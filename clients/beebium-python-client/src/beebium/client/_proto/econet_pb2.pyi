@@ -98,6 +98,8 @@ class GetEconetStatusResponse(_message.Message):
     AUN_STATION_COLLISION_COUNT_FIELD_NUMBER: _builtins.int
     AUN_LAST_STATION_COLLISION_FIELD_NUMBER: _builtins.int
     STATION_IN_FORCE_FIELD_NUMBER: _builtins.int
+    STATION_MIN_FIELD_NUMBER: _builtins.int
+    STATION_MAX_FIELD_NUMBER: _builtins.int
     has_econet_socket: _builtins.bool
     """True if this machine variant has an Econet socket (compile-time)."""
     enabled: _builtins.bool
@@ -169,6 +171,12 @@ class GetEconetStatusResponse(_message.Message):
     differs from station_id, a renumber is pending until the next Break;
     WatchEconetStatus pushes when the guest adopts it.
     """
+    station_min: _builtins.int
+    """The station numbers a station may have, inclusive (1 and 254): what
+    EnableEconet and SetStationId accept. Set whenever has_econet_socket,
+    so a frontend can bound a station field before Econet is fitted.
+    """
+    station_max: _builtins.int
     @_builtins.property
     def adlc(self) -> Global___AdlcStatus:
         """MC6854 ADLC register state (populated when enabled)."""
@@ -204,10 +212,12 @@ class GetEconetStatusResponse(_message.Message):
         aun_station_collision_count: _builtins.int = ...,
         aun_last_station_collision: _builtins.str = ...,
         station_in_force: _builtins.int = ...,
+        station_min: _builtins.int = ...,
+        station_max: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["adlc", b"adlc", "handshake", b"handshake"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["adlc", b"adlc", "aun_last_station_collision", b"aun_last_station_collision", "aun_mode", b"aun_mode", "aun_station_collision_count", b"aun_station_collision_count", "connected", b"connected", "cr1_0x82_write_count", b"cr1_0x82_write_count", "enabled", b"enabled", "gated_by_speed", b"gated_by_speed", "handshake", b"handshake", "has_econet_socket", b"has_econet_socket", "max_handshake_timer_seen", b"max_handshake_timer_seen", "requires_real_time", b"requires_real_time", "rx_blocked_by_reset_count", b"rx_blocked_by_reset_count", "rx_frames_received_count", b"rx_frames_received_count", "scout_ack_generated_count", b"scout_ack_generated_count", "send_stage_log", b"send_stage_log", "station_id", b"station_id", "station_in_force", b"station_in_force", "tick_count", b"tick_count", "ticks_with_timer_active", b"ticks_with_timer_active", "tx_frames_from_beeb_count", b"tx_frames_from_beeb_count", "tx_from_idle_count", b"tx_from_idle_count", "unexpected_tx_reset_count", b"unexpected_tx_reset_count", "watchdog_timeout_count", b"watchdog_timeout_count"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["adlc", b"adlc", "aun_last_station_collision", b"aun_last_station_collision", "aun_mode", b"aun_mode", "aun_station_collision_count", b"aun_station_collision_count", "connected", b"connected", "cr1_0x82_write_count", b"cr1_0x82_write_count", "enabled", b"enabled", "gated_by_speed", b"gated_by_speed", "handshake", b"handshake", "has_econet_socket", b"has_econet_socket", "max_handshake_timer_seen", b"max_handshake_timer_seen", "requires_real_time", b"requires_real_time", "rx_blocked_by_reset_count", b"rx_blocked_by_reset_count", "rx_frames_received_count", b"rx_frames_received_count", "scout_ack_generated_count", b"scout_ack_generated_count", "send_stage_log", b"send_stage_log", "station_id", b"station_id", "station_in_force", b"station_in_force", "station_max", b"station_max", "station_min", b"station_min", "tick_count", b"tick_count", "ticks_with_timer_active", b"ticks_with_timer_active", "tx_frames_from_beeb_count", b"tx_frames_from_beeb_count", "tx_from_idle_count", b"tx_from_idle_count", "unexpected_tx_reset_count", b"unexpected_tx_reset_count", "watchdog_timeout_count", b"watchdog_timeout_count"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

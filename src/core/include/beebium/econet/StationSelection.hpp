@@ -32,7 +32,13 @@
 
 namespace beebium::econet {
 
-// An inclusive range of candidate station numbers, lo <= hi, both in 1..254.
+// The station numbers a station may have: 0 and 255 are reserved (255 is
+// broadcast). EconetService reports this range, so a frontend never spells it.
+inline constexpr std::uint8_t kStationMin = 1;
+inline constexpr std::uint8_t kStationMax = 254;
+
+// An inclusive range of candidate station numbers, lo <= hi, both in
+// kStationMin..kStationMax.
 struct StationRange {
     std::uint8_t lo = 1;
     std::uint8_t hi = 253;
@@ -102,7 +108,7 @@ inline std::optional<StationSpec> parse_station_spec(std::string_view value,
     if (!starts_with_auto(value)) {
         StationSpec spec;
         spec.is_auto = false;
-        if (!parse_u8_in_range(value, 1, 254, "station", spec.fixed)) {
+        if (!parse_u8_in_range(value, kStationMin, kStationMax, "station", spec.fixed)) {
             return std::nullopt;
         }
         return spec;
@@ -128,10 +134,10 @@ inline std::optional<StationSpec> parse_station_spec(std::string_view value,
     }
     std::uint8_t lo = 0;
     std::uint8_t hi = 0;
-    if (!parse_u8_in_range(rest.substr(0, dash), 1, 254, "auto range low", lo)) {
+    if (!parse_u8_in_range(rest.substr(0, dash), kStationMin, kStationMax, "auto range low", lo)) {
         return std::nullopt;
     }
-    if (!parse_u8_in_range(rest.substr(dash + 1), 1, 254, "auto range high", hi)) {
+    if (!parse_u8_in_range(rest.substr(dash + 1), kStationMin, kStationMax, "auto range high", hi)) {
         return std::nullopt;
     }
     if (lo > hi) {

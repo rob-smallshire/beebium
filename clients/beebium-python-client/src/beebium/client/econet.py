@@ -152,6 +152,10 @@ class EconetStatus:
     # the last reset, the read with which a filing system takes its number at
     # boot; until it has read, the configured number.
     station_in_force: int = 0
+    # The station numbers a station may have, inclusive, as the server
+    # enforces them; given whenever has_econet_socket, fitted or not.
+    station_min: int = 0
+    station_max: int = 0
 
     @property
     def station_change_pending(self) -> bool:
@@ -236,6 +240,8 @@ def _response_to_status(response: econet_pb2.GetEconetStatusResponse) -> EconetS
         enabled=response.enabled,
         station_id=response.station_id,
         station_in_force=response.station_in_force,
+        station_min=response.station_min,
+        station_max=response.station_max,
         aun_mode=response.aun_mode,
         connected=response.connected,
         adlc=adlc,

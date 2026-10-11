@@ -103,8 +103,12 @@ class MockGetEconetStatusResponse:
         send_stage_log="",
         ticks_with_timer_active=0,
         read_stretch_coprocessor_ticks=0,
+        station_min=1,
+        station_max=254,
     ):
         self.has_econet_socket = has_econet_socket
+        self.station_min = station_min
+        self.station_max = station_max
         self.enabled = enabled
         self.station_id = station_id
         # As the server does: in force equals configured unless told otherwise.
@@ -193,6 +197,13 @@ class TestEconetStatus:
         assert status.connected is False
         assert status.adlc is None
         assert status.handshake is None
+
+    def test_status_gives_the_station_range(self, mock_stub, econet):
+        """The station range comes from the server, fitted or not."""
+        mock_stub.GetEconetStatus.return_value = MockGetEconetStatusResponse(station_min=2, station_max=200)
+        status = econet.status
+        assert status.station_min == 2
+        assert status.station_max == 200
 
     def test_status_enabled_with_adlc(self, mock_stub, econet):
         """Enabled status populates ADLC fields."""

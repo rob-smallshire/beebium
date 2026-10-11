@@ -96,6 +96,40 @@ TEST_CASE("EconetService GetEconetStatus when disabled", "[grpc][econet]") {
     REQUIRE(response.station_id() == 0);
 }
 
+TEST_CASE("EconetService GetEconetStatus gives the station range before Econet is fitted",
+          "[grpc][econet]") {
+    EconetTestFixture fixture;
+
+    grpc::ClientContext context;
+    beebium::GetEconetStatusRequest request;
+    beebium::GetEconetStatusResponse response;
+    REQUIRE(fixture.stub().GetEconetStatus(&context, request, &response).ok());
+
+    REQUIRE_FALSE(response.enabled());
+    CHECK(response.station_min() == 1);
+    CHECK(response.station_max() == 254);
+
+    // The range is the one SetStationId enforces.
+    {
+        grpc::ClientContext ctx;
+        beebium::EnableEconetRequest req;
+        beebium::EnableEconetResponse resp;
+        req.set_station_id(response.station_max());
+        req.set_no_network(true);
+        REQUIRE(fixture.stub().EnableEconet(&ctx, req, &resp).ok());
+        CHECK(resp.success());
+    }
+    {
+        grpc::ClientContext ctx;
+        beebium::SetStationIdRequest req;
+        beebium::SetStationIdResponse resp;
+        req.set_station_id(response.station_max() + 1);
+        REQUIRE(fixture.stub().SetStationId(&ctx, req, &resp).ok());
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "Station number must be between 1 and 254");
+    }
+}
+
 TEST_CASE("EconetService GetEconetStatus ADLC registers after enable", "[grpc][econet]") {
     EconetTestFixture fixture;
 

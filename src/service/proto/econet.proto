@@ -147,6 +147,12 @@ message GetEconetStatusResponse {
     // WatchEconetStatus pushes when the guest adopts it.
     uint32 station_in_force = 30;
 
+    // The station numbers a station may have, inclusive (1 and 254): what
+    // EnableEconet and SetStationId accept. Set whenever has_econet_socket,
+    // so a frontend can bound a station field before Econet is fitted.
+    uint32 station_min = 31;
+    uint32 station_max = 32;
+
     // Field 25 (piconet) is reserved; Piconet status is on
     // PiconetService.GetStatus (in src/extensions/piconet/piconet_service.proto).
     reserved 25;

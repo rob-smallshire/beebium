@@ -21,6 +21,7 @@
 #include "beebium/econet/AunPacket.hpp"
 #include "beebium/econet/TestBackend.hpp"
 #include "beebium/econet/Mc6854.hpp"
+#include "beebium/econet/StationSelection.hpp"
 #include "beebium/econet/FourWayHandshake.hpp"
 #include "beebium/extension/EconetTransportRegistry.hpp"
 
@@ -192,9 +193,11 @@ public:
             }
 
             uint32_t station = request->station_id();
-            if (station < 1 || station > 254) {
+            if (station < econet::kStationMin || station > econet::kStationMax) {
                 response->set_success(false);
-                response->set_error("Station number must be between 1 and 254");
+                response->set_error("Station number must be between " +
+                                    std::to_string(econet::kStationMin) + " and " +
+                                    std::to_string(econet::kStationMax));
                 return grpc::Status::OK;
             }
 
@@ -327,9 +330,11 @@ public:
             }
 
             uint32_t station = request->station_id();
-            if (station < 1 || station > 254) {
+            if (station < econet::kStationMin || station > econet::kStationMax) {
                 response->set_success(false);
-                response->set_error("Station number must be between 1 and 254");
+                response->set_error("Station number must be between " +
+                                    std::to_string(econet::kStationMin) + " and " +
+                                    std::to_string(econet::kStationMax));
                 return grpc::Status::OK;
             }
 
@@ -455,6 +460,8 @@ private:
             return;
         } else {
             response.set_has_econet_socket(true);
+            response.set_station_min(econet::kStationMin);
+            response.set_station_max(econet::kStationMax);
 
             // Snapshot the socket, ADLC, handshake and backend with the
             // emulation thread parked. These are ticked every cycle and the raw

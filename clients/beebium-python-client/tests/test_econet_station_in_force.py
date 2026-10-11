@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 
 from beebium.client import Beebium
+from beebium.client.exceptions import EconetError
 from beebium.client.pytest_plugin import LaunchBbc
 
 #: The committed test ROMs.
@@ -113,3 +114,11 @@ def test_a_renumber_is_pending_until_break_then_converges(station_80: Beebium) -
     status = bbc.econet.status
     assert status.station_in_force == 81
     assert status.station_change_pending is False
+
+
+def test_the_station_range_is_the_one_the_server_enforces(station_80: Beebium) -> None:
+    status = station_80.econet.status
+    assert (status.station_min, status.station_max) == (1, 254)
+    station_80.econet.set_station_id(status.station_max)
+    with pytest.raises(EconetError):
+        station_80.econet.set_station_id(status.station_max + 1)
