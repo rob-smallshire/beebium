@@ -45,8 +45,6 @@ void AcornRtcExtension::init(ExtensionContext& ctx) {
     } catch (const std::invalid_argument& e) {
         throw std::runtime_error(std::string("Acorn RTC: ") + e.what());
     }
-    auto layout_val = config_value("layout");
-
     // Initialise the chip (validates year range for the layout)
     if (!chip_.initialise(target_dt)) {
         const auto [first_year, last_year] = Saf3019p::year_range(chip_.layout());
@@ -54,7 +52,7 @@ void AcornRtcExtension::init(ExtensionContext& ctx) {
         throw std::runtime_error(
             "Acorn RTC: year " + std::to_string(target_dt.year) +
             " cannot be represented (valid range: " + range + " for layout '" +
-            std::string(layout_val.value_or(kAcornRtcDefaultLayoutName)) + "').\n"
+            std::string(*config_value("layout")) + "').\n"
             "  Use --acorn-rtc time=YYYY-MM-DDThhmm with a date in range,\n"
             "  or use --acorn-rtc offset=-Ny to shift the clock back.");
     }

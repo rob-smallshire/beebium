@@ -26,13 +26,9 @@ namespace beebium {
 // The reading of an Acorn RTC instance's configuration, shared by the
 // extension's start-up and its pre-launch check so the two cannot disagree.
 
-// The layout an instance has when its config names none: Level 3 File Server
-// 1.26's, which Beebium ships and which holds the years to 2099, so host time
-// works. The manifest's `layout` default is the same (test_acorn_rtc_manifest).
-inline constexpr const char* kAcornRtcDefaultLayoutName = "7bit-year-in-r7";
-
-// The register layout the config's `layout` names; kAcornRtcDefaultLayoutName
-// when it names none. Throws std::invalid_argument for an unknown name.
+// The register layout the config's `layout` names. The framework fills in the
+// manifest default (Level 3 File Server 1.26's), so a config always names one.
+// Throws std::invalid_argument for a config naming none or an unknown name.
 RegisterLayout acorn_rtc_layout(const std::map<std::string, std::string>& config);
 
 // The time the clock starts at: the config's `time`, or `now` moved by its

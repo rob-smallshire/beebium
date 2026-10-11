@@ -38,9 +38,9 @@ namespace {
 
 class AcornRtcGrpcFixture {
 public:
-    // `layout` selects the SAF3019P register-layout variant (empty = the
-    // extension default, 7-bit year in R7). `time` seeds the initial clock.
-    explicit AcornRtcGrpcFixture(const std::string& layout = "",
+    // `layout` selects the SAF3019P register-layout variant (by default the
+    // manifest's, 7-bit year in R7). `time` seeds the initial clock.
+    explicit AcornRtcGrpcFixture(const std::string& layout = "7bit-year-in-r7",
                                  const std::string& time = "1985-06-15T14:30")
         : service_(transports_, registry_) {
         machine_.reset();
@@ -48,14 +48,7 @@ public:
         registry_.register_extension_point("user-port");
 
         auto rtc = std::make_unique<beebium::AcornRtcExtension>();
-        std::map<std::string, std::string> config{
-            {"id", "test-rtc"},
-            {"time", time},
-        };
-        if (!layout.empty()) {
-            config["layout"] = layout;
-        }
-        rtc->set_config(config);
+        rtc->set_config({{"id", "test-rtc"}, {"time", time}, {"layout", layout}});
         registry_.register_extension(std::move(rtc));
 
         beebium::ExtensionContext ctx(

@@ -78,10 +78,10 @@ TEST_CASE("each layout choice states the years the chip holds in that layout",
     CHECK(described.size() == 3);
 }
 
-TEST_CASE("the manifest's default layout is the one the extension reads by default",
+TEST_CASE("the manifest's default layout is Level 3 File Server 1.26's",
           "[acorn-rtc][manifest]") {
+    // It holds the years to 2099, so a clock started at host time works.
     const auto manifest = acorn_rtc_manifest();
-    CHECK(layout_parameter(manifest).default_value == kAcornRtcDefaultLayoutName);
     CHECK(layout_parameter(manifest).default_value == "7bit-year-in-r7");
 }
 

@@ -49,7 +49,8 @@ bool holds(RegisterLayout layout, int year) {
 
 RegisterLayout acorn_rtc_layout(const std::map<std::string, std::string>& config) {
     const auto* name = find_value(config, "layout");
-    const std::string layout_name = name ? *name : kAcornRtcDefaultLayoutName;
+    if (!name) throw std::invalid_argument("no layout given");
+    const std::string& layout_name = *name;
     const auto layout = register_layout_from_name(layout_name);
     if (!layout) {
         throw std::invalid_argument(
@@ -79,8 +80,8 @@ std::vector<ConfigDiagnostic> check_acorn_rtc_config(
         found.push_back({"layout", e.what()});
         return found;
     }
-    const auto* name = find_value(config, "layout");
-    const std::string layout_name = name ? *name : kAcornRtcDefaultLayoutName;
+    // acorn_rtc_layout has refused a config naming no layout.
+    const std::string& layout_name = *find_value(config, "layout");
 
     // The parameter the start comes from: "time", "offset", or "" for host time.
     const std::string from = find_value(config, "time")     ? "time"

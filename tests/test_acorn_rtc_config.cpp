@@ -58,11 +58,9 @@ TEST_CASE("the RTC starts at its time, at now moved by its offset, or at now",
     CHECK_THROWS_AS(acorn_rtc_start_time({{"time", "soon"}}, kNow), std::invalid_argument);
 }
 
-TEST_CASE("the RTC's layout is the one its config names, Level 3 1.26's by default",
+TEST_CASE("the RTC's layout is the one its config names",
           "[acorn-rtc][config]") {
-    CHECK(acorn_rtc_layout({}) == RegisterLayout::SevenBitYearInR7);
-    CHECK(register_layout_from_name(kAcornRtcDefaultLayoutName) ==
-          RegisterLayout::SevenBitYearInR7);
+    CHECK_THROWS_AS(acorn_rtc_layout({}), std::invalid_argument);
     CHECK(acorn_rtc_layout({{"layout", "4bit-year-in-r1"}}) == RegisterLayout::FourBitYearInR1);
     CHECK(acorn_rtc_layout({{"layout", "7bit-year-in-r7"}}) == RegisterLayout::SevenBitYearInR7);
     CHECK_THROWS_AS(acorn_rtc_layout({{"layout", "8bit"}}), std::invalid_argument);
@@ -115,8 +113,7 @@ TEST_CASE("an offset that would start outside the layout's years today is an err
 
 TEST_CASE("host time outside the layout's years today is an error on the instance",
           "[acorn-rtc][config]") {
-    CHECK(check({}).empty());  // the default layout holds today
-    CHECK(check({{"layout", "7bit-year-in-r7"}}).empty());
+    CHECK(check({{"layout", "7bit-year-in-r7"}}).empty());  // the default holds today
     const auto found = check({{"layout", "4bit-year-in-r1"}});
     REQUIRE(found.size() == 1);
     CHECK(found[0].parameter.empty());
