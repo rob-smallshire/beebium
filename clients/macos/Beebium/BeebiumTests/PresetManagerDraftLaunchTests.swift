@@ -77,4 +77,46 @@ final class PresetManagerDraftLaunchTests: XCTestCase {
         let data = try XCTUnwrap(FileManager.default.contents(atPath: url1.path))
         XCTAssertEqual(try MachineDraft.decode(from: data), draft)
     }
+
+    // MARK: - CoreCLI resolve-preset output decoding (pinned samples)
+
+    func testDecodeResolveOutputParsesPresetAndDiagnostics() throws {
+        let json = """
+        {
+          "preset": { "model": "model-b", "name": "Resolved" },
+          "diagnostics": [
+            { "severity": "warning", "path": "/storage/floppies/0",
+              "message": "No disc image", "location": "Floppy drive 0" }
+          ]
+        }
+        """
+        let (preset, diagnostics) = try XCTUnwrap(CoreCLI.decodeResolveOutput(json))
+        XCTAssertEqual(preset?.model, "model-b")
+        XCTAssertEqual(preset?.name, "Resolved")
+        XCTAssertEqual(diagnostics, [
+            PresetManager.PresetDiagnostic(
+                severity: "warning", path: "/storage/floppies/0",
+                message: "No disc image", location: "Floppy drive 0"),
+        ])
+    }
+
+    func testDecodeResolveOutputAllowsNullPreset() throws {
+        // resolve-preset prints diagnostics even when the document could not be
+        // turned into a preset (a hard error); the preset is then null.
+        let json = """
+        { "preset": null,
+          "diagnostics": [
+            { "severity": "error", "path": "", "message": "unknown model", "location": "" }
+          ] }
+        """
+        let (preset, diagnostics) = try XCTUnwrap(CoreCLI.decodeResolveOutput(json))
+        XCTAssertNil(preset)
+        XCTAssertEqual(diagnostics.count, 1)
+        XCTAssertTrue(diagnostics.first?.isError ?? false)
+    }
+
+    func testDecodeResolveOutputReturnsNilForNonJSON() {
+        XCTAssertNil(CoreCLI.decodeResolveOutput("not json at all"))
+        XCTAssertNil(CoreCLI.decodeResolveOutput(""))
+    }
 }

@@ -55,6 +55,12 @@ class PresetManager: ObservableObject {
     /// Numbers machines per preset, for this run of the app only.
     private let nameSequence = MachineNameSequence()
 
+    /// The typed wrapper over the server executable's command-line interface.
+    /// Every run-to-completion subcommand goes through it; the long-lived
+    /// `start` launch (which awaits a listening port) stays here, being a
+    /// process-lifecycle concern rather than a run-and-decode one.
+    private let coreCLI = CoreCLI()
+
     /// Disc image picker content types, fetched from the server once and kept
     /// for the session (disc format support does not change while the app
     /// runs).
@@ -264,36 +270,11 @@ class PresetManager: ObservableObject {
     /// Invoke `describe-preset-schema` on a server executable and parse the JSON response.
     /// Returns (schema, errorMessage) - errorMessage is nil on success.
     private func fetchPresetSchema(from executablePath: String) async -> (PresetSchema?, String?) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = ["describe-preset-schema"]
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else {
-                let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let stderrText = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let errorMsg = stderrText.isEmpty
-                    ? "exit status \(process.terminationStatus)"
-                    : stderrText
-                NSLog("[PresetManager] Process exited with status \(process.terminationStatus): \(errorMsg)")
-                return (nil, errorMsg)
-            }
-
-            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            let schema = try JSONDecoder().decode(PresetSchema.self, from: data)
-            return (schema, nil)
-        } catch {
-            NSLog("[PresetManager] Failed to query \(executablePath): \(error)")
-            return (nil, error.localizedDescription)
+        let (schema, error) = await coreCLI.presetSchema(executablePath: executablePath)
+        if let error = error {
+            NSLog("[PresetManager] Failed to get schema from \(executablePath): \(error)")
         }
+        return (schema, error)
     }
 
     /// Fetch and decode the storage schema section for a preset's model.
@@ -301,12 +282,10 @@ class PresetManager: ObservableObject {
     /// This queries the preset's core executable for its schema and extracts
     /// the storage section, which includes FDC options and floppy drive configuration.
     func fetchStorageSchema(for preset: MachinePreset) async -> StorageSchemaSection? {
-        // fetchStorageSectionFromSchema runs `describe-preset-schema` itself
-        // and returns nil for every reason the fetch can fail, so probing with
-        // fetchPresetSchema first only ran the core executable a second time
-        // and discarded the answer. It logs its own failures.
-        guard let section = await fetchStorageSectionFromSchema(
-            executablePath: preset.coreExecutablePath
+        // One describe-preset-schema run, decoding the storage section; nil for
+        // every reason the fetch can fail (the section decode logs its own).
+        guard let section: StorageSchemaSection = await coreCLI.schemaSection(
+            "storage", executablePath: preset.coreExecutablePath
         ) else {
             NSLog("[PresetManager] Failed to fetch storage schema for \(preset.presetId)")
             return nil
@@ -314,70 +293,22 @@ class PresetManager: ObservableObject {
         return section
     }
 
-    /// Fetch the storage section with full detail from the schema JSON.
-    private func fetchStorageSectionFromSchema(executablePath: String) async -> StorageSchemaSection? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = ["describe-preset-schema"]
-
-        let stdoutPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else { return nil }
-
-            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-
-            // Decode as a dictionary to extract the sections array
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let sections = json["sections"] as? [[String: Any]] else {
-                return nil
-            }
-
-            // Find the storage section
-            guard let storageSection = sections.first(where: { ($0["type"] as? String) == "storage" }) else {
-                return nil
-            }
-
-            // Re-encode and decode as StorageSchemaSection
-            let sectionData = try JSONSerialization.data(withJSONObject: storageSection)
-            return try JSONDecoder().decode(StorageSchemaSection.self, from: sectionData)
-        } catch {
-            NSLog("[PresetManager] Failed to decode storage schema: \(error)")
-            return nil
-        }
-    }
-
     /// Fetch the sideways_bank schema section for a preset's model.
     ///
     /// Describes the machine's physical sideways sockets (and aliasing) plus the
     /// ROMs it installs by default, used to build the Memory tab.
     func fetchSidewaysSchema(for preset: MachinePreset) async -> SidewaysSchemaSection? {
-        return await fetchSidewaysSectionFromSchema(executablePath: preset.coreExecutablePath)
+        return await coreCLI.schemaSection("sideways_bank", executablePath: preset.coreExecutablePath)
     }
 
     /// Parse a ROM image's header via the `describe-rom` subcommand, so the UI
     /// can show its real title/version. `image` is a ROM library name or path;
     /// returns nil if it can't be read or parsed.
     func fetchRomHeader(image: String, executablePath: String) async -> RomHeaderInfo? {
-        var arguments = ["describe-rom", image]
         // Resolve bare ROM names against the bundled ROM directory when present;
         // otherwise the server falls back to its own search path.
-        if let romDir = bundledRomDirpath() {
-            arguments.append(contentsOf: ["--rom-dir", romDir])
-        }
-
-        let (output, error) = await runCli(executable: executablePath, arguments: arguments)
-        if error != nil { return nil }
-        guard let data = output.data(using: .utf8),
-              let info = try? JSONDecoder().decode(RomHeaderInfo.self, from: data) else {
-            return nil
-        }
-        return info
+        await coreCLI.romHeader(image: image, executablePath: executablePath,
+                                romDirpath: bundledRomDirpath())
     }
 
     /// A core executable to ask about disc formats when no particular machine
@@ -425,13 +356,11 @@ class PresetManager: ObservableObject {
         guard let executablePath = anyCoreExecutablePath else {
             return []
         }
-        let (output, error) = await runCli(
-            executable: executablePath,
-            arguments: ["--format", "jsonl", "list-disc-formats"])
-        if error != nil {
+        // Cache only a real answer; a CLI error returns an unfiltered (empty)
+        // picker this time and is retried next time.
+        guard let formats = await coreCLI.discFormats(executablePath: executablePath) else {
             return []
         }
-        let formats = Self.parseDiscFormats(fromFormatList: output)
         cachedDiscFormats = formats
         return formats
     }
@@ -464,72 +393,29 @@ class PresetManager: ObservableObject {
     /// opposed to running and reporting the file is not a disc image, which
     /// comes back as a DiscImageInfo with recognised == false).
     func describeDiscImage(path: String, executablePath: String) async -> DiscImageInfo? {
-        let (output, error) = await runCli(
-            executable: executablePath,
-            arguments: ["describe-disc-image", path])
         // A non-zero exit means the file could not be read at all; the
         // "not a disc image" verdict comes back as exit 0 with recognised
         // false, so it is not an error here.
-        if error != nil { return nil }
-        guard let data = output.data(using: .utf8),
-              let info = try? JSONDecoder().decode(DiscImageInfo.self, from: data) else {
-            return nil
-        }
-        return info
-    }
-
-    /// Fetch the sideways_bank section with full detail from the schema JSON.
-    private func fetchSidewaysSectionFromSchema(executablePath: String) async -> SidewaysSchemaSection? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = ["describe-preset-schema"]
-
-        let stdoutPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else { return nil }
-
-            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let sections = json["sections"] as? [[String: Any]] else {
-                return nil
-            }
-
-            guard let sidewaysSection = sections.first(where: { ($0["type"] as? String) == "sideways_bank" }) else {
-                return nil
-            }
-
-            let sectionData = try JSONSerialization.data(withJSONObject: sidewaysSection)
-            return try JSONDecoder().decode(SidewaysSchemaSection.self, from: sectionData)
-        } catch {
-            NSLog("[PresetManager] Failed to decode sideways schema: \(error)")
-            return nil
-        }
+        await coreCLI.describeDiscImage(path: path, executablePath: executablePath)
     }
 
     /// Fetch the `extensions` schema section for a preset's model: the model's
     /// attachment points and which extensions can attach where. Used to decide
     /// which configuration sections the model offers (e.g. hard discs).
     func fetchExtensionsSchema(for preset: MachinePreset) async -> ExtensionsSchemaSection? {
-        await fetchSection(type: "extensions", executablePath: preset.coreExecutablePath)
+        await coreCLI.schemaSection("extensions", executablePath: preset.coreExecutablePath)
     }
 
     /// Fetch the `econet` schema section (station rules + transports) for a
     /// preset's model, or nil if the model has no Econet socket.
     func fetchEconetSchema(for preset: MachinePreset) async -> EconetSchemaSection? {
-        await fetchSection(type: "econet", executablePath: preset.coreExecutablePath)
+        await coreCLI.schemaSection("econet", executablePath: preset.coreExecutablePath)
     }
 
     /// Fetch the `startup` schema section (screen-mode / auto-boot / links rules)
     /// for a preset's model.
     func fetchStartupSchema(for preset: MachinePreset) async -> StartupSchemaSection? {
-        await fetchSection(type: "startup", executablePath: preset.coreExecutablePath)
+        await coreCLI.schemaSection("startup", executablePath: preset.coreExecutablePath)
     }
 
     /// Cached host serial-port paths for the session (for the choices_from
@@ -541,10 +427,9 @@ class PresetManager: ObservableObject {
     func serialPortSuggestions() async -> [String] {
         if let cached = cachedSerialPorts { return cached }
         guard let executablePath = anyCoreExecutablePath else { return [] }
-        let (output, error) = await runCli(
-            executable: executablePath, arguments: ["--format", "jsonl", "list-serial-ports"])
-        if error != nil { return [] }
-        let paths = Self.parseSerialPortPaths(fromJSONL: output)
+        // Cache only a real answer; a CLI error returns no suggestions this time
+        // and is retried next time.
+        guard let paths = await coreCLI.serialPorts(executablePath: executablePath) else { return [] }
         cachedSerialPorts = paths
         return paths
     }
@@ -560,35 +445,6 @@ class PresetManager: ObservableObject {
             out.append(line.path)
         }
         return out
-    }
-
-    /// Run describe-preset-schema and decode the section of the given `type`.
-    private func fetchSection<T: Decodable>(type: String, executablePath: String) async -> T? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = ["describe-preset-schema"]
-
-        let stdoutPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-
-            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let sections = json["sections"] as? [[String: Any]],
-                  let section = sections.first(where: { ($0["type"] as? String) == type }) else {
-                return nil
-            }
-            let sectionData = try JSONSerialization.data(withJSONObject: section)
-            return try JSONDecoder().decode(T.self, from: sectionData)
-        } catch {
-            NSLog("[PresetManager] Failed to decode '\(type)' schema section: \(error)")
-            return nil
-        }
     }
 
     /// Sort presets by release date (chronological), then by name (natural alphanumeric).
@@ -641,13 +497,11 @@ class PresetManager: ObservableObject {
             return cached
         }
 
-        let (output, error) = await runCli(executable: executablePath, arguments: ["report-presets-dirpath"])
+        let (dirpath, error) = await coreCLI.reportPresetsDirpath(executablePath: executablePath)
         if let error = error {
             NSLog("[PresetManager] Failed to get user presets directory: \(error)")
             return nil
         }
-
-        let dirpath = output.trimmingCharacters(in: .whitespacesAndNewlines)
         cachedUserPresetsDirpath = dirpath
         return dirpath
     }
@@ -670,15 +524,13 @@ class PresetManager: ObservableObject {
     ///   - newName: The name for the new preset
     /// - Returns: The ID of the created preset, or nil on failure
     func duplicatePreset(_ preset: MachinePreset, newName: String) async -> String? {
-        let arguments = ["create-preset", "--name", newName, "--from", preset.presetId]
-        let (output, error) = await runCli(executable: preset.coreExecutablePath, arguments: arguments)
+        let (newPresetId, error) = await coreCLI.createPreset(
+            name: newName, from: preset.presetId, executablePath: preset.coreExecutablePath)
         if let error = error {
             NSLog("[PresetManager] Failed to duplicate preset: \(error)")
             return nil
         }
-
-        let newPresetId = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        NSLog("[PresetManager] Created preset: \(newPresetId)")
+        NSLog("[PresetManager] Created preset: \(newPresetId ?? "")")
 
         // Reload presets to pick up the new one
         await discoverPresets()
@@ -695,7 +547,7 @@ class PresetManager: ObservableObject {
             return false
         }
 
-        let (_, error) = await runCli(executable: preset.coreExecutablePath, arguments: ["delete-preset", preset.presetId])
+        let error = await coreCLI.deletePreset(presetId: preset.presetId, executablePath: preset.coreExecutablePath)
         if let error = error {
             NSLog("[PresetManager] Failed to delete preset: \(error)")
             return false
@@ -715,7 +567,8 @@ class PresetManager: ObservableObject {
     ///   - filepath: The destination file path
     /// - Returns: true if export succeeded
     func exportPreset(_ preset: MachinePreset, to filepath: String) async -> Bool {
-        let (_, error) = await runCli(executable: preset.coreExecutablePath, arguments: ["export-preset", preset.presetId, "--output", filepath])
+        let error = await coreCLI.exportPreset(
+            presetId: preset.presetId, to: filepath, executablePath: preset.coreExecutablePath)
         if let error = error {
             NSLog("[PresetManager] Failed to export preset: \(error)")
             return false
@@ -731,14 +584,12 @@ class PresetManager: ObservableObject {
     ///   - executablePath: The executable to use for import (determines model)
     /// - Returns: The ID of the imported preset, or nil on failure
     func importPreset(from filepath: String, using executablePath: String) async -> String? {
-        let (output, error) = await runCli(executable: executablePath, arguments: ["import-preset", filepath])
+        let (newPresetId, error) = await coreCLI.importPreset(filepath: filepath, executablePath: executablePath)
         if let error = error {
             NSLog("[PresetManager] Failed to import preset: \(error)")
             return nil
         }
-
-        let newPresetId = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        NSLog("[PresetManager] Imported preset: \(newPresetId)")
+        NSLog("[PresetManager] Imported preset: \(newPresetId ?? "")")
 
         // Reload presets
         await discoverPresets()
@@ -872,19 +723,7 @@ class PresetManager: ObservableObject {
     }
 
     private func resolve(presetPath: String, executablePath: String) async -> (MachineDraft?, [PresetDiagnostic]) {
-        struct Output: Decodable {
-            let preset: MachineDraft?
-            let diagnostics: [PresetDiagnostic]
-        }
-        let (output, _) = await runCli(
-            executable: executablePath,
-            arguments: ["resolve-preset", presetPath, "--json"])
-        guard let data = output.data(using: .utf8),
-              let parsed = try? JSONDecoder().decode(Output.self, from: data) else {
-            NSLog("[PresetManager] Could not parse resolve-preset output for \(presetPath)")
-            return (nil, [])
-        }
-        return (parsed.preset, parsed.diagnostics)
+        await coreCLI.resolvePreset(presetPath: presetPath, executablePath: executablePath)
     }
 
     // MARK: - Draft-based launching
@@ -1068,27 +907,44 @@ class PresetManager: ObservableObject {
         }
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let (output, error) = await runCli(executable: executablePath,
-                                           arguments: ["import-preset", url.path])
+        let (newPresetId, error) = await coreCLI.importPreset(filepath: url.path, executablePath: executablePath)
         if let error = error {
             NSLog("[PresetManager] Failed to import preset: \(error)")
             return (nil, error.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-
-        let newPresetId = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        NSLog("[PresetManager] Saved draft as preset: \(newPresetId)")
+        NSLog("[PresetManager] Saved draft as preset: \(newPresetId ?? "")")
 
         // Reload presets so the new one appears in the picker next time.
         await discoverPresets()
         return (newPresetId, nil)
     }
+}
 
-    // MARK: - CLI Execution
-
-    /// Run a CLI command and return (stdout, errorMessage).
-    private func runCli(executable: String, arguments: [String]) async -> (String, String?) {
+/// A typed wrapper over the server executable's command-line interface. One
+/// method per run-to-completion subcommand the client invokes: each builds the
+/// arguments, runs the executable with `run(...)`, and decodes its output,
+/// mapping a non-zero exit (or unparseable output) to the method's own failure
+/// shape. PresetManager owns one and routes every such call through it, so
+/// process invocation and output decoding live in one place rather than being
+/// hand-rolled at each call site.
+///
+/// The long-lived `start` launch (which spawns a server and awaits its
+/// listening port) is not here: it is a process-lifecycle concern, not a
+/// run-and-decode one, and stays in PresetManager. The two tiny JSONL line
+/// parsers (`PresetManager.parseDiscFormats`, `parseSerialPortPaths`) stay there
+/// too, with their pinned-sample tests; this wrapper calls them.
+///
+/// `@MainActor` so `run(...)`'s synchronous `waitUntilExit()` blocks the same
+/// actor it did when this was PresetManager.runCli, keeping the threading
+/// behaviour unchanged.
+@MainActor
+struct CoreCLI {
+    /// Run `executablePath` with `arguments` to completion, returning its stdout
+    /// and, on a non-zero exit (or a spawn failure), an error message (the
+    /// trimmed stderr, or a status/thrown description).
+    func run(executablePath: String, arguments: [String]) async -> (stdout: String, error: String?) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
+        process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
 
         let stdoutPipe = Pipe()
@@ -1116,5 +972,165 @@ class PresetManager: ObservableObject {
         } catch {
             return ("", error.localizedDescription)
         }
+    }
+
+    // MARK: - Schema
+
+    /// `describe-preset-schema`, decoded whole as a PresetSchema. Returns
+    /// (schema, errorMessage) with the error nil on success.
+    func presetSchema(executablePath: String) async -> (PresetSchema?, String?) {
+        let (output, error) = await run(executablePath: executablePath, arguments: ["describe-preset-schema"])
+        if let error = error { return (nil, error) }
+        guard let data = output.data(using: .utf8) else {
+            return (nil, "no output")
+        }
+        do {
+            return (try JSONDecoder().decode(PresetSchema.self, from: data), nil)
+        } catch {
+            return (nil, error.localizedDescription)
+        }
+    }
+
+    /// `describe-preset-schema`, decoding the one section whose `type` matches as
+    /// `T`. nil when the executable could not be run, the section is absent, or it
+    /// does not decode.
+    func schemaSection<T: Decodable>(_ type: String, executablePath: String) async -> T? {
+        let (output, error) = await run(executablePath: executablePath, arguments: ["describe-preset-schema"])
+        if error != nil { return nil }
+        guard let data = output.data(using: .utf8) else { return nil }
+        do {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let sections = json["sections"] as? [[String: Any]],
+                  let section = sections.first(where: { ($0["type"] as? String) == type }) else {
+                return nil
+            }
+            let sectionData = try JSONSerialization.data(withJSONObject: section)
+            return try JSONDecoder().decode(T.self, from: sectionData)
+        } catch {
+            NSLog("[CoreCLI] Failed to decode '\(type)' schema section: \(error)")
+            return nil
+        }
+    }
+
+    // MARK: - ROMs and disc images
+
+    /// `describe-rom <image>`, resolving bare names against `romDirpath` when
+    /// given. nil on any failure to run or decode.
+    func romHeader(image: String, executablePath: String, romDirpath: String?) async -> RomHeaderInfo? {
+        var arguments = ["describe-rom", image]
+        if let romDirpath = romDirpath {
+            arguments.append(contentsOf: ["--rom-dir", romDirpath])
+        }
+        let (output, error) = await run(executablePath: executablePath, arguments: arguments)
+        if error != nil { return nil }
+        guard let data = output.data(using: .utf8),
+              let info = try? JSONDecoder().decode(RomHeaderInfo.self, from: data) else {
+            return nil
+        }
+        return info
+    }
+
+    /// `describe-disc-image <path>`. nil only when the executable could not be
+    /// run at all; a "not a disc image" verdict comes back as a decoded
+    /// DiscImageInfo with recognised == false.
+    func describeDiscImage(path: String, executablePath: String) async -> DiscImageInfo? {
+        let (output, error) = await run(executablePath: executablePath, arguments: ["describe-disc-image", path])
+        if error != nil { return nil }
+        guard let data = output.data(using: .utf8),
+              let info = try? JSONDecoder().decode(DiscImageInfo.self, from: data) else {
+            return nil
+        }
+        return info
+    }
+
+    /// `list-disc-formats` (JSONL), parsed to the disc formats the server loads.
+    /// nil when the executable could not be run (so the caller can retry rather
+    /// than cache a failure); an empty array is a real answer.
+    func discFormats(executablePath: String) async -> [PresetManager.DiscFormat]? {
+        let (output, error) = await run(
+            executablePath: executablePath, arguments: ["--format", "jsonl", "list-disc-formats"])
+        if error != nil { return nil }
+        return PresetManager.parseDiscFormats(fromFormatList: output)
+    }
+
+    /// `list-serial-ports` (JSONL), parsed to the host's device paths. nil when
+    /// the executable could not be run (so the caller can retry); an empty array
+    /// is a real answer.
+    func serialPorts(executablePath: String) async -> [String]? {
+        let (output, error) = await run(
+            executablePath: executablePath, arguments: ["--format", "jsonl", "list-serial-ports"])
+        if error != nil { return nil }
+        return PresetManager.parseSerialPortPaths(fromJSONL: output)
+    }
+
+    // MARK: - Preset resolution
+
+    /// `resolve-preset <path> --json`, decoded to the resolved draft and its
+    /// diagnostics. resolve-preset prints its JSON even on a non-zero exit, so
+    /// the error is ignored and the output parsed regardless; (nil, []) when
+    /// nothing could be parsed.
+    func resolvePreset(presetPath: String, executablePath: String) async -> (MachineDraft?, [PresetManager.PresetDiagnostic]) {
+        let (output, _) = await run(
+            executablePath: executablePath, arguments: ["resolve-preset", presetPath, "--json"])
+        return Self.decodeResolveOutput(output) ?? {
+            NSLog("[CoreCLI] Could not parse resolve-preset output for \(presetPath)")
+            return (nil, [])
+        }()
+    }
+
+    /// Decode `resolve-preset --json` output: the resolved preset (optional) and
+    /// its diagnostics. nil when the text is not the expected JSON. A pure seam,
+    /// so the decode is testable against pinned samples without running a server.
+    nonisolated static func decodeResolveOutput(_ text: String) -> (MachineDraft?, [PresetManager.PresetDiagnostic])? {
+        struct Output: Decodable {
+            let preset: MachineDraft?
+            let diagnostics: [PresetManager.PresetDiagnostic]
+        }
+        guard let data = text.data(using: .utf8),
+              let parsed = try? JSONDecoder().decode(Output.self, from: data) else {
+            return nil
+        }
+        return (parsed.preset, parsed.diagnostics)
+    }
+
+    // MARK: - Preset management
+
+    /// `report-presets-dirpath`, trimmed. Returns (dirpath, errorMessage) with
+    /// exactly one non-nil.
+    func reportPresetsDirpath(executablePath: String) async -> (String?, String?) {
+        let (output, error) = await run(executablePath: executablePath, arguments: ["report-presets-dirpath"])
+        if let error = error { return (nil, error) }
+        return (output.trimmingCharacters(in: .whitespacesAndNewlines), nil)
+    }
+
+    /// `create-preset --name <name> --from <presetId>`. Returns (newPresetId,
+    /// errorMessage) with exactly one non-nil; the id is trimmed.
+    func createPreset(name: String, from presetId: String, executablePath: String) async -> (String?, String?) {
+        let (output, error) = await run(
+            executablePath: executablePath, arguments: ["create-preset", "--name", name, "--from", presetId])
+        if let error = error { return (nil, error) }
+        return (output.trimmingCharacters(in: .whitespacesAndNewlines), nil)
+    }
+
+    /// `delete-preset <presetId>`. Returns an error message, or nil on success.
+    func deletePreset(presetId: String, executablePath: String) async -> String? {
+        let (_, error) = await run(executablePath: executablePath, arguments: ["delete-preset", presetId])
+        return error
+    }
+
+    /// `export-preset <presetId> --output <filepath>`. Returns an error message,
+    /// or nil on success.
+    func exportPreset(presetId: String, to filepath: String, executablePath: String) async -> String? {
+        let (_, error) = await run(
+            executablePath: executablePath, arguments: ["export-preset", presetId, "--output", filepath])
+        return error
+    }
+
+    /// `import-preset <filepath>`. Returns (newPresetId, errorMessage) with
+    /// exactly one non-nil; the id is trimmed.
+    func importPreset(filepath: String, executablePath: String) async -> (String?, String?) {
+        let (output, error) = await run(executablePath: executablePath, arguments: ["import-preset", filepath])
+        if let error = error { return (nil, error) }
+        return (output.trimmingCharacters(in: .whitespacesAndNewlines), nil)
     }
 }
