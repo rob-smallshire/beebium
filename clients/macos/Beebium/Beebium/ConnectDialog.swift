@@ -170,7 +170,7 @@ struct ConnectWindowContent: View {
                 HStack(spacing: 6) {
                     Text(machine.instanceName)
                         .fontWeight(.medium)
-                    Text(friendlyModelName(machine.modelType))
+                    Text(machine.modelName.isEmpty ? machine.modelType : machine.modelName)
                         .foregroundColor(.secondary)
                 }
                 .font(.callout)
@@ -285,32 +285,6 @@ struct ConnectWindowContent: View {
     private func errorBanner(_ message: String) -> some View {
         ServerErrorView(message: message, tint: .yellow) {
             errorMessage = nil
-        }
-    }
-
-    // MARK: - Helpers
-
-    /// Map internal model identifiers to friendly display names.
-    /// Model IDs match the executable suffix (e.g., beebium-model-b → "model-b").
-    private func friendlyModelName(_ modelType: String) -> String {
-        switch modelType {
-        case "model-b":
-            return "Model B"
-        case "model-b-plus":
-            return "Model B+"
-        case "model-b-plus-128k":
-            return "Model B+ 128K"
-        case "model-b-romram":
-            return "Model B (ROM/RAM)"
-        case "master-128":
-            return "Master 128"
-        case "master-compact":
-            return "Master Compact"
-        case "model-a":
-            return "Model A"
-        default:
-            // Fall back to the raw value with hyphens replaced by spaces and title-cased
-            return modelType.replacingOccurrences(of: "-", with: " ").capitalized
         }
     }
 

@@ -17,7 +17,8 @@ import Network
 struct DiscoveredMachine: Identifiable, Hashable {
     let id: String           // Bonjour service name (unique within type)
     let instanceName: String // Machine name from service instance name
-    let modelType: String    // "BBC Model B", etc. from TXT record
+    let modelType: String    // model type slug, e.g. "ModelB", from the TXT record
+    let modelName: String    // friendly name, e.g. "BBC Model B", from the TXT record
     let host: String         // Resolved hostname (without .local suffix for display)
     let port: Int
     let isLocal: Bool        // True if running on this Mac
@@ -217,6 +218,7 @@ class DiscoveryClient: ObservableObject {
             id: serviceKey,
             instanceName: service.name,
             modelType: txtDict["model"] ?? "Unknown Model",
+            modelName: txtDict["model_name"] ?? "",
             host: hostName,
             port: service.port,
             isLocal: isLocal,
