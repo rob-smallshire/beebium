@@ -36,6 +36,9 @@ struct AttachmentPointGroup: View {
     /// and to nested points; Add/Change/Remove release a focused field first.
     @FocusState.Binding var focusedField: String?
 
+    /// Commits a focused parameter field before Add/Change/Remove act.
+    @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
+
     /// Whether the Add / Change chooser popover is open.
     @State private var showingAdd = false
     @State private var showingChange = false
@@ -105,7 +108,7 @@ struct AttachmentPointGroup: View {
     /// attaching it, rather than picking blind from a menu of names.
     private var addButton: some View {
         Button {
-            focusedField = nil
+            fieldEditCoordinator?.commitActiveEdit()
             showingAdd = true
         } label: {
             Label("Add", systemImage: "plus")
@@ -117,7 +120,7 @@ struct AttachmentPointGroup: View {
                 candidates: AttachmentChooser.candidates(names: addable, schema: schema),
                 commitTitle: "Add",
                 onCommit: { name in
-                    focusedField = nil
+                    fieldEditCoordinator?.commitActiveEdit()
                     draft = model.draft(adding: name, to: draft)
                     showingAdd = false
                 },
@@ -147,7 +150,7 @@ struct AttachmentPointGroup: View {
                     changeButton(instance)
                 }
                 Button {
-                    focusedField = nil
+                    fieldEditCoordinator?.commitActiveEdit()
                     draft = model.draft(removingInstanceAt: instance.index, from: draft)
                 } label: {
                     Image(systemName: "trash")
@@ -177,7 +180,7 @@ struct AttachmentPointGroup: View {
     /// point could swap the instance for (the current one excepted).
     private func changeButton(_ instance: ExtensionInstanceModel.Instance) -> some View {
         Button("Change") {
-            focusedField = nil
+            fieldEditCoordinator?.commitActiveEdit()
             showingChange = true
         }
         .buttonStyle(.borderless)
@@ -188,7 +191,7 @@ struct AttachmentPointGroup: View {
                     names: changeAlternatives(for: instance), schema: schema),
                 commitTitle: "Change",
                 onCommit: { name in
-                    focusedField = nil
+                    fieldEditCoordinator?.commitActiveEdit()
                     draft = model.draft(settingSoleInstance: name, onPoint: point.id, in: draft)
                     showingChange = false
                 },

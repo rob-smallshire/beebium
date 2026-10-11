@@ -76,6 +76,13 @@ struct PopoverTextField: NSViewRepresentable {
     /// field (CommittingField) uses this so an external change refreshes it after
     /// an earlier edit; a one-shot popover leaves it false.
     var reappliesWhenUnfocused: Bool = false
+    /// The committed value a long-lived field must show whenever it is not being
+    /// edited (first responder), taken straight from the source of truth rather
+    /// than from `text`. `text` holds the edit buffer, which can lag the committed
+    /// value after another control commits and releases this field; applying this
+    /// when unfocused guarantees the field reflects the real value. Used only with
+    /// `reappliesWhenUnfocused`; nil leaves the old `text`-only behaviour.
+    var committedDisplay: String? = nil
     /// Draw the bezel red (a rejected commit). The host clears it on the next edit.
     var isInvalid: Bool = false
     let onSubmit: () -> Void
@@ -156,13 +163,28 @@ struct PopoverTextField: NSViewRepresentable {
         }
         // Apply the model value until the user starts typing, so the initial value
         // lands even though the view already has focus; after that their text wins
-        // so a parent re-render cannot clobber it or move the caret. A long-lived
-        // field also re-applies the value whenever it is not first responder, so an
-        // external change refreshes it after an earlier edit.
+        // so a parent re-render cannot clobber it or move the caret.
         let isFirstResponder = (textView.window?.firstResponder === textView)
-        let shouldApply = !context.coordinator.userBeganEditing
-            || (reappliesWhenUnfocused && !isFirstResponder)
-        if shouldApply && textView.string != text {
+        if reappliesWhenUnfocused && !isFirstResponder {
+            // A long-lived field not being edited always reflects the committed
+            // value straight from the source of truth, so a change another control
+            // made to the shared value refreshes this field even after it held an
+            // edit (the edit buffer in `text` may still lag). Reset the typing flag
+            // so the next focus re-applies cleanly.
+            let display = committedDisplay ?? text
+            if textView.string != display {
+                textView.string = display
+                // Force a repaint: replacing the text with a same-length string
+                // (e.g. "123" -> "251") on a text view that is not first responder
+                // does not always invalidate the laid-out glyphs, leaving the old
+                // value on screen though `string` is correct.
+                textView.needsLayout = true
+                textView.needsDisplay = true
+            }
+            if context.coordinator.userBeganEditing {
+                context.coordinator.userBeganEditing = false
+            }
+        } else if !context.coordinator.userBeganEditing && textView.string != text {
             textView.string = text
         }
         (nsView as? BezelTextFieldScrollView)?.isInvalid = isInvalid

@@ -323,6 +323,50 @@ final class CommittingFieldTests: XCTestCase {
         XCTAssertEqual(model.text, "40000")
     }
 
+    // MARK: - FieldEditCoordinator ordering (commit -> release -> control action)
+
+    /// A control that changes the shared byte must commit the focused field FIRST,
+    /// then act on the committed value -- so a pending edit lands before the control's
+    /// change, and the control never acts on the field's stale value.
+    @MainActor
+    func testCommitActiveEditFlushesBeforeControlActs() {
+        let coordinator = FieldEditCoordinator()
+        var byte = 0xFF
+        var order: [String] = []
+        // The focused field's flush commits its typed value (123) into the byte.
+        coordinator.fieldFocused {
+            order.append("commit")
+            byte = 123
+        }
+        // A link toggle acts: flush the field, then toggle a bit on the COMMITTED byte.
+        coordinator.commitActiveEdit()
+        order.append("toggle")
+        byte ^= 0x80
+
+        XCTAssertEqual(order, ["commit", "toggle"])   // commit happened before the action
+        XCTAssertEqual(byte, 123 ^ 0x80)              // toggled relative to 0x7B -> 0xFB (251)
+    }
+
+    @MainActor
+    func testCommitActiveEditIsNoOpWhenNothingFocused() {
+        let coordinator = FieldEditCoordinator()
+        var flushed = false
+        coordinator.fieldFocused { flushed = true }
+        coordinator.fieldBlurred()        // field lost focus
+        coordinator.commitActiveEdit()    // must not flush a field no longer editing
+        XCTAssertFalse(flushed)
+    }
+
+    @MainActor
+    func testCommitActiveEditFlushesOnlyOnce() {
+        let coordinator = FieldEditCoordinator()
+        var flushes = 0
+        coordinator.fieldFocused { flushes += 1 }
+        coordinator.commitActiveEdit()
+        coordinator.commitActiveEdit()    // the second call has nothing to flush
+        XCTAssertEqual(flushes, 1)
+    }
+
     // MARK: - Fixtures
 
     private static func integerParameter(key: String, min: Int?, max: Int?) -> ExtensionParameter {

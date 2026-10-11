@@ -25,6 +25,9 @@ struct ProcessorSectionView: View {
     /// picker releases a focused field too.
     @FocusState.Binding var focusedField: String?
 
+    /// Commits a focused field before this page's controls act.
+    @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
+
     /// The attachment point coprocessors plug into. "tube" is the fixed BBC
     /// second-processor bus; the Processor section owns it (Peripherals excludes
     /// it) and presents it as a single-occupancy picker via AttachmentPointGroup.
@@ -97,7 +100,7 @@ struct ProcessorSectionView: View {
     }
 
     private func setChoice(_ choice: SpeedChoice) {
-        focusedField = nil
+        fieldEditCoordinator?.commitActiveEdit()
         switch choice {
         case .unlimited:         draft.speed = .string(SpeedPresentation.unlimitedToken)
         case .multiplier(let m): draft.speed = .double(m)

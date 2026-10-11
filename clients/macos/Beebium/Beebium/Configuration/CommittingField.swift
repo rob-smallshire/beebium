@@ -12,6 +12,55 @@
 
 import SwiftUI
 
+/// Commits the field currently being edited before another control acts, so the
+/// control sees the committed value and nothing is left focused afterwards.
+///
+/// This is the one place that enforces the order commit -> release -> control
+/// action. Each control (a check box, a picker, Add/Change/Remove, a background
+/// click) calls `commitActiveEdit()` at the start of its action instead of trying
+/// to release focus itself: with the AppKit-backed field, clearing a @FocusState
+/// cannot commit synchronously (the resign and commit are async), so the control
+/// would otherwise act on the field's stale value and leave it focused. A
+/// `CommittingField` registers its synchronous "commit my edit and resign" when it
+/// gains focus and clears it on blur.
+@MainActor
+final class FieldEditCoordinator: ObservableObject {
+    private var flushActive: (() -> Void)?
+
+    /// Called by the focused field: `flush` commits its edit (if any) and resigns,
+    /// synchronously, when invoked.
+    func fieldFocused(_ flush: @escaping () -> Void) { flushActive = flush }
+
+    /// Called by a field that has lost focus, so a later `commitActiveEdit` is a
+    /// no-op rather than flushing a field that is no longer being edited.
+    func fieldBlurred() { flushActive = nil }
+
+    /// Commit and resign the field being edited now, synchronously. A no-op when
+    /// nothing is focused. Call it at the start of any control's action that reads
+    /// or changes shared state, so the control acts on the committed value and
+    /// leaves nothing focused.
+    func commitActiveEdit() {
+        let flush = flushActive
+        flushActive = nil
+        flush?()
+    }
+}
+
+private struct FieldEditCoordinatorKey: EnvironmentKey {
+    static let defaultValue: FieldEditCoordinator? = nil
+}
+
+extension EnvironmentValues {
+    /// The Configurator's field-edit coordinator, injected by ConfigurationEditor.
+    /// Optional (nil by default) so a view hosted without it -- a test harness, a
+    /// preview -- still builds and runs; there, controls simply have no pending
+    /// field edit to flush.
+    var fieldEditCoordinator: FieldEditCoordinator? {
+        get { self[FieldEditCoordinatorKey.self] }
+        set { self[FieldEditCoordinatorKey.self] = newValue }
+    }
+}
+
 /// The pure commit decision for a `CommittingField`, factored out so it is unit
 /// testable and so the view and its model share exactly one rule.
 enum CommittingFieldLogic {
@@ -156,6 +205,9 @@ struct CommittingField<Value: Equatable>: View {
     @State private var model: EditableFieldModel<Value>
     /// Holds the backing NSTextView so shared-focus changes can focus or resign it.
     @StateObject private var controller = TemplateFieldController()
+    /// The shared coordinator that lets another control commit this field's edit
+    /// synchronously before it acts. nil when hosted without one (tests, previews).
+    @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
     init(value: Value, format: @escaping (Value) -> String, parse: @escaping (String) -> Value?,
          placeholder: String = "", width: CGFloat? = 120,
@@ -183,6 +235,7 @@ struct CommittingField<Value: Equatable>: View {
             onFocus: { focusGained() },
             onBlur: { resign() },
             reappliesWhenUnfocused: true,
+            committedDisplay: currentDisplay,
             isInvalid: model.invalid,
             onSubmit: { commitEdit() },
             onCancel: { cancelEdit() })
@@ -192,12 +245,19 @@ struct CommittingField<Value: Equatable>: View {
         }
         .onChange(of: currentDisplay) { newDisplay in
             // Refresh to the external value unless the user is mid-edit here --
-            // focused AND has typed an uncommitted change. Guarding on focus alone
-            // was racy: a field that gains focus just as the byte changes (Tab from
-            // the other view of the same byte) would see focusedField already point
-            // at itself and skip the refresh, keeping its pre-change text. Keying on
-            // an actual uncommitted edit is timing-independent.
-            let midEdit = focusedField == fieldID && model.isEdited
+            // actually editing THIS field (its text view is first responder) AND has
+            // typed an uncommitted change. Key the "focused" half on the live AppKit
+            // first-responder state, not the shared @FocusState: the latter is
+            // written asynchronously, so just after another control committed and
+            // released this field (a check box flushing a pending edit) @FocusState
+            // can still read this field, which wrongly skipped the refresh and left
+            // the field showing the just-typed value while the byte had moved on.
+            // The first-responder check is synchronous truth; a released field always
+            // refreshes.
+            let isFirstResponder = controller.textView.map {
+                $0.window?.firstResponder === $0
+            } ?? false
+            let midEdit = isFirstResponder && model.isEdited
             if !midEdit {
                 model.syncExternal(display: newDisplay, focused: false)
             }
@@ -212,6 +272,22 @@ struct CommittingField<Value: Equatable>: View {
         model.syncExternal(display: currentDisplay, focused: false)
         model.noteFocusGain()
         if focusedField != fieldID { focusedField = fieldID }
+        // Let another control commit this field synchronously before it acts.
+        fieldEditCoordinator?.fieldFocused { flushAndResign() }
+    }
+
+    /// Commit this field's edit (if the user changed it) and resign first
+    /// responder, synchronously. Called by the coordinator when another control is
+    /// about to act, so the control sees the committed value and nothing stays
+    /// focused. The async blur path (`resign`) still runs afterwards but finds the
+    /// edit already committed, so it is a no-op refresh.
+    private func flushAndResign() {
+        if model.isEdited { commitEdit() }
+        if let textView = controller.textView,
+           textView.window?.firstResponder === textView {
+            textView.window?.makeFirstResponder(nil)
+        }
+        if focusedField == fieldID { focusedField = nil }
     }
 
     /// Follow a shared-focus change: make the text view first responder when this
@@ -252,5 +328,6 @@ struct CommittingField<Value: Equatable>: View {
         } else {
             model.syncExternal(display: currentDisplay, focused: false)
         }
+        fieldEditCoordinator?.fieldBlurred()
     }
 }

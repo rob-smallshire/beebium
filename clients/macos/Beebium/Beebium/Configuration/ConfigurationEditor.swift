@@ -82,6 +82,12 @@ struct ConfigurationEditor: View {
     /// committing the first changes the draft.)
     @FocusState private var focusedField: String?
 
+    /// Commits whichever field is being edited before another control acts, so the
+    /// order is always commit -> release -> control action, enforced here rather
+    /// than per control. Injected into the environment for every section's fields
+    /// and controls to share.
+    @StateObject private var fieldEditCoordinator = FieldEditCoordinator()
+
     /// A configuration section the dialog can show.
     enum ConfigSection: String, Identifiable, CaseIterable {
         case storage = "Storage"
@@ -164,8 +170,9 @@ struct ConfigurationEditor: View {
             contentView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
-                .onTapGesture { focusedField = nil }
+                .onTapGesture { fieldEditCoordinator.commitActiveEdit() }
         }
+        .environment(\.fieldEditCoordinator, fieldEditCoordinator)
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(6)
         .overlay(

@@ -34,6 +34,10 @@ struct NetworkSectionView: View {
     /// station, port or net fields is focused.
     @FocusState.Binding var focusedField: String?
 
+    /// Commits a focused field (the station number, a transport parameter) before
+    /// another control here acts, so the order is commit -> release -> action.
+    @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
+
     /// Whether the transport chooser popover is open.
     @State private var showingTransportChooser = false
 
@@ -184,7 +188,7 @@ struct NetworkSectionView: View {
             }
             Spacer()
             Button("Change") {
-                focusedField = nil
+                fieldEditCoordinator?.commitActiveEdit()
                 showingTransportChooser = true
             }
             .buttonStyle(.borderless)
@@ -195,7 +199,7 @@ struct NetworkSectionView: View {
                     commitTitle: "Change",
                     initialSelection: transportName ?? "",
                     onCommit: { name in
-                        focusedField = nil
+                        fieldEditCoordinator?.commitActiveEdit()
                         setTransport(name)
                         showingTransportChooser = false
                     },
@@ -257,7 +261,7 @@ struct NetworkSectionView: View {
     // MARK: - Edits (write through to draft.econet)
 
     private func setEnabled(_ on: Bool) {
-        focusedField = nil
+        fieldEditCoordinator?.commitActiveEdit()
         if on {
             let station: JSONValue = schema.station.auto ? .string("auto") : .int(schema.station.min)
             let transport = schema.transports.first.map {
@@ -270,7 +274,7 @@ struct NetworkSectionView: View {
     }
 
     private func setMode(_ mode: StationMode) {
-        focusedField = nil
+        fieldEditCoordinator?.commitActiveEdit()
         switch mode {
         case .number: setStation(.number(currentNumberOrDefault))
         case .auto:   setStation(.auto)
@@ -304,7 +308,7 @@ struct NetworkSectionView: View {
     }
 
     private func setTransport(_ name: String) {
-        focusedField = nil
+        fieldEditCoordinator?.commitActiveEdit()
         guard var econet = draft.econet else { return }
         // Changing transport starts fresh parameters; resolve-preset fills the
         // new transport's defaults.

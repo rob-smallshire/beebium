@@ -712,6 +712,7 @@ private struct StringListEditor: View {
     @FocusState.Binding var focusedField: String?
     let idBase: String
     let setValues: ([String]) -> Void
+    @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -726,14 +727,14 @@ private struct StringListEditor: View {
                         focusedField: $focusedField, fieldID: "\(idBase)[\(index)]",
                         onCommit: { var v = values; v[index] = $0; setValues(v) })
                     Button {
-                        focusedField = nil
+                        fieldEditCoordinator?.commitActiveEdit()
                         var v = values; v.remove(at: index); setValues(v)
                     } label: { Image(systemName: "minus.circle") }
                         .buttonStyle(.borderless)
                 }
             }
             Button {
-                focusedField = nil
+                fieldEditCoordinator?.commitActiveEdit()
                 setValues(values + [""])
             } label: { Label("Add", systemImage: "plus") }
                 .buttonStyle(.borderless)

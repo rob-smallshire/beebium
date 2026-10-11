@@ -42,6 +42,10 @@ struct KeyboardSectionView: View {
     /// another control changes the byte.
     @FocusState.Binding var focusedField: String?
 
+    /// Commits a focused byte field before this page's controls change the byte, so
+    /// the change lands on the committed value and the field is released first.
+    @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
+
     private var layout: StartupSchemaSection.LinksLayout { schema.links }
 
     var body: some View {
@@ -72,7 +76,10 @@ struct KeyboardSectionView: View {
                 Text("Screen mode")
                 Picker("", selection: Binding(
                     get: { screenMode },
-                    set: { focusedField = nil; setByte(layout.byte(currentByte, settingScreenMode: $0)) })) {
+                    set: { newMode in
+                        fieldEditCoordinator?.commitActiveEdit()
+                        setByte(layout.byte(currentByte, settingScreenMode: newMode))
+                    })) {
                     ForEach(schema.screenMode.min...schema.screenMode.max, id: \.self) { mode in
                         Text("\(mode)").tag(mode)
                     }
@@ -82,7 +89,14 @@ struct KeyboardSectionView: View {
             }
             Toggle(isOn: Binding(
                 get: { autoBoot },
-                set: { focusedField = nil; setByte(layout.byte(currentByte, settingAutoBoot: $0)) })) {
+                set: { _ in
+                    // Commit any focused byte field first, then toggle relative to
+                    // the committed byte (not the box's pre-commit state), so a
+                    // pending edit lands before this change -- never on the stale
+                    // value the box was showing.
+                    fieldEditCoordinator?.commitActiveEdit()
+                    setByte(layout.byte(currentByte, settingAutoBoot: !autoBoot))
+                })) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Auto-boot")
                     Text(Self.autoBootBehaviour(layout: layout))
@@ -104,7 +118,14 @@ struct KeyboardSectionView: View {
             ForEach(layout.bits) { link in
                 Toggle(isOn: Binding(
                     get: { layout.isLinkMade(bit: link.bit, in: currentByte) },
-                    set: { focusedField = nil; setByte(layout.byte(currentByte, settingLink: link.bit, made: $0)) })) {
+                    set: { _ in
+                        // Commit any focused byte field first, then toggle this link
+                        // relative to the committed byte, so a pending edit lands
+                        // before the link change rather than being discarded.
+                        fieldEditCoordinator?.commitActiveEdit()
+                        setByte(layout.byte(currentByte, settingLink: link.bit,
+                                            made: !layout.isLinkMade(bit: link.bit, in: currentByte)))
+                    })) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("\(link.link): \(link.label)")
                         if !link.description.isEmpty {
