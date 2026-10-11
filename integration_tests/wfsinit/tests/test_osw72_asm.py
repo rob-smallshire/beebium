@@ -139,7 +139,7 @@ def test_osw72_read_sense_adfs_read_asm(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",

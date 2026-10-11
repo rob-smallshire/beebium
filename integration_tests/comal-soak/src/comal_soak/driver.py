@@ -231,7 +231,7 @@ def run_soak(args: argparse.Namespace) -> SoakResult:
     with ThreadPoolExecutor(max_workers=1) as executor, Beebium.launch(
         mos_filepath=args.roms / "acorn-mos_2_0.rom",
         basic_filepath=args.roms / "bbc-basic_2.rom",
-        server_filepath=args.server,
+        server=args.server,
         extra_args=extra_args,
         startup_timeout=20.0,
     ) as bbc:

@@ -135,7 +135,7 @@ def bbc_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc",
@@ -224,7 +224,7 @@ def tube_launch(
             with Beebium.launch(
                 mos_filepath=mos_filepath,
                 basic_filepath=basic_filepath,
-                server_filepath=beebium_server_filepath,
+                server=beebium_server_filepath,
                 extra_args=base + list(extra or []),
                 startup_timeout=20.0,
             ) as bbc:
@@ -378,7 +378,7 @@ def model_b_launch(
             with Beebium.launch(
                 mos_filepath=mos_filepath,
                 basic_filepath=basic_filepath,
-                server_filepath=beebium_server_filepath,
+                server=beebium_server_filepath,
                 extra_args=base + list(extra or []),
                 startup_timeout=20.0,
             ) as bbc:

@@ -138,7 +138,7 @@ def main(argv=None):
     with Beebium.launch(
         mos_filepath=str(ROMS_DIRPATH / "acorn-mos_1_20.rom"),
         basic_filepath=str(ROMS_DIRPATH / "bbc-basic_2.rom"),
-        server_filepath=str(args.server_filepath),
+        server=str(args.server_filepath),
     ) as bbc:
         bbc.debugger.ensure_running()
         bbc.run_until_or_timeout(

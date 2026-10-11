@@ -568,7 +568,7 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
     with ThreadPoolExecutor(max_workers=1) as executor, Beebium.launch(
         mos_filepath=args.roms / MOS_ROM,
         basic_filepath=args.roms / BASIC_ROM,
-        server_filepath=args.server,
+        server=args.server,
         extra_args=extra_args,
         startup_timeout=20.0,
     ) as bbc:

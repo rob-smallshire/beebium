@@ -54,7 +54,7 @@ def test_mismatched_client_is_rejected_at_connect(
             with Beebium.launch(
                 mos_filepath=mos_filepath,
                 basic_filepath=basic_filepath,
-                server_filepath=beebium_server_filepath,
+                server=beebium_server_filepath,
             ):
                 pass
     except ServerNotFoundError as e:
@@ -89,7 +89,7 @@ def test_mismatch_message_names_the_server_binary(
             with Beebium.launch(
                 mos_filepath=mos_filepath,
                 basic_filepath=basic_filepath,
-                server_filepath=beebium_server_filepath,
+                server=beebium_server_filepath,
             ):
                 pass
     except ServerNotFoundError as e:

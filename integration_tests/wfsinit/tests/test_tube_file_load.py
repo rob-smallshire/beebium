@@ -141,7 +141,7 @@ def test_load_file_via_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
@@ -213,7 +213,7 @@ def test_call_loaded_file_via_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",

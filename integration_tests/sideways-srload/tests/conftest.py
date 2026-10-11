@@ -287,7 +287,7 @@ def b_plus_128k_with_adfs_at_startup(
         with Beebium.launch(
             mos_filepath=b_plus_mos_rom_filepath,
             basic_filepath=None,
-            server_filepath=b_plus_128k_server_filepath,
+            server=b_plus_128k_server_filepath,
             extra_args=[
                 "--sideways", f"slot=9:type=rom:image={adfs_rom_filepath}",
             ],
@@ -322,7 +322,7 @@ def b_plus_128k_with_adfs_disc(
         with Beebium.launch(
             mos_filepath=b_plus_mos_rom_filepath,
             basic_filepath=None,
-            server_filepath=b_plus_128k_server_filepath,
+            server=b_plus_128k_server_filepath,
             extra_args=[
                 "--floppy", f"0:{srload_ssd_with_adfs_filepath}",
             ],
@@ -362,7 +362,7 @@ def romram_with_srload_disc(
         with Beebium.launch(
             mos_filepath=mos_rom_filepath,
             basic_filepath=basic_rom_filepath,
-            server_filepath=romram_server_filepath,
+            server=romram_server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
                 "--sideways", f"slot=14:type=rom:image={dfs_rom_filepath}",

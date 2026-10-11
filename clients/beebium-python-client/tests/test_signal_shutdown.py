@@ -51,7 +51,7 @@ def server_filepath(mos_filepath: Path, beebium_server_filepath: Path | None) ->
     """Path to the server executable these tests spawn directly."""
     try:
         return ServerProcess(
-            mos_filepath=mos_filepath, server_filepath=beebium_server_filepath
+            mos_filepath=mos_filepath, server=beebium_server_filepath
         ).server_filepath
     except ServerNotFoundError as e:
         pytest.skip(str(e))

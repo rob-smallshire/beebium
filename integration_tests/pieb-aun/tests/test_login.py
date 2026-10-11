@@ -110,7 +110,7 @@ def test_login_with_flat_net_declaration(
     with Beebium.launch(
         mos_filepath=mos_filepath,
         basic_filepath=basic_filepath,
-        server_filepath=server_filepath,
+        server=server_filepath,
         extra_args=beebium_args,
         startup_timeout=30.0,
     ) as bbc:
@@ -137,7 +137,7 @@ def test_login_with_matching_non_zero_net_declaration(
     with Beebium.launch(
         mos_filepath=mos_filepath,
         basic_filepath=basic_filepath,
-        server_filepath=server_filepath,
+        server=server_filepath,
         extra_args=beebium_args,
         startup_timeout=30.0,
     ) as bbc:

@@ -211,17 +211,6 @@ class TestDefaultResolution:
 class TestServerProcessIntegration:
     """ServerProcess resolves an installation and honours server=/variant=/mos."""
 
-    def test_deprecated_server_filepath_alias_warns(self, tmp_path: Path) -> None:
-        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
-        with pytest.warns(DeprecationWarning, match="server_filepath="):
-            process = ServerProcess(server_filepath=binary)
-        assert process.server_filepath == binary
-
-    def test_server_and_alias_together_is_an_error(self, tmp_path: Path) -> None:
-        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
-        with pytest.raises(ValueError):
-            ServerProcess(server=binary, server_filepath=binary)
-
     def test_variant_selects_the_binary(self, tmp_path: Path) -> None:
         root = _make_install_tree(tmp_path / "inst")
         process = ServerProcess(server=root, variant="model-b-plus")

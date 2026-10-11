@@ -171,7 +171,7 @@ def bbc_rpc_serial(mos_filepath: Path, basic_filepath, beebium_server_filepath):
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=["--rpc-serial"],
         ) as instance:
             yield instance
@@ -230,7 +230,7 @@ def bbc_aun(mos_filepath: Path, basic_filepath, beebium_server_filepath):
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=["--aun", "net=1:discovery=off:map-file=none"],
         ) as instance:
             yield instance

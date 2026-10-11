@@ -114,7 +114,7 @@ def main(argv=None):
     with Beebium.launch(
         mos_filepath=str(ROMS_DIRPATH / "acorn-mos_1_20.rom"),
         basic_filepath=str(ROMS_DIRPATH / "bbc-basic_2.rom"),
-        server_filepath=str(REPO_DIRPATH / "build" / "src" / "server"
+        server=str(REPO_DIRPATH / "build" / "src" / "server"
                             / "beebium-model-b"),
         extra_args=["--fdc", "acorn-1770",
                     "--sideways",

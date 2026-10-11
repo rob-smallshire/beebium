@@ -214,7 +214,7 @@ def test_l3fs_floppy_client_login(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=server_extra_args,
             startup_timeout=30.0,
         ) as server_bbc:
@@ -247,7 +247,7 @@ def test_l3fs_floppy_client_login(
             with Beebium.launch(
                 mos_filepath=mos_filepath,
                 basic_filepath=basic_filepath,
-                server_filepath=client_server_filepath,
+                server=client_server_filepath,
                 extra_args=client_extra_args,
                 startup_timeout=30.0,
             ) as client_bbc:

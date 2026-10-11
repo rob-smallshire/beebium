@@ -118,7 +118,7 @@ def test_reply_overtaking_its_ack_still_reaches_the_guest(
     with Beebium.launch(
         mos_filepath=mos_filepath,
         basic_filepath=basic_filepath,
-        server_filepath=server_filepath,
+        server=server_filepath,
         extra_args=beebium_args_via_proxy,
         startup_timeout=30.0,
     ) as bbc:

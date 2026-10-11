@@ -46,7 +46,7 @@ def test_packaged_tube_rom_boots_banner(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 tube_flag,
                 "--fdc", "acorn-1770",

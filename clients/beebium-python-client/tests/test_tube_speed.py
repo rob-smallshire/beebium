@@ -127,7 +127,7 @@ def bbc_copro(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=[
                 f"--{coprocessor_flag}",
                 "--fdc", "acorn-1770",

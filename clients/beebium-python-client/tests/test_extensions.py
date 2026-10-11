@@ -53,7 +53,7 @@ def bbc_with_rpc_serial(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=["--rpc-serial"],
         ) as instance:
             yield instance

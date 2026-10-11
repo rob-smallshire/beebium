@@ -61,7 +61,7 @@ def test_transmission_to_absent_station_is_reported_as_failure(
     with Beebium.launch(
         mos_filepath=mos_filepath,
         basic_filepath=basic_filepath,
-        server_filepath=server_filepath,
+        server=server_filepath,
         extra_args=beebium_args,
         startup_timeout=30.0,
     ) as bbc:

@@ -60,7 +60,7 @@ def cts_bbc(mos_filepath, basic_filepath, beebium_server_filepath):
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=["--rpc-serial", f"tx_buffer={_TX_BUFFER}"],
         ) as instance:
             instance.debugger.stop()

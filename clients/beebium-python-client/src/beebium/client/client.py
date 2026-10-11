@@ -17,7 +17,6 @@ from __future__ import annotations
 import contextlib
 import time
 import uuid
-import warnings
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -177,7 +176,6 @@ class Beebium:
         basic_filepath: str | Path | None = None,
         server: ServerInstallation | str | Path | None = None,
         variant: str = "model-b",
-        server_filepath: str | Path | None = None,
         port: int = 0,
         startup_timeout: float = 10.0,
         connection_timeout: float = 5.0,
@@ -198,7 +196,6 @@ class Beebium:
                 resolution applies (BEEBIUM_SERVER, checkout build, the
                 beebium-server wheel, then PATH).
             variant: the machine variant to run ("model-b" default).
-            server_filepath: deprecated alias for ``server=`` (a binary path).
             port: Port to listen on. If 0 (default), a free port is allocated.
             startup_timeout: Maximum time to wait for server to start (seconds).
             connection_timeout: Maximum time to wait for connection (seconds).
@@ -216,19 +213,6 @@ class Beebium:
             ServerStartupError: If the server fails to start.
             ConnectionError: If the connection cannot be established.
         """
-        # Handle the deprecated alias here so the warning points at the caller's
-        # launch() line, and pass server= to ServerProcess (no double warning).
-        if server_filepath is not None:
-            if server is not None:
-                raise ValueError("pass server=, not both server= and the deprecated server_filepath=")
-            warnings.warn(
-                "server_filepath= is deprecated; use server= (a ServerInstallation, "
-                "a binary path, or an install root)",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-            server = server_filepath
-
         process = ServerProcess(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,

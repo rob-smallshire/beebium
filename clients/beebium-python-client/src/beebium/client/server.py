@@ -22,7 +22,6 @@ import sys
 import threading
 import time
 import uuid
-import warnings
 from pathlib import Path
 
 import grpc
@@ -51,7 +50,6 @@ class ServerProcess:
         basic_filepath: str | Path | None = None,
         server: ServerInstallation | str | Path | None = None,
         variant: str = DEFAULT_VARIANT,
-        server_filepath: str | Path | None = None,
         port: int = 0,
         extra_args: list[str] | None = None,
         preset: str | Path | None = None,
@@ -68,7 +66,6 @@ class ServerProcess:
                 resolution applies (BEEBIUM_SERVER, checkout build, the
                 beebium-server wheel, then PATH).
             variant: the machine variant within the installation ("model-b").
-            server_filepath: deprecated alias for ``server=`` (a binary path).
             port: Port to listen on. If 0 (default), a free port is allocated.
             extra_args: Additional command-line arguments to pass to the server
                 (e.g., ["--tube", "65C02-3MHz"]).
@@ -77,17 +74,6 @@ class ServerProcess:
                 preset as reported by ``list-presets`` (e.g. "model-b-disc").
                 Command-line options, including ``extra_args``, override it.
         """
-        if server_filepath is not None:
-            if server is not None:
-                raise ValueError("pass server=, not both server= and the deprecated server_filepath=")
-            warnings.warn(
-                "server_filepath= is deprecated; use server= (a ServerInstallation, "
-                "a binary path, or an install root)",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            server = server_filepath
-
         self._mos_filepath = Path(mos_filepath) if mos_filepath is not None else None
         self._basic_filepath = Path(basic_filepath) if basic_filepath else None
         self._variant = variant

@@ -150,7 +150,7 @@ def bbc_dfs(bplus_server_filepath, mos_filepath, basic_filepath,
     with Beebium.launch(
         mos_filepath=mos_filepath,
         basic_filepath=basic_filepath,
-        server_filepath=bplus_server_filepath,
+        server=bplus_server_filepath,
         extra_args=extra_args,
         startup_timeout=15.0,
     ) as bbc:

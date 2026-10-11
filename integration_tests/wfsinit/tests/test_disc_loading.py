@@ -44,7 +44,7 @@ def test_boot_from_full_size_ssd(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
                 "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
@@ -88,7 +88,7 @@ def test_boot_from_truncated_beebasm_ssd(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
                 "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
@@ -133,7 +133,7 @@ def test_boot_from_truncated_ssd_with_adfs_rom_no_scsi(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
                 "--sideways", f"slot=10:type=rom:image={adfs_filepath}",
@@ -179,7 +179,7 @@ def test_boot_from_truncated_ssd_with_adfs_and_scsi(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
                 "--sideways", f"slot=10:type=rom:image={adfs_filepath}",

@@ -78,7 +78,7 @@ def main():
     with Beebium.launch(
         mos_filepath=roms / "acorn-mos_1_20.rom",
         basic_filepath=roms / "bbc-basic_2.rom",
-        server_filepath=server_filepath,
+        server=server_filepath,
         extra_args=extra_args,
         startup_timeout=30.0,
     ) as bbc:

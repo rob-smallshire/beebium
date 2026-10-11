@@ -51,7 +51,7 @@ def rpc_serial_bbc(mos_filepath, basic_filepath, beebium_server_filepath):
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=["--rpc-serial"],
         ) as instance:
             instance.debugger.stop()
@@ -67,7 +67,7 @@ def loopback_serial_bbc(mos_filepath, basic_filepath, beebium_server_filepath):
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=["--loopback-serial"],
         ) as instance:
             instance.debugger.stop()
@@ -128,7 +128,7 @@ def host_serial_bbc(mos_filepath, basic_filepath, beebium_server_filepath):
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=["--host-serial", "mode=pty"],
         ) as instance:
             instance.debugger.stop()

@@ -164,7 +164,7 @@ def bbc_rtc(model_b_server_filepath, mos_filepath, basic_filepath,
     with Beebium.launch(
         mos_filepath=mos_filepath,
         basic_filepath=basic_filepath,
-        server_filepath=model_b_server_filepath,
+        server=model_b_server_filepath,
         extra_args=extra_args,
         startup_timeout=15.0,
     ) as bbc:

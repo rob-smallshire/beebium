@@ -58,7 +58,7 @@ def commstar_after_stale_burst(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=[
                 "--rpc-serial",
                 "--sideways",

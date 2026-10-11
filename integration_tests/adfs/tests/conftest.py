@@ -185,7 +185,7 @@ def _make_bbc_adfs(bplus_server_filepath, mos_filepath, basic_filepath,
     return Beebium.launch(
         mos_filepath=mos_filepath,
         basic_filepath=basic_filepath,
-        server_filepath=bplus_server_filepath,
+        server=bplus_server_filepath,
         extra_args=extra_args,
         startup_timeout=15.0,
     )

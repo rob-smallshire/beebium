@@ -44,7 +44,7 @@ def _server(mos_filepath, basic_filepath, beebium_server_filepath) -> ServerProc
         return ServerProcess(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
         )
     except ServerNotFoundError as e:
         pytest.skip(str(e))

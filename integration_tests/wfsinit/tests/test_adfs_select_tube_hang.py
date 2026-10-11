@@ -262,7 +262,7 @@ def test_adfs_select_with_tube_and_scsi(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 tube_flag,
                 "--fdc", "acorn-1770",
@@ -323,7 +323,7 @@ def test_osword_72_then_adfs_select_with_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
@@ -413,7 +413,7 @@ def test_osword_72_correct_cb_with_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
@@ -489,7 +489,7 @@ def test_adfs_cat_with_tube_and_scsi(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
@@ -558,7 +558,7 @@ def test_osword_72_scsi_read_with_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
@@ -661,7 +661,7 @@ def test_osword_72_after_adfs_select_with_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
@@ -754,7 +754,7 @@ def test_watchpoint_025f_tube_flag(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",

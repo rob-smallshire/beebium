@@ -105,7 +105,7 @@ def bbc_no_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
                 "--sideways", f"slot=14:type=rom:image={dfs_rom_filepath}",
@@ -139,7 +139,7 @@ def bbc_with_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",

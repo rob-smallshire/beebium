@@ -34,7 +34,7 @@ def bbc_rtc(mos_filepath: Path, basic_filepath, beebium_server_filepath):
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             # The default 4-bit-year layout only spans 1981-1996 and refuses to
             # start from the host's (2026) wall clock. The 7-bit-year layout
             # spans 1981-2099, so the server starts from the real clock with no
@@ -52,7 +52,7 @@ def bbc_scsi(mos_filepath: Path, basic_filepath, beebium_server_filepath):
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=["--acorn-scsi"],
         ) as instance:
             yield instance
