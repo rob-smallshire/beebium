@@ -74,7 +74,11 @@ public:
             auto candidate = unique_temp_path(prefix);
             std::error_code ec;
             if (std::filesystem::create_directory(candidate, ec)) {
-                dirpath_ = std::move(candidate);
+                // One spelling of the directory, the one the filesystem
+                // reports: no symlinked prefix (macOS /var is /private/var)
+                // and no 8.3 short name (Windows RUNNER~1), so a test's
+                // expected path matches what the code under test derives.
+                dirpath_ = std::filesystem::canonical(candidate);
                 return;
             }
         }

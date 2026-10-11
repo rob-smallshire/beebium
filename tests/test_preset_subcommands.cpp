@@ -505,8 +505,8 @@ TEST_CASE("create-preset: machine settings round-trip through the loader",
     // A relative --floppy path means what it means to `start`: relative to the
     // working directory, so the preset records it absolutely.
     CHECK(*loaded.config->storage->floppy_drives.at(0) ==
-          "file://" + (std::filesystem::current_path() / "discs" / "game.ssd")
-                          .lexically_normal().generic_string());
+          beebium::server::normalize_image_uri(
+              (std::filesystem::current_path() / "discs" / "game.ssd").string(), {}));
 }
 
 TEST_CASE("create-preset: --links and --language-rom round-trip through the loader",
@@ -2403,8 +2403,8 @@ TEST_CASE("create-preset --from: a flag overrides the source preset as start wou
                          {"path", "/dev/ttyUSB0"}});
     // The source's relative floppy meant its own directory; the copy says so.
     CHECK(preset.at("storage").at("floppy_drives")[0].at("image_uri") ==
-          "file://" + (std::filesystem::absolute(user_dir.path()) / "discs" / "game.ssd")
-                          .lexically_normal().generic_string());
+          beebium::server::normalize_image_uri(
+              (std::filesystem::absolute(user_dir.path()) / "discs" / "game.ssd").string(), {}));
 }
 
 // ============================================================================

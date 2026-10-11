@@ -218,8 +218,7 @@ TEST_CASE("load_preset: a preset named by a relative path resolves floppies from
     std::filesystem::current_path(saved_cwd);
 
     REQUIRE(result.success());
-    const auto expected = "file://" + (std::filesystem::canonical(temp_dir.path()) / "presets" /
-                                       "game.ssd").generic_string();
+    const auto expected = normalize_image_uri((temp_dir / "presets" / "game.ssd").string(), {});
     CHECK(*result.config->storage->floppy_drives.at(0) == expected);
 }
 
