@@ -73,17 +73,13 @@ struct ConfigurationEditor: View {
     /// `effectiveSection` resolves that).
     @State private var selectedSection: ConfigSection = .storage
 
-    /// The one focus owner for every section's text fields, identifying which field
-    /// holds focus. Owning it here, rather than one per section, means a new section
-    /// cannot forget to coordinate focus. Committing and releasing a focused field
-    /// before another control (or the background click) acts is handled by
-    /// `fieldEditCoordinator` below, not by each control clearing this binding.
-    @FocusState private var focusedField: String?
-
-    /// Commits whichever field is being edited before another control acts, so the
-    /// order is always commit -> release -> control action, enforced here rather
-    /// than per control. Injected into the environment for every section's fields
-    /// and controls to share.
+    /// The one focus owner for every section's text fields: it tracks which field
+    /// is being edited and commits and releases it before another control (or the
+    /// background click) acts, so the order is always commit -> release -> control
+    /// action, enforced here rather than per control. Owning it here, rather than
+    /// one per section, means a new section cannot forget to coordinate focus.
+    /// Injected into the environment for every section's fields and controls to
+    /// share.
     @StateObject private var fieldEditCoordinator = FieldEditCoordinator()
 
     /// A configuration section the dialog can show.
@@ -249,8 +245,7 @@ struct ConfigurationEditor: View {
                     schema: extensionsSchema,
                     diagnostics: diagnostics,
                     serialPorts: serialPorts,
-                    excludedPointIds: [ProcessorSectionView.tubePointId],
-                    focusedField: $focusedField))
+                    excludedPointIds: [ProcessorSectionView.tubePointId]))
             }
             return AnyView(EmptyView())
         case .network:
@@ -260,8 +255,7 @@ struct ConfigurationEditor: View {
                     schema: econetSchema,
                     extensionsSchema: extensionsSchema,
                     diagnostics: diagnostics,
-                    serialPorts: serialPorts,
-                    focusedField: $focusedField))
+                    serialPorts: serialPorts))
             }
             return AnyView(EmptyView())
         case .processor:
@@ -270,8 +264,7 @@ struct ConfigurationEditor: View {
                     draft: $draft,
                     extensionsSchema: extensionsSchema,
                     diagnostics: diagnostics,
-                    serialPorts: serialPorts,
-                    focusedField: $focusedField))
+                    serialPorts: serialPorts))
             }
             return AnyView(EmptyView())
         case .keyboard:
@@ -279,8 +272,7 @@ struct ConfigurationEditor: View {
                 return AnyView(KeyboardSectionView(
                     draft: $draft,
                     schema: startupSchema,
-                    diagnostics: diagnostics,
-                    focusedField: $focusedField))
+                    diagnostics: diagnostics))
             }
             return AnyView(EmptyView())
         case nil:

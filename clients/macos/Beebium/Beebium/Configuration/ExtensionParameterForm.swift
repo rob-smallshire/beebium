@@ -50,18 +50,12 @@ struct ExtensionParameterForm: View {
     /// Set (or, with nil, clear) one config key, written through to the draft.
     let setValue: (String, JSONValue?) -> Void
 
-    /// A host section's shared focus. When given, this form's fields join it, so a
-    /// control or a background click in the host section releases a focused field
-    /// here too (the station/port/net fields then all share one focus). When nil
-    /// the form keeps its own focus. Field ids are the parameter keys, which do
-    /// not collide with a host's own field ids.
-    var hostFocusedField: FocusState<String?>.Binding? = nil
-
-    /// The form's own focus, used when no host focus is shared.
-    @FocusState private var ownFocusedField: String?
-
-    /// The focus binding in force: the host's when shared, else the form's own.
-    private var focus: FocusState<String?>.Binding { hostFocusedField ?? $ownFocusedField }
+    /// The Configurator's shared focus owner. A group change (which reveals a
+    /// different member's field) commits and releases any focused field through it
+    /// first. The parameter fields themselves reach it from the environment; this
+    /// is nil when the form is hosted without one (a test, a preview), where each
+    /// field keeps its own first-responder focus.
+    @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
     var body: some View {
         if manifest.parameters.isEmpty {
@@ -78,7 +72,7 @@ struct ExtensionParameterForm: View {
                         GroupControl(group: group, members: members(of: group),
                                      config: config, diagnostics: diagnostics,
                                      setValue: setValue, control: { control($0) },
-                                     releaseFocus: { focus.wrappedValue = nil })
+                                     releaseFocus: { fieldEditCoordinator?.commitActiveEdit() })
                     }
                 }
             }
@@ -211,7 +205,6 @@ struct ExtensionParameterForm: View {
             return AnyView(StringListEditor(
                 values: Self.listValue(parameter.key, in: config),
                 placeholder: parameter.defaultValue,
-                focusedField: focus,
                 idBase: parameter.key,
                 setValues: { setValue(parameter.key, $0.isEmpty ? nil : .array($0.map(JSONValue.string))) }))
         case .mapFile:
@@ -226,7 +219,7 @@ struct ExtensionParameterForm: View {
             return AnyView(ScalarParameterControl(
                 parameter: parameter, config: config,
                 serialPortSuggestions: serialPortSuggestions,
-                focusedField: focus, setValue: setValue))
+                setValue: setValue))
         }
     }
 
@@ -417,8 +410,8 @@ private struct ScalarParameterControl: View {
     let parameter: ExtensionParameter
     let config: [String: JSONValue]
     var serialPortSuggestions: [String] = []
-    @FocusState.Binding var focusedField: String?
     let setValue: (String, JSONValue?) -> Void
+    @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
     var body: some View {
         switch ExtensionParameterForm.kind(of: parameter) {
@@ -437,7 +430,7 @@ private struct ScalarParameterControl: View {
         return VStack(alignment: .leading, spacing: 2) {
             Picker("", selection: Binding(
                 get: { current },
-                set: { focusedField = nil; setValue(parameter.key, .string($0)) }
+                set: { fieldEditCoordinator?.commitActiveEdit(); setValue(parameter.key, .string($0)) }
             )) {
                 ForEach(parameter.choices) { choice in
                     Text(choice.label).tag(choice.value)
@@ -458,7 +451,7 @@ private struct ScalarParameterControl: View {
     private var booleanToggle: some View {
         Toggle("", isOn: Binding(
             get: { ExtensionParameterForm.boolValue(parameter.key, in: config) },
-            set: { focusedField = nil; setValue(parameter.key, .bool($0)) }))
+            set: { fieldEditCoordinator?.commitActiveEdit(); setValue(parameter.key, .bool($0)) }))
             .labelsHidden()
     }
 
@@ -470,7 +463,7 @@ private struct ScalarParameterControl: View {
                     format: { $0 },
                     parse: { ExtensionParameterForm.parseIntegerEntry($0, parameter: parameter) },
                     width: 120,
-                    focusedField: $focusedField, fieldID: parameter.key,
+                    fieldID: parameter.key,
                     onCommit: { text in
                         // Exact record: a blank or the default clears the key; a
                         // different number is recorded.
@@ -499,7 +492,7 @@ private struct ScalarParameterControl: View {
                     format: { $0 },
                     parse: { $0 },
                     width: 220,
-                    focusedField: $focusedField, fieldID: parameter.key,
+                    fieldID: parameter.key,
                     onCommit: { text in
                         setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
                     })
@@ -527,7 +520,7 @@ private struct ScalarParameterControl: View {
                 format: { $0 },
                 parse: { $0 },
                 width: 260,
-                focusedField: $focusedField, fieldID: parameter.key,
+                fieldID: parameter.key,
                 onCommit: { text in
                     setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
                 })
@@ -816,7 +809,6 @@ private struct GroupControl: View {
 private struct StringListEditor: View {
     let values: [String]
     let placeholder: String
-    @FocusState.Binding var focusedField: String?
     let idBase: String
     let setValues: ([String]) -> Void
     @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
@@ -831,7 +823,7 @@ private struct StringListEditor: View {
                         parse: { $0 },
                         placeholder: placeholder,
                         width: 260,
-                        focusedField: $focusedField, fieldID: "\(idBase)[\(index)]",
+                        fieldID: "\(idBase)[\(index)]",
                         onCommit: { var v = values; v[index] = $0; setValues(v) })
                     Button {
                         fieldEditCoordinator?.commitActiveEdit()

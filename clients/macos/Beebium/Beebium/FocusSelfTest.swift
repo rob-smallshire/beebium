@@ -61,28 +61,52 @@ final class FocusSelfTest {
             atPath: outputDirpath, withIntermediateDirectories: true)
         setUpHostWindow()
 
-        // Multi-field form (like add-peer / add-subnet): focus must settle on the
-        // FIRST field and stay there, not jump to the last field (#153).
-        await captureFormFocusOverTime(name: "form_settle", clickSecondAfter: nil)
-        // A click on the second field at ~150 ms must not be overridden by the
-        // delayed focus assertion.
-        await captureFormFocusOverTime(name: "form_click2", clickSecondAfter: 0.15)
-        // Tab should walk the fields in order.
-        await captureFormTabOrder(name: "form_tab")
-        // Single-field popover is unaffected (focus stays on its one field).
-        await captureStation(name: "station_settle", appearance: .darkAqua)
+        // BEEBIUM_DEBUG_FOCUS_SELFTEST_ONLY selects a subset:
+        //   "configurator" runs all the New Machine dialog (plain-window) scenarios;
+        //   a single scenario name ("cfg_kbd", "cfg_commit_toggle", "cfg_kbd_tab",
+        //   "cfg_field") runs just that one. Running one scenario per app launch
+        //   keeps each run short, which matters when driving the app headlessly.
+        let only = ProcessInfo.processInfo.environment["BEEBIUM_DEBUG_FOCUS_SELFTEST_ONLY"]
+        let configurator = (only == nil) || only == "configurator"
+            || (only?.hasPrefix("cfg") ?? false)
+
+        if only == nil {
+            // Multi-field form (like add-peer / add-subnet): focus must settle on the
+            // FIRST field and stay there, not jump to the last field (#153).
+            await captureFormFocusOverTime(name: "form_settle", clickSecondAfter: nil)
+            // A click on the second field at ~150 ms must not be overridden by the
+            // delayed focus assertion.
+            await captureFormFocusOverTime(name: "form_click2", clickSecondAfter: 0.15)
+            // Tab should walk the fields in order.
+            await captureFormTabOrder(name: "form_tab")
+            // Single-field popover is unaffected (focus stays on its one field).
+            await captureStation(name: "station_settle", appearance: .darkAqua)
+        }
 
         // The New Machine dialog's Configurator keyboard fields: the hex field
         // must show a caret when focused, and must resign and refresh (not stay
         // focused and stale) when another control changes the byte.
-        await captureConfiguratorKeyboard(name: "cfg_kbd")
+        if configurator && (only == nil || only == "configurator" || only == "cfg_kbd") {
+            await captureConfiguratorKeyboard(name: "cfg_kbd")
+        }
+
+        // The user's commit-before-action sequence (the one FieldEditCoordinator
+        // exists for): type 123 into the decimal byte field, then click the Link 1
+        // check box. The check box must commit the pending edit FIRST (byte -> 123),
+        // then toggle bit 7 relative to the committed byte (123 -> 251), leaving the
+        // decimal field showing 251 (not a stale 123) and no field focused.
+        if configurator && (only == nil || only == "configurator" || only == "cfg_commit_toggle") {
+            await captureKeyboardCommitBeforeToggle(name: "cfg_commit_toggle")
+        }
 
         // The Tab-cycle regression: after editing the hex byte and tabbing round
         // the two fields, the hex field must keep its new value, not revert to the
         // pre-edit text. Pre-fix it reverted (the NSTextView's blur callback was a
         // stale closure capturing the old value); this logs the hex text after
         // three tabs so a regression is visible.
-        await captureKeyboardTabCycle(name: "cfg_kbd_tab")
+        if configurator && (only == nil || only == "configurator" || only == "cfg_kbd_tab") {
+            await captureKeyboardTabCycle(name: "cfg_kbd_tab")
+        }
 
         // The regression that keeps coming back (#153): a CommittingField shown
         // again (the New Machine dialog is a reused window) must show its caret on
@@ -90,12 +114,15 @@ final class FocusSelfTest {
         // times, clicking the field each time; a healthy field shows a caret in
         // some frames of every open. If open 2 or 3 never shows one, the shared
         // field editor regression is back.
-        for open in 1...3 {
-            await captureCommittingField(name: "cfg_field_open\(open)")
+        if only == nil || only == "configurator" || only == "cfg_field" {
+            for open in 1...3 {
+                await captureCommittingField(name: "cfg_field_open\(open)")
+            }
         }
 
         // With a server port, also capture the rename popover's chips and preview.
-        if let port = ProcessInfo.processInfo.environment["BEEBIUM_DEBUG_FOCUS_SELFTEST_PORT"],
+        if only == nil,
+           let port = ProcessInfo.processInfo.environment["BEEBIUM_DEBUG_FOCUS_SELFTEST_PORT"],
            let portNumber = Int(port) {
             await connectServer(port: portNumber)
             await sleep(1.8)
@@ -294,6 +321,58 @@ final class FocusSelfTest {
         await sleep(0.3)
     }
 
+    /// Drive the user's commit-before-action sequence on the real Keyboard page:
+    /// focus the decimal byte field, type "123", then click the Link 1 check box.
+    /// The check box's action commits the focused field first (byte -> 123) and
+    /// toggles bit 7 on the committed byte (-> 251), so afterwards the decimal
+    /// field reads "251" (not the stale "123"), the hex field "FB", and nothing is
+    /// first responder. Logs PASS/FAIL and photographs before and after.
+    private func captureKeyboardCommitBeforeToggle(name: String) async {
+        bringHostToFront()
+        let content = ConfiguratorKeyboardHarness(schema: Self.startupSchemaFixture())
+        let window = NSWindow(contentViewController: NSHostingController(rootView: content))
+        window.styleMask = [.titled, .closable]
+        window.title = "Keyboard Commit Before Toggle"
+        window.setContentSize(NSSize(width: 400, height: 470))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        await sleep(0.6)
+        guard let root = window.contentView else { window.orderOut(nil); return }
+        let fields = Self.allTextViews(in: root)
+        let buttons = Self.allButtons(in: root)
+        guard fields.count >= 2, buttons.count >= 2 else {
+            NSLog("[SELFTEST] %@ FAIL: expected >=2 fields and >=2 check boxes, found %d fields %d buttons",
+                  name, fields.count, buttons.count)
+            window.orderOut(nil); return
+        }
+        let hex = fields[0]
+        let dec = fields[1]
+        // Type 123 into the decimal field through the delegate (so the model sees it).
+        window.makeFirstResponder(dec)
+        await sleep(0.2)
+        dec.setSelectedRange(NSRange(location: 0, length: (dec.string as NSString).length))
+        dec.insertText("123", replacementRange: dec.selectedRange())
+        await sleep(0.2)
+        NSLog("[SELFTEST] %@ after type123: dec='%@' decFR=%d",
+              name, dec.string, window.firstResponder === dec ? 1 : 0)
+        capture(window: window, name: "\(name)_1_typed123")
+        // Click Link 1: the first link check box, which follows the auto-boot check
+        // box in the layout (index 1 of the non-popup buttons).
+        let link1 = buttons[1]
+        NSLog("[SELFTEST] %@ clicking button[1] (of %d non-popup buttons)", name, buttons.count)
+        postClick(on: link1)
+        await sleep(0.4)
+        let decAfter = dec.string
+        let hexAfter = hex.string
+        let decFocused = window.firstResponder === dec
+        let pass = decAfter == "251" && hexAfter == "FB" && !decFocused
+        NSLog("[SELFTEST] %@ after clickLink1: dec='%@' (expect 251) hex='%@' (expect FB) decFR=%d; %@",
+              name, decAfter, hexAfter, decFocused ? 1 : 0, pass ? "PASS" : "FAIL")
+        capture(window: window, name: "\(name)_2_afterLink1")
+        window.orderOut(nil)
+        await sleep(0.3)
+    }
+
     // MARK: - Host window
 
     private func setUpHostWindow() {
@@ -462,6 +541,17 @@ final class FocusSelfTest {
         return found
     }
 
+    /// Every NSButton in the tree except NSPopUpButton (the screen-mode picker),
+    /// in tree order: the auto-boot check box then the eight link check boxes.
+    private static func allButtons(in view: NSView) -> [NSButton] {
+        var found: [NSButton] = []
+        if let button = view as? NSButton, !(button is NSPopUpButton) { found.append(button) }
+        for subview in view.subviews {
+            found.append(contentsOf: allButtons(in: subview))
+        }
+        return found
+    }
+
     private func clickTextView(index: Int, in root: NSView) {
         let textViews = Self.allTextViews(in: root)
         guard index < textViews.count else { return }
@@ -517,10 +607,11 @@ final class FocusSelfTest {
 private struct ConfiguratorKeyboardHarness: View {
     let schema: StartupSchemaSection
     @State private var draft = MachineDraft()
-    @FocusState private var focusedField: String?
+    @StateObject private var fieldEditCoordinator = FieldEditCoordinator()
 
     var body: some View {
-        KeyboardSectionView(draft: $draft, schema: schema, focusedField: $focusedField)
+        KeyboardSectionView(draft: $draft, schema: schema)
+            .environment(\.fieldEditCoordinator, fieldEditCoordinator)
             .frame(width: 400, height: 470)
     }
 }
@@ -528,12 +619,13 @@ private struct ConfiguratorKeyboardHarness: View {
 /// One CommittingField in a popover, for the repeated-presentation caret check.
 private struct RepeatedFieldHarness: View {
     @State private var value = 42
-    @FocusState private var focusedField: String?
+    @StateObject private var fieldEditCoordinator = FieldEditCoordinator()
 
     var body: some View {
         CommittingField(value: value, format: { String($0) }, parse: { Int($0) },
-                        width: 120, focusedField: $focusedField, fieldID: "field",
+                        width: 120, fieldID: "field",
                         onCommit: { value = $0 })
+            .environment(\.fieldEditCoordinator, fieldEditCoordinator)
             .padding()
             .frame(width: 200)
     }

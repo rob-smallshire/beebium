@@ -334,7 +334,7 @@ final class CommittingFieldTests: XCTestCase {
         var byte = 0xFF
         var order: [String] = []
         // The focused field's flush commits its typed value (123) into the byte.
-        coordinator.fieldFocused {
+        coordinator.fieldFocused("decimal") {
             order.append("commit")
             byte = 123
         }
@@ -345,26 +345,47 @@ final class CommittingFieldTests: XCTestCase {
 
         XCTAssertEqual(order, ["commit", "toggle"])   // commit happened before the action
         XCTAssertEqual(byte, 123 ^ 0x80)              // toggled relative to 0x7B -> 0xFB (251)
+        XCTAssertNil(coordinator.focusedFieldID)      // nothing left focused
     }
 
     @MainActor
     func testCommitActiveEditIsNoOpWhenNothingFocused() {
         let coordinator = FieldEditCoordinator()
         var flushed = false
-        coordinator.fieldFocused { flushed = true }
-        coordinator.fieldBlurred()        // field lost focus
+        coordinator.fieldFocused("hex") { flushed = true }
+        coordinator.fieldBlurred("hex")   // field lost focus
         coordinator.commitActiveEdit()    // must not flush a field no longer editing
         XCTAssertFalse(flushed)
+        XCTAssertNil(coordinator.focusedFieldID)
     }
 
     @MainActor
     func testCommitActiveEditFlushesOnlyOnce() {
         let coordinator = FieldEditCoordinator()
         var flushes = 0
-        coordinator.fieldFocused { flushes += 1 }
+        coordinator.fieldFocused("hex") { flushes += 1 }
         coordinator.commitActiveEdit()
         coordinator.commitActiveEdit()    // the second call has nothing to flush
         XCTAssertEqual(flushes, 1)
+    }
+
+    /// A late blur from a field that already lost focus to a newer field must not
+    /// drop the newer field's registration (the id guard).
+    @MainActor
+    func testStaleBlurDoesNotDropNewerFieldRegistration() {
+        let coordinator = FieldEditCoordinator()
+        var flushedHex = false
+        var flushedDecimal = false
+        coordinator.fieldFocused("hex") { flushedHex = true }
+        // Focus moves to decimal (its onFocus runs), then hex's late async blur
+        // arrives. The blur names hex, which is no longer the focused field, so it
+        // must be ignored.
+        coordinator.fieldFocused("decimal") { flushedDecimal = true }
+        coordinator.fieldBlurred("hex")
+        XCTAssertEqual(coordinator.focusedFieldID, "decimal")
+        coordinator.commitActiveEdit()
+        XCTAssertFalse(flushedHex)
+        XCTAssertTrue(flushedDecimal)
     }
 
     // MARK: - Fixtures

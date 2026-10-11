@@ -32,11 +32,10 @@ struct AttachmentPointGroup: View {
     let point: AttachmentPoint
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
-    /// The Configurator's shared focus, passed to each instance's parameter form
-    /// and to nested points; Add/Change/Remove release a focused field first.
-    @FocusState.Binding var focusedField: String?
 
-    /// Commits a focused parameter field before Add/Change/Remove act.
+    /// The Configurator's shared focus owner: Add/Change/Remove commit and release
+    /// a focused parameter field before they act. The instance parameter forms and
+    /// nested points reach it from the environment.
     @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
     /// Whether the Add / Change chooser popover is open.
@@ -210,16 +209,14 @@ struct AttachmentPointGroup: View {
                 bundledImages: schema.bundledImages ?? [:],
                 bundledKindNames: schema.bundledKindNames,
                 serialPortSuggestions: serialPorts,
-                setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) },
-                hostFocusedField: $focusedField)
+                setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })
                 .padding(.leading, 8)
             // Points this instance provides (e.g. the SCSI bus) nest beneath it
             // as further child nodes.
             ForEach(model.pointsProvided(by: instance)) { provided in
                 AttachmentPointGroup(
                     draft: $draft, schema: schema, point: provided,
-                    diagnostics: diagnostics, serialPorts: serialPorts,
-                    focusedField: $focusedField)
+                    diagnostics: diagnostics, serialPorts: serialPorts)
             }
         }
     }

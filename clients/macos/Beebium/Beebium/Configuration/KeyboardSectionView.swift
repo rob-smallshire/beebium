@@ -36,14 +36,10 @@ struct KeyboardSectionView: View {
     let schema: StartupSchemaSection
     var diagnostics: [PresetManager.PresetDiagnostic] = []
 
-    /// The Configurator's shared focus (owned by ConfigurationEditor), identifying
-    /// which byte field holds focus. A check box, the picker or a background click
-    /// commits and releases it first (via `fieldEditCoordinator`) before changing the
-    /// byte, so the change never lands on a stale value and no field is left focused.
-    @FocusState.Binding var focusedField: String?
-
-    /// Commits a focused byte field before this page's controls change the byte, so
-    /// the change lands on the committed value and the field is released first.
+    /// The Configurator's shared focus owner (from ConfigurationEditor). A check
+    /// box, the picker or a background click commits and releases the focused byte
+    /// field first (via `commitActiveEdit`) before changing the byte, so the change
+    /// never lands on a stale value and no field is left focused.
     @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
     private var layout: StartupSchemaSection.LinksLayout { schema.links }
@@ -144,13 +140,13 @@ struct KeyboardSectionView: View {
                     Text("Hex")
                     CommittingField(value: currentByte, format: Self.formatHexByte,
                                     parse: Self.parseHexByte, width: 80,
-                                    focusedField: $focusedField, fieldID: "hex", onCommit: setByte)
+                                    fieldID: "hex", onCommit: setByte)
                 }
                 HStack(spacing: 6) {
                     Text("Decimal")
                     CommittingField(value: currentByte, format: { String($0) },
                                     parse: Self.parseDecByte, width: 80,
-                                    focusedField: $focusedField, fieldID: "decimal", onCommit: setByte)
+                                    fieldID: "decimal", onCommit: setByte)
                 }
             }
             .padding(.top, 4)

@@ -29,13 +29,10 @@ struct NetworkSectionView: View {
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
 
-    /// The Configurator's shared focus (owned by ConfigurationEditor), so a
-    /// picker, the Econet switch or a background click releases whichever of the
-    /// station, port or net fields is focused.
-    @FocusState.Binding var focusedField: String?
-
-    /// Commits a focused field (the station number, a transport parameter) before
-    /// another control here acts, so the order is commit -> release -> action.
+    /// The Configurator's shared focus owner (from ConfigurationEditor): a picker,
+    /// the Econet switch or a background click commits and releases whichever of
+    /// the station, port or net fields is focused before it acts, so the order is
+    /// commit -> release -> action.
     @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
     /// Whether the transport chooser popover is open.
@@ -112,7 +109,7 @@ struct NetworkSectionView: View {
             return AnyView(HStack(spacing: 6) {
                 CommittingField(value: currentNumberOrDefault, format: { String($0) },
                                 parse: parseStation, width: 100,
-                                focusedField: $focusedField, fieldID: "station",
+                                fieldID: "station",
                                 onCommit: { setStation(.number($0)) })
                 Text("(\(schema.station.min)-\(schema.station.max))")
                     .font(.caption2).foregroundColor(.secondary)
@@ -124,11 +121,11 @@ struct NetworkSectionView: View {
             return AnyView(HStack(spacing: 6) {
                 Text("from")
                 CommittingField(value: rangeLow, format: { String($0) }, parse: parseStation,
-                                width: 70, focusedField: $focusedField, fieldID: "rangeLow",
+                                width: 70, fieldID: "rangeLow",
                                 onCommit: { setRange(low: $0, high: rangeHigh) })
                 Text("to")
                 CommittingField(value: rangeHigh, format: { String($0) }, parse: parseStation,
-                                width: 70, focusedField: $focusedField, fieldID: "rangeHigh",
+                                width: 70, fieldID: "rangeHigh",
                                 onCommit: { setRange(low: rangeLow, high: $0) })
             })
         }
@@ -160,10 +157,7 @@ struct NetworkSectionView: View {
                     diagnostics: diagnostics.withPrefix("/econet/transport/parameters"),
                     bundledKindNames: extensionsSchema?.bundledKindNames ?? [:],
                     serialPortSuggestions: serialPorts,
-                    setValue: setTransportParameter,
-                    // Share the section's focus so the station field, the port/net
-                    // fields and a background click all release one another.
-                    hostFocusedField: $focusedField)
+                    setValue: setTransportParameter)
                     .padding(.leading, 8)
             }
 

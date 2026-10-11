@@ -21,11 +21,8 @@ struct ProcessorSectionView: View {
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
 
-    /// The Configurator's shared focus, passed to the coprocessor form; the speed
-    /// picker releases a focused field too.
-    @FocusState.Binding var focusedField: String?
-
-    /// Commits a focused field before this page's controls act.
+    /// The Configurator's shared focus owner: the speed picker commits and
+    /// releases a focused field before it acts.
     @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
     /// The attachment point coprocessors plug into. "tube" is the fixed BBC
@@ -45,8 +42,7 @@ struct ProcessorSectionView: View {
                     // and description), so no separate "Coprocessor" label.
                     AttachmentPointGroup(
                         draft: $draft, schema: extensionsSchema, point: tubePoint,
-                        diagnostics: diagnostics, serialPorts: serialPorts,
-                        focusedField: $focusedField)
+                        diagnostics: diagnostics, serialPorts: serialPorts)
                     Divider()
                 }
                 speedControl

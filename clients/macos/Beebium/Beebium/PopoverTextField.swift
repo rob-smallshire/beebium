@@ -297,8 +297,8 @@ final class SingleLineTextView: NSTextView {
         let became = super.becomeFirstResponder()
         if became {
             bezel?.isEditing = true
-            // Defer so a SwiftUI @FocusState write does not land inside an AppKit
-            // responder transition / view update.
+            // Defer so the host's focus bookkeeping (a state write) does not land
+            // inside an AppKit responder transition / view update.
             if let onFocus { DispatchQueue.main.async(execute: onFocus) }
         }
         return became
@@ -308,6 +308,14 @@ final class SingleLineTextView: NSTextView {
         let resigned = super.resignFirstResponder()
         if resigned {
             bezel?.isEditing = false
+            // The user is no longer editing this field, so clear the "began
+            // editing" flag now rather than waiting for an updateNSView while the
+            // field is unfocused -- which may not run before the field is focused
+            // again. If it stayed set, updateNSView would refuse to re-apply the
+            // committed value (its `!userBeganEditing` guard), so a field that was
+            // edited, committed, then re-focused would keep showing its old text
+            // after another projection of the same value changed it.
+            (delegate as? PopoverTextField.Coordinator)?.userBeganEditing = false
             if let onBlur { DispatchQueue.main.async(execute: onBlur) }
         }
         return resigned
