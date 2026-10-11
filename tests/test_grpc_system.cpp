@@ -577,3 +577,23 @@ TEST_CASE("SystemService SetSpeedMultiplier still validates before the clock is 
 // blocks waiting for shutdown or client disconnect. Testing this properly
 // requires either async clients or multi-threaded test setup.
 // For now, this functionality is covered by Python integration tests.
+
+TEST_CASE("A machine's advertisement names its model as well as its type",
+          "[grpc][system][discovery]") {
+    beebium::service::MachineIdentity identity;
+    identity.uuid = "0f6c2a3e-1111-4222-8333-444455556666";
+    identity.name = "Lab Beeb";
+    identity.model_type = "ModelB";
+    identity.model_name = "BBC Model B";
+    beebium::service::Provenance provenance;
+    provenance.type = "cli";
+
+    const auto txt = beebium::service::machine_txt_records(identity, provenance);
+
+    CHECK(txt.at("uuid") == "0f6c2a3e-1111-4222-8333-444455556666");
+    CHECK(txt.at("role") == "host");
+    CHECK(txt.at("model") == "ModelB");
+    CHECK(txt.at("model_name") == "BBC Model B");
+    CHECK(txt.at("provenance") == "cli");
+    CHECK_FALSE(txt.contains("econet_station"));
+}

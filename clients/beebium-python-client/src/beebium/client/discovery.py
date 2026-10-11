@@ -66,6 +66,7 @@ class DiscoveredMachine:
         port: gRPC port number
         uuid: Machine UUID (from TXT record)
         model: Machine model type (from TXT record, e.g., "ModelB")
+        model_name: Machine model as a user sees it (from TXT record, e.g., "BBC Model B")
         provenance: Launch provenance type (from TXT record)
         version: Server version (from TXT record, may be empty)
         econet_station: Econet station number (1-254), or None if Econet not enabled
@@ -83,6 +84,7 @@ class DiscoveredMachine:
     econet_station: int | None = None
     econet_net: int | None = None
     econet_aun_port: int | None = None
+    model_name: str = ""
 
 
 class MachineDiscovery:
@@ -239,6 +241,7 @@ class MachineDiscovery:
             econet_station=int(txt["econet_station"]) if "econet_station" in txt else None,
             econet_net=int(txt["econet_net"]) if "econet_net" in txt else None,
             econet_aun_port=int(txt["econet_aun_port"]) if "econet_aun_port" in txt else None,
+            model_name=txt.get("model_name", ""),
         )
 
         with self._lock:

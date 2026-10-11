@@ -153,6 +153,17 @@ def test_a_machine_advertises_the_name_it_was_given(
     )
 
 
+def test_a_machine_advertises_its_model_by_name(
+    advertising_bbc: Beebium, discovery: MachineDiscovery
+) -> None:
+    identity = advertising_bbc.system.identity
+    assert _wait_for_name(discovery, identity.uuid, "Peterhouse")
+
+    seen = [m for m in discovery.machines.values() if m.uuid == identity.uuid]
+    assert seen[0].model_name == identity.model_name
+    assert seen[0].model_name == "BBC Model B"
+
+
 def test_renaming_reaches_the_network(
     advertising_bbc: Beebium, discovery: MachineDiscovery
 ) -> None:

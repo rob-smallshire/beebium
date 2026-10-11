@@ -253,8 +253,11 @@ zsh); the templates above are safe as written in double quotes.
 
 Advertisement is opt-in. With `--advertise`, the server publishes an
 `_beebium._tcp` record on the local network carrying its host, port, and TXT
-metadata (`uuid`, `model`, `role`, `provenance`); a discovering frontend (the
-macOS app today) lists it without the user typing `host:port`. The advertised
+metadata (`uuid`, `role`, `provenance`, `model` -- the type, e.g. `ModelB` --
+and `model_name`, the model as a user sees it, e.g. `BBC Model B`; while Econet
+is enabled also `econet_station`, and with AUN `econet_net` and
+`econet_aun_port`); a discovering frontend (the macOS app today) lists it
+without the user typing `host:port`, showing `model_name`. The advertised
 instance name is the machine's rendered name (`--machine-name`), and is
 re-announced when the rendering changes -- at most once every five seconds, so
 a value that changes repeatedly cannot flood the network.

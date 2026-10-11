@@ -36,6 +36,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <map>
 #include <string>
 #include <thread>
 
@@ -63,6 +64,21 @@ struct MachineIdentity {
     // The name as the user edits it, with {key} placeholders. Mutable.
     std::string name_template;
 };
+
+/// The TXT keys a machine's service advertisement always carries: its uuid,
+/// its role, its model as a type (`model`, e.g. "ModelB") and by name
+/// (`model_name`, e.g. "BBC Model B", for a browser to show), and how it was
+/// launched. The Econet keys are added only while Econet is enabled.
+inline std::map<std::string, std::string> machine_txt_records(const MachineIdentity& identity,
+                                                              const Provenance& provenance) {
+    return {
+        {"uuid", identity.uuid},
+        {"role", "host"},
+        {"model", identity.model_type},
+        {"model_name", identity.model_name},
+        {"provenance", provenance.type},
+    };
+}
 
 /// How often the name is re-rendered, so it follows placeholder values that
 /// change under a fixed template (#153). A placeholder value needs no push;
@@ -379,10 +395,7 @@ discovery::ServiceInfo SystemServiceImpl<MachineType>::build_service_info() {
         info.instance_name = identity_.name;
     }
     info.port = server_port_;
-    info.txt_records["uuid"] = identity_.uuid;
-    info.txt_records["role"] = "host";
-    info.txt_records["model"] = identity_.model_type;
-    info.txt_records["provenance"] = provenance_.type;
+    info.txt_records = machine_txt_records(identity_, provenance_);
 
     using Memory = typename MachineType::Memory;
     if constexpr (HasEconetSocket<Memory>) {
