@@ -1650,6 +1650,38 @@ TEST_CASE("describe-preset-schema labels each section and floppy drive",
     CHECK(sections.at("storage").at("floppy_drives")[1].at("label") == "Floppy drive 1");
 }
 
+TEST_CASE("describe-preset-schema names every kind of bundled image a parameter may name",
+          "[integration][preset][describe-preset-schema]") {
+    auto result = run_command(std::string(EXECUTABLE) + " describe-preset-schema");
+    REQUIRE(result.exit_code == 0);
+    const auto schema = nlohmann::json::parse(result.stdout_output);
+    nlohmann::json extensions;
+    for (const auto& section : schema.at("sections")) {
+        if (section.at("type") == "extensions") extensions = section;
+    }
+    REQUIRE(extensions.is_object());
+
+    std::map<std::string, std::string> nouns;
+    for (const auto& k : extensions.at("bundled_image_kinds")) {
+        nouns[k.at("kind").get<std::string>()] = k.at("display_name").get<std::string>();
+    }
+    CHECK(nouns.at("hard-disc") == "hard disc");
+    CHECK(nouns.at("rom") == "ROM");
+
+    // Every kind bundled_images lists, and every kind a parameter names, is named.
+    for (const auto& [kind, images] : extensions.at("bundled_images").items()) {
+        INFO(kind);
+        CHECK(nouns.contains(kind));
+    }
+    for (const auto& ext : extensions.at("catalogue")) {
+        for (const auto& p : ext.at("parameters")) {
+            const auto bundled = p.at("bundled").get<std::string>();
+            INFO(ext.at("name") << " " << p.at("key"));
+            if (!bundled.empty()) CHECK(nouns.contains(bundled));
+        }
+    }
+}
+
 TEST_CASE("resolve-preset: an unreadable preset reports a null preset",
           "[integration][preset][resolve-preset]") {
     TempDirectory temp_dir;

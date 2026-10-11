@@ -3652,7 +3652,13 @@ public:
             // The images a parameter declared bundled may name by bare name,
             // by kind (bundled_images): the hard-disc masters the server ships,
             // and each plugin's own ROMs. Floppy discs have none.
-            ojson by_kind{{"hard-disc", ojson::array()}, {"rom", ojson::array()}};
+            ojson by_kind = ojson::object();
+            ojson kinds = ojson::array();
+            for (const auto& k : kBundledImageKinds) {
+                by_kind[std::string(k.kind)] = ojson::array();
+                kinds.push_back({{"kind", std::string(k.kind)},
+                                 {"display_name", std::string(k.display_name)}});
+            }
             for (const auto& image : bundled_images(resolver_cfg.extension_resolver)) {
                 by_kind[image.kind].push_back(ojson{
                     {"image", image.image},
@@ -3664,7 +3670,8 @@ public:
             section_for[PresetKey::Extensions] = ojson{{"type", "extensions"},
                                                        {"attachment_points", attachment_points},
                                                        {"catalogue", catalogue},
-                                                       {"bundled_images", by_kind}};
+                                                       {"bundled_images", by_kind},
+                                                       {"bundled_image_kinds", kinds}};
         }
 
         ojson sections = ojson::array();

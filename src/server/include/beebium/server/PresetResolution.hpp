@@ -44,6 +44,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -437,6 +438,19 @@ void assign_extension_ids(ServerConfig<MachineType>& config) {
         inst.config["id"] = std::move(id);
     }
 }
+
+// A kind of bundled image, and what a user calls one: a noun to fit a
+// sentence ("Choose a hard disc") or, with an "s", a heading ("Bundled ROMs").
+struct BundledImageKind {
+    std::string_view kind;          // as a parameter's `bundled` names it
+    std::string_view display_name;  // e.g. "hard disc"
+};
+
+// The kinds of bundled image, in the order describe-preset-schema gives them.
+inline constexpr std::array<BundledImageKind, 2> kBundledImageKinds{{
+    {"hard-disc", "hard disc"},
+    {"rom", "ROM"},
+}};
 
 // An image a parameter declared `bundled` may name by its bare name: a hard
 // disc master the server ships (kind "hard-disc", any extension), or a ROM a
