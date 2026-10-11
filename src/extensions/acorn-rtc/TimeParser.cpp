@@ -75,10 +75,6 @@ Saf3019p::DateTime parse_absolute_time(std::string_view iso8601) {
     return dt;
 }
 
-Saf3019p::DateTime apply_relative_offset(std::string_view offset) {
-    return apply_relative_offset(offset, current_local_datetime());
-}
-
 Saf3019p::DateTime apply_relative_offset(std::string_view offset, Saf3019p::DateTime base) {
     // Parse offset string like "-10y", "+5h", "-365d", "+30m", "-1y6M"
     // Start from `base` and adjust

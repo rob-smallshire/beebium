@@ -96,57 +96,44 @@ TEST_CASE("parse_absolute_time invalid inputs", "[time-parser][absolute]") {
 //////////////////////////////////////////////////////////////////////////////
 
 TEST_CASE("apply_relative_offset", "[time-parser][relative]") {
-    // These tests verify the offset is applied relative to current time.
-    // We can't test exact values since current time varies, but we can
-    // verify the offset arithmetic.
+    const Saf3019p::DateTime base{2026, 3, 15, 22, 30};
 
     SECTION("Negative year offset") {
-        auto now = current_local_datetime();
-        auto dt = apply_relative_offset("-10y");
-        REQUIRE(dt.year == now.year - 10);
-        REQUIRE(dt.month == now.month);
+        auto dt = apply_relative_offset("-10y", base);
+        REQUIRE(dt.year == 2016);
+        REQUIRE(dt.month == 3);
+        REQUIRE(dt.day == 15);
     }
 
-    SECTION("Positive hour offset") {
-        auto now = current_local_datetime();
-        auto dt = apply_relative_offset("+5h");
-        // May roll over to next day, so just check it's different
-        int expected_total_minutes = now.hour * 60 + now.minute + 5 * 60;
-        int actual_total_minutes = dt.hour * 60 + dt.minute;
-        // Account for day rollover
-        if (expected_total_minutes >= 24 * 60) {
-            expected_total_minutes -= 24 * 60;
-        }
-        REQUIRE(actual_total_minutes == expected_total_minutes);
+    SECTION("Positive hour offset rolls over to the next day") {
+        auto dt = apply_relative_offset("+5h", base);
+        REQUIRE(dt.day == 16);
+        REQUIRE(dt.hour == 3);
+        REQUIRE(dt.minute == 30);
     }
 
     SECTION("Combined offset") {
-        auto now = current_local_datetime();
-        auto dt = apply_relative_offset("-1y6M");
-        // -1y6M means subtract 1 year and 6 months
-        // Month may go negative; normalisation pushes into previous year
-        int expected_month = now.month - 6;
-        int expected_year = now.year - 1;
-        if (expected_month <= 0) {
-            expected_month += 12;
-            expected_year--;
-        }
-        REQUIRE(dt.year == expected_year);
-        REQUIRE(dt.month == expected_month);
+        // -1y6M subtracts 1 year and 6 months; the month normalises into the
+        // previous year.
+        auto dt = apply_relative_offset("-1y6M", base);
+        REQUIRE(dt.year == 2024);
+        REQUIRE(dt.month == 9);
     }
 }
 
 TEST_CASE("apply_relative_offset invalid inputs", "[time-parser][relative]") {
+    const Saf3019p::DateTime base{2026, 3, 15, 22, 30};
+
     SECTION("Empty string") {
-        REQUIRE_THROWS_AS(apply_relative_offset(""), std::invalid_argument);
+        REQUIRE_THROWS_AS(apply_relative_offset("", base), std::invalid_argument);
     }
 
     SECTION("Missing unit") {
-        REQUIRE_THROWS_AS(apply_relative_offset("-10"), std::invalid_argument);
+        REQUIRE_THROWS_AS(apply_relative_offset("-10", base), std::invalid_argument);
     }
 
     SECTION("Unknown unit") {
-        REQUIRE_THROWS_AS(apply_relative_offset("-10x"), std::invalid_argument);
+        REQUIRE_THROWS_AS(apply_relative_offset("-10x", base), std::invalid_argument);
     }
 }
 
