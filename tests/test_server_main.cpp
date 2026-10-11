@@ -22,7 +22,9 @@
 
 #include "test_temp_paths.hpp"
 
+#include <filesystem>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -1060,25 +1062,32 @@ TEST_CASE("assemble_machine boots a host with no coprocessor when none is config
     am.extension_registry.shutdown();
 }
 
-TEST_CASE("ServerMain constructs a MachineType in exactly one place",
+TEST_CASE("The server constructs a MachineType in exactly one place",
           "[server_main][assemble][guard]") {
     // The whole point of assemble_machine is that a MachineType is built for
     // running in ONE place -- its AssembledMachine member -- so a subcommand
     // cannot acquire a divergent assembly. Guard that by construction count:
-    // the only `MachineType machine;` in the header is that struct member.
-    std::ifstream f(BEEBIUM_SERVERMAIN_HPP);
-    REQUIRE(f);
-    std::stringstream ss;
-    ss << f.rdbuf();
-    const std::string src = ss.str();
-
+    // across every server header, the only `MachineType machine;` is that
+    // struct member, in MachineAssembly.hpp.
+    std::map<std::string, size_t> counts;
     size_t count = 0;
-    for (size_t pos = 0; (pos = src.find("MachineType machine;", pos)) != std::string::npos;
-         pos += 1) {
-        ++count;
+    for (const auto& entry :
+         std::filesystem::directory_iterator(BEEBIUM_SERVER_HEADERS_DIRPATH)) {
+        if (entry.path().extension() != ".hpp") continue;
+        std::ifstream f(entry.path());
+        REQUIRE(f);
+        std::stringstream ss;
+        ss << f.rdbuf();
+        const std::string src = ss.str();
+        for (size_t pos = 0; (pos = src.find("MachineType machine;", pos)) != std::string::npos;
+             pos += 1) {
+            ++counts[entry.path().filename().string()];
+            ++count;
+        }
     }
-    INFO("occurrences of 'MachineType machine;' in ServerMain.hpp: " << count);
+    INFO("occurrences of 'MachineType machine;' in the server headers: " << count);
     CHECK(count == 1);
+    CHECK(counts["MachineAssembly.hpp"] == 1);
 }
 
 // ============================================================================

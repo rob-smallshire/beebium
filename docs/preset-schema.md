@@ -8,8 +8,8 @@ edits a preset as a draft, launches it by writing it to a file and passing
 `--preset`, and saves it with `create-preset`.
 
 This document is the reference for the file format as the server implements
-it (`src/server/include/beebium/server/PresetLoader.hpp`, `apply_preset` and
-the merge steps in `ServerMain.hpp`). Where the system and user presets live,
+it (`src/server/include/beebium/server/PresetLoader.hpp`, and `apply_preset` and
+the merge steps in `PresetResolution.hpp`). Where the system and user presets live,
 and how an id is found, is in [deployment.md](deployment.md#preset-discovery). The
 commands that list, show, create, import, export and delete presets are in
 [cli.md](cli.md#preset-management-subcommands).

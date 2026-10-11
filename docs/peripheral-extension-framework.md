@@ -782,7 +782,9 @@ src/
       Server.hpp                  # Accepts extension_services span
   server/
     include/beebium/server/
-      ServerMain.hpp              # Three-pass parsing, extension loading
+      ServerMain.hpp              # Subcommand dispatch
+      StartOptions.hpp            # Start option parsing, extension search
+      MachineAssembly.hpp         # Extension loading and registration
       PresetLoader.hpp            # Preset extensions section
   cmake/
     BeebiumProto.cmake             # Reusable proto compilation function

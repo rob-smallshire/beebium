@@ -514,7 +514,7 @@ A preset configures Econet with one `econet` object: a `station`, and a single `
 - A `--aun` (or `--piconet`) on the command line overrides the preset's transport. With the same transport name the parameters merge, the command line winning key by key, and only the keys typed on the command line override the preset. With a different name the command line's transport replaces the preset's. See [cli.md](cli.md).
 - The legacy preset keys `econet.aun_port` and `econet.piconet` are rejected with a message pointing at this shape. Other unknown keys in the `econet` section, including the old `econet.aun_map`, are ignored.
 
-The parsing is in `src/server/include/beebium/server/PresetLoader.hpp` (`parse_econet_section()`); `merge_preset_extensions` in `ServerMain.hpp` combines the preset's transport with the command line's, and the result goes through the same dispatch as a command-line transport.
+The parsing is in `src/server/include/beebium/server/PresetLoader.hpp` (`parse_econet_section()`); `merge_preset_extensions` in `PresetResolution.hpp` combines the preset's transport with the command line's, and the result goes through the same dispatch as a command-line transport.
 
 ### gRPC services
 

@@ -14,7 +14,7 @@ so, and a per-cycle lock is never the answer.
 ## What runs on the emulation thread
 
 One thread runs the machine. The per-iteration work lives in one place --
-`step_emulation` in `src/server/include/beebium/server/ServerMain.hpp` -- which
+`step_emulation` in `src/server/include/beebium/server/MachineAssembly.hpp` -- which
 every subcommand that runs the machine calls. Each iteration it:
 
 1. parks in `machine.wait_if_paused(on_wake)` while the machine is paused;
