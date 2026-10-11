@@ -99,7 +99,7 @@ enum PeripheralLabels {
     private static let extensionPointNames: [String: String] = [
         "1mhz-bus": "1 MHz Bus",
         "user-port": "User Port",
-        "tube": "Tube",
+        "tube": "Coprocessor",
         "scsi": "SCSI Bus",
         "analogue-port": "Analogue Port",
         "printer-port": "Printer Port",
