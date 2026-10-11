@@ -174,7 +174,7 @@ struct PresetKeyInfo {
     std::string_view name;    // the key in a preset file
     std::string_view type;    // its JSON shape
     std::string_view cli;     // the start options that set the same thing
-    std::string_view config;  // the ServerConfig fields it lands in
+    std::string_view config;  // the ServerConfig fields it lands in (machine.* or launch.*)
     bool written;             // preset_document writes it
     std::string_view label;   // what a user calls it: describe-preset-schema's
                               // section label and a diagnostic's location
@@ -182,24 +182,24 @@ struct PresetKeyInfo {
 
 inline constexpr std::array<PresetKeyInfo, 14> kPresetKeys{{
     {PresetKey::Model, "model", "string", "", "(checked against the executable)", true, "Model"},
-    {PresetKey::Name, "name", "string", "", "preset_name", true, "Name"},
+    {PresetKey::Name, "name", "string", "", "launch.preset_name", true, "Name"},
     {PresetKey::ReleaseDate, "release_date", "string", "", "", true, "Release date"},
     {PresetKey::Description, "description", "string", "", "", true, "Description"},
-    {PresetKey::MachineName, "machine_name", "string", "--machine-name", "machine_name", true,
-     "Machine name"},
+    {PresetKey::MachineName, "machine_name", "string", "--machine-name",
+     "machine.machine_name", true, "Machine name"},
     {PresetKey::Speed, "speed", "number or \"unlimited\"", "--speed",
-     "speed_multiplier_override", true, "Speed"},
+     "machine.speed_multiplier_override", true, "Speed"},
     {PresetKey::Startup, "startup", "object", "--screen-mode, --auto-boot, --links",
-     "screen_mode, auto_boot, raw_links", true, "Keyboard links"},
-    {PresetKey::MosImageUri, "mos_image_uri", "string", "--mos", "mos_filepath", true,
+     "machine.screen_mode, auto_boot, raw_links", true, "Keyboard links"},
+    {PresetKey::MosImageUri, "mos_image_uri", "string", "--mos", "machine.mos_filepath", true,
      "MOS ROM"},
-    {PresetKey::Storage, "storage", "object", "--fdc, --floppy", "fdc_type, floppy_filepaths",
-     true, "Storage"},
+    {PresetKey::Storage, "storage", "object", "--fdc, --floppy",
+     "machine.fdc_type, floppy_filepaths", true, "Storage"},
     {PresetKey::SidewaysBank, "sideways_bank", "object", "--sideways, --language-rom",
-     "sideways_configs, rom_slots", true, "Sideways ROM / RAM"},
+     "machine.sideways_configs, rom_slots", true, "Sideways ROM / RAM"},
     {PresetKey::Econet, "econet", "object", "--station, an Econet transport (--aun, ...)",
-     "station_number, station_auto_range, extension_instances", true, "Econet"},
-    {PresetKey::Extensions, "extensions", "array", "--<extension>", "extension_instances",
+     "machine.station_number, station_auto_range, extension_instances", true, "Econet"},
+    {PresetKey::Extensions, "extensions", "array", "--<extension>", "machine.extension_instances",
      true, "Extensions"},
     {PresetKey::ThumbnailCaptureDelaySeconds, "thumbnail_capture_delay_seconds", "number", "",
      "", true, "Thumbnail delay"},

@@ -516,7 +516,7 @@ void print_usage(const char* program_name) {
     {
         ServerConfig<MachineType> tmp;
         if (!populate_extension_resolver(program_name, {}, tmp)) {
-            const auto& entries = tmp.extension_resolver.entries();
+            const auto& entries = tmp.launch.extension_resolver.entries();
             if (!entries.empty()) {
                 std::cerr << "\n"
                           << "Extensions -- configure as: --<name> key=value:key=value ...\n"
@@ -665,34 +665,34 @@ std::optional<int> populate_extension_resolver(
         const char* argv0,
         const std::vector<std::string>& user_dirs,
         ServerConfig<MachineType>& config) {
-    config.default_extension_dirpath = resolve_default_extension_dirpath(argv0);
+    config.launch.default_extension_dirpath = resolve_default_extension_dirpath(argv0);
 
     const auto& builtin_entries = beebium::builtin_extensions::entries();
-    config.builtin_manifests.clear();
-    config.builtin_manifests.reserve(builtin_entries.size());
+    config.launch.builtin_manifests.clear();
+    config.launch.builtin_manifests.reserve(builtin_entries.size());
     for (const auto& e : builtin_entries) {
-        config.builtin_manifests.push_back(e.manifest);
+        config.launch.builtin_manifests.push_back(e.manifest);
     }
 
-    config.extension_resolver = beebium::ExtensionResolver{};
-    config.extension_resolver.add_source("built-in", config.builtin_manifests);
-    config.extension_scan_results.clear();
+    config.launch.extension_resolver = beebium::ExtensionResolver{};
+    config.launch.extension_resolver.add_source("built-in", config.launch.builtin_manifests);
+    config.launch.extension_scan_results.clear();
 
     auto scan = [&](const std::string& path,
                     beebium::PluginLoader::MissingDirPolicy policy) -> std::optional<int> {
         beebium::PluginLoader scanner;
         try {
-            config.extension_scan_results.push_back(scanner.scan_manifests(path, policy));
+            config.launch.extension_scan_results.push_back(scanner.scan_manifests(path, policy));
         } catch (const std::exception& e) {
             std::cerr << "Error: " << e.what() << "\n";
             return ExitCode::CONFIG;
         }
-        config.extension_resolver.add_source(path, config.extension_scan_results.back());
+        config.launch.extension_resolver.add_source(path, config.launch.extension_scan_results.back());
         return std::nullopt;
     };
 
-    if (config.default_extension_dirpath) {
-        if (auto err = scan(*config.default_extension_dirpath,
+    if (config.launch.default_extension_dirpath) {
+        if (auto err = scan(*config.launch.default_extension_dirpath,
                 beebium::PluginLoader::MissingDirPolicy::ReturnEmpty)) {
             return err;
         }
@@ -706,9 +706,251 @@ std::optional<int> populate_extension_resolver(
     return std::nullopt;
 }
 
+// Which start options parse_start_arguments accepts: all of them (start), or
+// only those that describe the machine, refusing the rest (create-preset).
+enum class StartOptionScope { Everything, MachineOnly };
+
+// What an option parser made of argv[i]: whether the option is one of its
+// own (i then advanced past its value), and the exit code when it was
+// malformed.
+struct OptionParse {
+    bool recognised = false;
+    std::optional<int> exit_code;
+};
+
+// An option that configures how this launch runs: it writes only `launch`.
+inline OptionParse parse_launch_option(const std::string& arg, int& i, int argc, char* argv[],
+                                       LaunchSettings& launch) {
+    auto usage_error = [](const std::string& message) {
+        std::cerr << "Error: " << message << "\n";
+        return OptionParse{true, ExitCode::USAGE};
+    };
+    if (arg == "--rom-dir" && i + 1 < argc) {
+        launch.rom_dirpath = argv[++i];
+    } else if (arg == "--port" && i + 1 < argc) {
+        try {
+            launch.port = static_cast<uint16_t>(parse_int(argv[++i], "--port"));
+        } catch (const std::runtime_error& e) {
+            return usage_error(e.what());
+        }
+    } else if (arg == "--wait") {
+        // Bare --wait: use TTY detection to choose default
+        launch.wait_mode = platform::is_stdin_tty() ? WaitMode::Cli : WaitMode::Api;
+    } else if (arg.rfind("--wait=", 0) == 0) {
+        // --wait=cli or --wait=api
+        try {
+            launch.wait_mode = parse_wait_arg(arg.substr(7));  // Skip "--wait="
+        } catch (const std::runtime_error& e) {
+            return usage_error(e.what());
+        }
+    } else if (arg == "--provenance-type" && i + 1 < argc) {
+        launch.provenance_type = argv[++i];
+    } else if (arg == "--provenance-uuid" && i + 1 < argc) {
+        launch.provenance_uuid = argv[++i];
+    } else if (arg == "--provenance-version" && i + 1 < argc) {
+        launch.provenance_version = argv[++i];
+    } else if (arg == "--machine-uuid" && i + 1 < argc) {
+        launch.machine_uuid = argv[++i];
+        if (!is_valid_uuid(launch.machine_uuid)) {
+            return usage_error("--machine-uuid must be a valid UUID");
+        }
+    } else if (arg == "--machine-ordinal") {
+        if (i + 1 >= argc) {
+            return usage_error("--machine-ordinal requires a positive integer");
+        }
+        const std::string value = argv[++i];
+        unsigned long ordinal = 0;
+        const bool digits = !value.empty() &&
+            value.find_first_not_of("0123456789") == std::string::npos &&
+            value.size() <= 9;
+        if (digits) {
+            ordinal = std::stoul(value);
+        }
+        if (!digits || ordinal == 0) {
+            return usage_error("--machine-ordinal must be a positive integer, got '" + value +
+                               "'");
+        }
+        launch.machine_ordinal = static_cast<unsigned>(ordinal);
+    } else if (arg == "--allow-shutdown") {
+        launch.allow_shutdown = true;
+    } else if (arg == "--advertise") {
+        launch.advertise = true;
+    } else {
+        return {};
+    }
+    return {true, std::nullopt};
+}
+
+// An option that sets the board's switches, links or clock, which no preset
+// has a form for yet: it writes only `board`.
+template<typename MachineType>
+OptionParse parse_board_option(const std::string& arg, int& i, int argc, char* argv[],
+                               BoardSettings<MachineType>& board) {
+    auto usage_error = [](const std::string& message) {
+        std::cerr << "Error: " << message << "\n";
+        return OptionParse{true, ExitCode::USAGE};
+    };
+    if (arg == "--write-protect" && i + 1 < argc) {
+        board.launch_protections.emplace_back(argv[++i], ProtectionKind::WriteProtect);
+    } else if (arg == "--hide" && i + 1 < argc) {
+        board.launch_protections.emplace_back(argv[++i], ProtectionKind::Hide);
+    } else if (arg == board_rtc_flag<typename MachineType::Memory>() && i + 1 < argc) {
+        try {
+            board.board_rtc = parse_board_rtc_arg(argv[++i], arg);
+        } catch (const std::runtime_error& e) {
+            return usage_error(e.what());
+        }
+    } else if (arg == "--motherboard-link" && i + 1 < argc) {
+        // KEY=VALUE; key/value strings interpreted by the machine
+        // variant's MotherboardLinks::parse method.
+        std::string spec = argv[++i];
+        auto eq = spec.find('=');
+        if (eq == std::string::npos) {
+            return usage_error("--motherboard-link expects KEY=VALUE, got '" + spec + "'");
+        }
+        std::string key = spec.substr(0, eq);
+        std::string value = spec.substr(eq + 1);
+        if (auto err = board.motherboard_links.parse(key, value)) {
+            return usage_error(*err);
+        }
+    } else {
+        return {};
+    }
+    return {true, std::nullopt};
+}
+
+// An option that describes the machine, which a preset records: it writes
+// only `machine`. An extension's --<cli-name> flag is one, found by
+// `cli_name_to_manifest`.
+inline OptionParse parse_machine_option(
+        const std::string& arg, int& i, int argc, char* argv[], MachineDescription& machine,
+        const std::map<std::string, const beebium::ExtensionManifest*>& cli_name_to_manifest) {
+    auto usage_error = [](const std::string& message) {
+        std::cerr << "Error: " << message << "\n";
+        return OptionParse{true, ExitCode::USAGE};
+    };
+    if (arg == "--mos" && i + 1 < argc) {
+        machine.mos_filepath = argv[++i];
+    } else if (arg == "--language-rom" && i + 1 < argc) {
+        machine.language_rom_filepath = argv[++i];
+    } else if (arg == "--sideways" && i + 1 < argc) {
+        std::string value = argv[++i];
+        SidewaysConfig sideways_config;
+        try {
+            sideways_config = parse_sideways_arg(value);
+        } catch (const std::runtime_error& e) {
+            return usage_error(e.what());
+        }
+        machine.sideways_configs.push_back(sideways_config);
+        // Add ALL slot types to rom_slots to prevent default ROM loading
+        // (e.g. type=empty or type=ram prevents the default BASIC loading)
+        if (sideways_config.type == SidewaysSlotType::Rom) {
+            machine.rom_slots[sideways_config.slot] = sideways_config.image_filepath;
+        } else if (sideways_config.type == SidewaysSlotType::Empty) {
+            machine.rom_slots[sideways_config.slot] = EMPTY_SLOT_MARKER;
+        } else if (sideways_config.type == SidewaysSlotType::Ram) {
+            machine.rom_slots[sideways_config.slot] = RAM_SLOT_MARKER;
+        }
+    } else if (arg == "--floppy" && i + 1 < argc) {
+        std::string value = argv[++i];
+        complete_colon_arg(value, i, argc, argv);
+        try {
+            auto [drive, filepath] = parse_floppy_arg(value);
+            machine.floppy_filepaths[drive] = filepath;
+        } catch (const std::runtime_error& e) {
+            return usage_error(e.what());
+        }
+    } else if (arg == "--screen-mode" && i + 1 < argc) {
+        try {
+            machine.screen_mode = parse_int(argv[++i], "--screen-mode");
+        } catch (const std::runtime_error& e) {
+            return usage_error(e.what());
+        }
+        if (machine.screen_mode < 0 || machine.screen_mode > 7) {
+            return usage_error("--screen-mode must be 0-7");
+        }
+        machine.screen_mode_set = true;
+    } else if (arg == "--auto-boot") {
+        machine.auto_boot = true;
+        machine.auto_boot_set = true;
+    } else if (arg == "--links" && i + 1 < argc) {
+        try {
+            machine.raw_links = parse_int(argv[++i], "--links");
+        } catch (const std::runtime_error& e) {
+            return usage_error(e.what());
+        }
+        if (machine.raw_links < 0 || machine.raw_links > 255) {
+            return usage_error("--links must be 0-255");
+        }
+    } else if (arg == "--speed" || arg.rfind("--speed=", 0) == 0) {
+        std::string speed_value;
+        if (arg == "--speed") {
+            if (i + 1 >= argc) {
+                return usage_error("--speed requires a value "
+                                   "(a positive multiplier or 'unlimited')");
+            }
+            speed_value = argv[++i];
+        } else {
+            speed_value = arg.substr(8);  // Skip "--speed="
+        }
+        try {
+            machine.speed_multiplier_override = parse_speed_arg(speed_value);
+        } catch (const std::runtime_error& e) {
+            return usage_error(e.what());
+        }
+    } else if (arg == "--fdc" && i + 1 < argc) {
+        machine.fdc_type = argv[++i];
+    } else if (arg == "--station" && i + 1 < argc) {
+        std::string error;
+        auto spec = beebium::econet::parse_station_spec(argv[++i], error);
+        if (!spec.has_value()) {
+            return usage_error("--station " + error);
+        }
+        if (spec->is_auto) {
+            machine.station_auto_range = spec->range;
+            machine.station_number = -1;  // chosen at launch, in install_econet
+        } else {
+            machine.station_number = spec->fixed;
+            machine.station_auto_range.reset();
+        }
+    } else if (arg == "--machine-name" && i + 1 < argc) {
+        machine.machine_name = argv[++i];
+    } else {
+        // An extension CLI flag (e.g. --acorn-scsi, --scsi-hdd)?
+        std::string lower = arg;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        auto manifest_it = cli_name_to_manifest.find(lower);
+        if (manifest_it == cli_name_to_manifest.end()) {
+            return {};
+        }
+        const auto* manifest = manifest_it->second;
+        std::string arg_string;
+        // Consume the next argv as the colon-separated argument string
+        // (if it exists and doesn't start with --)
+        if (i + 1 < argc && std::string_view(argv[i + 1]).substr(0, 2) != "--") {
+            arg_string = argv[++i];
+        }
+        auto parse_result = beebium::parse_extension_args(
+            manifest->effective_cli_name(), arg_string, manifest->parameters);
+        if (!parse_result.ok) {
+            return usage_error(parse_result.error);
+        }
+        machine.extension_instances.push_back({
+            manifest->name,
+            std::move(parse_result.config),
+            std::move(parse_result.list_config),
+            /*from_preset=*/false,
+            std::move(parse_result.explicit_keys)
+        });
+    }
+    return {true, std::nullopt};
+}
+
 template<typename MachineType>
 std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index,
-                                          ServerConfig<MachineType>& config) {
+                                          ServerConfig<MachineType>& config,
+                                          StartOptionScope scope = StartOptionScope::Everything) {
     using Memory = typename MachineType::Memory;
 
     // First pass: find --preset and --extension-dir before other options
@@ -717,24 +959,24 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
     for (int i = start_index; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--extension-dir" && i + 1 < argc) {
-            config.extension_dirpaths.push_back(argv[i + 1]);
+            config.launch.extension_dirpaths.push_back(argv[i + 1]);
             ++i;
             continue;
         }
         if (arg == "--preset" && i + 1 < argc) {
-            if (config.preset_filepath) {
+            if (config.launch.preset_filepath) {
                 std::cerr << "Error: --preset may be given only once\n";
                 return ExitCode::USAGE;
             }
             // The argument is a preset file path or, failing that, a preset id
             // resolved like show-preset: system presets, then user presets.
             std::string preset_arg = argv[++i];
-            config.preset_filepath = locate_preset(preset_arg);
-            if (!config.preset_filepath) {
+            config.launch.preset_filepath = locate_preset(preset_arg);
+            if (!config.launch.preset_filepath) {
                 std::cerr << "Error: " << preset_not_found_message(preset_arg) << "\n";
                 return ExitCode::NOINPUT;
             }
-            auto result = load_preset(*config.preset_filepath);
+            auto result = load_preset(*config.launch.preset_filepath);
             if (!result) {
                 for (const auto& e : result.errors()) {
                     std::cerr << "Error: " << e.message << "\n";
@@ -755,243 +997,60 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
     // Build the extension resolver: built-ins (lowest priority), the
     // auto-resolved default <exe-dir>/extensions, then each user-
     // supplied --extension-dir in CLI order (later wins).
-    if (auto err = populate_extension_resolver(argv[0], config.extension_dirpaths, config)) {
+    if (auto err = populate_extension_resolver(argv[0], config.launch.extension_dirpaths, config)) {
         return err;
     }
 
     // Lowercase CLI flag map driven by the resolved manifest set.
-    auto cli_name_to_manifest = config.extension_resolver.cli_name_map();
-
-    auto to_lower = [](std::string s) {
-        std::transform(s.begin(), s.end(), s.begin(),
-                       [](unsigned char c) { return std::tolower(c); });
-        return s;
-    };
+    auto cli_name_to_manifest = config.launch.extension_resolver.cli_name_map();
 
     // Second pass: parse all CLI arguments (including --preset which we skip now)
     for (int i = start_index; i < argc; ++i) {
         std::string arg = argv[i];
 
-        if (arg == "--preset" && i + 1 < argc) {
+        if ((arg == "--preset" || arg == "--extension-dir") && i + 1 < argc) {
             // Already handled in first pass, skip
             ++i;
             continue;
         } else if (arg == "--help" || arg == "-h") {
             print_usage<MachineType>(argv[0]);
             return ExitCode::OK;
-        } else if (arg == "--mos" && i + 1 < argc) {
-            config.mos_filepath = argv[++i];
-        } else if (arg == "--language-rom" && i + 1 < argc) {
-            config.language_rom_filepath = argv[++i];
-        } else if (arg == "--write-protect" && i + 1 < argc) {
-            config.launch_protections.emplace_back(argv[++i],
-                                                   ProtectionKind::WriteProtect);
-        } else if (arg == "--hide" && i + 1 < argc) {
-            config.launch_protections.emplace_back(argv[++i],
-                                                   ProtectionKind::Hide);
-        } else if (arg == board_rtc_flag<typename MachineType::Memory>() && i + 1 < argc) {
-            try {
-                config.board_rtc = parse_board_rtc_arg(argv[++i], arg);
-            } catch (const std::runtime_error& e) {
-                std::cerr << "Error: " << e.what() << "\n";
+        }
+
+        // Each option is parsed by the one parser whose part of the
+        // configuration it sets. With MachineOnly (create-preset), an option
+        // the launch or board parser recognises is refused: the preset could
+        // not record it.
+        if (scope == StartOptionScope::MachineOnly) {
+            const std::string flag = arg.substr(0, arg.find('='));
+            LaunchSettings launch_scratch;
+            BoardSettings<MachineType> board_scratch;
+            int j = i;
+            if (parse_launch_option(arg, j, argc, argv, launch_scratch).recognised) {
+                std::cerr << "Error: " << flag << " configures the launch, not the machine; "
+                             "a preset cannot record it\n";
                 return ExitCode::USAGE;
             }
-        } else if (arg == "--sideways" && i + 1 < argc) {
-            std::string value = argv[++i];
-            SidewaysConfig sideways_config;
-            try {
-                sideways_config = parse_sideways_arg(value);
-            } catch (const std::runtime_error& e) {
-                std::cerr << "Error: " << e.what() << "\n";
+            j = i;
+            if (parse_board_option<MachineType>(arg, j, argc, argv, board_scratch).recognised) {
+                std::cerr << "Error: " << flag << " has no preset form yet\n";
                 return ExitCode::USAGE;
             }
-            config.sideways_configs.push_back(sideways_config);
-            // Add ALL slot types to rom_slots to prevent default ROM loading
-            // (e.g. type=empty or type=ram prevents the default BASIC loading)
-            if (sideways_config.type == SidewaysSlotType::Rom) {
-                config.rom_slots[sideways_config.slot] = sideways_config.image_filepath;
-            } else if (sideways_config.type == SidewaysSlotType::Empty) {
-                config.rom_slots[sideways_config.slot] = EMPTY_SLOT_MARKER;
-            } else if (sideways_config.type == SidewaysSlotType::Ram) {
-                config.rom_slots[sideways_config.slot] = RAM_SLOT_MARKER;
-            }
-        } else if (arg == "--rom-dir" && i + 1 < argc) {
-            config.rom_dirpath = argv[++i];
-        } else if (arg == "--motherboard-link" && i + 1 < argc) {
-            // KEY=VALUE; key/value strings interpreted by the machine
-            // variant's MotherboardLinks::parse method.
-            std::string spec = argv[++i];
-            auto eq = spec.find('=');
-            if (eq == std::string::npos) {
-                std::cerr << "Error: --motherboard-link expects KEY=VALUE, got '"
-                          << spec << "'\n";
-                return ExitCode::USAGE;
-            }
-            std::string key = spec.substr(0, eq);
-            std::string value = spec.substr(eq + 1);
-            if (auto err = config.motherboard_links.parse(key, value)) {
-                std::cerr << "Error: " << *err << "\n";
-                return ExitCode::USAGE;
-            }
-        } else if (arg == "--port" && i + 1 < argc) {
-            try {
-                config.port = static_cast<uint16_t>(parse_int(argv[++i], "--port"));
-            } catch (const std::runtime_error& e) {
-                std::cerr << "Error: " << e.what() << "\n";
-                return ExitCode::USAGE;
-            }
-        } else if (arg == "--floppy" && i + 1 < argc) {
-            std::string value = argv[++i];
-            complete_colon_arg(value, i, argc, argv);
-            try {
-                auto [drive, filepath] = parse_floppy_arg(value);
-                config.floppy_filepaths[drive] = filepath;
-            } catch (const std::runtime_error& e) {
-                std::cerr << "Error: " << e.what() << "\n";
-                return ExitCode::USAGE;
-            }
-        } else if (arg == "--screen-mode" && i + 1 < argc) {
-            try {
-                config.screen_mode = parse_int(argv[++i], "--screen-mode");
-            } catch (const std::runtime_error& e) {
-                std::cerr << "Error: " << e.what() << "\n";
-                return ExitCode::USAGE;
-            }
-            if (config.screen_mode < 0 || config.screen_mode > 7) {
-                std::cerr << "Error: --screen-mode must be 0-7\n";
-                return ExitCode::USAGE;
-            }
-            config.screen_mode_set = true;
-        } else if (arg == "--auto-boot") {
-            config.auto_boot = true;
-            config.auto_boot_set = true;
-        } else if (arg == "--links" && i + 1 < argc) {
-            try {
-                config.raw_links = parse_int(argv[++i], "--links");
-            } catch (const std::runtime_error& e) {
-                std::cerr << "Error: " << e.what() << "\n";
-                return ExitCode::USAGE;
-            }
-            if (config.raw_links < 0 || config.raw_links > 255) {
-                std::cerr << "Error: --links must be 0-255\n";
-                return ExitCode::USAGE;
-            }
-        } else if (arg == "--wait") {
-            // Bare --wait: use TTY detection to choose default
-            config.wait_mode = platform::is_stdin_tty() ? WaitMode::Cli : WaitMode::Api;
-        } else if (arg.rfind("--wait=", 0) == 0) {
-            // --wait=cli or --wait=api
-            std::string wait_value = arg.substr(7);  // Skip "--wait="
-            try {
-                config.wait_mode = parse_wait_arg(wait_value);
-            } catch (const std::runtime_error& e) {
-                std::cerr << "Error: " << e.what() << "\n";
-                return ExitCode::USAGE;
-            }
-        } else if (arg == "--speed" || arg.rfind("--speed=", 0) == 0) {
-            std::string speed_value;
-            if (arg == "--speed") {
-                if (i + 1 >= argc) {
-                    std::cerr << "Error: --speed requires a value "
-                                 "(a positive multiplier or 'unlimited')\n";
-                    return ExitCode::USAGE;
-                }
-                speed_value = argv[++i];
-            } else {
-                speed_value = arg.substr(8);  // Skip "--speed="
-            }
-            try {
-                config.speed_multiplier_override = parse_speed_arg(speed_value);
-            } catch (const std::runtime_error& e) {
-                std::cerr << "Error: " << e.what() << "\n";
-                return ExitCode::USAGE;
-            }
-        } else if (arg == "--fdc" && i + 1 < argc) {
-            config.fdc_type = argv[++i];
-        } else if (arg == "--station" && i + 1 < argc) {
-            std::string error;
-            auto spec = beebium::econet::parse_station_spec(argv[++i], error);
-            if (!spec.has_value()) {
-                std::cerr << "Error: --station " << error << "\n";
-                return ExitCode::USAGE;
-            }
-            if (spec->is_auto) {
-                config.station_auto_range = spec->range;
-                config.station_number = -1;  // chosen at launch, in install_econet
-            } else {
-                config.station_number = spec->fixed;
-                config.station_auto_range.reset();
-            }
-        } else if (arg == "--provenance-type" && i + 1 < argc) {
-            config.provenance_type = argv[++i];
-        } else if (arg == "--provenance-uuid" && i + 1 < argc) {
-            config.provenance_uuid = argv[++i];
-        } else if (arg == "--provenance-version" && i + 1 < argc) {
-            config.provenance_version = argv[++i];
-        } else if (arg == "--machine-uuid" && i + 1 < argc) {
-            config.machine_uuid = argv[++i];
-            if (!is_valid_uuid(config.machine_uuid)) {
-                std::cerr << "Error: --machine-uuid must be a valid UUID\n";
-                return ExitCode::USAGE;
-            }
-        } else if (arg == "--machine-name" && i + 1 < argc) {
-            config.machine_name = argv[++i];
-        } else if (arg == "--machine-ordinal") {
-            if (i + 1 >= argc) {
-                std::cerr << "Error: --machine-ordinal requires a positive integer\n";
-                return ExitCode::USAGE;
-            }
-            const std::string value = argv[++i];
-            unsigned long ordinal = 0;
-            const bool digits = !value.empty() &&
-                value.find_first_not_of("0123456789") == std::string::npos &&
-                value.size() <= 9;
-            if (digits) {
-                ordinal = std::stoul(value);
-            }
-            if (!digits || ordinal == 0) {
-                std::cerr << "Error: --machine-ordinal must be a positive integer, got '"
-                          << value << "'\n";
-                return ExitCode::USAGE;
-            }
-            config.machine_ordinal = static_cast<unsigned>(ordinal);
-        } else if (arg == "--allow-shutdown") {
-            config.allow_shutdown = true;
-        } else if (arg == "--advertise") {
-            config.advertise = true;
-        } else if (arg == "--extension-dir" && i + 1 < argc) {
-            // Already handled in first pass, skip
-            ++i;
-            continue;
         } else {
-            // Check if this is an extension CLI flag (e.g. --acorn-scsi, --scsi-hdd)
-            auto manifest_it = cli_name_to_manifest.find(to_lower(arg));
-            if (manifest_it != cli_name_to_manifest.end()) {
-                const auto* manifest = manifest_it->second;
-                std::string arg_string;
-                // Consume the next argv as the colon-separated argument string
-                // (if it exists and doesn't start with --)
-                if (i + 1 < argc && std::string_view(argv[i + 1]).substr(0, 2) != "--") {
-                    arg_string = argv[++i];
-                }
-                auto parse_result = beebium::parse_extension_args(
-                    manifest->effective_cli_name(), arg_string, manifest->parameters);
-                if (!parse_result.ok) {
-                    std::cerr << "Error: " << parse_result.error << "\n";
-                    return ExitCode::USAGE;
-                }
-                config.extension_instances.push_back({
-                    manifest->name,
-                    std::move(parse_result.config),
-                    std::move(parse_result.list_config),
-                    /*from_preset=*/false,
-                    std::move(parse_result.explicit_keys)
-                });
-            } else {
-                std::cerr << "Unknown argument: " << arg << "\n";
-                print_usage<MachineType>(argv[0]);
-                return ExitCode::USAGE;
-            }
+            auto launch = parse_launch_option(arg, i, argc, argv, config.launch);
+            if (launch.exit_code) return launch.exit_code;
+            if (launch.recognised) continue;
+            auto board = parse_board_option<MachineType>(arg, i, argc, argv, config.board);
+            if (board.exit_code) return board.exit_code;
+            if (board.recognised) continue;
+        }
+        auto machine = parse_machine_option(arg, i, argc, argv, config.machine,
+                                            cli_name_to_manifest);
+        if (machine.exit_code) return machine.exit_code;
+        if (!machine.recognised) {
+            std::cerr << "Unknown argument: " << arg << "\n";
+            print_usage<MachineType>(argv[0]);
+            return ExitCode::USAGE;
         }
     }
 
@@ -1024,13 +1083,13 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
                             const typename MachineType::Memory::MotherboardLinks& l) {
                       m.apply_motherboard_links(l);
                   }) {
-        machine.state().memory.apply_motherboard_links(config.motherboard_links);
+        machine.state().memory.apply_motherboard_links(config.board.motherboard_links);
     }
 
     apply_rom_defaults(config);
 
     // Load MOS ROM
-    auto mos_path = RomPaths::find_rom(config.mos_filepath);
+    auto mos_path = RomPaths::find_rom(config.machine.mos_filepath);
     std::cout << "Loading MOS ROM: " << mos_path << "\n";
     auto mos_data = load_file(mos_path);
     if (mos_data.size() != 16384) {
@@ -1046,7 +1105,7 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
     // validation step above (validate_sideways_configs) already rejected
     // unsupported (slot, type) pairs against the topology, so we can
     // pass each request straight through.
-    for (const auto& [slot, marker_or_filepath] : config.rom_slots) {
+    for (const auto& [slot, marker_or_filepath] : config.machine.rom_slots) {
         if (marker_or_filepath == EMPTY_SLOT_MARKER) {
             std::cout << "Slot " << static_cast<int>(slot) << ": empty\n";
             machine.state().memory.configure_slot_as_empty(slot);
@@ -1080,7 +1139,7 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
 
     // Handle RAM slots with pre-loaded images
     // These are processed after rom_slots to ensure the slot is already configured as RAM
-    for (const auto& sideways_config : config.sideways_configs) {
+    for (const auto& sideways_config : config.machine.sideways_configs) {
         if (sideways_config.type == SidewaysSlotType::Ram && !sideways_config.image_filepath.empty()) {
             auto ram_path = RomPaths::find_rom(sideways_config.image_filepath);
             auto ram_data = load_file(ram_path);
@@ -1101,7 +1160,7 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
                       m.set_slot_write_protected(uint8_t{0}, bool{});
                   }) {
         auto& memory = machine.state().memory;
-        for (const auto& sw : config.sideways_configs) {
+        for (const auto& sw : config.machine.sideways_configs) {
             if (!sw.write_protected) continue;
             if (memory.sideways.bank_type(sw.slot) == SlotType::Ram) {
                 std::cout << "Slot " << static_cast<int>(sw.slot)
@@ -1122,7 +1181,7 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
                       m.set_protection(id, ProtectionKind::WriteProtect, bool{});
                   }) {
         auto& memory = machine.state().memory;
-        for (const auto& [group_id, kind] : config.launch_protections) {
+        for (const auto& [group_id, kind] : config.board.launch_protections) {
             if (memory.set_protection(group_id, kind, true)) {
                 std::cout << (kind == ProtectionKind::Hide ? "Hide" : "Write-protect")
                           << " group '" << group_id << "': engaged\n";
@@ -1134,7 +1193,7 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
                     + "' with that control on this machine variant");
             }
         }
-    } else if (!config.launch_protections.empty()) {
+    } else if (!config.board.launch_protections.empty()) {
         throw std::runtime_error(
             "--write-protect/--hide: this machine variant has no protection "
             "controls");
@@ -1142,9 +1201,9 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
 
     // The board's built-in real-time clock: time source and start time.
     if constexpr (requires { MachineType::Memory::BOARD_RTC_OPTION; }) {
-        if (config.board_rtc) {
+        if (config.board.board_rtc) {
             auto& rtc = machine.state().memory.rtc;
-            const auto& spec = *config.board_rtc;
+            const auto& spec = *config.board.board_rtc;
             const int64_t host_now =
                 Mc146818Rtc::host_local_civil_now().count() / 1'000'000;
             std::optional<int64_t> start = spec.time_civil_seconds;
@@ -1167,23 +1226,23 @@ std::optional<int> install_disc_controller(MachineType& machine, const ServerCon
     using Memory = typename MachineType::Memory;
 
     if constexpr (HasDiscControllerSocket<Memory>) {
-        if (!config.fdc_type.empty()) {
-            if (config.fdc_type == "none") {
+        if (!config.machine.fdc_type.empty()) {
+            if (config.machine.fdc_type == "none") {
                 std::cout << "Disc controller: none (socket empty)\n";
                 // Do nothing - leave socket empty
-            } else if (auto controller = DiscControllerRegistry::create(config.fdc_type)) {
-                auto* info = DiscControllerRegistry::find(config.fdc_type);
+            } else if (auto controller = DiscControllerRegistry::create(config.machine.fdc_type)) {
+                auto* info = DiscControllerRegistry::find(config.machine.fdc_type);
                 std::cout << "Installing disc controller: " << info->display_name
                           << " (" << info->fdc_chip << ")\n";
-                machine.state().memory.install_disc_controller(std::move(controller), config.fdc_type);
+                machine.state().memory.install_disc_controller(std::move(controller), config.machine.fdc_type);
             } else {
-                std::cerr << "Error: Unknown disc controller type: " << config.fdc_type << "\n"
+                std::cerr << "Error: Unknown disc controller type: " << config.machine.fdc_type << "\n"
                           << "Use the list-fdcs command to see available disc controllers.\n";
                 return 1;
             }
         }
         // If --fdc not specified, socket remains empty (no disc controller)
-    } else if (!config.fdc_type.empty()) {
+    } else if (!config.machine.fdc_type.empty()) {
         // Model B+ has built-in controller, --fdc option is not applicable
         std::cerr << "Warning: --fdc option ignored (machine has built-in disc controller)\n";
     }
@@ -1207,9 +1266,9 @@ std::optional<int> resolve_auto_station(
     const ServerConfig<MachineType>& config,
     beebium::EconetTransportRegistry& transport_registry, bool offline,
     int& resolved_station, bool& auto_assigned) {
-    resolved_station = config.station_number;
+    resolved_station = config.machine.station_number;
     auto_assigned = false;
-    if (!config.station_auto_range.has_value()) {
+    if (!config.machine.station_auto_range.has_value()) {
         return std::nullopt;  // a fixed station (or none)
     }
     if (transport_registry.empty()) {
@@ -1223,11 +1282,11 @@ std::optional<int> resolve_auto_station(
     }
     auto_assigned = true;
     if (offline) {
-        resolved_station = config.station_auto_range->lo;  // deterministic
+        resolved_station = config.machine.station_auto_range->lo;  // deterministic
         return std::nullopt;
     }
     auto& transport = *transport_registry.extensions().front();
-    auto outcome = transport.select_auto_station(*config.station_auto_range);
+    auto outcome = transport.select_auto_station(*config.machine.station_auto_range);
     using Status = beebium::EconetTransportExtension::AutoStationOutcome::Status;
     if (outcome.status == Status::Unsupported) {
         std::cerr << "Error: " << outcome.report << "\n";
@@ -1325,7 +1384,7 @@ std::optional<int> install_econet(MachineType& machine,
             std::cout << "Econet station " << resolved_station << auto_note
                       << " (no network -- pass --aun port=N or --piconet device_path=... to enable a transport)\n";
         }
-    } else if (config.station_number >= 1 || config.station_auto_range.has_value()) {
+    } else if (config.machine.station_number >= 1 || config.machine.station_auto_range.has_value()) {
         std::cerr << "Warning: --station option ignored (machine has no Econet socket)\n";
     }
 
@@ -1410,16 +1469,16 @@ void tick_disc_drives(MachineType& machine) {
 template<typename MachineType>
 std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<MachineType>& config) {
     if constexpr (requires { machine.state().memory.disc_drive_0; }) {
-        if (!config.floppy_filepaths[0].empty()) {
+        if (!config.machine.floppy_filepaths[0].empty()) {
             if (auto exit_code = load_single_disc(
-                    machine.state().memory.disc_drive_0, 0, config.floppy_filepaths[0])) {
+                    machine.state().memory.disc_drive_0, 0, config.machine.floppy_filepaths[0])) {
                 return exit_code;
             }
         }
 
-        if (!config.floppy_filepaths[1].empty()) {
+        if (!config.machine.floppy_filepaths[1].empty()) {
             if (auto exit_code = load_single_disc(
-                    machine.state().memory.disc_drive_1, 1, config.floppy_filepaths[1])) {
+                    machine.state().memory.disc_drive_1, 1, config.machine.floppy_filepaths[1])) {
                 return exit_code;
             }
         }
@@ -1431,19 +1490,19 @@ std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<Mac
 // Must be called before machine.reset().
 template<typename MachineType>
 void apply_startup_options(MachineType& machine, const ServerConfig<MachineType>& config) {
-    if (config.raw_links >= 0) {
+    if (config.machine.raw_links >= 0) {
         // Raw byte overrides everything
-        machine.state().memory.set_startup_options(static_cast<uint8_t>(config.raw_links));
-        std::cout << "Startup links: 0x" << std::hex << config.raw_links << std::dec << "\n";
+        machine.state().memory.set_startup_options(static_cast<uint8_t>(config.machine.raw_links));
+        std::cout << "Startup links: 0x" << std::hex << config.machine.raw_links << std::dec << "\n";
     } else {
         // Apply semantic options (modifies specific bits, preserves others)
-        if (config.screen_mode_set) {
-            machine.state().memory.set_screen_mode(static_cast<uint8_t>(config.screen_mode));
-            std::cout << "Startup screen mode: " << config.screen_mode << "\n";
+        if (config.machine.screen_mode_set) {
+            machine.state().memory.set_screen_mode(static_cast<uint8_t>(config.machine.screen_mode));
+            std::cout << "Startup screen mode: " << config.machine.screen_mode << "\n";
         }
-        if (config.auto_boot_set) {
-            machine.state().memory.set_auto_boot(config.auto_boot);
-            std::cout << "Auto-boot: " << (config.auto_boot ? "enabled" : "disabled") << "\n";
+        if (config.machine.auto_boot_set) {
+            machine.state().memory.set_auto_boot(config.machine.auto_boot);
+            std::cout << "Auto-boot: " << (config.machine.auto_boot ? "enabled" : "disabled") << "\n";
         }
     }
 }
@@ -1597,8 +1656,8 @@ void run_emulation_loop(MachineType& machine,
     auto quantum = beebium::measure_sleep_quantum(sleeper);
 
     auto pacing_config = Memory::default_pacing_config();
-    if (config.speed_multiplier_override.has_value()) {
-        pacing_config.speed_multiplier = *config.speed_multiplier_override;
+    if (config.machine.speed_multiplier_override.has_value()) {
+        pacing_config.speed_multiplier = *config.machine.speed_multiplier_override;
     }
 
     // Create and start pacing clock with measured quantum
@@ -1867,36 +1926,36 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     // pick it up via inst.config["machine_uuid"] before their create_backend
     // runs. The MachineIdentity proper is constructed later (serving), but the
     // UUID -- the only value extensions need -- is fixed once generated.
-    if (config.machine_uuid.empty()) {
-        config.machine_uuid = generate_uuid_v4();
+    if (config.launch.machine_uuid.empty()) {
+        config.launch.machine_uuid = generate_uuid_v4();
     }
 
     beebium::PluginLoader plugin_loader;
-    if (config.default_extension_dirpath) {
-        std::cout << "Extension directory: " << *config.default_extension_dirpath << "\n";
+    if (config.launch.default_extension_dirpath) {
+        std::cout << "Extension directory: " << *config.launch.default_extension_dirpath << "\n";
     }
-    for (const auto& p : config.extension_dirpaths) {
+    for (const auto& p : config.launch.extension_dirpaths) {
         std::cout << "Extension directory: " << p << "\n";
     }
 
     // Build the Econet transport registry from any econet-transport extension
     // instances, before install_econet so the transport is ready when the
     // machine first reads the ADLC. Transport-extension instances are removed
-    // from config.extension_instances; the later peripheral load loop only sees
+    // from config.machine.extension_instances; the later peripheral load loop only sees
     // peripherals.
     {
         std::vector<typename ServerConfig<MachineType>::ExtensionInstance> remaining;
-        remaining.reserve(config.extension_instances.size());
-        for (auto& inst : config.extension_instances) {
+        remaining.reserve(config.machine.extension_instances.size());
+        for (auto& inst : config.machine.extension_instances) {
             const beebium::ExtensionManifest* manifest =
-                config.extension_resolver.find_by_name(inst.name);
+                config.launch.extension_resolver.find_by_name(inst.name);
 
             if (!manifest || manifest->extension_kind != "econet-transport") {
                 remaining.push_back(std::move(inst));
                 continue;
             }
 
-            inst.config["machine_uuid"] = config.machine_uuid;
+            inst.config["machine_uuid"] = config.launch.machine_uuid;
             auto loaded = instantiate_extension(*manifest, inst, plugin_loader, "transport");
             if (!loaded) {
                 return {nullptr, ExitCode::CONFIG};
@@ -1913,7 +1972,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             am->transport_registry.add(
                 std::unique_ptr<beebium::EconetTransportExtension>(transport));
         }
-        config.extension_instances = std::move(remaining);
+        config.machine.extension_instances = std::move(remaining);
     }
 
     // Validate each transport's config before anything else (issue #158): an
@@ -1933,10 +1992,10 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     // then, before the machine runs. Off that path (capture-screenshot), or for
     // a fixed station, resolve now -- offline (no browse/announce) so build-time
     // boots stay deterministic.
-    if (config.station_auto_range.has_value() && defer_auto_station) {
-        am->pending_auto_station = config.station_auto_range;
+    if (config.machine.station_auto_range.has_value() && defer_auto_station) {
+        am->pending_auto_station = config.machine.station_auto_range;
     } else {
-        int resolved_station = config.station_number;
+        int resolved_station = config.machine.station_number;
         bool auto_assigned = false;
         if (auto exit_code = resolve_auto_station(
                 config, am->transport_registry, /*offline=*/true,
@@ -1977,23 +2036,23 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     // are loaded before consumers (RTLD_GLOBAL takes effect before children
     // resolve parent symbols); stable_partition preserves command-line order.
     std::stable_partition(
-        config.extension_instances.begin(),
-        config.extension_instances.end(),
+        config.machine.extension_instances.begin(),
+        config.machine.extension_instances.end(),
         [&config](const auto& inst) {
-            const auto* m = config.extension_resolver.find_by_name(inst.name);
+            const auto* m = config.launch.extension_resolver.find_by_name(inst.name);
             return m && !m->provides.empty();
         });
 
-    for (auto& inst : config.extension_instances) {
+    for (auto& inst : config.machine.extension_instances) {
         const beebium::ExtensionManifest* manifest =
-            config.extension_resolver.find_by_name(inst.name);
+            config.launch.extension_resolver.find_by_name(inst.name);
         if (!manifest) {
             std::cerr << "Error: Extension '" << inst.name << "' not found";
-            for (const auto& p : config.extension_dirpaths) {
+            for (const auto& p : config.launch.extension_dirpaths) {
                 std::cerr << " in " << p;
             }
-            if (config.default_extension_dirpath && config.extension_dirpaths.empty()) {
-                std::cerr << " in " << *config.default_extension_dirpath;
+            if (config.launch.default_extension_dirpath && config.launch.extension_dirpaths.empty()) {
+                std::cerr << " in " << *config.launch.default_extension_dirpath;
             }
             std::cerr << "\n";
             return {nullptr, ExitCode::CONFIG};
@@ -2018,7 +2077,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
                     return {nullptr, ExitCode::CONFIG};
                 }
             } else {
-                const auto images = bundled_images(config.extension_resolver);
+                const auto images = bundled_images(config.launch.extension_resolver);
                 const auto* image = find_bundled_image(images, *manifest, p, it->second);
                 if (!image) {
                     std::cerr << "Error: " << inst.name << " " << p.key << " '" << it->second
@@ -2173,12 +2232,12 @@ public:
         }
 
         // Apply provenance defaults (protocol specification)
-        if (config.provenance_type.empty()) {
-            config.provenance_type = platform::is_stdin_tty() ? "terminal" : "unknown";
+        if (config.launch.provenance_type.empty()) {
+            config.launch.provenance_type = platform::is_stdin_tty() ? "terminal" : "unknown";
         }
-        if (config.provenance_uuid.empty()) {
-            config.provenance_uuid = generate_uuid_v4();
-        } else if (!is_valid_uuid(config.provenance_uuid)) {
+        if (config.launch.provenance_uuid.empty()) {
+            config.launch.provenance_uuid = generate_uuid_v4();
+        } else if (!is_valid_uuid(config.launch.provenance_uuid)) {
             std::cerr << "Error: --provenance-uuid must be a valid UUID\n";
             return ExitCode::USAGE;
         }
@@ -2186,8 +2245,8 @@ public:
 
         try {
             // Set ROM directory if specified
-            if (!config.rom_dirpath.empty()) {
-                RomPaths::set_rom_directory(config.rom_dirpath);
+            if (!config.launch.rom_dirpath.empty()) {
+                RomPaths::set_rom_directory(config.launch.rom_dirpath);
             }
 
             // Assemble the machine. This is the single shared assembly every
@@ -2265,37 +2324,37 @@ public:
 
             // Start gRPC server
             std::cout << "Starting gRPC server...\n";
-            beebium::service::Server<MachineType> server(machine, "0.0.0.0", config.port);
+            beebium::service::Server<MachineType> server(machine, "0.0.0.0", config.launch.port);
 
             // Push the configured motherboard link state into the server
             // so that the sideways service (constructed during start())
             // reports the actual topology to clients -- e.g. Model B+
             // with --motherboard-link s13=north shows IC71 at slots 0/1.
-            server.set_motherboard_links(config.motherboard_links);
+            server.set_motherboard_links(config.board.motherboard_links);
 
             beebium::service::Provenance provenance{
-                config.provenance_type,
-                config.provenance_uuid,
-                config.provenance_version,
+                config.launch.provenance_type,
+                config.launch.provenance_uuid,
+                config.launch.provenance_version,
                 timestamp
             };
 
             // Apply identity defaults
-            if (config.machine_uuid.empty()) {
-                config.machine_uuid = generate_uuid_v4();
+            if (config.launch.machine_uuid.empty()) {
+                config.launch.machine_uuid = generate_uuid_v4();
             }
-            if (config.machine_name.empty()) {
-                config.machine_name = std::string(Memory::MACHINE_DISPLAY_NAME);
+            if (config.machine.machine_name.empty()) {
+                config.machine.machine_name = std::string(Memory::MACHINE_DISPLAY_NAME);
             }
 
             // The name is a template (#153); the server renders it, and
             // re-renders it as its placeholders' values change.
             beebium::service::MachineIdentity identity{
-                config.machine_uuid,
-                config.machine_name,
+                config.launch.machine_uuid,
+                config.machine.machine_name,
                 std::string(Memory::MACHINE_TYPE),
                 std::string(Memory::MACHINE_DISPLAY_NAME),
-                config.machine_name
+                config.machine.machine_name
             };
 
             // Print provenance details for debugging (before move)
@@ -2315,7 +2374,7 @@ public:
                       << "'" << std::endl;
 
             // Create shutdown callback that stops the emulation loop when RPC shutdown is requested
-            beebium::service::ShutdownPolicyConfig shutdown_policy_config{config.allow_shutdown};
+            beebium::service::ShutdownPolicyConfig shutdown_policy_config{config.launch.allow_shutdown};
             auto shutdown_callback = [&machine]() {
                 g_running = false;
                 machine.request_shutdown();
@@ -2329,7 +2388,7 @@ public:
             // immediately -- the pacing clock itself is wired only once the
             // emulation loop starts, below.
             server.set_initial_speed_multiplier(
-                config.speed_multiplier_override.value_or(1.0));
+                config.machine.speed_multiplier_override.value_or(1.0));
 
             // Placeholders the loaded extensions offer for the machine's name
             // template. A plugin that breaks the registration rules loses its
@@ -2340,14 +2399,14 @@ public:
             for (const auto& transport : transport_registry.extensions()) {
                 register_extension_name_placeholders(server, *transport);
             }
-            server.set_launch_preset_name(config.preset_name);
+            server.set_launch_preset_name(config.launch.preset_name);
             server.set_launch_coprocessor(am.coprocessor);
-            if (config.machine_ordinal) {
-                server.set_launch_ordinal(*config.machine_ordinal);
+            if (config.launch.machine_ordinal) {
+                server.set_launch_ordinal(*config.launch.machine_ordinal);
             }
 
             server.start(std::move(provenance), std::move(identity),
-                        config.advertise, shutdown_policy_config, std::move(shutdown_callback),
+                        config.launch.advertise, shutdown_policy_config, std::move(shutdown_callback),
                         extension_services, &am.transport_registry);
 
             // Print actual bound port (important when port 0 was requested for dynamic allocation)
@@ -2369,11 +2428,11 @@ public:
                 // begin/end_startup_selection below) for the selection to
                 // finish before resuming, rather than being rejected as
                 // "already running" or lost (the macOS black-screen defect).
-                if (config.wait_mode == WaitMode::Api) {
+                if (config.launch.wait_mode == WaitMode::Api) {
                     enter_api_wait_state(machine);
                 }
                 server.debugger_service().begin_startup_selection();
-                int resolved_station = config.station_number;
+                int resolved_station = config.machine.station_number;
                 bool auto_assigned = false;
                 auto exit_code = resolve_auto_station(
                     config, transport_registry, /*offline=*/false,
@@ -2415,9 +2474,9 @@ public:
             // before it was ever asked to run. A deferred --station auto launch
             // already entered the Api wait state above (before selecting), so
             // don't enter it again here.
-            WaitMode effective_wait_mode = config.wait_mode;
+            WaitMode effective_wait_mode = config.launch.wait_mode;
             if (am.pending_auto_station.has_value() &&
-                config.wait_mode == WaitMode::Api) {
+                config.launch.wait_mode == WaitMode::Api) {
                 effective_wait_mode = WaitMode::None;
             }
             if (handle_wait_mode(machine, effective_wait_mode)) {
@@ -2757,7 +2816,7 @@ public:
 
         // Optionally filter to extensions that attach to a given point. A point
         // appears in an extension's attaches_to list (which may name several).
-        const auto& all_entries = config.extension_resolver.entries();
+        const auto& all_entries = config.launch.extension_resolver.entries();
         std::vector<const typename std::decay_t<decltype(all_entries)>::value_type*> entries;
         for (const auto& e : all_entries) {
             if (!attaches_to_filter.empty()) {
@@ -2994,7 +3053,7 @@ public:
         // Look up by cli_name first, then by canonical name.
         const beebium::ExtensionManifest* manifest = nullptr;
         std::string source_label;
-        for (const auto& e : config.extension_resolver.entries()) {
+        for (const auto& e : config.launch.extension_resolver.entries()) {
             if (e.manifest->effective_cli_name() == target_name
                 || e.manifest->name == target_name) {
                 manifest = e.manifest;
@@ -3476,7 +3535,7 @@ public:
         if (auto err = populate_extension_resolver(argv[0], {}, resolver_cfg)) {
             return *err;
         }
-        const auto& extension_entries = resolver_cfg.extension_resolver.entries();
+        const auto& extension_entries = resolver_cfg.launch.extension_resolver.entries();
 
         // Each section, by the preset key it describes; written out below in
         // the registry's order.
@@ -3653,7 +3712,7 @@ public:
                 kinds.push_back({{"kind", std::string(k.kind)},
                                  {"display_name", std::string(k.display_name)}});
             }
-            for (const auto& image : bundled_images(resolver_cfg.extension_resolver)) {
+            for (const auto& image : bundled_images(resolver_cfg.launch.extension_resolver)) {
                 by_kind[image.kind].push_back(ojson{
                     {"image", image.image},
                     {"display_name", image.display_name},
@@ -4507,30 +4566,22 @@ public:
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
-        using Memory = typename MachineType::Memory;
-
         if (global.help_requested) {
             help(argv[0]);
             return ExitCode::OK;
         }
 
         // Separate the preset's own options from the machine options, which
-        // go to parse_start_arguments exactly as `start` would receive them
-        // (with --from as its --preset).
+        // go to parse_start_arguments as `start` would receive them (with
+        // --from as its --preset), but MachineOnly: an option that configures
+        // the launch or the board, which a preset cannot record, is refused.
         std::string preset_name;
         std::string preset_description;
         std::string release_date;
         std::string output_filepath;
         std::vector<std::string> machine_args{argv[0]};
-        const std::set<std::string> launch_only{
-            "--port", "--wait", "--advertise", "--allow-shutdown", "--machine-uuid",
-            "--machine-ordinal", "--provenance-type", "--provenance-uuid",
-            "--provenance-version", "--rom-dir"};
-        const std::set<std::string> no_preset_form{
-            "--write-protect", "--hide", "--motherboard-link", board_rtc_flag<Memory>()};
         for (int i = global.subcommand_argv_start; i < argc; ++i) {
             std::string arg = argv[i];
-            const std::string flag = arg.substr(0, arg.find('='));
             if (arg == "--help" || arg == "-h") {
                 help(argv[0]);
                 return ExitCode::OK;
@@ -4545,13 +4596,6 @@ public:
             } else if (arg == "--from" && i + 1 < argc) {
                 machine_args.push_back("--preset");
                 machine_args.push_back(argv[++i]);
-            } else if (launch_only.count(flag) != 0) {
-                std::cerr << "Error: " << flag << " configures the launch, not the machine; "
-                             "a preset cannot record it\n";
-                return ExitCode::USAGE;
-            } else if (!flag.empty() && no_preset_form.count(flag) != 0) {
-                std::cerr << "Error: " << flag << " has no preset form yet\n";
-                return ExitCode::USAGE;
             } else {
                 machine_args.push_back(std::move(arg));
             }
@@ -4568,7 +4612,8 @@ public:
             for (auto& a : machine_args) machine_argv.push_back(a.data());
             machine_argv.push_back(nullptr);
             if (auto exit_code = parse_start_arguments<MachineType>(
-                    static_cast<int>(machine_args.size()), machine_argv.data(), 1, config)) {
+                    static_cast<int>(machine_args.size()), machine_argv.data(), 1, config,
+                    StartOptionScope::MachineOnly)) {
                 return *exit_code;
             }
         }
@@ -4580,8 +4625,8 @@ public:
         // The source preset's descriptive fields are the baseline for the
         // copy's (its machine settings arrived through parse_start_arguments).
         std::optional<PresetConfig> source;
-        if (config.preset_filepath) {
-            auto loaded = load_preset(*config.preset_filepath);
+        if (config.launch.preset_filepath) {
+            auto loaded = load_preset(*config.launch.preset_filepath);
             if (loaded) source = std::move(*loaded.config);
         }
         if (preset_description.empty() && source && source->description) {
@@ -4595,7 +4640,7 @@ public:
                                     source ? source->thumbnail_capture_delay_seconds
                                            : std::nullopt};
         std::string write_error;
-        auto document = preset_document(config, header, DocumentKeys::Given, write_error);
+        auto document = preset_document<MachineType>(config.machine, config.launch.extension_resolver, header, DocumentKeys::Given, write_error);
         if (!document) {
             std::cerr << "Error: " << write_error << "\n";
             return ExitCode::USAGE;
@@ -4814,7 +4859,7 @@ private:
         // Build the configuration exactly as parse_start_arguments does with
         // no other arguments.
         ServerConfig<MachineType> config;
-        config.preset_filepath = preset_filepath;
+        config.launch.preset_filepath = preset_filepath;
         apply_preset(config, preset);
         if (auto err = populate_extension_resolver(argv0, {}, config)) {
             error("", "cannot scan the extension directories");
@@ -4822,9 +4867,9 @@ private:
         }
         // Each extension instance from the preset, and its transport, by the
         // name its manifest gives it.
-        for (const auto& inst : config.extension_instances) {
+        for (const auto& inst : config.machine.extension_instances) {
             if (!inst.from_preset || inst.preset_pointer.empty()) continue;
-            const auto* m = config.extension_resolver.find_by_name(inst.name);
+            const auto* m = config.launch.extension_resolver.find_by_name(inst.name);
             locations.instance_names[inst.preset_pointer] =
                 m && !m->display_name.empty() ? m->display_name : inst.name;
         }
@@ -4845,7 +4890,7 @@ private:
             // Locate it at the preset's slot entry for the request at fault.
             std::string path = "/sideways_bank";
             if (err->index) {
-                const auto slot = config.sideways_configs[*err->index].slot;
+                const auto slot = config.machine.sideways_configs[*err->index].slot;
                 for (std::size_t i = 0; i < preset.sideways.size(); ++i) {
                     if (preset.sideways[i].slot == slot) {
                         path = "/sideways_bank/slots/" + std::to_string(i);
@@ -4856,13 +4901,13 @@ private:
             failed = true;
         }
         if constexpr (HasDiscControllerSocket<Memory>) {
-            if (!config.fdc_type.empty() && config.fdc_type != "none" &&
-                !DiscControllerRegistry::find(config.fdc_type)) {
+            if (!config.machine.fdc_type.empty() && config.machine.fdc_type != "none" &&
+                !DiscControllerRegistry::find(config.machine.fdc_type)) {
                 error("/storage/fdc_socket/id",
-                      "unknown disc controller '" + config.fdc_type + "' (see list-fdcs)");
+                      "unknown disc controller '" + config.machine.fdc_type + "' (see list-fdcs)");
                 failed = true;
             }
-        } else if (!config.fdc_type.empty()) {
+        } else if (!config.machine.fdc_type.empty()) {
             warning("/storage/fdc_socket/id",
                     "ignored: this model has a built-in disc controller");
         }
@@ -4872,8 +4917,8 @@ private:
         check_floppies_exist(config, warning);
 
         std::string write_error;
-        document = preset_document(
-            config,
+        document = preset_document<MachineType>(
+            config.machine, config.launch.extension_resolver,
             PresetDocumentHeader{preset.name, preset.description, preset.release_date,
                                  preset.thumbnail_capture_delay_seconds},
             DocumentKeys::Every, write_error);
@@ -4896,8 +4941,8 @@ private:
                 warning(path, e.what());
             }
         };
-        check(preset.mos_image_uri ? "/mos_image_uri" : "", config.mos_filepath);
-        for (const auto& [slot, image] : config.rom_slots) {
+        check(preset.mos_image_uri ? "/mos_image_uri" : "", config.machine.mos_filepath);
+        for (const auto& [slot, image] : config.machine.rom_slots) {
             if (image == EMPTY_SLOT_MARKER) continue;
             std::string path;
             for (std::size_t i = 0; i < preset.sideways.size(); ++i) {
@@ -4906,7 +4951,7 @@ private:
                 }
             }
             if (image == RAM_SLOT_MARKER) {
-                for (const auto& c : config.sideways_configs) {
+                for (const auto& c : config.machine.sideways_configs) {
                     if (c.slot == slot && !c.image_filepath.empty()) {
                         check(path, c.image_filepath);
                     }
@@ -4925,9 +4970,9 @@ private:
     static bool check_bundled_images_exist(const ServerConfig<MachineType>& config,
                                            Error error, Warning warning) {
         bool failed = false;
-        const auto images = bundled_images(config.extension_resolver);
-        for (const auto& inst : config.extension_instances) {
-            const auto* m = config.extension_resolver.find_by_name(inst.name);
+        const auto images = bundled_images(config.launch.extension_resolver);
+        for (const auto& inst : config.machine.extension_instances) {
+            const auto* m = config.launch.extension_resolver.find_by_name(inst.name);
             if (!m) continue;
             for (const auto& p : m->parameters) {
                 if (p.bundled.empty()) continue;
@@ -4952,8 +4997,8 @@ private:
 
     template<typename Warning>
     static void check_floppies_exist(const ServerConfig<MachineType>& config, Warning warning) {
-        for (std::size_t drive = 0; drive < config.floppy_filepaths.size(); ++drive) {
-            const auto& uri = config.floppy_filepaths[drive];
+        for (std::size_t drive = 0; drive < config.machine.floppy_filepaths.size(); ++drive) {
+            const auto& uri = config.machine.floppy_filepaths[drive];
             if (uri.empty()) continue;
             auto url = beebium::DiscUrl::parse(uri);
             std::error_code ec;
@@ -5490,16 +5535,16 @@ public:
         double duration_seconds = 2.0;
         if (cli_duration) {
             duration_seconds = *cli_duration;
-        } else if (config.preset_filepath) {
-            auto result = load_preset(*config.preset_filepath);
+        } else if (config.launch.preset_filepath) {
+            auto result = load_preset(*config.launch.preset_filepath);
             if (result && result.config->thumbnail_capture_delay_seconds) {
                 duration_seconds = *result.config->thumbnail_capture_delay_seconds;
             }
         }
 
         try {
-            if (!config.rom_dirpath.empty()) {
-                RomPaths::set_rom_directory(config.rom_dirpath);
+            if (!config.launch.rom_dirpath.empty()) {
+                RomPaths::set_rom_directory(config.launch.rom_dirpath);
             }
 
             // Assemble the machine through the one shared assembly, exactly as

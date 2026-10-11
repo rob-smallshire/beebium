@@ -86,12 +86,11 @@ inline nlohmann::ordered_json sideways_slot_json(const SidewaysConfig& slot, boo
 
 // The Econet station as a preset writes it: the number, or "auto" (the
 // default range) / "auto:lo-hi" for one chosen at launch.
-template<typename MachineType>
-nlohmann::ordered_json station_json(const ServerConfig<MachineType>& config) {
-    if (!config.station_auto_range) {
-        return config.station_number;
+inline nlohmann::ordered_json station_json(const MachineDescription& machine) {
+    if (!machine.station_auto_range) {
+        return machine.station_number;
     }
-    const auto& r = *config.station_auto_range;
+    const auto& r = *machine.station_auto_range;
     const beebium::econet::StationRange defaults{};
     if (r.lo == defaults.lo && r.hi == defaults.hi) {
         return "auto";
@@ -212,32 +211,32 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
             case PresetKey::AutoBoot:  // already folded into startup by the loader
                 break;
             case PresetKey::Name:
-                config.preset_name = preset.name;
+                config.launch.preset_name = preset.name;
                 break;
             case PresetKey::MachineName:
-                if (preset.machine_name && config.machine_name.empty()) {
-                    config.machine_name = *preset.machine_name;
+                if (preset.machine_name && config.machine.machine_name.empty()) {
+                    config.machine.machine_name = *preset.machine_name;
                 }
                 break;
             case PresetKey::Speed:
-                if (preset.speed) config.speed_multiplier_override = *preset.speed;
+                if (preset.speed) config.machine.speed_multiplier_override = *preset.speed;
                 break;
             case PresetKey::Startup:
                 config.preset_startup = preset.startup;
                 break;
             case PresetKey::MosImageUri:
-                if (preset.mos_image_uri) config.mos_filepath = *preset.mos_image_uri;
+                if (preset.mos_image_uri) config.machine.mos_filepath = *preset.mos_image_uri;
                 break;
             case PresetKey::Storage:
                 if (!preset.storage) break;
-                if (preset.storage->fdc_socket_id && config.fdc_type.empty()) {
-                    config.fdc_type = *preset.storage->fdc_socket_id;
+                if (preset.storage->fdc_socket_id && config.machine.fdc_type.empty()) {
+                    config.machine.fdc_type = *preset.storage->fdc_socket_id;
                 }
                 for (const auto& [drive, uri_opt] : preset.storage->floppy_drives) {
                     // nullopt means an empty drive: left as the empty string.
-                    if (drive < config.floppy_filepaths.size() &&
-                        config.floppy_filepaths[drive].empty() && uri_opt) {
-                        config.floppy_filepaths[drive] = *uri_opt;
+                    if (drive < config.machine.floppy_filepaths.size() &&
+                        config.machine.floppy_filepaths[drive].empty() && uri_opt) {
+                        config.machine.floppy_filepaths[drive] = *uri_opt;
                     }
                 }
                 break;
@@ -252,11 +251,11 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
                 if (econet.auto_range.has_value()) {
                     // The number is chosen at launch (issue #67); install_econet
                     // resolves it. A later --station overrides this.
-                    config.station_auto_range = econet.auto_range;
-                    config.station_number = -1;
+                    config.machine.station_auto_range = econet.auto_range;
+                    config.machine.station_number = -1;
                 } else {
-                    config.station_number = econet.station;
-                    config.station_auto_range.reset();
+                    config.machine.station_number = econet.station;
+                    config.machine.station_auto_range.reset();
                 }
                 // The transport becomes an ExtensionInstance, so it flows
                 // through the same dispatch as a CLI --aun or --piconet.
@@ -267,7 +266,7 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
                     inst.preset_list_items = econet.transport->list_parameters;
                     inst.from_preset = true;
                     inst.preset_pointer = "/econet/transport";
-                    config.extension_instances.push_back(std::move(inst));
+                    config.machine.extension_instances.push_back(std::move(inst));
                 }
                 break;
             }
@@ -280,7 +279,7 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
                     inst.preset_list_items = ext.list_config;
                     inst.from_preset = true;
                     inst.preset_pointer = "/extensions/" + std::to_string(i);
-                    config.extension_instances.push_back(std::move(inst));
+                    config.machine.extension_instances.push_back(std::move(inst));
                 }
                 break;
         }
@@ -290,7 +289,7 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
 // Fold preset-supplied sideways slots (collected by apply_preset into
 // config.preset_sideways_configs) into the active configuration as a
 // baseline. A CLI --sideways for the same slot takes precedence: those
-// entries are already in config.sideways_configs, so a preset slot is applied
+// entries are already in config.machine.sideways_configs, so a preset slot is applied
 // only when no CLI --sideways targets that exact slot. This keeps CLI-vs-CLI
 // duplicate detection in validate_config intact (we never add a second entry
 // for a slot the CLI already claimed) while letting presets supply defaults
@@ -303,20 +302,20 @@ template<typename MachineType>
 void merge_preset_sideways_configs(ServerConfig<MachineType>& config) {
     for (const auto& preset_slot : config.preset_sideways_configs) {
         bool cli_claims_slot = std::any_of(
-            config.sideways_configs.begin(), config.sideways_configs.end(),
+            config.machine.sideways_configs.begin(), config.machine.sideways_configs.end(),
             [&](const SidewaysConfig& c) { return c.slot == preset_slot.slot; });
         if (cli_claims_slot) {
             continue;
         }
-        config.sideways_configs.push_back(preset_slot);
+        config.machine.sideways_configs.push_back(preset_slot);
         // Mirror the CLI --sideways path so the machine's default ROM for this
         // slot is suppressed and the preset's choice is what gets loaded.
         if (preset_slot.type == SidewaysSlotType::Rom) {
-            config.rom_slots[preset_slot.slot] = preset_slot.image_filepath;
+            config.machine.rom_slots[preset_slot.slot] = preset_slot.image_filepath;
         } else if (preset_slot.type == SidewaysSlotType::Empty) {
-            config.rom_slots[preset_slot.slot] = EMPTY_SLOT_MARKER;
+            config.machine.rom_slots[preset_slot.slot] = EMPTY_SLOT_MARKER;
         } else if (preset_slot.type == SidewaysSlotType::Ram) {
-            config.rom_slots[preset_slot.slot] = RAM_SLOT_MARKER;
+            config.machine.rom_slots[preset_slot.slot] = RAM_SLOT_MARKER;
         }
     }
 }
@@ -330,22 +329,22 @@ template<typename MachineType>
 void merge_preset_startup(ServerConfig<MachineType>& config) {
     if (!config.preset_startup) return;
     const auto& preset = *config.preset_startup;
-    const bool cli_links = config.raw_links >= 0;
-    const bool cli_semantic = config.screen_mode_set || config.auto_boot_set;
+    const bool cli_links = config.machine.raw_links >= 0;
+    const bool cli_semantic = config.machine.screen_mode_set || config.machine.auto_boot_set;
     if (preset.links) {
         if (!cli_links && !cli_semantic) {
-            config.raw_links = *preset.links;
+            config.machine.raw_links = *preset.links;
         }
         return;
     }
     if (cli_links) return;
-    if (preset.screen_mode && !config.screen_mode_set) {
-        config.screen_mode = *preset.screen_mode;
-        config.screen_mode_set = true;
+    if (preset.screen_mode && !config.machine.screen_mode_set) {
+        config.machine.screen_mode = *preset.screen_mode;
+        config.machine.screen_mode_set = true;
     }
-    if (preset.auto_boot && !config.auto_boot_set) {
-        config.auto_boot = *preset.auto_boot;
-        config.auto_boot_set = true;
+    if (preset.auto_boot && !config.machine.auto_boot_set) {
+        config.machine.auto_boot = *preset.auto_boot;
+        config.machine.auto_boot_set = true;
     }
 }
 
@@ -376,9 +375,9 @@ std::string instance_parameter_pointer(const Instance& inst, const std::string& 
 template<typename MachineType>
 std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& config) {
     std::vector<Diagnostic> errors;
-    for (auto& inst : config.extension_instances) {
+    for (auto& inst : config.machine.extension_instances) {
         if (!inst.from_preset) continue;
-        const auto* manifest = config.extension_resolver.find_by_name(inst.name);
+        const auto* manifest = config.launch.extension_resolver.find_by_name(inst.name);
         if (!manifest) {
             errors.push_back({inst.preset_pointer,
                               "preset extension '" + inst.name
@@ -401,9 +400,9 @@ std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& c
         inst.config = std::move(normalised.config);
         inst.list_config = std::move(normalised.list_config);
         inst.explicit_keys = std::move(normalised.explicit_keys);
-        if (config.preset_filepath) {
+        if (config.launch.preset_filepath) {
             const auto preset_dirpath =
-                std::filesystem::absolute(*config.preset_filepath).parent_path();
+                std::filesystem::absolute(*config.launch.preset_filepath).parent_path();
             for (const auto& p : manifest->parameters) {
                 auto it = inst.config.find(p.key);
                 if (p.type == "filepath" && it != inst.config.end() &&
@@ -427,12 +426,12 @@ std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& c
 template<typename MachineType>
 void assign_extension_ids(ServerConfig<MachineType>& config) {
     std::vector<std::string> taken;
-    for (const auto& inst : config.extension_instances) {
+    for (const auto& inst : config.machine.extension_instances) {
         if (auto it = inst.config.find("id"); it != inst.config.end()) {
             taken.push_back(it->second);
         }
     }
-    for (auto& inst : config.extension_instances) {
+    for (auto& inst : config.machine.extension_instances) {
         if (inst.config.count("id") != 0) continue;
         auto id = beebium::make_extension_id(inst.name, taken);
         taken.push_back(id);
@@ -528,8 +527,8 @@ template<typename MachineType>
 std::vector<Diagnostic> validate_extension_configs(const ServerConfig<MachineType>& config) {
     std::vector<Diagnostic> found;
     beebium::PluginLoader loader;
-    for (const auto& inst : config.extension_instances) {
-        const auto* m = config.extension_resolver.find_by_name(inst.name);
+    for (const auto& inst : config.machine.extension_instances) {
+        const auto* m = config.launch.extension_resolver.find_by_name(inst.name);
         if (!m || m->library_stem.empty()) continue;
         const std::string source =
             inst.from_preset
@@ -566,13 +565,13 @@ template<typename MachineType>
 std::vector<Diagnostic> check_extension_attachments(
         const ServerConfig<MachineType>& config) {
     std::vector<const beebium::ExtensionManifest*> known;
-    for (const auto& e : config.extension_resolver.entries()) {
+    for (const auto& e : config.launch.extension_resolver.entries()) {
         known.push_back(e.manifest);
     }
     std::vector<const typename ServerConfig<MachineType>::ExtensionInstance*> instances;
     std::vector<beebium::AttachmentRequest> requests;
-    for (const auto& inst : config.extension_instances) {
-        const auto* m = config.extension_resolver.find_by_name(inst.name);
+    for (const auto& inst : config.machine.extension_instances) {
+        const auto* m = config.launch.extension_resolver.find_by_name(inst.name);
         if (m && m->extension_kind == "econet-transport") continue;
         instances.push_back(&inst);
         requests.push_back({inst.name, inst.config});
@@ -585,7 +584,7 @@ std::vector<Diagnostic> check_extension_attachments(
             errors.push_back({instance_parameter_pointer(inst, problem.key),
                               "preset extension '" + inst.name + "': " + problem.message});
         } else {
-            const auto* m = config.extension_resolver.find_by_name(inst.name);
+            const auto* m = config.launch.extension_resolver.find_by_name(inst.name);
             errors.push_back({"", "--" + std::string(m ? m->effective_cli_name()
                                                        : std::string_view(inst.name)) +
                                       ": " + problem.message});
@@ -619,9 +618,9 @@ std::vector<Diagnostic> check_extension_attachments(
 template<typename MachineType>
 void merge_preset_extensions(ServerConfig<MachineType>& config) {
     using Instance = typename ServerConfig<MachineType>::ExtensionInstance;
-    auto& insts = config.extension_instances;
+    auto& insts = config.machine.extension_instances;
     auto is_transport = [&](const Instance& inst) {
-        const auto* m = config.extension_resolver.find_by_name(inst.name);
+        const auto* m = config.launch.extension_resolver.find_by_name(inst.name);
         return m && m->extension_kind == "econet-transport";
     };
     auto merge_into = [](Instance& cli, const Instance& preset) {
@@ -739,7 +738,7 @@ std::vector<Diagnostic> fold_in_preset(ServerConfig<MachineType>& config) {
 // The startup links: --links excludes the semantic options.
 template<typename MachineType>
 std::optional<std::string> validate_startup_links(const ServerConfig<MachineType>& config) {
-    if (config.raw_links >= 0 && (config.screen_mode_set || config.auto_boot_set)) {
+    if (config.machine.raw_links >= 0 && (config.machine.screen_mode_set || config.machine.auto_boot_set)) {
         return "--links cannot be combined with --screen-mode or --auto-boot";
     }
     return std::nullopt;
@@ -771,11 +770,11 @@ std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<Mac
     // slot mapping (e.g. Model B+ S13). Reports nonexistent slots,
     // unsupported types, aliased-socket conflicts, duplicate slot specs.
     using Memory = typename MachineType::Memory;
-    if constexpr (requires { Memory::slot_topology(config.motherboard_links); }) {
-        const auto topology = Memory::slot_topology(config.motherboard_links);
-        if (auto err = validate_sideways_configs(topology, config.sideways_configs)) {
+    if constexpr (requires { Memory::slot_topology(config.board.motherboard_links); }) {
+        const auto topology = Memory::slot_topology(config.board.motherboard_links);
+        if (auto err = validate_sideways_configs(topology, config.machine.sideways_configs)) {
             return SidewaysSlotsError{
-                sideways_config_problems(topology, config.sideways_configs).front().index,
+                sideways_config_problems(topology, config.machine.sideways_configs).front().index,
                 *err};
         }
     }
@@ -785,7 +784,7 @@ std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<Mac
     // write-protect switch. (parse_sideways_arg already ensures write-protect is
     // only set on a RAM slot.)
     bool any_write_protect = std::any_of(
-        config.sideways_configs.begin(), config.sideways_configs.end(),
+        config.machine.sideways_configs.begin(), config.machine.sideways_configs.end(),
         [](const SidewaysConfig& c) { return c.write_protected; });
     if (any_write_protect) {
         if constexpr (!requires(Memory m) {
@@ -795,11 +794,11 @@ std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<Mac
                                       "write-protect is not supported on this machine variant "
                                       "(no sideways write-protect control)"};
         } else if constexpr (requires {
-                                 Memory::slot_topology(config.motherboard_links);
+                                 Memory::slot_topology(config.board.motherboard_links);
                              }) {
-            auto topo = Memory::slot_topology(config.motherboard_links);
-            for (std::size_t i = 0; i < config.sideways_configs.size(); ++i) {
-                const auto& c = config.sideways_configs[i];
+            auto topo = Memory::slot_topology(config.board.motherboard_links);
+            for (std::size_t i = 0; i < config.machine.sideways_configs.size(); ++i) {
+                const auto& c = config.machine.sideways_configs[i];
                 if (!c.write_protected) continue;
                 const auto* spec =
                     topo.find_socket_for_slot(static_cast<int>(c.slot));
@@ -835,8 +834,8 @@ void apply_rom_defaults(ServerConfig<MachineType>& config) {
     using Memory = typename MachineType::Memory;
 
     // Apply default MOS ROM if not specified
-    if (config.mos_filepath.empty()) {
-        config.mos_filepath = std::string(Memory::DEFAULT_MOS_ROM);
+    if (config.machine.mos_filepath.empty()) {
+        config.machine.mos_filepath = std::string(Memory::DEFAULT_MOS_ROM);
     }
 
     // Apply default ROM fallbacks (BASIC into the language slot, DFS into
@@ -851,7 +850,7 @@ void apply_rom_defaults(ServerConfig<MachineType>& config) {
     // still dispatches to the same physical chip.
     auto user_targets_socket =
         [&](const SlotTopology& topo, int socket_index) -> bool {
-        for (const auto& cfg : config.sideways_configs) {
+        for (const auto& cfg : config.machine.sideways_configs) {
             const auto* s = topo.find_socket_for_slot(cfg.slot);
             if (s && s->socket_index == socket_index) return true;
         }
@@ -861,9 +860,9 @@ void apply_rom_defaults(ServerConfig<MachineType>& config) {
     auto skip_default_for_slot =
         [&](uint8_t default_slot) -> bool {
         if constexpr (requires {
-                          Memory::slot_topology(config.motherboard_links);
+                          Memory::slot_topology(config.board.motherboard_links);
                       }) {
-            auto topo = Memory::slot_topology(config.motherboard_links);
+            auto topo = Memory::slot_topology(config.board.motherboard_links);
             const auto* spec = topo.find_socket_for_slot(default_slot);
             // Default slot is not present on this configured topology.
             if (spec == nullptr) return true;
@@ -880,20 +879,20 @@ void apply_rom_defaults(ServerConfig<MachineType>& config) {
     // a caller need not know which slot a given variant uses for its language
     // ROM (e.g. slot 14 on the ATPL Sidewise, 15 elsewhere).
     if (!skip_default_for_slot(Memory::DEFAULT_LANGUAGE_SLOT)
-        && config.rom_slots.find(Memory::DEFAULT_LANGUAGE_SLOT)
-               == config.rom_slots.end()) {
-        config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] =
-            config.language_rom_filepath.empty()
+        && config.machine.rom_slots.find(Memory::DEFAULT_LANGUAGE_SLOT)
+               == config.machine.rom_slots.end()) {
+        config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] =
+            config.machine.language_rom_filepath.empty()
                 ? std::string(Memory::DEFAULT_LANGUAGE_ROM)
-                : config.language_rom_filepath;
+                : config.machine.language_rom_filepath;
     }
 
     // Load default DFS ROM if machine has one and slot not overridden
     if constexpr (requires { Memory::DEFAULT_DFS_ROM; }) {
         if (!skip_default_for_slot(Memory::DEFAULT_DFS_SLOT)
-            && config.rom_slots.find(Memory::DEFAULT_DFS_SLOT)
-                   == config.rom_slots.end()) {
-            config.rom_slots[Memory::DEFAULT_DFS_SLOT] = std::string(Memory::DEFAULT_DFS_ROM);
+            && config.machine.rom_slots.find(Memory::DEFAULT_DFS_SLOT)
+                   == config.machine.rom_slots.end()) {
+            config.machine.rom_slots[Memory::DEFAULT_DFS_SLOT] = std::string(Memory::DEFAULT_DFS_ROM);
         }
     }
 
@@ -901,9 +900,9 @@ void apply_rom_defaults(ServerConfig<MachineType>& config) {
     // machine has one and its slot is not overridden.
     if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
         if (!skip_default_for_slot(Memory::DEFAULT_BOARD_ROM_SLOT)
-            && config.rom_slots.find(Memory::DEFAULT_BOARD_ROM_SLOT)
-                   == config.rom_slots.end()) {
-            config.rom_slots[Memory::DEFAULT_BOARD_ROM_SLOT] =
+            && config.machine.rom_slots.find(Memory::DEFAULT_BOARD_ROM_SLOT)
+                   == config.machine.rom_slots.end()) {
+            config.machine.rom_slots[Memory::DEFAULT_BOARD_ROM_SLOT] =
                 std::string(Memory::DEFAULT_BOARD_ROM);
         }
     }
@@ -962,15 +961,18 @@ nlohmann::ordered_json document_config_json(const beebium::ExtensionManifest* ma
                                  given_items);
 }
 
-// The preset document describing the machine `config` holds, in the one key
-// order every preset is written in. The only writer of preset documents:
-// create-preset writes with Given, resolve-preset with Every, so a key added
-// here is added to both. For Every, `config` must have had apply_rom_defaults,
-// whose default ROMs become explicit slots. Returns nullopt, with `error` set,
-// when the configuration cannot be written as a preset (an Econet transport
-// with no station, or two transports).
+// The preset document describing `machine`, in the one key order every preset
+// is written in, its extensions' parameters described by the manifests
+// `resolver` finds. The only writer of preset documents: create-preset writes
+// with Given, resolve-preset with Every, so a key added here is added to both.
+// It sees only the machine description, so a launch setting cannot reach a
+// preset. For Every, the machine must have had apply_rom_defaults, whose
+// default ROMs become explicit slots. Returns nullopt, with `error` set, when
+// the configuration cannot be written as a preset (an Econet transport with
+// no station, or two transports).
 template<typename MachineType>
-std::optional<nlohmann::ordered_json> preset_document(const ServerConfig<MachineType>& config,
+std::optional<nlohmann::ordered_json> preset_document(const MachineDescription& machine,
+                                                      const beebium::ExtensionResolver& resolver,
                                                       const PresetDocumentHeader& header,
                                                       DocumentKeys keys, std::string& error) {
     using Memory = typename MachineType::Memory;
@@ -980,10 +982,10 @@ std::optional<nlohmann::ordered_json> preset_document(const ServerConfig<Machine
     // The Econet transport belongs in the econet section, which needs a
     // station; with none (only possible through extensions[] in a preset),
     // Every writes it among the extensions.
-    const bool has_station = config.station_number >= 1 || config.station_auto_range;
-    const typename ServerConfig<MachineType>::ExtensionInstance* transport = nullptr;
-    for (const auto& inst : config.extension_instances) {
-        const auto* manifest = config.extension_resolver.find_by_name(inst.name);
+    const bool has_station = machine.station_number >= 1 || machine.station_auto_range;
+    const ExtensionInstance* transport = nullptr;
+    for (const auto& inst : machine.extension_instances) {
+        const auto* manifest = resolver.find_by_name(inst.name);
         if (!(manifest && manifest->extension_kind == "econet-transport") ||
             (!has_station && every)) {
             continue;
@@ -1027,55 +1029,55 @@ std::optional<nlohmann::ordered_json> preset_document(const ServerConfig<Machine
                 optional_string(key, header.description);
                 break;
             case PresetKey::MachineName:
-                optional_string(key, config.machine_name.empty()
+                optional_string(key, machine.machine_name.empty()
                                          ? std::nullopt
-                                         : std::optional<std::string>(config.machine_name));
+                                         : std::optional<std::string>(machine.machine_name));
                 break;
             case PresetKey::Speed:
-                if (config.speed_multiplier_override || every) {
-                    const double speed = config.speed_multiplier_override.value_or(1.0);
+                if (machine.speed_multiplier_override || every) {
+                    const double speed = machine.speed_multiplier_override.value_or(1.0);
                     doc[key] = speed == 0.0 ? ojson("unlimited") : ojson(speed);
                 }
                 break;
             case PresetKey::Startup:
                 // One form or the other. Every fills in the machine's own
                 // (mode 7, SHIFT-BREAK boots) where the config sets none.
-                if (config.raw_links >= 0) {
-                    doc[key] = {{"links", config.raw_links}};
+                if (machine.raw_links >= 0) {
+                    doc[key] = {{"links", machine.raw_links}};
                 } else if (every) {
-                    doc[key] = {{"screen_mode", config.screen_mode_set ? config.screen_mode : 7},
-                                {"auto_boot", config.auto_boot_set && config.auto_boot}};
-                } else if (config.screen_mode_set || config.auto_boot_set) {
+                    doc[key] = {{"screen_mode", machine.screen_mode_set ? machine.screen_mode : 7},
+                                {"auto_boot", machine.auto_boot_set && machine.auto_boot}};
+                } else if (machine.screen_mode_set || machine.auto_boot_set) {
                     ojson startup = ojson::object();
-                    if (config.screen_mode_set) startup["screen_mode"] = config.screen_mode;
-                    if (config.auto_boot_set) startup["auto_boot"] = config.auto_boot;
+                    if (machine.screen_mode_set) startup["screen_mode"] = machine.screen_mode;
+                    if (machine.auto_boot_set) startup["auto_boot"] = machine.auto_boot;
                     doc[key] = std::move(startup);
                 }
                 break;
             case PresetKey::MosImageUri:
-                if (!config.mos_filepath.empty()) {
-                    doc[key] = path_for_preset(config.mos_filepath);
+                if (!machine.mos_filepath.empty()) {
+                    doc[key] = path_for_preset(machine.mos_filepath);
                 }
                 break;
             case PresetKey::Storage: {
                 // The socket's controller and the floppy drives.
                 ojson storage = ojson::object();
                 if constexpr (HasDiscControllerSocket<Memory>) {
-                    if (!config.fdc_type.empty()) {
-                        storage["fdc_socket"] = {{"id", config.fdc_type}};
+                    if (!machine.fdc_type.empty()) {
+                        storage["fdc_socket"] = {{"id", machine.fdc_type}};
                     } else if (every) {
                         storage["fdc_socket"] = {{"id", "none"}};
                     }
                 } else {
-                    if (!config.fdc_type.empty() && !every) {
-                        storage["fdc_socket"] = {{"id", config.fdc_type}};
+                    if (!machine.fdc_type.empty() && !every) {
+                        storage["fdc_socket"] = {{"id", machine.fdc_type}};
                     } else if (every) {
                         storage["fdc_socket"] = nullptr;
                     }
                 }
                 ojson drives = ojson::array();
-                for (std::size_t drive = 0; drive < config.floppy_filepaths.size(); ++drive) {
-                    const auto& image = config.floppy_filepaths[drive];
+                for (std::size_t drive = 0; drive < machine.floppy_filepaths.size(); ++drive) {
+                    const auto& image = machine.floppy_filepaths[drive];
                     if (image.empty() && !every) continue;
                     drives.push_back(
                         {{"drive", drive},
@@ -1094,14 +1096,14 @@ std::optional<nlohmann::ordered_json> preset_document(const ServerConfig<Machine
                 // in slot order.
                 ojson slots = ojson::array();
                 if (every) {
-                    for (const auto& [slot, image] : config.rom_slots) {
+                    for (const auto& [slot, image] : machine.rom_slots) {
                         SidewaysConfig entry{};
                         entry.slot = slot;
                         if (image == EMPTY_SLOT_MARKER) {
                             entry.type = SidewaysSlotType::Empty;
                         } else if (image == RAM_SLOT_MARKER) {
                             entry.type = SidewaysSlotType::Ram;
-                            for (const auto& c : config.sideways_configs) {
+                            for (const auto& c : machine.sideways_configs) {
                                 if (c.slot == slot) entry = c;
                             }
                         } else {
@@ -1111,19 +1113,19 @@ std::optional<nlohmann::ordered_json> preset_document(const ServerConfig<Machine
                         slots.push_back(sideways_slot_json(entry, /*every_key=*/true));
                     }
                 } else {
-                    for (auto slot : config.sideways_configs) {
-                        if (!config.language_rom_filepath.empty() &&
+                    for (auto slot : machine.sideways_configs) {
+                        if (!machine.language_rom_filepath.empty() &&
                             slot.slot == Memory::DEFAULT_LANGUAGE_SLOT) {
                             continue;
                         }
                         slot.image_filepath = path_for_preset(slot.image_filepath);
                         slots.push_back(sideways_slot_json(slot, /*every_key=*/false));
                     }
-                    if (!config.language_rom_filepath.empty()) {
+                    if (!machine.language_rom_filepath.empty()) {
                         SidewaysConfig language{};
                         language.slot = Memory::DEFAULT_LANGUAGE_SLOT;
                         language.type = SidewaysSlotType::Rom;
-                        language.image_filepath = path_for_preset(config.language_rom_filepath);
+                        language.image_filepath = path_for_preset(machine.language_rom_filepath);
                         slots.push_back(sideways_slot_json(language, /*every_key=*/false));
                     }
                 }
@@ -1132,11 +1134,11 @@ std::optional<nlohmann::ordered_json> preset_document(const ServerConfig<Machine
             }
             case PresetKey::Econet:
                 if (has_station) {
-                    ojson econet{{"station", station_json(config)}};
+                    ojson econet{{"station", station_json(machine)}};
                     if (transport) {
                         ojson t{{"name", transport->name}};
                         auto parameters = document_config_json(
-                            config.extension_resolver.find_by_name(transport->name), *transport,
+                            resolver.find_by_name(transport->name), *transport,
                             keys);
                         if (!parameters.empty() || every) t["parameters"] = std::move(parameters);
                         econet["transport"] = std::move(t);
@@ -1150,9 +1152,9 @@ std::optional<nlohmann::ordered_json> preset_document(const ServerConfig<Machine
                 break;
             case PresetKey::Extensions: {
                 ojson extensions = ojson::array();
-                for (const auto& inst : config.extension_instances) {
+                for (const auto& inst : machine.extension_instances) {
                     if (&inst == transport) continue;
-                    const auto* manifest = config.extension_resolver.find_by_name(inst.name);
+                    const auto* manifest = resolver.find_by_name(inst.name);
                     ojson entry{{"name", inst.name}};
                     auto ext_config = document_config_json(manifest, inst, keys);
                     if (!ext_config.empty() || every) entry["config"] = std::move(ext_config);

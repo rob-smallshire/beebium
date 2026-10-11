@@ -16,6 +16,7 @@
 // end-to-end behavior of the preset management workflow.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <beebium/KeyboardMatrix.hpp>
 #include <beebium/PlatformUtils.hpp>
 #include <beebium/server/PresetLoader.hpp>
@@ -2405,6 +2406,49 @@ TEST_CASE("create-preset: a launch-only option cannot be recorded",
                               "--output \"" + output_filepath.string() + "\"");
     CHECK(result.exit_code == 64);
     CHECK(result.stderr_output.find("--port") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(output_filepath));
+}
+
+TEST_CASE("create-preset: every option that configures the launch is refused",
+          "[integration][preset][create-preset][given]") {
+    const auto [option, flag] = GENERATE(table<std::string, std::string>({
+        {"--port 4000", "--port"},
+        {"--wait=api", "--wait"},
+        {"--wait", "--wait"},
+        {"--advertise", "--advertise"},
+        {"--allow-shutdown", "--allow-shutdown"},
+        {"--machine-uuid 12345678-1234-1234-1234-123456789abc", "--machine-uuid"},
+        {"--machine-ordinal 2", "--machine-ordinal"},
+        {"--provenance-type test", "--provenance-type"},
+        {"--provenance-uuid 12345678-1234-1234-1234-123456789abc", "--provenance-uuid"},
+        {"--provenance-version 1", "--provenance-version"},
+        {"--rom-dir /tmp", "--rom-dir"},
+    }));
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "launch.preset.beebium";
+    auto result = run_command(EXECUTABLE + " create-preset --name \"Launch\" " + option +
+                              " --output \"" + output_filepath.string() + "\"");
+    INFO(option << "\n" << result.stderr_output);
+    CHECK(result.exit_code == 64);
+    CHECK(result.stderr_output.find(flag + " configures the launch, not the machine") !=
+          std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(output_filepath));
+}
+
+TEST_CASE("create-preset: a machine option with no preset form is refused",
+          "[integration][preset][create-preset][given]") {
+    const auto [option, flag] = GENERATE(table<std::string, std::string>({
+        {"--write-protect slot-15", "--write-protect"},
+        {"--hide slot-15", "--hide"},
+        {"--motherboard-link key=value", "--motherboard-link"},
+    }));
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "board.preset.beebium";
+    auto result = run_command(EXECUTABLE + " create-preset --name \"Board\" " + option +
+                              " --output \"" + output_filepath.string() + "\"");
+    INFO(option << "\n" << result.stderr_output);
+    CHECK(result.exit_code == 64);
+    CHECK(result.stderr_output.find(flag + " has no preset form yet") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(output_filepath));
 }
 

@@ -189,7 +189,7 @@ TEST_CASE("parse_start_arguments: --port sets config", "[cli][parse_start_argume
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.port == 8080);
+    REQUIRE(config.launch.port == 8080);
 }
 
 TEST_CASE("parse_start_arguments: --port accepts hex value", "[cli][parse_start_arguments]") {
@@ -199,7 +199,7 @@ TEST_CASE("parse_start_arguments: --port accepts hex value", "[cli][parse_start_
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.port == 48875);  // 0xBEEB
+    REQUIRE(config.launch.port == 48875);  // 0xBEEB
 }
 
 TEST_CASE("parse_start_arguments: --mos sets config", "[cli][parse_start_arguments]") {
@@ -209,7 +209,7 @@ TEST_CASE("parse_start_arguments: --mos sets config", "[cli][parse_start_argumen
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.mos_filepath == "custom.rom");
+    REQUIRE(config.machine.mos_filepath == "custom.rom");
 }
 
 TEST_CASE("parse_start_arguments: --screen-mode sets config", "[cli][parse_start_arguments]") {
@@ -219,8 +219,8 @@ TEST_CASE("parse_start_arguments: --screen-mode sets config", "[cli][parse_start
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.screen_mode == 4);
-    REQUIRE(config.screen_mode_set == true);
+    REQUIRE(config.machine.screen_mode == 4);
+    REQUIRE(config.machine.screen_mode_set == true);
 }
 
 TEST_CASE("parse_start_arguments: --screen-mode accepts binary value", "[cli][parse_start_arguments]") {
@@ -230,8 +230,8 @@ TEST_CASE("parse_start_arguments: --screen-mode accepts binary value", "[cli][pa
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.screen_mode == 5);
-    REQUIRE(config.screen_mode_set == true);
+    REQUIRE(config.machine.screen_mode == 5);
+    REQUIRE(config.machine.screen_mode_set == true);
 }
 
 TEST_CASE("parse_start_arguments: --screen-mode out of range returns USAGE", "[cli][parse_start_arguments]") {
@@ -251,7 +251,7 @@ TEST_CASE("parse_start_arguments: --links sets config", "[cli][parse_start_argum
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.raw_links == 128);
+    REQUIRE(config.machine.raw_links == 128);
 }
 
 TEST_CASE("parse_start_arguments: --links accepts hex value", "[cli][parse_start_arguments]") {
@@ -261,7 +261,7 @@ TEST_CASE("parse_start_arguments: --links accepts hex value", "[cli][parse_start
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.raw_links == 255);
+    REQUIRE(config.machine.raw_links == 255);
 }
 
 TEST_CASE("parse_start_arguments: --links out of range returns USAGE", "[cli][parse_start_arguments]") {
@@ -291,9 +291,9 @@ TEST_CASE("parse_start_arguments: multiple options combined", "[cli][parse_start
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.mos_filepath == "mos.rom");
-    REQUIRE(config.port == 9000);
-    REQUIRE(config.screen_mode == 0);
+    REQUIRE(config.machine.mos_filepath == "mos.rom");
+    REQUIRE(config.launch.port == 9000);
+    REQUIRE(config.machine.screen_mode == 0);
 }
 
 TEST_CASE("parse_start_arguments: implicit start (no subcommand)", "[cli][parse_start_arguments]") {
@@ -304,7 +304,7 @@ TEST_CASE("parse_start_arguments: implicit start (no subcommand)", "[cli][parse_
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 1, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.port == 7000);
+    REQUIRE(config.launch.port == 7000);
 }
 
 // ============================================================================
@@ -818,7 +818,7 @@ TEST_CASE("parse_start_arguments: --provenance-type sets config", "[cli][parse_s
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.provenance_type == "python-client");
+    REQUIRE(config.launch.provenance_type == "python-client");
 }
 
 TEST_CASE("parse_start_arguments: --provenance-uuid sets config", "[cli][parse_start_arguments][provenance]") {
@@ -828,7 +828,7 @@ TEST_CASE("parse_start_arguments: --provenance-uuid sets config", "[cli][parse_s
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.provenance_uuid == "550e8400-e29b-41d4-a716-446655440000");
+    REQUIRE(config.launch.provenance_uuid == "550e8400-e29b-41d4-a716-446655440000");
 }
 
 TEST_CASE("parse_start_arguments: --provenance-version sets config", "[cli][parse_start_arguments][provenance]") {
@@ -838,7 +838,7 @@ TEST_CASE("parse_start_arguments: --provenance-version sets config", "[cli][pars
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.provenance_version == "1.2.3");
+    REQUIRE(config.launch.provenance_version == "1.2.3");
 }
 
 TEST_CASE("parse_start_arguments: all provenance options combined", "[cli][parse_start_arguments][provenance]") {
@@ -851,9 +851,9 @@ TEST_CASE("parse_start_arguments: all provenance options combined", "[cli][parse
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.provenance_type == "macos-gui");
-    REQUIRE(config.provenance_uuid == "12345678-1234-1234-1234-123456789abc");
-    REQUIRE(config.provenance_version == "2.0.0");
+    REQUIRE(config.launch.provenance_type == "macos-gui");
+    REQUIRE(config.launch.provenance_uuid == "12345678-1234-1234-1234-123456789abc");
+    REQUIRE(config.launch.provenance_version == "2.0.0");
 }
 
 TEST_CASE("parse_start_arguments: provenance type values", "[cli][parse_start_arguments][provenance]") {
@@ -861,21 +861,21 @@ TEST_CASE("parse_start_arguments: provenance type values", "[cli][parse_start_ar
         ArgvHelper args{"beebium", "start", "--provenance-type", "terminal"};
         ServerConfig<MachineType> config;
         parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
-        REQUIRE(config.provenance_type == "terminal");
+        REQUIRE(config.launch.provenance_type == "terminal");
     }
 
     SECTION("unknown type") {
         ArgvHelper args{"beebium", "start", "--provenance-type", "unknown"};
         ServerConfig<MachineType> config;
         parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
-        REQUIRE(config.provenance_type == "unknown");
+        REQUIRE(config.launch.provenance_type == "unknown");
     }
 
     SECTION("typescript-oracle type") {
         ArgvHelper args{"beebium", "start", "--provenance-type", "typescript-oracle"};
         ServerConfig<MachineType> config;
         parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
-        REQUIRE(config.provenance_type == "typescript-oracle");
+        REQUIRE(config.launch.provenance_type == "typescript-oracle");
     }
 }
 
@@ -886,9 +886,9 @@ TEST_CASE("parse_start_arguments: provenance defaults are empty", "[cli][parse_s
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.provenance_type.empty());
-    REQUIRE(config.provenance_uuid.empty());
-    REQUIRE(config.provenance_version.empty());
+    REQUIRE(config.launch.provenance_type.empty());
+    REQUIRE(config.launch.provenance_uuid.empty());
+    REQUIRE(config.launch.provenance_version.empty());
 }
 
 // ============================================================================
@@ -948,7 +948,7 @@ TEST_CASE("parse_start_arguments: --machine-uuid sets config", "[cli][parse_star
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.machine_uuid == "550e8400-e29b-41d4-a716-446655440000");
+    REQUIRE(config.launch.machine_uuid == "550e8400-e29b-41d4-a716-446655440000");
 }
 
 TEST_CASE("parse_start_arguments: --machine-uuid rejects invalid UUID", "[cli][parse_start_arguments][identity]") {
@@ -968,7 +968,7 @@ TEST_CASE("parse_start_arguments: --machine-name sets config", "[cli][parse_star
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.machine_name == "My BBC Micro");
+    REQUIRE(config.machine.machine_name == "My BBC Micro");
 }
 
 TEST_CASE("parse_start_arguments: --machine-name allows spaces", "[cli][parse_start_arguments][identity]") {
@@ -978,7 +978,7 @@ TEST_CASE("parse_start_arguments: --machine-name allows spaces", "[cli][parse_st
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.machine_name == "Level 3 Fileserver");
+    REQUIRE(config.machine.machine_name == "Level 3 Fileserver");
 }
 
 TEST_CASE("parse_start_arguments: all identity options combined", "[cli][parse_start_arguments][identity]") {
@@ -990,8 +990,8 @@ TEST_CASE("parse_start_arguments: all identity options combined", "[cli][parse_s
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.machine_uuid == "12345678-1234-1234-1234-123456789abc");
-    REQUIRE(config.machine_name == "Teletext Server");
+    REQUIRE(config.launch.machine_uuid == "12345678-1234-1234-1234-123456789abc");
+    REQUIRE(config.machine.machine_name == "Teletext Server");
 }
 
 TEST_CASE("parse_start_arguments: identity defaults are empty", "[cli][parse_start_arguments][identity]") {
@@ -1001,8 +1001,8 @@ TEST_CASE("parse_start_arguments: identity defaults are empty", "[cli][parse_sta
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.machine_uuid.empty());
-    REQUIRE(config.machine_name.empty());
+    REQUIRE(config.launch.machine_uuid.empty());
+    REQUIRE(config.machine.machine_name.empty());
 }
 
 TEST_CASE("parse_start_arguments: identity and provenance combined", "[cli][parse_start_arguments][identity]") {
@@ -1016,10 +1016,10 @@ TEST_CASE("parse_start_arguments: identity and provenance combined", "[cli][pars
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.provenance_type == "python-client");
-    REQUIRE(config.provenance_uuid == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-    REQUIRE(config.machine_uuid == "11111111-2222-3333-4444-555555555555");
-    REQUIRE(config.machine_name == "Test Server");
+    REQUIRE(config.launch.provenance_type == "python-client");
+    REQUIRE(config.launch.provenance_uuid == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    REQUIRE(config.launch.machine_uuid == "11111111-2222-3333-4444-555555555555");
+    REQUIRE(config.machine.machine_name == "Test Server");
 }
 
 // ============================================================================
@@ -1108,8 +1108,8 @@ TEST_CASE("parse_start_arguments: --preset sets preset_filepath", "[cli][parse_s
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.preset_filepath.has_value());
-    REQUIRE(config.preset_filepath->filename() == "minimal.preset.beebium");
+    REQUIRE(config.launch.preset_filepath.has_value());
+    REQUIRE(config.launch.preset_filepath->filename() == "minimal.preset.beebium");
 }
 
 TEST_CASE("parse_start_arguments: --preset applies fdc_socket_id", "[cli][parse_start_arguments][preset]") {
@@ -1120,7 +1120,7 @@ TEST_CASE("parse_start_arguments: --preset applies fdc_socket_id", "[cli][parse_
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.fdc_type == "acorn-1770");
+    REQUIRE(config.machine.fdc_type == "acorn-1770");
 }
 
 TEST_CASE("parse_start_arguments: --preset applies floppy_drives", "[cli][parse_start_arguments][preset]") {
@@ -1131,8 +1131,8 @@ TEST_CASE("parse_start_arguments: --preset applies floppy_drives", "[cli][parse_
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.floppy_filepaths[0] == "file:///tmp/test.ssd");
-    REQUIRE(config.floppy_filepaths[1].empty());  // Explicit null in preset
+    REQUIRE(config.machine.floppy_filepaths[0] == "file:///tmp/test.ssd");
+    REQUIRE(config.machine.floppy_filepaths[1].empty());  // Explicit null in preset
 }
 
 TEST_CASE("parse_start_arguments: CLI --fdc overrides preset fdc", "[cli][parse_start_arguments][preset]") {
@@ -1143,7 +1143,7 @@ TEST_CASE("parse_start_arguments: CLI --fdc overrides preset fdc", "[cli][parse_
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.fdc_type == "none");  // CLI overrides preset's "acorn-1770"
+    REQUIRE(config.machine.fdc_type == "none");  // CLI overrides preset's "acorn-1770"
 }
 
 TEST_CASE("parse_start_arguments: CLI --floppy overrides preset floppy", "[cli][parse_start_arguments][preset]") {
@@ -1155,7 +1155,7 @@ TEST_CASE("parse_start_arguments: CLI --floppy overrides preset floppy", "[cli][
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.floppy_filepaths[0] == "file:///other/disc.ssd");  // CLI overrides preset
+    REQUIRE(config.machine.floppy_filepaths[0] == "file:///other/disc.ssd");  // CLI overrides preset
 }
 
 TEST_CASE("parse_start_arguments: --preset applies sideways_bank slots", "[cli][parse_start_arguments][preset][sideways]") {
@@ -1168,10 +1168,10 @@ TEST_CASE("parse_start_arguments: --preset applies sideways_bank slots", "[cli][
     REQUIRE_FALSE(result.has_value());
     // Preset slot 14 ROM and slot 13 empty are folded into the active config
     // and routed for loading (proves the merge is wired into parse).
-    REQUIRE(config.rom_slots[14] == "acorn-dfs_2_26.rom");
-    REQUIRE(config.rom_slots[13] == EMPTY_SLOT_MARKER);
+    REQUIRE(config.machine.rom_slots[14] == "acorn-dfs_2_26.rom");
+    REQUIRE(config.machine.rom_slots[13] == EMPTY_SLOT_MARKER);
     int slot14_rom = 0;
-    for (const auto& c : config.sideways_configs) {
+    for (const auto& c : config.machine.sideways_configs) {
         if (c.slot == 14 && c.type == SidewaysSlotType::Rom) ++slot14_rom;
     }
     REQUIRE(slot14_rom == 1);
@@ -1187,9 +1187,9 @@ TEST_CASE("parse_start_arguments: CLI --sideways overrides preset sideways slot"
 
     REQUIRE_FALSE(result.has_value());
     // CLI wins for slot 14: empty, not the preset's DFS ROM, and no duplicate.
-    REQUIRE(config.rom_slots[14] == EMPTY_SLOT_MARKER);
+    REQUIRE(config.machine.rom_slots[14] == EMPTY_SLOT_MARKER);
     int slot14_count = 0;
-    for (const auto& c : config.sideways_configs) {
+    for (const auto& c : config.machine.sideways_configs) {
         if (c.slot == 14) ++slot14_count;
     }
     REQUIRE(slot14_count == 1);
@@ -1205,9 +1205,9 @@ TEST_CASE("parse_start_arguments: --preset before other options", "[cli][parse_s
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.fdc_type == "none");  // CLI override
-    REQUIRE(config.floppy_filepaths[0] == "file:///tmp/test.ssd");  // From preset
-    REQUIRE(config.floppy_filepaths[1] == "file:///drive1.ssd");  // CLI override
+    REQUIRE(config.machine.fdc_type == "none");  // CLI override
+    REQUIRE(config.machine.floppy_filepaths[0] == "file:///tmp/test.ssd");  // From preset
+    REQUIRE(config.machine.floppy_filepaths[1] == "file:///drive1.ssd");  // CLI override
 }
 
 TEST_CASE("parse_start_arguments: --preset after other options", "[cli][parse_start_arguments][preset]") {
@@ -1219,7 +1219,7 @@ TEST_CASE("parse_start_arguments: --preset after other options", "[cli][parse_st
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.fdc_type == "none");  // CLI overrides preset
+    REQUIRE(config.machine.fdc_type == "none");  // CLI overrides preset
 }
 
 TEST_CASE("parse_start_arguments: --preset with nonexistent file returns error", "[cli][parse_start_arguments][preset]") {
@@ -1251,9 +1251,9 @@ TEST_CASE("parse_start_arguments: preset without storage section leaves defaults
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.fdc_type.empty());  // Not set by preset
-    REQUIRE(config.floppy_filepaths[0].empty());
-    REQUIRE(config.floppy_filepaths[1].empty());
+    REQUIRE(config.machine.fdc_type.empty());  // Not set by preset
+    REQUIRE(config.machine.floppy_filepaths[0].empty());
+    REQUIRE(config.machine.floppy_filepaths[1].empty());
 }
 
 TEST_CASE("parse_start_arguments: --preset with wrong model returns CONFIG error", "[cli][parse_start_arguments][preset]") {
@@ -1276,7 +1276,7 @@ TEST_CASE("parse_start_arguments: --preset with matching model succeeds", "[cli]
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.fdc_type == "acorn-1770");
+    REQUIRE(config.machine.fdc_type == "acorn-1770");
 }
 
 namespace {
@@ -1338,9 +1338,9 @@ TEST_CASE("parse_start_arguments: --preset resolves a bare id as a system preset
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.fdc_type == "acorn-1770");
-    REQUIRE(config.preset_filepath.has_value());
-    REQUIRE(config.preset_filepath->filename() == "storage.preset.beebium");
+    REQUIRE(config.machine.fdc_type == "acorn-1770");
+    REQUIRE(config.launch.preset_filepath.has_value());
+    REQUIRE(config.launch.preset_filepath->filename() == "storage.preset.beebium");
 }
 
 TEST_CASE("parse_start_arguments: --preset resolves a bare id as a user preset", "[cli][parse_start_arguments][preset]") {
@@ -1356,7 +1356,7 @@ TEST_CASE("parse_start_arguments: --preset resolves a bare id as a user preset",
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.fdc_type == "acorn-1770");
+    REQUIRE(config.machine.fdc_type == "acorn-1770");
 }
 
 TEST_CASE("parse_start_arguments: --preset with an unknown id names both attempts", "[cli][parse_start_arguments][preset]") {
@@ -2074,7 +2074,7 @@ TEST_CASE("parse_start_arguments: --station sets station_number", "[cli][parse_s
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.station_number == 1);
+    REQUIRE(config.machine.station_number == 1);
 }
 
 TEST_CASE("parse_start_arguments: --station 254 is valid", "[cli][parse_start_arguments][econet]") {
@@ -2084,7 +2084,7 @@ TEST_CASE("parse_start_arguments: --station 254 is valid", "[cli][parse_start_ar
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.station_number == 254);
+    REQUIRE(config.machine.station_number == 254);
 }
 
 TEST_CASE("parse_start_arguments: --station 0 returns USAGE", "[cli][parse_start_arguments][econet]") {
@@ -2124,7 +2124,7 @@ TEST_CASE("parse_start_arguments: default station_number is -1", "[cli][parse_st
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.station_number == -1);
+    REQUIRE(config.machine.station_number == -1);
 }
 
 // AUN is now selected via the generic extension dispatch:
@@ -2140,7 +2140,7 @@ namespace {
 const typename ServerConfig<MachineType>::ExtensionInstance*
 find_extension_instance(const ServerConfig<MachineType>& config,
                         std::string_view name) {
-    for (const auto& inst : config.extension_instances) {
+    for (const auto& inst : config.machine.extension_instances) {
         if (inst.name == name) return &inst;
     }
     return nullptr;
@@ -2214,7 +2214,7 @@ TEST_CASE("parse_start_arguments: --aun and --station combined",
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.station_number == 1);
+    REQUIRE(config.machine.station_number == 1);
     auto* inst = find_extension_instance(config, "aun");
     REQUIRE(inst != nullptr);
     REQUIRE(inst->config.at("port") == "42001");
@@ -2234,7 +2234,7 @@ TEST_CASE("parse_start_arguments: --rom-dir sets rom_dirpath", "[cli][parse_star
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.rom_dirpath == "/path/to/roms");
+    REQUIRE(config.launch.rom_dirpath == "/path/to/roms");
 }
 
 TEST_CASE("parse_start_arguments: --sideways rom populates sideways_configs and rom_slots", "[cli][parse_start_arguments]") {
@@ -2244,12 +2244,12 @@ TEST_CASE("parse_start_arguments: --sideways rom populates sideways_configs and 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.sideways_configs.size() == 1);
-    REQUIRE(config.sideways_configs[0].slot == 15);
-    REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Rom);
-    REQUIRE(config.sideways_configs[0].image_filepath == "test.rom");
-    REQUIRE(config.rom_slots.count(15) == 1);
-    REQUIRE(config.rom_slots[15] == "test.rom");
+    REQUIRE(config.machine.sideways_configs.size() == 1);
+    REQUIRE(config.machine.sideways_configs[0].slot == 15);
+    REQUIRE(config.machine.sideways_configs[0].type == SidewaysSlotType::Rom);
+    REQUIRE(config.machine.sideways_configs[0].image_filepath == "test.rom");
+    REQUIRE(config.machine.rom_slots.count(15) == 1);
+    REQUIRE(config.machine.rom_slots[15] == "test.rom");
 }
 
 TEST_CASE("parse_start_arguments: --sideways empty populates config", "[cli][parse_start_arguments]") {
@@ -2259,9 +2259,9 @@ TEST_CASE("parse_start_arguments: --sideways empty populates config", "[cli][par
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.sideways_configs.size() == 1);
-    REQUIRE(config.sideways_configs[0].slot == 11);
-    REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Empty);
+    REQUIRE(config.machine.sideways_configs.size() == 1);
+    REQUIRE(config.machine.sideways_configs[0].slot == 11);
+    REQUIRE(config.machine.sideways_configs[0].type == SidewaysSlotType::Empty);
 }
 
 TEST_CASE("parse_start_arguments: --sideways ram populates config", "[cli][parse_start_arguments]") {
@@ -2271,10 +2271,10 @@ TEST_CASE("parse_start_arguments: --sideways ram populates config", "[cli][parse
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.sideways_configs.size() == 1);
-    REQUIRE(config.sideways_configs[0].slot == 4);
-    REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Ram);
-    REQUIRE_FALSE(config.sideways_configs[0].write_protected);
+    REQUIRE(config.machine.sideways_configs.size() == 1);
+    REQUIRE(config.machine.sideways_configs[0].slot == 4);
+    REQUIRE(config.machine.sideways_configs[0].type == SidewaysSlotType::Ram);
+    REQUIRE_FALSE(config.machine.sideways_configs[0].write_protected);
 }
 
 TEST_CASE("parse_start_arguments: --floppy sets floppy_filepaths", "[cli][parse_start_arguments]") {
@@ -2284,8 +2284,8 @@ TEST_CASE("parse_start_arguments: --floppy sets floppy_filepaths", "[cli][parse_
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.floppy_filepaths[0] == "game.ssd");
-    REQUIRE(config.floppy_filepaths[1].empty());
+    REQUIRE(config.machine.floppy_filepaths[0] == "game.ssd");
+    REQUIRE(config.machine.floppy_filepaths[1].empty());
 }
 
 TEST_CASE("parse_start_arguments: --floppy for drive 1", "[cli][parse_start_arguments]") {
@@ -2295,8 +2295,8 @@ TEST_CASE("parse_start_arguments: --floppy for drive 1", "[cli][parse_start_argu
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.floppy_filepaths[0].empty());
-    REQUIRE(config.floppy_filepaths[1] == "backup.ssd");
+    REQUIRE(config.machine.floppy_filepaths[0].empty());
+    REQUIRE(config.machine.floppy_filepaths[1] == "backup.ssd");
 }
 
 TEST_CASE("parse_start_arguments: --floppy with split filepath (colon completion)", "[cli][parse_start_arguments]") {
@@ -2306,7 +2306,7 @@ TEST_CASE("parse_start_arguments: --floppy with split filepath (colon completion
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.floppy_filepaths[0] == "game.ssd");
+    REQUIRE(config.machine.floppy_filepaths[0] == "game.ssd");
 }
 
 TEST_CASE("parse_start_arguments: --sideways ram with write-protect flag", "[cli][parse_start_arguments]") {
@@ -2316,10 +2316,10 @@ TEST_CASE("parse_start_arguments: --sideways ram with write-protect flag", "[cli
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.sideways_configs.size() == 1);
-    REQUIRE(config.sideways_configs[0].slot == 15);
-    REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Ram);
-    REQUIRE(config.sideways_configs[0].write_protected);
+    REQUIRE(config.machine.sideways_configs.size() == 1);
+    REQUIRE(config.machine.sideways_configs[0].slot == 15);
+    REQUIRE(config.machine.sideways_configs[0].type == SidewaysSlotType::Ram);
+    REQUIRE(config.machine.sideways_configs[0].write_protected);
 }
 
 TEST_CASE("parse_start_arguments: legacy positional --sideways is rejected", "[cli][parse_start_arguments]") {
@@ -2349,9 +2349,9 @@ TEST_CASE("parse_start_arguments: --sideways does not consume a following option
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.sideways_configs.size() == 1);
-    REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Empty);
-    REQUIRE(config.port == 8080);
+    REQUIRE(config.machine.sideways_configs.size() == 1);
+    REQUIRE(config.machine.sideways_configs[0].type == SidewaysSlotType::Empty);
+    REQUIRE(config.launch.port == 8080);
 }
 
 TEST_CASE("parse_start_arguments: --auto-boot sets auto_boot", "[cli][parse_start_arguments]") {
@@ -2361,8 +2361,8 @@ TEST_CASE("parse_start_arguments: --auto-boot sets auto_boot", "[cli][parse_star
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.auto_boot == true);
-    REQUIRE(config.auto_boot_set == true);
+    REQUIRE(config.machine.auto_boot == true);
+    REQUIRE(config.machine.auto_boot_set == true);
 }
 
 TEST_CASE("parse_start_arguments: --wait=cli sets wait_mode", "[cli][parse_start_arguments]") {
@@ -2372,7 +2372,7 @@ TEST_CASE("parse_start_arguments: --wait=cli sets wait_mode", "[cli][parse_start
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.wait_mode == WaitMode::Cli);
+    REQUIRE(config.launch.wait_mode == WaitMode::Cli);
 }
 
 TEST_CASE("parse_start_arguments: --wait=api sets wait_mode", "[cli][parse_start_arguments]") {
@@ -2382,7 +2382,7 @@ TEST_CASE("parse_start_arguments: --wait=api sets wait_mode", "[cli][parse_start
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.wait_mode == WaitMode::Api);
+    REQUIRE(config.launch.wait_mode == WaitMode::Api);
 }
 
 TEST_CASE("parse_start_arguments: --fdc sets fdc_type", "[cli][parse_start_arguments]") {
@@ -2392,7 +2392,7 @@ TEST_CASE("parse_start_arguments: --fdc sets fdc_type", "[cli][parse_start_argum
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.fdc_type == "acorn-1770");
+    REQUIRE(config.machine.fdc_type == "acorn-1770");
 }
 
 // ============================================================================
@@ -2411,7 +2411,7 @@ std::filesystem::path write_preset(const beebium::test::ScopedTempDir& dir, cons
 
 const ServerConfig<MachineType>::ExtensionInstance* find_instance(
         const ServerConfig<MachineType>& config, const std::string& name) {
-    for (const auto& inst : config.extension_instances) {
+    for (const auto& inst : config.machine.extension_instances) {
         if (inst.name == name) return &inst;
     }
     return nullptr;
@@ -2520,8 +2520,8 @@ TEST_CASE("parse_start_arguments: a CLI extension with a preset instance's id ov
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.extension_instances.size() == 1);
-    const auto& inst = config.extension_instances[0];
+    REQUIRE(config.machine.extension_instances.size() == 1);
+    const auto& inst = config.machine.extension_instances[0];
     CHECK(inst.config.at("id") == "modem");
     CHECK(inst.config.at("mode") == "device");        // from the preset
     CHECK(inst.config.at("path") == "/dev/ttyUSB0");  // from the preset
@@ -2544,7 +2544,7 @@ TEST_CASE("parse_start_arguments: a CLI extension naming no preset instance is a
 
     REQUIRE(result.has_value());
     CHECK(*result == ExitCode::CONFIG);
-    CHECK(config.extension_instances.size() == 2);
+    CHECK(config.machine.extension_instances.size() == 2);
 }
 
 TEST_CASE("parse_start_arguments: --extension-dir after --preset is honoured",
@@ -2559,8 +2559,8 @@ TEST_CASE("parse_start_arguments: --extension-dir after --preset is honoured",
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.extension_dirpaths.size() == 1);
-    CHECK(config.extension_dirpaths[0] == extension_dir.path().string());
+    REQUIRE(config.launch.extension_dirpaths.size() == 1);
+    CHECK(config.launch.extension_dirpaths[0] == extension_dir.path().string());
 }
 
 TEST_CASE("parse_start_arguments: --preset given twice is an error",
@@ -2642,12 +2642,12 @@ TEST_CASE("parse_start_arguments: a preset's speed applies and --speed overrides
     beebium::test::ScopedTempDir dir("beebium-preset-settings-");
     ServerConfig<MachineType> from_preset;
     REQUIRE_FALSE(parse_with_preset(dir, R"({"speed": 2})", {}, from_preset).has_value());
-    CHECK(from_preset.speed_multiplier_override == 2.0);
+    CHECK(from_preset.machine.speed_multiplier_override == 2.0);
 
     ServerConfig<MachineType> overridden;
     REQUIRE_FALSE(parse_with_preset(dir, R"({"speed": 2})", {"--speed", "unlimited"}, overridden)
                       .has_value());
-    CHECK(overridden.speed_multiplier_override == 0.0);
+    CHECK(overridden.machine.speed_multiplier_override == 0.0);
 }
 
 TEST_CASE("parse_start_arguments: a preset's mos_image_uri applies and --mos overrides it",
@@ -2656,13 +2656,13 @@ TEST_CASE("parse_start_arguments: a preset's mos_image_uri applies and --mos ove
     ServerConfig<MachineType> from_preset;
     REQUIRE_FALSE(parse_with_preset(dir, R"({"mos_image_uri": "my-mos.rom"})", {}, from_preset)
                       .has_value());
-    CHECK(from_preset.mos_filepath == "my-mos.rom");
+    CHECK(from_preset.machine.mos_filepath == "my-mos.rom");
 
     ServerConfig<MachineType> overridden;
     REQUIRE_FALSE(parse_with_preset(dir, R"({"mos_image_uri": "my-mos.rom"})",
                                     {"--mos", "other.rom"}, overridden)
                       .has_value());
-    CHECK(overridden.mos_filepath == "other.rom");
+    CHECK(overridden.machine.mos_filepath == "other.rom");
 }
 
 TEST_CASE("parse_start_arguments: a preset's startup screen_mode and auto_boot apply",
@@ -2672,11 +2672,11 @@ TEST_CASE("parse_start_arguments: a preset's startup screen_mode and auto_boot a
     REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"screen_mode": 3, "auto_boot": true}})",
                                     {}, config)
                       .has_value());
-    CHECK(config.screen_mode == 3);
-    CHECK(config.screen_mode_set);
-    CHECK(config.auto_boot);
-    CHECK(config.auto_boot_set);
-    CHECK(config.raw_links == -1);
+    CHECK(config.machine.screen_mode == 3);
+    CHECK(config.machine.screen_mode_set);
+    CHECK(config.machine.auto_boot);
+    CHECK(config.machine.auto_boot_set);
+    CHECK(config.machine.raw_links == -1);
 }
 
 TEST_CASE("parse_start_arguments: --screen-mode overrides the preset's per key",
@@ -2686,8 +2686,8 @@ TEST_CASE("parse_start_arguments: --screen-mode overrides the preset's per key",
     REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"screen_mode": 3, "auto_boot": true}})",
                                     {"--screen-mode", "1"}, config)
                       .has_value());
-    CHECK(config.screen_mode == 1);
-    CHECK(config.auto_boot);  // kept from the preset
+    CHECK(config.machine.screen_mode == 1);
+    CHECK(config.machine.auto_boot);  // kept from the preset
 }
 
 TEST_CASE("parse_start_arguments: --links replaces the preset's screen_mode and auto_boot",
@@ -2697,9 +2697,9 @@ TEST_CASE("parse_start_arguments: --links replaces the preset's screen_mode and 
     REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"screen_mode": 3, "auto_boot": false}})",
                                     {"--links", "7"}, config)
                       .has_value());
-    CHECK(config.raw_links == 7);
-    CHECK_FALSE(config.screen_mode_set);
-    CHECK_FALSE(config.auto_boot_set);
+    CHECK(config.machine.raw_links == 7);
+    CHECK_FALSE(config.machine.screen_mode_set);
+    CHECK_FALSE(config.machine.auto_boot_set);
     CHECK_FALSE(validate_config(config).has_value());
 }
 
@@ -2710,8 +2710,8 @@ TEST_CASE("parse_start_arguments: --auto-boot replaces the preset's links",
     REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"links": 135}})", {"--auto-boot"},
                                     config)
                       .has_value());
-    CHECK(config.raw_links == -1);
-    CHECK(config.auto_boot);
+    CHECK(config.machine.raw_links == -1);
+    CHECK(config.machine.auto_boot);
     CHECK_FALSE(validate_config(config).has_value());
 }
 
@@ -2721,7 +2721,7 @@ TEST_CASE("parse_start_arguments: a preset's links apply",
     ServerConfig<MachineType> config;
     REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"links": 135}})", {}, config)
                       .has_value());
-    CHECK(config.raw_links == 135);
+    CHECK(config.machine.raw_links == 135);
     CHECK_FALSE(validate_config(config).has_value());
 }
 
@@ -2756,7 +2756,7 @@ TEST_CASE("parse_start_arguments: generated ids never take an id given explicitl
     REQUIRE_FALSE(parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config)
                       .has_value());
 
-    REQUIRE(config.extension_instances.size() == 2);
-    CHECK(config.extension_instances[0].config.at("id") == "aun-1");
-    CHECK(config.extension_instances[1].config.at("id") == "aun");
+    REQUIRE(config.machine.extension_instances.size() == 2);
+    CHECK(config.machine.extension_instances[0].config.at("id") == "aun-1");
+    CHECK(config.machine.extension_instances[1].config.at("id") == "aun");
 }

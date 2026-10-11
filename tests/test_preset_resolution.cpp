@@ -66,7 +66,7 @@ const std::vector<beebium::ExtensionManifest>& manifests() {
 
 Config config_with_manifests() {
     Config config;
-    config.extension_resolver.add_source("test", manifests());
+    config.launch.extension_resolver.add_source("test", manifests());
     return config;
 }
 
@@ -91,11 +91,11 @@ TEST_CASE("fold_in_preset normalises, names and attaches a preset's extensions",
     auto problems = fold_in_preset(config);
 
     CHECK(problems.empty());
-    REQUIRE(config.extension_instances.size() == 3);
-    CHECK(config.extension_instances[0].config.at("id") == "adapter");
-    CHECK(config.extension_instances[1].config.at("scsi-id") == "3");
-    CHECK(config.extension_instances[2].config.at("baud") == "19200");  // default
-    CHECK(config.extension_instances[2].explicit_keys.empty());
+    REQUIRE(config.machine.extension_instances.size() == 3);
+    CHECK(config.machine.extension_instances[0].config.at("id") == "adapter");
+    CHECK(config.machine.extension_instances[1].config.at("scsi-id") == "3");
+    CHECK(config.machine.extension_instances[2].config.at("baud") == "19200");  // default
+    CHECK(config.machine.extension_instances[2].explicit_keys.empty());
 }
 
 TEST_CASE("fold_in_preset locates each problem at its preset entry",
@@ -124,13 +124,13 @@ TEST_CASE("fold_in_preset merges the sideways and startup baselines under the CL
     auto config = config_with_manifests();
     apply_preset(config, load(dir, R"({"startup": {"screen_mode": 3, "auto_boot": true},
         "sideways_bank": {"slots": [{"slot": 14, "type": "empty"}]}})"));
-    config.screen_mode = 1;  // as a CLI --screen-mode 1 would have left it
-    config.screen_mode_set = true;
+    config.machine.screen_mode = 1;  // as a CLI --screen-mode 1 would have left it
+    config.machine.screen_mode_set = true;
 
     CHECK(fold_in_preset(config).empty());
-    CHECK(config.screen_mode == 1);
-    CHECK(config.auto_boot);
-    CHECK(config.rom_slots.at(14) == EMPTY_SLOT_MARKER);
+    CHECK(config.machine.screen_mode == 1);
+    CHECK(config.machine.auto_boot);
+    CHECK(config.machine.rom_slots.at(14) == EMPTY_SLOT_MARKER);
 }
 
 TEST_CASE("preset_model_error names both models", "[preset-resolution]") {
@@ -146,8 +146,8 @@ TEST_CASE("preset_model_error names both models", "[preset-resolution]") {
 TEST_CASE("apply_rom_defaults gives the model's MOS and language ROM", "[preset-resolution]") {
     Config config;
     apply_rom_defaults(config);
-    CHECK(config.mos_filepath == MachineType::Memory::DEFAULT_MOS_ROM);
-    CHECK(config.rom_slots.at(MachineType::Memory::DEFAULT_LANGUAGE_SLOT) ==
+    CHECK(config.machine.mos_filepath == MachineType::Memory::DEFAULT_MOS_ROM);
+    CHECK(config.machine.rom_slots.at(MachineType::Memory::DEFAULT_LANGUAGE_SLOT) ==
           MachineType::Memory::DEFAULT_LANGUAGE_ROM);
 }
 
@@ -161,10 +161,10 @@ TEST_CASE("the preset JSON helpers", "[preset-resolution]") {
                                  {"write_protected", false}});
 
     Config config;
-    config.station_number = 80;
-    CHECK(station_json(config) == 80);
-    config.station_auto_range = beebium::econet::StationRange{40, 49};
-    CHECK(station_json(config) == "auto:40-49");
+    config.machine.station_number = 80;
+    CHECK(station_json(config.machine) == 80);
+    config.machine.station_auto_range = beebium::econet::StationRange{40, 49};
+    CHECK(station_json(config.machine) == "auto:40-49");
 
     const auto& serial = manifests()[2];
     CHECK(extension_config_json(&serial, {{"baud", "9600"}}, {}, false) ==
@@ -186,19 +186,19 @@ std::vector<std::string> keys_of(const nlohmann::ordered_json& doc) {
 // A configuration that sets something in every section.
 Config populated_config() {
     auto config = config_with_manifests();
-    config.machine_name = "Station {econet-station}";
-    config.screen_mode = 3;
-    config.screen_mode_set = true;
-    config.speed_multiplier_override = 2.0;
-    config.mos_filepath = "my-mos.rom";
-    config.fdc_type = "acorn-1770";
-    config.floppy_filepaths[0] = "file:///discs/game.ssd";
-    config.sideways_configs.push_back({14, SidewaysSlotType::Rom, "dfs.rom", false});
-    config.rom_slots[14] = "dfs.rom";
-    config.station_number = 80;
+    config.machine.machine_name = "Station {econet-station}";
+    config.machine.screen_mode = 3;
+    config.machine.screen_mode_set = true;
+    config.machine.speed_multiplier_override = 2.0;
+    config.machine.mos_filepath = "my-mos.rom";
+    config.machine.fdc_type = "acorn-1770";
+    config.machine.floppy_filepaths[0] = "file:///discs/game.ssd";
+    config.machine.sideways_configs.push_back({14, SidewaysSlotType::Rom, "dfs.rom", false});
+    config.machine.rom_slots[14] = "dfs.rom";
+    config.machine.station_number = 80;
     Config::ExtensionInstance net{"net", {{"port", "0"}}, {}, false, {"port"}};
     Config::ExtensionInstance serial{"serial", {{"baud", "9600"}}, {}, false, {"baud"}};
-    config.extension_instances = {net, serial};
+    config.machine.extension_instances = {net, serial};
     return config;
 }
 
@@ -210,8 +210,8 @@ TEST_CASE("preset_document writes every key in the one order, Given a subsequenc
     PresetDocumentHeader header{"Test", "A test", "1985", 1.5};
     std::string error;
 
-    auto every = preset_document(config, header, DocumentKeys::Every, error);
-    auto given = preset_document(config, header, DocumentKeys::Given, error);
+    auto every = preset_document<MachineType>(config.machine, config.launch.extension_resolver, header, DocumentKeys::Every, error);
+    auto given = preset_document<MachineType>(config.machine, config.launch.extension_resolver, header, DocumentKeys::Given, error);
     REQUIRE(every.has_value());
     REQUIRE(given.has_value());
 
@@ -228,16 +228,16 @@ TEST_CASE("preset_document with Given leaves defaults out; with Every fills them
           "[preset-resolution][document]") {
     Config config = config_with_manifests();
     apply_rom_defaults(config);
-    config.mos_filepath.clear();  // as if no --mos was given
+    config.machine.mos_filepath.clear();  // as if no --mos was given
     PresetDocumentHeader header;
     header.name = "Bare";
     std::string error;
 
-    auto given = preset_document(config, header, DocumentKeys::Given, error);
+    auto given = preset_document<MachineType>(config.machine, config.launch.extension_resolver, header, DocumentKeys::Given, error);
     REQUIRE(given.has_value());
     CHECK(keys_of(*given) == std::vector<std::string>{"model", "name"});
 
-    auto every = preset_document(config, header, DocumentKeys::Every, error);
+    auto every = preset_document<MachineType>(config.machine, config.launch.extension_resolver, header, DocumentKeys::Every, error);
     REQUIRE(every.has_value());
     CHECK(every->at("speed") == 1.0);
     CHECK(every->at("startup") ==
@@ -248,11 +248,11 @@ TEST_CASE("preset_document with Given leaves defaults out; with Every fills them
 
 TEST_CASE("preset_document refuses a transport with no station", "[preset-resolution][document]") {
     auto config = config_with_manifests();
-    config.extension_instances.push_back({"net", {}, {}, false, {}});
+    config.machine.extension_instances.push_back({"net", {}, {}, false, {}});
     std::string error;
     PresetDocumentHeader header;
     header.name = "X";
-    CHECK_FALSE(preset_document(config, header, DocumentKeys::Given, error).has_value());
+    CHECK_FALSE(preset_document<MachineType>(config.machine, config.launch.extension_resolver, header, DocumentKeys::Given, error).has_value());
     CHECK_THAT(error, ContainsSubstring("requires --station"));
 }
 
@@ -264,7 +264,7 @@ TEST_CASE("an extension that fails normalisation keeps the config the preset gav
         {"name": "serial", "config": {"baud": "fast"}}]})"));
 
     REQUIRE(fold_in_preset(config).size() == 1);
-    CHECK(config.extension_instances[0].config.at("baud") == "fast");
+    CHECK(config.machine.extension_instances[0].config.at("baud") == "fast");
 }
 
 TEST_CASE("the preset key registry names every key the loader accepts, once",

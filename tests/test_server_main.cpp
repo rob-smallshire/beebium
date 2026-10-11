@@ -43,8 +43,8 @@ TEST_CASE("validate_config: valid empty config returns nullopt", "[server_main][
 
 TEST_CASE("validate_config: --links with --screen-mode returns error", "[server_main][validate_config]") {
     ServerConfig<MachineType> config;
-    config.raw_links = 128;
-    config.screen_mode_set = true;
+    config.machine.raw_links = 128;
+    config.machine.screen_mode_set = true;
 
     auto error = validate_config<MachineType>(config);
 
@@ -55,8 +55,8 @@ TEST_CASE("validate_config: --links with --screen-mode returns error", "[server_
 
 TEST_CASE("validate_config: --links with --auto-boot returns error", "[server_main][validate_config]") {
     ServerConfig<MachineType> config;
-    config.raw_links = 128;
-    config.auto_boot_set = true;
+    config.machine.raw_links = 128;
+    config.machine.auto_boot_set = true;
 
     auto error = validate_config<MachineType>(config);
 
@@ -67,9 +67,9 @@ TEST_CASE("validate_config: --links with --auto-boot returns error", "[server_ma
 
 TEST_CASE("validate_config: --links with both --screen-mode and --auto-boot returns error", "[server_main][validate_config]") {
     ServerConfig<MachineType> config;
-    config.raw_links = 128;
-    config.screen_mode_set = true;
-    config.auto_boot_set = true;
+    config.machine.raw_links = 128;
+    config.machine.screen_mode_set = true;
+    config.machine.auto_boot_set = true;
 
     auto error = validate_config<MachineType>(config);
 
@@ -78,8 +78,8 @@ TEST_CASE("validate_config: --links with both --screen-mode and --auto-boot retu
 
 TEST_CASE("validate_config: --screen-mode without --links returns nullopt", "[server_main][validate_config]") {
     ServerConfig<MachineType> config;
-    config.screen_mode = 4;
-    config.screen_mode_set = true;
+    config.machine.screen_mode = 4;
+    config.machine.screen_mode_set = true;
 
     auto error = validate_config<MachineType>(config);
 
@@ -88,8 +88,8 @@ TEST_CASE("validate_config: --screen-mode without --links returns nullopt", "[se
 
 TEST_CASE("validate_config: --auto-boot without --links returns nullopt", "[server_main][validate_config]") {
     ServerConfig<MachineType> config;
-    config.auto_boot = true;
-    config.auto_boot_set = true;
+    config.machine.auto_boot = true;
+    config.machine.auto_boot_set = true;
 
     auto error = validate_config<MachineType>(config);
 
@@ -98,10 +98,10 @@ TEST_CASE("validate_config: --auto-boot without --links returns nullopt", "[serv
 
 TEST_CASE("validate_config: both --screen-mode and --auto-boot without --links returns nullopt", "[server_main][validate_config]") {
     ServerConfig<MachineType> config;
-    config.screen_mode = 4;
-    config.screen_mode_set = true;
-    config.auto_boot = true;
-    config.auto_boot_set = true;
+    config.machine.screen_mode = 4;
+    config.machine.screen_mode_set = true;
+    config.machine.auto_boot = true;
+    config.machine.auto_boot_set = true;
 
     auto error = validate_config<MachineType>(config);
 
@@ -126,8 +126,8 @@ TEST_CASE("apply_preset: records preset sideways slots as baseline",
     // sideways_configs or rom_slots (the merge does, after CLI parsing).
     REQUIRE(config.preset_sideways_configs.size() == 1);
     REQUIRE(config.preset_sideways_configs[0].slot == 14);
-    REQUIRE(config.sideways_configs.empty());
-    REQUIRE(config.rom_slots.count(14) == 0);
+    REQUIRE(config.machine.sideways_configs.empty());
+    REQUIRE(config.machine.rom_slots.count(14) == 0);
 }
 
 TEST_CASE("merge_preset_sideways_configs: applies a preset ROM slot",
@@ -139,10 +139,10 @@ TEST_CASE("merge_preset_sideways_configs: applies a preset ROM slot",
 
     merge_preset_sideways_configs(config);
 
-    REQUIRE(config.sideways_configs.size() == 1);
-    REQUIRE(config.sideways_configs[0].slot == 14);
-    REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Rom);
-    REQUIRE(config.rom_slots[14] == "acorn-dfs_2_26.rom");
+    REQUIRE(config.machine.sideways_configs.size() == 1);
+    REQUIRE(config.machine.sideways_configs[0].slot == 14);
+    REQUIRE(config.machine.sideways_configs[0].type == SidewaysSlotType::Rom);
+    REQUIRE(config.machine.rom_slots[14] == "acorn-dfs_2_26.rom");
 }
 
 TEST_CASE("merge_preset_sideways_configs: empty and ram slots map to markers",
@@ -155,8 +155,8 @@ TEST_CASE("merge_preset_sideways_configs: empty and ram slots map to markers",
 
     merge_preset_sideways_configs(config);
 
-    REQUIRE(config.rom_slots[13] == EMPTY_SLOT_MARKER);
-    REQUIRE(config.rom_slots[4] == RAM_SLOT_MARKER);
+    REQUIRE(config.machine.rom_slots[13] == EMPTY_SLOT_MARKER);
+    REQUIRE(config.machine.rom_slots[4] == RAM_SLOT_MARKER);
 }
 
 TEST_CASE("merge_preset_sideways_configs: CLI --sideways overrides preset for same slot",
@@ -164,8 +164,8 @@ TEST_CASE("merge_preset_sideways_configs: CLI --sideways overrides preset for sa
     ServerConfig<MachineType> config;
     // Simulate a CLI --sideways 14:empty already parsed, as the second pass of
     // parse_start_arguments would leave it.
-    config.sideways_configs.push_back(SidewaysConfig{14, SidewaysSlotType::Empty, ""});
-    config.rom_slots[14] = EMPTY_SLOT_MARKER;
+    config.machine.sideways_configs.push_back(SidewaysConfig{14, SidewaysSlotType::Empty, ""});
+    config.machine.rom_slots[14] = EMPTY_SLOT_MARKER;
     // The preset wants DFS in slot 14.
     config.preset_sideways_configs = {
         SidewaysConfig{14, SidewaysSlotType::Rom, "acorn-dfs_2_26.rom"},
@@ -174,9 +174,9 @@ TEST_CASE("merge_preset_sideways_configs: CLI --sideways overrides preset for sa
     merge_preset_sideways_configs(config);
 
     // CLI wins: exactly one slot-14 entry, still Empty, no duplicate added.
-    REQUIRE(config.sideways_configs.size() == 1);
-    REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Empty);
-    REQUIRE(config.rom_slots[14] == EMPTY_SLOT_MARKER);
+    REQUIRE(config.machine.sideways_configs.size() == 1);
+    REQUIRE(config.machine.sideways_configs[0].type == SidewaysSlotType::Empty);
+    REQUIRE(config.machine.rom_slots[14] == EMPTY_SLOT_MARKER);
 }
 
 // ============================================================================
@@ -200,7 +200,7 @@ void install_transport_manifests(ServerConfig<MachineType>& config) {
         return std::vector<beebium::ExtensionManifest>{transport("aun"),
                                                        transport("piconet")};
     }();
-    config.extension_resolver.add_source("test", manifests);
+    config.launch.extension_resolver.add_source("test", manifests);
 }
 
 using Inst = ServerConfig<MachineType>::ExtensionInstance;
@@ -212,9 +212,9 @@ TEST_CASE("merge_preset_extensions: a CLI --aun merges over the preset's aun",
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
     // Preset aun carries the net; the CLI aun overrides the port and adds keys.
-    config.extension_instances.push_back(
+    config.machine.extension_instances.push_back(
         Inst{"aun", {{"net", "0"}, {"port", "32768"}}, {}, /*from_preset=*/true});
-    config.extension_instances.push_back(
+    config.machine.extension_instances.push_back(
         Inst{"aun", {{"port", "0"}, {"map-file", "none"}}, {}, false,
              /*explicit_keys=*/{"port", "map-file"}});
 
@@ -222,8 +222,8 @@ TEST_CASE("merge_preset_extensions: a CLI --aun merges over the preset's aun",
 
     // One transport survives: the CLI instance, with the preset's net kept and
     // the CLI's port and map-file winning.
-    REQUIRE(config.extension_instances.size() == 1);
-    const auto& inst = config.extension_instances[0];
+    REQUIRE(config.machine.extension_instances.size() == 1);
+    const auto& inst = config.machine.extension_instances[0];
     CHECK(inst.name == "aun");
     CHECK_FALSE(inst.from_preset);
     CHECK(inst.config.at("net") == "0");         // from the preset
@@ -235,30 +235,30 @@ TEST_CASE("merge_preset_extensions: a different CLI transport replaces the prese
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
-    config.extension_instances.push_back(
+    config.machine.extension_instances.push_back(
         Inst{"aun", {{"net", "0"}}, {}, /*from_preset=*/true});
-    config.extension_instances.push_back(
+    config.machine.extension_instances.push_back(
         Inst{"piconet", {{"device_path", "/dev/ttyUSB0"}}, {}, false,
              /*explicit_keys=*/{"device_path"}});
 
     merge_preset_extensions(config);
 
-    REQUIRE(config.extension_instances.size() == 1);
-    CHECK(config.extension_instances[0].name == "piconet");  // preset aun dropped
+    REQUIRE(config.machine.extension_instances.size() == 1);
+    CHECK(config.machine.extension_instances[0].name == "piconet");  // preset aun dropped
 }
 
 TEST_CASE("merge_preset_extensions: a preset transport alone is left in place",
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
-    config.extension_instances.push_back(
+    config.machine.extension_instances.push_back(
         Inst{"aun", {{"net", "0"}}, {}, /*from_preset=*/true});
 
     merge_preset_extensions(config);
 
-    REQUIRE(config.extension_instances.size() == 1);
-    CHECK(config.extension_instances[0].name == "aun");
-    CHECK(config.extension_instances[0].from_preset);
+    REQUIRE(config.machine.extension_instances.size() == 1);
+    CHECK(config.machine.extension_instances[0].name == "aun");
+    CHECK(config.machine.extension_instances[0].from_preset);
 }
 
 TEST_CASE("merge_preset_extensions: list parameters follow the CLI per key",
@@ -271,13 +271,13 @@ TEST_CASE("merge_preset_extensions: list parameters follow the CLI per key",
     Inst cli{"aun", {}, {}, false};
     cli.list_config["map"] = {"0.80@127.0.0.1@40001"};  // CLI sets map
     cli.explicit_keys = {"map"};                        // the user typed map=
-    config.extension_instances.push_back(std::move(preset));
-    config.extension_instances.push_back(std::move(cli));
+    config.machine.extension_instances.push_back(std::move(preset));
+    config.machine.extension_instances.push_back(std::move(cli));
 
     merge_preset_extensions(config);
 
-    REQUIRE(config.extension_instances.size() == 1);
-    const auto& inst = config.extension_instances[0];
+    REQUIRE(config.machine.extension_instances.size() == 1);
+    const auto& inst = config.machine.extension_instances[0];
     // The CLI's map list wins outright; the preset's subnet (a key the CLI did
     // not set) is kept.
     REQUIRE(inst.list_config.at("map").size() == 1);
@@ -289,14 +289,14 @@ TEST_CASE("merge_preset_extensions: two CLI transports are left for the one-tran
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
-    config.extension_instances.push_back(Inst{"aun", {}, {}, false});
-    config.extension_instances.push_back(Inst{"piconet", {}, {}, false});
+    config.machine.extension_instances.push_back(Inst{"aun", {}, {}, false});
+    config.machine.extension_instances.push_back(Inst{"piconet", {}, {}, false});
 
     merge_preset_extensions(config);
 
     // No preset transport to reconcile: both stay, so install_econet still
     // reports "got 2".
-    CHECK(config.extension_instances.size() == 2);
+    CHECK(config.machine.extension_instances.size() == 2);
 }
 
 // #166: parse_extension_args fills every optional key with its default before
@@ -307,13 +307,13 @@ TEST_CASE("merge_preset_extensions: a CLI's defaulted keys do not mask the prese
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
     // Preset carries a chosen port and net.
-    config.extension_instances.push_back(Inst{
+    config.machine.extension_instances.push_back(Inst{
         "aun", {{"port", "0"}, {"net", "5"}, {"discovery", "off"}}, {},
         /*from_preset=*/true});
     // CLI as parse_extension_args would build it: the user typed only
     // discovery=off:map-file=none, but port and net arrived as manifest
     // defaults. Only the two typed keys are explicit.
-    config.extension_instances.push_back(Inst{
+    config.machine.extension_instances.push_back(Inst{
         "aun",
         {{"port", "32768"}, {"net", "0"}, {"discovery", "off"}, {"map-file", "none"}},
         {},
@@ -322,8 +322,8 @@ TEST_CASE("merge_preset_extensions: a CLI's defaulted keys do not mask the prese
 
     merge_preset_extensions(config);
 
-    REQUIRE(config.extension_instances.size() == 1);
-    const auto& inst = config.extension_instances[0];
+    REQUIRE(config.machine.extension_instances.size() == 1);
+    const auto& inst = config.machine.extension_instances[0];
     CHECK(inst.config.at("port") == "0");         // preset wins over the default
     CHECK(inst.config.at("net") == "5");          // preset wins over the default
     CHECK(inst.config.at("discovery") == "off");  // user typed it (same value)
@@ -336,17 +336,17 @@ TEST_CASE("merge_preset_extensions: a preset discovery=off survives an unrelated
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
-    config.extension_instances.push_back(
+    config.machine.extension_instances.push_back(
         Inst{"aun", {{"discovery", "off"}, {"port", "0"}}, {}, /*from_preset=*/true});
     // The user typed only port=0; discovery arrived as the default "on".
-    config.extension_instances.push_back(Inst{
+    config.machine.extension_instances.push_back(Inst{
         "aun", {{"port", "0"}, {"discovery", "on"}}, {}, false,
         /*explicit_keys=*/{"port"}});
 
     merge_preset_extensions(config);
 
-    REQUIRE(config.extension_instances.size() == 1);
-    const auto& inst = config.extension_instances[0];
+    REQUIRE(config.machine.extension_instances.size() == 1);
+    const auto& inst = config.machine.extension_instances[0];
     CHECK(inst.config.at("discovery") == "off");  // preset survives
     CHECK(inst.config.at("port") == "0");          // user typed it
 }
@@ -355,14 +355,14 @@ TEST_CASE("merge_preset_extensions: a peripheral without a matching id is added 
           "[server_main][preset][extensions]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
-    config.extension_instances.push_back(
+    config.machine.extension_instances.push_back(
         Inst{"scsi-hard-disc", {{"id", "boot"}, {"scsi-id", "0"}}, {}, /*from_preset=*/true});
-    config.extension_instances.push_back(Inst{"scsi-hard-disc", {{"scsi-id", "1"}}, {}, false,
+    config.machine.extension_instances.push_back(Inst{"scsi-hard-disc", {{"scsi-id", "1"}}, {}, false,
                                               /*explicit_keys=*/{"scsi-id"}});
 
     merge_preset_extensions(config);
 
-    CHECK(config.extension_instances.size() == 2);
+    CHECK(config.machine.extension_instances.size() == 2);
 }
 
 // The AUN transport's display name is what a machine-name template's
@@ -395,16 +395,16 @@ TEST_CASE("merge_preset_extensions: real AUN manifest, only typed keys beat the 
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
     // The preset chose port 0 and net 7.
-    config.extension_instances.push_back(
+    config.machine.extension_instances.push_back(
         Inst{"aun", {{"port", "0"}, {"net", "7"}}, {}, /*from_preset=*/true});
-    config.extension_instances.push_back(Inst{"aun", std::move(parsed.config),
+    config.machine.extension_instances.push_back(Inst{"aun", std::move(parsed.config),
                                               std::move(parsed.list_config), false,
                                               std::move(parsed.explicit_keys)});
 
     merge_preset_extensions(config);
 
-    REQUIRE(config.extension_instances.size() == 1);
-    const auto& inst = config.extension_instances[0];
+    REQUIRE(config.machine.extension_instances.size() == 1);
+    const auto& inst = config.machine.extension_instances[0];
     CHECK(inst.config.at("port") == "0");         // preset, not the 32768 default
     CHECK(inst.config.at("net") == "7");          // preset, not the 0 default
     CHECK(inst.config.at("discovery") == "off");  // user typed it
@@ -423,22 +423,22 @@ TEST_CASE("apply_rom_defaults: fills the default MOS and language ROM",
 
     apply_rom_defaults(config);
 
-    CHECK(config.mos_filepath == Memory::DEFAULT_MOS_ROM);
-    REQUIRE(config.rom_slots.count(Memory::DEFAULT_LANGUAGE_SLOT) == 1);
-    CHECK(config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == Memory::DEFAULT_LANGUAGE_ROM);
+    CHECK(config.machine.mos_filepath == Memory::DEFAULT_MOS_ROM);
+    REQUIRE(config.machine.rom_slots.count(Memory::DEFAULT_LANGUAGE_SLOT) == 1);
+    CHECK(config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == Memory::DEFAULT_LANGUAGE_ROM);
 }
 
 TEST_CASE("apply_rom_defaults: leaves a configured MOS and language slot alone",
           "[server_main][apply_rom_defaults]") {
     using Memory = MachineType::Memory;
     ServerConfig<MachineType> config;
-    config.mos_filepath = "my-mos.rom";
-    config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] = EMPTY_SLOT_MARKER;
+    config.machine.mos_filepath = "my-mos.rom";
+    config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] = EMPTY_SLOT_MARKER;
 
     apply_rom_defaults(config);
 
-    CHECK(config.mos_filepath == "my-mos.rom");
-    CHECK(config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == EMPTY_SLOT_MARKER);
+    CHECK(config.machine.mos_filepath == "my-mos.rom");
+    CHECK(config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == EMPTY_SLOT_MARKER);
 }
 
 // ============================================================================
@@ -461,11 +461,11 @@ TEST_CASE("load_roms: applies default MOS ROM when not specified", "[server_main
     MachineType machine;
     ServerConfig<MachineType> config;
     setup_test_config(config);
-    // config.mos_filepath is empty, should use default
+    // config.machine.mos_filepath is empty, should use default
 
     load_roms(machine, config);
 
-    REQUIRE(config.mos_filepath == Memory::DEFAULT_MOS_ROM);
+    REQUIRE(config.machine.mos_filepath == Memory::DEFAULT_MOS_ROM);
 }
 
 TEST_CASE("load_roms: uses specified MOS ROM filepath", "[server_main][load_roms]") {
@@ -474,11 +474,11 @@ TEST_CASE("load_roms: uses specified MOS ROM filepath", "[server_main][load_roms
     MachineType machine;
     ServerConfig<MachineType> config;
     setup_test_config(config);
-    config.mos_filepath = "acorn-mos_1_20.rom";  // Explicit MOS
+    config.machine.mos_filepath = "acorn-mos_1_20.rom";  // Explicit MOS
 
     load_roms(machine, config);
 
-    REQUIRE(config.mos_filepath == "acorn-mos_1_20.rom");
+    REQUIRE(config.machine.mos_filepath == "acorn-mos_1_20.rom");
 }
 
 TEST_CASE("load_roms: applies default language ROM when slot not overridden", "[server_main][load_roms]") {
@@ -491,8 +491,8 @@ TEST_CASE("load_roms: applies default language ROM when slot not overridden", "[
 
     load_roms(machine, config);
 
-    REQUIRE(config.rom_slots.count(Memory::DEFAULT_LANGUAGE_SLOT) == 1);
-    REQUIRE(config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == Memory::DEFAULT_LANGUAGE_ROM);
+    REQUIRE(config.machine.rom_slots.count(Memory::DEFAULT_LANGUAGE_SLOT) == 1);
+    REQUIRE(config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == Memory::DEFAULT_LANGUAGE_ROM);
 }
 
 TEST_CASE("load_roms: does not override user-specified language slot", "[server_main][load_roms]") {
@@ -502,12 +502,12 @@ TEST_CASE("load_roms: does not override user-specified language slot", "[server_
     MachineType machine;
     ServerConfig<MachineType> config;
     setup_test_config(config);
-    config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] = "acorn-mos_1_20.rom";  // Use MOS as test ROM
+    config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] = "acorn-mos_1_20.rom";  // Use MOS as test ROM
 
     load_roms(machine, config);
 
     // Should not have been overwritten with default
-    REQUIRE(config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == "acorn-mos_1_20.rom");
+    REQUIRE(config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == "acorn-mos_1_20.rom");
 }
 
 TEST_CASE("load_roms: handles empty slot marker", "[server_main][load_roms]") {
@@ -516,7 +516,7 @@ TEST_CASE("load_roms: handles empty slot marker", "[server_main][load_roms]") {
     MachineType machine;
     ServerConfig<MachineType> config;
     setup_test_config(config);
-    config.rom_slots[10] = EMPTY_SLOT_MARKER;
+    config.machine.rom_slots[10] = EMPTY_SLOT_MARKER;
 
     // Should not throw
     REQUIRE_NOTHROW(load_roms(machine, config));
@@ -560,7 +560,7 @@ TEST_CASE("load_roms: preset sideways DFS loads into slot 14",
     apply_preset(config, preset);
     merge_preset_sideways_configs(config);
 
-    REQUIRE(config.rom_slots[14] == "acorn-dfs_2_26.rom");
+    REQUIRE(config.machine.rom_slots[14] == "acorn-dfs_2_26.rom");
     REQUIRE_NOTHROW(load_roms(machine, config));
 }
 
@@ -571,7 +571,7 @@ TEST_CASE("load_roms: preset sideways DFS loads into slot 14",
 TEST_CASE("install_disc_controller: returns nullopt when no FDC specified", "[server_main][install_disc_controller]") {
     MachineType machine;
     ServerConfig<MachineType> config;
-    // config.fdc_type is empty
+    // config.machine.fdc_type is empty
 
     auto result = install_disc_controller(machine, config);
 
@@ -581,7 +581,7 @@ TEST_CASE("install_disc_controller: returns nullopt when no FDC specified", "[se
 TEST_CASE("install_disc_controller: returns nullopt for 'none' type", "[server_main][install_disc_controller]") {
     MachineType machine;
     ServerConfig<MachineType> config;
-    config.fdc_type = "none";
+    config.machine.fdc_type = "none";
 
     auto result = install_disc_controller(machine, config);
 
@@ -591,7 +591,7 @@ TEST_CASE("install_disc_controller: returns nullopt for 'none' type", "[server_m
 TEST_CASE("install_disc_controller: installs valid FDC type", "[server_main][install_disc_controller]") {
     MachineType machine;
     ServerConfig<MachineType> config;
-    config.fdc_type = "acorn-1770";
+    config.machine.fdc_type = "acorn-1770";
 
     auto result = install_disc_controller(machine, config);
 
@@ -603,7 +603,7 @@ TEST_CASE("install_disc_controller: installs valid FDC type", "[server_main][ins
 TEST_CASE("install_disc_controller: returns error for unknown FDC type", "[server_main][install_disc_controller]") {
     MachineType machine;
     ServerConfig<MachineType> config;
-    config.fdc_type = "unknown-controller";
+    config.machine.fdc_type = "unknown-controller";
 
     auto result = install_disc_controller(machine, config);
 
@@ -618,7 +618,7 @@ TEST_CASE("install_disc_controller: returns error for unknown FDC type", "[serve
 TEST_CASE("load_disc_images: handles empty floppy paths (no-op)", "[server_main][load_disc_images]") {
     MachineType machine;
     ServerConfig<MachineType> config;
-    // config.floppy_filepaths are empty
+    // config.machine.floppy_filepaths are empty
 
     // Should not throw
     REQUIRE_NOTHROW(load_disc_images(machine, config));
@@ -640,7 +640,7 @@ TEST_CASE("apply_startup_options: does nothing when no options set", "[server_ma
 TEST_CASE("apply_startup_options: sets raw links when specified", "[server_main][apply_startup_options]") {
     MachineType machine;
     ServerConfig<MachineType> config;
-    config.raw_links = 0xAB;
+    config.machine.raw_links = 0xAB;
 
     apply_startup_options(machine, config);
 
@@ -650,8 +650,8 @@ TEST_CASE("apply_startup_options: sets raw links when specified", "[server_main]
 TEST_CASE("apply_startup_options: sets screen mode when specified", "[server_main][apply_startup_options]") {
     MachineType machine;
     ServerConfig<MachineType> config;
-    config.screen_mode = 4;
-    config.screen_mode_set = true;
+    config.machine.screen_mode = 4;
+    config.machine.screen_mode_set = true;
 
     apply_startup_options(machine, config);
 
@@ -663,8 +663,8 @@ TEST_CASE("apply_startup_options: sets screen mode when specified", "[server_mai
 TEST_CASE("apply_startup_options: sets auto-boot when specified", "[server_main][apply_startup_options]") {
     MachineType machine;
     ServerConfig<MachineType> config;
-    config.auto_boot = true;
-    config.auto_boot_set = true;
+    config.machine.auto_boot = true;
+    config.machine.auto_boot_set = true;
 
     // Should not throw
     REQUIRE_NOTHROW(apply_startup_options(machine, config));
