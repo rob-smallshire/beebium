@@ -191,12 +191,19 @@ Elite Server.beebium-machine/
                         CPU state)
   extensions/<name>/<id>/ data owned by one extension instance (section 4.9)
   lock                  held by the running server (section 4.4)
+  Elite Server.beebium-machine
+                        the openable document file on Windows and Linux: a
+                        small text file naming its own directory (section 4.11)
+  desktop.ini, .directory
+                        platform folder metadata: icon and display name
+                        (section 4.11); written by the server, never read
   ...                   everything else the preset archive contained, at the
                         same relative paths (disc images, ROM images, notes)
 ```
 
 The core defines the meaning of `machine.json`, `preset.json`,
-`thumbnail.png`, `nvram/`, `extensions/` and `lock`, and nothing else. It
+`thumbnail.png`, `nvram/`, `extensions/`, `lock`, the document file and the
+two folder-metadata files, and nothing else. It
 does not prescribe a `discs/` or `roms/` layout: a preset author decides
 where resources sit in the archive, extraction preserves that, and the
 path rule of section 2 finds them. A directory is not a schema.
@@ -471,6 +478,68 @@ may warn once when a machine is saved into a folder it recognises as
 sync-managed. The exact behaviour under sync is settled in the Save/Open
 step of the sequencing (section 6, step 3), not by the location choice.
 
+### 4.11 A machine directory as a document on every platform (decided 2026-10-16)
+
+Only macOS can present a directory as a single document: a document
+package, a directory whose extension maps to a UTI conforming to
+`com.apple.package`, is shown by Finder as one item with the app's icon and
+opens in the app on double-click. Windows Explorer always treats a
+directory as a folder whatever its name, and the Linux file managers have
+no package concept. Both can give a folder a custom icon (`desktop.ini`
+with `IconResource` plus the folder's read-only attribute; a `.directory`
+file with `Icon=`) and Windows and KDE can override the displayed name
+(`LocalizedResourceName`, `Name=`), but neither can make double-clicking a
+folder open an application short of a shell extension, which is out of the
+question.
+
+**Decision: the project-folder pattern.** The machine stays a directory,
+identical on every platform, and carries one small registered document
+file inside it, `<name>.beebium-machine`, the same name as the directory.
+This is the shape of a `.sln` or `.uproject`: the folder is the project,
+the file inside is what you double-click.
+
+- **On Windows and Linux** the app associates the `.beebium-machine` file
+  extension with itself. Double-clicking the file, or dropping it or its
+  folder on the app, opens the machine. The Open panel accepts either the
+  file or the directory. The folder shows the Beebium machine icon and its
+  display name without the suffix where the desktop supports it.
+- **On macOS** the app registers the `.beebium-machine` directory as a
+  document package. Finder shows one document with the app's icon, hides
+  the contents, and double-click opens the machine. The inner file is still
+  written, so a machine copied to a PC is complete; it is simply invisible
+  inside the package.
+- **The on-disk layout is the same everywhere**, so a saved machine moves
+  between platforms unchanged. The two alternatives rejected were a
+  platform-specific layout (a packaged directory on macOS, a plain folder
+  elsewhere), which breaks that, and a single-file zip document for saved
+  machines, which would be uniform but turns live disc writes into
+  write-back-on-save and loses writes on a crash; it stays in reserve
+  (section 7) if the directory model proves awkward.
+
+**The document file.** A small text file whose only job is to be
+double-clickable and to identify its directory. It carries the format
+name and version and the machine UUID (which lets the app check that the
+file has not been separated from its directory), nothing the server reads
+to run the machine. `machine.json` remains the identity record.
+
+**Folder metadata.** The server writes `desktop.ini` and `.directory` on
+Save, and sets the read-only attribute on the directory on Windows (which
+Explorer requires before it honours `desktop.ini`; it does not make the
+contents read-only). The icon they reference is the installed app's
+machine-document icon on Windows and a named icon the Linux packaging
+installs into the hicolor theme. The server never reads either file, and
+neither is required: a machine directory with both deleted still opens.
+`machine.json` holds the name; the two metadata files are rewritten from it
+on every Save and on rename, so a display name can never go stale.
+
+**Opening a machine, all platforms.** The front-end receives a path from a
+double-click, a drop, the Open panel or the recents list. If the path is
+the document file, its parent is the machine directory; if it is a
+directory, it is used as is. The front-end then launches a server with
+`start --machine <dir>`. The server identifies a machine directory by
+`machine.json`, never by the document file or the suffix, so a renamed or
+suffix-stripped directory still opens from the command line.
+
 ## 5. CLI surface
 
 | Command | Meaning |
@@ -520,6 +589,10 @@ Save and ResetBattery RPCs.
   A hard-disc image copied mid-write is not consistent; the server can
   quiesce the emulation for the copy, which the existing pause primitive
   supports.
+- The single-file zip form for saved machines (rejected in 4.11 in favour
+  of the project-folder pattern) is kept in reserve: it would unify presets
+  and machines into one archive format at the cost of write-back-on-save
+  semantics for disc images.
 - Does `create-preset --from <running machine>` (capture the current
   configuration of a machine back into a template) belong in this design?
   It is the inverse arrow and cheap once a machine directory is an
