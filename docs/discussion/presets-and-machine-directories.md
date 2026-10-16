@@ -312,10 +312,10 @@ title stays literal. Under discussion; see the issue.
   machines/               transient machine directories (cleaned at exit)
 ```
 
-Saved machines live wherever the user put them; the app remembers recent
-ones (Welcome window, File > Open Recent). The macOS app can register the
-`.beebium-machine` directory as a document package later; the preset
-archive is an ordinary document type and needs nothing.
+Saved machines live wherever the user put them (section 4.10); the app
+remembers recent ones (Welcome window, File > Open Recent). The macOS app
+can register the `.beebium-machine` directory as a document package later;
+the preset archive is an ordinary document type and needs nothing.
 
 ### 4.7 Behaviour change to flag
 
@@ -424,6 +424,52 @@ Core-owned non-volatile state stays in `nvram/` rather than moving under
 `extensions/`, because the core hardware units (an Integra-B board, a
 Master 128 CMOS) are not extension instances and have no instance id.
 The same serialise/restore surface serves both.
+
+### 4.10 Where saved machines live (decided 2026-10-16)
+
+A saved machine is a document, and goes wherever the user chooses. Nothing
+in the design depends on its location: identity is in `machine.json`, not
+the path, so a directory moved or renamed afterwards still opens, and the
+recents list behind the Machines page tolerates moves. The server's only
+requirements of a destination are that it is writable and does not already
+contain a machine directory.
+
+**The default for a first save is the platform documents directory**, with
+no Beebium subfolder. After that the system save panel remembers the last
+folder used, as it does for any document.
+
+| Platform | First-save default | How the front-end finds it |
+|----------|--------------------|----------------------------|
+| macOS | `~/Documents` | `FileManager.url(for: .documentDirectory, ...)`; NSSavePanel remembers the last folder by itself |
+| Windows | the Documents known folder | `SHGetKnownFolderPath(FOLDERID_Documents)`, which follows folder redirection and OneDrive-backed Documents |
+| Linux | `xdg-user-dir DOCUMENTS`, falling back to `~/Documents` | `XDG_DOCUMENTS_DIR` in `user-dirs.dirs` |
+
+The default is a front-end concern. The server never chooses a location:
+`start --machine <dir>`, `create-machine --output <dir>` and
+`SystemService.SaveMachine(destination)` all take an explicit path, so the
+server needs no per-platform folder lookup beyond the Application Support
+directory it already uses.
+
+Two things that must not go under Documents:
+
+- **Transient machine directories.** They are working state, not
+  documents. They stay under the per-user application area (Application
+  Support on macOS, `%LOCALAPPDATA%` on Windows, `$XDG_STATE_HOME` or
+  `~/.local/state` on Linux) so that they are kept out of cloud sync,
+  backups and indexing. (Which of Application Support or the temp
+  directory is still open; see section 7.)
+- **A server-chosen default.** See above.
+
+**Cloud-synced folders.** On macOS and Windows the documents directory is
+often iCloud Drive or OneDrive. An open saved machine is a directory with
+continuously written disc images and a lock file, which invites sync
+conflicts, and iCloud can evict a file the server has not opened yet. The
+app does not refuse such locations, because refusing Documents would defeat
+the default. Instead: the server opens every media file at launch rather
+than lazily, writes atomically as section 4.3 requires, and the front-end
+may warn once when a machine is saved into a folder it recognises as
+sync-managed. The exact behaviour under sync is settled in the Save/Open
+step of the sequencing (section 6, step 3), not by the location choice.
 
 ## 5. CLI surface
 
