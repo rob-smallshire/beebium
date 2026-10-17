@@ -1212,8 +1212,15 @@ TEST_CASE("a preset's MOS and sideways ROMs are found beside the preset",
     load_roms(machine, config);
     std::cout.rdbuf(previous);
 
-    CHECK(said.str().find((t.container / "my-mos.rom").string()) != std::string::npos);
-    CHECK(said.str().find((t.container / "my-dfs.rom").string()) != std::string::npos);
+    // load_roms prints each path as a path streams: quoted, and on Windows
+    // with each backslash doubled.
+    auto as_printed = [](const std::filesystem::path& path) {
+        std::ostringstream printed;
+        printed << path;
+        return printed.str();
+    };
+    CHECK(said.str().find(as_printed(t.container / "my-mos.rom")) != std::string::npos);
+    CHECK(said.str().find(as_printed(t.container / "my-dfs.rom")) != std::string::npos);
 }
 
 // ============================================================================
