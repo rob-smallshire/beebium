@@ -220,14 +220,6 @@ struct CoreCLI {
 
     // MARK: - Preset management
 
-    /// `report-presets-dirpath`, trimmed. Returns (dirpath, errorMessage) with
-    /// exactly one non-nil.
-    func reportPresetsDirpath(executablePath: String) async -> (String?, String?) {
-        let (output, error) = await run(executablePath: executablePath, arguments: ["report-presets-dirpath"])
-        if let error = error { return (nil, error) }
-        return (output.trimmingCharacters(in: .whitespacesAndNewlines), nil)
-    }
-
     /// `create-preset --name <name> --from <presetId>`. Returns (newPresetId,
     /// errorMessage) with exactly one non-nil; the id is trimmed.
     func createPreset(name: String, from presetId: String, executablePath: String) async -> (String?, String?) {

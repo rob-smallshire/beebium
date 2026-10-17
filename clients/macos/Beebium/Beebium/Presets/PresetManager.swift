@@ -49,9 +49,6 @@ class PresetManager: ObservableObject {
     @Published private(set) var isDiscovering = false
     @Published private(set) var discoveryError: String?
 
-    /// Cached user presets directory path (retrieved from CLI)
-    private var cachedUserPresetsDirpath: String?
-
     /// Model id -> model display name (e.g. "model-b" -> "BBC Model B"), from
     /// describe-preset-schema, kept for the app's lifetime so a model's name is
     /// fetched at most once however many presets name it or how often presets
@@ -157,56 +154,6 @@ class PresetManager: ObservableObject {
         return names
     }
 
-    /// Load a single preset from a file path.
-    private func loadPreset(from presetFilepath: String, source: MachinePreset.Source, serversDirpath: String, configFailures: inout [String]) async -> MachinePreset? {
-        let filename = URL(fileURLWithPath: presetFilepath).lastPathComponent
-        let presetId = presetIdFromFilename(filename)
-        NSLog("[PresetManager] Processing preset: \(filename) (id: \(presetId))")
-
-        guard let presetData = parsePresetFile(at: presetFilepath), let model = presetData.model else {
-            configFailures.append(filename)
-            NSLog("[PresetManager] Failed to parse preset file (or no model): \(filename)")
-            return nil
-        }
-
-        let executablePath = "\(serversDirpath)/beebium-\(model)"
-        guard FileManager.default.isExecutableFile(atPath: executablePath) else {
-            NSLog("[PresetManager] Executable not found for model '\(model)': \(executablePath)")
-            return nil
-        }
-
-        let (schema, error) = await fetchPresetSchema(from: executablePath)
-        guard let schema = schema else {
-            configFailures.append(filename)
-            NSLog("[PresetManager] Failed to get schema from \(model): \(error ?? "unknown error")")
-            return nil
-        }
-
-        let preset = MachinePreset(
-            id: UUID(),
-            presetId: presetId,
-            name: presetData.name ?? schema.model.name,
-            coreExecutablePath: executablePath,
-            presetFilepath: presetFilepath,
-            source: source,
-            machineName: presetData.machineName,
-            modelName: schema.model.name,
-            modelDescription: presetData.description ?? schema.model.description,
-            releaseDate: presetData.releaseDate
-        )
-        NSLog("[PresetManager] Discovered: \(preset.name)")
-        return preset
-    }
-
-    /// Extract preset ID from filename (e.g., "bbc-model-b.preset.beebium" -> "bbc-model-b")
-    private func presetIdFromFilename(_ filename: String) -> String {
-        let suffix = ".preset.beebium"
-        if filename.hasSuffix(suffix) {
-            return String(filename.dropLast(suffix.count))
-        }
-        return filename
-    }
-
     /// Get the directory path where server executables are located.
     ///
     /// Search order:
@@ -249,68 +196,6 @@ class PresetManager: ObservableObject {
         // them relative to its own executable).
         let romPath = "\(resourcePath)/servers/share/beebium/roms"
         return FileManager.default.fileExists(atPath: romPath) ? romPath : nil
-    }
-
-    /// Get the bundled presets directory path, if presets are bundled in the app.
-    /// Returns nil if no bundled presets are found.
-    ///
-    /// Presets ship inside the static server bundle tree, under
-    /// servers/share/beebium/presets/ -- the same location the server binary's
-    /// own PresetPaths::get_system_presets_dirpath() resolves relative to its
-    /// executable, so `--from <id>` works. The Swift side reads the same directory.
-    private func bundledPresetsDirpath() -> String? {
-        guard let resourcePath = Bundle.main.resourcePath else { return nil }
-        let presetsPath = "\(resourcePath)/servers/share/beebium/presets"
-        return FileManager.default.fileExists(atPath: presetsPath) ? presetsPath : nil
-    }
-
-    /// Find preset files in a directory (files with `.preset.beebium` extension).
-    /// Returns (filepaths, errorMessage) - errorMessage is nil on success.
-    private func findPresetFiles(in dirpath: String) -> ([String], String?) {
-        let fm = FileManager.default
-
-        var isDirectory: ObjCBool = false
-        guard fm.fileExists(atPath: dirpath, isDirectory: &isDirectory), isDirectory.boolValue else {
-            NSLog("[PresetManager] Presets directory does not exist: \(dirpath)")
-            return ([], "Presets directory does not exist: \(dirpath)")
-        }
-
-        guard let contents = try? fm.contentsOfDirectory(atPath: dirpath) else {
-            NSLog("[PresetManager] Cannot read presets directory: \(dirpath)")
-            return ([], "Cannot read presets directory: \(dirpath)")
-        }
-
-        let presetFilepaths = contents
-            .filter { $0.hasSuffix(".preset.beebium") }
-            .map { "\(dirpath)/\($0)" }
-            .sorted()
-
-        return (presetFilepaths, nil)
-    }
-
-    /// Parse a preset file into a draft, for its discovery metadata (model,
-    /// name, machine_name, description, release_date). The same model the dialog
-    /// edits, so the client has a single preset representation.
-    private func parsePresetFile(at filepath: String) -> MachineDraft? {
-        guard let data = FileManager.default.contents(atPath: filepath) else {
-            return nil
-        }
-        do {
-            return try MachineDraft.decode(from: data)
-        } catch {
-            NSLog("[PresetManager] JSON decode error for \(filepath): \(error)")
-            return nil
-        }
-    }
-
-    /// Invoke `describe-preset-schema` on a server executable and parse the JSON response.
-    /// Returns (schema, errorMessage) - errorMessage is nil on success.
-    private func fetchPresetSchema(from executablePath: String) async -> (PresetSchema?, String?) {
-        let (schema, error) = await coreCLI.presetSchema(executablePath: executablePath)
-        if let error = error {
-            NSLog("[PresetManager] Failed to get schema from \(executablePath): \(error)")
-        }
-        return (schema, error)
     }
 
     /// Fetch and decode the storage schema section for a preset's model.
@@ -508,48 +393,6 @@ class PresetManager: ObservableObject {
         let day = parts.count > 2 ? String(parts[2]) : "00"
 
         return "\(year)-\(month)-\(day)"
-    }
-
-    // MARK: - User Presets Directory
-
-    /// Get the user presets directory path by querying the CLI.
-    func userPresetsDirpath() async -> String? {
-        if let cached = cachedUserPresetsDirpath {
-            return cached
-        }
-
-        // Need at least one system preset to determine executable
-        guard let firstPreset = systemPresets.first else {
-            NSLog("[PresetManager] No system presets available to query user presets directory")
-            return nil
-        }
-
-        return await fetchUserPresetsDirpath(using: firstPreset.coreExecutablePath)
-    }
-
-    /// Fetch the user presets directory path using a specific executable.
-    private func fetchUserPresetsDirpath(using executablePath: String) async -> String? {
-        if let cached = cachedUserPresetsDirpath {
-            return cached
-        }
-
-        let (dirpath, error) = await coreCLI.reportPresetsDirpath(executablePath: executablePath)
-        if let error = error {
-            NSLog("[PresetManager] Failed to get user presets directory: \(error)")
-            return nil
-        }
-        cachedUserPresetsDirpath = dirpath
-        return dirpath
-    }
-
-    /// Get the system presets directory path.
-    ///
-    /// Checks bundled presets first, then falls back to server directory.
-    func systemPresetsDirpath() -> String {
-        if let bundledPath = bundledPresetsDirpath() {
-            return bundledPath
-        }
-        return "\(serversDirpath())/presets"
     }
 
     // MARK: - Preset Management
