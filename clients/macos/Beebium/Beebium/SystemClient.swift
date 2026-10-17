@@ -42,6 +42,22 @@ final class SystemClient: ObservableObject, Disconnectable {
     /// Machine model display name (e.g., "BBC Model B+ 64K")
     @Published private(set) var machineDisplayName: String = ""
 
+    /// The machine's directory on disk: its saved directory when `machineSaved`,
+    /// or its transient working directory otherwise. From SystemInfo, and
+    /// re-set by a successful SaveMachine.
+    @Published private(set) var machineDirpath: String = ""
+
+    /// Whether the machine has been saved (its directory is a document the user
+    /// chose a place for), as opposed to a transient machine the server will
+    /// remove on exit. From SystemInfo; true after a successful save.
+    @Published private(set) var machineSaved: Bool = false
+
+    /// The server's `template_media_written` signal, stamped on every status
+    /// event: the guest has written to a medium copied from the preset, which is
+    /// lost unless the machine is saved. Drives the window's unsaved-changes dot
+    /// and the close-time "Save this machine?" prompt; cleared by a save.
+    @Published private(set) var templateMediaWritten: Bool = false
+
     // MARK: - Connection Tracking
 
     /// Number of clients with active WatchServerStatus streams on the server
@@ -152,6 +168,9 @@ final class SystemClient: ObservableObject, Disconnectable {
         machineNameTemplate = ""
         machineType = ""
         machineDisplayName = ""
+        machineDirpath = ""
+        machineSaved = false
+        templateMediaWritten = false
         errorMessage = nil
     }
 
@@ -185,6 +204,43 @@ final class SystemClient: ObservableObject, Disconnectable {
             return .success(())
         } catch {
             return .failure(.operationFailed(error.localizedDescription))
+        }
+    }
+
+    /// Save the running machine. An empty `destinationDirpath` writes a saved
+    /// machine's state in place; a destination saves a not-yet-saved machine
+    /// there, or duplicates a saved one (Save As). `replaceExisting` lets the
+    /// save replace a non-running saved machine already at the destination
+    /// rather than be refused. The machine runs on from the saved directory; on
+    /// success its new directory and identity are applied at once and
+    /// template_media_written is cleared (the next status event confirms).
+    /// Returns the final directory, or a mapped error.
+    func saveMachine(destinationDirpath: String, replaceExisting: Bool) async -> Result<String, MachineSaveError> {
+        guard let client = client else { return .failure(.notConnected) }
+        do {
+            var request = Beebium_SaveMachineRequest()
+            request.destinationDirpath = destinationDirpath
+            request.replaceExisting = replaceExisting
+            let response = try await client.saveMachine(request).response.get()
+            updateIdentity(response.identity)
+            machineDirpath = response.machineDirpath
+            machineSaved = true
+            templateMediaWritten = false
+            return .success(response.machineDirpath)
+        } catch {
+            return .failure(SaveClient.saveError(from: error))
+        }
+    }
+
+    /// Forget the machine's battery-backed state, taking effect at its next
+    /// start (the running machine is unchanged). Returns the units forgotten.
+    func resetBattery() async -> Result<[String], MachineSaveError> {
+        guard let client = client else { return .failure(.notConnected) }
+        do {
+            let response = try await client.resetBattery(Beebium_ResetBatteryRequest()).response.get()
+            return .success(response.resetUnits)
+        } catch {
+            return .failure(SaveClient.saveError(from: error))
         }
     }
 
@@ -375,6 +431,10 @@ final class SystemClient: ObservableObject, Disconnectable {
             NSLog("[SystemClient] Heartbeats resumed -- server reachable again")
         }
 
+        // Stamped on every event, heartbeats included, so the unsaved-changes
+        // dot and the close prompt stay current without a dedicated event.
+        templateMediaWritten = event.templateMediaWritten
+
         switch event.status {
         case .serverStatusReady:
             isServerShuttingDown = false
@@ -439,6 +499,8 @@ final class SystemClient: ObservableObject, Disconnectable {
                     self?.updateIdentity(response.identity)
                     self?.isServerLocal =
                         HostFingerprint.isThisHost(response.hostFingerprint)
+                    self?.machineDirpath = response.machineDirpath
+                    self?.machineSaved = response.machineSaved
                     self?.clientCount = Int(response.connections.clientCount)
                     self?.isLoaded = true
                     self?.errorMessage = nil

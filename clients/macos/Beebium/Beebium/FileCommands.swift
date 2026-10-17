@@ -19,6 +19,7 @@ struct FileCommands: Commands {
     /// focus, and the menu item is disabled accordingly. It puts the cursor in
     /// the title bar's name field rather than opening a dialog of its own.
     @FocusedValue(\.renameMachine) private var renameMachine
+    @FocusedValue(\.machineSaveActions) private var machineSaveActions
     @ObservedObject private var appActions = AppActions.shared
 
     @ObservedObject private var presetManager = PresetManager.shared
@@ -74,18 +75,18 @@ struct FileCommands: Commands {
         }
 
         CommandGroup(replacing: .saveItem) {
-            // Save and Save As stay disabled until the SaveMachine RPC exists
-            // (it lands in a later commit). Their enable rule is already
-            // decided -- see saveEnabled / saveAsEnabled -- and is wired to the
-            // real actions then; for now the items are present but inert so the
-            // menu shape does not change under the user when Save arrives.
-            Button("Save") { }
+            // Save and Save As act on the machine in the focused window; they are
+            // disabled with no machine focused. Save As needs an already-saved
+            // machine, since it duplicates one into a new directory.
+            Button("Save") { machineSaveActions?.save() }
             .keyboardShortcut("s", modifiers: .command)
-            .disabled(true)
+            .disabled(!Self.saveEnabled(hasFocusedMachineWindow: machineSaveActions != nil))
 
-            Button("Save As...") { }
+            Button("Save As...") { machineSaveActions?.saveAs() }
             .keyboardShortcut("s", modifiers: [.command, .shift])
-            .disabled(true)
+            .disabled(!Self.saveAsEnabled(
+                hasFocusedMachineWindow: machineSaveActions != nil,
+                isSaved: machineSaveActions?.isSaved ?? false))
 
             Menu("Revert To") {
                 Text("No Saved Versions")

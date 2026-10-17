@@ -181,6 +181,84 @@ enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// Three forms, by the machine and the destination:
+/// - a machine not yet saved, and a destination: the machine is saved there,
+///   keeping its uuid, and runs on from there;
+/// - a saved machine, and no destination: its state is written in place;
+/// - a saved machine, and a destination: a copy is saved there, with a new
+///   uuid, and the machine runs on from the copy (Save As). The directory it
+///   leaves keeps what it had, and is no longer in use.
+struct Beebium_SaveMachineRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The directory to save into, which must not exist unless
+  /// replace_existing; empty to save a saved machine in place.
+  var destinationDirpath: String = String()
+
+  /// Replace a saved machine at the destination: accepted only for a
+  /// machine directory (it holds machine.json) that no process is running
+  /// and that is not this machine's own. The new machine is made whole
+  /// first, then put in the old one's place, which is removed; on a failure
+  /// the old one is left as it was. The client need not remove anything
+  /// before a Save it cannot yet know will succeed.
+  var replaceExisting: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_SaveMachineResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The machine's directory now, in every form.
+  var machineDirpath: String = String()
+
+  /// The machine's identity now: a Save As gives it a new uuid.
+  var identity: Beebium_MachineIdentity {
+    get {return _identity ?? Beebium_MachineIdentity()}
+    set {_identity = newValue}
+  }
+  /// Returns true if `identity` has been explicitly set.
+  var hasIdentity: Bool {return self._identity != nil}
+  /// Clears the value of `identity`. Subsequent reads from it will return its default value.
+  mutating func clearIdentity() {self._identity = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _identity: Beebium_MachineIdentity? = nil
+}
+
+struct Beebium_ResetBatteryRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ResetBatteryResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The battery-backed units forgotten: the machine's own ("integra-b-rtc")
+  /// and its extensions' ("<instance id>/<unit>", e.g. "clock/saf3019p").
+  var resetUnits: [String] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 /// Future: request specific fields, version info, etc.
 struct Beebium_GetSystemInfoRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
@@ -346,6 +424,15 @@ struct Beebium_SystemInfo: Sendable {
   /// Empty if the host will not identify itself, which a client must read as
   /// "not the same host" rather than as matching another empty value.
   var hostFingerprint: String = String()
+
+  /// The machine's directory: a saved machine's, or the transient one a
+  /// machine not yet saved runs in. Empty when the server has none.
+  var machineDirpath: String = String()
+
+  /// True for a saved machine, whose directory outlives the server; false
+  /// for one not yet saved. A front-end offers Save for the one and Save
+  /// As for the other.
+  var machineSaved: Bool = false
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -624,6 +711,13 @@ struct Beebium_ServerStatusEvent: Sendable {
   /// Reset RPC) or soft (the Break key). See ResetKind.
   var resetKind: Beebium_ResetKind = .unspecified
 
+  /// On every event: true when a machine not yet saved has written to media
+  /// its template named (its own copies, which are lost unless it is
+  /// saved), so a front-end can ask whether to save it before closing.
+  /// Always false for a saved machine, whose media are its own; a Save
+  /// clears it.
+  var templateMediaWritten: Bool = false
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -834,6 +928,129 @@ extension Beebium_ServerStatusType: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVER_STATUS_READY\0\u{1}SERVER_STATUS_SHUTTING_DOWN\0\u{1}SERVER_STATUS_IDENTITY_CHANGED\0\u{1}SERVER_STATUS_SHUTDOWN_PROGRESS\0\u{1}SERVER_STATUS_HEARTBEAT\0\u{1}SERVER_STATUS_MACHINE_RESET\0")
 }
 
+extension Beebium_SaveMachineRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".SaveMachineRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}destination_dirpath\0\u{3}replace_existing\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.destinationDirpath) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.replaceExisting) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.destinationDirpath.isEmpty {
+      try visitor.visitSingularStringField(value: self.destinationDirpath, fieldNumber: 1)
+    }
+    if self.replaceExisting != false {
+      try visitor.visitSingularBoolField(value: self.replaceExisting, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_SaveMachineRequest, rhs: Beebium_SaveMachineRequest) -> Bool {
+    if lhs.destinationDirpath != rhs.destinationDirpath {return false}
+    if lhs.replaceExisting != rhs.replaceExisting {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_SaveMachineResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".SaveMachineResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}machine_dirpath\0\u{1}identity\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.machineDirpath) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._identity) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.machineDirpath.isEmpty {
+      try visitor.visitSingularStringField(value: self.machineDirpath, fieldNumber: 1)
+    }
+    try { if let v = self._identity {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_SaveMachineResponse, rhs: Beebium_SaveMachineResponse) -> Bool {
+    if lhs.machineDirpath != rhs.machineDirpath {return false}
+    if lhs._identity != rhs._identity {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ResetBatteryRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ResetBatteryRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ResetBatteryRequest, rhs: Beebium_ResetBatteryRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ResetBatteryResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ResetBatteryResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}reset_units\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedStringField(value: &self.resetUnits) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.resetUnits.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.resetUnits, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ResetBatteryResponse, rhs: Beebium_ResetBatteryResponse) -> Bool {
+    if lhs.resetUnits != rhs.resetUnits {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 extension Beebium_GetSystemInfoRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".GetSystemInfoRequest"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap()
@@ -980,7 +1197,7 @@ extension Beebium_ConnectionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageI
 
 extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".SystemInfo"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{3}provenance\0\u{1}identity\0\u{1}connections\0\u{3}clock_speed_hz\0\u{3}protocol_fingerprint\0\u{3}executable_path\0\u{3}host_fingerprint\0\u{b}machine_type\0\u{b}machine_display_name\0\u{c}\u{1}\u{1}\u{c}\u{2}\u{1}")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{3}provenance\0\u{1}identity\0\u{1}connections\0\u{3}clock_speed_hz\0\u{3}protocol_fingerprint\0\u{3}executable_path\0\u{3}host_fingerprint\0\u{3}machine_dirpath\0\u{3}machine_saved\0\u{b}machine_type\0\u{b}machine_display_name\0\u{c}\u{1}\u{1}\u{c}\u{2}\u{1}")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -995,6 +1212,8 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       case 7: try { try decoder.decodeSingularStringField(value: &self.protocolFingerprint) }()
       case 8: try { try decoder.decodeSingularStringField(value: &self.executablePath) }()
       case 9: try { try decoder.decodeSingularStringField(value: &self.hostFingerprint) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self.machineDirpath) }()
+      case 11: try { try decoder.decodeSingularBoolField(value: &self.machineSaved) }()
       default: break
       }
     }
@@ -1026,6 +1245,12 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if !self.hostFingerprint.isEmpty {
       try visitor.visitSingularStringField(value: self.hostFingerprint, fieldNumber: 9)
     }
+    if !self.machineDirpath.isEmpty {
+      try visitor.visitSingularStringField(value: self.machineDirpath, fieldNumber: 10)
+    }
+    if self.machineSaved != false {
+      try visitor.visitSingularBoolField(value: self.machineSaved, fieldNumber: 11)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1037,6 +1262,8 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if lhs.protocolFingerprint != rhs.protocolFingerprint {return false}
     if lhs.executablePath != rhs.executablePath {return false}
     if lhs.hostFingerprint != rhs.hostFingerprint {return false}
+    if lhs.machineDirpath != rhs.machineDirpath {return false}
+    if lhs.machineSaved != rhs.machineSaved {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1465,7 +1692,7 @@ extension Beebium_WatchServerStatusRequest: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ServerStatusEvent"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}status\0\u{1}message\0\u{3}shutdown_grace_ms\0\u{1}identity\0\u{3}shutdown_conditions\0\u{3}reset_kind\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}status\0\u{1}message\0\u{3}shutdown_grace_ms\0\u{1}identity\0\u{3}shutdown_conditions\0\u{3}reset_kind\0\u{3}template_media_written\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1479,6 +1706,7 @@ extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._Messa
       case 4: try { try decoder.decodeSingularMessageField(value: &self._identity) }()
       case 5: try { try decoder.decodeRepeatedMessageField(value: &self.shutdownConditions) }()
       case 6: try { try decoder.decodeSingularEnumField(value: &self.resetKind) }()
+      case 7: try { try decoder.decodeSingularBoolField(value: &self.templateMediaWritten) }()
       default: break
       }
     }
@@ -1507,6 +1735,9 @@ extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if self.resetKind != .unspecified {
       try visitor.visitSingularEnumField(value: self.resetKind, fieldNumber: 6)
     }
+    if self.templateMediaWritten != false {
+      try visitor.visitSingularBoolField(value: self.templateMediaWritten, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1517,6 +1748,7 @@ extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if lhs._identity != rhs._identity {return false}
     if lhs.shutdownConditions != rhs.shutdownConditions {return false}
     if lhs.resetKind != rhs.resetKind {return false}
+    if lhs.templateMediaWritten != rhs.templateMediaWritten {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

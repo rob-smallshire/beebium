@@ -256,6 +256,19 @@ struct ContentView: View {
         renamePopover.show(in: window, systemClient: systemClient)
     }
 
+    /// Reflect the machine's document state on the window: the proxy icon (its
+    /// saved directory, or none while transient) and the unsaved-changes dot
+    /// (the server's template-media-written signal). Driven by changes to the
+    /// SystemClient fields and by the window appearing.
+    private func applyMachineDocumentChrome() {
+        guard let window = currentWindow else { return }
+        let state = MachineDocumentState(
+            savedDirpath: systemClient.machineSaved
+                ? URL(fileURLWithPath: systemClient.machineDirpath) : nil,
+            hasUnsavedChanges: systemClient.templateMediaWritten)
+        MachineWindowChrome.apply(state, to: window)
+    }
+
     private var emulatorView: some View {
         EmulatorView(
             videoClient: videoClient,
@@ -359,6 +372,13 @@ struct ContentView: View {
         // alone.
         .navigationSubtitle(duplicateNameWarning)
         .focusedValue(\.renameMachine, { beginRenamingMachine() })
+        .focusedValue(\.machineSaveActions, MachineSaveActions(
+            isSaved: systemClient.machineSaved,
+            save: { Task { await MachineSaving.save(systemClient: systemClient) } },
+            saveAs: { Task { await MachineSaving.saveAs(systemClient: systemClient) } }))
+        .onChange(of: systemClient.machineSaved) { _ in applyMachineDocumentChrome() }
+        .onChange(of: systemClient.machineDirpath) { _ in applyMachineDocumentChrome() }
+        .onChange(of: systemClient.templateMediaWritten) { _ in applyMachineDocumentChrome() }
         .alert(
             "Server / app version mismatch",
             isPresented: Binding(
@@ -553,6 +573,9 @@ struct ContentView: View {
         }))
         .onChange(of: currentWindow) { window in
             guard let window = window else { return }
+            // The proxy icon and edited dot, now that there is a window to carry
+            // them (the SystemClient fields may have arrived first).
+            applyMachineDocumentChrome()
             // Capture the NSWindow once; never update it. Used by Immersive Mode to
             // sidestep the transient-nil currentWindow during fullscreen transitions.
             if stableWindow == nil {

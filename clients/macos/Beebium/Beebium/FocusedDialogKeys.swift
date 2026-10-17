@@ -141,3 +141,23 @@ extension FocusedValues {
         set { self[RenameMachineActionKey.self] = newValue }
     }
 }
+
+// Save and Save As act on the machine in the focused window, so they are
+// focused values too. `isSaved` gates Save As, since only an already-saved
+// machine can be duplicated into a new directory.
+struct MachineSaveActions {
+    let isSaved: Bool
+    let save: () -> Void
+    let saveAs: () -> Void
+}
+
+struct MachineSaveActionsKey: FocusedValueKey {
+    typealias Value = MachineSaveActions
+}
+
+extension FocusedValues {
+    var machineSaveActions: MachineSaveActions? {
+        get { self[MachineSaveActionsKey.self] }
+        set { self[MachineSaveActionsKey.self] = newValue }
+    }
+}

@@ -75,6 +75,16 @@ internal protocol Beebium_SystemServiceClientProtocol: GRPCClient {
     _ request: Beebium_SetSpeedMultiplierRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_SetSpeedMultiplierRequest, Beebium_SetSpeedMultiplierResponse>
+
+  func saveMachine(
+    _ request: Beebium_SaveMachineRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse>
+
+  func resetBattery(
+    _ request: Beebium_ResetBatteryRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_ResetBatteryRequest, Beebium_ResetBatteryResponse>
 }
 
 extension Beebium_SystemServiceClientProtocol {
@@ -293,6 +303,52 @@ extension Beebium_SystemServiceClientProtocol {
       interceptors: self.interceptors?.makeSetSpeedMultiplierInterceptors() ?? []
     )
   }
+
+  /// Save the machine, without stopping it: its battery-backed state, last
+  /// screen and identity are written to its directory, which from then on
+  /// outlives the server. See SaveMachineRequest for the three forms.
+  /// Errors: INVALID_ARGUMENT for a machine not yet saved and no
+  /// destination; ALREADY_EXISTS for a destination that exists, unless
+  /// replace_existing; FAILED_PRECONDITION, with a message, for one that
+  /// cannot be replaced; INTERNAL, with a message, when the directory cannot
+  /// be written.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to SaveMachine.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func saveMachine(
+    _ request: Beebium_SaveMachineRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.saveMachine.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSaveMachineInterceptors() ?? []
+    )
+  }
+
+  /// Forget the machine's battery-backed state, as taking out the battery
+  /// does. It takes effect when the machine is next started: until then the
+  /// machine runs on, and nothing it holds now is kept by a shutdown or a
+  /// Save.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ResetBattery.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func resetBattery(
+    _ request: Beebium_ResetBatteryRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_ResetBatteryRequest, Beebium_ResetBatteryResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.resetBattery.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeResetBatteryInterceptors() ?? []
+    )
+  }
 }
 
 @available(*, deprecated)
@@ -413,6 +469,16 @@ internal protocol Beebium_SystemServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_SetSpeedMultiplierRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_SetSpeedMultiplierRequest, Beebium_SetSpeedMultiplierResponse>
+
+  func makeSaveMachineCall(
+    _ request: Beebium_SaveMachineRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse>
+
+  func makeResetBatteryCall(
+    _ request: Beebium_ResetBatteryRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_ResetBatteryRequest, Beebium_ResetBatteryResponse>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -556,6 +622,30 @@ extension Beebium_SystemServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeSetSpeedMultiplierInterceptors() ?? []
     )
   }
+
+  internal func makeSaveMachineCall(
+    _ request: Beebium_SaveMachineRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.saveMachine.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSaveMachineInterceptors() ?? []
+    )
+  }
+
+  internal func makeResetBatteryCall(
+    _ request: Beebium_ResetBatteryRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_ResetBatteryRequest, Beebium_ResetBatteryResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.resetBattery.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeResetBatteryInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -691,6 +781,30 @@ extension Beebium_SystemServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeSetSpeedMultiplierInterceptors() ?? []
     )
   }
+
+  internal func saveMachine(
+    _ request: Beebium_SaveMachineRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_SaveMachineResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.saveMachine.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSaveMachineInterceptors() ?? []
+    )
+  }
+
+  internal func resetBattery(
+    _ request: Beebium_ResetBatteryRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ResetBatteryResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.resetBattery.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeResetBatteryInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -744,6 +858,12 @@ internal protocol Beebium_SystemServiceClientInterceptorFactoryProtocol: Sendabl
 
   /// - Returns: Interceptors to use when invoking 'setSpeedMultiplier'.
   func makeSetSpeedMultiplierInterceptors() -> [ClientInterceptor<Beebium_SetSpeedMultiplierRequest, Beebium_SetSpeedMultiplierResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'saveMachine'.
+  func makeSaveMachineInterceptors() -> [ClientInterceptor<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'resetBattery'.
+  func makeResetBatteryInterceptors() -> [ClientInterceptor<Beebium_ResetBatteryRequest, Beebium_ResetBatteryResponse>]
 }
 
 internal enum Beebium_SystemServiceClientMetadata {
@@ -762,6 +882,8 @@ internal enum Beebium_SystemServiceClientMetadata {
       Beebium_SystemServiceClientMetadata.Methods.getPacingStats,
       Beebium_SystemServiceClientMetadata.Methods.watchPacingStats,
       Beebium_SystemServiceClientMetadata.Methods.setSpeedMultiplier,
+      Beebium_SystemServiceClientMetadata.Methods.saveMachine,
+      Beebium_SystemServiceClientMetadata.Methods.resetBattery,
     ]
   )
 
@@ -831,6 +953,18 @@ internal enum Beebium_SystemServiceClientMetadata {
       path: "/beebium.SystemService/SetSpeedMultiplier",
       type: GRPCCallType.unary
     )
+
+    internal static let saveMachine = GRPCMethodDescriptor(
+      name: "SaveMachine",
+      path: "/beebium.SystemService/SaveMachine",
+      type: GRPCCallType.unary
+    )
+
+    internal static let resetBattery = GRPCMethodDescriptor(
+      name: "ResetBattery",
+      path: "/beebium.SystemService/ResetBattery",
+      type: GRPCCallType.unary
+    )
   }
 }
 
@@ -881,6 +1015,22 @@ internal protocol Beebium_SystemServiceProvider: CallHandlerProvider {
 
   /// Set the runtime pacing speed multiplier.
   func setSpeedMultiplier(request: Beebium_SetSpeedMultiplierRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SetSpeedMultiplierResponse>
+
+  /// Save the machine, without stopping it: its battery-backed state, last
+  /// screen and identity are written to its directory, which from then on
+  /// outlives the server. See SaveMachineRequest for the three forms.
+  /// Errors: INVALID_ARGUMENT for a machine not yet saved and no
+  /// destination; ALREADY_EXISTS for a destination that exists, unless
+  /// replace_existing; FAILED_PRECONDITION, with a message, for one that
+  /// cannot be replaced; INTERNAL, with a message, when the directory cannot
+  /// be written.
+  func saveMachine(request: Beebium_SaveMachineRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SaveMachineResponse>
+
+  /// Forget the machine's battery-backed state, as taking out the battery
+  /// does. It takes effect when the machine is next started: until then the
+  /// machine runs on, and nothing it holds now is kept by a shutdown or a
+  /// Save.
+  func resetBattery(request: Beebium_ResetBatteryRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ResetBatteryResponse>
 }
 
 extension Beebium_SystemServiceProvider {
@@ -994,6 +1144,24 @@ extension Beebium_SystemServiceProvider {
         userFunction: self.setSpeedMultiplier(request:context:)
       )
 
+    case "SaveMachine":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_SaveMachineRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SaveMachineResponse>(),
+        interceptors: self.interceptors?.makeSaveMachineInterceptors() ?? [],
+        userFunction: self.saveMachine(request:context:)
+      )
+
+    case "ResetBattery":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ResetBatteryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ResetBatteryResponse>(),
+        interceptors: self.interceptors?.makeResetBatteryInterceptors() ?? [],
+        userFunction: self.resetBattery(request:context:)
+      )
+
     default:
       return nil
     }
@@ -1084,6 +1252,28 @@ internal protocol Beebium_SystemServiceAsyncProvider: CallHandlerProvider, Senda
     request: Beebium_SetSpeedMultiplierRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_SetSpeedMultiplierResponse
+
+  /// Save the machine, without stopping it: its battery-backed state, last
+  /// screen and identity are written to its directory, which from then on
+  /// outlives the server. See SaveMachineRequest for the three forms.
+  /// Errors: INVALID_ARGUMENT for a machine not yet saved and no
+  /// destination; ALREADY_EXISTS for a destination that exists, unless
+  /// replace_existing; FAILED_PRECONDITION, with a message, for one that
+  /// cannot be replaced; INTERNAL, with a message, when the directory cannot
+  /// be written.
+  func saveMachine(
+    request: Beebium_SaveMachineRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_SaveMachineResponse
+
+  /// Forget the machine's battery-backed state, as taking out the battery
+  /// does. It takes effect when the machine is next started: until then the
+  /// machine runs on, and nothing it holds now is kept by a shutdown or a
+  /// Save.
+  func resetBattery(
+    request: Beebium_ResetBatteryRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ResetBatteryResponse
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -1204,6 +1394,24 @@ extension Beebium_SystemServiceAsyncProvider {
         wrapping: { try await self.setSpeedMultiplier(request: $0, context: $1) }
       )
 
+    case "SaveMachine":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_SaveMachineRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SaveMachineResponse>(),
+        interceptors: self.interceptors?.makeSaveMachineInterceptors() ?? [],
+        wrapping: { try await self.saveMachine(request: $0, context: $1) }
+      )
+
+    case "ResetBattery":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ResetBatteryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ResetBatteryResponse>(),
+        interceptors: self.interceptors?.makeResetBatteryInterceptors() ?? [],
+        wrapping: { try await self.resetBattery(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -1255,6 +1463,14 @@ internal protocol Beebium_SystemServiceServerInterceptorFactoryProtocol: Sendabl
   /// - Returns: Interceptors to use when handling 'setSpeedMultiplier'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeSetSpeedMultiplierInterceptors() -> [ServerInterceptor<Beebium_SetSpeedMultiplierRequest, Beebium_SetSpeedMultiplierResponse>]
+
+  /// - Returns: Interceptors to use when handling 'saveMachine'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeSaveMachineInterceptors() -> [ServerInterceptor<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse>]
+
+  /// - Returns: Interceptors to use when handling 'resetBattery'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeResetBatteryInterceptors() -> [ServerInterceptor<Beebium_ResetBatteryRequest, Beebium_ResetBatteryResponse>]
 }
 
 internal enum Beebium_SystemServiceServerMetadata {
@@ -1273,6 +1489,8 @@ internal enum Beebium_SystemServiceServerMetadata {
       Beebium_SystemServiceServerMetadata.Methods.getPacingStats,
       Beebium_SystemServiceServerMetadata.Methods.watchPacingStats,
       Beebium_SystemServiceServerMetadata.Methods.setSpeedMultiplier,
+      Beebium_SystemServiceServerMetadata.Methods.saveMachine,
+      Beebium_SystemServiceServerMetadata.Methods.resetBattery,
     ]
   )
 
@@ -1340,6 +1558,18 @@ internal enum Beebium_SystemServiceServerMetadata {
     internal static let setSpeedMultiplier = GRPCMethodDescriptor(
       name: "SetSpeedMultiplier",
       path: "/beebium.SystemService/SetSpeedMultiplier",
+      type: GRPCCallType.unary
+    )
+
+    internal static let saveMachine = GRPCMethodDescriptor(
+      name: "SaveMachine",
+      path: "/beebium.SystemService/SaveMachine",
+      type: GRPCCallType.unary
+    )
+
+    internal static let resetBattery = GRPCMethodDescriptor(
+      name: "ResetBattery",
+      path: "/beebium.SystemService/ResetBattery",
       type: GRPCCallType.unary
     )
   }
