@@ -59,8 +59,8 @@ ship the `extensions/` tree.
 
 ### Build Directory (Development)
 
-After building, ROMs are copied to `build/roms/`, generated presets sit beside
-the executables, and bundled disc masters are decompressed to `build/discs/`:
+After building, ROMs are copied to `build/roms/` and the generated presets sit
+beside the executables:
 
 ```
 build/
@@ -72,13 +72,10 @@ build/
 │   ├── acorn-mos_1_20.rom
 │   ├── acorn-mos_2_0.rom
 │   └── bbc-basic_2.rom, ...
-└── discs/
-    └── l3fs-v1_26b.dat, l3fs-v1_26b.dsc, l3fs-v1_26b.json
 ```
 
 The executable finds ROMs in the nearest `roms/` directory at or above its own
-directory (`build/src/server/` -> `build/roms/`), and bundled discs likewise in
-the nearest `discs/`.
+directory (`build/src/server/` -> `build/roms/`).
 
 ### Installed Layout (FHS-Compliant)
 
@@ -94,8 +91,7 @@ When installed via `cmake --install`, the tree is relocatable and self-describin
 │   └── libbeebium_extension_ui_proto.so
 └── share/beebium/
     ├── roms/      (acorn-mos_1_20.rom, ...)
-    ├── presets/   (*.beebium-preset)
-    └── discs/     (bundled disc masters, read-only)
+    └── presets/   (*.beebium-preset)
 ```
 
 The server binaries carry an `$ORIGIN`-relative `RPATH` (`@loader_path` on macOS),
@@ -117,9 +113,8 @@ is entirely relative to the binary's own location, all of these work unchanged.
 For the self-contained, statically linked bundles (and how they are built,
 validated, and shipped), see [Packaging and Distribution](packaging.md).
 
-The executable locates ROMs via `../share/beebium/roms/`, presets via
-`../share/beebium/presets/`, and disc masters via `../share/beebium/discs/`,
-relative to its directory.
+The executable locates ROMs via `../share/beebium/roms/` and presets via
+`../share/beebium/presets/`, relative to its directory.
 
 ## ROM Discovery Algorithm
 
@@ -168,8 +163,7 @@ The CMake install rules handle:
 - Plugin extensions (library, `manifest.json`, firmware) to `bin/extensions/<name>/`
 - The extension ABI libraries to `lib/`
 - ROM files (`.rom`) to `share/beebium/roms/`
-- System presets and their thumbnails to `share/beebium/presets/`
-- Bundled disc masters (`.dat`, `.dsc`, and the `.json` naming each), read-only, to `share/beebium/discs/`
+- System presets, each an archive holding its thumbnail and any disc it carries, to `share/beebium/presets/`
 
 ## Preset Discovery
 
@@ -182,7 +176,7 @@ System presets (shipped with the software) are searched in this order:
 3. `<executable_dir>/../share/beebium/presets/` (installed layout)
 
 Every stored preset is a `<id>.beebium-preset` zip archive holding its
-`preset.json` and its `thumbnail.png`. User presets (created with
+`preset.json`, its `thumbnail.png` and any file it carries (a disc, say). User presets (created with
 `create-preset` / `import-preset`) live in
 `presets/` in the per-user state directory (below). `list-presets --format jsonl` gives each preset's `filepath`.
 A preset id is looked up among the system presets first, then the user
@@ -190,22 +184,16 @@ presets.
 
 ## Bundled Discs and Machine Directories
 
-Some presets ship a hard-disc image -- for example the Level 3 File Server
-preset carries a SCSI image. These **master** images live read-only alongside
-the ROMs and presets:
-
-- Build tree: `<build>/discs/`
-- Installed: `<prefix>/share/beebium/discs/`
-
-Masters are committed compressed (`discs/bundled/<id>.tar.xz`, tiny because the
-images are almost entirely empty) and decompressed at build time. Beside each,
-`discs/bundled/<id>.json` gives the name a user sees (`{"display_name": "Acorn
-Level 3 File Server 1.26"}`), which `describe-preset-schema` reports. It is
-required: configuration fails naming a missing one, and a master directory's
-`.dat` and `.dsc` without it are not a master. They are
-**immutable**: the emulated filing system writes to disc, so the server never
-opens a master. This keeps a shipped image (or a signed/sealed macOS app
-bundle) from ever being modified.
+Some presets need a hard-disc image -- for example the Level 3 File Server
+preset needs its SCSI disc. Such a preset **carries** its disc: the image is
+inside the preset's archive, beside `preset.json`, and the server ships no disc
+images anywhere else. The disc is committed compressed
+(`discs/bundled/<id>.tar.xz`, tiny because the image is almost entirely empty)
+and extracted into the preset as the build puts it together. A user who wants
+the Level 3 machine again duplicates its preset (`create-preset --from
+model-b-l3fs-aun --name ...`, which takes the disc with it); one who wants the
+image itself unpacks the preset (`export-preset model-b-l3fs-aun --unpack
+--output <dir>`).
 
 **Every running machine has a directory of its own**, under `machines/` in
 the per-user directory, which it holds locked while it runs and which is
@@ -214,14 +202,14 @@ not is removed by the next launch, with one line saying so). Media a template
 names by search or by position within itself is the machine's own copy;
 media the user names by location is the user's own file. So:
 
-- a disc found by search -- a bare name beside the preset, in the per-user
-  `discs/`, or among the masters -- is copied into the machine's directory and
-  the copy is opened;
-- a disc named by a path inside the preset's directory (`discs/game.ssd`) is
-  copied in too, at the same relative path;
-- a disc named by an absolute or `~/` path outside the preset's directory,
-  given on the command line, or inserted while the machine runs is opened in
-  place, read/write.
+- a disc found by search -- a bare name in the preset (beside its document) or
+  in the per-user `discs/` -- is copied into the machine's directory and the
+  copy is opened;
+- a disc named by a path inside the preset (`discs/game.ssd`) is copied in
+  too, at the same relative path;
+- a disc named by an absolute or `~/` path outside the preset, given on the
+  command line, or inserted while the machine runs is opened in place,
+  read/write.
 
 A bare name is looked for as any file reference is
 ([preset-schema.md](preset-schema.md#file-references)). To use a downloaded
@@ -246,9 +234,9 @@ moved separately (see Environment Variables). `report-aun-map-filepath`
 prints the map file path in effect. For the map file and the hint file, see
 `docs/networking.md`.
 
-**Versioning**: masters are version-named (e.g. `l3fs-v1_26b.dat`). A revised
-image ships under a NEW name -- a master is never mutated in place, so nobody
-can accidentally ship a same-named image with different contents.
+**Versioning**: bundled discs are version-named (e.g. `l3fs-v1_26b.dat`). A
+revised image ships under a NEW name, so nobody can accidentally ship a
+same-named image with different contents.
 
 **Regenerating a bundled disc**: the committed `.tar.xz` under `discs/bundled/`
 is the build input, but it is regenerable from parts, not a hand-made blob. For
@@ -267,8 +255,8 @@ and liblzma. That is the maintenance check:
 the two tarballs are identical and their image is identical to the committed
 one.
 
-A preset references a bundled image by its bare filename, which the machine
-copies.
+A preset references the disc it carries by its bare filename, which the
+machine copies.
 
 Note: mDNS **advertisement** (`--advertise`) is a runtime/environment concern,
 not machine configuration, so it is a `start` flag and never part of a preset
@@ -284,7 +272,6 @@ launcher enables it.
 | `BEEBIUM_ROM_DIR` | Path to ROM directory (overrides auto-detection) |
 | `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets (overrides auto-detection) |
 | `BEEBIUM_USER_DIRPATH` | The per-user state directory (overrides the platform default); its `presets/`, `discs/`, `aun-map.json` and `aun-auto-next` follow it. For tests and CI, to keep a run away from the real user's files |
-| `BEEBIUM_DISC_DIR` | Path to the bundled disc **master** directory (overrides auto-detection) |
 | `BEEBIUM_AUN_MAP_FILEPATH` | AUN map file path (overrides the per-user `aun-map.json`; `--aun map-file=` overrides this, and `map-file=none` disables the map file) |
 | `BEEBIUM_AUN_AUTO_STATE_FILEPATH` | AUN automatic-station hint file (overrides the per-user `aun-auto-next`; `none` disables the hint) |
 

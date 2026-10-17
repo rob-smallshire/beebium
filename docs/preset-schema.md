@@ -1,11 +1,26 @@
 # Preset Schema
 
-A **preset** is a JSON document (`preset.json`, stored in a `<id>.beebium-preset` zip archive) that describes one machine
-configuration: the model, the ROMs, the disc and network hardware, the
-extensions plugged into it, and how it starts. `start --preset <id|filepath>`
-launches the machine a preset describes. A front-end's New Machine dialog
-edits a preset as a draft, launches it by writing it to a file and passing
-`--preset`, and saves it with `create-preset`.
+A **preset** is a JSON document that describes one machine configuration:
+the model, the ROMs, the disc and network hardware, the extensions plugged
+into it, and how it starts. `start --preset <id|path>` launches the machine a
+preset describes. A front-end's New Machine dialog edits a preset as a draft,
+launches it by writing it to a file and passing `--preset`, and saves it with
+`create-preset`.
+
+**Forms.** A stored preset -- system or user -- is one zip archive,
+`<id>.beebium-preset`, holding the document as `preset.json`, its thumbnail
+as `thumbnail.png`, and any file the document references from inside it (a
+disc image, a ROM). Anywhere a preset is given by path (`--preset`,
+`resolve-preset`, `show-preset`, `import-preset`, `export-preset`,
+`create-preset --from`) it may also be a **directory** laid out as the archive
+is, or a **lone document**. The form is told by what is there, not by its
+name: a file that starts as a zip archive does is an archive, whatever it is
+called; a directory holds its document as `preset.json`; any other file is the
+document itself, whatever it is called (`preset.json`, `my-game.json`). A
+directory or an archive is the container its references are written in; a
+lone document's container is the directory holding it. `import-preset` stores
+any of them as an archive, and `export-preset --unpack` writes the directory
+for editing.
 
 This document is the reference for the file format as the server implements
 it (`src/server/include/beebium/server/PresetLoader.hpp`, and `apply_preset` and
@@ -100,7 +115,11 @@ images, the MOS, and extension parameters whose manifest type is `filepath`
 (a hard-disc image, a coprocessor ROM, AUN's `map-file`). Every one of them,
 and every file named on the command line, is resolved by one rule. A
 reference is resolved from where it is written, its **container**: a preset's
-directory for a preset, the working directory for the command line. Values
+archive or directory (or the directory holding a lone preset document) for a
+preset, the working directory for the command line. An archive is anchored on
+its own path as if it were a directory, so `discs/game.ssd` written in
+`/p/elite.beebium-preset` is the member `discs/game.ssd`, and `../x.ssd` is the
+file `/p/x.ssd` beside it. Values
 given with `--preset` resolve as if written in the preset.
 
 1. **A bare name** (no directory component, such as `game.ssd` or
@@ -109,10 +128,11 @@ given with `--preset` resolve as if written in the preset.
    2. the per-user directory for that kind of resource: `discs/` for floppy
       and hard-disc images, `roms/` for ROMs, under the per-user Beebium
       directory ([deployment.md](deployment.md#environment-variables));
-   3. the system directory for it: the bundled disc masters
-      ([deployment.md](deployment.md#bundled-discs-and-machine-directories)), the ROM
-      directory ([deployment.md](deployment.md#rom-discovery-algorithm)), or,
-      for a coprocessor's ROM, the `roms/` of the plugin that ships it.
+   3. for a ROM, the system directory for it: the ROM directory
+      ([deployment.md](deployment.md#rom-discovery-algorithm)), or, for a
+      coprocessor's ROM, the `roms/` of the plugin that ships it. Discs have
+      none: a preset that needs one carries it
+      ([deployment.md](deployment.md#bundled-discs-and-machine-directories)).
 2. **A relative path with a directory component** (`discs/game.ssd`,
    `../roms/forth.rom`) is resolved against the container.
 3. **An absolute path** is used as it is; a path beginning `/` counts as
@@ -127,17 +147,16 @@ name, the server says so on one line, naming both files.
 What is done with a disc image found depends on who owns it. Media a
 template names by search or by position within itself is the machine's own
 copy; media the user names by location is the user's own file. A disc found
-by search (in the container, the per-user `discs/` or among the bundled
-masters), or named by a path inside the preset's directory, is copied into
-the machine's own directory, so the guest's writes change the machine and
-never the preset, the user's `discs/` or a master. A disc named by an
-absolute or `~/` path outside the preset's directory, or on the command line,
+by search (in the container or the per-user `discs/`), or named by a path
+inside the preset, is copied into the machine's own directory, so the guest's
+writes change the machine and never the preset or the user's `discs/`. A disc
+named by an absolute or `~/` path outside the preset, or on the command line,
 is opened in place, writable
 ([deployment.md](deployment.md#bundled-discs-and-machine-directories)). ROMs
 are only read.
 
-A `filepath` parameter its manifest does not declare `bundled` names a
-**location** the extension owns and may create (AUN's `map-file`), not a
+A `filepath` parameter its manifest declares neither `media` nor `bundled`
+names a **location** the extension owns and may create (AUN's `map-file`), not a
 resource: rules 2-4 apply, but it is never searched for, so a file that does
 not exist yet is not an error, and a bare value is the extension's own (such
 as `map-file: "none"`).
@@ -339,21 +358,19 @@ These properties are general manifest parameter properties, shown by
 `provider_of` `scsi` and its `scsi-id` is `unique`, so two discs may share a
 SCSI ID only on different adapters.
 
-A manifest may also declare a `filepath` parameter `bundled` with a kind: a
-bare name there refers to one of the images of that kind that ship with
-Beebium. There are two kinds. `hard-disc` (`scsi-hard-disc`'s `image`): a disc
-master in the server's disc directory, copied into each machine's directory,
-never opened itself
-([deployment.md](deployment.md#bundled-discs-and-machine-directories)). `rom` (a
-coprocessor's `rom`): one of the ROMs that extension itself ships in its
-`roms/` directory. The manifest decides which bare names may be given, and a
-name it does not ship is an error (write `./name` for a file of your own); the
-search of [File references](#file-references) decides where the file comes
-from, so a ROM of that name beside the preset or in the per-user `roms/` is
-used in place of the plugin's. `describe-preset-schema`
-lists the bundled images of both kinds, each with a `display_name`: a ROM's
-from its manifest `roms` entry, a disc master's from the `<name>.json` it
-must have beside it (a `.dat` and `.dsc` without one are not a master). No floppy images are bundled.
+A manifest says what a `filepath` parameter names
+([peripheral-extension-framework.md](peripheral-extension-framework.md)).
+`media` (`scsi-hard-disc`'s `image`, `"hard-disc"`): a medium, searched for by
+bare name and copied into each machine's directory, never opened itself
+([deployment.md](deployment.md#bundled-discs-and-machine-directories)).
+`bundled` (a coprocessor's `rom`, `"rom"`): one of the ROMs that extension
+itself ships in its `roms/` directory. The manifest decides which bare names
+may be given, and a name it does not ship is an error (write `./name` for a
+file of your own); the search of [File references](#file-references) decides
+where the file comes from, so a ROM of that name beside the preset or in the
+per-user `roms/` is used in place of the plugin's. `describe-preset-schema`
+lists the bundled ROMs, each with the `display_name` its manifest `roms` entry
+gives. No disc images ship with Beebium apart from those a preset carries.
 
 A parameter may declare `choices_from` `"serial-ports"` (`host-serial`'s
 `path`, Piconet's `device_path`): a UI may offer the host's serial ports,

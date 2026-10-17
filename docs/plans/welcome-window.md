@@ -1,5 +1,7 @@
 # Phase 10: Welcome Window
 
+> **Superseded** (2026-10, #136): a historical plan. Stored presets are now `.beebium-preset` zip archives; for the format and commands as they are, see [preset-schema.md](../preset-schema.md) and [cli.md](../cli.md#preset-management-subcommands).
+
 **Goal**: Provide a welcoming startup experience with quick access to presets.
 
 ## 10.1 Window Design

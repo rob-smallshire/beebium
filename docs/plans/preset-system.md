@@ -1,5 +1,7 @@
 # Preset System Design
 
+> **Superseded** (2026-10, #136): a historical plan. Stored presets are now `.beebium-preset` zip archives; for the format and commands as they are, see [preset-schema.md](../preset-schema.md) and [cli.md](../cli.md#preset-management-subcommands).
+
 ## Overview
 
 The Preset System provides a way to define and manage machine configurations. A preset is a named configuration that can be used to launch a new emulator core with specific settings (model type, ROM selection, disc images, peripherals, etc.).

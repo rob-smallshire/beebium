@@ -31,9 +31,11 @@ and log on from the client with `*I AM SYST` (ANFS's default file server is
 station 254). The bundled disc has users `SYST`, `ChrisC` and `HermannH`; the
 root catalogue holds `Library` and `Passwords`.
 
-The SCSI image is a bundled master (`l3fs-v1_26b.dat`) that each launch copies
-into the machine's own directory, so the file server starts from the shipped
-disc every time; what clients write to it lasts until the server shuts down. See [deployment.md](deployment.md#bundled-discs-and-machine-directories).
+The SCSI image (`l3fs-v1_26b.dat`) is carried inside the preset, and each
+launch copies it into the machine's own directory, so the file server starts
+from the shipped disc every time; what clients write to it lasts until the
+server shuts down. To use the image elsewhere, unpack the preset
+(`export-preset model-b-l3fs-aun --unpack --output <dir>`). See [deployment.md](deployment.md#bundled-discs-and-machine-directories).
 mDNS advertisement of the gRPC service (`--advertise`) is a launch flag, not
 part of the preset; the AUN transport's `_aun._udp` announcement is governed
 by `--aun discovery=` (default `on`). To keep a server off the LAN, override
