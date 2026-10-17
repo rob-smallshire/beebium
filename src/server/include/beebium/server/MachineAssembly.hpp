@@ -1077,6 +1077,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         // the plugin that ships it. Any other names a location the extension
         // owns, which is never searched.
         const auto container_dirpath = config.launch.reference_container_dirpath();
+        const auto disc_destination = beebium::server::DiscPaths::launch_copy_destination();
         for (const auto& p : manifest->parameters) {
             if (p.type != "filepath") continue;
             auto it = inst.config.find(p.key);
@@ -1084,7 +1085,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             if (p.bundled == "hard-disc") {
                 try {
                     it->second = beebium::server::DiscPaths::resolve_disc_image(
-                                     it->second, container_dirpath)
+                                     it->second, container_dirpath, disc_destination)
                                      .string();
                 } catch (const std::exception& e) {
                     std::cerr << "Error: cannot resolve disc image for '"

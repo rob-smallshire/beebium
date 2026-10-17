@@ -208,12 +208,27 @@ public:
         return user_resource_dirpath(ResourceKind::Disc);
     }
 
+    // Where a launch makes the working copy of a master, and how.
+    struct CopyDestination {
+        std::filesystem::path dirpath;
+        DiscWorkMode mode;
+    };
+
+    // The copy destination a launch uses: BEEBIUM_DISC_WORK_DIR in Scratch
+    // mode when it is set, else the per-user discs directory, Persistent.
+    static CopyDestination launch_copy_destination() {
+        if (auto env = beebium::platform::get_env("BEEBIUM_DISC_WORK_DIR")) {
+            return {std::filesystem::path(*env), DiscWorkMode::Scratch};
+        }
+        return {get_user_disc_working_dirpath(), DiscWorkMode::Persistent};
+    }
+
     // The path the emulator should open for a hard-disc "image" reference
-    // written in `container_dirpath`. Reads BEEBIUM_DISC_WORK_DIR to pick
-    // Scratch vs Persistent for a master's working copy, and uses
-    // find_disc_directory() as the master source.
+    // written in `container_dirpath`, using find_disc_directory() as the
+    // master source and making a master's working copy at `destination`.
     static std::filesystem::path resolve_disc_image(
-        const std::string& image, const std::filesystem::path& container_dirpath) {
+        const std::string& image, const std::filesystem::path& container_dirpath,
+        const CopyDestination& destination) {
         const auto master_dirpath = find_disc_directory();
         std::error_code ec;
         // Working copies are not user files: the per-user discs/ doubles as the
@@ -225,15 +240,8 @@ public:
         if (is_bare_reference(image) && master_dirpath &&
             std::filesystem::is_regular_file(*master_dirpath / image, ec) &&
             !std::filesystem::is_regular_file(container_dirpath / image, ec)) {
-            std::optional<std::filesystem::path> work_override;
-            if (auto env = beebium::platform::get_env("BEEBIUM_DISC_WORK_DIR")) {
-                work_override = std::filesystem::path(*env);
-            }
-            const DiscWorkMode mode =
-                work_override ? DiscWorkMode::Scratch : DiscWorkMode::Persistent;
-            const std::filesystem::path work_dir =
-                work_override ? *work_override : get_user_disc_working_dirpath();
-            return prepare_working_image(image, *master_dirpath, work_dir, mode);
+            return prepare_working_image(image, *master_dirpath, destination.dirpath,
+                                         destination.mode);
         }
         std::vector<std::filesystem::path> system_dirpaths;
         if (master_dirpath) system_dirpaths.push_back(*master_dirpath);
