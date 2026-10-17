@@ -555,26 +555,35 @@ suffix-stripped directory still opens from the command line.
 Pre-launch configuration stays on the CLI; only operations on a running
 machine are RPCs, following the existing rule.
 
-## 6. Sequencing
+## 6. Sequencing (revised 2026-10-17)
 
 1. **#135, path rule** (server): the one resolution rule of section 2 for
    every reference, tilde expansion, and the per-user `discs/` and `roms/`
    directories on the bare-name search path. Small, self-contained, and
    enough on its own to make Mark's pack install by drag-and-drop into two
    folders.
-2. **#136, preset archives** (server, then macOS): the zip stored form
+2. **#103a, transient machine directories** (server): every launch
+   instantiates its preset into a per-machine directory under the per-user
+   `machines/` area, the copy rules of 4.1 apply, the lock lands, and the
+   per-preset working copy keyed by image name in `DiscPaths` is retired
+   (with the migration offer of 4.7 deferred to step 4, when there is a
+   saved form to offer). No proto change.
+3. **#136, preset archives** (server, then macOS): the zip stored form
    with its vendored zip library and one-shot migration, `create-preset`
    writing zips for the build, the three input forms, `export-preset
-   --unpack`, multi-select Import panel (#134). Writable media shipped in an archive
-   are still handled by today's per-user working-copy mechanism until step
-   3, so such a hard disc behaves exactly like the L3FS preset's.
-3. **#103, machine directories** (server, then macOS): transient directories
-   and the copy rules of 4.1 first (this alone retires the per-preset working
-   copy and introduces the lock), then Save/Open, then the battery-state
-   serialise/restore surface with the Integra-B as the first unit.
+   --unpack`, multi-select Import panel (#134). Extraction into a machine
+   directory already exists after step 2, so a zip is simply its input and
+   writable media inside an archive need no special handling.
+4. **#103b, saved machines** (server, then macOS): Save/Open with the
+   document file and folder metadata of 4.11, the battery-state
+   serialise/restore surface with the Integra-B as the first unit,
+   `reset-battery`, the Machines page of the Welcome window, and the two
+   RPCs. The only step that moves the protocol fingerprint.
 
-Each step ships on its own and none needs a proto change until step 3's
-Save and ResetBattery RPCs.
+Step 2 was moved ahead of the archives so that writable media shipped in
+an archive never pass through the legacy per-user working copy, where two
+presets shipping an image of the same name would collide and the code
+would be discarded one step later.
 
 ## 7. Open questions
 
