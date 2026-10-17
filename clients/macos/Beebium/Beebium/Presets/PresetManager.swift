@@ -512,9 +512,6 @@ class PresetManager: ObservableObject {
     /// before starting emulation.
     /// - Returns: LaunchedCore on success, or error on failure
     func launchCore(_ preset: MachinePreset) async -> Result<LaunchedCore, CoreLaunchError> {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: preset.coreExecutablePath)
-
         let provenanceUUID = UUID().uuidString
 
         // Name the machine rather than letting the server fall back to the
@@ -536,42 +533,16 @@ class PresetManager: ObservableObject {
             presetMachineName: preset.machineName,
             presetDisplayName: preset.name)
 
-        var arguments = [
-            "start",
-            "--preset", preset.presetFilepath,
-            "--port", "0",
-            "--advertise",
-            "--wait=api",
-            "--machine-name", machineName,
-            "--machine-ordinal", "\(ordinal)",
-            "--provenance-type", "macos-gui",
-            "--provenance-uuid", provenanceUUID
-        ]
+        let arguments = Self.presetLaunchArguments(
+            presetFilepath: preset.presetFilepath,
+            machineName: machineName,
+            ordinal: ordinal,
+            provenanceUUID: provenanceUUID,
+            romDirpath: bundledRomDirpath())
 
-        // Pass ROM directory if running from app bundle with bundled ROMs
-        if let romDir = bundledRomDirpath() {
-            arguments.append(contentsOf: ["--rom-dir", romDir])
-        }
-
-        process.arguments = arguments
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        do {
-            try process.run()
-        } catch {
-            return .failure(.launchFailed("Failed to launch: \(error.localizedDescription)"))
-        }
-
-        NSLog("[PresetManager] Launched \(preset.coreExecutablePath) with args: \(arguments.joined(separator: " "))")
-
-        return await Self.awaitListeningPort(process: process,
-                                             stdoutPipe: stdoutPipe,
-                                             stderrPipe: stderrPipe,
-                                             provenanceUUID: provenanceUUID)
+        return await spawnCore(executablePath: preset.coreExecutablePath,
+                               arguments: arguments,
+                               provenanceUUID: provenanceUUID)
     }
 
     // MARK: - Preset resolution
@@ -647,9 +618,7 @@ class PresetManager: ObservableObject {
             return .failure(.launchFailed("Failed to write temporary preset: \(error.localizedDescription)"))
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = Self.draftLaunchArguments(
+        let arguments = Self.presetLaunchArguments(
             presetFilepath: presetURL.path,
             machineName: machineName,
             ordinal: ordinal,
@@ -657,9 +626,39 @@ class PresetManager: ObservableObject {
             romDirpath: bundledRomDirpath())
 
         // Remove the temporary preset once the process ends -- after every read
-        // of it, whether the launch succeeded, failed or timed out.
-        process.terminationHandler = { _ in
-            try? FileManager.default.removeItem(at: presetURL)
+        // of it, whether the launch succeeded, failed or timed out. spawnCore
+        // guarantees the handler runs exactly once: as the termination handler
+        // of a process that started, or directly if the spawn itself threw.
+        return await spawnCore(executablePath: executablePath,
+                               arguments: arguments,
+                               provenanceUUID: provenanceUUID,
+                               onTerminate: { _ in
+                                   try? FileManager.default.removeItem(at: presetURL)
+                               })
+    }
+
+    // MARK: - The one place a core process is spawned
+
+    /// Spawn a core process with the given arguments and wait for it to announce
+    /// its listening port. Every launch -- a preset file, an edited draft, and
+    /// (from the saved-machines work) an existing machine directory -- builds
+    /// its own argument list and hands it here, so the process creation, the
+    /// pipes and the port-wait are written once rather than per launch kind.
+    ///
+    /// `onTerminate`, when given, is run exactly once after the process can
+    /// produce no further reads: as the process's termination handler if it
+    /// started, or directly if `run()` threw. The draft launch uses it to
+    /// delete its temporary preset file.
+    private func spawnCore(executablePath: String,
+                           arguments: [String],
+                           provenanceUUID: String,
+                           onTerminate: (@Sendable (Process) -> Void)? = nil)
+        async -> Result<LaunchedCore, CoreLaunchError> {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = arguments
+        if let onTerminate {
+            process.terminationHandler = onTerminate
         }
 
         let stdoutPipe = Pipe()
@@ -670,11 +669,13 @@ class PresetManager: ObservableObject {
         do {
             try process.run()
         } catch {
-            try? FileManager.default.removeItem(at: presetURL)
+            // The termination handler never fires for a process that did not
+            // start, so run the cleanup here instead to keep it exactly-once.
+            onTerminate?(process)
             return .failure(.launchFailed("Failed to launch: \(error.localizedDescription)"))
         }
 
-        NSLog("[PresetManager] Launched \(executablePath) with args: \(process.arguments?.joined(separator: " ") ?? "")")
+        NSLog("[PresetManager] Launched \(executablePath) with args: \(arguments.joined(separator: " "))")
 
         return await Self.awaitListeningPort(process: process,
                                              stdoutPipe: stdoutPipe,
@@ -682,14 +683,15 @@ class PresetManager: ObservableObject {
                                              provenanceUUID: provenanceUUID)
     }
 
-    /// The `start` arguments for launching a draft preset file: server plumbing
-    /// only, no per-setting overrides. Pure, so the argument shape is testable
-    /// without a launch.
-    nonisolated static func draftLaunchArguments(presetFilepath: String,
-                                                 machineName: String,
-                                                 ordinal: Int,
-                                                 provenanceUUID: String,
-                                                 romDirpath: String?) -> [String] {
+    /// The `start` arguments for launching a preset file (a quick-launch of a
+    /// stored preset, or an edited draft written to a temporary file): server
+    /// plumbing only, no per-setting overrides. Pure, so the argument shape is
+    /// testable without a launch.
+    nonisolated static func presetLaunchArguments(presetFilepath: String,
+                                                  machineName: String,
+                                                  ordinal: Int,
+                                                  provenanceUUID: String,
+                                                  romDirpath: String?) -> [String] {
         var arguments = [
             "start",
             "--preset", presetFilepath,
@@ -698,6 +700,30 @@ class PresetManager: ObservableObject {
             "--wait=api",
             "--machine-name", machineName,
             "--machine-ordinal", "\(ordinal)",
+            "--provenance-type", "macos-gui",
+            "--provenance-uuid", provenanceUUID,
+        ]
+        if let romDirpath = romDirpath {
+            arguments.append(contentsOf: ["--rom-dir", romDirpath])
+        }
+        return arguments
+    }
+
+    /// The `start` arguments for opening an existing saved machine directory:
+    /// server plumbing only. Unlike a preset launch this carries no
+    /// `--machine-name` or `--machine-ordinal`: a saved machine's name and
+    /// identity live in its `machine.json`, which the server reads and reports,
+    /// so the app supplies only the plumbing it needs to own the process. Pure,
+    /// so the argument shape is testable without a launch.
+    nonisolated static func machineLaunchArguments(machineDirpath: String,
+                                                   provenanceUUID: String,
+                                                   romDirpath: String?) -> [String] {
+        var arguments = [
+            "start",
+            "--machine", machineDirpath,
+            "--port", "0",
+            "--advertise",
+            "--wait=api",
             "--provenance-type", "macos-gui",
             "--provenance-uuid", provenanceUUID,
         ]

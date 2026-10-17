@@ -14,12 +14,13 @@ import XCTest
 @testable import Beebium
 
 /// Tests for the pure plumbing behind launching and saving a MachineDraft: the
-/// `start` argument shape (server plumbing only, no per-setting overrides) and
+/// `start` argument shapes (server plumbing only, no per-setting overrides) for
+/// both launching a preset file and opening a saved machine directory, and
 /// serialising a draft to a temporary preset file.
 final class PresetManagerDraftLaunchTests: XCTestCase {
 
-    func testLaunchArgumentsAreServerPlumbingOnly() {
-        let args = PresetManager.draftLaunchArguments(
+    func testPresetLaunchArgumentsAreServerPlumbingOnly() {
+        let args = PresetManager.presetLaunchArguments(
             presetFilepath: "/tmp/x.beebium-preset",
             machineName: "Model B {machine-ordinal}",
             ordinal: 2,
@@ -45,11 +46,43 @@ final class PresetManagerDraftLaunchTests: XCTestCase {
         XCTAssertFalse(args.contains("--fdc"))
     }
 
-    func testLaunchArgumentsAppendRomDirWhenBundled() {
-        let args = PresetManager.draftLaunchArguments(
+    func testPresetLaunchArgumentsAppendRomDirWhenBundled() {
+        let args = PresetManager.presetLaunchArguments(
             presetFilepath: "/tmp/x.beebium-preset",
             machineName: "M {machine-ordinal}",
             ordinal: 1,
+            provenanceUUID: "U",
+            romDirpath: "/Applications/Beebium.app/roms")
+        XCTAssertEqual(args.suffix(2), ["--rom-dir", "/Applications/Beebium.app/roms"])
+    }
+
+    func testMachineLaunchArgumentsOpenASavedDirectory() {
+        let args = PresetManager.machineLaunchArguments(
+            machineDirpath: "/Users/me/Documents/Elite Server.beebium-machine",
+            provenanceUUID: "UUID-9",
+            romDirpath: nil)
+
+        XCTAssertEqual(args, [
+            "start",
+            "--machine", "/Users/me/Documents/Elite Server.beebium-machine",
+            "--port", "0",
+            "--advertise",
+            "--wait=api",
+            "--provenance-type", "macos-gui",
+            "--provenance-uuid", "UUID-9",
+        ])
+
+        // A saved machine carries its own name and identity in machine.json,
+        // which the server reads and reports; the app supplies only plumbing,
+        // never a preset, a name or an ordinal.
+        XCTAssertFalse(args.contains("--preset"))
+        XCTAssertFalse(args.contains("--machine-name"))
+        XCTAssertFalse(args.contains("--machine-ordinal"))
+    }
+
+    func testMachineLaunchArgumentsAppendRomDirWhenBundled() {
+        let args = PresetManager.machineLaunchArguments(
+            machineDirpath: "/m/x.beebium-machine",
             provenanceUUID: "U",
             romDirpath: "/Applications/Beebium.app/roms")
         XCTAssertEqual(args.suffix(2), ["--rom-dir", "/Applications/Beebium.app/roms"])
