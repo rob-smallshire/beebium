@@ -2066,6 +2066,15 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_machine_document)
 
+    # Battery-backed units' contents kept in files (NvramStore.hpp)
+    add_executable(test_nvram_store test_nvram_store.cpp)
+    target_link_libraries(test_nvram_store PRIVATE
+        beebium_server_headers
+        beebium_core
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_nvram_store)
+
     # Atomic file replacement (AtomicFile.hpp) and the preset writer on it
     add_executable(test_atomic_file test_atomic_file.cpp)
     target_link_libraries(test_atomic_file PRIVATE
