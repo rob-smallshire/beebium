@@ -112,14 +112,23 @@ TEST_CASE("A key outside its provider's domains is refused", "[name][placeholder
     FakeProvider prefix({"econet"}, {info("econetwork-name")});
     CHECK_THROWS(registry.add(prefix, "prefix"));
 
-    // Nor is the domain alone.
-    FakeProvider domain_only({"econet"}, {info("econet")});
-    CHECK_THROWS(registry.add(domain_only, "domain-only"));
+    // A key in another provider's domain is refused even when it is that
+    // domain alone.
+    FakeProvider other_domain({"scsi"}, {info("econet")});
+    CHECK_THROWS(registry.add(other_domain, "other-domain"));
 
     FakeProvider foreign({"scsi"}, {info("machine-model")});
     CHECK_THROWS(registry.add(foreign, "foreign"));
 
     CHECK(registry.snapshot().empty());
+}
+
+TEST_CASE("A domain's one placeholder may be the domain itself", "[name][placeholders]") {
+    NamePlaceholderRegistry registry;
+    FakeProvider document({"document"}, {info("document")});
+    REQUIRE_NOTHROW(registry.add(document, "document"));
+    REQUIRE(registry.snapshot().size() == 1);
+    CHECK(registry.snapshot().front().key == "document");
 }
 
 TEST_CASE("A domain belongs to one provider", "[name][placeholders]") {

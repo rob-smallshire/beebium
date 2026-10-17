@@ -112,7 +112,17 @@ public:
 
     /// Where the machine is kept on disk, for SaveMachine, ResetBattery and
     /// SystemInfo. Call before start(); it must outlive the server.
-    void set_machine_store(MachineStore* store) { impl_->machine_store = store; }
+    void set_machine_store(MachineStore* store) {
+        impl_->machine_store = store;
+        impl_->document_name_placeholders.set_machine_store(store);
+    }
+
+    /// The template of the name a machine not yet saved would have, which
+    /// {document} renders for it. Call before start().
+    void set_default_name_template(std::string name_template) {
+        impl_->document_name_placeholders.set_default_template(std::move(name_template),
+                                                              &impl_->name_placeholders);
+    }
 
     /// The frame the machine last presented, as clients are sent it.
     const FrameBuffer& frame_buffer() const { return impl_->frame_buffer; }
@@ -192,6 +202,7 @@ private:
         EconetNamePlaceholders<MachineType> econet_name_placeholders{machine};
         StorageNamePlaceholders<MachineType> storage_name_placeholders{machine};
         CoprocessorNamePlaceholders coprocessor_name_placeholders;
+        DocumentNamePlaceholders document_name_placeholders;
         NamePlaceholderRegistry name_placeholders;
 
         TeletextGrid teletext_grid;
@@ -227,6 +238,7 @@ private:
             name_placeholders.add(econet_name_placeholders, "econet socket");
             name_placeholders.add(storage_name_placeholders, "disc controller socket");
             name_placeholders.add(coprocessor_name_placeholders, "tube coprocessor");
+            name_placeholders.add(document_name_placeholders, "machine document");
         }
 
         // Background thread that consumes video_output queue and renders to frame_buffer

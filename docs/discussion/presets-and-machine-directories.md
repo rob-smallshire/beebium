@@ -309,6 +309,14 @@ machine; Save proposes that name for the file. A saved machine's display name
 is the name in `machine.json`, not the directory name, so renaming the
 directory in Finder does not rename the machine (question 1).
 
+*Revised at step 4 (2026-10-17), after a hands-on check in which two machines
+forked by Save As showed the same title:* a document's name is its
+directory's name. A saved machine is shown by `{document}`, its directory's
+name without the suffix, read when it is opened, so a Finder rename shows at
+its next open; `machine.json` keeps the name template, which shows only when
+it places `{document}` itself (`"{document} (station {econet-station})"`).
+See [cli.md](../cli.md#machine-name).
+
 The `source preset` field records which preset the machine
 was instantiated from, as information only. A later change to the preset
 does not touch the machine (question 2).

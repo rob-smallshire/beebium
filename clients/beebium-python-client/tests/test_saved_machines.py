@@ -33,6 +33,7 @@ import pytest
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.installation import ServerInstallation
+from beebium.client.system import ServerStatus
 from beebium.ext.peripheral.acorn_rtc import AcornRtc
 
 EX_CANTCREAT = 73
@@ -100,6 +101,7 @@ def test_create_machine_makes_a_described_machine_directory(run, describe, tmp_p
 
     description = describe(machine)
     assert description["machine_dirpath"] == str(machine)
+    assert description["document_name"] == "Disc Machine"
     assert description["model"] == "model-b"
     assert description["preset"] == "model-b-disc"
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", description["created"])
@@ -138,6 +140,7 @@ def test_a_machine_keeps_its_identity_on_every_run(installation, run, describe,
             identity = bbc.system.identity
             assert identity.uuid == uuid
             assert identity.name_template == "Kept {model}"
+            assert identity.name == "Kept"  # known by its document's name
         assert describe(machine)["uuid"] == uuid
     assert "last_used" in describe(machine)
 
@@ -244,9 +247,18 @@ def test_save_as_makes_another_machine_and_runs_on_from_it(installation, run, de
 
     with _launch(installation, original) as bbc:
         _run_for(bbc, 0.5)
+        assert bbc.system.identity.name == "Original"
+        events = bbc.system.watch_status()
+        assert next(events).status == ServerStatus.READY
         saved = bbc.system.save_machine(copy)
         assert saved.machine_dirpath == str(copy)
         assert saved.identity.uuid != original_uuid
+        # The fork is known by its own document's name, announced at once.
+        assert saved.identity.name == "Copy"
+        changed = next(e for e in events if e.status == ServerStatus.IDENTITY_CHANGED)
+        events.close()
+        assert changed.identity.name == "Copy"
+        assert changed.identity.uuid == saved.identity.uuid
         assert bbc.system.identity.uuid == saved.identity.uuid
         assert bbc.system.machine_dirpath == str(copy)
 
@@ -301,6 +313,24 @@ def test_a_save_replaces_a_saved_machine_only_when_asked_and_only_one_it_may(
 
     with _launch(installation, old) as bbc:
         assert bbc.system.identity.uuid == uuid
+
+
+def test_document_names_a_machine_not_yet_saved_as_a_launcher_would(installation):
+    """For a machine not yet saved, {document} is the name it would otherwise
+    have: its preset's (here, with none, its model's) and its instance number."""
+    with Beebium.launch(server=installation,
+                        extra_args=["--machine-name", "{document} here",
+                                    "--machine-ordinal", "3"]) as bbc:
+        assert bbc.system.identity.name == "BBC Model B #3 here"
+
+
+def test_a_saved_machine_that_places_its_document_name_keeps_the_rest(
+        installation, run, tmp_path: Path):
+    machine = tmp_path / "Elite.beebium-machine"
+    assert run("create-machine", "--machine-name", "{document} ({machine-model})",
+               "--output", machine).returncode == 0
+    with _launch(installation, machine) as bbc:
+        assert bbc.system.identity.name == "Elite (BBC Model B)"
 
 
 def test_a_saved_machine_keeps_its_new_name_and_its_last_screen(installation, run, describe,

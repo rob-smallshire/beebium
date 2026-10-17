@@ -75,14 +75,4 @@ MachineRecord new_machine_record(const ServerConfig<MachineType>& config, std::s
     return record;
 }
 
-// The name a machine's folder is shown by: its name, unless that is a
-// template, which only a running server can render; then the directory's.
-inline std::string machine_display_name(const MachineRecord& record,
-                                        const std::filesystem::path& dirpath) {
-    if (record.name.find('{') == std::string::npos) return record.name;
-    auto stem = dirpath.filename();
-    return stem.extension() == machine_layout::DOCUMENT_SUFFIX ? stem.stem().string()
-                                                               : stem.string();
-}
-
 }  // namespace beebium::server

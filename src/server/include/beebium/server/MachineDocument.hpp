@@ -227,6 +227,16 @@ inline void write_machine_record(const std::filesystem::path& dirpath,
     write_text_atomically(dirpath / machine_layout::RECORD_FILENAME, machine_record_text(record));
 }
 
+// The name of the document a machine directory is: the directory's name
+// without the document suffix ("Elite Server" for "Elite
+// Server.beebium-machine"), what {document} renders for a saved machine.
+inline std::string machine_document_name(const std::filesystem::path& dirpath) {
+    auto filename = dirpath.filename();
+    if (filename.empty()) filename = dirpath.parent_path().filename();
+    return filename.extension() == machine_layout::DOCUMENT_SUFFIX ? filename.stem().string()
+                                                                   : filename.string();
+}
+
 // The document file of the machine directory `dirpath`: named after the
 // directory, with the document suffix whether or not the directory has it.
 inline std::filesystem::path machine_document_filepath(const std::filesystem::path& dirpath) {

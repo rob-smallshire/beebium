@@ -58,7 +58,8 @@
 //
 // Keys are lowercase ASCII words joined by single hyphens; a word is a letter
 // followed by letters or digits: `econet-station`, `scsi-id0-title`. Every
-// key begins with its owner's domain, a single word (`econet`, `machine`);
+// key begins with its owner's domain, a single word (`econet`, `machine`),
+// or is the domain itself, for a domain with one placeholder (`document`);
 // the placeholder registry enforces that.
 
 #ifndef BEEBIUM_NAME_TEMPLATE_HPP

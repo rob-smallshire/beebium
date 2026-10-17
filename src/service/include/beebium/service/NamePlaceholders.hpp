@@ -21,7 +21,9 @@
 #include "beebium/econet/AunBackend.hpp"
 #include "beebium/extension/CoprocessorExtension.hpp"
 #include "beebium/extension/EconetTransportRegistry.hpp"
+#include "beebium/NamePlaceholderRegistry.hpp"
 #include "beebium/extension/NamePlaceholderProvider.hpp"
+#include "beebium/service/MachineStore.hpp"
 
 #include <atomic>
 #include <optional>
@@ -67,6 +69,18 @@ inline std::vector<NamePlaceholderInfo> econet_name_placeholder_infos() {
          "sidebar labels it; empty when Econet is fitted with no "
          "transport. Changes when Econet is enabled or disabled.",
          "Econet"},
+    };
+}
+
+inline std::vector<NamePlaceholderInfo> document_name_placeholder_infos() {
+    return {
+        {"document", "Document name",
+         "The name of a saved machine's document: its directory's name without "
+         "the .beebium-machine suffix, as it was when the machine was opened "
+         "or saved. For a machine not yet saved, the name it would otherwise "
+         "have: its preset's name and instance number. A saved machine whose "
+         "name does not use it is shown by this name alone.",
+         "Machine"},
     };
 }
 
@@ -130,6 +144,46 @@ private:
     const std::string model_name_;
     std::string preset_name_;
     std::optional<unsigned> ordinal_;
+};
+
+// The `document` domain: the one placeholder {document}, the name a machine
+// is known by as a document. A saved machine's comes from its store; one not
+// yet saved has none, and renders its default name instead.
+class DocumentNamePlaceholders final : public NamePlaceholderProvider {
+public:
+    // Where the machine is kept, or nullptr. Set before the server starts.
+    void set_machine_store(const MachineStore* store) { store_ = store; }
+
+    // The template of the name a machine not yet saved would have, and the
+    // registry to render it with. Any {document} in it is dropped, so it
+    // cannot refer to itself. Set before the server starts.
+    void set_default_template(std::string name_template, const NamePlaceholderRegistry* registry) {
+        static constexpr std::string_view self = "{document}";
+        for (auto at = name_template.find(self); at != std::string::npos;
+             at = name_template.find(self)) {
+            name_template.erase(at, self.size());
+        }
+        default_template_ = std::move(name_template);
+        registry_ = registry;
+    }
+
+    std::vector<std::string> placeholder_domains() const override { return {"document"}; }
+
+    std::vector<NamePlaceholderInfo> placeholders() const override {
+        return document_name_placeholder_infos();
+    }
+
+    NamePlaceholderValue placeholder_value(std::string_view key) const override {
+        if (key != "document") return {"", false};
+        if (store_ && store_->machine_saved()) return {store_->document_name(), true};
+        if (!registry_) return {"", true};
+        return {registry_->render(default_template_).text, true};
+    }
+
+private:
+    const MachineStore* store_ = nullptr;
+    std::string default_template_;
+    const NamePlaceholderRegistry* registry_ = nullptr;
 };
 
 // The `econet` domain: the Econet socket and its transport. Every value is

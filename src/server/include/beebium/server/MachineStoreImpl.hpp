@@ -105,6 +105,12 @@ public:
         return !am_.machine_directory->transient();
     }
 
+    std::string document_name() const override {
+        std::lock_guard lock(mutex_);
+        if (am_.machine_directory->transient()) return {};
+        return machine_document_name(am_.machine_directory->dirpath());
+    }
+
     bool template_media_written() const override {
         std::lock_guard lock(mutex_);
         if (!am_.machine_directory->transient()) return false;
@@ -163,7 +169,7 @@ public:
         record->name = name_template;
         try {
             write_machine_record(dirpath, *record);
-            write_machine_document_files(dirpath, *record, machine_display_name(*record, dirpath));
+            write_machine_document_files(dirpath, *record, machine_document_name(dirpath));
         } catch (const std::exception& e) {
             std::cerr << "Warning: cannot record the machine's new name: " << e.what() << "\n";
         }
@@ -239,7 +245,7 @@ private:
         if (!record) throw std::runtime_error(error);
         record->name = name_template;
         write_machine_record(home, *record);
-        write_machine_document_files(home, *record, machine_display_name(*record, home));
+        write_machine_document_files(home, *record, machine_document_name(home));
     }
 
     // Why the existing `target` cannot be replaced by the machine at `home`,
@@ -328,7 +334,7 @@ private:
             template_stamps_.clear();
             try {
                 write_machine_document_files(target, record,
-                                             machine_display_name(record, target));
+                                             machine_document_name(target));
             } catch (const std::exception& e) {
                 std::cerr << "Warning: cannot write the machine's document file and folder "
                              "metadata: "

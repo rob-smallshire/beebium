@@ -269,6 +269,20 @@ public:
                 register_extension_name_placeholders(server, *transport);
             }
             server.set_launch_preset_name(config.launch.preset_name);
+            // What {document} renders for a machine not yet saved: its
+            // preset's name (else the model's) and its instance number, as a
+            // launcher names a new machine.
+            {
+                std::string base = config.launch.preset_name.empty()
+                                       ? std::string(Memory::MACHINE_DISPLAY_NAME)
+                                       : config.launch.preset_name;
+                std::string escaped;
+                for (char c : base) {
+                    escaped += c;
+                    if (c == '{' || c == '}') escaped += c;
+                }
+                server.set_default_name_template(escaped + " {machine-ordinal}");
+            }
             server.set_launch_coprocessor(am.coprocessor);
             if (config.launch.machine_ordinal) {
                 server.set_launch_ordinal(*config.launch.machine_ordinal);

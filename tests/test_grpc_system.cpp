@@ -611,11 +611,13 @@ class FakeMachineStore final : public beebium::service::MachineStore {
 public:
     std::string machine_dirpath() const override { return dirpath; }
     bool machine_saved() const override { return saved; }
+    std::string document_name() const override { return saved ? document : std::string(); }
     bool template_media_written() const override { return written; }
     SaveOutcome save(const std::string& destination, bool replace_existing,
                      const std::string& uuid, const std::string& name_template) override {
         asked_destination = destination;
         asked_replace = replace_existing;
+        if (outcome.error == SaveOutcome::Error::None) saved = true;
         asked_uuid = uuid;
         asked_name_template = name_template;
         return outcome;
@@ -624,6 +626,7 @@ public:
     void renamed(const std::string& name_template) override { renamed_to = name_template; }
 
     std::string dirpath = "/machines/transient";
+    std::string document = "Elite";
     bool saved = false;
     bool written = true;
     SaveOutcome outcome;
@@ -729,6 +732,72 @@ TEST_CASE("SystemService reports and saves the machine through its store", "[grp
         CHECK(event.status() == beebium::SERVER_STATUS_READY);
         CHECK(event.template_media_written());
         context.TryCancel();
+        while (reader->Read(&event)) {}
+        reader->Finish();
+    }
+}
+
+TEST_CASE("SystemService names a saved machine by its document", "[grpc][system][save][name]") {
+    auto identity_named = [](std::string name_template) {
+        beebium::service::MachineIdentity identity;
+        identity.name_template = std::move(name_template);
+        return identity;
+    };
+    auto name_of = [](SystemTestFixture& fixture) {
+        grpc::ClientContext context;
+        beebium::SystemInfo info;
+        REQUIRE(fixture.system().GetSystemInfo(&context, {}, &info).ok());
+        return std::make_pair(info.identity().name(), info.identity().name_template());
+    };
+
+    SECTION("a template that does not place {document} gives way to it") {
+        FakeMachineStore store;
+        store.saved = true;
+        SystemTestFixture fixture({}, identity_named("BBC Model B {machine-ordinal}"), true, &store);
+        CHECK(name_of(fixture) == std::make_pair(std::string("Elite"),
+                                                 std::string("BBC Model B {machine-ordinal}")));
+    }
+    SECTION("a template that places {document} is rendered as written") {
+        FakeMachineStore store;
+        store.saved = true;
+        SystemTestFixture fixture({}, identity_named("{document} ({machine-model})"), true, &store);
+        CHECK(name_of(fixture).first == "Elite (BBC Model B)");
+    }
+    SECTION("a machine not yet saved keeps its template") {
+        FakeMachineStore store;
+        SystemTestFixture fixture({}, identity_named("Station 80"), true, &store);
+        CHECK(name_of(fixture).first == "Station 80");
+    }
+    SECTION("its first save gives it its document's name, announced as an identity change") {
+        FakeMachineStore store;
+        store.outcome = {{}, {}, "/home/me/Elite.beebium-machine", ""};
+        beebium::service::MachineIdentity identity = identity_named("Station 80");
+        identity.uuid = "11111111-1111-4111-8111-111111111111";
+        store.outcome.machine_uuid = identity.uuid;
+        SystemTestFixture fixture({}, identity, true, &store);
+
+        grpc::ClientContext watch_context;
+        auto reader = fixture.system().WatchServerStatus(&watch_context, {});
+        beebium::ServerStatusEvent event;
+        REQUIRE(reader->Read(&event));  // READY
+
+        grpc::ClientContext context;
+        beebium::SaveMachineRequest request;
+        request.set_destination_dirpath("/home/me/Elite.beebium-machine");
+        beebium::SaveMachineResponse response;
+        REQUIRE(fixture.system().SaveMachine(&context, request, &response).ok());
+        CHECK(response.identity().name() == "Elite");
+        CHECK(response.identity().name_template() == "Station 80");
+
+        bool announced = false;
+        while (!announced && reader->Read(&event)) {
+            if (event.status() == beebium::SERVER_STATUS_IDENTITY_CHANGED) {
+                CHECK(event.identity().name() == "Elite");
+                announced = true;
+            }
+        }
+        CHECK(announced);
+        watch_context.TryCancel();
         while (reader->Read(&event)) {}
         reader->Finish();
     }

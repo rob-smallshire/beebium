@@ -33,6 +33,11 @@ public:
     // True when the directory outlives the server.
     virtual bool machine_saved() const = 0;
 
+    // The name of a saved machine's document: its directory's name without
+    // the .beebium-machine suffix, as it was when the machine was opened or
+    // last saved. Empty for a machine not yet saved.
+    virtual std::string document_name() const = 0;
+
     // True when a machine not yet saved has written to the copies of media
     // its template named, which are lost unless it is saved.
     virtual bool template_media_written() const = 0;

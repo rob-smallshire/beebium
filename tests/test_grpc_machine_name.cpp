@@ -222,7 +222,7 @@ TEST_CASE("ListNamePlaceholders lists every provider's placeholders with values"
                                            "econet-station",
                                            "econet-net", "econet-transport",
                                            "fdc-controller", "coprocessor-cpu",
-                                           "coprocessor-clock", "gizmo-colour"});
+                                           "coprocessor-clock", "document", "gizmo-colour"});
     for (const auto& p : response.placeholders()) {
         INFO(p.key());
         CHECK_FALSE(p.label().empty());

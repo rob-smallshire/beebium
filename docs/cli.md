@@ -275,7 +275,8 @@ beebium-model-b --machine-name "Station {econet-station} (AUN, Model B)" \
 ```
 
 - Keys are lowercase words joined by hyphens, each beginning with the domain
-  that owns it: `econet-station`, `machine-model`.
+  that owns it: `econet-station`, `machine-model` -- or, for a domain with a
+  single placeholder, the domain itself: `document`.
   [list-name-placeholders](#list-name-placeholders) lists them; extensions can
   add their own.
 - `{{` and `}}` are literal braces.
@@ -290,6 +291,25 @@ beebium-model-b --machine-name "Station {econet-station} (AUN, Model B)" \
   without; a name that renders blank falls back to the model's name.
 - `:` `|` `?` `!` inside braces are reserved for future formatting and
   fallbacks; today they make the placeholder unknown.
+
+**`{document}` and saved machines.** A saved machine is known by its
+document's name: the name of its directory without `.beebium-machine`, read
+when it is opened, so a machine renamed in the Finder or Explorer shows its new
+name at its next open. Unless its template places `{document}` itself, a saved
+machine's name is `{document}` alone -- its template is kept, and still edited
+by `SetMachineName`, but shows only once it uses `{document}` -- so no preset
+needs editing for a saved machine to show its document's name, and two
+machines forked from one by Save As show different names. A template that
+places it keeps the rest: `"{document} (station {econet-station})"`. The name
+is re-rendered when a machine is first saved and on Save As, and announced to
+`WatchServerStatus` watchers as a rename is; a Save in place changes nothing.
+
+For a machine not yet saved, `{document}` is the name it would otherwise have:
+its preset's name (else the model's) and its `{machine-ordinal}`, as a launcher
+names a new machine ("Model B (Blank disc) #2"). The ordinal belongs to the
+launch, not the machine: a saved machine shows no ordinal unless its template
+places `{machine-ordinal}`, and then only the one its launcher passed for that
+run, which may differ from run to run.
 
 `econet-station` is the number **in force**: the number the guest's filing
 system read from the station links at its last Break, which is the number it

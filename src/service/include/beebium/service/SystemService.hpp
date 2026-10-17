@@ -449,12 +449,19 @@ grpc::Status SystemServiceImpl<MachineType>::SaveMachine(
             return grpc::Status(grpc::StatusCode::INTERNAL, outcome.message);
     }
 
-    // A Save As makes another machine, with an identity of its own.
+    // A Save As makes another machine, with an identity of its own; and a
+    // first save or a Save As gives the machine a document, whose name it is
+    // known by from now on.
+    const auto rendering = render_name(name_template);
     bool identity_changed = false;
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
         if (identity_.uuid != outcome.machine_uuid) {
             identity_.uuid = outcome.machine_uuid;
+            identity_changed = true;
+        }
+        if (identity_.name != rendering.text) {
+            identity_.name = rendering.text;
             identity_changed = true;
         }
         populate_identity_proto(response->mutable_identity());
@@ -544,12 +551,26 @@ void SystemServiceImpl<MachineType>::start_advertisement() {
 template<typename MachineType>
 NameRendering SystemServiceImpl<MachineType>::render_name(
     std::string_view name_template) const {
-    NameRendering rendering = name_placeholders_
-        ? name_placeholders_->render(name_template)
-        : render_name_template(name_template,
-              [](std::string_view) -> std::optional<NamePlaceholderValue> {
-                  return std::nullopt;
-              });
+    auto render = [this](std::string_view text) {
+        return name_placeholders_
+            ? name_placeholders_->render(text)
+            : render_name_template(text,
+                  [](std::string_view) -> std::optional<NamePlaceholderValue> {
+                      return std::nullopt;
+                  });
+    };
+    NameRendering rendering = render(name_template);
+    // A saved machine is known by its document's name, unless its template
+    // places that name itself. The report stays the template's as written.
+    if (machine_store_ && machine_store_->machine_saved()) {
+        bool places_document = false;
+        render_name_template(name_template,
+            [&](std::string_view key) -> std::optional<NamePlaceholderValue> {
+                if (key == "document") places_document = true;
+                return NamePlaceholderValue{};
+            });
+        if (!places_document) rendering.text = render("{document}").text;
+    }
     const bool blank = rendering.text.find_first_not_of(" \t\r\n") == std::string::npos;
     if (blank) {
         // model_name is immutable, so this read needs no lock.

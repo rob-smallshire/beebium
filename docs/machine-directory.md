@@ -58,7 +58,10 @@ without it still gets a document file with it.
 - `name` is the name as the user gives it, a name template (see
   [cli.md](cli.md#machine-name)); a rename of a running saved machine
   (`SetMachineName`) is written here at once. It wins over a `machine_name`
-  in `preset.json`.
+  in `preset.json`. A saved machine is shown by its **document name**, the
+  directory's name without `.beebium-machine` (`{document}`), unless this
+  template places `{document}` itself, when the template is rendered as
+  written; `describe-machine` reports it as `document_name`.
 - `model` is the model id; `start --machine` refuses a machine of another
   model.
 - `created` and `last_used` are ISO 8601 UTC; `last_used` is empty until the
@@ -156,9 +159,8 @@ the directory.
 
 `desktop.ini` (UTF-16LE with a byte-order mark, `[.ShellClassInfo]` with
 `LocalizedResourceName`) and `.directory` (`[Desktop Entry]` with `Icon` and
-`Name`) give the folder the machine's display name and icon in Explorer and
-KDE: its name, or the directory's when the name is a template only a running
-server can render. On Windows `desktop.ini` is made hidden and system and the
+`Name`) give the folder the machine's document name (the directory's name
+without the suffix) and icon in Explorer and KDE. On Windows `desktop.ini` is made hidden and system and the
 directory read-only, which Explorer requires before it honours `desktop.ini`
 (it does not make the contents read-only); the server clears that attribute
 again before it renames or removes a machine directory. The server writes the
