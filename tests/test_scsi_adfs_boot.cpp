@@ -198,11 +198,16 @@ TEST_CASE("ScsiHardDiscExtension reopened at a copy serves and writes the copy",
           "[scsi][hdd][reopen]") {
     if (!adfs_available()) SKIP("SCSI disc image not available");
     beebium::test::ScopedTempDir dir("beebium_scsi_reopen_");
+    // Copied through streams, which share the asset: the other tests here
+    // open it for writing while this one runs, and Windows's CopyFile holds
+    // its source shared for reading only, failing their opens.
+    auto copy = [](const std::filesystem::path& from, const std::filesystem::path& to) {
+        std::ifstream in(from, std::ios::binary);
+        std::ofstream(to, std::ios::binary) << in.rdbuf();
+    };
     for (const auto* name : {"original", "copy"}) {
-        std::filesystem::copy_file(kAssetsDir / "scsi" / "scsi0.dat",
-                                   dir / (std::string(name) + ".dat"));
-        std::filesystem::copy_file(kAssetsDir / "scsi" / "scsi0.dsc",
-                                   dir / (std::string(name) + ".dsc"));
+        copy(kAssetsDir / "scsi" / "scsi0.dat", dir / (std::string(name) + ".dat"));
+        copy(kAssetsDir / "scsi" / "scsi0.dsc", dir / (std::string(name) + ".dsc"));
     }
 
     ModelBPlus machine;
