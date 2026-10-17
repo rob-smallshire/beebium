@@ -15,11 +15,16 @@
 
 #include <beebium/server/ResourcePaths.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include "test_env.hpp"
 #include "test_temp_paths.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <sstream>
 #include <stdexcept>
 
 using namespace beebium::server;
@@ -96,6 +101,141 @@ TEST_CASE("find_on_search_path: not found names every directory searched, in ord
     const std::string expected = "ROM 'x.rom' not found; searched " + first.string() + ", " +
                                  missing.string();
     CHECK_THROWS_WITH(find_on_search_path("x.rom", {first, missing}, "ROM"), expected);
+}
+
+// ---------------------------------------------------------------------------
+// Rule 4: a leading "~/" is the home directory
+// ---------------------------------------------------------------------------
+
+TEST_CASE("anchor_reference: a leading ~/ or ~\\ is the home directory",
+          "[resource_paths][anchor_reference][tilde]") {
+    beebium::test::ScopedEnv home("HOME", "/home/u");
+    const auto expected = normal("/home/u/discs/x.dat");
+    CHECK(anchor_reference("~/discs/x.dat", "/elsewhere") == expected);
+    CHECK(anchor_reference("~\\discs/x.dat", "/elsewhere") == expected);
+    // Only a leading ~ followed by a separator: these name files.
+    CHECK(anchor_reference("~x.dat", "/elsewhere") == "~x.dat");
+    CHECK(anchor_reference("discs/~/x.dat", "/p") == normal("/p/discs/~/x.dat"));
+}
+
+TEST_CASE("anchor_reference: without HOME, ~ is USERPROFILE",
+          "[resource_paths][anchor_reference][tilde]") {
+    beebium::test::ScopedEnv home("HOME", "");
+    beebium::test::ScopedEnv profile("USERPROFILE", "/users/u");
+    CHECK(anchor_reference("~/x.rom", "/elsewhere") == normal("/users/u/x.rom"));
+}
+
+// ---------------------------------------------------------------------------
+// Rule 1: a bare name is searched for -- container, per-user, system
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A container, a per-user directory (pinned through BEEBIUM_USER_DIRPATH) and a
+// system directory, each empty until a test puts a file in it.
+struct SearchTree {
+    beebium::test::ScopedTempDir root{"beebium_resource_search_"};
+    std::filesystem::path container = root / "container";
+    std::filesystem::path user = root / "user";
+    std::filesystem::path system = root / "system";
+    beebium::test::ScopedEnv user_env{"BEEBIUM_USER_DIRPATH", user.string()};
+
+    SearchTree() {
+        for (const auto& d : {container, user / "discs", user / "roms", system}) {
+            std::filesystem::create_directories(d);
+        }
+    }
+    static void put(const std::filesystem::path& filepath) {
+        std::ofstream(filepath) << filepath.string();
+    }
+};
+
+// What `body` writes to std::cerr.
+template <typename F>
+std::string cerr_of(F body) {
+    std::ostringstream captured;
+    auto* previous = std::cerr.rdbuf(captured.rdbuf());
+    try {
+        body();
+    } catch (...) {
+        std::cerr.rdbuf(previous);
+        throw;
+    }
+    std::cerr.rdbuf(previous);
+    return captured.str();
+}
+
+}  // namespace
+
+TEST_CASE("resolve_reference: the container comes first, then per-user, then system",
+          "[resource_paths][resolve_reference]") {
+    SearchTree t;
+    const auto kind = GENERATE(ResourceKind::Disc, ResourceKind::Rom);
+    const auto user_dirpath = t.user / (kind == ResourceKind::Disc ? "discs" : "roms");
+
+    SearchTree::put(t.system / "x");
+    CHECK(resolve_reference("x", kind, t.container, {t.system}) == t.system / "x");
+    SearchTree::put(user_dirpath / "x");
+    CHECK(resolve_reference("x", kind, t.container, {t.system}) == user_dirpath / "x");
+    SearchTree::put(t.container / "x");
+    CHECK(resolve_reference("x", kind, t.container, {t.system}) == t.container / "x");
+}
+
+TEST_CASE("resolve_reference: not found names every directory searched, in order",
+          "[resource_paths][resolve_reference]") {
+    SearchTree t;
+    const std::string expected = "ROM 'x.rom' not found; searched " + t.container.string() +
+                                 ", " + (t.user / "roms").string() + ", " + t.system.string();
+    CHECK_THROWS_WITH(resolve_reference("x.rom", ResourceKind::Rom, t.container, {t.system}),
+                      expected);
+}
+
+TEST_CASE("resolve_reference: a per-user ROM hiding a system ROM is noted, naming both",
+          "[resource_paths][resolve_reference][notice]") {
+    SearchTree t;
+    SearchTree::put(t.system / "x.rom");
+    SearchTree::put(t.user / "roms" / "x.rom");
+
+    const auto said = cerr_of(
+        [&] { (void)resolve_reference("x.rom", ResourceKind::Rom, t.container, {t.system}); });
+    CHECK(said.find((t.user / "roms" / "x.rom").string()) != std::string::npos);
+    CHECK(said.find((t.system / "x.rom").string()) != std::string::npos);
+    CHECK(std::count(said.begin(), said.end(), '\n') == 1);
+}
+
+TEST_CASE("resolve_reference: no notice when nothing is hidden",
+          "[resource_paths][resolve_reference][notice]") {
+    SearchTree t;
+    SearchTree::put(t.user / "roms" / "x.rom");
+    SearchTree::put(t.container / "y.rom");
+    SearchTree::put(t.system / "y.rom");
+    SearchTree::put(t.system / "z.dat");
+    SearchTree::put(t.user / "discs" / "z.dat");
+
+    CHECK(cerr_of([&] {
+              (void)resolve_reference("x.rom", ResourceKind::Rom, t.container, {t.system});
+              // The container's own file is what the preset means: no notice.
+              (void)resolve_reference("y.rom", ResourceKind::Rom, t.container, {t.system});
+              // Discs: notices are for ROMs only.
+              (void)resolve_reference("z.dat", ResourceKind::Disc, t.container, {t.system});
+          }).empty());
+}
+
+TEST_CASE("resolve_reference: a path is anchored, never searched",
+          "[resource_paths][resolve_reference]") {
+    SearchTree t;
+    SearchTree::put(t.user / "roms" / "x.rom");
+    // Rule 2: from the container, whether or not the file exists.
+    CHECK(resolve_reference("sub/x.rom", ResourceKind::Rom, t.container, {t.system}) ==
+          (t.container / "sub" / "x.rom").lexically_normal());
+    // Rule 3: as is.
+    const auto absolute = (t.root / "else" / "x.rom").lexically_normal();
+    CHECK(resolve_reference(absolute.string(), ResourceKind::Rom, t.container, {t.system}) ==
+          absolute);
+    // Rule 4: from home.
+    beebium::test::ScopedEnv home("HOME", t.root.path().string());
+    CHECK(resolve_reference("~/x.rom", ResourceKind::Rom, t.container, {t.system}) ==
+          (t.root / "x.rom").lexically_normal());
 }
 
 #ifdef _WIN32

@@ -16,6 +16,7 @@ The beebium pytest fixtures are auto-registered via the entry point in pyproject
 This conftest.py adds additional test-specific fixtures shared across test files.
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,20 @@ from tube_test_helpers import DFS_1770_ROM_CANDIDATES, find_dfs_1770_rom
 
 # The beebium fixtures (bbc, bbc_shared, stopped_bbc, etc.) are automatically
 # available from the beebium.client.pytest_plugin module via the entry point.
+
+
+@pytest.fixture(scope="session", autouse=True)
+def hermetic_user_dirpath(tmp_path_factory: pytest.TempPathFactory):
+    """Every server a test launches gets its own per-user directory, so no test
+    reads or writes the developer's real presets, discs or ROMs, and a bare
+    name a test gives is never found there."""
+    previous = os.environ.get("BEEBIUM_USER_DIRPATH")
+    os.environ["BEEBIUM_USER_DIRPATH"] = str(tmp_path_factory.mktemp("user-state"))
+    yield
+    if previous is None:
+        del os.environ["BEEBIUM_USER_DIRPATH"]
+    else:
+        os.environ["BEEBIUM_USER_DIRPATH"] = previous
 
 
 @pytest.fixture(scope="module")

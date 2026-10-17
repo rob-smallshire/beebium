@@ -56,8 +56,14 @@ TEST_CASE("normalize_image_uri: absolute path to file:// URI", "[preset][normali
     REQUIRE(result == "file:///path/to/game.ssd");
 }
 
-TEST_CASE("normalize_image_uri: relative path resolved from base dir", "[preset][normalize_image_uri]") {
-    auto result = normalize_image_uri("game.ssd", "/home/user/presets");
+TEST_CASE("normalize_image_uri: a bare name is kept, to be searched for",
+          "[preset][normalize_image_uri]") {
+    CHECK(normalize_image_uri("game.ssd", "/home/user/presets") == "game.ssd");
+}
+
+TEST_CASE("normalize_image_uri: a path in the base dir is resolved from it",
+          "[preset][normalize_image_uri]") {
+    auto result = normalize_image_uri("./game.ssd", "/home/user/presets");
     REQUIRE(result == "file:///home/user/presets/game.ssd");
 }
 
@@ -68,7 +74,7 @@ TEST_CASE("normalize_image_uri: relative path with subdirectory", "[preset][norm
 
 TEST_CASE("normalize_image_uri: a space or a percent sign is encoded",
           "[preset][normalize_image_uri]") {
-    CHECK(normalize_image_uri("My Disc.ssd", "/home/user/presets") ==
+    CHECK(normalize_image_uri("./My Disc.ssd", "/home/user/presets") ==
           "file:///home/user/presets/My%20Disc.ssd");
     CHECK(normalize_image_uri("/x/50%.ssd", "/home/user/presets") == "file:///x/50%25.ssd");
 }
@@ -79,7 +85,8 @@ TEST_CASE("normalize_image_uri: a path round-trips through DiscUrl",
     // encoded the same way, or a name with a '%' opens a different file.
     beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
     for (const char* name : {"game.ssd", "My Disc.ssd", "a%41.ssd", "100% full #2.ssd"}) {
-        const auto url = beebium::DiscUrl::parse(normalize_image_uri(name, temp_dir.path()));
+        const auto url = beebium::DiscUrl::parse(
+            normalize_image_uri(std::string("./") + name, temp_dir.path()));
         REQUIRE(url.has_value());
         CHECK(url->to_filepath() == (temp_dir.path() / name).lexically_normal());
     }
@@ -135,11 +142,9 @@ TEST_CASE("load_preset: relative paths are resolved", "[preset][load_preset]") {
     const auto& storage = *result.config->storage;
     REQUIRE(storage.floppy_drives.size() == 2);
 
-    // Drive 0: relative path "game.ssd"
+    // Drive 0: a bare name, kept to be searched for when the disc is loaded
     REQUIRE(storage.floppy_drives.at(0).has_value());
-    std::string drive0_uri = *storage.floppy_drives.at(0);
-    REQUIRE(drive0_uri.find("file://") == 0);
-    REQUIRE(drive0_uri.find("presets/game.ssd") != std::string::npos);
+    CHECK(*storage.floppy_drives.at(0) == "game.ssd");
 
     // Drive 1: relative path with parent directory
     REQUIRE(storage.floppy_drives.at(1).has_value());
@@ -228,7 +233,7 @@ TEST_CASE("load_preset: a preset named by a relative path resolves floppies from
     std::filesystem::create_directory(temp_dir / "presets");
     {
         std::ofstream file(temp_dir / "presets" / "relative.preset.beebium");
-        file << R"({"storage": {"floppy_drives": [{"drive": 0, "image_uri": "game.ssd"}]}})";
+        file << R"({"storage": {"floppy_drives": [{"drive": 0, "image_uri": "./game.ssd"}]}})";
     }
     const auto saved_cwd = std::filesystem::current_path();
     std::filesystem::current_path(temp_dir.path());

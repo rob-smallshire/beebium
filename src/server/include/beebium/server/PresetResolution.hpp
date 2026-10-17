@@ -472,14 +472,6 @@ inline std::vector<BundledImage> bundled_images(const beebium::ExtensionResolver
     return images;
 }
 
-// True when `value` is a bare name (no directory component, not absolute):
-// the form a bundled parameter uses to name a bundled image.
-inline bool is_bare_name(const std::string& value) {
-    const std::filesystem::path path(value);
-    return !value.empty() && !path.is_absolute() && !path.has_parent_path() &&
-           value.find("://") == std::string::npos;
-}
-
 // The bundled image a bare value of `param` (of extension `manifest`) names,
 // or nullptr.
 inline const BundledImage* find_bundled_image(const std::vector<BundledImage>& images,

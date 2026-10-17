@@ -77,6 +77,13 @@ function(bundled_disc_outputs_named OUT_VAR)
     set(${OUT_VAR} "${outputs}" PARENT_SCOPE)
 endfunction()
 
+# The per-user directory every build-time create-preset and capture runs
+# with: the build's own, so a bare name a preset gives is never found in the
+# developer's per-user discs/ or roms/. They run in this directory's binary
+# directory (add_custom_command's default), which holds no disc or ROM images,
+# so the working-directory step of the search finds nothing there either.
+set(PRESET_USER_DIRPATH "${CMAKE_CURRENT_BINARY_DIR}/user-state")
+
 # Generate a system preset and its thumbnail at build time, using the same
 # create-preset code path that users create their own presets with. Extra
 # create-preset arguments (e.g. --fdc, --sideways) are forwarded via ARGN.
@@ -104,7 +111,8 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
     set(thumbnail_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.thumbnail.png")
     add_custom_command(TARGET ${EXECUTABLE} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}"
-        COMMAND ${EXECUTABLE} create-preset
+        COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
+            $<TARGET_FILE:${EXECUTABLE}> create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
             ${description_args}
@@ -117,6 +125,7 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
         # user's working copies. Harmless for disc-less presets.
         COMMAND ${CMAKE_COMMAND} -E env
             "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
+            "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
             "BEEBIUM_DISC_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/disc-scratch/${PRESET_ID}"
             $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
             --preset "${preset_filepath}"
@@ -180,7 +189,8 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
     add_custom_command(
         OUTPUT "${preset_filepath}" "${thumbnail_filepath}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}"
-        COMMAND ${EXECUTABLE} create-preset
+        COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
+            $<TARGET_FILE:${EXECUTABLE}> create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
             ${description_args}
@@ -191,6 +201,7 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
         # never touches user working copies. Harmless for disc-less presets.
         COMMAND ${CMAKE_COMMAND} -E env
             "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
+            "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
             "BEEBIUM_DISC_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/disc-scratch/${PRESET_ID}"
             $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
             --preset "${preset_filepath}"

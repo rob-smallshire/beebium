@@ -396,7 +396,7 @@ public:
 
         std::vector<uint8_t> data;
         try {
-            data = load_file(RomPaths::find_rom(rom_ref));
+            data = load_file(RomPaths::find_rom(rom_ref, std::filesystem::current_path()));
         } catch (const std::exception& e) {
             std::cerr << "Error: " << e.what() << "\n";
             return ExitCode::NOINPUT;

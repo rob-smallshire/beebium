@@ -283,40 +283,17 @@ parse_startup_section(const nlohmann::json& startup_json) {
     return {startup, {}};
 }
 
-// Normalize a path or URI to a file:// URI.
-//
-// If the input contains "://", it's treated as a URI and returned unchanged.
-// Otherwise, it's treated as a filesystem path:
-// - Absolute paths are converted to file:// URIs directly
-// - Relative paths are resolved relative to base_dirpath, then converted
-// - Path components like ".." are resolved to produce clean URIs
-// - Unix-style absolute paths (starting with /) are treated as absolute on all platforms
-// - The URI is encoded as DiscUrl decodes it (file_url_from_filepath)
-//
-// This allows presets to use relative paths (resolved from preset file location)
-// or absolute paths, while storing everything as URIs internally.
+// A floppy image reference as a preset records it: a URI or a bare name as
+// given (a bare name is searched for when the disc is loaded), any other path
+// anchored in base_dirpath (see ResourcePaths.hpp) and spelled as the file://
+// URI DiscUrl decodes.
 inline std::string normalize_image_uri(const std::string& uri_or_path,
                                        const std::filesystem::path& base_dirpath) {
-    // Check if it's already a URI
-    if (uri_or_path.find("://") != std::string::npos) {
+    if (uri_or_path.find("://") != std::string::npos || is_bare_reference(uri_or_path)) {
         return uri_or_path;
     }
-
-    // Treat as filesystem path
-    std::filesystem::path path(uri_or_path);
-
-    // Resolve relative paths against base directory.
-    // On Windows, treat Unix-style absolute paths (starting with /) as absolute
-    // for preset portability, even though std::filesystem considers them relative.
-    if (!is_absolute_reference(uri_or_path)) {
-        path = base_dirpath / path;
-    }
-
-    // Normalize the path to resolve .. and . components
-    // Use lexically_normal for textual normalization (no filesystem access)
-    path = path.lexically_normal();
-
-    return beebium::file_url_from_filepath(path);
+    const std::filesystem::path path(anchor_reference(uri_or_path, base_dirpath));
+    return beebium::file_url_from_filepath(path.lexically_normal());
 }
 
 // Parse the storage section from JSON

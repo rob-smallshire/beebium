@@ -1124,7 +1124,7 @@ private:
                                  const PresetConfig& preset, Warning warning) {
         auto check = [&](const std::string& path, const std::string& rom) {
             try {
-                (void)RomPaths::find_rom(rom);
+                (void)RomPaths::find_rom(rom, config.launch.reference_container_dirpath());
             } catch (const std::exception& e) {
                 warning(path, e.what());
             }
@@ -1150,22 +1150,27 @@ private:
         }
     }
 
-    // A bare name in a parameter declared bundled must name a bundled image;
-    // the launch fails otherwise. A plugin's ROMs are certain, so an unknown
-    // one is an error; the hard-disc masters are the server's disc directory,
-    // which the launch may see differently, so an unknown one is a warning.
+    // A bare name in a parameter declared bundled must name a ROM its plugin
+    // ships, or the launch fails; a hard disc's is searched for (see
+    // ResourcePaths.hpp), and one found nowhere is a warning, since the launch
+    // may see the directories differently.
     template<typename Error, typename Warning>
     static bool check_bundled_images_exist(const ServerConfig<MachineType>& config,
                                            Error error, Warning warning) {
         bool failed = false;
         const auto images = bundled_images(config.launch.extension_resolver);
+        const auto container_dirpath = config.launch.reference_container_dirpath();
+        std::vector<std::filesystem::path> disc_dirpaths;
+        if (auto master_dirpath = DiscPaths::find_disc_directory()) {
+            disc_dirpaths.push_back(*master_dirpath);
+        }
         for (const auto& inst : config.machine.extension_instances) {
             const auto* m = config.launch.extension_resolver.find_by_name(inst.name);
             if (!m) continue;
             for (const auto& p : m->parameters) {
                 if (p.bundled.empty()) continue;
                 auto it = inst.config.find(p.key);
-                if (it == inst.config.end() || !is_bare_name(it->second) ||
+                if (it == inst.config.end() || !is_bare_reference(it->second) ||
                     find_bundled_image(images, *m, p, it->second)) {
                     continue;
                 }
@@ -1174,9 +1179,13 @@ private:
                 if (p.bundled == "rom") {
                     error(path, "'" + it->second + "' is not a ROM " + inst.name + " ships");
                     failed = true;
-                } else {
-                    warning(path, "'" + it->second + "' is not a bundled " + p.bundled +
-                                      " image");
+                    continue;
+                }
+                try {
+                    (void)resolve_reference(it->second, ResourceKind::Disc, container_dirpath,
+                                            disc_dirpaths);
+                } catch (const std::exception& e) {
+                    warning(path, e.what());
                 }
             }
         }
@@ -1185,14 +1194,32 @@ private:
 
     template<typename Warning>
     static void check_floppies_exist(const ServerConfig<MachineType>& config, Warning warning) {
+        std::vector<std::filesystem::path> disc_dirpaths;
+        if (auto master_dirpath = DiscPaths::find_disc_directory()) {
+            disc_dirpaths.push_back(*master_dirpath);
+        }
         for (std::size_t drive = 0; drive < config.machine.floppy_filepaths.size(); ++drive) {
             const auto& uri = config.machine.floppy_filepaths[drive];
             if (uri.empty()) continue;
-            auto url = beebium::DiscUrl::parse(uri);
+            const auto path = "/storage/floppy_drives/" + std::to_string(drive) + "/image_uri";
+            std::filesystem::path filepath;
+            if (uri.find("://") != std::string::npos) {
+                auto url = beebium::DiscUrl::parse(uri);
+                if (!url || !url->is_local()) continue;
+                filepath = url->to_filepath();
+            } else {
+                try {
+                    filepath = resolve_reference(uri, ResourceKind::Disc,
+                                                 config.launch.reference_container_dirpath(),
+                                                 disc_dirpaths);
+                } catch (const std::exception& e) {
+                    warning(path, e.what());
+                    continue;
+                }
+            }
             std::error_code ec;
-            if (url && url->is_local() && !std::filesystem::exists(url->to_filepath(), ec)) {
-                warning("/storage/floppy_drives/" + std::to_string(drive) + "/image_uri",
-                        "disc image not found: " + url->to_filepath().string());
+            if (!std::filesystem::exists(filepath, ec)) {
+                warning(path, "disc image not found: " + filepath.string());
             }
         }
     }

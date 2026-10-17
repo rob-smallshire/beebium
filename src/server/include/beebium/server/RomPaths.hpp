@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <stdexcept>
+#include <vector>
 #include <beebium/PlatformUtils.hpp>
 #include <beebium/server/ResourcePaths.hpp>
 
@@ -32,10 +33,8 @@ namespace beebium::server {
 // 4. ../share/beebium/roms/ relative to executable (installed layout)
 // 5. Compile-time BEEBIUM_DEFAULT_ROM_DIR (fallback for development)
 //
-// For individual ROM files:
-// 1. If absolute path → return as-is
-// 2. If relative path with directory component → resolve against cwd
-// 3. Otherwise → look in rom_directory/filename
+// An individual ROM is found by the file reference rule (ResourcePaths.hpp),
+// with the ROM directory as the system directory for ROMs.
 
 class RomPaths {
 public:
@@ -49,8 +48,9 @@ public:
         explicit_rom_dirpath_.reset();
     }
 
-    // Find the ROM directory using the search order
-    static std::filesystem::path find_rom_directory() {
+    // Find the ROM directory using the search order; nullopt when there is
+    // none. An explicit directory that does not exist is an error.
+    static std::optional<std::filesystem::path> find_rom_directory() {
         // 1. Explicit path takes priority
         if (explicit_rom_dirpath_) {
             if (std::filesystem::is_directory(*explicit_rom_dirpath_)) {
@@ -109,38 +109,32 @@ public:
         }
 #endif
 
-        throw std::runtime_error(
-            "Cannot find ROM directory. Set BEEBIUM_ROM_DIR environment variable "
-            "or use --rom-dir option.");
+        return std::nullopt;
     }
 
-    // Find a specific ROM file
-    // If filepath is absolute, returns it as-is (after checking existence)
-    // If filepath contains directory separators, resolves against cwd
-    // Otherwise, looks in the ROM directory
-    static std::filesystem::path find_rom(std::string_view filename) {
-        std::filesystem::path filepath(filename);
-
-        // Absolute path - return as-is
-        if (filepath.is_absolute()) {
-            if (!std::filesystem::exists(filepath)) {
-                throw std::runtime_error("ROM file not found: " + std::string(filename));
-            }
-            return filepath;
+    // The ROM file a reference names, written in `container_dirpath` (see
+    // ResourcePaths.hpp). Throws when it does not exist, naming where it was
+    // looked for.
+    static std::filesystem::path find_rom(std::string_view reference,
+                                          const std::filesystem::path& container_dirpath) {
+        std::vector<std::filesystem::path> system_dirpaths;
+        if (auto rom_dirpath = find_rom_directory()) {
+            system_dirpaths.push_back(*rom_dirpath);
         }
-
-        // Relative path with directory component - resolve against cwd
-        if (filepath.has_parent_path()) {
-            const std::filesystem::path resolved =
-                anchor_reference(std::string(filename), std::filesystem::current_path());
-            if (!std::filesystem::exists(resolved)) {
-                throw std::runtime_error("ROM file not found: " + resolved.string());
-            }
-            return resolved;
+        std::filesystem::path filepath;
+        try {
+            filepath = resolve_reference(std::string(reference), ResourceKind::Rom,
+                                         container_dirpath, system_dirpaths);
+        } catch (const std::runtime_error& e) {
+            if (!system_dirpaths.empty()) throw;
+            throw std::runtime_error(std::string(e.what()) +
+                                     " (no ROM directory found: set BEEBIUM_ROM_DIR "
+                                     "or use --rom-dir)");
         }
-
-        // Simple filename - look in ROM directory
-        return find_on_search_path(filename, {find_rom_directory()}, "ROM");
+        if (!std::filesystem::exists(filepath)) {
+            throw std::runtime_error("ROM file not found: " + filepath.string());
+        }
+        return filepath;
     }
 
 private:

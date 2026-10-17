@@ -20,6 +20,7 @@
 #include <beebium/TeletextText.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "test_env.hpp"
 #include "test_temp_paths.hpp"
 
 #include <filesystem>
@@ -1091,6 +1092,129 @@ TEST_CASE("The server constructs a MachineType in exactly one place",
 }
 
 // ============================================================================
+// File references: a launch's container, floppies and ROMs by the one rule
+// ============================================================================
+
+TEST_CASE("a launch's references are written in its preset's directory, else the cwd",
+          "[server_main][resource_paths]") {
+    LaunchSettings launch;
+    CHECK(launch.reference_container_dirpath() == std::filesystem::current_path());
+    launch.preset_filepath = std::filesystem::path("presets") / "x.preset.beebium";
+    CHECK(launch.reference_container_dirpath() ==
+          std::filesystem::absolute(std::filesystem::path("presets")));
+}
+
+namespace {
+
+// A container, a per-user directory and a system directory for both discs
+// (BEEBIUM_DISC_DIR) and ROMs (the explicit ROM directory), all empty.
+struct ReferenceTree {
+    beebium::test::ScopedTempDir root{"beebium_references_"};
+    std::filesystem::path container = root / "container";
+    std::filesystem::path user = root / "user";
+    std::filesystem::path system = root / "system";
+    beebium::test::ScopedEnv user_env{"BEEBIUM_USER_DIRPATH", user.string()};
+    beebium::test::ScopedEnv disc_env{"BEEBIUM_DISC_DIR", system.string()};
+
+    ReferenceTree() {
+        for (const auto& d : {container / "sub", user / "discs", user / "roms", system}) {
+            std::filesystem::create_directories(d);
+        }
+        RomPaths::set_rom_directory(system);
+    }
+    ~ReferenceTree() { RomPaths::clear_rom_directory(); }
+
+    // An empty single-sided 80-track DFS image.
+    static void put_floppy(const std::filesystem::path& filepath) {
+        std::ofstream image(filepath, std::ios::binary);
+        image << std::string(80 * 10 * 256, '\0');
+    }
+    static void put_rom(const std::filesystem::path& filepath) {
+        std::ofstream(filepath, std::ios::binary) << std::string(16384, '\xff');
+    }
+};
+
+// The file a floppy reference loads, or nullopt when the load fails.
+std::optional<std::filesystem::path> floppy_loaded(const std::string& reference,
+                                                   const std::filesystem::path& container) {
+    beebium::DiscDrive drive;
+    if (load_single_disc(drive, 0, reference, container)) return std::nullopt;
+    return beebium::DiscUrl::parse(drive.source_url())->to_filepath();
+}
+
+}  // namespace
+
+TEST_CASE("a floppy's bare name is found in the container, then per-user, then system",
+          "[server_main][disc][resource_paths]") {
+    ReferenceTree t;
+    ReferenceTree::put_floppy(t.system / "game.ssd");
+    CHECK(floppy_loaded("game.ssd", t.container) == t.system / "game.ssd");
+    ReferenceTree::put_floppy(t.user / "discs" / "game.ssd");
+    CHECK(floppy_loaded("game.ssd", t.container) == t.user / "discs" / "game.ssd");
+    ReferenceTree::put_floppy(t.container / "game.ssd");
+    CHECK(floppy_loaded("game.ssd", t.container) == t.container / "game.ssd");
+    CHECK_FALSE(floppy_loaded("nope.ssd", t.container).has_value());
+}
+
+TEST_CASE("a floppy's path is anchored in the container, or home",
+          "[server_main][disc][resource_paths]") {
+    ReferenceTree t;
+    ReferenceTree::put_floppy(t.container / "sub" / "game.ssd");
+    CHECK(floppy_loaded("sub/game.ssd", t.container) == t.container / "sub" / "game.ssd");
+    CHECK(floppy_loaded((t.container / "sub" / "game.ssd").string(), t.root.path()) ==
+          t.container / "sub" / "game.ssd");
+    beebium::test::ScopedEnv home("HOME", t.container.string());
+    CHECK(floppy_loaded("~/sub/game.ssd", t.root.path()) == t.container / "sub" / "game.ssd");
+}
+
+TEST_CASE("a ROM's bare name is found in the container, then per-user, then system",
+          "[server_main][load_roms][resource_paths]") {
+    ReferenceTree t;
+    ReferenceTree::put_rom(t.system / "x.rom");
+    CHECK(RomPaths::find_rom("x.rom", t.container) == t.system / "x.rom");
+    ReferenceTree::put_rom(t.user / "roms" / "x.rom");
+    CHECK(RomPaths::find_rom("x.rom", t.container) == t.user / "roms" / "x.rom");
+    ReferenceTree::put_rom(t.container / "x.rom");
+    CHECK(RomPaths::find_rom("x.rom", t.container) == t.container / "x.rom");
+    CHECK_THROWS(RomPaths::find_rom("nope.rom", t.container));
+}
+
+TEST_CASE("a ROM's path is anchored in the container, or home",
+          "[server_main][load_roms][resource_paths]") {
+    ReferenceTree t;
+    ReferenceTree::put_rom(t.container / "sub" / "x.rom");
+    CHECK(RomPaths::find_rom("sub/x.rom", t.container) ==
+          (t.container / "sub" / "x.rom").lexically_normal());
+    CHECK(RomPaths::find_rom((t.container / "sub" / "x.rom").string(), t.root.path()) ==
+          t.container / "sub" / "x.rom");
+    beebium::test::ScopedEnv home("HOME", t.container.string());
+    CHECK(RomPaths::find_rom("~/sub/x.rom", t.root.path()) ==
+          (t.container / "sub" / "x.rom").lexically_normal());
+}
+
+TEST_CASE("a preset's MOS and sideways ROMs are found beside the preset",
+          "[server_main][load_roms][resource_paths]") {
+    ReferenceTree t;
+    ReferenceTree::put_rom(t.container / "my-mos.rom");
+    ReferenceTree::put_rom(t.container / "my-dfs.rom");
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_ROM_DIR) / "bbc-basic_2.rom",
+                               t.system / "bbc-basic_2.rom");
+
+    MachineType machine;
+    ServerConfig<MachineType> config;
+    config.launch.preset_filepath = t.container / "p.preset.beebium";
+    config.machine.mos_filepath = "my-mos.rom";
+    config.machine.rom_slots[14] = "my-dfs.rom";
+    std::ostringstream said;
+    auto* previous = std::cout.rdbuf(said.rdbuf());
+    load_roms(machine, config);
+    std::cout.rdbuf(previous);
+
+    CHECK(said.str().find((t.container / "my-mos.rom").string()) != std::string::npos);
+    CHECK(said.str().find((t.container / "my-dfs.rom").string()) != std::string::npos);
+}
+
+// ============================================================================
 // load_single_disc: the URL a drive records for a disc loaded by path
 // ============================================================================
 
@@ -1106,7 +1230,7 @@ TEST_CASE("load_single_disc records a path as the file URL DiscUrl spells",
     }
 
     beebium::DiscDrive drive;
-    REQUIRE_FALSE(load_single_disc(drive, 0, image_filepath.string()).has_value());
+    REQUIRE_FALSE(load_single_disc(drive, 0, image_filepath.string(), temp_dir.path()).has_value());
 
     const auto& url = drive.source_url();
     CHECK(url == beebium::DiscUrl::from_filepath(image_filepath).url());
@@ -1129,6 +1253,6 @@ TEST_CASE("load_single_disc records a URL as given", "[server_main][disc]") {
     const auto url = beebium::DiscUrl::from_filepath(image_filepath).url();
 
     beebium::DiscDrive drive;
-    REQUIRE_FALSE(load_single_disc(drive, 0, url).has_value());
+    REQUIRE_FALSE(load_single_disc(drive, 0, url, temp_dir.path()).has_value());
     CHECK(drive.source_url() == url);
 }

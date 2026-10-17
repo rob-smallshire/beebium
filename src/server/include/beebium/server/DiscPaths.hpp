@@ -50,12 +50,11 @@ namespace beebium::server {
 // the master to a per-user working copy on first use and hands the emulator
 // the WORKING copy -- never the master.
 //
-// Reference forms (mirrors RomPaths' filename rules):
-//   * absolute path, or relative path WITH a directory component
-//       -> an explicit user-supplied image: returned as-is, opened writable,
-//          no copy-on-write. Exactly today's behaviour.
-//   * bare filename (no directory component)
-//       -> a bundled master reference: resolved to a working copy (below).
+// A reference is resolved by the file reference rule (ResourcePaths.hpp),
+// with the master directory as the system directory for discs. A file found
+// in the container or the per-user discs/ is the user's own: opened in place,
+// writable. A bare name that names a master, and is not in the container,
+// resolves to a working copy of it (below).
 //
 // Working-copy modes:
 //   * Persistent (real emulator sessions): the working copy lives in the
@@ -103,9 +102,8 @@ public:
     //   1. BEEBIUM_DISC_DIR environment variable
     //   2. a discs/ directory at or above the executable (build layout)
     //   3. ../share/beebium/discs relative to the executable (installed)
-    // Throws if none exists (a bare-name reference cannot be resolved without
-    // it).
-    static std::filesystem::path find_disc_directory() {
+    // nullopt when none exists.
+    static std::optional<std::filesystem::path> find_disc_directory() {
         if (auto env_dir = beebium::platform::get_env("BEEBIUM_DISC_DIR")) {
             std::filesystem::path env_path(*env_dir);
             if (std::filesystem::is_directory(env_path)) {
@@ -140,9 +138,7 @@ public:
             return installed;
         }
 
-        throw std::runtime_error(
-            "Cannot find disc directory. Set BEEBIUM_DISC_DIR environment "
-            "variable to the directory containing the bundled disc images.");
+        return std::nullopt;
     }
 
     // A bundled hard-disc master: the bare name a preset or --scsi-hdd uses
@@ -201,43 +197,47 @@ public:
     // The hard-disc masters this server ships (find_disc_directory), or none
     // when it has no disc directory.
     static std::vector<BundledImage> bundled_hard_disc_images() {
-        try {
-            return bundled_hard_disc_images(find_disc_directory());
-        } catch (const std::runtime_error&) {
-            return {};
-        }
+        const auto master_dirpath = find_disc_directory();
+        return master_dirpath ? bundled_hard_disc_images(*master_dirpath)
+                              : std::vector<BundledImage>{};
     }
 
-    // Per-user working-copy directory: a sibling of the user presets
-    // directory (see PresetPaths), so all Beebium per-user state lives
-    // together. Not created here; prepare_working_image() creates it.
+    // Per-user working-copy directory: the per-user discs directory. Not
+    // created here; prepare_working_image() creates it.
     static std::filesystem::path get_user_disc_working_dirpath() {
-        return user_state_base() / "discs";
+        return user_resource_dirpath(ResourceKind::Disc);
     }
 
-    // Resolve a scsi-hdd "image" reference to the path the emulator should
-    // open. Reads BEEBIUM_DISC_WORK_DIR to pick Scratch vs Persistent, and
-    // uses find_disc_directory() as the master source. See the
-    // dir-injecting overload for the actual policy.
-    static std::filesystem::path resolve_disc_image(std::string_view image) {
-        std::filesystem::path ref(image);
-        // Explicit user path (absolute or with a directory component): as-is.
-        if (ref.is_absolute() || ref.has_parent_path()) {
-            return ref;
+    // The path the emulator should open for a hard-disc "image" reference
+    // written in `container_dirpath`. Reads BEEBIUM_DISC_WORK_DIR to pick
+    // Scratch vs Persistent for a master's working copy, and uses
+    // find_disc_directory() as the master source.
+    static std::filesystem::path resolve_disc_image(
+        const std::string& image, const std::filesystem::path& container_dirpath) {
+        const auto master_dirpath = find_disc_directory();
+        std::error_code ec;
+        // Working copies are not user files: the per-user discs/ doubles as the
+        // directory working copies are made in, so a file there named like a
+        // master is taken to be that master's working copy, and the master's
+        // name resolves through copy-on-write, never through the search (and
+        // never with a notice). A consequence of the shared directory, to be
+        // deleted when machine directories hold the working copies (#103a).
+        if (is_bare_reference(image) && master_dirpath &&
+            std::filesystem::is_regular_file(*master_dirpath / image, ec) &&
+            !std::filesystem::is_regular_file(container_dirpath / image, ec)) {
+            std::optional<std::filesystem::path> work_override;
+            if (auto env = beebium::platform::get_env("BEEBIUM_DISC_WORK_DIR")) {
+                work_override = std::filesystem::path(*env);
+            }
+            const DiscWorkMode mode =
+                work_override ? DiscWorkMode::Scratch : DiscWorkMode::Persistent;
+            const std::filesystem::path work_dir =
+                work_override ? *work_override : get_user_disc_working_dirpath();
+            return prepare_working_image(image, *master_dirpath, work_dir, mode);
         }
-
-        std::optional<std::filesystem::path> work_override;
-        if (auto env = beebium::platform::get_env("BEEBIUM_DISC_WORK_DIR")) {
-            work_override = std::filesystem::path(*env);
-        }
-        const DiscWorkMode mode =
-            work_override ? DiscWorkMode::Scratch : DiscWorkMode::Persistent;
-        const std::filesystem::path work_dir =
-            work_override ? *work_override : get_user_disc_working_dirpath();
-
-        const auto master_dat =
-            find_on_search_path(image, {find_disc_directory()}, "Hard disc image");
-        return prepare_working_image(image, master_dat.parent_path(), work_dir, mode);
+        std::vector<std::filesystem::path> system_dirpaths;
+        if (master_dirpath) system_dirpaths.push_back(*master_dirpath);
+        return resolve_reference(image, ResourceKind::Disc, container_dirpath, system_dirpaths);
     }
 
     // Core copy-on-write policy, with the master and working directories
@@ -361,14 +361,6 @@ private:
     static std::string unique_suffix() {
         std::random_device rd;
         return std::to_string((static_cast<std::uint64_t>(rd()) << 32) ^ rd());
-    }
-
-    // Base directory for per-user Beebium state (the parent of the user
-    // presets "presets" dir; see PresetPaths, kept deliberately in step).
-    // Delegates to the shared platform helper so all three users -- PresetPaths,
-    // DiscPaths and the AUN transport -- agree without copying the logic.
-    static std::filesystem::path user_state_base() {
-        return beebium::platform::user_state_base_dirpath();
     }
 };
 

@@ -33,6 +33,7 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include "test_env.hpp"
 #include "test_temp_paths.hpp"
 
 namespace {
@@ -1531,8 +1532,8 @@ TEST_CASE("resolve-preset: a floppy named with a space or a percent sign opens t
     auto preset_filepath = temp_dir.path() / "floppies.preset.beebium";
     std::ofstream(preset_filepath) << R"({"model": "model-b", "name": "Floppies",
         "storage": {"fdc_socket": {"id": "acorn-1770"}, "floppy_drives": [
-            {"drive": 0, "image_uri": "a%41.ssd"},
-            {"drive": 1, "image_uri": "My Disc.ssd"}]}})";
+            {"drive": 0, "image_uri": "./a%41.ssd"},
+            {"drive": 1, "image_uri": "./My Disc.ssd"}]}})";
 
     auto out = resolve_json(EXECUTABLE, preset_filepath.string());
 
@@ -2319,6 +2320,183 @@ TEST_CASE("a coprocessor's ROM named by bare name loads the one the plugin ships
     auto bad = run_command(EXECUTABLE + " capture-screenshot --duration 0 --output \"" +
                            png_filepath.string() + "\" --tube-65c102 rom=no-such.rom");
     CHECK(bad.exit_code == 78);
+}
+
+// ============================================================================
+// File references at launch: the one rule, through the real server
+// ============================================================================
+
+namespace {
+
+// The file called `name` the build gives the server, found by walking up from
+// the executable's directory into `subdirpath` (roms/, discs/, or a plugin's
+// roms/ under extensions/).
+std::filesystem::path built_file(const std::filesystem::path& subdirpath,
+                                 const std::string& name) {
+    auto dirpath = std::filesystem::absolute(std::filesystem::path(EXECUTABLE)).parent_path();
+    for (int level = 0; level < 6; ++level) {
+        if (std::filesystem::exists(dirpath / subdirpath / name)) {
+            return std::filesystem::canonical(dirpath / subdirpath / name);
+        }
+        dirpath = dirpath.parent_path();
+    }
+    FAIL("the build has no " << (subdirpath / name).string());
+    return {};
+}
+
+// Runs `command` with the working directory set to `dirpath`.
+ProcessResult run_command_in(const std::filesystem::path& dirpath, const std::string& command) {
+    const auto saved_cwd = std::filesystem::current_path();
+    std::filesystem::current_path(dirpath);
+    auto result = run_command(command);
+    std::filesystem::current_path(saved_cwd);
+    return result;
+}
+
+std::string capture_command(const std::filesystem::path& png_filepath) {
+    return EXECUTABLE + " capture-screenshot --duration 0 --output \"" +
+           png_filepath.string() + "\"";
+}
+
+}  // namespace
+
+TEST_CASE("a coprocessor ROM in the per-user roms/ takes the place of the plugin's",
+          "[integration][preset][bundled][resource_paths]") {
+    TempDirectory temp_dir;
+    const auto user_dirpath = temp_dir.path() / "user";
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
+    const auto shipped = built_file(std::filesystem::path("extensions") /
+                                        "acorn-65c102-coprocessor" / "roms",
+                                    "acorn-tube-65c102_1_20.rom");
+    std::filesystem::create_directories(user_dirpath / "roms");
+    std::filesystem::copy_file(shipped, user_dirpath / "roms" / "acorn-tube-65c102_1_20.rom");
+
+    auto result = run_command(capture_command(temp_dir.path() / "rom.png") +
+                              " --tube-65c102 rom=acorn-tube-65c102_1_20.rom");
+    INFO(result.stdout_output << result.stderr_output);
+    CHECK(result.exit_code == 0);
+    // The notice names both files.
+    CHECK(result.stderr_output.find(
+              (user_dirpath / "roms" / "acorn-tube-65c102_1_20.rom").string()) !=
+          std::string::npos);
+    CHECK(result.stderr_output.find(shipped.string()) != std::string::npos);
+
+    // The manifest still decides which names may be given: a ROM it does not
+    // declare is refused, wherever a file of that name is.
+    std::filesystem::copy_file(shipped, user_dirpath / "roms" / "not-declared.rom");
+    auto refused = run_command(capture_command(temp_dir.path() / "rom.png") +
+                               " --tube-65c102 rom=not-declared.rom");
+    CHECK(refused.exit_code == 78);
+}
+
+TEST_CASE("a coprocessor ROM beside the preset is the one it loads",
+          "[integration][preset][bundled][resource_paths]") {
+    TempDirectory temp_dir;
+    const auto shipped = built_file(std::filesystem::path("extensions") /
+                                        "acorn-65c102-coprocessor" / "roms",
+                                    "acorn-tube-65c102_1_20.rom");
+    std::filesystem::copy_file(shipped, temp_dir.path() / "acorn-tube-65c102_1_20.rom");
+    std::filesystem::create_directories(temp_dir.path() / "user" / "roms");
+    std::filesystem::copy_file(shipped,
+                               temp_dir.path() / "user" / "roms" / "acorn-tube-65c102_1_20.rom");
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH",
+                                      (temp_dir.path() / "user").string());
+    const auto preset_filepath = temp_dir.path() / "copro.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
+        {"name": "acorn-65c102-coprocessor", "config": {"rom": "acorn-tube-65c102_1_20.rom"}}]})";
+
+    auto result = run_command(capture_command(temp_dir.path() / "rom.png") + " --preset \"" +
+                              preset_filepath.string() + "\"");
+    INFO(result.stdout_output << result.stderr_output);
+    CHECK(result.exit_code == 0);
+    // The container's file comes before the per-user one, so nothing is noted.
+    CHECK(result.stderr_output.find("takes the place of") == std::string::npos);
+}
+
+TEST_CASE("a command line's bare MOS and sideways names are found in the working directory",
+          "[integration][resource_paths][cli]") {
+    TempDirectory temp_dir;
+    std::filesystem::copy_file(built_file("roms", "acorn-mos_1_20.rom"),
+                               temp_dir.path() / "cwd-mos.rom");
+    std::filesystem::copy_file(built_file("roms", "acorn-dfs_2_26.rom"),
+                               temp_dir.path() / "cwd-dfs.rom");
+
+    auto result = run_command_in(
+        temp_dir.path(), capture_command(temp_dir.path() / "cwd.png") +
+                             " --mos cwd-mos.rom --sideways slot=14:type=rom:image=cwd-dfs.rom");
+    INFO(result.stdout_output << result.stderr_output);
+    CHECK(result.exit_code == 0);
+    CHECK(result.stdout_output.find("cwd-mos.rom") != std::string::npos);
+    CHECK(result.stdout_output.find("cwd-dfs.rom") != std::string::npos);
+}
+
+TEST_CASE("a command line's bare hard-disc name is found in the working directory",
+          "[integration][resource_paths][cli]") {
+    TempDirectory temp_dir;
+    const std::string scsi = " --acorn-scsi --scsi-hdd scsi-id=0:image=cwd-disc.dat";
+    auto missing = run_command_in(temp_dir.path(),
+                                  capture_command(temp_dir.path() / "hd.png") + scsi);
+    CHECK(missing.exit_code == 78);
+    CHECK(missing.stderr_output.find("searched " + temp_dir.path().string()) !=
+          std::string::npos);
+
+    std::filesystem::copy_file(built_file("discs", "l3fs-v1_26b.dat"),
+                               temp_dir.path() / "cwd-disc.dat");
+    std::filesystem::copy_file(built_file("discs", "l3fs-v1_26b.dsc"),
+                               temp_dir.path() / "cwd-disc.dsc");
+    auto found = run_command_in(temp_dir.path(),
+                                capture_command(temp_dir.path() / "hd.png") + scsi);
+    INFO(found.stdout_output << found.stderr_output);
+    CHECK(found.exit_code == 0);
+}
+
+TEST_CASE("a preset's relative and bare per-user hard-disc images are both found",
+          "[integration][preset][resource_paths]") {
+    // End to end: a path relative to the preset, and a bare name the per-user
+    // discs/ holds, through a launch from the preset.
+    TempDirectory temp_dir;
+    const auto user_dirpath = temp_dir.path() / "user";
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
+    std::filesystem::create_directories(temp_dir.path() / "pack" / "discs");
+    std::filesystem::create_directories(user_dirpath / "discs");
+    for (const char* extension : {".dat", ".dsc"}) {
+        const auto master = built_file("discs", std::string("l3fs-v1_26b") + extension);
+        std::filesystem::copy_file(master, temp_dir.path() / "pack" / "discs" /
+                                               (std::string("relative") + extension));
+    }
+    const auto preset_filepath = temp_dir.path() / "pack" / "discs.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
+        {"name": "acorn-scsi"},
+        {"name": "scsi-hard-disc", "config": {"scsi-id": 0, "image": "discs/relative.dat"}},
+        {"name": "scsi-hard-disc", "config": {"scsi-id": 1, "image": "user-disc.dat"}}]})";
+    const auto command = capture_command(temp_dir.path() / "e2e.png") + " --preset \"" +
+                         preset_filepath.string() + "\"";
+
+    auto before = run_command(command);
+    CHECK(before.exit_code == 78);
+    CHECK(before.stderr_output.find("user-disc.dat' not found") != std::string::npos);
+
+    for (const char* extension : {".dat", ".dsc"}) {
+        const auto master = built_file("discs", std::string("l3fs-v1_26b") + extension);
+        std::filesystem::copy_file(master,
+                                   user_dirpath / "discs" / (std::string("user-disc") + extension));
+    }
+    auto after = run_command(command);
+    INFO(after.stdout_output << after.stderr_output);
+    CHECK(after.exit_code == 0);
+}
+
+TEST_CASE("an AUN map file not yet made is a location, not a search",
+          "[integration][resource_paths][aun]") {
+    // The transport makes its map file on the first edit, so a map-file path
+    // that does not exist yet is resolved from where it is written and handed
+    // over, never searched for and never an error.
+    TempDirectory temp_dir;
+    auto result = run_command_in(
+        temp_dir.path(), capture_command(temp_dir.path() / "aun.png") +
+                             " --station 2 --aun port=none:discovery=off:map-file=maps/new.json");
+    INFO(result.stdout_output << result.stderr_output);
+    CHECK(result.exit_code == 0);
 }
 
 // ============================================================================

@@ -129,10 +129,15 @@ if(BEEBIUM_BUILD_TESTS)
     # a second PROPERTIES keyword would let cmake_parse_arguments keep only the
     # last, silently dropping e.g. a RESOURCE_LOCK. The original command remains
     # callable as _catch_discover_tests (CMake's command-override convention).
+    #
+    # Every test also runs with BEEBIUM_USER_DIRPATH in the build tree, so no
+    # test, nor any server it launches, reads or writes the developer's real
+    # per-user presets, discs or ROMs.
     function(catch_discover_tests TARGET)
         cmake_parse_arguments(_cdt "" "" "PROPERTIES" ${ARGN})
         _catch_discover_tests(${TARGET} ${_cdt_UNPARSED_ARGUMENTS}
-            PROPERTIES ${_cdt_PROPERTIES} SKIP_RETURN_CODE 4)
+            PROPERTIES ${_cdt_PROPERTIES} SKIP_RETURN_CODE 4
+                ENVIRONMENT "BEEBIUM_USER_DIRPATH=${CMAKE_BINARY_DIR}/test-user-state")
     endfunction()
 
     # Defer Catch2's test discovery from build time to ctest time on Windows.

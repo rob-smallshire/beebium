@@ -2038,7 +2038,10 @@ if(BEEBIUM_BUILD_SERVICE)
     target_include_directories(test_resource_paths PRIVATE
         ${CMAKE_SOURCE_DIR}/src/server/include
     )
-    target_link_libraries(test_resource_paths PRIVATE Catch2::Catch2WithMain)
+    target_link_libraries(test_resource_paths PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
     catch_discover_tests(test_resource_paths)
 
     # Preset paths utility tests

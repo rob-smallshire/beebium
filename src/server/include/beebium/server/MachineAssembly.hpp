@@ -91,9 +91,10 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
     }
 
     apply_rom_defaults(config);
+    const auto container_dirpath = config.launch.reference_container_dirpath();
 
     // Load MOS ROM
-    auto mos_path = RomPaths::find_rom(config.machine.mos_filepath);
+    auto mos_path = RomPaths::find_rom(config.machine.mos_filepath, container_dirpath);
     std::cout << "Loading MOS ROM: " << mos_path << "\n";
     auto mos_data = load_file(mos_path);
     if (mos_data.size() != 16384) {
@@ -123,7 +124,7 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
         }
 
         // Regular ROM loading - use unified API
-        auto rom_path = RomPaths::find_rom(marker_or_filepath);
+        auto rom_path = RomPaths::find_rom(marker_or_filepath, container_dirpath);
         std::cout << "Loading ROM into slot " << static_cast<int>(slot) << ": " << rom_path << "\n";
         auto rom_data = load_file(rom_path);
 
@@ -145,7 +146,7 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
     // These are processed after rom_slots to ensure the slot is already configured as RAM
     for (const auto& sideways_config : config.machine.sideways_configs) {
         if (sideways_config.type == SidewaysSlotType::Ram && !sideways_config.image_filepath.empty()) {
-            auto ram_path = RomPaths::find_rom(sideways_config.image_filepath);
+            auto ram_path = RomPaths::find_rom(sideways_config.image_filepath, container_dirpath);
             auto ram_data = load_file(ram_path);
             std::cout << "Pre-loading RAM slot " << static_cast<int>(sideways_config.slot)
                       << " from " << ram_path << "\n";
@@ -395,15 +396,27 @@ std::optional<int> install_econet(MachineType& machine,
     return std::nullopt;
 }
 
-// Load a single disc image into a floppy drive.
+// Load a single disc image into a floppy drive: a URL, or a file reference
+// written in `container_dirpath` (see ResourcePaths.hpp).
 // Returns an exit code on error, or std::nullopt on success.
 inline std::optional<int> load_single_disc(DiscDrive& drive, int drive_num,
-                                            const std::string& filepath_or_url) {
-    // Resolve filepath to canonical path, checking existence
+                                            const std::string& filepath_or_url,
+                                            const std::filesystem::path& container_dirpath) {
     std::filesystem::path filepath(filepath_or_url);
     const bool is_url = filepath_or_url.find("://") != std::string::npos;
     if (!is_url) {
-        // Bare filepath: check existence before trying to canonicalize
+        std::vector<std::filesystem::path> system_dirpaths;
+        if (auto master_dirpath = beebium::server::DiscPaths::find_disc_directory()) {
+            system_dirpaths.push_back(*master_dirpath);
+        }
+        try {
+            filepath = resolve_reference(filepath_or_url, ResourceKind::Disc, container_dirpath,
+                                         system_dirpaths);
+        } catch (const std::runtime_error& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return ExitCode::NOINPUT;
+        }
+        // Check existence before trying to canonicalize
         std::error_code ec;
         if (!std::filesystem::exists(filepath, ec)) {
             std::cerr << "Error: disc image not found: " << filepath_or_url << "\n";
@@ -475,14 +488,16 @@ std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<Mac
     if constexpr (requires { machine.state().memory.disc_drive_0; }) {
         if (!config.machine.floppy_filepaths[0].empty()) {
             if (auto exit_code = load_single_disc(
-                    machine.state().memory.disc_drive_0, 0, config.machine.floppy_filepaths[0])) {
+                    machine.state().memory.disc_drive_0, 0, config.machine.floppy_filepaths[0],
+                    config.launch.reference_container_dirpath())) {
                 return exit_code;
             }
         }
 
         if (!config.machine.floppy_filepaths[1].empty()) {
             if (auto exit_code = load_single_disc(
-                    machine.state().memory.disc_drive_1, 1, config.machine.floppy_filepaths[1])) {
+                    machine.state().memory.disc_drive_1, 1, config.machine.floppy_filepaths[1],
+                    config.launch.reference_container_dirpath())) {
                 return exit_code;
             }
         }
@@ -1053,35 +1068,52 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             return {nullptr, ExitCode::CONFIG};
         }
 
-        // A bare name in a parameter the manifest declares bundled names a
-        // shipped image. A hard disc resolves to a per-user working copy via
-        // copy-on-first-use, so the shipped read-only master is never opened
-        // writable (see DiscPaths); a ROM to the file in its plugin's roms/.
-        // Explicit paths (absolute or with a directory component) pass through.
+        // A file path parameter is a file reference written in the launch's
+        // container (see ResourcePaths.hpp). One the manifest declares bundled
+        // names a resource, and a bare name is searched for: a hard disc
+        // through DiscPaths (a master resolves to a per-user working copy, so
+        // the shipped read-only master is never opened writable), a ROM on the
+        // ROM search path ending in the roms/ of the plugin that ships it. Any
+        // other names a location the extension owns, which is never searched.
+        const auto container_dirpath = config.launch.reference_container_dirpath();
         for (const auto& p : manifest->parameters) {
-            if (p.bundled.empty()) continue;
+            if (p.type != "filepath") continue;
             auto it = inst.config.find(p.key);
-            if (it == inst.config.end() || !is_bare_name(it->second)) continue;
+            if (it == inst.config.end() || it->second.empty()) continue;
             if (p.bundled == "hard-disc") {
                 try {
-                    it->second =
-                        beebium::server::DiscPaths::resolve_disc_image(it->second).string();
+                    it->second = beebium::server::DiscPaths::resolve_disc_image(
+                                     it->second, container_dirpath)
+                                     .string();
                 } catch (const std::exception& e) {
                     std::cerr << "Error: cannot resolve disc image for '"
                               << inst.name << "': " << e.what() << "\n";
                     return {nullptr, ExitCode::CONFIG};
                 }
+            } else if (p.bundled.empty() || !is_bare_reference(it->second)) {
+                it->second = anchor_reference(it->second, container_dirpath);
             } else {
+                // The manifest decides which names may be given; the search
+                // decides where the file comes from.
                 const auto images = bundled_images(config.launch.extension_resolver);
                 const auto* image = find_bundled_image(images, *manifest, p, it->second);
                 if (!image) {
                     std::cerr << "Error: " << inst.name << " " << p.key << " '" << it->second
                               << "' is not a " << p.bundled << " this extension ships"
-                              << " (for a file in the working directory, write ./"
+                              << " (for a file of your own, give its path, e.g. ./"
                               << it->second << ")\n";
                     return {nullptr, ExitCode::CONFIG};
                 }
-                it->second = image->filepath.string();
+                try {
+                    it->second = resolve_reference(it->second, ResourceKind::Rom,
+                                                   container_dirpath,
+                                                   {image->filepath.parent_path()})
+                                     .string();
+                } catch (const std::exception& e) {
+                    std::cerr << "Error: " << inst.name << " " << p.key << ": " << e.what()
+                              << "\n";
+                    return {nullptr, ExitCode::CONFIG};
+                }
             }
         }
 
