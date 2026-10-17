@@ -22,6 +22,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include "test_env.hpp"
 #include "test_temp_paths.hpp"
 
 using namespace beebium::server;
@@ -1280,48 +1281,22 @@ TEST_CASE("parse_start_arguments: --preset with matching model succeeds", "[cli]
 }
 
 namespace {
-    // Point the system and user preset directories at known locations for the
-    // lifetime of a test, restoring the previous environment afterwards.
+    // Point the system presets and the per-user directory (whose presets/
+    // holds the user presets) at known locations for the lifetime of a test,
+    // restoring the previous environment afterwards.
     class ScopedPresetDirs {
     public:
         ScopedPresetDirs(const std::filesystem::path& servers_dirpath,
-                         const std::filesystem::path& user_presets_dirpath)
-            : old_servers_(beebium::platform::get_env("BEEBIUM_SERVERS_DIRPATH")),
-              old_user_(beebium::platform::get_env("BEEBIUM_USER_PRESETS_DIRPATH")) {
-            set("BEEBIUM_SERVERS_DIRPATH", servers_dirpath.string());
-            set("BEEBIUM_USER_PRESETS_DIRPATH", user_presets_dirpath.string());
-        }
-        ~ScopedPresetDirs() {
-            restore("BEEBIUM_SERVERS_DIRPATH", old_servers_);
-            restore("BEEBIUM_USER_PRESETS_DIRPATH", old_user_);
-        }
-        ScopedPresetDirs(const ScopedPresetDirs&) = delete;
-        ScopedPresetDirs& operator=(const ScopedPresetDirs&) = delete;
+                         const std::filesystem::path& user_dirpath)
+            : servers_("BEEBIUM_SERVERS_DIRPATH", servers_dirpath.string()),
+              user_("BEEBIUM_USER_DIRPATH", user_dirpath.string()) {}
 
     private:
-        static void set(const char* name, const std::string& value) {
-#ifdef _WIN32
-            _putenv_s(name, value.c_str());
-#else
-            setenv(name, value.c_str(), 1);
-#endif
-        }
-        static void restore(const char* name, const std::optional<std::string>& value) {
-            if (value) {
-                set(name, *value);
-            } else {
-#ifdef _WIN32
-                _putenv_s(name, "");
-#else
-                unsetenv(name);
-#endif
-            }
-        }
-        std::optional<std::string> old_servers_;
-        std::optional<std::string> old_user_;
+        beebium::test::ScopedEnv servers_;
+        beebium::test::ScopedEnv user_;
     };
 
-    // An empty directory standing in for the user presets directory.
+    // An empty directory standing in for the per-user directory.
     std::filesystem::path empty_user_presets_dirpath() {
         static const beebium::test::ScopedTempDir dir("beebium_test_no_user_presets_");
         return dir.path();
@@ -1346,8 +1321,9 @@ TEST_CASE("parse_start_arguments: --preset resolves a bare id as a system preset
 TEST_CASE("parse_start_arguments: --preset resolves a bare id as a user preset", "[cli][parse_start_arguments][preset]") {
     beebium::test::ScopedTempDir user_dir("beebium_test_user_presets_104_");
     const auto& user_dirpath = user_dir.path();
+    std::filesystem::create_directories(user_dirpath / "presets");
     std::filesystem::copy_file(presets_dirpath() / "storage.preset.beebium",
-                               user_dirpath / "my-storage.preset.beebium",
+                               user_dirpath / "presets" / "my-storage.preset.beebium",
                                std::filesystem::copy_options::overwrite_existing);
     ScopedPresetDirs dirs{empty_user_presets_dirpath(), user_dirpath};
     ArgvHelper args{"beebium", "start", "--preset", "my-storage"};

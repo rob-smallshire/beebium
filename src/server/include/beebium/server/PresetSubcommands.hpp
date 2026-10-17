@@ -688,8 +688,8 @@ public:
         std::cerr << "Usage: " << program_name << " report-presets-dirpath\n"
                   << "\n"
                   << "Outputs the directory path where user presets are stored.\n"
-                  << "This path can be overridden with the BEEBIUM_USER_PRESETS_DIRPATH\n"
-                  << "environment variable.\n";
+                  << "It is presets/ in the per-user directory, which the\n"
+                  << "BEEBIUM_USER_DIRPATH environment variable overrides.\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {

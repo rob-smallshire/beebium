@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <set>
 #include <fstream>
 #include <sstream>
@@ -44,25 +45,6 @@ struct ProcessResult {
     std::string stdout_output;
     std::string stderr_output;
 };
-
-// Cross-platform environment variable helpers
-// Set environment variable in current process (inherited by child processes)
-void set_env(const std::string& name, const std::string& value) {
-#ifdef _WIN32
-    _putenv_s(name.c_str(), value.c_str());
-#else
-    setenv(name.c_str(), value.c_str(), 1);
-#endif
-}
-
-// Unset environment variable in current process
-void unset_env(const std::string& name) {
-#ifdef _WIN32
-    _putenv_s(name.c_str(), "");
-#else
-    unsetenv(name.c_str());
-#endif
-}
 
 // Best-effort removal of a temporary file produced by a test. On Windows a
 // file that was just written by a subprocess can be briefly held open by an
@@ -84,9 +66,11 @@ ProcessResult run_command(const std::string& command,
     auto stdout_filepath = beebium::test::unique_temp_path("beebium_test_stdout_", ".txt");
     auto stderr_filepath = beebium::test::unique_temp_path("beebium_test_stderr_", ".txt");
 
-    // Set environment variables in current process - child processes inherit them
+    // Set environment variables in current process - child processes inherit
+    // them - restoring each afterwards (ctest pins some for every test).
+    std::vector<std::unique_ptr<beebium::test::ScopedEnv>> scoped_env;
     for (const auto& [name, value] : env_vars) {
-        set_env(name, value);
+        scoped_env.push_back(std::make_unique<beebium::test::ScopedEnv>(name.c_str(), value));
     }
 
     // Build command with output redirection
@@ -99,10 +83,7 @@ ProcessResult run_command(const std::string& command,
 
     result.exit_code = std::system(full_command.c_str());
 
-    // Unset environment variables after command completes
-    for (const auto& [name, value] : env_vars) {
-        unset_env(name);
-    }
+    scoped_env.clear();
 
     // WEXITSTATUS macro to get actual exit code on Unix
 #ifdef _WIN32
@@ -177,6 +158,14 @@ std::filesystem::path find_executable(const std::string& name) {
 class TempDirectory : public beebium::test::ScopedTempDir {
 public:
     TempDirectory() : ScopedTempDir("beebium_test_") {}
+
+    // Its presets/ subdirectory, made if absent: where a server whose
+    // BEEBIUM_USER_DIRPATH is this directory keeps user presets.
+    std::filesystem::path presets() const {
+        const auto dirpath = path() / "presets";
+        std::filesystem::create_directories(dirpath);
+        return dirpath;
+    }
 };
 
 const std::string EXECUTABLE = find_executable("beebium-model-b").string();
@@ -218,10 +207,10 @@ void write_long_id_user_preset(const std::filesystem::path& user_dirpath) {
 TEST_CASE("list-presets: pretty id column leaves a gap after the longest id", "[integration][preset][list-presets]") {
     REQUIRE(LONG_PRESET_ID.size() == 30);
     TempDirectory temp_dir;
-    write_long_id_user_preset(temp_dir.path());
+    write_long_id_user_preset(temp_dir.presets());
 
     auto result = run_command(EXECUTABLE + " --format pretty list-presets",
-                              {{"BEEBIUM_USER_PRESETS_DIRPATH", temp_dir.path().string()}});
+                              {{"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}});
 
     REQUIRE(result.exit_code == 0);
     INFO(result.stdout_output);
@@ -230,10 +219,10 @@ TEST_CASE("list-presets: pretty id column leaves a gap after the longest id", "[
 
 TEST_CASE("list-presets: --format tsv yields tab-separated rows", "[integration][preset][list-presets]") {
     TempDirectory temp_dir;
-    write_long_id_user_preset(temp_dir.path());
+    write_long_id_user_preset(temp_dir.presets());
 
     auto result = run_command(EXECUTABLE + " --format tsv list-presets",
-                              {{"BEEBIUM_USER_PRESETS_DIRPATH", temp_dir.path().string()}});
+                              {{"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}});
 
     REQUIRE(result.exit_code == 0);
     INFO(result.stdout_output);
@@ -244,9 +233,9 @@ TEST_CASE("list-presets: --format tsv yields tab-separated rows", "[integration]
 
 TEST_CASE("list-presets: --format jsonl and --json yield the same rows", "[integration][preset][list-presets]") {
     TempDirectory temp_dir;
-    write_long_id_user_preset(temp_dir.path());
+    write_long_id_user_preset(temp_dir.presets());
     std::vector<std::pair<std::string, std::string>> env{
-        {"BEEBIUM_USER_PRESETS_DIRPATH", temp_dir.path().string()}};
+        {"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}};
 
     auto jsonl = run_command(EXECUTABLE + " --format jsonl list-presets", env);
     auto json = run_command(EXECUTABLE + " list-presets --json", env);
@@ -281,16 +270,16 @@ TEST_CASE("report-presets-dirpath: returns a path", "[integration][preset][repor
              result.stdout_output.find('\\') != std::string::npos));
 }
 
-TEST_CASE("report-presets-dirpath: respects BEEBIUM_USER_PRESETS_DIRPATH", "[integration][preset][report-presets-dirpath]") {
+TEST_CASE("report-presets-dirpath: follows BEEBIUM_USER_DIRPATH", "[integration][preset][report-presets-dirpath]") {
     TempDirectory temp_dir;
 
     auto result = run_command(
         EXECUTABLE + " report-presets-dirpath",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", temp_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}}
     );
 
     REQUIRE(result.exit_code == 0);
-    REQUIRE(result.stdout_output.find(temp_dir.path().string()) != std::string::npos);
+    REQUIRE(result.stdout_output.find(temp_dir.presets().string()) != std::string::npos);
 }
 
 // ============================================================================
@@ -343,7 +332,7 @@ TEST_CASE("create-preset: creates preset in user directory", "[integration][pres
 
     auto result = run_command(
         EXECUTABLE + " create-preset --name \"My Test Setup\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", temp_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}}
     );
 
     REQUIRE(result.exit_code == 0);
@@ -351,7 +340,7 @@ TEST_CASE("create-preset: creates preset in user directory", "[integration][pres
     REQUIRE(result.stdout_output.find("my-test-setup") != std::string::npos);
 
     // Verify file was created
-    auto preset_filepath = temp_dir.path() / "my-test-setup.preset.beebium";
+    auto preset_filepath = temp_dir.presets() / "my-test-setup.preset.beebium";
     REQUIRE(std::filesystem::exists(preset_filepath));
 }
 
@@ -610,7 +599,7 @@ TEST_CASE("delete-preset: deletes user preset", "[integration][preset][delete-pr
     TempDirectory temp_dir;
 
     // First create a preset
-    auto preset_filepath = temp_dir.path() / "deleteme.preset.beebium";
+    auto preset_filepath = temp_dir.presets() / "deleteme.preset.beebium";
     {
         std::ofstream f(preset_filepath);
         f << R"({"model": "model-b", "name": "Delete Me"})";
@@ -620,7 +609,7 @@ TEST_CASE("delete-preset: deletes user preset", "[integration][preset][delete-pr
     // Delete it
     auto result = run_command(
         EXECUTABLE + " delete-preset deleteme",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", temp_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}}
     );
 
     REQUIRE(result.exit_code == 0);
@@ -663,14 +652,14 @@ TEST_CASE("import-preset: imports valid preset", "[integration][preset][import-p
 
     auto result = run_command(
         EXECUTABLE + " import-preset \"" + source_filepath.string() + "\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", dest_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", dest_dir.path().string()}}
     );
 
     REQUIRE(result.exit_code == 0);
     REQUIRE(result.stdout_output.find("importme") != std::string::npos);
 
     // Verify file was created in dest directory
-    auto imported_filepath = dest_dir.path() / "importme.preset.beebium";
+    auto imported_filepath = dest_dir.presets() / "importme.preset.beebium";
     REQUIRE(std::filesystem::exists(imported_filepath));
 }
 
@@ -728,7 +717,7 @@ TEST_CASE("export-preset: exports user preset", "[integration][preset][export-pr
     TempDirectory output_dir;
 
     // Create source preset in user directory
-    auto source_filepath = user_dir.path() / "mypreset.preset.beebium";
+    auto source_filepath = user_dir.presets() / "mypreset.preset.beebium";
     {
         std::ofstream f(source_filepath);
         f << R"({"model": "model-b", "name": "My Preset"})";
@@ -738,7 +727,7 @@ TEST_CASE("export-preset: exports user preset", "[integration][preset][export-pr
 
     auto result = run_command(
         EXECUTABLE + " export-preset mypreset --output \"" + output_filepath.string() + "\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}}
     );
 
     REQUIRE(result.exit_code == 0);
@@ -770,7 +759,7 @@ TEST_CASE("Full preset workflow: create, export, import, delete", "[integration]
     // Step 1: Create a preset
     auto create_result = run_command(
         EXECUTABLE + " create-preset --name \"Workflow Test\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}}
     );
     REQUIRE(create_result.exit_code == 0);
 
@@ -782,14 +771,14 @@ TEST_CASE("Full preset workflow: create, export, import, delete", "[integration]
     REQUIRE_FALSE(preset_id.empty());
 
     // Verify preset file exists
-    auto preset_filepath = user_dir.path() / (preset_id + ".preset.beebium");
+    auto preset_filepath = user_dir.presets() / (preset_id + ".preset.beebium");
     REQUIRE(std::filesystem::exists(preset_filepath));
 
     // Step 2: Export the preset
     auto export_filepath = export_dir.path() / "exported.preset.beebium";
     auto export_result = run_command(
         EXECUTABLE + " export-preset " + preset_id + " --output \"" + export_filepath.string() + "\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}}
     );
     REQUIRE(export_result.exit_code == 0);
     REQUIRE(std::filesystem::exists(export_filepath));
@@ -797,7 +786,7 @@ TEST_CASE("Full preset workflow: create, export, import, delete", "[integration]
     // Step 3: Delete the original
     auto delete_result = run_command(
         EXECUTABLE + " delete-preset " + preset_id,
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}}
     );
     REQUIRE(delete_result.exit_code == 0);
     REQUIRE_FALSE(std::filesystem::exists(preset_filepath));
@@ -805,12 +794,12 @@ TEST_CASE("Full preset workflow: create, export, import, delete", "[integration]
     // Step 4: Import from export
     auto import_result = run_command(
         EXECUTABLE + " import-preset \"" + export_filepath.string() + "\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", import_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", import_dir.path().string()}}
     );
     REQUIRE(import_result.exit_code == 0);
 
     // Verify imported file exists
-    auto imported_filepath = import_dir.path() / "exported.preset.beebium";
+    auto imported_filepath = import_dir.presets() / "exported.preset.beebium";
     REQUIRE(std::filesystem::exists(imported_filepath));
 }
 
@@ -843,7 +832,7 @@ TEST_CASE("create-preset --from and export-preset preserve sideways_bank",
     TempDirectory user_dir;
 
     // A source preset carrying a sideways_bank DFS slot.
-    auto source_filepath = user_dir.path() / "sideways-src.preset.beebium";
+    auto source_filepath = user_dir.presets() / "sideways-src.preset.beebium";
     {
         std::ofstream f(source_filepath);
         f << R"({"name": "Sideways Source", "model": "model-b", )"
@@ -861,7 +850,7 @@ TEST_CASE("create-preset --from and export-preset preserve sideways_bank",
     // Copy via create-preset --from: the section should survive the copy.
     auto create_result = run_command(
         EXECUTABLE + " create-preset --from sideways-src --name \"Sideways Copy\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}}
     );
     REQUIRE(create_result.exit_code == 0);
 
@@ -872,17 +861,17 @@ TEST_CASE("create-preset --from and export-preset preserve sideways_bank",
     }
     REQUIRE_FALSE(new_id.empty());
 
-    auto copy_filepath = user_dir.path() / (new_id + ".preset.beebium");
+    auto copy_filepath = user_dir.presets() / (new_id + ".preset.beebium");
     REQUIRE(std::filesystem::exists(copy_filepath));
     std::string copy_contents = read_file(copy_filepath);
     REQUIRE(copy_contents.find("sideways_bank") != std::string::npos);
     REQUIRE(copy_contents.find("acorn-dfs_2_26.rom") != std::string::npos);
 
     // Export the copy: the section should survive export too.
-    auto export_filepath = user_dir.path() / "exported-sideways.preset.beebium";
+    auto export_filepath = user_dir.presets() / "exported-sideways.preset.beebium";
     auto export_result = run_command(
         EXECUTABLE + " export-preset " + new_id + " --output \"" + export_filepath.string() + "\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}}
+        {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}}
     );
     REQUIRE(export_result.exit_code == 0);
     REQUIRE(std::filesystem::exists(export_filepath));
@@ -895,17 +884,17 @@ TEST_CASE("create-preset --from: --sideways replaces only the slots it names",
           "[integration][preset][create-preset][sideways]") {
     TempDirectory user_dir;
     {
-        std::ofstream f(user_dir.path() / "slots-src.preset.beebium");
+        std::ofstream f(user_dir.presets() / "slots-src.preset.beebium");
         f << R"({"name": "Slots Source", "model": "model-b", "auto_boot": true, )"
              R"("sideways_bank": { "slots": [ )"
              R"({ "slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_26.rom" }, )"
              R"({ "slot": 13, "type": "empty" } ] }})";
     }
-    auto output_filepath = user_dir.path() / "slots-copy.preset.beebium";
+    auto output_filepath = user_dir.presets() / "slots-copy.preset.beebium";
     auto result = run_command(
         EXECUTABLE + " create-preset --from slots-src --name \"Slots Copy\" "
         "--sideways slot=13:type=ram --output \"" + output_filepath.string() + "\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}});
+        {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
     REQUIRE(result.exit_code == 0);
 
     auto loaded = beebium::server::load_preset(output_filepath);
@@ -1784,10 +1773,10 @@ TEST_CASE("resolve-preset: every shipped preset resolves and round-trips through
         }
 
         TempDirectory user_dir;
-        std::ofstream(user_dir.path() / "resolved.preset.beebium") << first.at("preset").dump(2);
-        auto saved_filepath = user_dir.path() / "saved.preset.beebium";
+        std::ofstream(user_dir.presets() / "resolved.preset.beebium") << first.at("preset").dump(2);
+        auto saved_filepath = user_dir.presets() / "saved.preset.beebium";
         const std::vector<std::pair<std::string, std::string>> env{
-            {"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}};
+            {"BEEBIUM_USER_DIRPATH", user_dir.path().string()}};
         auto created = run_command(
             executable + " create-preset --from resolved --name \"" +
                 first.at("preset").at("name").get<std::string>() + "\" --output \"" +
@@ -1801,7 +1790,7 @@ TEST_CASE("resolve-preset: every shipped preset resolves and round-trips through
         // And the saved document builds the machine: every value it spells
         // out (an unset parameter as "", a default ROM as an explicit slot)
         // must mean what leaving it out means.
-        auto png_filepath = user_dir.path() / "saved.png";
+        auto png_filepath = user_dir.presets() / "saved.png";
         auto built = run_command(
             executable + " capture-screenshot --preset \"" + saved_filepath.string() +
                 "\" --duration 0 --output \"" + png_filepath.string() + "\"",
@@ -2693,20 +2682,20 @@ TEST_CASE("create-preset: a machine option with no preset form is refused",
 TEST_CASE("create-preset --from: a flag overrides the source preset as start would",
           "[integration][preset][create-preset][given]") {
     TempDirectory user_dir;
-    std::filesystem::create_directory(user_dir.path() / "discs");
+    std::filesystem::create_directory(user_dir.presets() / "discs");
     {
-        std::ofstream f(user_dir.path() / "source.preset.beebium");
+        std::ofstream f(user_dir.presets() / "source.preset.beebium");
         f << R"({"model": "model-b", "name": "Source", "description": "From here",
                  "storage": {"floppy_drives": [{"drive": 0, "image_uri": "discs/game.ssd"}]},
                  "extensions": [{"name": "host-serial",
                                  "config": {"id": "modem", "mode": "device",
                                             "path": "/dev/ttyUSB0", "baud": 9600}}]})";
     }
-    auto output_filepath = user_dir.path() / "copy.preset.beebium";
+    auto output_filepath = user_dir.presets() / "copy.preset.beebium";
     auto result = run_command(
         EXECUTABLE + " create-preset --from source --name \"Copy\" "
         "--host-serial id=modem:baud=2400 --output \"" + output_filepath.string() + "\"",
-        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}});
+        {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
     INFO(result.stderr_output);
     REQUIRE(result.exit_code == 0);
 
@@ -2720,7 +2709,7 @@ TEST_CASE("create-preset --from: a flag overrides the source preset as start wou
     // The source's relative floppy meant its own directory; the copy says so.
     CHECK(preset.at("storage").at("floppy_drives")[0].at("image_uri") ==
           beebium::server::normalize_image_uri(
-              (std::filesystem::absolute(user_dir.path()) / "discs" / "game.ssd").string(), {}));
+              (std::filesystem::absolute(user_dir.presets()) / "discs" / "game.ssd").string(), {}));
 }
 
 // ============================================================================

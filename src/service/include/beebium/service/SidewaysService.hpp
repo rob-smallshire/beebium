@@ -18,6 +18,7 @@
 #include "beebium/SlotTopology.hpp"
 #include "beebium/SidewaysRomHeader.hpp"
 #include "beebium/devices/ConfigurableSlot.hpp"
+#include "beebium/disc/DiscUrl.hpp"
 
 #include <grpcpp/grpcpp.h>
 #include <algorithm>
@@ -353,9 +354,20 @@ public:
             bool have_image = false;
             std::string image_filepath;
             if (request->has_url()) {
-                std::string url = request->url();
-                image_filepath = (url.rfind("file://", 0) == 0)
-                    ? url.substr(7) : url;
+                // A file: URL (percent-decoded, a drive path's third slash
+                // dropped, by the one parser) or a plain path.
+                const std::string& url = request->url();
+                if (url.find("://") != std::string::npos) {
+                    const auto parsed = DiscUrl::parse(url);
+                    if (!parsed || !parsed->is_local()) {
+                        response->set_success(false);
+                        response->set_error("Not a local file URL: " + url);
+                        return grpc::Status::OK;
+                    }
+                    image_filepath = parsed->to_filepath().string();
+                } else {
+                    image_filepath = url;
+                }
 
                 std::ifstream file(image_filepath, std::ios::binary | std::ios::ate);
                 if (!file) {

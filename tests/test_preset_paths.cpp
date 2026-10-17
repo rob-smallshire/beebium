@@ -120,7 +120,6 @@ TEST_CASE("get_user_presets_dirpath: path contains 'presets'", "[PresetPaths][us
 #ifdef __APPLE__
 TEST_CASE("get_user_presets_dirpath: macOS path contains Application Support", "[PresetPaths][user_presets][macos]") {
     // The platform path, with the overrides cleared (it is only computed).
-    beebium::test::ScopedEnv presets_env("BEEBIUM_USER_PRESETS_DIRPATH", "");
     beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", "");
 
     auto path = PresetPaths::get_user_presets_dirpath();
@@ -132,7 +131,6 @@ TEST_CASE("get_user_presets_dirpath: macOS path contains Application Support", "
 #ifdef __linux__
 TEST_CASE("get_user_presets_dirpath: Linux path contains .config or XDG_CONFIG_HOME", "[PresetPaths][user_presets][linux]") {
     // The platform path, with the overrides cleared (it is only computed).
-    beebium::test::ScopedEnv presets_env("BEEBIUM_USER_PRESETS_DIRPATH", "");
     beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", "");
 
     auto path = PresetPaths::get_user_presets_dirpath();
@@ -146,7 +144,6 @@ TEST_CASE("get_user_presets_dirpath: Linux path contains .config or XDG_CONFIG_H
 TEST_CASE("BEEBIUM_USER_DIRPATH moves every per-user directory",
           "[PresetPaths][user_presets][user_dirpath]") {
     beebium::test::ScopedTempDir temp_dir("beebium_user_dirpath_");
-    beebium::test::ScopedEnv presets_env("BEEBIUM_USER_PRESETS_DIRPATH", "");
     beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", temp_dir.path().string());
 
     CHECK(beebium::platform::user_state_base_dirpath() == temp_dir.path());

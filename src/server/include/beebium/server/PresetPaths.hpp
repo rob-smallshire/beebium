@@ -40,9 +40,8 @@ namespace beebium::server {
 //   2. ../presets/ relative to executable (build directory layout)
 //   3. ../share/beebium/presets/ relative to executable (installed layout)
 //
-// User presets (created by users):
-//   1. BEEBIUM_USER_PRESETS_DIRPATH environment variable
-//   2. Platform-specific application data directory:
+// User presets (created by users): presets/ in the per-user directory
+// (platform::user_state_base_dirpath, which BEEBIUM_USER_DIRPATH overrides):
 //      - macOS:   ~/Library/Application Support/Beebium/presets/
 //      - Linux:   ~/.config/beebium/presets/
 //      - Windows: %APPDATA%/Beebium/presets/
@@ -88,13 +87,7 @@ public:
     // Get the user presets directory (user-created presets)
     // This directory may not exist yet; use ensure_user_presets_dirpath_exists() to create it
     static std::filesystem::path get_user_presets_dirpath() {
-        // 1. Environment variable override
-        if (auto env_dir = platform::get_env("BEEBIUM_USER_PRESETS_DIRPATH")) {
-            return std::filesystem::path(*env_dir);
-        }
-
-        // 2. Platform-specific application data directory
-        return get_platform_user_presets_dirpath();
+        return beebium::platform::user_state_base_dirpath() / "presets";
     }
 
     // Ensure the user presets directory exists, creating it if necessary
@@ -239,14 +232,6 @@ public:
 
         // Fallback (should never happen)
         return base_id + "-new";
-    }
-
-private:
-    // Get platform-specific user presets directory: the shared per-user state
-    // base with a "presets" subdirectory, so this stays in step with DiscPaths
-    // and the AUN transport without copying the platform logic.
-    static std::filesystem::path get_platform_user_presets_dirpath() {
-        return beebium::platform::user_state_base_dirpath() / "presets";
     }
 };
 

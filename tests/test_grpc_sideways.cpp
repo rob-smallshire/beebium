@@ -26,6 +26,9 @@
 #include "debugger.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 
+#include "beebium/disc/DiscUrl.hpp"
+#include "test_temp_paths.hpp"
+
 #include <fstream>
 #include <vector>
 
@@ -639,6 +642,55 @@ TEST_CASE("SidewaysService ConfigureSlot with data loads image", "[grpc][sideway
     REQUIRE(read_status.ok());
     REQUIRE(read_response.success() == true);
     CHECK(read_response.data() == test_data);
+}
+
+TEST_CASE("SidewaysService ConfigureSlot loads an image by its file URL, decoded",
+          "[grpc][sideways]") {
+    // The URL a client builds for a path with a space (percent-encoded), and
+    // on Windows a drive path (file:///C:/...), names the file it was built
+    // from.
+    RomRamBoardSidewaysFixture fixture;
+    beebium::test::ScopedTempDir temp_dir("beebium_sideways_url_");
+    const auto rom_filepath = temp_dir / "My Rom #1.rom";
+    std::string test_data(256, '\0');
+    for (int i = 0; i < 256; ++i) test_data[i] = static_cast<char>(255 - i);
+    std::ofstream(rom_filepath, std::ios::binary) << test_data;
+    const auto url = beebium::DiscUrl::from_filepath(rom_filepath).url();
+    REQUIRE(url.find("%20") != std::string::npos);
+
+    grpc::ClientContext configure_context;
+    beebium::ConfigureSlotRequest configure_request;
+    beebium::ConfigureSlotResponse configure_response;
+    configure_request.set_slot(5);
+    configure_request.set_type(beebium::SIDEWAYS_SLOT_TYPE_ROM);
+    configure_request.set_url(url);
+    REQUIRE(fixture.sideways()
+                .ConfigureSlot(&configure_context, configure_request, &configure_response)
+                .ok());
+    INFO(configure_response.error());
+    REQUIRE(configure_response.success());
+
+    grpc::ClientContext read_context;
+    beebium::ReadSlotDataRequest read_request;
+    beebium::ReadSlotDataResponse read_response;
+    read_request.set_slot(5);
+    read_request.set_offset(0);
+    read_request.set_length(256);
+    REQUIRE(fixture.sideways().ReadSlotData(&read_context, read_request, &read_response).ok());
+    CHECK(read_response.data() == test_data);
+}
+
+TEST_CASE("SidewaysService ConfigureSlot refuses a URL that is not a local file",
+          "[grpc][sideways]") {
+    RomRamBoardSidewaysFixture fixture;
+    grpc::ClientContext context;
+    beebium::ConfigureSlotRequest request;
+    beebium::ConfigureSlotResponse response;
+    request.set_slot(5);
+    request.set_type(beebium::SIDEWAYS_SLOT_TYPE_ROM);
+    request.set_url("http://example.com/x.rom");
+    REQUIRE(fixture.sideways().ConfigureSlot(&context, request, &response).ok());
+    CHECK_FALSE(response.success());
 }
 
 TEST_CASE("SidewaysService empty slot returns 0xFF", "[grpc][sideways]") {
