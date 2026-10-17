@@ -273,6 +273,22 @@ TEST_CASE("find: the first preset with the id in search order, or from one store
     CHECK_FALSE(PresetPaths::find("nonexistent").has_value());
 }
 
+TEST_CASE("locate: a file path, else the id of a stored preset", "[PresetPaths][locate]") {
+    PresetStores stores;
+    std::ofstream(stores.user_dirpath() / "mine.preset.beebium") << "{}";
+    const auto loose_filepath = stores.user / "loose.json";
+    std::ofstream(loose_filepath) << "{}";
+
+    CHECK(PresetPaths::locate(loose_filepath.string()) == loose_filepath);
+    CHECK(PresetPaths::locate("mine") == stores.user_dirpath() / "mine.preset.beebium");
+    CHECK_FALSE(PresetPaths::locate("nonexistent").has_value());
+    // A directory is not a preset file, and names no stored preset.
+    CHECK_FALSE(PresetPaths::locate(stores.user_dirpath().string()).has_value());
+    CHECK(PresetPaths::not_found_message("nonexistent") ==
+          "Preset not found: 'nonexistent' (no such file, and no system or user preset with "
+          "that id)");
+}
+
 TEST_CASE("user_filepath_for: where a user preset with the id is stored", "[PresetPaths][naming]") {
     PresetStores stores;
     CHECK(PresetPaths::user_filepath_for("mine") ==

@@ -148,6 +148,24 @@ public:
         return std::nullopt;
     }
 
+    // The preset an argument names: a file path or, failing that, the id of
+    // a stored preset, found in search order. Every subcommand taking a preset
+    // by path or id locates it here.
+    static std::optional<std::filesystem::path> locate(const std::string& preset_arg) {
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(preset_arg, ec)) {
+            return std::filesystem::path(preset_arg);
+        }
+        if (auto entry = find(preset_arg)) return entry->filepath;
+        return std::nullopt;
+    }
+
+    // What to say when locate() finds nothing.
+    static std::string not_found_message(const std::string& preset_arg) {
+        return "Preset not found: '" + preset_arg +
+               "' (no such file, and no system or user preset with that id)";
+    }
+
     // Where a user preset with `id` is stored.
     static std::filesystem::path user_filepath_for(std::string_view id) {
         return get_user_presets_dirpath() / filename_for(id);

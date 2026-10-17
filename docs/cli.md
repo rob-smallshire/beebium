@@ -715,10 +715,12 @@ my-elite-setup	My Elite Setup	user
 Output the contents of a preset file.
 
 ```bash
-beebium-model-b show-preset <id>
+beebium-model-b show-preset <id-or-path>
 ```
 
 Outputs the preset JSON to stdout. Useful for inspection or piping to editors.
+The preset is named as `--preset` names one: a file path or, failing that, the
+id of a system or user preset.
 
 #### report-presets-dirpath
 
@@ -793,10 +795,12 @@ Outputs the imported preset ID on success.
 Export a preset to a specified path.
 
 ```bash
-beebium-model-b export-preset <id> --output <filepath>
+beebium-model-b export-preset <id-or-path> --output <filepath>
 ```
 
-Copies the preset file to the specified location. Works with both system and user presets.
+Copies the preset file to the specified location. The preset is named as
+`--preset` names one: a file path or, failing that, the id of a system or user
+preset.
 
 ### AUN Map Subcommands
 

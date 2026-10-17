@@ -660,17 +660,6 @@ void merge_preset_extensions(ServerConfig<MachineType>& config) {
     insts = std::move(kept);
 }
 
-// The preset a --preset argument names: a file path or, failing that, a
-// preset id resolved like show-preset (system presets, then user presets).
-inline std::optional<std::filesystem::path> locate_preset(const std::string& preset_arg) {
-    std::error_code ec;
-    if (std::filesystem::is_regular_file(preset_arg, ec)) {
-        return std::filesystem::path(preset_arg);
-    }
-    if (auto entry = PresetPaths::find(preset_arg)) return entry->filepath;
-    return std::nullopt;
-}
-
 // Why a preset cannot be used with this model's executable, if it names
 // another model; a preset that names none suits any.
 template<typename Memory>
@@ -680,11 +669,6 @@ std::optional<std::string> preset_model_error(const PresetConfig& preset) {
                std::string(Memory::MACHINE_TYPE) + "'";
     }
     return std::nullopt;
-}
-
-inline std::string preset_not_found_message(const std::string& preset_arg) {
-    return "Preset not found: '" + preset_arg +
-           "' (no such file, and no system or user preset with that id)";
 }
 
 // Fold the preset staged by apply_preset in under the command line, once both

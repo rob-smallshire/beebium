@@ -637,9 +637,9 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             // The argument is a preset file path or, failing that, a preset id
             // resolved like show-preset: system presets, then user presets.
             std::string preset_arg = argv[++i];
-            config.launch.preset_filepath = locate_preset(preset_arg);
+            config.launch.preset_filepath = PresetPaths::locate(preset_arg);
             if (!config.launch.preset_filepath) {
-                std::cerr << "Error: " << preset_not_found_message(preset_arg) << "\n";
+                std::cerr << "Error: " << PresetPaths::not_found_message(preset_arg) << "\n";
                 return ExitCode::NOINPUT;
             }
             auto result = load_preset(*config.launch.preset_filepath);

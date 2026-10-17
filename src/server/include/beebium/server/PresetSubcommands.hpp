@@ -599,9 +599,10 @@ public:
     std::string_view description() const override { return "Output preset file contents"; }
 
     void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " show-preset <id>\n"
+        std::cerr << "Usage: " << program_name << " show-preset <id-or-path>\n"
                   << "\n"
-                  << "Outputs the JSON contents of the specified preset file.\n";
+                  << "Outputs the JSON contents of a preset: a preset file, or the\n"
+                  << "system or user preset with that id.\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
@@ -612,15 +613,15 @@ public:
         }
 
         // Parse subcommand options
-        std::string preset_id;
+        std::string preset_arg;
         for (int i = global.subcommand_argv_start; i < argc; ++i) {
             std::string_view arg = argv[i];
             if (arg == "--help" || arg == "-h") {
                 help(argv[0]);
                 return ExitCode::OK;
             } else if (!arg.empty() && arg[0] != '-') {
-                if (preset_id.empty()) {
-                    preset_id = std::string(arg);
+                if (preset_arg.empty()) {
+                    preset_arg = std::string(arg);
                 } else {
                     std::cerr << "Too many arguments\n";
                     help(argv[0]);
@@ -633,23 +634,22 @@ public:
             }
         }
 
-        if (preset_id.empty()) {
-            std::cerr << "Error: preset ID required\n";
+        if (preset_arg.empty()) {
+            std::cerr << "Error: preset ID or path required\n";
             help(argv[0]);
             return ExitCode::USAGE;
         }
 
-        // Find preset file
-        auto entry = PresetPaths::find(preset_id);
-        if (!entry) {
-            std::cerr << "Error: preset not found: " << preset_id << "\n";
+        auto filepath = PresetPaths::locate(preset_arg);
+        if (!filepath) {
+            std::cerr << "Error: " << PresetPaths::not_found_message(preset_arg) << "\n";
             return ExitCode::NOINPUT;
         }
 
         // Read and output file contents
-        std::ifstream file(entry->filepath);
+        std::ifstream file(*filepath);
         if (!file) {
-            std::cerr << "Error: cannot read preset file: " << entry->filepath.string() << "\n";
+            std::cerr << "Error: cannot read preset file: " << filepath->string() << "\n";
             return ExitCode::NOINPUT;
         }
 
@@ -1003,9 +1003,9 @@ private:
         using Memory = typename MachineType::Memory;
 
         // Find and load the preset as `start --preset` does.
-        const auto located = locate_preset(preset_arg);
+        const auto located = PresetPaths::locate(preset_arg);
         if (!located) {
-            error("", preset_not_found_message(preset_arg));
+            error("", PresetPaths::not_found_message(preset_arg));
             return ExitCode::NOINPUT;
         }
         const std::filesystem::path preset_filepath = *located;
@@ -1419,9 +1419,10 @@ public:
     std::string_view description() const override { return "Export a preset to a file"; }
 
     void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " export-preset <id> --output <filepath>\n"
+        std::cerr << "Usage: " << program_name << " export-preset <id-or-path> --output <filepath>\n"
                   << "\n"
-                  << "Exports a preset to the specified file path.\n"
+                  << "Exports a preset (a preset file, or the system or user preset with\n"
+                  << "that id) to the specified file path.\n"
                   << "\n"
                   << "Options:\n"
                   << "  --output <path>   Output file path (required)\n";
@@ -1435,7 +1436,7 @@ public:
         }
 
         // Parse subcommand options
-        std::string preset_id;
+        std::string preset_arg;
         std::filesystem::path output_filepath;
         for (int i = global.subcommand_argv_start; i < argc; ++i) {
             std::string_view arg = argv[i];
@@ -1450,8 +1451,8 @@ public:
                 }
                 output_filepath = argv[++i];
             } else if (!arg.empty() && arg[0] != '-') {
-                if (preset_id.empty()) {
-                    preset_id = std::string(arg);
+                if (preset_arg.empty()) {
+                    preset_arg = std::string(arg);
                 } else {
                     std::cerr << "Too many arguments\n";
                     help(argv[0]);
@@ -1464,8 +1465,8 @@ public:
             }
         }
 
-        if (preset_id.empty()) {
-            std::cerr << "Error: preset ID required\n";
+        if (preset_arg.empty()) {
+            std::cerr << "Error: preset ID or path required\n";
             help(argv[0]);
             return ExitCode::USAGE;
         }
@@ -1477,15 +1478,15 @@ public:
         }
 
         // Find preset file
-        auto source = PresetPaths::find(preset_id);
-        if (!source) {
-            std::cerr << "Error: preset not found: " << preset_id << "\n";
+        auto source_filepath = PresetPaths::locate(preset_arg);
+        if (!source_filepath) {
+            std::cerr << "Error: " << PresetPaths::not_found_message(preset_arg) << "\n";
             return ExitCode::NOINPUT;
         }
 
         // Copy file to output path
         std::error_code ec;
-        std::filesystem::copy_file(source->filepath, output_filepath,
+        std::filesystem::copy_file(*source_filepath, output_filepath,
                                    std::filesystem::copy_options::overwrite_existing, ec);
         if (ec) {
             std::cerr << "Error: cannot write to output file: " << output_filepath.string()

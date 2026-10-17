@@ -286,10 +286,34 @@ TEST_CASE("report-presets-dirpath: follows BEEBIUM_USER_DIRPATH", "[integration]
 // show-preset integration tests
 // ============================================================================
 
-TEST_CASE("show-preset: nonexistent preset returns NOINPUT (66)", "[integration][preset][show-preset]") {
-    auto result = run_command(EXECUTABLE + " show-preset nonexistent-preset-12345");
+TEST_CASE("show-preset: shows a preset named by id or by path", "[integration][preset][show-preset]") {
+    TempDirectory user_dir;
+    TempDirectory elsewhere;
+    {
+        std::ofstream(user_dir.presets() / "mine.preset.beebium")
+            << R"({"model": "model-b", "name": "By Id"})";
+        std::ofstream(elsewhere.path() / "loose.json")
+            << R"({"model": "model-b", "name": "By Path"})";
+    }
+    std::vector<std::pair<std::string, std::string>> env{
+        {"BEEBIUM_USER_DIRPATH", user_dir.path().string()}};
 
+    auto by_id = run_command(EXECUTABLE + " show-preset mine", env);
+    REQUIRE(by_id.exit_code == 0);
+    CHECK(by_id.stdout_output.find("By Id") != std::string::npos);
+
+    auto by_path = run_command(
+        EXECUTABLE + " show-preset \"" + (elsewhere.path() / "loose.json").string() + "\"", env);
+    REQUIRE(by_path.exit_code == 0);
+    CHECK(by_path.stdout_output.find("By Path") != std::string::npos);
+}
+
+TEST_CASE("show-preset: a preset named by nothing says what was searched", "[integration][preset][show-preset]") {
+    auto result = run_command(EXECUTABLE + " show-preset nonexistent-preset-12345");
     REQUIRE(result.exit_code == 66);
+    CHECK(result.stderr_output.find("Preset not found: 'nonexistent-preset-12345' (no such file, "
+                                    "and no system or user preset with that id)") !=
+          std::string::npos);
 }
 
 TEST_CASE("show-preset --help: returns OK", "[integration][preset][show-preset]") {
@@ -738,6 +762,22 @@ TEST_CASE("export-preset: exports user preset", "[integration][preset][export-pr
     std::string content((std::istreambuf_iterator<char>(f)),
                         std::istreambuf_iterator<char>());
     REQUIRE(content.find("\"name\": \"My Preset\"") != std::string::npos);
+}
+
+TEST_CASE("export-preset: exports a preset named by path", "[integration][preset][export-preset]") {
+    TempDirectory source_dir;
+    TempDirectory output_dir;
+    const auto source_filepath = source_dir.path() / "loose.json";
+    std::ofstream(source_filepath) << R"({"model": "model-b", "name": "Loose"})";
+    const auto output_filepath = output_dir.path() / "exported.preset.beebium";
+
+    auto result = run_command(EXECUTABLE + " export-preset \"" + source_filepath.string() +
+                              "\" --output \"" + output_filepath.string() + "\"");
+
+    REQUIRE(result.exit_code == 0);
+    std::ifstream f(output_filepath);
+    std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    CHECK(content.find("\"name\": \"Loose\"") != std::string::npos);
 }
 
 TEST_CASE("export-preset --help: returns OK", "[integration][preset][export-preset]") {
