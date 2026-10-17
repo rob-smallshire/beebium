@@ -20,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <beebium/PlatformUtils.hpp>
 #include <nlohmann/json.hpp>
+#include "test_env.hpp"
 #include "test_temp_paths.hpp"
 
 #include <atomic>
@@ -425,33 +426,7 @@ TEST_CASE("the AUN net number is an integer 0-255",
 
 namespace {
 
-// Sets an environment variable for the life of the scope, for the commands it
-// runs, and restores the previous value afterwards.
-class ScopedEnv {
-public:
-    ScopedEnv(const char* name, const std::string& value) : name_(name) {
-        previous_ = beebium::platform::get_env(name);
-        set(value);
-    }
-    ~ScopedEnv() { set(previous_.value_or("")); }
-    ScopedEnv(const ScopedEnv&) = delete;
-    ScopedEnv& operator=(const ScopedEnv&) = delete;
-
-private:
-    void set(const std::string& value) {
-#ifdef _WIN32
-        _putenv_s(name_, value.c_str());
-#else
-        if (value.empty()) {
-            ::unsetenv(name_);
-        } else {
-            ::setenv(name_, value.c_str(), 1);
-        }
-#endif
-    }
-    const char* name_;
-    std::optional<std::string> previous_;
-};
+using beebium::test::ScopedEnv;
 
 }  // namespace
 

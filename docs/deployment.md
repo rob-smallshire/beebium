@@ -261,6 +261,7 @@ launcher enables it.
 |----------|-------------|
 | `BEEBIUM_ROM_DIR` | Path to ROM directory (overrides auto-detection) |
 | `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets (overrides auto-detection) |
+| `BEEBIUM_USER_DIRPATH` | The per-user state directory (overrides the platform default); its `presets/`, `discs/`, `aun-map.json` and `aun-auto-next` follow it. For tests and CI, to keep a run away from the real user's files |
 | `BEEBIUM_USER_PRESETS_DIRPATH` | User presets directory (overrides the per-user default) |
 | `BEEBIUM_DISC_DIR` | Path to the bundled disc **master** directory (overrides auto-detection) |
 | `BEEBIUM_DISC_WORK_DIR` | Working-copy directory. When set, selects an ephemeral "scratch" mode that always re-copies the master fresh (used by the build to keep thumbnail capture deterministic and stateless); when unset, working copies persist in the per-user discs directory |

@@ -17,6 +17,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>  // For creating test files
+#include "test_env.hpp"
 #include "test_temp_paths.hpp"
 
 using namespace beebium::server;
@@ -143,6 +144,22 @@ TEST_CASE("get_user_presets_dirpath: Linux path contains .config or XDG_CONFIG_H
     REQUIRE(path.string().find("beebium") != std::string::npos);
 }
 #endif
+
+TEST_CASE("BEEBIUM_USER_DIRPATH moves every per-user directory",
+          "[PresetPaths][user_presets][user_dirpath]") {
+    beebium::test::ScopedTempDir temp_dir("beebium_user_dirpath_");
+    beebium::test::ScopedEnv presets_env("BEEBIUM_USER_PRESETS_DIRPATH", "");
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", temp_dir.path().string());
+
+    CHECK(beebium::platform::user_state_base_dirpath() == temp_dir.path());
+    CHECK(PresetPaths::get_user_presets_dirpath() == temp_dir / "presets");
+}
+
+TEST_CASE("an empty BEEBIUM_USER_DIRPATH is no override",
+          "[PresetPaths][user_presets][user_dirpath]") {
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", "");
+    CHECK_FALSE(beebium::platform::user_state_base_dirpath().empty());
+}
 
 // ============================================================================
 // ensure_user_presets_dirpath_exists() tests

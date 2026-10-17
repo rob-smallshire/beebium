@@ -79,7 +79,13 @@ inline std::optional<std::string> get_env(const char* name) {
 //   Windows: %APPDATA%\Beebium
 //   Linux:   $XDG_CONFIG_HOME/beebium, else ~/.config/beebium
 // Falls back to ./beebium only when the home/APPDATA cannot be determined.
+// BEEBIUM_USER_DIRPATH, when set, replaces the whole location, so a test or a
+// CI job can keep everything per-user away from the real user's.
 inline std::filesystem::path user_state_base_dirpath() {
+    if (auto override_dirpath = get_env("BEEBIUM_USER_DIRPATH");
+        override_dirpath && !override_dirpath->empty()) {
+        return std::filesystem::path(*override_dirpath);
+    }
 #ifdef __APPLE__
     if (auto home = get_env("HOME")) {
         return std::filesystem::path(*home) / "Library" / "Application Support" /
