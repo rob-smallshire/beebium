@@ -35,5 +35,26 @@
 	<true/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.zip-archive</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Beebium preset</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.beebium.preset</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>beebium-preset</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

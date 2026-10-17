@@ -70,7 +70,7 @@ final class PresetManagerDraftLaunchTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url2) }
 
         XCTAssertNotEqual(url1, url2, "each call must write a distinct file")
-        XCTAssertTrue(url1.lastPathComponent.hasSuffix(".preset.beebium"))
+        XCTAssertTrue(url1.lastPathComponent.hasSuffix(".json"))
         XCTAssertTrue(FileManager.default.fileExists(atPath: url1.path))
 
         // The file on disk decodes back to an equal draft.

@@ -72,7 +72,14 @@ final class PresetThumbnailCache: ObservableObject {
             idOrPath: preset.presetId,
             outputPath: output.path,
             executablePath: preset.coreExecutablePath)
-        guard error == nil else { return nil }
+        if let error {
+            // The listing said this preset has a thumbnail, so a failure to
+            // write it is a real fault, not the expected "no thumbnail" case
+            // (which the caller avoids via hasThumbnail). Say why before
+            // falling back to the placeholder.
+            NSLog("[PresetThumbnailCache] show-preset --thumbnail failed for \(preset.presetId): \(error)")
+            return nil
+        }
         return try? Data(contentsOf: output)
     }
 }

@@ -161,8 +161,18 @@ struct MachinesSettingsPane: View {
 
     private func exportPreset(_ preset: MachinePreset) {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "beebium") ?? .data]
-        panel.nameFieldStringValue = "\(preset.presetId).preset.beebium"
+        // Suggest the stored file's own name and type, so the suggestion
+        // follows whatever form the server stores -- a .preset.beebium file
+        // now, a .beebium-preset archive after the archive switch -- without
+        // the client hard-coding either. The .beebium-preset extension
+        // resolves to the exported com.beebium.preset type declared in the
+        // Info.plist.
+        let suggestedName = URL(fileURLWithPath: preset.presetFilepath).lastPathComponent
+        panel.nameFieldStringValue = suggestedName
+        let suggestedExtension = (suggestedName as NSString).pathExtension
+        if let type = UTType(filenameExtension: suggestedExtension) {
+            panel.allowedContentTypes = [type]
+        }
         panel.title = "Export Preset"
         panel.message = "Choose a location to save the preset file."
 

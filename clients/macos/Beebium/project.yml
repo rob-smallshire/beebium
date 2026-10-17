@@ -58,6 +58,18 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.beebium.Beebium.connect
             CFBundleURLSchemes: [beebium]
+        # The preset document type: a .beebium-preset archive (a zip holding
+        # preset.json and its resources). Declared as an exported type so the
+        # open/save panels and Finder recognise it. It conforms to
+        # public.zip-archive (it is a zip) and public.data.
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.beebium.preset
+            UTTypeDescription: Beebium preset
+            UTTypeConformsTo:
+              - public.zip-archive
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension: [beebium-preset]
     dependencies:
       - package: grpc-swift
         product: GRPC

@@ -701,14 +701,18 @@ class PresetManager: ObservableObject {
         return arguments
     }
 
-    /// Serialise a draft to a fresh temporary `*.preset.beebium` file and return
-    /// its URL. Each call returns a distinct path.
+    /// Serialise a draft to a fresh temporary JSON file and return its URL.
+    /// Each call returns a distinct path. The name carries a neutral `.json`
+    /// extension rather than a preset suffix: the server reads this as a lone
+    /// JSON preset for resolve-preset, start --preset and import-preset
+    /// whatever it is called, and the stored preset form is the server's to
+    /// decide, not the client's.
     nonisolated static func writeTemporaryPreset(_ draft: MachineDraft) throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("Beebium", isDirectory: true)
             .appendingPathComponent("drafts", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("\(UUID().uuidString).preset.beebium")
+        let url = dir.appendingPathComponent("\(UUID().uuidString).json")
         try draft.encoded().write(to: url, options: .atomic)
         return url
     }
