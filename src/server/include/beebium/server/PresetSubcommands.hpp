@@ -512,7 +512,7 @@ public:
         // Get model ID for this executable
         std::string_view model_id = Memory::MACHINE_TYPE;
 
-        // Collect presets from system and user directories
+        // Collect the stored presets for this model, system then user.
         struct PresetEntry {
             std::string id;
             std::string name;
@@ -520,35 +520,16 @@ public:
         };
         std::vector<PresetEntry> system_presets;
         std::vector<PresetEntry> user_presets;
-
-        // List system presets
-        if (auto system_dir = PresetPaths::get_system_presets_dirpath()) {
-            for (const auto& preset_id : PresetPaths::list_presets_in_directory(*system_dir)) {
-                auto filepath = *system_dir / (preset_id + std::string(PresetPaths::PRESET_EXTENSION));
-                auto result = load_preset(filepath);
-                if (result) {
-                    // Filter by model
-                    if (result.config->model && *result.config->model != model_id) {
-                        continue;  // Skip presets for other models
-                    }
-                    system_presets.push_back({preset_id, result.config->name, "system"});
-                }
+        for (const auto& entry : PresetPaths::enumerate()) {
+            auto result = load_preset(entry.filepath);
+            if (!result) continue;
+            if (result.config->model && *result.config->model != model_id) {
+                continue;  // Skip presets for other models
             }
-        }
-
-        // List user presets
-        auto user_dir = PresetPaths::get_user_presets_dirpath();
-        if (std::filesystem::is_directory(user_dir)) {
-            for (const auto& preset_id : PresetPaths::list_presets_in_directory(user_dir)) {
-                auto filepath = user_dir / (preset_id + std::string(PresetPaths::PRESET_EXTENSION));
-                auto result = load_preset(filepath);
-                if (result) {
-                    // Filter by model
-                    if (result.config->model && *result.config->model != model_id) {
-                        continue;  // Skip presets for other models
-                    }
-                    user_presets.push_back({preset_id, result.config->name, "user"});
-                }
+            if (entry.origin == PresetPaths::Origin::System) {
+                system_presets.push_back({entry.id, result.config->name, "system"});
+            } else {
+                user_presets.push_back({entry.id, result.config->name, "user"});
             }
         }
 
@@ -659,16 +640,16 @@ public:
         }
 
         // Find preset file
-        auto filepath = PresetPaths::find_preset_filepath(preset_id);
-        if (!filepath) {
+        auto entry = PresetPaths::find(preset_id);
+        if (!entry) {
             std::cerr << "Error: preset not found: " << preset_id << "\n";
             return ExitCode::NOINPUT;
         }
 
         // Read and output file contents
-        std::ifstream file(*filepath);
+        std::ifstream file(entry->filepath);
         if (!file) {
-            std::cerr << "Error: cannot read preset file: " << filepath->string() << "\n";
+            std::cerr << "Error: cannot read preset file: " << entry->filepath.string() << "\n";
             return ExitCode::NOINPUT;
         }
 
@@ -852,8 +833,7 @@ public:
 
             // Generate unique ID
             preset_id = PresetPaths::generate_unique_preset_id(PresetPaths::slugify(preset_name));
-            target_filepath = PresetPaths::get_user_presets_dirpath() /
-                              (preset_id + std::string(PresetPaths::PRESET_EXTENSION));
+            target_filepath = PresetPaths::user_filepath_for(preset_id);
         }
 
         // Write preset file
@@ -1275,22 +1255,21 @@ public:
         }
 
         // Find preset file
-        auto filepath = PresetPaths::find_preset_filepath(preset_id);
-        if (!filepath) {
+        auto entry = PresetPaths::find(preset_id);
+        if (!entry) {
             std::cerr << "Error: preset not found: " << preset_id << "\n";
             return ExitCode::NOINPUT;
         }
 
-        // Check if it's a system preset
-        if (PresetPaths::is_system_preset(*filepath)) {
+        if (entry->origin == PresetPaths::Origin::System) {
             std::cerr << "Error: cannot delete system preset: " << preset_id << "\n";
             return ExitCode::USAGE;
         }
 
         // Delete the file
         std::error_code ec;
-        if (!std::filesystem::remove(*filepath, ec)) {
-            std::cerr << "Error: cannot delete preset file: " << filepath->string();
+        if (!std::filesystem::remove(entry->filepath, ec)) {
+            std::cerr << "Error: cannot delete preset file: " << entry->filepath.string();
             if (ec) {
                 std::cerr << " (" << ec.message() << ")";
             }
@@ -1388,13 +1367,9 @@ public:
             return ExitCode::DATAERR;
         }
 
-        // Determine ID from filename
-        std::string filename = source_filepath.stem().string();
-        // Remove .preset suffix if present
-        if (filename.size() > 7 && filename.substr(filename.size() - 7) == ".preset") {
-            filename = filename.substr(0, filename.size() - 7);
-        }
-        std::string preset_id = PresetPaths::slugify(filename);
+        // Determine ID from filename: a stored preset's id, else its stem.
+        std::string preset_id = PresetPaths::slugify(
+            PresetPaths::id_from_filename(source_filepath).value_or(source_filepath.stem().string()));
         if (preset_id.empty()) {
             // Fall back to using name field if present
             if (preset.contains("name") && preset["name"].is_string()) {
@@ -1415,8 +1390,7 @@ public:
         preset_id = PresetPaths::generate_unique_preset_id(preset_id);
 
         // Write to user presets directory
-        std::filesystem::path target_filepath = PresetPaths::get_user_presets_dirpath() /
-                                                (preset_id + std::string(PresetPaths::PRESET_EXTENSION));
+        std::filesystem::path target_filepath = PresetPaths::user_filepath_for(preset_id);
 
         std::ofstream output_file(target_filepath);
         if (!output_file) {
@@ -1503,15 +1477,15 @@ public:
         }
 
         // Find preset file
-        auto source_filepath = PresetPaths::find_preset_filepath(preset_id);
-        if (!source_filepath) {
+        auto source = PresetPaths::find(preset_id);
+        if (!source) {
             std::cerr << "Error: preset not found: " << preset_id << "\n";
             return ExitCode::NOINPUT;
         }
 
         // Copy file to output path
         std::error_code ec;
-        std::filesystem::copy_file(*source_filepath, output_filepath,
+        std::filesystem::copy_file(source->filepath, output_filepath,
                                    std::filesystem::copy_options::overwrite_existing, ec);
         if (ec) {
             std::cerr << "Error: cannot write to output file: " << output_filepath.string()

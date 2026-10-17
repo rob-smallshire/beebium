@@ -15,7 +15,9 @@
 
 #include "beebium/server/Platform.hpp"
 
+#include <algorithm>
 #include <cctype>
+#include <iterator>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -48,9 +50,6 @@ namespace beebium::server {
 
 class PresetPaths {
 public:
-    // Preset file extension
-    static constexpr std::string_view PRESET_EXTENSION = ".preset.beebium";
-
     // Get the system presets directory (shipped with software)
     // Returns empty optional if no system presets directory found
     static std::optional<std::filesystem::path> get_system_presets_dirpath() {
@@ -101,82 +100,57 @@ public:
         return std::filesystem::create_directories(dirpath, ec);
     }
 
-    // Find a preset file by ID
-    // Searches system presets first, then user presets
-    // Returns full path if found, nullopt otherwise
-    static std::optional<std::filesystem::path> find_preset_filepath(
-        const std::string& preset_id,
-        bool system_only = false,
-        bool user_only = false
-    ) {
-        std::string filename = preset_id + std::string(PRESET_EXTENSION);
+    // Where a stored preset lives: shipped with the software, or the user's.
+    enum class Origin { System, User };
 
-        // Search system presets first (unless user_only)
-        if (!user_only) {
-            if (auto system_dir = get_system_presets_dirpath()) {
-                auto filepath = *system_dir / filename;
-                if (std::filesystem::exists(filepath)) {
-                    return filepath;
-                }
-            }
+    // A stored preset: its id, its file and which store holds it.
+    struct Entry {
+        std::string id;
+        std::filesystem::path filepath;
+        Origin origin;
+    };
+
+    // The file name a stored preset with `id` has.
+    static std::string filename_for(std::string_view id) {
+        return std::string(id) + std::string(PRESET_EXTENSION);
+    }
+
+    // The id of the stored preset named `filename`, or nullopt when
+    // `filename` is not a stored preset's name.
+    static std::optional<std::string> id_from_filename(const std::filesystem::path& filename) {
+        const std::string name = filename.filename().string();
+        if (name.size() <= PRESET_EXTENSION.size() ||
+            name.compare(name.size() - PRESET_EXTENSION.size(), PRESET_EXTENSION.size(),
+                         PRESET_EXTENSION) != 0) {
+            return std::nullopt;
         }
+        return name.substr(0, name.size() - PRESET_EXTENSION.size());
+    }
 
-        // Then search user presets (unless system_only)
-        if (!system_only) {
-            auto user_dir = get_user_presets_dirpath();
-            auto filepath = user_dir / filename;
-            if (std::filesystem::exists(filepath)) {
-                return filepath;
-            }
+    // Every stored preset, in search order: the system presets, then the
+    // user presets, each by id.
+    static std::vector<Entry> enumerate() {
+        std::vector<Entry> entries;
+        if (auto system_dirpath = get_system_presets_dirpath()) {
+            append_entries(*system_dirpath, Origin::System, entries);
         }
+        append_entries(get_user_presets_dirpath(), Origin::User, entries);
+        return entries;
+    }
 
+    // The stored preset with `id`, the first in search order, or only from
+    // the store `origin` when it is given.
+    static std::optional<Entry> find(const std::string& id,
+                                     std::optional<Origin> origin = std::nullopt) {
+        for (auto& entry : enumerate()) {
+            if (entry.id == id && (!origin || entry.origin == *origin)) return std::move(entry);
+        }
         return std::nullopt;
     }
 
-    // Check if a preset file is a system preset (read-only)
-    static bool is_system_preset(const std::filesystem::path& filepath) {
-        auto system_dir = get_system_presets_dirpath();
-        if (!system_dir) {
-            return false;
-        }
-
-        // Normalize paths for comparison
-        std::error_code ec;
-        auto canonical_preset = std::filesystem::weakly_canonical(filepath, ec);
-        if (ec) return false;
-
-        auto canonical_system = std::filesystem::weakly_canonical(*system_dir, ec);
-        if (ec) return false;
-
-        // Check if preset is within system directory
-        auto rel = canonical_preset.lexically_relative(canonical_system);
-        return !rel.empty() && rel.native()[0] != '.';
-    }
-
-    // List all preset files in a directory
-    // Returns list of preset IDs (filenames without extension)
-    static std::vector<std::string> list_presets_in_directory(
-        const std::filesystem::path& dirpath
-    ) {
-        std::vector<std::string> preset_ids;
-
-        if (!std::filesystem::is_directory(dirpath)) {
-            return preset_ids;
-        }
-
-        for (const auto& entry : std::filesystem::directory_iterator(dirpath)) {
-            if (!entry.is_regular_file()) continue;
-
-            std::string filename = entry.path().filename().string();
-            if (filename.size() > PRESET_EXTENSION.size() &&
-                filename.substr(filename.size() - PRESET_EXTENSION.size()) == PRESET_EXTENSION) {
-                // Extract preset ID (filename without extension)
-                std::string preset_id = filename.substr(0, filename.size() - PRESET_EXTENSION.size());
-                preset_ids.push_back(preset_id);
-            }
-        }
-
-        return preset_ids;
+    // Where a user preset with `id` is stored.
+    static std::filesystem::path user_filepath_for(std::string_view id) {
+        return get_user_presets_dirpath() / filename_for(id);
     }
 
     // Slugify a display name to create a preset ID
@@ -215,23 +189,45 @@ public:
     }
 
     // Generate a unique preset ID based on a base ID
-    // If base_id exists, appends -2, -3, etc. until unique
+    // If a preset in either store has base_id, appends -2, -3, etc. until
+    // unique, so a user preset is never hidden behind a system one
     static std::string generate_unique_preset_id(const std::string& base_id) {
         // Check if base ID is available
-        if (!find_preset_filepath(base_id, false, true)) {
+        if (!find(base_id)) {
             return base_id;
         }
 
         // Try numbered suffixes
         for (int i = 2; i < 1000; ++i) {
             std::string candidate = base_id + "-" + std::to_string(i);
-            if (!find_preset_filepath(candidate, false, true)) {
+            if (!find(candidate)) {
                 return candidate;
             }
         }
 
         // Fallback (should never happen)
         return base_id + "-new";
+    }
+
+private:
+    // The suffix of a stored preset's file name: the one place it is named.
+    static constexpr std::string_view PRESET_EXTENSION = ".preset.beebium";
+
+    // The stored presets directly in `dirpath`, by id.
+    static void append_entries(const std::filesystem::path& dirpath, Origin origin,
+                               std::vector<Entry>& entries) {
+        std::vector<Entry> found;
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(dirpath, ec)) {
+            if (!entry.is_regular_file(ec)) continue;
+            if (auto id = id_from_filename(entry.path())) {
+                found.push_back({std::move(*id), entry.path(), origin});
+            }
+        }
+        std::sort(found.begin(), found.end(),
+                  [](const Entry& a, const Entry& b) { return a.id < b.id; });
+        entries.insert(entries.end(), std::make_move_iterator(found.begin()),
+                       std::make_move_iterator(found.end()));
     }
 };
 

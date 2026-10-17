@@ -667,7 +667,8 @@ inline std::optional<std::filesystem::path> locate_preset(const std::string& pre
     if (std::filesystem::is_regular_file(preset_arg, ec)) {
         return std::filesystem::path(preset_arg);
     }
-    return PresetPaths::find_preset_filepath(preset_arg);
+    if (auto entry = PresetPaths::find(preset_arg)) return entry->filepath;
+    return std::nullopt;
 }
 
 // Why a preset cannot be used with this model's executable, if it names

@@ -17,6 +17,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>  // For creating test files
+#include <string>
+#include <vector>
 #include "test_env.hpp"
 #include "test_temp_paths.hpp"
 
@@ -96,11 +98,22 @@ TEST_CASE("slugify: empty and edge cases", "[PresetPaths][slugify]") {
 }
 
 // ============================================================================
-// PRESET_EXTENSION constant tests
+// filename_for() and id_from_filename() tests
 // ============================================================================
 
-TEST_CASE("PRESET_EXTENSION: has correct value", "[PresetPaths][constant]") {
-    REQUIRE(PresetPaths::PRESET_EXTENSION == ".preset.beebium");
+TEST_CASE("filename_for and id_from_filename: a stored preset's name and id", "[PresetPaths][naming]") {
+    CHECK(PresetPaths::filename_for("model-b") == "model-b.preset.beebium");
+    CHECK(PresetPaths::id_from_filename("model-b.preset.beebium") == "model-b");
+    CHECK(PresetPaths::id_from_filename(std::filesystem::path("dir") / "model-b.preset.beebium") ==
+          "model-b");
+    CHECK(PresetPaths::id_from_filename(PresetPaths::filename_for("a.b")) == "a.b");
+}
+
+TEST_CASE("id_from_filename: names that are not stored presets have no id", "[PresetPaths][naming]") {
+    CHECK_FALSE(PresetPaths::id_from_filename("readme.txt").has_value());
+    CHECK_FALSE(PresetPaths::id_from_filename("config.json").has_value());
+    CHECK_FALSE(PresetPaths::id_from_filename("preset.beebium.bak").has_value());
+    CHECK_FALSE(PresetPaths::id_from_filename(".preset.beebium").has_value());
 }
 
 // ============================================================================
@@ -174,116 +187,111 @@ TEST_CASE("ensure_user_presets_dirpath_exists: creates directory if missing", "[
 }
 
 // ============================================================================
-// list_presets_in_directory() tests
+// enumerate() and find() tests
 // ============================================================================
 
-TEST_CASE("list_presets_in_directory: empty directory returns empty list", "[PresetPaths][list]") {
-    beebium::test::ScopedTempDir scoped_dir("beebium_test_presets_empty_");
-    const auto& temp_dir = scoped_dir.path();
+namespace {
 
-    auto presets = PresetPaths::list_presets_in_directory(temp_dir);
-    REQUIRE(presets.empty());
+// A system store and a user store of its own, each empty to begin with.
+struct PresetStores {
+    beebium::test::ScopedTempDir servers{"beebium_test_servers_"};
+    beebium::test::ScopedTempDir user{"beebium_test_user_"};
+    beebium::test::ScopedEnv servers_env{"BEEBIUM_SERVERS_DIRPATH", servers.path().string()};
+    beebium::test::ScopedEnv user_env{"BEEBIUM_USER_DIRPATH", user.path().string()};
+
+    PresetStores() {
+        std::filesystem::create_directories(system_dirpath());
+        std::filesystem::create_directories(user_dirpath());
+    }
+    std::filesystem::path system_dirpath() const { return servers / "presets"; }
+    std::filesystem::path user_dirpath() const { return user / "presets"; }
+};
+
+std::vector<std::string> ids_of(const std::vector<PresetPaths::Entry>& entries) {
+    std::vector<std::string> ids;
+    for (const auto& entry : entries) ids.push_back(entry.id);
+    return ids;
 }
 
-TEST_CASE("list_presets_in_directory: non-existent directory returns empty list", "[PresetPaths][list]") {
-    auto non_existent = beebium::test::unique_temp_path("beebium_test_nonexistent_dir_");
-    REQUIRE_FALSE(std::filesystem::exists(non_existent));
+}  // namespace
 
-    auto presets = PresetPaths::list_presets_in_directory(non_existent);
-    REQUIRE(presets.empty());
+TEST_CASE("enumerate: empty stores give no presets", "[PresetPaths][enumerate]") {
+    PresetStores stores;
+    CHECK(PresetPaths::enumerate().empty());
 }
 
-TEST_CASE("list_presets_in_directory: finds preset files", "[PresetPaths][list]") {
-    beebium::test::ScopedTempDir scoped_dir("beebium_test_presets_find_");
-    const auto& temp_dir = scoped_dir.path();
-
-    // Create test preset files
-    std::ofstream(temp_dir / "model-b.preset.beebium") << "{}";
-    std::ofstream(temp_dir / "my-setup.preset.beebium") << "{}";
-
-    auto presets = PresetPaths::list_presets_in_directory(temp_dir);
-
-    REQUIRE(presets.size() == 2);
-    REQUIRE(std::find(presets.begin(), presets.end(), "model-b") != presets.end());
-    REQUIRE(std::find(presets.begin(), presets.end(), "my-setup") != presets.end());
+TEST_CASE("enumerate: a missing user store gives no user presets", "[PresetPaths][enumerate]") {
+    PresetStores stores;
+    std::filesystem::remove(stores.user_dirpath());
+    std::ofstream(stores.system_dirpath() / "model-b.preset.beebium") << "{}";
+    CHECK(ids_of(PresetPaths::enumerate()) == std::vector<std::string>{"model-b"});
 }
 
-TEST_CASE("list_presets_in_directory: ignores non-preset files", "[PresetPaths][list]") {
-    beebium::test::ScopedTempDir scoped_dir("beebium_test_presets_ignore_");
-    const auto& temp_dir = scoped_dir.path();
+TEST_CASE("enumerate: system presets then user presets, each by id, with their origin",
+          "[PresetPaths][enumerate]") {
+    PresetStores stores;
+    std::ofstream(stores.system_dirpath() / "zebra.preset.beebium") << "{}";
+    std::ofstream(stores.system_dirpath() / "model-b.preset.beebium") << "{}";
+    std::ofstream(stores.user_dirpath() / "my-setup.preset.beebium") << "{}";
+    std::ofstream(stores.user_dirpath() / "another.preset.beebium") << "{}";
 
-    // Create preset file and non-preset files
-    std::ofstream(temp_dir / "model-b.preset.beebium") << "{}";
-    std::ofstream(temp_dir / "readme.txt") << "text";
-    std::ofstream(temp_dir / "config.json") << "{}";
-    std::ofstream(temp_dir / "preset.beebium.bak") << "{}";  // Wrong extension pattern
-
-    auto presets = PresetPaths::list_presets_in_directory(temp_dir);
-
-    REQUIRE(presets.size() == 1);
-    REQUIRE(presets[0] == "model-b");
+    const auto entries = PresetPaths::enumerate();
+    REQUIRE(ids_of(entries) ==
+            std::vector<std::string>{"model-b", "zebra", "another", "my-setup"});
+    CHECK(entries[0].origin == PresetPaths::Origin::System);
+    CHECK(entries[0].filepath == stores.system_dirpath() / "model-b.preset.beebium");
+    CHECK(entries[3].origin == PresetPaths::Origin::User);
+    CHECK(entries[3].filepath == stores.user_dirpath() / "my-setup.preset.beebium");
 }
 
-TEST_CASE("list_presets_in_directory: ignores subdirectories", "[PresetPaths][list]") {
-    beebium::test::ScopedTempDir scoped_dir("beebium_test_presets_subdir_");
-    const auto& temp_dir = scoped_dir.path();
-    std::filesystem::create_directories(temp_dir / "subdir.preset.beebium");  // Directory with preset-like name
+TEST_CASE("enumerate: ignores other files and directories", "[PresetPaths][enumerate]") {
+    PresetStores stores;
+    std::ofstream(stores.user_dirpath() / "model-b.preset.beebium") << "{}";
+    std::ofstream(stores.user_dirpath() / "readme.txt") << "text";
+    std::ofstream(stores.user_dirpath() / "preset.beebium.bak") << "{}";
+    std::filesystem::create_directories(stores.user_dirpath() / "subdir.preset.beebium");
 
-    std::ofstream(temp_dir / "model-b.preset.beebium") << "{}";
-
-    auto presets = PresetPaths::list_presets_in_directory(temp_dir);
-
-    REQUIRE(presets.size() == 1);
-    REQUIRE(presets[0] == "model-b");
+    CHECK(ids_of(PresetPaths::enumerate()) == std::vector<std::string>{"model-b"});
 }
 
-// ============================================================================
-// is_system_preset() tests
-// ============================================================================
+TEST_CASE("find: the first preset with the id in search order, or from one store",
+          "[PresetPaths][find]") {
+    PresetStores stores;
+    std::ofstream(stores.system_dirpath() / "shared.preset.beebium") << "{}";
+    std::ofstream(stores.user_dirpath() / "shared.preset.beebium") << "{}";
+    std::ofstream(stores.user_dirpath() / "mine.preset.beebium") << "{}";
 
-TEST_CASE("is_system_preset: returns false when no system directory", "[PresetPaths][is_system]") {
-    // When get_system_presets_dirpath returns nullopt
-    auto user_path = PresetPaths::get_user_presets_dirpath() / "test.preset.beebium";
+    auto shared = PresetPaths::find("shared");
+    REQUIRE(shared.has_value());
+    CHECK(shared->origin == PresetPaths::Origin::System);
 
-    // This test behavior depends on whether system presets exist
-    // Just verify it doesn't crash and returns a boolean
-    bool result = PresetPaths::is_system_preset(user_path);
-    REQUIRE((result == true || result == false));
+    auto users = PresetPaths::find("shared", PresetPaths::Origin::User);
+    REQUIRE(users.has_value());
+    CHECK(users->filepath == stores.user_dirpath() / "shared.preset.beebium");
+
+    CHECK_FALSE(PresetPaths::find("mine", PresetPaths::Origin::System).has_value());
+    CHECK_FALSE(PresetPaths::find("nonexistent").has_value());
+}
+
+TEST_CASE("user_filepath_for: where a user preset with the id is stored", "[PresetPaths][naming]") {
+    PresetStores stores;
+    CHECK(PresetPaths::user_filepath_for("mine") ==
+          stores.user_dirpath() / "mine.preset.beebium");
 }
 
 // ============================================================================
 // generate_unique_preset_id() tests
 // ============================================================================
 
-TEST_CASE("generate_unique_preset_id: returns base ID when available", "[PresetPaths][unique_id]") {
-    // This would require setting up a test directory structure
-    // For now, just test the basic case without file conflicts
-    // When there's no conflicting preset, it should return the base ID
-    auto id = PresetPaths::generate_unique_preset_id("unique-test-id-12345");
-
-    // Without file conflicts, should return the base ID
-    // (The actual behavior depends on what presets exist)
-    REQUIRE_FALSE(id.empty());
-    REQUIRE(id.find("unique-test-id-12345") != std::string::npos);
-}
-
-// ============================================================================
-// find_preset_filepath() integration tests
-// ============================================================================
-
-TEST_CASE("find_preset_filepath: returns nullopt for nonexistent preset", "[PresetPaths][find]") {
-    auto result = PresetPaths::find_preset_filepath("nonexistent-preset-12345");
-    REQUIRE_FALSE(result.has_value());
-}
-
-TEST_CASE("find_preset_filepath: user_only flag works", "[PresetPaths][find]") {
-    // With user_only=true, should only search user presets
-    auto result = PresetPaths::find_preset_filepath("nonexistent-12345", false, true);
-    REQUIRE_FALSE(result.has_value());
-}
-
-TEST_CASE("find_preset_filepath: system_only flag works", "[PresetPaths][find]") {
-    // With system_only=true, should only search system presets
-    auto result = PresetPaths::find_preset_filepath("nonexistent-12345", true, false);
-    REQUIRE_FALSE(result.has_value());
+TEST_CASE("generate_unique_preset_id: the base id, else the first free numbered one in any store",
+          "[PresetPaths][unique_id]") {
+    PresetStores stores;
+    CHECK(PresetPaths::generate_unique_preset_id("mine") == "mine");
+    std::ofstream(stores.user_dirpath() / "mine.preset.beebium") << "{}";
+    std::ofstream(stores.user_dirpath() / "mine-2.preset.beebium") << "{}";
+    CHECK(PresetPaths::generate_unique_preset_id("mine") == "mine-3");
+    // A system preset's id is taken too: a user preset with it would be
+    // hidden behind the system one.
+    std::ofstream(stores.system_dirpath() / "shipped.preset.beebium") << "{}";
+    CHECK(PresetPaths::generate_unique_preset_id("shipped") == "shipped-2");
 }
