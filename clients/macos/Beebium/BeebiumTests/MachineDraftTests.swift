@@ -232,30 +232,35 @@ final class MachineDraftTests: XCTestCase {
     // MARK: - Every bundled preset (when a build tree is available)
 
     func testEveryBundledPresetRoundTrips() throws {
-        guard let presetsDirpath = Self.bundledPresetsDirpath() else {
-            throw XCTSkip("No build-tree presets directory found; the embedded corpus still covers the schema surface.")
+        guard let sourcesDirpath = Self.bundledPresetSourcesDirpath() else {
+            throw XCTSkip("No build-tree preset sources directory found; the embedded corpus still covers the schema surface.")
         }
         let fm = FileManager.default
-        let names = try fm.contentsOfDirectory(atPath: presetsDirpath)
-            .filter { $0.hasSuffix(".preset.beebium") }
+        // The build keeps each system preset's unpacked source at
+        // preset-sources/<id>/preset.json -- the very document stored inside
+        // the <id>.beebium-preset archive, so round-tripping these covers the
+        // bundled corpus the archive form ships.
+        let ids = try fm.contentsOfDirectory(atPath: sourcesDirpath)
+            .filter { fm.fileExists(atPath: "\(sourcesDirpath)/\($0)/preset.json") }
             .sorted()
-        XCTAssertFalse(names.isEmpty, "presets directory \(presetsDirpath) held no preset files")
+        XCTAssertFalse(ids.isEmpty, "preset sources directory \(sourcesDirpath) held no preset.json")
 
-        for name in names {
-            let filepath = "\(presetsDirpath)/\(name)"
-            let data = try XCTUnwrap(fm.contents(atPath: filepath), "could not read \(name)")
+        for id in ids {
+            let filepath = "\(sourcesDirpath)/\(id)/preset.json"
+            let data = try XCTUnwrap(fm.contents(atPath: filepath), "could not read \(id)/preset.json")
             let first = try MachineDraft.decode(from: data)
             let second = try MachineDraft.decode(from: first.encoded())
-            XCTAssertEqual(first, second, "round-trip changed bundled preset \(name)")
+            XCTAssertEqual(first, second, "round-trip changed bundled preset \(id)")
         }
-        NSLog("[MachineDraftTests] round-tripped \(names.count) bundled preset(s) from \(presetsDirpath)")
+        NSLog("[MachineDraftTests] round-tripped \(ids.count) bundled preset(s) from \(sourcesDirpath)")
     }
 
-    /// Locate a build-tree `src/server/presets` directory holding generated
-    /// presets, searching the build directories beside the repo root. Returns
-    /// the one with the most preset files, or nil if none exists (a clean
-    /// checkout with no build).
-    private static func bundledPresetsDirpath() -> String? {
+    /// Locate a build-tree `src/server/preset-sources` directory, searching the
+    /// build directories beside the repo root. It holds one `<id>/preset.json`
+    /// per system preset -- the unpacked source of each archive. Returns the
+    /// one with the most presets, or nil if none exists (a clean checkout with
+    /// no build).
+    private static func bundledPresetSourcesDirpath() -> String? {
         let fm = FileManager.default
         var root = URL(fileURLWithPath: #filePath)
         // Walk up to the repository root (the directory that contains src/).
@@ -267,12 +272,12 @@ final class MachineDraftTests: XCTestCase {
         }
         guard let entries = try? fm.contentsOfDirectory(atPath: root.path) else { return nil }
         var best: (path: String, count: Int)?
-        for entry in entries where entry.hasPrefix("build") || entry == "build" {
+        for entry in entries where entry.hasPrefix("build") {
             let candidate = root
                 .appendingPathComponent(entry)
-                .appendingPathComponent("src/server/presets").path
-            guard let files = try? fm.contentsOfDirectory(atPath: candidate) else { continue }
-            let count = files.filter { $0.hasSuffix(".preset.beebium") }.count
+                .appendingPathComponent("src/server/preset-sources").path
+            guard let subdirs = try? fm.contentsOfDirectory(atPath: candidate) else { continue }
+            let count = subdirs.filter { fm.fileExists(atPath: "\(candidate)/\($0)/preset.json") }.count
             if count > 0, count > (best?.count ?? 0) {
                 best = (candidate, count)
             }
