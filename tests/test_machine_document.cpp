@@ -183,3 +183,16 @@ TEST_CASE("paths cross the gRPC boundary as UTF-8", "[machine_document]") {
     CHECK(machine_document_name(machine) == name);
     CHECK(machine_document_name(path_from_utf8("Plain")) == "Plain");
 }
+
+TEST_CASE("a document's name must be a file name on every host", "[machine_document]") {
+    CHECK_FALSE(why_not_document_name("Elite Server").has_value());
+    CHECK_FALSE(why_not_document_name("\xC3\x89lite S\xC3\xA4ve").has_value());
+    CHECK_FALSE(why_not_document_name("Console").has_value());  // only CON itself is refused
+    for (const auto* bad : {"", ".", "..", "a/b", "a\\b", "a:b", "a*b", "a?b", "a|b", "a\"b",
+                            "a<b", "a>b", "trailing.", "trailing ", "CON", "con.txt", "LPT1",
+                            "tab\there"}) {
+        INFO(bad);
+        CHECK(why_not_document_name(bad).has_value());
+    }
+    CHECK_THAT(*why_not_document_name("a/b"), Catch::Matchers::ContainsSubstring("path separator"));
+}

@@ -622,6 +622,11 @@ public:
         asked_description_template = description_template;
         return outcome;
     }
+    SaveOutcome rename(const std::string& name) override {
+        asked_rename = name;
+        if (rename_outcome.error == SaveOutcome::Error::None) document = name;
+        return rename_outcome;
+    }
     std::vector<std::string> reset_battery() override { return {"integra-b-rtc", "clock/saf3019p"}; }
     void described(const std::string& description_template) override {
         described_as = description_template;
@@ -634,6 +639,8 @@ public:
     SaveOutcome outcome;
     std::string asked_destination, asked_uuid, asked_description_template, described_as;
     bool asked_replace = false;
+    std::string asked_rename;
+    SaveOutcome rename_outcome;
 };
 
 }  // namespace
@@ -755,13 +762,68 @@ TEST_CASE("SystemService names a saved machine by its document", "[grpc][system]
         return fixture.system().SetMachineName(&context, request, &response);
     };
 
-    SECTION("a saved machine cannot be renamed but by its document") {
+    SECTION("renaming a saved machine renames its document") {
         FakeMachineStore store;
         store.saved = true;
         SystemTestFixture fixture({}, identity_named("Elite"), true, &store);
-        const auto status = set_name(fixture, "Other");
-        CHECK(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
-        CHECK(status.error_message().find("rename the document") != std::string::npos);
+
+        grpc::ClientContext watch_context;
+        auto reader = fixture.system().WatchServerStatus(&watch_context, {});
+        beebium::ServerStatusEvent event;
+        REQUIRE(reader->Read(&event));  // READY
+
+        grpc::ClientContext context;
+        beebium::SetMachineNameRequest request;
+        request.set_name("Elite II");
+        beebium::SetMachineNameResponse response;
+        REQUIRE(fixture.system().SetMachineName(&context, request, &response).ok());
+        CHECK(store.asked_rename == "Elite II");
+        CHECK(response.identity().name() == "Elite II");
+        CHECK(response.identity().uuid() == "11111111-1111-4111-8111-111111111111");
+        bool announced = false;
+        while (!announced && reader->Read(&event)) {
+            if (event.status() == beebium::SERVER_STATUS_IDENTITY_CHANGED) {
+                CHECK(event.identity().name() == "Elite II");
+                announced = true;
+            }
+        }
+        CHECK(announced);
+        watch_context.TryCancel();
+        while (reader->Read(&event)) {}
+        reader->Finish();
+    }
+    SECTION("a refused rename changes nothing, with the store's reason") {
+        using Error = beebium::service::MachineStore::SaveOutcome::Error;
+        for (auto [error, code] :
+             {std::pair{Error::InvalidArgument, grpc::StatusCode::INVALID_ARGUMENT},
+              std::pair{Error::AlreadyExists, grpc::StatusCode::ALREADY_EXISTS},
+              std::pair{Error::Internal, grpc::StatusCode::INTERNAL}}) {
+            FakeMachineStore store;
+            store.saved = true;
+            store.rename_outcome = {error, "why", {}, {}};
+            SystemTestFixture fixture({}, identity_named("Elite"), true, &store);
+            const auto status = set_name(fixture, "Bad/Name");
+            CHECK(status.error_code() == code);
+            CHECK(status.error_message() == "why");
+            grpc::ClientContext context;
+            beebium::SystemInfo info;
+            REQUIRE(fixture.system().GetSystemInfo(&context, {}, &info).ok());
+            CHECK(info.identity().name() == "Elite");
+        }
+    }
+    SECTION("an empty name is refused before the store is asked") {
+        FakeMachineStore store;
+        store.saved = true;
+        SystemTestFixture fixture({}, identity_named("Elite"), true, &store);
+        CHECK(set_name(fixture, "").error_code() == grpc::StatusCode::INVALID_ARGUMENT);
+        CHECK(store.asked_rename.empty());
+    }
+    SECTION("the same name is a success that announces nothing") {
+        FakeMachineStore store;
+        store.saved = true;
+        SystemTestFixture fixture({}, identity_named("Elite"), true, &store);
+        CHECK(set_name(fixture, "Elite").ok());
+        CHECK(store.asked_rename == "Elite");
     }
     SECTION("a machine not yet saved can be renamed") {
         FakeMachineStore store;

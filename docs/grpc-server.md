@@ -566,11 +566,17 @@ has no description. See [cli.md](cli.md#machine-name-and-description).
 
 #### SetMachineName
 
-Renames a machine not yet saved, to a plain name, and returns its identity. A
-saved machine is named by its document, which is renamed instead: the request
-is refused with `FAILED_PRECONDITION` ("rename the document"). An empty name is
-refused with `INVALID_ARGUMENT`. The rename is announced to `WatchServerStatus`
-watchers and re-published over mDNS at once.
+Renames the machine, to a plain name, and returns its identity. A machine not
+yet saved simply takes the name. A saved machine is named by its document, so
+its document is renamed: without the machine stopping, its directory moves to
+`<parent>/<name>.beebium-machine`, its open media and lock follow, its document
+file is rewritten for the new name, and `SystemInfo.machineDirpath` reports the
+new directory; its uuid is unchanged. A name that cannot name a file on every
+host is refused with `INVALID_ARGUMENT`, saying why, and one whose directory
+already exists with `ALREADY_EXISTS`; nothing changes then. An empty name is
+refused with `INVALID_ARGUMENT`; the same name succeeds and changes nothing. A
+rename is announced to `WatchServerStatus` watchers and re-published over mDNS
+at once.
 
 #### SetMachineDescription
 

@@ -133,10 +133,13 @@ class SystemServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def SetMachineName(self, request, context):
-        """Set a machine's name: plain text, never a template. Only for a machine
-        not yet saved; a saved machine's name is its document's, so the
-        document is renamed instead. Errors: INVALID_ARGUMENT for an empty
-        name; FAILED_PRECONDITION for a saved machine.
+        """Set a machine's name: plain text, never a template. A saved machine's
+        name is its document's, so its document is renamed, its directory
+        becoming <parent>/<name>.beebium-machine without the machine stopping.
+        Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
+        that cannot name a file (the message says why); ALREADY_EXISTS for a
+        saved machine whose new directory exists. The same name changes
+        nothing.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

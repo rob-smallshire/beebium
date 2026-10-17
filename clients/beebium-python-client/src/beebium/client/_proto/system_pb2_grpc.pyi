@@ -50,10 +50,13 @@ class SystemServiceStub:
     GetSystemInfo: _grpc.UnaryUnaryMultiCallable[_system_pb2.GetSystemInfoRequest, _system_pb2.SystemInfo]
     """Get current system/machine information"""
     SetMachineName: _grpc.UnaryUnaryMultiCallable[_system_pb2.SetMachineNameRequest, _system_pb2.SetMachineNameResponse]
-    """Set a machine's name: plain text, never a template. Only for a machine
-    not yet saved; a saved machine's name is its document's, so the
-    document is renamed instead. Errors: INVALID_ARGUMENT for an empty
-    name; FAILED_PRECONDITION for a saved machine.
+    """Set a machine's name: plain text, never a template. A saved machine's
+    name is its document's, so its document is renamed, its directory
+    becoming <parent>/<name>.beebium-machine without the machine stopping.
+    Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
+    that cannot name a file (the message says why); ALREADY_EXISTS for a
+    saved machine whose new directory exists. The same name changes
+    nothing.
     """
     SetMachineDescription: _grpc.UnaryUnaryMultiCallable[_system_pb2.SetMachineDescriptionRequest, _system_pb2.SetMachineDescriptionResponse]
     """Set the machine's description template (empty: no description). See
@@ -115,10 +118,13 @@ class SystemServiceAsyncStub(SystemServiceStub):
     GetSystemInfo: _aio.UnaryUnaryMultiCallable[_system_pb2.GetSystemInfoRequest, _system_pb2.SystemInfo]  # type: ignore[assignment]
     """Get current system/machine information"""
     SetMachineName: _aio.UnaryUnaryMultiCallable[_system_pb2.SetMachineNameRequest, _system_pb2.SetMachineNameResponse]  # type: ignore[assignment]
-    """Set a machine's name: plain text, never a template. Only for a machine
-    not yet saved; a saved machine's name is its document's, so the
-    document is renamed instead. Errors: INVALID_ARGUMENT for an empty
-    name; FAILED_PRECONDITION for a saved machine.
+    """Set a machine's name: plain text, never a template. A saved machine's
+    name is its document's, so its document is renamed, its directory
+    becoming <parent>/<name>.beebium-machine without the machine stopping.
+    Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
+    that cannot name a file (the message says why); ALREADY_EXISTS for a
+    saved machine whose new directory exists. The same name changes
+    nothing.
     """
     SetMachineDescription: _aio.UnaryUnaryMultiCallable[_system_pb2.SetMachineDescriptionRequest, _system_pb2.SetMachineDescriptionResponse]  # type: ignore[assignment]
     """Set the machine's description template (empty: no description). See
@@ -189,10 +195,13 @@ class SystemServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _system_pb2.SetMachineNameRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_system_pb2.SetMachineNameResponse, _abc.Awaitable[_system_pb2.SetMachineNameResponse]]:
-        """Set a machine's name: plain text, never a template. Only for a machine
-        not yet saved; a saved machine's name is its document's, so the
-        document is renamed instead. Errors: INVALID_ARGUMENT for an empty
-        name; FAILED_PRECONDITION for a saved machine.
+        """Set a machine's name: plain text, never a template. A saved machine's
+        name is its document's, so its document is renamed, its directory
+        becoming <parent>/<name>.beebium-machine without the machine stopping.
+        Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
+        that cannot name a file (the message says why); ALREADY_EXISTS for a
+        saved machine whose new directory exists. The same name changes
+        nothing.
         """
 
     @_abc_1.abstractmethod

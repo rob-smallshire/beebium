@@ -313,10 +313,12 @@ has a plain **name** and a templated **description**:
   is its document name, its directory's name without the suffix, derived when
   it is opened and after every Save and Save As and never stored, so a Finder
   rename shows at its next open and two machines forked by Save As show
-  different titles. `SetMachineName` refuses a saved machine ("rename the
-  document"). A transient machine's name is a plain `--machine-name`, else the
-  preset's name and the launcher's ordinal ("Model B (Disc) #2"), and
-  `SetMachineName` renames it; Save proposes it as the document name.
+  different titles. Renaming is one mechanism, the machine's name: renaming a
+  saved machine (`SetMachineName`, the app's rename, as for any document)
+  renames its document, its directory moving while it runs. A transient
+  machine's name is a plain `--machine-name`, else the preset's name and the
+  launcher's ordinal ("Model B (Disc) #2"), and `SetMachineName` renames it;
+  Save proposes it as the document name.
 - The description is the #153 template (`machine_description` in a preset,
   `description` in `machine.json`), rendered live and shown as a subtitle;
   absent means no subtitle.

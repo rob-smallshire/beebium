@@ -63,8 +63,13 @@ without it still gets a document file with it.
 
 The machine's **name** is not stored: a saved machine's name is its document
 name, the directory's name without `.beebium-machine`, read when the machine
-is opened and after every Save and Save As. Renaming the directory renames
-the machine (at its next open); `SetMachineName` refuses a saved machine.
+is opened and after every Save, Save As and rename. Renaming the directory
+renames the machine (at its next open); renaming a running saved machine
+(`SetMachineName`) renames the directory, which moves to
+`<name>.beebium-machine` beside it with its media, lock and document file
+following and its uuid kept: on POSIX by renaming the directory in place, on
+Windows -- which will not rename a directory holding open files -- by
+copying it beside, as Save As does, and removing the old one.
 `describe-machine` reports the name as `name`.
 - `model` is the model id; `start --machine` refuses a machine of another
   model.

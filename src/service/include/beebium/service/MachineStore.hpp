@@ -58,6 +58,16 @@ public:
                              const std::string& machine_uuid,
                              const std::string& description_template) = 0;
 
+    // Renames a saved machine's document to `name`: its directory becomes
+    // <parent>/<name>.beebium-machine, and every medium open in it, its lock
+    // and its document file follow, without the machine stopping. The same
+    // name is a success that changes nothing. Errors: InvalidArgument for a
+    // name that cannot name a file (the message says why), AlreadyExists
+    // for a sibling of that name, Internal when the move fails (the machine
+    // is left where it was). machine_dirpath and machine_uuid in the outcome
+    // are the machine's afterwards.
+    virtual SaveOutcome rename(const std::string& name) = 0;
+
     // Forgets the battery-backed state, from the next start; returns the
     // units forgotten.
     virtual std::vector<std::string> reset_battery() = 0;

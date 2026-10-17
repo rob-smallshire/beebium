@@ -162,6 +162,20 @@ public:
         return outcome;
     }
 
+    SaveOutcome rename(const std::string& name) override {
+        std::lock_guard lock(mutex_);
+        SaveOutcome outcome;
+        am_.machine.with_emulation_paused([&] {
+            try {
+                outcome = rename_paused(name);
+            } catch (const std::exception& e) {
+                outcome.error = SaveOutcome::Error::Internal;
+                outcome.message = e.what();
+            }
+        });
+        return outcome;
+    }
+
     std::vector<std::string> reset_battery() override {
         std::lock_guard lock(mutex_);
         battery_reset_ = true;
@@ -267,6 +281,65 @@ private:
         return {Error::None, {}, utf8_of(target), uuid};
     }
 
+    SaveOutcome rename_paused(const std::string& name) {
+        const auto home = am_.machine_directory->dirpath();
+        std::string error;
+        auto record = read_machine_record(home, error);
+        if (!record) throw std::runtime_error(error);
+        if (auto why = why_not_document_name(name)) return {Error::InvalidArgument, *why, {}, {}};
+        if (name == machine_document_name(home)) {
+            return {Error::None, {}, utf8_of(home), record->uuid};
+        }
+        auto target = home.parent_path() / path_from_utf8(name);
+        target += machine_layout::DOCUMENT_SUFFIX;
+        std::error_code ec;
+        if (std::filesystem::exists(target, ec)) {
+            return {Error::AlreadyExists,
+                    utf8_of(target) + " already exists; choose another name", {}, {}};
+        }
+        flush_disc_drives(am_.machine);
+#ifdef _WIN32
+        // Windows will not rename a directory holding open files (the lock,
+        // a hard disc image), so the machine is copied beside it, as by
+        // Save As but keeping its uuid, and the old directory removed.
+        save_as(home, target, /*saved=*/true, record->uuid, record->description,
+                /*replacing=*/false);
+        clear_directory_readonly(home);
+        std::filesystem::remove_all(home, ec);
+        if (ec) {
+            std::cerr << "Warning: cannot remove " << utf8_of(home) << " after renaming the "
+                      << "machine: " << ec.message() << "\n";
+        }
+#else
+        // A directory renamed with files open in it keeps them open: the
+        // lock and a hard disc image stay held, and the media are re-pointed
+        // so that their paths, and the next open of a floppy image, are the
+        // new ones.
+        std::filesystem::rename(home, target);
+        try {
+            repoint_media(home, target);
+        } catch (...) {
+            std::filesystem::rename(target, home, ec);
+            try {
+                repoint_media(target, home);
+            } catch (const std::exception& e) {
+                std::cerr << "Warning: " << e.what() << "\n";
+            }
+            throw;
+        }
+        am_.machine_directory->relocate(target);
+        config_.launch.machine_dirpath = target;
+        try {
+            write_machine_document_files(target, *record, machine_document_name(target));
+        } catch (const std::exception& e) {
+            std::cerr << "Warning: cannot write the machine's document file and folder "
+                         "metadata: "
+                      << e.what() << "\n";
+        }
+#endif
+        return {Error::None, {}, utf8_of(target), record->uuid};
+    }
+
     void save_in_place(const std::filesystem::path& home, const std::string& description_template) {
         keep_state(home);
         std::string error;
@@ -326,7 +399,9 @@ private:
                 auto kept = read_machine_record(home, error);
                 if (!kept) throw std::runtime_error(error);
                 record = *kept;
-                record.created = iso8601_utc_now();
+                // A copy with a uuid of its own is a new machine; the same
+                // machine moved (a rename) keeps when it was made.
+                if (record.uuid != uuid) record.created = iso8601_utc_now();
             } else {
                 record = new_machine_record(config_, uuid, description_template);
             }

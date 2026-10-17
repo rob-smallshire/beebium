@@ -22,7 +22,9 @@ test_integra_b.py.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import socket
 import subprocess
 from pathlib import Path
@@ -316,9 +318,9 @@ def test_a_save_replaces_a_saved_machine_only_when_asked_and_only_one_it_may(
         assert bbc.system.identity.uuid == uuid
 
 
-def test_a_saved_machine_is_renamed_only_by_its_document(installation, run, tmp_path: Path):
-    """A saved machine's name is its document's: SetMachineName is refused,
-    and the description, a template, is unaffected."""
+def test_a_saved_machine_is_named_by_its_document(installation, run, tmp_path: Path):
+    """A saved machine's name is its document's, whatever --machine-name says,
+    and its description, a template, is its own."""
     machine = tmp_path / "Elite.beebium-machine"
     assert run("create-machine", "--machine-description", "On {machine-model}",
                "--output", machine).returncode == 0
@@ -326,10 +328,6 @@ def test_a_saved_machine_is_renamed_only_by_its_document(installation, run, tmp_
         identity = bbc.system.identity
         assert identity.name == "Elite"
         assert identity.description == "On BBC Model B"
-        with pytest.raises(grpc.RpcError) as refused:
-            bbc.system.set_machine_name("Other")
-        assert refused.value.code() == grpc.StatusCode.FAILED_PRECONDITION
-        assert "rename the document" in refused.value.details()
 
 
 def test_a_saved_machine_keeps_its_new_description_and_its_last_screen(
@@ -346,6 +344,94 @@ def test_a_saved_machine_keeps_its_new_description_and_its_last_screen(
     assert Path(description["thumbnail_filepath"]).is_file()  # kept at shutdown
     with _launch(installation, machine) as bbc:
         assert bbc.system.identity.description == "Described BBC Model B"
+
+
+REPO_ASSETS_DIRPATH = Path(__file__).parent.parent.parent.parent / "tests" / "assets"
+
+
+def test_a_running_saved_machine_is_renamed_with_its_document(installation, run, describe,
+                                                             tmp_path: Path):
+    """Renaming a saved machine renames its document: the directory moves to
+    <name>.beebium-machine with its lock and document file, its open media are
+    re-pointed and keep taking writes, and it reopens under the new name with
+    the same uuid."""
+    disc = REPO_ASSETS_DIRPATH / "discs" / "6502timing.ssd"
+    hard_disc = REPO_ASSETS_DIRPATH / "scsi" / "scsi0.dat"
+    if not disc.is_file() or not hard_disc.is_file():
+        pytest.skip("test disc images not available")
+    # Bare names found in the per-user discs/ become the machine's own copies.
+    user_discs = Path(os.environ["BEEBIUM_USER_DIRPATH"]) / "discs"
+    user_discs.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(disc, user_discs / "rename-test.ssd")
+    shutil.copyfile(hard_disc, user_discs / "rename-test.dat")
+    shutil.copyfile(hard_disc.with_suffix(".dsc"), user_discs / "rename-test.dsc")
+
+    old = tmp_path / "Before.beebium-machine"
+    new = tmp_path / "After It.beebium-machine"
+    created = run("create-machine", "--preset", "model-b-disc", "--floppy", "0:rename-test.ssd",
+                  "--acorn-scsi", "--scsi-hdd", "scsi-id=0:image=rename-test.dat",
+                  "--output", old)
+    assert created.returncode == 0, created.stderr
+    uuid = describe(old)["uuid"]
+
+    def basic(bbc: Beebium, line: str) -> None:
+        bbc.keyboard.type(line + "\r")
+        assert _run_until(bbc, lambda: _at_prompt(bbc) and bbc.keyboard.typing_status().idle,
+                          COMMAND_SECONDS), _screen(bbc)
+
+    with _launch(installation, old) as bbc:
+        assert _run_until(bbc, lambda: _at_prompt(bbc), CLIENT_BOOT_SECONDS), _screen(bbc)
+        assert bbc.system.identity.name == "Before"
+        events = bbc.system.watch_status()
+        assert next(events).status == ServerStatus.READY
+
+        renamed = bbc.system.set_machine_name("After It")
+        assert renamed.name == "After It"
+        assert renamed.uuid == uuid
+        changed = next(e for e in events if e.status == ServerStatus.IDENTITY_CHANGED)
+        events.close()
+        assert changed.identity.name == "After It"
+
+        # The directory moved, with its lock and its document file.
+        assert not old.exists()
+        assert bbc.system.machine_dirpath == str(new)
+        assert (new / "After It.beebium-machine").is_file()
+        assert not (new / "Before.beebium-machine").exists()
+        assert "After It" in (new / "desktop.ini").read_bytes().decode("utf-16")
+        assert describe(new)["locked_by_pid"]
+        assert describe(new)["uuid"] == uuid
+
+        # Its media follow it, and keep taking writes.
+        assert "After%20It.beebium-machine" in bbc.disc.drive(0).status.disc_url
+        devices = [d for e in bbc.extensions.loaded for d in e.storage_devices]
+        assert [Path(d.backing_path).parent for d in devices] == [new]
+        basic(bbc, '10 PRINT "RENAMED"')
+        basic(bbc, 'SAVE "AFTER"')
+
+    with _launch(installation, new) as bbc:
+        assert bbc.system.identity.name == "After It"
+        assert bbc.system.identity.uuid == uuid
+        assert _run_until(bbc, lambda: _at_prompt(bbc), CLIENT_BOOT_SECONDS), _screen(bbc)
+        basic(bbc, "*CAT")
+        assert "AFTER" in _screen(bbc)
+
+
+def test_a_saved_machine_refuses_a_name_that_cannot_name_its_document(
+        installation, run, tmp_path: Path):
+    machine = tmp_path / "Named.beebium-machine"
+    taken = tmp_path / "Taken.beebium-machine"
+    for directory in (machine, taken):
+        assert run("create-machine", "--output", directory).returncode == 0
+    with _launch(installation, machine) as bbc:
+        for name, code, why in (("a/b", grpc.StatusCode.INVALID_ARGUMENT, "path separator"),
+                                ("..", grpc.StatusCode.INVALID_ARGUMENT, "not a file name"),
+                                ("Taken", grpc.StatusCode.ALREADY_EXISTS, "already exists")):
+            with pytest.raises(grpc.RpcError) as refused:
+                bbc.system.set_machine_name(name)
+            assert refused.value.code() == code
+            assert why in refused.value.details()
+        assert bbc.system.set_machine_name("Named").name == "Named"  # the same name: nothing to do
+        assert bbc.system.machine_dirpath == str(machine)
 
 
 # ---------------------------------------------------------------------------

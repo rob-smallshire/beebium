@@ -281,6 +281,10 @@ public:
 
     const std::filesystem::path& dirpath() const { return dirpath_; }
 
+    // The directory, renamed to `dirpath` while its lock is held (the lock is
+    // on the open file, which moves with it), is known by its new path.
+    void relocate(std::filesystem::path dirpath) { dirpath_ = std::move(dirpath); }
+
     // True for a directory the launch made and removes at a clean shutdown.
     bool transient() const { return transient_; }
 

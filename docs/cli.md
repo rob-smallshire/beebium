@@ -270,10 +270,15 @@ plain text: braces in it are just braces. A saved machine's name is its
 document's: the name of its directory without `.beebium-machine`, read when it
 is opened and after every Save and Save As, and never stored, so a machine
 renamed in the Finder or Explorer shows its new name at its next open, and two
-machines forked by Save As have different names. `SetMachineName` refuses a
-saved machine ("rename the document"). A machine not yet saved has the name
-`--machine-name` gives it, else its preset's name (else the model's) and its
-launcher's ordinal; `SetMachineName` renames it.
+machines forked by Save As have different names. Renaming a saved machine
+(`SetMachineName`, the app's rename) renames its document: the directory moves
+to `<name>.beebium-machine` beside it while the machine runs, its media and
+lock following. A name that cannot name a file on every host (a path
+separator, `.` or `..`, a character Windows refuses, a trailing space or `.`,
+a Windows device name such as `CON`) is refused, as is one whose directory
+already exists. A machine not yet saved has the name `--machine-name` gives
+it, else its preset's name (else the model's) and its launcher's ordinal;
+`SetMachineName` renames it, plainly.
 
 The **description**, shown beside the name (a window subtitle), is a
 **template** (#153): `{key}` stands for a placeholder's current value, and the

@@ -39,6 +39,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <cctype>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -236,6 +237,39 @@ inline std::filesystem::path path_from_utf8(std::string_view text) {
 inline std::string utf8_of(const std::filesystem::path& path) {
     const auto text = path.u8string();
     return std::string(text.begin(), text.end());
+}
+
+// Why `name` cannot name a machine's document, or nullopt when it can. A
+// document's name becomes its directory's and its document file's, and a
+// machine moves between hosts unchanged, so the name must be a valid file
+// name on every one of them: not empty, not "." or "..", no path separator
+// and none of the characters or names Windows refuses.
+inline std::optional<std::string> why_not_document_name(std::string_view name) {
+    if (name.empty()) return "a name cannot be empty";
+    if (name == "." || name == "..") return "\"" + std::string(name) + "\" is not a file name";
+    for (const char c : name) {
+        if (c == '/' || c == '\\') return "a name cannot contain a path separator ('/' or '\\')";
+        if (static_cast<unsigned char>(c) < 0x20) return "a name cannot contain a control character";
+        if (std::string_view("<>:\"|?*").find(c) != std::string_view::npos) {
+            return std::string("a name cannot contain '") + c +
+                   "', which Windows does not allow in a file name";
+        }
+    }
+    if (name.back() == ' ' || name.back() == '.') {
+        return "a name cannot end with a space or a '.', which Windows drops";
+    }
+    std::string upper;
+    for (const char c : name.substr(0, name.find('.'))) {
+        upper += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    for (const auto* reserved : {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4",
+                                 "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3",
+                                 "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"}) {
+        if (upper == reserved) {
+            return "\"" + std::string(name) + "\" is a device name on Windows, not a file name";
+        }
+    }
+    return std::nullopt;
 }
 
 // The name of the document a machine directory is: the directory's name

@@ -71,9 +71,9 @@ class MachineIdentity:
 
     A machine's *name* is plain text, never a template: what titles and the
     network announcement show. A saved machine's is its document's name (its
-    directory's name without ``.beebium-machine``), and is changed by renaming
-    the document; a machine not yet saved can be renamed with
-    :meth:`System.set_machine_name`.
+    directory's name without ``.beebium-machine``), so renaming it with
+    :meth:`System.set_machine_name` renames the document; a machine not yet
+    saved is simply renamed.
 
     Its *description* is shown beside the name (a window subtitle) and is a
     *template*: ordinary text in which ``{key}`` stands for the current value
@@ -151,7 +151,7 @@ class MachineIdentity:
 
     @name.setter
     def name(self, value: str) -> None:
-        """Rename a machine not yet saved via gRPC (a saved machine refuses)."""
+        """Rename the machine via gRPC (a saved machine's document with it)."""
         self._adopt(self._system.set_machine_name(value))
 
     @property
@@ -410,12 +410,16 @@ class System:
         return MachineIdentity._from_proto(response.identity, self)
 
     def set_machine_name(self, name: str) -> MachineIdentity:
-        """Rename a machine not yet saved.
+        """Rename the machine.
 
         A name is plain text, never a template. A saved machine is named by
-        its document, which is renamed instead: the server refuses
-        (grpc.RpcError with status FAILED_PRECONDITION). An empty name is
-        refused with INVALID_ARGUMENT.
+        its document, so its document is renamed: its directory moves to
+        ``<name>.beebium-machine`` beside it while it runs, and
+        :attr:`machine_dirpath` reports the new one. A name that cannot name
+        a file on every host is refused (grpc.RpcError with status
+        INVALID_ARGUMENT, saying why), as is one whose directory already
+        exists (ALREADY_EXISTS). An empty name is refused with
+        INVALID_ARGUMENT.
 
         Returns:
             The updated identity.

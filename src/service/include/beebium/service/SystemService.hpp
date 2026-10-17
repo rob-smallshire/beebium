@@ -630,17 +630,34 @@ grpc::Status SystemServiceImpl<MachineType>::SetMachineName(
     if (name.empty()) {
         return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Name cannot be empty");
     }
-    // A saved machine's name is its document's: there is one way to rename
-    // it, and that is to rename the document.
+    // A saved machine's name is its document's, so renaming it renames the
+    // document, its directory moving with it.
+    std::string new_name = name;
     if (machine_store_ && machine_store_->machine_saved()) {
-        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
-                            "a saved machine is named by its document: rename the document");
+        const auto outcome = machine_store_->rename(name);
+        using Error = MachineStore::SaveOutcome::Error;
+        switch (outcome.error) {
+            case Error::None:
+                break;
+            case Error::InvalidArgument:
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, outcome.message);
+            case Error::AlreadyExists:
+                return grpc::Status(grpc::StatusCode::ALREADY_EXISTS, outcome.message);
+            case Error::FailedPrecondition:
+                return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, outcome.message);
+            case Error::Internal:
+                return grpc::Status(grpc::StatusCode::INTERNAL, outcome.message);
+        }
+        new_name = machine_store_->document_name();
     }
+    bool changed = false;
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
-        identity_.name = name;
+        changed = identity_.name != new_name;
+        identity_.name = new_name;
         populate_identity_proto(response->mutable_identity());
     }
+    if (!changed) return grpc::Status::OK;
 
     // The name on the network is the name in the title bar of anyone looking
     // at this machine, so it has to follow the rename rather than wait for a

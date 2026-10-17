@@ -327,10 +327,12 @@ export class System {
     }
 
     /**
-     * Rename a machine not yet saved. A name is plain text, never a
-     * template, and must not be empty. A saved machine is named by its
-     * document, which is renamed instead: the server refuses with
-     * FAILED_PRECONDITION.
+     * Rename the machine. A name is plain text, never a template, and must
+     * not be empty. A saved machine is named by its document, so its
+     * document is renamed: its directory moves to `<name>.beebium-machine`
+     * beside it while it runs. A name that cannot name a file on every host
+     * is refused with INVALID_ARGUMENT, one whose directory exists with
+     * ALREADY_EXISTS.
      */
     async setMachineName(name: string): Promise<MachineIdentity> {
         const response = await promisify<{ name: string }, ProtoSetMachineNameResponse>(
