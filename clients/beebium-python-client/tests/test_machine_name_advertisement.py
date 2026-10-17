@@ -95,7 +95,7 @@ def advertising_bbc(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
             server=beebium_server_filepath,
-            extra_args=["--machine-name", "Peterhouse", "--advertise"],
+            extra_args=["--machine-description", "Peterhouse", "--advertise"],
             startup_timeout=20.0,
         ) as bbc:
             state = bbc.system.get_advertisement_state()

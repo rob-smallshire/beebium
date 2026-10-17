@@ -56,7 +56,7 @@ The shipped Level 3 File Server preset, as `create-preset` writes it:
   "name": "Station 254 (L3 File Server, Model B)",
   "release_date": "1985",
   "description": "Level 3 File Server: ADFS + ANFS, SCSI disc, 65C02 copro",
-  "machine_name": "L3 File Server, station {econet-station}",
+  "machine_description": "L3 File Server, station {econet-station}",
   "startup": { "auto_boot": true },
   "storage": { "fdc_socket": { "id": "acorn-1770" } },
   "sideways_bank": {
@@ -90,7 +90,7 @@ model's default, which `resolve-preset` shows.
 | `name` | string | The preset's display name. Default: the display name of its model (the model it names or, naming none, the one it runs as) |
 | `release_date` | string | `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, for sorting in a picker |
 | `description` | string | One line for a preset picker |
-| `machine_name` | string | The launched machine's name, a template with `{key}` placeholders (see `list-name-placeholders` and [cli.md](cli.md#machine-name)). Default: the model's name |
+| `machine_description` | string | The launched machine's name, a template with `{key}` placeholders (see `list-name-placeholders` and [cli.md](cli.md#machine-name)). Default: the model's name |
 | `speed` | number or `"unlimited"` | [Emulation speed](#speed) |
 | `startup` | object | [Startup keyboard links](#startup) |
 | `mos_image_uri` | string | [The MOS ROM](#mos_image_uri) |
@@ -416,7 +416,7 @@ keeps the rest:
 
 | Setting | Rule |
 |---------|------|
-| `--machine-name`, `--speed`, `--mos`, `--fdc`, `--station` | Replaces the preset's value |
+| `--machine-description`, `--speed`, `--mos`, `--fdc`, `--station` | Replaces the preset's value |
 | `--floppy d:...` | Replaces the preset's image for that drive |
 | `--sideways slot=N...` | Replaces the preset's entry for that slot |
 | `--screen-mode`, `--auto-boot`, `--links` | Per key within one form; an option of the other form replaces the preset's startup entirely (`--links` drops the preset's `screen_mode` and `auto_boot`, and the reverse) |
@@ -472,7 +472,7 @@ machine (it loads the configured extensions' plugin libraries, to ask their
 configuration checks, but creates no extension), and prints the machine it describes as a preset document in which
 every key is present:
 
-- `description`, `release_date`, `machine_name`, `thumbnail_capture_delay_seconds`: the value or `null`
+- `description`, `release_date`, `machine_description`, `thumbnail_capture_delay_seconds`: the value or `null`
 - `speed`: the value, `1.0` by default, `"unlimited"` for unlimited
 - `startup`: `{ "links": n }`, or `{ "screen_mode": m, "auto_boot": b }` with the defaults filled in
 - `mos_image_uri`: the model's MOS by default

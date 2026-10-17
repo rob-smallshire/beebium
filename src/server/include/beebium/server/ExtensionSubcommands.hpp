@@ -666,7 +666,7 @@ public:
     }
 };
 
-// ListNamePlaceholders subcommand: the placeholders a machine-name template
+// ListNamePlaceholders subcommand: the placeholders a machine description template
 // can use (#153), for people writing presets and launch commands. Lists the
 // core's placeholders without launching a machine, so only values fixed
 // before launch are shown; a running server's ListNamePlaceholders RPC lists
@@ -676,14 +676,15 @@ class ListNamePlaceholdersSubcommand : public Subcommand<MachineType> {
 public:
     std::string_view name() const override { return "list-name-placeholders"; }
     std::string_view description() const override {
-        return "List the placeholders a machine-name template can use";
+        return "List the placeholders a machine description template can use";
     }
 
     void help(const char* program_name) const override {
         std::cerr << "Usage: " << program_name << " list-name-placeholders\n"
                   << "\n"
-                  << "Lists the placeholders a machine-name template (--machine-name, a\n"
-                  << "preset's machine_name) can use: each placeholder's key, written\n"
+                  << "Lists the placeholders a machine description template\n"
+                  << "(--machine-description, a preset's machine_description) can use: each\n"
+                  << "placeholder's key, written\n"
                   << "{key} in a template, its label, group and description, and its\n"
                   << "value where it is known before launch. 'Station {econet-station}'\n"
                   << "renders as 'Station 80' on station 80, and follows a renumber at\n"

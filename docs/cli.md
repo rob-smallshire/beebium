@@ -259,7 +259,7 @@ Scripts can parse the `Listening on port <N>` line to discover the allocated por
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--machine-name <template>` | the preset's `machine_name`, else the model's name | The machine's name: text in which `{key}` placeholders are filled from the machine's state |
+| `--machine-description <template>` | the preset's `machine_description`, else the model's name | The machine's name: text in which `{key}` placeholders are filled from the machine's state |
 | `--machine-ordinal <n>` | none | This machine's instance number from its launcher (a positive integer), shown by `{machine-ordinal}` as `#n`. Launch state: a preset cannot set it |
 
 The name is a **template** (#153). Ordinary text is a plain name, as before;
@@ -268,7 +268,7 @@ rendered name up to date as values change -- re-rendering once a second -- so
 window titles, `SystemInfo` and the mDNS announcement follow the machine:
 
 ```bash
-beebium-model-b --machine-name "Station {econet-station} (AUN, Model B)" \
+beebium-model-b --machine-description "Station {econet-station} (AUN, Model B)" \
     --station 80 --aun port=0
 # named "Station 80 (AUN, Model B)"; renumbered to 81, it becomes
 # "Station 81 (AUN, Model B)" at the next Break
@@ -316,7 +316,7 @@ system read from the station links at its last Break, which is the number it
 is using. A renumber from the sidebar or `SetStationId` shows in the name once
 the guest re-reads the links at the next Break.
 
-A preset's `machine_name` is a template in the same way. A shell needs the
+A preset's `machine_description` is a template in the same way. A shell needs the
 braces quoted only where it would otherwise expand them (`{a,b}` in bash and
 zsh); the templates above are safe as written in double quotes.
 
@@ -333,7 +333,7 @@ and `model_name`, the model as a user sees it, e.g. `BBC Model B`; while Econet
 is enabled also `econet_station`, and with AUN `econet_net` and
 `econet_aun_port`); a discovering frontend (the macOS app today) lists it
 without the user typing `host:port`, showing `model_name`. The advertised
-instance name is the machine's rendered name (`--machine-name`), and is
+instance name is the machine's rendered name (`--machine-description`), and is
 re-announced when the rendering changes -- at most once every five seconds, so
 a value that changes repeatedly cannot flood the network.
 
@@ -768,7 +768,7 @@ my-elite-setup	My Elite Setup	user
 ```
 
 **`jsonl`** (one object per preset). Each row has `id`, `name` and `source`,
-then whichever of `model`, `machine_name`, `description` and `release_date` the
+then whichever of `model`, `machine_description`, `description` and `release_date` the
 preset gives (a field it does not give is omitted, never `null`), then
 `filepath` and `thumbnail` (whether `show-preset --thumbnail` has one to write),
 in that order:
@@ -817,7 +817,7 @@ The preset is written as a `.beebium-preset` zip archive holding `preset.json`
 my-elite-setup
 ```
 
-`create-preset` also accepts every machine option `start` does that a preset can record: `--description`, `--release-date`, `--machine-name` (a name template, recorded as written; see [Machine Name](#machine-name)), `--speed`, `--screen-mode`, `--auto-boot`, `--links`, `--mos`, `--language-rom` (recorded as the model's language slot), `--fdc`, `--floppy` (a relative path is taken from the working directory, as for `start`, and recorded absolutely), `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. With `--from`, each flag overrides the source preset as it would on a `start` command line: a `--sideways` or `--floppy` replaces only the slot or drive it names. The file format is described in [preset-schema.md](preset-schema.md). The options are parsed exactly as `start` parses them (`--from` playing `--preset`), and only what was given is recorded: a parameter left to its default, or an instance id the server would generate, is left out, so the preset keeps following the defaults. For example `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "port": "0"}`. A relative path with a directory component (a `--floppy`, `--sideways` image, `--mos` or an extension file parameter) is taken from the working directory and recorded absolutely; a bare name (a ROM, a bundled ROM or a hard disc to be searched for) is kept. Options that configure the launch rather than the machine (`--port`, `--wait`, `--advertise`, ...) and those with no preset form (`--write-protect`, `--hide`, `--motherboard-link`, a board RTC) are refused.
+`create-preset` also accepts every machine option `start` does that a preset can record: `--description`, `--release-date`, `--machine-description` (a name template, recorded as written; see [Machine Name](#machine-name)), `--speed`, `--screen-mode`, `--auto-boot`, `--links`, `--mos`, `--language-rom` (recorded as the model's language slot), `--fdc`, `--floppy` (a relative path is taken from the working directory, as for `start`, and recorded absolutely), `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. With `--from`, each flag overrides the source preset as it would on a `start` command line: a `--sideways` or `--floppy` replaces only the slot or drive it names. The file format is described in [preset-schema.md](preset-schema.md). The options are parsed exactly as `start` parses them (`--from` playing `--preset`), and only what was given is recorded: a parameter left to its default, or an instance id the server would generate, is left out, so the preset keeps following the defaults. For example `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "port": "0"}`. A relative path with a directory component (a `--floppy`, `--sideways` image, `--mos` or an extension file parameter) is taken from the working directory and recorded absolutely; a bare name (a ROM, a bundled ROM or a hard disc to be searched for) is kept. Options that configure the launch rather than the machine (`--port`, `--wait`, `--advertise`, ...) and those with no preset form (`--write-protect`, `--hide`, `--motherboard-link`, a board RTC) are refused.
 
 If `--from` is omitted, creates a minimal "bare" preset for the model containing just the model ID, name, and release date.
 
@@ -886,7 +886,7 @@ when it does), without running it, and prints its path. The directory holds
 the preset unpacked, with any machine options recorded over it as
 `create-preset` records them (launch options are refused), as `preset.json`
 beside every file the preset holds, its thumbnail included; a `machine.json`
-giving it a new uuid, its name (`--machine-name`, else the preset's machine
+giving it a new uuid, its name (`--machine-description`, else the preset's machine
 name, else the model's name), its model, the preset it came from and when it
 was made; and the `<name>.beebium-machine` document file and folder metadata.
 Every extension instance's id is recorded in `preset.json`, so the instance

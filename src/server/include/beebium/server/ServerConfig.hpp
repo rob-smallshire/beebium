@@ -112,7 +112,7 @@ struct MachineDescription {
     std::optional<double> speed_multiplier_override;
 
     // The label the machine carries.
-    std::string machine_name;
+    std::string machine_description;
 
     std::vector<ExtensionInstance> extension_instances;
 };

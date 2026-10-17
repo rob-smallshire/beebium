@@ -407,7 +407,7 @@ add_system_preset(beebium-model-b "model-b-disc-aun-80"
     DESCRIPTION "Econet over AUN (UDP), ANFS + DFS"
     # The name follows the station number in force (#153), so a renumbered
     # machine's title follows it at the next Break.
-    --machine-name "Station {econet-station} (AUN, Model B)"
+    --machine-description "Station {econet-station} (AUN, Model B)"
     --fdc acorn-1770
     --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
     --sideways slot=14:type=rom:image=acorn-anfs_4_18.rom
@@ -425,7 +425,7 @@ add_system_preset(beebium-model-b "model-b-disc-aun-80"
 add_system_preset(beebium-model-b "model-b-disc-aun-auto"
     "AUN client, auto station (Model B)" "1985"
     DESCRIPTION "Econet over AUN (UDP), automatic station number, ANFS + DFS"
-    --machine-name "Station {econet-station} (AUN, Model B)"
+    --machine-description "Station {econet-station} (AUN, Model B)"
     --fdc acorn-1770
     --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
     --sideways slot=14:type=rom:image=acorn-anfs_4_18.rom
@@ -446,7 +446,7 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
         "Model B (Disc), 65C02 Copro (3 MHz)" "1984"
         DESCRIPTION "Model B disc, 65C02 copro (3 MHz)"
         THUMBNAIL_DELAY 6
-        --machine-name "Model B (Disc), {coprocessor-cpu} Copro ({coprocessor-clock})"
+        --machine-description "Model B (Disc), {coprocessor-cpu} Copro ({coprocessor-clock})"
         --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom --tube-65c02)
 endif()
 if(TARGET beebium_ext_acorn_65c102_plugin)
@@ -455,7 +455,7 @@ if(TARGET beebium_ext_acorn_65c102_plugin)
         "Model B+ 128K, 65C102 Copro (4 MHz)" "1986"
         DESCRIPTION "128K B+, 65C102 copro (4 MHz)"
         THUMBNAIL_DELAY 6
-        --machine-name "Model B+ 128K, {coprocessor-cpu} Copro ({coprocessor-clock})"
+        --machine-description "Model B+ 128K, {coprocessor-cpu} Copro ({coprocessor-clock})"
         --tube-65c102)
 endif()
 
@@ -471,7 +471,7 @@ if(TARGET beebium_ext_piconet_plugin)
         "model-b-disc-eco-81"
         "Station 81 (Piconet, Model B)" "1985"
         DESCRIPTION "Econet via Piconet USB, ANFS + DFS"
-        --machine-name "Station {econet-station} (Piconet, Model B)"
+        --machine-description "Station {econet-station} (Piconet, Model B)"
         --fdc acorn-1770
         --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
         --sideways slot=14:type=rom:image=acorn-anfs_4_18.rom
@@ -504,7 +504,7 @@ if(TARGET beebium_ext_acorn_65c02_plugin
         # server unattended; the thumbnail then captures "Starting - Ready".
         # THUMBNAIL_DELAY covers the parasite's SCSI bitmap read + FS start.
         THUMBNAIL_DELAY 30
-        --machine-name "L3 File Server, station {econet-station}"
+        --machine-description "L3 File Server, station {econet-station}"
         --auto-boot
         --fdc acorn-1770
         --sideways slot=9:type=rom:image=acorn-anfs_4_18.rom

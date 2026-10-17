@@ -54,7 +54,7 @@ def station_80(
         server=server_installation,
         mos_filepath=mos_filepath,
         extra_args=[
-            "--machine-name",
+            "--machine-description",
             TEMPLATE,
             "--station",
             "80",
@@ -182,7 +182,7 @@ def test_machine_ordinal_renders_the_launch_ordinal(
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--machine-name", "X {machine-ordinal}", *extra_args],
+        extra_args=["--machine-description", "X {machine-ordinal}", *extra_args],
         startup_timeout=30.0,
     ) as bbc:
         assert bbc.system.identity.name == expected

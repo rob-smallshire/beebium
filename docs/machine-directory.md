@@ -45,7 +45,7 @@ without it still gets a document file with it.
   "format": "beebium-machine",
   "version": 1,
   "uuid": "6f1c2a9e-...",
-  "name": "L3 File Server, station {econet-station}",
+  "description": "L3 File Server, station {econet-station}",
   "model": "model-b",
   "created": "2026-10-17T15:28:56Z",
   "last_used": "2026-10-18T09:02:11Z",
@@ -55,9 +55,9 @@ without it still gets a document file with it.
 
 - `uuid` is the machine's identity, the `MachineIdentity` uuid the server
   reports on every run. A Save As gives the copy a new one.
-- `name` is the name as the user gives it, a name template (see
+- `description` is the name as the user gives it, a template (see
   [cli.md](cli.md#machine-name)); a rename of a running saved machine
-  (`SetMachineName`) is written here at once. It wins over a `machine_name`
+  (`SetMachineName`) is written here at once. It wins over a `machine_description`
   in `preset.json`. A saved machine is shown by its **document name**, the
   directory's name without `.beebium-machine` (`{document}`), unless this
   template places `{document}` itself, when the template is rendered as

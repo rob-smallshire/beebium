@@ -186,7 +186,7 @@ std::vector<std::string> keys_of(const nlohmann::ordered_json& doc) {
 // A configuration that sets something in every section.
 Config populated_config() {
     auto config = config_with_manifests();
-    config.machine.machine_name = "Station {econet-station}";
+    config.machine.machine_description = "Station {econet-station}";
     config.machine.screen_mode = 3;
     config.machine.screen_mode_set = true;
     config.machine.speed_multiplier_override = 2.0;
@@ -216,7 +216,7 @@ TEST_CASE("preset_document writes every key in the one order, Given a subsequenc
     REQUIRE(given.has_value());
 
     const std::vector<std::string> all_keys{
-        "model", "name", "release_date", "description", "machine_name", "speed", "startup",
+        "model", "name", "release_date", "description", "machine_description", "speed", "startup",
         "mos_image_uri", "storage", "sideways_bank", "econet", "extensions",
         "thumbnail_capture_delay_seconds"};
     CHECK(keys_of(*every) == all_keys);

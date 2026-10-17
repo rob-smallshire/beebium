@@ -131,7 +131,7 @@ def test_describe_machine_refuses_a_directory_that_is_not_a_machine(run, tmp_pat
 def test_a_machine_keeps_its_identity_on_every_run(installation, run, describe,
                                                     tmp_path: Path):
     machine = tmp_path / "Kept.beebium-machine"
-    assert run("create-machine", "--machine-name", "Kept {model}",
+    assert run("create-machine", "--machine-description", "Kept {model}",
                "--output", machine).returncode == 0
     uuid = describe(machine)["uuid"]
 
@@ -319,7 +319,7 @@ def test_document_names_a_machine_not_yet_saved_as_a_launcher_would(installation
     """For a machine not yet saved, {document} is the name it would otherwise
     have: its preset's (here, with none, its model's) and its instance number."""
     with Beebium.launch(server=installation,
-                        extra_args=["--machine-name", "{document} here",
+                        extra_args=["--machine-description", "{document} here",
                                     "--machine-ordinal", "3"]) as bbc:
         assert bbc.system.identity.name == "BBC Model B #3 here"
 
@@ -327,7 +327,7 @@ def test_document_names_a_machine_not_yet_saved_as_a_launcher_would(installation
 def test_a_saved_machine_that_places_its_document_name_keeps_the_rest(
         installation, run, tmp_path: Path):
     machine = tmp_path / "Elite.beebium-machine"
-    assert run("create-machine", "--machine-name", "{document} ({machine-model})",
+    assert run("create-machine", "--machine-description", "{document} ({machine-model})",
                "--output", machine).returncode == 0
     with _launch(installation, machine) as bbc:
         assert bbc.system.identity.name == "Elite (BBC Model B)"
@@ -342,7 +342,7 @@ def test_a_saved_machine_keeps_its_new_name_and_its_last_screen(installation, ru
         bbc.system.set_machine_name("Renamed {model}")
         _run_for(bbc, 0.5)
     description = describe(machine)
-    assert description["name"] == "Renamed {model}"
+    assert description["description"] == "Renamed {model}"
     assert Path(description["thumbnail_filepath"]).is_file()  # kept at shutdown
 
 

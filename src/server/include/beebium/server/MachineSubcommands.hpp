@@ -106,8 +106,9 @@ public:
                   << "  --output <dirpath>    The machine directory to make (required)\n"
                   << "  --preset <id|path>    The preset to make it from (default: this model's\n"
                   << "                        defaults)\n"
-                  << "  --machine-name <name> The machine's name (a name template; default: the\n"
-                  << "                        preset's, or the model's name)\n"
+                  << "  --machine-description <template>\n"
+                  << "                        The machine's description (a template; default:\n"
+                  << "                        the preset's, or the model's name)\n"
                   << "\n"
                   << "Any other machine option, as for 'start' and 'create-preset'; options that\n"
                   << "configure the launch rather than the machine are refused.\n"
@@ -230,7 +231,7 @@ public:
                   << "  document_name       the directory's name without .beebium-machine,\n"
                   << "                      which the machine is known by unless its name\n"
                   << "                      places {document}\n"
-                  << "  name                its name (a name template)\n"
+                  << "  description         its description (a template)\n"
                   << "  uuid                its identity, the same on every run\n"
                   << "  model               its model id\n"
                   << "  preset              the preset it was made from, if known\n"
@@ -298,7 +299,7 @@ public:
         nlohmann::ordered_json out;
         out["machine_dirpath"] = dirpath->string();
         out["document_name"] = machine_document_name(*dirpath);
-        out["name"] = record->name;
+        out["description"] = record->description;
         out["uuid"] = record->uuid;
         out["model"] = record->model;
         if (!record->source_preset.empty()) out["preset"] = record->source_preset;

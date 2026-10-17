@@ -966,37 +966,37 @@ TEST_CASE("parse_start_arguments: --machine-uuid rejects invalid UUID", "[cli][p
     REQUIRE(*result == ExitCode::USAGE);
 }
 
-TEST_CASE("parse_start_arguments: --machine-name sets config", "[cli][parse_start_arguments][identity]") {
-    ArgvHelper args{"beebium", "start", "--machine-name", "My BBC Micro"};
+TEST_CASE("parse_start_arguments: --machine-description sets config", "[cli][parse_start_arguments][identity]") {
+    ArgvHelper args{"beebium", "start", "--machine-description", "My BBC Micro"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.machine.machine_name == "My BBC Micro");
+    REQUIRE(config.machine.machine_description == "My BBC Micro");
 }
 
-TEST_CASE("parse_start_arguments: --machine-name allows spaces", "[cli][parse_start_arguments][identity]") {
-    ArgvHelper args{"beebium", "start", "--machine-name", "Level 3 Fileserver"};
+TEST_CASE("parse_start_arguments: --machine-description allows spaces", "[cli][parse_start_arguments][identity]") {
+    ArgvHelper args{"beebium", "start", "--machine-description", "Level 3 Fileserver"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.machine.machine_name == "Level 3 Fileserver");
+    REQUIRE(config.machine.machine_description == "Level 3 Fileserver");
 }
 
 TEST_CASE("parse_start_arguments: all identity options combined", "[cli][parse_start_arguments][identity]") {
     ArgvHelper args{"beebium", "start",
         "--machine-uuid", "12345678-1234-1234-1234-123456789abc",
-        "--machine-name", "Teletext Server"};
+        "--machine-description", "Teletext Server"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
     REQUIRE(config.launch.machine_uuid == "12345678-1234-1234-1234-123456789abc");
-    REQUIRE(config.machine.machine_name == "Teletext Server");
+    REQUIRE(config.machine.machine_description == "Teletext Server");
 }
 
 TEST_CASE("parse_start_arguments: identity defaults are empty", "[cli][parse_start_arguments][identity]") {
@@ -1007,7 +1007,7 @@ TEST_CASE("parse_start_arguments: identity defaults are empty", "[cli][parse_sta
 
     REQUIRE_FALSE(result.has_value());
     REQUIRE(config.launch.machine_uuid.empty());
-    REQUIRE(config.machine.machine_name.empty());
+    REQUIRE(config.machine.machine_description.empty());
 }
 
 TEST_CASE("parse_start_arguments: identity and provenance combined", "[cli][parse_start_arguments][identity]") {
@@ -1015,7 +1015,7 @@ TEST_CASE("parse_start_arguments: identity and provenance combined", "[cli][pars
         "--provenance-type", "python-client",
         "--provenance-uuid", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
         "--machine-uuid", "11111111-2222-3333-4444-555555555555",
-        "--machine-name", "Test Server"};
+        "--machine-description", "Test Server"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
@@ -1024,7 +1024,7 @@ TEST_CASE("parse_start_arguments: identity and provenance combined", "[cli][pars
     REQUIRE(config.launch.provenance_type == "python-client");
     REQUIRE(config.launch.provenance_uuid == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     REQUIRE(config.launch.machine_uuid == "11111111-2222-3333-4444-555555555555");
-    REQUIRE(config.machine.machine_name == "Test Server");
+    REQUIRE(config.machine.machine_description == "Test Server");
 }
 
 // ============================================================================

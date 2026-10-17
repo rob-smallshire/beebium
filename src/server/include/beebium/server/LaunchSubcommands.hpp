@@ -212,18 +212,18 @@ public:
 
             // Apply identity defaults (the uuid is the one assemble_machine
             // resolved)
-            if (config.machine.machine_name.empty()) {
-                config.machine.machine_name = std::string(Memory::MACHINE_DISPLAY_NAME);
+            if (config.machine.machine_description.empty()) {
+                config.machine.machine_description = std::string(Memory::MACHINE_DISPLAY_NAME);
             }
 
             // The name is a template (#153); the server renders it, and
             // re-renders it as its placeholders' values change.
             beebium::service::MachineIdentity identity{
                 config.launch.machine_uuid,
-                config.machine.machine_name,
+                config.machine.machine_description,
                 std::string(Memory::MACHINE_TYPE),
                 std::string(Memory::MACHINE_DISPLAY_NAME),
-                config.machine.machine_name
+                config.machine.machine_description
             };
 
             // Print provenance details for debugging (before move)

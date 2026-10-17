@@ -51,7 +51,7 @@ TEST_CASE("machine.json: a record written is read back", "[machine_document]") {
     const auto record = read_machine_record(dir.path(), error);
     REQUIRE(record.has_value());
     CHECK(record->uuid == "12345678-1234-1234-1234-123456789abc");
-    CHECK(record->name == "Elite Server {station}");
+    CHECK(record->description == "Elite Server {station}");
     CHECK(record->model == "model-b");
     CHECK(record->created == "2026-10-17T14:30:00Z");
     CHECK(record->last_used == "2026-10-17T15:00:00Z");

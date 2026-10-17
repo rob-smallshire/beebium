@@ -151,7 +151,7 @@ void print_usage(const char* program_name) {
               << "  --provenance-uuid <uuid> Provenance instance UUID (RFC 4122)\n"
               << "  --provenance-version <v> Provenance version string\n"
               << "  --machine-uuid <uuid>    Machine identity UUID (RFC 4122, default: auto-generated)\n"
-              << "  --machine-name <template> Machine name: text with {key} placeholders\n"
+              << "  --machine-description <template> Machine description: text with {key} placeholders\n"
               << "                           filled from the machine's state, e.g.\n"
               << "                           'Station {econet-station}'; see\n"
               << "                           list-name-placeholders (default: from model)\n"
@@ -578,8 +578,8 @@ inline OptionParse parse_machine_option(
             machine.station_number = spec->fixed;
             machine.station_auto_range.reset();
         }
-    } else if (arg == "--machine-name" && i + 1 < argc) {
-        machine.machine_name = argv[++i];
+    } else if (arg == "--machine-description" && i + 1 < argc) {
+        machine.machine_description = argv[++i];
     } else {
         // An extension CLI flag (e.g. --acorn-scsi, --scsi-hdd)?
         std::string lower = arg;
@@ -698,7 +698,9 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             config.launch.machine_dirpath = std::filesystem::absolute(*dirpath);
             config.launch.machine_uuid = record->uuid;
             saved_machine_uuid = record->uuid;
-            if (!record->name.empty()) config.machine.machine_name = record->name;
+            if (!record->description.empty()) {
+                config.machine.machine_description = record->description;
+            }
             continue;
         }
         if (arg == "--preset" && i + 1 < argc) {

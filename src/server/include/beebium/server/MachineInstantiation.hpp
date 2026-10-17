@@ -66,8 +66,8 @@ MachineRecord new_machine_record(const ServerConfig<MachineType>& config, std::s
     using Memory = typename MachineType::Memory;
     MachineRecord record;
     record.uuid = std::move(uuid);
-    record.name = !name_template.empty()                ? name_template
-                  : !config.machine.machine_name.empty() ? config.machine.machine_name
+    record.description = !name_template.empty()                ? name_template
+                  : !config.machine.machine_description.empty() ? config.machine.machine_description
                                                          : std::string(Memory::MACHINE_DISPLAY_NAME);
     record.model = std::string(Memory::MACHINE_TYPE);
     record.created = iso8601_utc_now();

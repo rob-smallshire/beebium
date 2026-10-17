@@ -300,7 +300,7 @@ TEST_CASE("list-presets jsonl: every field a preset gives, in a fixed order, and
     TempDirectory user_dir;
     const auto filepath = store_preset(user_dir.presets(), "full",
                                        R"({"release_date": "1984", "model": "model-b",
-        "description": "Every field", "machine_name": "Full {station}", "name": "Full"})",
+        "description": "Every field", "machine_description": "Full {station}", "name": "Full"})",
                                        "PNG");
 
     auto result = run_command(EXECUTABLE + " --format jsonl list-presets",
@@ -311,7 +311,7 @@ TEST_CASE("list-presets jsonl: every field a preset gives, in a fixed order, and
                                     {"name", "Full"},
                                     {"source", "user"},
                                     {"model", "model-b"},
-                                    {"machine_name", "Full {station}"},
+                                    {"machine_description", "Full {station}"},
                                     {"description", "Every field"},
                                     {"release_date", "1984"},
                                     {"filepath", filepath.string()},
@@ -598,37 +598,37 @@ TEST_CASE("create-preset: --station + --piconet omits a discovered device_path",
     CHECK(loaded.config->econet->transport->parameters.empty());
 }
 
-TEST_CASE("create-preset: --machine-name round-trips through the loader",
+TEST_CASE("create-preset: --machine-description round-trips through the loader",
           "[integration][preset][create-preset]") {
     TempDirectory temp_dir;
     auto output_filepath = temp_dir.path() / "named.preset.beebium";
 
     auto result = run_command(
-        EXECUTABLE + " create-preset --name \"Server\" --machine-name \"L3FS\" "
+        EXECUTABLE + " create-preset --name \"Server\" --machine-description \"L3FS\" "
         "--output \"" + output_filepath.string() + "\"");
     REQUIRE(result.exit_code == 0);
 
     auto loaded = beebium::server::load_preset(output_filepath);
     REQUIRE(loaded.success());
-    REQUIRE(loaded.config->machine_name.has_value());
-    CHECK(*loaded.config->machine_name == "L3FS");
+    REQUIRE(loaded.config->machine_description.has_value());
+    CHECK(*loaded.config->machine_description == "L3FS");
 }
 
-TEST_CASE("create-preset: a --machine-name template round-trips unchanged (#153)",
+TEST_CASE("create-preset: a --machine-description template round-trips unchanged (#153)",
           "[integration][preset][create-preset]") {
     TempDirectory temp_dir;
     auto output_filepath = temp_dir.path() / "templated.preset.beebium";
 
     auto result = run_command(
         EXECUTABLE + " create-preset --name \"Station\" "
-        "--machine-name \"Station {econet-station} {{x}}\" "
+        "--machine-description \"Station {econet-station} {{x}}\" "
         "--output \"" + output_filepath.string() + "\"");
     REQUIRE(result.exit_code == 0);
 
     auto loaded = beebium::server::load_preset(output_filepath);
     REQUIRE(loaded.success());
-    REQUIRE(loaded.config->machine_name.has_value());
-    CHECK(*loaded.config->machine_name == "Station {econet-station} {{x}}");
+    REQUIRE(loaded.config->machine_description.has_value());
+    CHECK(*loaded.config->machine_description == "Station {econet-station} {{x}}");
 }
 
 TEST_CASE("create-preset: --auto-boot round-trips through the loader",
@@ -1804,7 +1804,7 @@ TEST_CASE("resolve-preset: every key of a minimal preset is filled",
     CHECK(p.at("name") == "Minimal");
     CHECK(p.at("description").is_null());
     CHECK(p.at("release_date").is_null());
-    CHECK(p.at("machine_name").is_null());
+    CHECK(p.at("machine_description").is_null());
     CHECK(p.at("speed") == 1.0);
     CHECK(p.at("startup") == nlohmann::json{{"screen_mode", 7}, {"auto_boot", false}});
     CHECK(p.at("mos_image_uri") == "acorn-mos_1_20.rom");
@@ -3223,7 +3223,7 @@ TEST_CASE("resolve-preset --json output is stable, diagnostics included",
     "name": "Pinned",
     "release_date": null,
     "description": null,
-    "machine_name": null,
+    "machine_description": null,
     "speed": 1.0,
     "startup": {
       "screen_mode": 7,

@@ -83,7 +83,7 @@ struct PresetConfig {
     std::string name;  // empty when the preset gives none (see preset_display_name)
     std::optional<std::string> description;       // One-line description shown in the picker
     std::optional<std::string> release_date;      // YYYY, YYYY-MM or YYYY-MM-DD
-    std::optional<std::string> machine_name;      // Machine label the preset launches with
+    std::optional<std::string> machine_description;  // The machine's description template
     std::optional<std::string> model;             // For validation against executable
     std::optional<PresetStorageConfig> storage;
     std::optional<PresetEconetConfig> econet;
@@ -158,7 +158,7 @@ enum class PresetKey {
     Name,
     ReleaseDate,
     Description,
-    MachineName,
+    MachineDescription,
     Speed,
     Startup,
     MosImageUri,
@@ -186,8 +186,8 @@ inline constexpr std::array<PresetKeyInfo, 14> kPresetKeys{{
     {PresetKey::Name, "name", "string", "", "launch.preset_name", true, "Name"},
     {PresetKey::ReleaseDate, "release_date", "string", "", "", true, "Release date"},
     {PresetKey::Description, "description", "string", "", "", true, "Description"},
-    {PresetKey::MachineName, "machine_name", "string", "--machine-name",
-     "machine.machine_name", true, "Machine name"},
+    {PresetKey::MachineDescription, "machine_description", "string", "--machine-description",
+     "machine.machine_description", true, "Machine description"},
     {PresetKey::Speed, "speed", "number or \"unlimited\"", "--speed",
      "machine.speed_multiplier_override", true, "Speed"},
     {PresetKey::Startup, "startup", "object", "--screen-mode, --auto-boot, --links",
@@ -616,10 +616,10 @@ inline PresetLoadResult load_preset(const PresetSource& source) {
             case PresetKey::Description:
                 if (value.is_string()) config.description = value.get<std::string>();
                 break;
-            case PresetKey::MachineName:
-                // The label the launched machine carries; a CLI --machine-name
+            case PresetKey::MachineDescription:
+                // The label the launched machine carries; a CLI --machine-description
                 // overrides it.
-                if (value.is_string()) config.machine_name = value.get<std::string>();
+                if (value.is_string()) config.machine_description = value.get<std::string>();
                 break;
             case PresetKey::Speed:
                 // A positive multiplier or "unlimited", as --speed.

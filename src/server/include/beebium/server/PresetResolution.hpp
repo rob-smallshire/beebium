@@ -212,9 +212,9 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
                 config.launch.preset_name =
                     preset_display_name<typename MachineType::Memory>(preset);
                 break;
-            case PresetKey::MachineName:
-                if (preset.machine_name && config.machine.machine_name.empty()) {
-                    config.machine.machine_name = *preset.machine_name;
+            case PresetKey::MachineDescription:
+                if (preset.machine_description && config.machine.machine_description.empty()) {
+                    config.machine.machine_description = *preset.machine_description;
                 }
                 break;
             case PresetKey::Speed:
@@ -990,10 +990,10 @@ std::optional<nlohmann::ordered_json> preset_document(const MachineDescription& 
             case PresetKey::Description:
                 optional_string(key, header.description);
                 break;
-            case PresetKey::MachineName:
-                optional_string(key, machine.machine_name.empty()
+            case PresetKey::MachineDescription:
+                optional_string(key, machine.machine_description.empty()
                                          ? std::nullopt
-                                         : std::optional<std::string>(machine.machine_name));
+                                         : std::optional<std::string>(machine.machine_description));
                 break;
             case PresetKey::Speed:
                 if (machine.speed_multiplier_override || every) {

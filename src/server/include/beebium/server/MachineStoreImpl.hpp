@@ -194,7 +194,7 @@ public:
             std::cerr << "Warning: cannot record the machine's new name: " << error << "\n";
             return;
         }
-        record->name = name_template;
+        record->description = name_template;
         try {
             write_machine_record(dirpath, *record);
             write_machine_document_files(dirpath, *record, machine_document_name(dirpath));
@@ -271,7 +271,7 @@ private:
         std::string error;
         auto record = read_machine_record(home, error);
         if (!record) throw std::runtime_error(error);
-        record->name = name_template;
+        record->description = name_template;
         write_machine_record(home, *record);
         write_machine_document_files(home, *record, machine_document_name(home));
     }
@@ -330,7 +330,7 @@ private:
                 record = new_machine_record(config_, uuid, name_template);
             }
             record.uuid = uuid;
-            record.name = name_template;
+            record.description = name_template;
             record.last_used = iso8601_utc_now();
             write_machine_record(partial, record);
             keep_state(partial);

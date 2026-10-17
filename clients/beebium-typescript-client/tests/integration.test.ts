@@ -93,7 +93,7 @@ describe("Integration: System Service", () => {
 describe("Integration: Machine name templates", () => {
     const TEMPLATE = "Station {econet-station}";
     const AUN_ARGS = [
-        "--machine-name", TEMPLATE,
+        "--machine-description", TEMPLATE,
         "--station", "80",
         "--aun", "port=0:discovery=off:map-file=none",
     ];

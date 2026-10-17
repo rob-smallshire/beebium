@@ -457,7 +457,7 @@ private:
             case PresetKey::Name:
             case PresetKey::ReleaseDate:
             case PresetKey::Description:
-            case PresetKey::MachineName:
+            case PresetKey::MachineDescription:
             case PresetKey::ThumbnailCaptureDelaySeconds:
             case PresetKey::AutoBoot:
                 return false;
@@ -481,7 +481,7 @@ public:
                   << "every model's. The output format follows the global --format option\n"
                   << "(pretty on a terminal, tsv when piped); rows carry the preset id, name\n"
                   << "and source (system or user). A jsonl row also carries what the preset\n"
-                  << "gives of model, machine_name, description and release_date, its\n"
+                  << "gives of model, machine_description, description and release_date, its\n"
                   << "filepath, and whether it has a thumbnail (show-preset --thumbnail).\n"
                   << "A preset with no name is called by its model's display name.\n"
                   << "\n"
@@ -525,7 +525,7 @@ public:
             std::string name;
             std::string source;  // "system" or "user"
             std::optional<std::string> model;
-            std::optional<std::string> machine_name;
+            std::optional<std::string> machine_description;
             std::optional<std::string> description;
             std::optional<std::string> release_date;
             std::filesystem::path filepath;
@@ -546,7 +546,7 @@ public:
             const bool system = entry.origin == PresetPaths::Origin::System;
             (system ? system_presets : user_presets)
                 .push_back({entry.id, preset_display_name<Memory>(preset),
-                            system ? "system" : "user", preset.model, preset.machine_name,
+                            system ? "system" : "user", preset.model, preset.machine_description,
                             preset.description, preset.release_date, entry.filepath,
                             PresetPaths::find_thumbnail(*source).has_value()});
         }
@@ -598,7 +598,7 @@ public:
                         nlohmann::ordered_json row{
                             {"id", p.id}, {"name", p.name}, {"source", p.source}};
                         for (const auto& [key, value] :
-                             {std::pair{"model", &p.model}, {"machine_name", &p.machine_name},
+                             {std::pair{"model", &p.model}, {"machine_description", &p.machine_description},
                               {"description", &p.description},
                               {"release_date", &p.release_date}}) {
                             if (*value) row[key] = **value;
@@ -828,7 +828,7 @@ public:
                   << "                        archive is, for editing\n"
                   << "\n"
                   << "Machine options, as for 'start' (see 'start --help'):\n"
-                  << "  --machine-name, --speed, --screen-mode, --auto-boot, --links, --mos,\n"
+                  << "  --machine-description, --speed, --screen-mode, --auto-boot, --links, --mos,\n"
                   << "  --language-rom (recorded as the model's language slot), --fdc,\n"
                   << "  --floppy (a relative path is taken from the working directory),\n"
                   << "  --sideways, --station, and --<extension> [k=v:...] for any extension\n"

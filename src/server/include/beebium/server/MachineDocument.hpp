@@ -87,7 +87,7 @@ inline bool is_core_entry(const std::filesystem::path& name) {
 // A machine's identity record, machine.json.
 struct MachineRecord {
     std::string uuid;           // the MachineIdentity uuid, the same on every open
-    std::string name;           // the name as the user gives it: a template (#153)
+    std::string description;    // the machine's description: a template (#153)
     std::string model;          // the model id, e.g. "model-b-integra-b"
     std::string created;        // when the machine was made (ISO 8601, UTC)
     std::string last_used;      // when it was last opened (ISO 8601, UTC)
@@ -148,7 +148,7 @@ inline std::optional<MachineRecord> read_machine_record(const std::filesystem::p
         error = filepath.string() + " is from a later version of Beebium";
         return std::nullopt;
     }
-    return MachineRecord{json["uuid"].get<std::string>(), json.value("name", ""),
+    return MachineRecord{json["uuid"].get<std::string>(), json.value("description", ""),
                          json.value("model", ""),          json.value("created", ""),
                          json.value("last_used", ""),      json.value("source_preset", "")};
 }
@@ -213,7 +213,7 @@ inline std::string machine_record_text(const MachineRecord& record) {
     nlohmann::ordered_json json{{"format", machine_layout::FORMAT},
                                 {"version", machine_layout::FORMAT_VERSION},
                                 {"uuid", record.uuid},
-                                {"name", record.name},
+                                {"description", record.description},
                                 {"model", record.model},
                                 {"created", record.created},
                                 {"last_used", record.last_used}};
