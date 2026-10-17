@@ -14,6 +14,7 @@
 #define BEEBIUM_SERVER_DISC_PATHS_HPP
 
 #include <beebium/PlatformUtils.hpp>
+#include <beebium/server/AtomicFile.hpp>
 #include <beebium/server/ResourcePaths.hpp>
 
 #include <nlohmann/json.hpp>
@@ -25,7 +26,6 @@
 #include <fstream>
 #include <functional>
 #include <optional>
-#include <random>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -268,57 +268,22 @@ public:
     using FileCopier =
         std::function<void(const std::filesystem::path&, const std::filesystem::path&)>;
 
-    // Replace dst with a writable copy of src, atomically: copy to a
-    // uniquely named temporary in dst's directory, make it writable (the
-    // master is shipped read-only), then rename it over dst. A reader opening
-    // dst sees the complete old file or the complete new one, and a copy that
-    // fails part-way removes its temporary and leaves dst untouched.
-    //
-    // rename() replaces atomically on POSIX. On Windows std::filesystem
-    // rename uses MoveFileEx with MOVEFILE_REPLACE_EXISTING, which replaces an
-    // existing file but is not guaranteed atomic, and fails -- leaving dst
-    // intact -- if another process has dst open without delete sharing.
-    //
-    // `copy` performs the copy into the temporary; tests substitute one that
-    // fails part-way.
+    // Replace dst with a writable copy of src, atomically (see
+    // write_file_atomically): the master is shipped read-only, the copy is
+    // not. `copy` performs the copy into the temporary; tests substitute one
+    // that fails part-way.
     static void copy_file_atomically(const std::filesystem::path& src,
                                      const std::filesystem::path& dst,
                                      const FileCopier& copy = copy_file_plain) {
-        const std::filesystem::path temp_filepath =
-            dst.parent_path() / (dst.filename().string() + ".partial-" + unique_suffix());
-        try {
+        write_file_atomically(dst, [&](const std::filesystem::path& temp_filepath) {
             copy(src, temp_filepath);
-            std::filesystem::permissions(
-                temp_filepath,
-                std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
-                std::filesystem::perm_options::add);
-            // Windows refuses to replace a read-only file (a copy left by an
-            // older version); POSIX does not care. Making dst writable first
-            // opens no window in which it is missing or partial.
-            std::error_code ec;
-            if (std::filesystem::exists(dst, ec)) {
-                std::filesystem::permissions(dst, std::filesystem::perms::owner_write,
-                                             std::filesystem::perm_options::add, ec);
-            }
-            std::filesystem::rename(temp_filepath, dst);
-        } catch (...) {
-            std::error_code ec;
-            std::filesystem::remove(temp_filepath, ec);
-            throw;
-        }
+        });
     }
 
 private:
     static void copy_file_plain(const std::filesystem::path& src,
                                 const std::filesystem::path& dst) {
         std::filesystem::copy_file(src, dst);
-    }
-
-    // Distinguishes the temporaries of concurrent copies to the same
-    // destination, in this process or another.
-    static std::string unique_suffix() {
-        std::random_device rd;
-        return std::to_string((static_cast<std::uint64_t>(rd()) << 32) ^ rd());
     }
 };
 

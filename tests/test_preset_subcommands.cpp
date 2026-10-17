@@ -695,9 +695,11 @@ TEST_CASE("import-preset: imports valid preset", "[integration][preset][import-p
     REQUIRE(result.exit_code == 0);
     REQUIRE(result.stdout_output.find("importme") != std::string::npos);
 
-    // Verify file was created in dest directory
+    // The preset is stored exactly as written, not re-serialised.
     auto imported_filepath = dest_dir.presets() / "importme.preset.beebium";
-    REQUIRE(std::filesystem::exists(imported_filepath));
+    std::ifstream f(imported_filepath, std::ios::binary);
+    std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    CHECK(content == R"({"model": "model-b", "name": "Import Me"})");
 }
 
 TEST_CASE("import-preset: rejects wrong model", "[integration][preset][import-preset]") {
@@ -791,6 +793,21 @@ TEST_CASE("export-preset: exports a preset named by path", "[integration][preset
     std::ifstream f(output_filepath);
     std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     CHECK(content.find("\"name\": \"Loose\"") != std::string::npos);
+}
+
+TEST_CASE("export-preset: an output that cannot be written is an IO error",
+          "[integration][preset][export-preset]") {
+    TempDirectory source_dir;
+    const auto source_filepath = source_dir.path() / "loose.json";
+    std::ofstream(source_filepath) << R"({"model": "model-b"})";
+    const auto output_filepath = source_dir.path() / "no-such-dir" / "out.preset.beebium";
+
+    auto result = run_command(EXECUTABLE + " export-preset \"" + source_filepath.string() +
+                              "\" --output \"" + output_filepath.string() + "\"");
+
+    REQUIRE(result.exit_code == 74);  // IOERR
+    CHECK(result.stderr_output.find("cannot write preset file: " + output_filepath.string()) !=
+          std::string::npos);
 }
 
 TEST_CASE("export-preset --help: returns OK", "[integration][preset][export-preset]") {

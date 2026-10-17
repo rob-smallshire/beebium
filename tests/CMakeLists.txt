@@ -2060,6 +2060,16 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_resource_paths)
 
+    # Atomic file replacement (AtomicFile.hpp) and the preset writer on it
+    add_executable(test_atomic_file test_atomic_file.cpp)
+    target_include_directories(test_atomic_file PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/server/include
+    )
+    target_link_libraries(test_atomic_file PRIVATE
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_atomic_file)
+
     # Preset paths utility tests
     add_executable(test_preset_paths test_preset_paths.cpp)
     target_include_directories(test_preset_paths PRIVATE

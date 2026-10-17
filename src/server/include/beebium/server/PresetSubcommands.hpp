@@ -17,6 +17,7 @@
 #pragma once
 
 #include "beebium/server/ExtensionSubcommands.hpp"
+#include "beebium/server/PresetWriter.hpp"
 #include "beebium/server/RomPaths.hpp"
 #include "beebium/disc/DiscControllerRegistry.hpp"
 #include "beebium/disc/DiscLoader.hpp"
@@ -831,18 +832,9 @@ public:
             target_filepath = PresetPaths::user_filepath_for(preset_id);
         }
 
-        // Write preset file
-        std::ofstream output_file(target_filepath);
-        if (!output_file) {
-            std::cerr << "Error: cannot write preset file: " << target_filepath.string() << "\n";
-            return ExitCode::IOERR;
-        }
-
-        output_file << preset.dump(2) << "\n";
-        output_file.close();
-
-        if (!output_file) {
-            std::cerr << "Error: failed to write preset file: " << target_filepath.string() << "\n";
+        if (auto write_error = write_preset(preset.dump(2) + "\n", target_filepath);
+            !write_error.empty()) {
+            std::cerr << "Error: " << write_error << "\n";
             return ExitCode::IOERR;
         }
 
@@ -1346,7 +1338,7 @@ public:
             std::cerr << "Error: " << parse_error << "\n";
             return ExitCode::DATAERR;
         }
-        nlohmann::json& preset = *parsed;
+        const nlohmann::json& preset = *parsed;
 
         // Verify model field matches this executable
         if (!preset.contains("model") || !preset["model"].is_string()) {
@@ -1386,17 +1378,10 @@ public:
         // Write to user presets directory
         std::filesystem::path target_filepath = PresetPaths::user_filepath_for(preset_id);
 
-        std::ofstream output_file(target_filepath);
-        if (!output_file) {
-            std::cerr << "Error: cannot write preset file: " << target_filepath.string() << "\n";
-            return ExitCode::IOERR;
-        }
-
-        output_file << preset.dump(2) << "\n";
-        output_file.close();
-
-        if (!output_file) {
-            std::cerr << "Error: failed to write preset file: " << target_filepath.string() << "\n";
+        // The document is stored as written, not re-serialised.
+        if (auto write_error = write_preset(source->document_text(), target_filepath);
+            !write_error.empty()) {
+            std::cerr << "Error: " << write_error << "\n";
             return ExitCode::IOERR;
         }
 
@@ -1478,13 +1463,9 @@ public:
             return ExitCode::NOINPUT;
         }
 
-        // Write the document as stored
-        std::ofstream output_file(output_filepath, std::ios::binary);
-        output_file << source->document_text();
-        output_file.close();
-        if (!output_file) {
-            std::cerr << "Error: cannot write to output file: " << output_filepath.string()
-                      << "\n";
+        if (auto write_error = write_preset(source->document_text(), output_filepath);
+            !write_error.empty()) {
+            std::cerr << "Error: " << write_error << "\n";
             return ExitCode::IOERR;
         }
 
