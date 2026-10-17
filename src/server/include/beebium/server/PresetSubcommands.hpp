@@ -640,20 +640,15 @@ public:
             return ExitCode::USAGE;
         }
 
-        auto filepath = PresetPaths::locate(preset_arg);
-        if (!filepath) {
-            std::cerr << "Error: " << PresetPaths::not_found_message(preset_arg) << "\n";
+        std::string open_error;
+        auto source = PresetPaths::open(preset_arg, open_error);
+        if (!source) {
+            std::cerr << "Error: " << open_error << "\n";
             return ExitCode::NOINPUT;
         }
 
-        // Read and output file contents
-        std::ifstream file(*filepath);
-        if (!file) {
-            std::cerr << "Error: cannot read preset file: " << filepath->string() << "\n";
-            return ExitCode::NOINPUT;
-        }
-
-        std::cout << file.rdbuf();
+        // The document as stored
+        std::cout << source->document_text();
         return ExitCode::OK;
     }
 };
@@ -794,8 +789,8 @@ public:
         // The source preset's descriptive fields are the baseline for the
         // copy's (its machine settings arrived through parse_start_arguments).
         std::optional<PresetConfig> source;
-        if (config.launch.preset_filepath) {
-            auto loaded = load_preset(*config.launch.preset_filepath);
+        if (config.launch.preset) {
+            auto loaded = load_preset(*config.launch.preset);
             if (loaded) source = std::move(*loaded.config);
         }
         if (preset_description.empty() && source && source->description) {
@@ -1003,13 +998,13 @@ private:
         using Memory = typename MachineType::Memory;
 
         // Find and load the preset as `start --preset` does.
-        const auto located = PresetPaths::locate(preset_arg);
-        if (!located) {
-            error("", PresetPaths::not_found_message(preset_arg));
+        std::string open_error;
+        auto source = PresetPaths::open(preset_arg, open_error);
+        if (!source) {
+            error("", open_error);
             return ExitCode::NOINPUT;
         }
-        const std::filesystem::path preset_filepath = *located;
-        auto loaded = load_preset(preset_filepath);
+        auto loaded = load_preset(*source);
         for (const auto& w : loaded.warnings()) {
             warning(w.path, w.message);
         }
@@ -1027,7 +1022,7 @@ private:
         // Build the configuration exactly as parse_start_arguments does with
         // no other arguments.
         ServerConfig<MachineType> config;
-        config.launch.preset_filepath = preset_filepath;
+        config.launch.preset = std::move(*source);
         apply_preset(config, preset);
         if (auto err = populate_extension_resolver(argv0, {}, config)) {
             error("", "cannot scan the extension directories");
@@ -1333,26 +1328,25 @@ public:
             return ExitCode::USAGE;
         }
 
-        // Verify source file exists
-        if (!std::filesystem::exists(source_filepath)) {
-            std::cerr << "Error: file not found: " << source_filepath.string() << "\n";
+        std::error_code ec;
+        if (std::filesystem::is_directory(source_filepath, ec)) {
+            std::cerr << "Error: import-preset takes a preset file, not a directory: "
+                      << source_filepath.string() << "\n";
+            return ExitCode::USAGE;
+        }
+        std::string open_error;
+        auto source = PresetSource::open(source_filepath, open_error);
+        if (!source) {
+            std::cerr << "Error: " << open_error << "\n";
             return ExitCode::NOINPUT;
         }
-
-        // Read and parse the preset file
-        std::ifstream input_file(source_filepath);
-        if (!input_file) {
-            std::cerr << "Error: cannot read file: " << source_filepath.string() << "\n";
-            return ExitCode::NOINPUT;
-        }
-
-        nlohmann::json preset;
-        try {
-            input_file >> preset;
-        } catch (const nlohmann::json::exception& e) {
-            std::cerr << "Error: invalid JSON: " << e.what() << "\n";
+        std::string parse_error;
+        auto parsed = source->parse_document(parse_error);
+        if (!parsed) {
+            std::cerr << "Error: " << parse_error << "\n";
             return ExitCode::DATAERR;
         }
+        nlohmann::json& preset = *parsed;
 
         // Verify model field matches this executable
         if (!preset.contains("model") || !preset["model"].is_string()) {
@@ -1477,20 +1471,20 @@ public:
             return ExitCode::USAGE;
         }
 
-        // Find preset file
-        auto source_filepath = PresetPaths::locate(preset_arg);
-        if (!source_filepath) {
-            std::cerr << "Error: " << PresetPaths::not_found_message(preset_arg) << "\n";
+        std::string open_error;
+        auto source = PresetPaths::open(preset_arg, open_error);
+        if (!source) {
+            std::cerr << "Error: " << open_error << "\n";
             return ExitCode::NOINPUT;
         }
 
-        // Copy file to output path
-        std::error_code ec;
-        std::filesystem::copy_file(*source_filepath, output_filepath,
-                                   std::filesystem::copy_options::overwrite_existing, ec);
-        if (ec) {
+        // Write the document as stored
+        std::ofstream output_file(output_filepath, std::ios::binary);
+        output_file << source->document_text();
+        output_file.close();
+        if (!output_file) {
             std::cerr << "Error: cannot write to output file: " << output_filepath.string()
-                      << " (" << ec.message() << ")\n";
+                      << "\n";
             return ExitCode::IOERR;
         }
 

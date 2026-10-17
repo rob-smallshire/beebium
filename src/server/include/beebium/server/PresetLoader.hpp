@@ -16,6 +16,7 @@
 #include <beebium/econet/StationSelection.hpp>
 #include <beebium/extension/ExtensionArgParser.hpp>
 #include <beebium/server/CliArgParsers.hpp>
+#include <beebium/server/PresetSource.hpp>
 #include <beebium/server/ResourcePaths.hpp>
 
 #include <nlohmann/json.hpp>
@@ -23,7 +24,6 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <optional>
 #include <string>
@@ -553,12 +553,12 @@ parse_sideways_section(const nlohmann::json& sideways_json) {
     return {std::move(slots), {}};
 }
 
-// Load and parse a preset file.
+// Load and parse a preset.
 //
 // Returns a PresetLoadResult containing either the parsed configuration or
-// every error the file holds, each located by its JSON pointer. A fault in one
-// key does not hide a fault in another, so a user (or the Configurator) sees
-// them all at once. Unknown top-level keys are ignored with a warning
+// every error the preset holds, each located by its JSON pointer. A fault in
+// one key does not hide a fault in another, so a user (or the Configurator)
+// sees them all at once. Unknown top-level keys are ignored with a warning
 // (PresetLoadResult::warnings).
 //
 // Usage:
@@ -568,42 +568,26 @@ parse_sideways_section(const nlohmann::json& sideways_json) {
 //   } else {
 //       std::cerr << "Error: " << result.error << "\n";
 //   }
-inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
+inline PresetLoadResult load_preset(const PresetSource& source) {
     auto failed = [](std::string path, std::string message, bool unreadable = false) {
         return PresetLoadResult{std::nullopt, {Diagnostic{std::move(path), std::move(message)}},
                                 unreadable};
     };
 
-    // Open the file
-    std::ifstream file(filepath);
-    if (!file.is_open()) {
-        return failed("", "Cannot open preset file: " + filepath.string(), true);
-    }
+    std::string parse_error;
+    auto parsed = source.parse_document(parse_error);
+    if (!parsed) return failed("", parse_error, true);
+    const nlohmann::json& json = *parsed;
 
-    // Parse JSON
-    nlohmann::json json;
-    try {
-        json = nlohmann::json::parse(file);
-    } catch (const nlohmann::json::parse_error& e) {
-        return failed("",
-                      "Invalid JSON in preset file: " + filepath.string() +
-                          ": parse error at byte " + std::to_string(e.byte),
-                      true);
-    }
-
-    if (!json.is_object()) {
-        return failed("", "Preset file must contain a JSON object: " + filepath.string(), true);
-    }
-
-    // Relative paths in the preset resolve from the directory holding it,
-    // wherever the preset was named from.
-    const auto preset_dirpath = std::filesystem::absolute(filepath).parent_path();
+    // Relative paths in the preset resolve from the directory it is written
+    // in, wherever the preset was named from.
+    const auto& preset_dirpath = source.container_dirpath();
 
     // Parse into PresetConfig
     PresetConfig config;
     std::vector<Diagnostic> diagnostics;
     auto error = [&](std::string path, std::string message) {
-        diagnostics.push_back({std::move(path), message + ": " + filepath.string()});
+        diagnostics.push_back({std::move(path), message + ": " + source.path().string()});
     };
 
     for (const auto& [key, value] : json.items()) {
@@ -613,8 +597,8 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
         }
     }
 
-    // The name falls back to the file's, so a preset always has one.
-    config.name = filepath.stem().string();
+    // The name falls back to the preset's own, so a preset always has one.
+    config.name = source.fallback_name();
 
     for (const auto& info : kPresetKeys) {
         const std::string name(info.name);
@@ -747,6 +731,14 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
                                         [](const Diagnostic& d) { return d.is_error(); });
     if (has_errors) return {std::nullopt, std::move(diagnostics), false};
     return {std::move(config), std::move(diagnostics), false};
+}
+
+// Load and parse the preset at `path` (see PresetSource::open).
+inline PresetLoadResult load_preset(const std::filesystem::path& path) {
+    std::string error;
+    auto source = PresetSource::open(path, error);
+    if (!source) return PresetLoadResult{std::nullopt, {Diagnostic{"", std::move(error)}}, true};
+    return load_preset(*source);
 }
 
 } // namespace beebium::server

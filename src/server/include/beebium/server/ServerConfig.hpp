@@ -165,8 +165,8 @@ struct LaunchSettings {
     // mDNS advertisement
     bool advertise = false;
 
-    // Preset file path
-    std::optional<std::filesystem::path> preset_filepath;
+    // The preset launched from, as opened
+    std::optional<PresetSource> preset;
     // The launching preset's display name ("" without a preset), for the
     // machine-preset name placeholder.
     std::string preset_name;
@@ -199,8 +199,7 @@ struct LaunchSettings {
     // preset's, when launched from one (values given on the command line
     // beside --preset resolve as if written in it), else the working directory.
     std::filesystem::path reference_container_dirpath() const {
-        return preset_filepath ? std::filesystem::absolute(*preset_filepath).parent_path()
-                               : std::filesystem::current_path();
+        return preset ? preset->container_dirpath() : std::filesystem::current_path();
     }
 };
 

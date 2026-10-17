@@ -1034,7 +1034,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     // Where the media a template names are copied: the machine's directory.
     const DiscPaths::CopyDestination disc_destination{
         am->machine_directory->dirpath(),
-        config.launch.preset_filepath
+        config.launch.preset
             ? std::optional(config.launch.reference_container_dirpath())
             : std::nullopt};
 

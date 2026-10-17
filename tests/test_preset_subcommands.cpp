@@ -663,6 +663,19 @@ TEST_CASE("import-preset: nonexistent file returns NOINPUT (66)", "[integration]
     REQUIRE(result.exit_code == 66);
 }
 
+TEST_CASE("import-preset: a directory is refused", "[integration][preset][import-preset]") {
+    TempDirectory user_dir;
+    TempDirectory source_dir;
+    std::ofstream(source_dir.path() / "preset.json") << R"({"model": "model-b"})";
+
+    auto result = run_command(EXECUTABLE + " import-preset \"" + source_dir.path().string() + "\"",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+
+    REQUIRE(result.exit_code == 64);
+    CHECK(result.stderr_output.find("takes a preset file, not a directory") != std::string::npos);
+    CHECK(std::filesystem::is_empty(user_dir.presets()));
+}
+
 TEST_CASE("import-preset: imports valid preset", "[integration][preset][import-preset]") {
     TempDirectory source_dir;
     TempDirectory dest_dir;
@@ -1551,6 +1564,25 @@ TEST_CASE("resolve-preset: every key of a minimal preset is filled",
                                   {"image_uri", "bbc-basic_2.rom"}}}));
     CHECK(p.at("econet").is_null());
     CHECK(p.at("extensions").empty());
+}
+
+TEST_CASE("resolve-preset: a directory preset resolves its references in the directory",
+          "[integration][preset][resolve-preset][preset_source]") {
+    TempDirectory temp_dir;
+    const auto dirpath = temp_dir.path() / "my-game";
+    std::filesystem::create_directories(dirpath / "discs");
+    std::ofstream(dirpath / "discs" / "game.ssd") << std::string(2560, '\0');
+    std::ofstream(dirpath / "preset.json") << R"({"model": "model-b",
+        "storage": {"fdc_socket": {"id": "acorn-1770"},
+                    "floppy_drives": [{"drive": 0, "image_uri": "discs/game.ssd"}]}})";
+
+    auto out = resolve_json(EXECUTABLE, dirpath.string());
+
+    CHECK(out.at("diagnostics").empty());
+    const auto& p = out.at("preset");
+    CHECK(p.at("name") == "my-game");
+    CHECK(p.at("storage").at("floppy_drives")[0].at("image_uri") ==
+          beebium::file_url_from_filepath(dirpath / "discs" / "game.ssd"));
 }
 
 TEST_CASE("resolve-preset: a floppy named with a space or a percent sign opens that file",

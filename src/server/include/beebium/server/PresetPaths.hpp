@@ -14,6 +14,7 @@
 #define BEEBIUM_SERVER_PRESET_PATHS_HPP
 
 #include "beebium/server/Platform.hpp"
+#include "beebium/server/PresetSource.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -148,12 +149,13 @@ public:
         return std::nullopt;
     }
 
-    // The preset an argument names: a file path or, failing that, the id of
-    // a stored preset, found in search order. Every subcommand taking a preset
+    // The preset an argument names: a path to a preset (a file, or a
+    // directory holding one; see PresetSource) or, failing that, the id of a
+    // stored preset, found in search order. Every subcommand taking a preset
     // by path or id locates it here.
     static std::optional<std::filesystem::path> locate(const std::string& preset_arg) {
         std::error_code ec;
-        if (std::filesystem::is_regular_file(preset_arg, ec)) {
+        if (std::filesystem::exists(preset_arg, ec)) {
             return std::filesystem::path(preset_arg);
         }
         if (auto entry = find(preset_arg)) return entry->filepath;
@@ -164,6 +166,17 @@ public:
     static std::string not_found_message(const std::string& preset_arg) {
         return "Preset not found: '" + preset_arg +
                "' (no such file, and no system or user preset with that id)";
+    }
+
+    // The preset an argument names (see locate), opened; or nullopt with
+    // `error` saying why there is none.
+    static std::optional<PresetSource> open(const std::string& preset_arg, std::string& error) {
+        auto path = locate(preset_arg);
+        if (!path) {
+            error = not_found_message(preset_arg);
+            return std::nullopt;
+        }
+        return PresetSource::open(*path, error);
     }
 
     // Where a user preset with `id` is stored.

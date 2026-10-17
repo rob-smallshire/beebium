@@ -282,11 +282,28 @@ TEST_CASE("locate: a file path, else the id of a stored preset", "[PresetPaths][
     CHECK(PresetPaths::locate(loose_filepath.string()) == loose_filepath);
     CHECK(PresetPaths::locate("mine") == stores.user_dirpath() / "mine.preset.beebium");
     CHECK_FALSE(PresetPaths::locate("nonexistent").has_value());
-    // A directory is not a preset file, and names no stored preset.
-    CHECK_FALSE(PresetPaths::locate(stores.user_dirpath().string()).has_value());
+    // A directory is located as a preset source (PresetSource says whether
+    // it holds a preset).
+    CHECK(PresetPaths::locate(stores.user_dirpath().string()) == stores.user_dirpath());
     CHECK(PresetPaths::not_found_message("nonexistent") ==
           "Preset not found: 'nonexistent' (no such file, and no system or user preset with "
           "that id)");
+}
+
+TEST_CASE("open: the preset an argument names, read, or why there is none", "[PresetPaths][open]") {
+    PresetStores stores;
+    std::ofstream(stores.user_dirpath() / "mine.preset.beebium") << R"({"name": "Mine"})";
+    std::string error;
+
+    auto mine = PresetPaths::open("mine", error);
+    REQUIRE(mine.has_value());
+    CHECK(mine->document_text() == R"({"name": "Mine"})");
+
+    CHECK_FALSE(PresetPaths::open("nonexistent", error).has_value());
+    CHECK(error == PresetPaths::not_found_message("nonexistent"));
+
+    CHECK_FALSE(PresetPaths::open(stores.user.path().string(), error).has_value());
+    CHECK(error.rfind("No preset.json in preset directory: ", 0) == 0);
 }
 
 TEST_CASE("user_filepath_for: where a user preset with the id is stored", "[PresetPaths][naming]") {

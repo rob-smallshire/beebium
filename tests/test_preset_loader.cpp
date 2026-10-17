@@ -18,6 +18,7 @@
 #include "test_temp_paths.hpp"
 
 #include <filesystem>
+#include <fstream>
 
 using namespace beebium::server;
 
@@ -152,6 +153,59 @@ TEST_CASE("load_preset: relative paths are resolved", "[preset][load_preset]") {
     REQUIRE(drive1_uri.find("file://") == 0);
     // The .. should be resolved
     REQUIRE(drive1_uri.find("discs/other.ssd") != std::string::npos);
+}
+
+TEST_CASE("load_preset: a directory preset is read from its preset.json, and its "
+          "references are written in the directory",
+          "[preset][load_preset][preset_source]") {
+    beebium::test::ScopedTempDir root("beebium_preset_dir_");
+    const auto dirpath = root / "my-game";
+    std::filesystem::create_directories(dirpath);
+    std::ofstream(dirpath / "preset.json")
+        << R"({"storage": {"floppy_drives": [{"drive": 0, "image_uri": "discs/game.ssd"}]}})";
+
+    auto result = load_preset(dirpath);
+    REQUIRE(result.success());
+    CHECK(result.config->name == "my-game");
+    const auto& drive0 = result.config->storage->floppy_drives.at(0);
+    REQUIRE(drive0.has_value());
+    CHECK(*drive0 == beebium::file_url_from_filepath(dirpath / "discs" / "game.ssd"));
+}
+
+TEST_CASE("load_preset: a file preset's name falls back to its file name without the extension",
+          "[preset][load_preset][preset_source]") {
+    beebium::test::ScopedTempDir root("beebium_preset_file_");
+    std::ofstream(root / "loose.json") << "{}";
+    auto result = load_preset(root / "loose.json");
+    REQUIRE(result.success());
+    CHECK(result.config->name == "loose");
+}
+
+TEST_CASE("load_preset: a directory without preset.json, or no preset at all, is unreadable",
+          "[preset][load_preset][preset_source]") {
+    beebium::test::ScopedTempDir root("beebium_preset_empty_dir_");
+    auto empty = load_preset(root.path());
+    REQUIRE_FALSE(empty.success());
+    CHECK(empty.unreadable);
+    CHECK(empty.error()->message == "No preset.json in preset directory: " + root.path().string());
+
+    auto missing = load_preset(root / "missing.json");
+    REQUIRE_FALSE(missing.success());
+    CHECK(missing.unreadable);
+    CHECK(missing.error()->message ==
+          "Cannot open preset file: " + (root / "missing.json").string());
+}
+
+TEST_CASE("PresetSource: the document is kept exactly as stored", "[preset][preset_source]") {
+    beebium::test::ScopedTempDir root("beebium_preset_text_");
+    const std::string text = "{\n  \"name\":   \"Spaced\"\r\n}\n";
+    std::ofstream(root / "p.json", std::ios::binary) << text;
+    std::string error;
+    auto source = PresetSource::open(root / "p.json", error);
+    REQUIRE(source.has_value());
+    CHECK(source->document_text() == text);
+    CHECK(source->path() == root / "p.json");
+    CHECK(source->container_dirpath() == root.path());
 }
 
 TEST_CASE("load_preset: unknown keys are ignored (forward compatibility)", "[preset][load_preset]") {

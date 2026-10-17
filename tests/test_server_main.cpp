@@ -1099,11 +1099,21 @@ TEST_CASE("The server constructs a MachineType in exactly one place",
 
 TEST_CASE("a launch's references are written in its preset's directory, else the cwd",
           "[server_main][resource_paths]") {
+    beebium::test::ScopedTempDir root("beebium_container_");
+    std::filesystem::create_directories(root / "presets" / "as-dir");
+    std::ofstream(root / "presets" / "x.preset.beebium") << "{}";
+    std::ofstream(root / "presets" / "as-dir" / "preset.json") << "{}";
+    std::string error;
+
     LaunchSettings launch;
     CHECK(launch.reference_container_dirpath() == std::filesystem::current_path());
-    launch.preset_filepath = std::filesystem::path("presets") / "x.preset.beebium";
-    CHECK(launch.reference_container_dirpath() ==
-          std::filesystem::absolute(std::filesystem::path("presets")));
+    launch.preset = PresetSource::open(root / "presets" / "x.preset.beebium", error);
+    REQUIRE(launch.preset.has_value());
+    CHECK(launch.reference_container_dirpath() == root / "presets");
+    // A directory preset's references are written in the directory itself.
+    launch.preset = PresetSource::open(root / "presets" / "as-dir", error);
+    REQUIRE(launch.preset.has_value());
+    CHECK(launch.reference_container_dirpath() == root / "presets" / "as-dir");
 }
 
 namespace {
@@ -1212,7 +1222,10 @@ TEST_CASE("a preset's MOS and sideways ROMs are found beside the preset",
 
     MachineType machine;
     ServerConfig<MachineType> config;
-    config.launch.preset_filepath = t.container / "p.preset.beebium";
+    std::ofstream(t.container / "p.preset.beebium") << "{}";
+    std::string error;
+    config.launch.preset = PresetSource::open(t.container / "p.preset.beebium", error);
+    REQUIRE(config.launch.preset.has_value());
     config.machine.mos_filepath = "my-mos.rom";
     config.machine.rom_slots[14] = "my-dfs.rom";
     std::ostringstream said;

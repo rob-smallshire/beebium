@@ -1109,8 +1109,8 @@ TEST_CASE("parse_start_arguments: --preset sets preset_filepath", "[cli][parse_s
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(config.launch.preset_filepath.has_value());
-    REQUIRE(config.launch.preset_filepath->filename() == "minimal.preset.beebium");
+    REQUIRE(config.launch.preset.has_value());
+    REQUIRE(config.launch.preset->path().filename() == "minimal.preset.beebium");
 }
 
 TEST_CASE("parse_start_arguments: --preset applies fdc_socket_id", "[cli][parse_start_arguments][preset]") {
@@ -1314,8 +1314,8 @@ TEST_CASE("parse_start_arguments: --preset resolves a bare id as a system preset
 
     REQUIRE_FALSE(result.has_value());
     REQUIRE(config.machine.fdc_type == "acorn-1770");
-    REQUIRE(config.launch.preset_filepath.has_value());
-    REQUIRE(config.launch.preset_filepath->filename() == "storage.preset.beebium");
+    REQUIRE(config.launch.preset.has_value());
+    REQUIRE(config.launch.preset->path().filename() == "storage.preset.beebium");
 }
 
 TEST_CASE("parse_start_arguments: --preset resolves a bare id as a user preset", "[cli][parse_start_arguments][preset]") {

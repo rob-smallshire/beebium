@@ -484,8 +484,8 @@ public:
         double duration_seconds = 2.0;
         if (cli_duration) {
             duration_seconds = *cli_duration;
-        } else if (config.launch.preset_filepath) {
-            auto result = load_preset(*config.launch.preset_filepath);
+        } else if (config.launch.preset) {
+            auto result = load_preset(*config.launch.preset);
             if (result && result.config->thumbnail_capture_delay_seconds) {
                 duration_seconds = *result.config->thumbnail_capture_delay_seconds;
             }

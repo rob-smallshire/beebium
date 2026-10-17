@@ -630,19 +630,19 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             continue;
         }
         if (arg == "--preset" && i + 1 < argc) {
-            if (config.launch.preset_filepath) {
+            if (config.launch.preset) {
                 std::cerr << "Error: --preset may be given only once\n";
                 return ExitCode::USAGE;
             }
-            // The argument is a preset file path or, failing that, a preset id
+            // The argument is a preset path or, failing that, a preset id
             // resolved like show-preset: system presets, then user presets.
-            std::string preset_arg = argv[++i];
-            config.launch.preset_filepath = PresetPaths::locate(preset_arg);
-            if (!config.launch.preset_filepath) {
-                std::cerr << "Error: " << PresetPaths::not_found_message(preset_arg) << "\n";
+            std::string open_error;
+            config.launch.preset = PresetPaths::open(argv[++i], open_error);
+            if (!config.launch.preset) {
+                std::cerr << "Error: " << open_error << "\n";
                 return ExitCode::NOINPUT;
             }
-            auto result = load_preset(*config.launch.preset_filepath);
+            auto result = load_preset(*config.launch.preset);
             if (!result) {
                 for (const auto& e : result.errors()) {
                     std::cerr << "Error: " << e.message << "\n";
