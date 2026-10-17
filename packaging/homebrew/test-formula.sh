@@ -200,7 +200,7 @@ for cli in host-serial aun scsi-hdd ip232-serial rfc2217-client-serial \
 done
 echo "all expected extensions discovered"
 
-# ROMs, presets and bundled discs are found relative to the binary's real
+# ROMs and presets are found relative to the binary's real
 # location too; both checks fail if the symlink is not resolved first.
 # TSV rows start with the preset id and a tab.
 preset_out="$("${keg_bin_dirpath}/beebium-model-b" --format tsv list-presets)"

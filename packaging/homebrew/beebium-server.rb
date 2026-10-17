@@ -37,14 +37,14 @@ class BeebiumServer < Formula
     # Install the whole relocatable tree under libexec: one server binary per
     # machine variant (libexec/bin/beebium-model-*), the extension ABI dylibs
     # (libexec/lib), the dlopened plugins (libexec/bin/extensions/<name>) and
-    # the ROMs, presets and bundled discs (libexec/share/beebium). The binaries
+    # the ROMs and presets (libexec/share/beebium). The binaries
     # resolve all of these relative to their own on-disk location, so the tree
     # relocates intact.
     system "cmake", "--install", "build", "--prefix", libexec
 
     # Put every server on the user's PATH without dragging the rest of the tree
     # (notably bin/extensions) onto it. Every resource lookup (extensions, ROMs,
-    # presets, bundled discs) is relative to the binary's real on-disk location,
+    # presets) is relative to the binary's real on-disk location,
     # resolved through this symlink, so they all find the libexec tree. The
     # test block exercises each lookup through the symlink.
     bin.install_symlink (libexec/"bin").glob("beebium-model-*")
