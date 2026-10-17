@@ -46,12 +46,11 @@ final class ScsiDiscEditorTests: XCTestCase {
         XCTAssertEqual(capability.adapterPoint, "1mhz-bus")
     }
 
-    func testCapabilityCarriesOccupancyAndBundledMasters() throws {
+    func testCapabilityCarriesOccupancy() throws {
         // The shape describe-preset-schema v2 emits.
         let json = """
         {
           "type": "extensions",
-          "bundled_images": { "hard-disc": [ { "image": "l3fs-v1_26b.dat", "size_bytes": 10002432 } ] },
           "attachment_points": [
             { "id": "1mhz-bus", "display_name": "1 MHz Bus", "min_occupancy": 0, "max_occupancy": null,
               "provided_by": null, "extensions": ["acorn-scsi"] },
@@ -64,8 +63,6 @@ final class ScsiDiscEditorTests: XCTestCase {
         let capability = try XCTUnwrap(HardDiscCapability(schema: schema))
         XCTAssertEqual(capability.discPointName, "SCSI Bus")
         XCTAssertEqual(capability.maxDiscsPerAdapter, 7)
-        XCTAssertEqual(capability.bundledMasters.map(\.image), ["l3fs-v1_26b.dat"])
-        XCTAssertEqual(capability.bundledMasters.first?.displayName, "l3fs-v1_26b")
     }
 
     func testNoCapabilityWhenNoProvidedDiscPoint() {

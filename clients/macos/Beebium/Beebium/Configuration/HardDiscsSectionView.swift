@@ -90,7 +90,6 @@ struct HardDiscsSectionView: View {
                     HardDiscRowView(
                         disc: disc,
                         duplicateId: duplicateIds.contains(disc.scsiId),
-                        bundledMasters: capability.bundledMasters,
                         adapters: adapters.count > 1 ? adapters : [],
                         diagnostics: diagnostics.forExtension(index: disc.instanceIndex),
                         setScsiId: { draft = editor.draft(settingScsiId: $0, forDiscAt: disc.instanceIndex, in: draft) },
@@ -112,7 +111,6 @@ struct HardDiscsSectionView: View {
 private struct HardDiscRowView: View {
     let disc: ScsiDiscEditor.Disc
     let duplicateId: Bool
-    let bundledMasters: [BundledImage]
     /// The adapters to choose from; empty when there is only one (no picker).
     let adapters: [ScsiDiscEditor.Adapter]
     let diagnostics: [PresetManager.PresetDiagnostic]
@@ -222,29 +220,17 @@ private struct HardDiscRowView: View {
         }
     }
 
-    /// The image chooser: the bundled masters (set by bare name, so the server
-    /// uses a per-machine working copy) and a file picker.
+    /// The image chooser: a file picker. A preset may still ship a disc by bare
+    /// name (resolved inside its archive), but there is no catalogue of bundled
+    /// masters to pick from any more.
     private var imageMenu: some View {
         Menu {
-            if !bundledMasters.isEmpty {
-                Section("Bundled discs") {
-                    ForEach(bundledMasters, id: \.image) { master in
-                        Button(masterLabel(master)) { setImage(master.image) }
-                    }
-                }
-            }
             Button("Choose File…") { browseForImage() }
         } label: {
             Text(disc.image == nil ? "Choose…" : "Change…")
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-    }
-
-    private func masterLabel(_ master: BundledImage) -> String {
-        guard let bytes = master.sizeBytes else { return master.displayName }
-        let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-        return "\(master.displayName) (\(size))"
     }
 
     /// Browse for a hard-disc image file. Stored as an absolute path (the preset

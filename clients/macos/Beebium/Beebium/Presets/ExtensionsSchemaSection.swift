@@ -242,8 +242,6 @@ struct HardDiscCapability: Equatable {
     /// Maximum discs per adapter (from the disc point's occupancy), or nil if
     /// unbounded.
     let maxDiscsPerAdapter: Int?
-    /// Bundled disc-image masters offered in the image chooser.
-    let bundledMasters: [BundledImage]
 
     /// Derive the hard-disc capability a model offers, or nil if it has none.
     ///
@@ -265,12 +263,6 @@ struct HardDiscCapability: Equatable {
             self.adapterExtension = adapter
             self.adapterPoint = host.id
             self.maxDiscsPerAdapter = point.maxOccupancy
-            // "hard-disc" is the storage kind SCSI discs draw masters from; it
-            // matches the disc image parameter's declared `bundled` kind. Filter
-            // to images available to the disc extension (hard-disc masters are
-            // shared, so this keeps them all).
-            self.bundledMasters = (schema.bundledImages?["hard-disc"] ?? [])
-                .filter { $0.availableTo(extensionName: disc) }
             return
         }
         return nil
