@@ -250,9 +250,23 @@ struct ContentView: View {
         return "\u{26A0}\u{FE0E} name also used on \(clash.displayHost)"
     }
 
-    /// Open the rename popover on the window showing this machine.
+    /// The window's subtitle, beneath the name. The server's rendered machine
+    /// description (its templated identity string, e.g. "Station 254 (AUN,
+    /// Model B)") when it has one; otherwise the duplicate-name warning, so a
+    /// machine whose name clashes on the network still says so. Empty when there
+    /// is neither, leaving the window with its name alone.
+    private var windowSubtitle: String {
+        let description = systemClient.machineDescription
+        return description.isEmpty ? duplicateNameWarning : description
+    }
+
+    /// Open the rename popover on the window showing this machine. Only a
+    /// transient machine can be renamed in place: the server refuses to rename a
+    /// saved one, whose name follows its document (rename it with Save As, or in
+    /// Finder when it is closed). So this is a no-op on a saved machine, and the
+    /// menu item that reaches it is disabled with a tooltip saying as much.
     private func beginRenamingMachine() {
-        guard let window = currentWindow else { return }
+        guard !systemClient.machineSaved, let window = currentWindow else { return }
         renamePopover.show(in: window, systemClient: systemClient)
     }
 
@@ -367,10 +381,10 @@ struct ContentView: View {
         // the Window menu, Mission Control and every window switcher, so it
         // still has to say which machine this is.
         .navigationTitle(windowTitle)
-        // Beside the name, which is the thing that is not unique. Empty when
-        // there is nothing to say, so an ordinary window carries the name
-        // alone.
-        .navigationSubtitle(duplicateNameWarning)
+        // Beneath the name: the machine's rendered description when it has one,
+        // else the duplicate-name warning. Empty when there is neither, so an
+        // ordinary window carries the name alone.
+        .navigationSubtitle(windowSubtitle)
         .focusedValue(\.renameMachine, { beginRenamingMachine() })
         .focusedValue(\.machineSaveActions, MachineSaveActions(
             isSaved: systemClient.machineSaved,

@@ -36,6 +36,15 @@ final class SystemClient: ObservableObject, Disconnectable {
     /// an identity, or from a server too old to carry the field.
     @Published private(set) var machineNameTemplate: String = ""
 
+    /// The machine's rendered description: the templated identity string the
+    /// server composes (for example "Station 254 (AUN, Model B)"), shown as the
+    /// window subtitle beneath the name. Empty means there is nothing to show,
+    /// so the window carries its name alone. The server re-renders it as state
+    /// changes and pushes each change on the status stream, like the name.
+    /// Populated from the machine identity's description once the server carries
+    /// that field; empty until then.
+    @Published private(set) var machineDescription: String = ""
+
     /// Machine model type identifier (e.g., "ModelBPlus")
     @Published private(set) var machineType: String = ""
 
@@ -166,6 +175,7 @@ final class SystemClient: ObservableObject, Disconnectable {
         machineUUID = ""
         machineName = ""
         machineNameTemplate = ""
+        machineDescription = ""
         machineType = ""
         machineDisplayName = ""
         machineDirpath = ""
