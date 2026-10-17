@@ -260,6 +260,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/BeebiumPlugin.cmake)
 
 # Third-party libraries
 add_subdirectory(third_party/stb)
+add_subdirectory(third_party/miniz)
 
 # Subdirectories
 add_subdirectory(src/6502)
@@ -267,6 +268,8 @@ add_subdirectory(src/6502)
 # repository may depend on it except by choice. Listed before the core so that
 # the one-way direction of the dependency is plain.
 add_subdirectory(src/screen-text)
+# Zip archives (stored presets); the only user of miniz.
+add_subdirectory(src/zip)
 add_subdirectory(src/core)
 add_subdirectory(src/extensions)
 add_subdirectory(src/discovery)

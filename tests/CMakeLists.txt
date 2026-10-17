@@ -2060,6 +2060,14 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_resource_paths)
 
+    # Zip archives (src/zip)
+    add_executable(test_zip_archive test_zip_archive.cpp)
+    target_link_libraries(test_zip_archive PRIVATE
+        beebium_zip
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_zip_archive)
+
     # ROM lookup and reading through a launch's container (RomPaths.hpp)
     add_executable(test_rom_paths test_rom_paths.cpp)
     target_include_directories(test_rom_paths PRIVATE
