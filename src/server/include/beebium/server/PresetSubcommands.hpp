@@ -11,7 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 // The preset subcommands: describe-preset-schema, list-presets,
-// show-preset, report-presets-dirpath, create-preset, resolve-preset,
+// show-preset, create-preset, resolve-preset,
 // delete-preset, import-preset and export-preset.
 
 #pragma once
@@ -344,8 +344,7 @@ public:
                 }
             }
             // The images a parameter declared bundled may name by bare name,
-            // by kind (bundled_images): the hard-disc masters the server ships,
-            // and each plugin's own ROMs. Floppy discs have none.
+            // by kind (bundled_images): each plugin's own ROMs.
             ojson by_kind = ojson::object();
             ojson kinds = ojson::array();
             for (const auto& k : kBundledImageKinds) {
@@ -358,8 +357,7 @@ public:
                     {"image", image.image},
                     {"display_name", image.display_name},
                     {"size_bytes", image.size_bytes},
-                    {"extension", image.extension.empty() ? ojson(nullptr)
-                                                          : ojson(image.extension)}});
+                    {"extension", image.extension}});
             }
             section_for[PresetKey::Extensions] = ojson{{"type", "extensions"},
                                                        {"attachment_points", attachment_points},
@@ -720,46 +718,6 @@ public:
 
         // The document as stored
         std::cout << source->document_text();
-        return ExitCode::OK;
-    }
-};
-
-// ReportPresetsDirpath subcommand - report user presets directory
-template<typename MachineType>
-class ReportPresetsDirpathSubcommand : public Subcommand<MachineType> {
-public:
-    std::string_view name() const override { return "report-presets-dirpath"; }
-    std::string_view description() const override { return "Report user presets directory path"; }
-
-    void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " report-presets-dirpath\n"
-                  << "\n"
-                  << "Outputs the directory path where user presets are stored.\n"
-                  << "It is presets/ in the per-user directory, which the\n"
-                  << "BEEBIUM_USER_DIRPATH environment variable overrides.\n";
-    }
-
-    int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
-        // Handle --help
-        if (global.help_requested) {
-            help(argv[0]);
-            return ExitCode::OK;
-        }
-
-        // Check for subcommand-specific --help
-        for (int i = global.subcommand_argv_start; i < argc; ++i) {
-            std::string_view arg = argv[i];
-            if (arg == "--help" || arg == "-h") {
-                help(argv[0]);
-                return ExitCode::OK;
-            } else {
-                std::cerr << "Unknown argument: " << arg << "\n";
-                help(argv[0]);
-                return ExitCode::USAGE;
-            }
-        }
-
-        std::cout << PresetPaths::get_user_presets_dirpath().string() << "\n";
         return ExitCode::OK;
     }
 };
@@ -1225,39 +1183,34 @@ private:
     }
 
     // A bare name in a parameter declared bundled must name a ROM its plugin
-    // ships, or the launch fails; a hard disc's is searched for (see
-    // ResourcePaths.hpp), and one found nowhere is a warning, since the launch
-    // may see the directories differently.
+    // ships, or the launch fails; one in a parameter declaring a media kind (a
+    // hard disc) is searched for (see ResourcePaths.hpp), and one found
+    // nowhere is a warning, since the launch may see the directories
+    // differently.
     template<typename Error, typename Warning>
     static bool check_bundled_images_exist(const ServerConfig<MachineType>& config,
                                            Error error, Warning warning) {
         bool failed = false;
         const auto images = bundled_images(config.launch.extension_resolver);
         const auto container = config.launch.reference_container();
-        std::vector<std::filesystem::path> disc_dirpaths;
-        if (auto master_dirpath = DiscPaths::find_disc_directory()) {
-            disc_dirpaths.push_back(*master_dirpath);
-        }
         for (const auto& inst : config.machine.extension_instances) {
             const auto* m = config.launch.extension_resolver.find_by_name(inst.name);
             if (!m) continue;
             for (const auto& p : m->parameters) {
-                if (p.bundled.empty()) continue;
+                if (p.bundled.empty() && p.media.empty()) continue;
                 auto it = inst.config.find(p.key);
-                if (it == inst.config.end() || !is_bare_reference(it->second) ||
-                    find_bundled_image(images, *m, p, it->second)) {
-                    continue;
-                }
+                if (it == inst.config.end() || !is_bare_reference(it->second)) continue;
                 const auto path = inst.from_preset ? instance_parameter_pointer(inst, p.key)
                                                    : std::string();
-                if (p.bundled == "rom") {
-                    error(path, "'" + it->second + "' is not a ROM " + inst.name + " ships");
-                    failed = true;
+                if (!p.bundled.empty()) {
+                    if (!find_bundled_image(images, *m, p, it->second)) {
+                        error(path, "'" + it->second + "' is not a ROM " + inst.name + " ships");
+                        failed = true;
+                    }
                     continue;
                 }
                 try {
-                    (void)resolve_reference(it->second, ResourceKind::Disc, container,
-                                            disc_dirpaths);
+                    (void)resolve_reference(it->second, ResourceKind::Disc, container, {});
                 } catch (const std::exception& e) {
                     warning(path, e.what());
                 }
@@ -1268,10 +1221,6 @@ private:
 
     template<typename Warning>
     static void check_floppies_exist(const ServerConfig<MachineType>& config, Warning warning) {
-        std::vector<std::filesystem::path> disc_dirpaths;
-        if (auto master_dirpath = DiscPaths::find_disc_directory()) {
-            disc_dirpaths.push_back(*master_dirpath);
-        }
         const auto container = config.launch.reference_container();
         for (std::size_t drive = 0; drive < config.machine.floppy_filepaths.size(); ++drive) {
             const auto& uri = config.machine.floppy_filepaths[drive];
@@ -1284,8 +1233,7 @@ private:
                 filepath = url->to_filepath();
             } else {
                 try {
-                    filepath = resolve_reference(uri, ResourceKind::Disc, container,
-                                                 disc_dirpaths).path;
+                    filepath = resolve_reference(uri, ResourceKind::Disc, container, {}).path;
                 } catch (const std::exception& e) {
                     warning(path, e.what());
                     continue;

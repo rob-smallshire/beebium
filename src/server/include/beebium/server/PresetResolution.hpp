@@ -438,27 +438,25 @@ void assign_extension_ids(ServerConfig<MachineType>& config) {
 }
 
 // A kind of bundled image, and what a user calls one: a noun to fit a
-// sentence ("Choose a hard disc") or, with an "s", a heading ("Bundled ROMs").
+// sentence ("Choose a ROM") or, with an "s", a heading ("Bundled ROMs").
 struct BundledImageKind {
     std::string_view kind;          // as a parameter's `bundled` names it
-    std::string_view display_name;  // e.g. "hard disc"
+    std::string_view display_name;  // e.g. "ROM"
 };
 
 // The kinds of bundled image, in the order describe-preset-schema gives them.
-inline constexpr std::array<BundledImageKind, 2> kBundledImageKinds{{
-    {"hard-disc", "hard disc"},
+inline constexpr std::array<BundledImageKind, 1> kBundledImageKinds{{
     {"rom", "ROM"},
 }};
 
-// An image a parameter declared `bundled` may name by its bare name: a hard
-// disc master the server ships (kind "hard-disc", any extension), or a ROM a
-// plugin ships in its roms/ directory (kind "rom", that extension only).
+// An image a parameter declared `bundled` may name by its bare name: a ROM a
+// plugin ships in its roms/ directory (kind "rom"), for that extension only.
 struct BundledImage {
     std::string kind;
     std::string image;            // the bare name, e.g. "l3fs-v1_26b.dat"
     std::uintmax_t size_bytes = 0;
     std::string display_name;     // the name a user sees
-    std::string extension;        // the extension it belongs to; "" = any
+    std::string extension;        // the extension it belongs to
     std::filesystem::path filepath;  // the shipped file
 };
 
@@ -466,9 +464,6 @@ struct BundledImage {
 // lists and the launch and resolve-preset check names against.
 inline std::vector<BundledImage> bundled_images(const beebium::ExtensionResolver& resolver) {
     std::vector<BundledImage> images;
-    for (const auto& disc : beebium::server::DiscPaths::bundled_hard_disc_images()) {
-        images.push_back({"hard-disc", disc.image, disc.size_bytes, disc.display_name, "", {}});
-    }
     for (const auto& e : resolver.entries()) {
         for (const auto& rom : e.manifest->roms) {
             images.push_back({"rom", rom.filename, rom.size,
@@ -488,7 +483,7 @@ inline const BundledImage* find_bundled_image(const std::vector<BundledImage>& i
                                               const std::string& value) {
     for (const auto& image : images) {
         if (image.kind == param.bundled && image.image == value &&
-            (image.extension.empty() || image.extension == manifest.name)) {
+            image.extension == manifest.name) {
             return &image;
         }
     }

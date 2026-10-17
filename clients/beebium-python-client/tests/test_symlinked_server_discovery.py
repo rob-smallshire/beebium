@@ -85,7 +85,7 @@ def _clean_env() -> dict[str, str]:
     """The test environment minus any discovery overrides, so the binary must
     find its resources from its own location."""
     env = dict(os.environ)
-    for name in ("BEEBIUM_ROM_DIR", "BEEBIUM_DISC_DIR", "BEEBIUM_SERVERS_DIRPATH"):
+    for name in ("BEEBIUM_ROM_DIR", "BEEBIUM_SERVERS_DIRPATH"):
         env.pop(name, None)
     return env
 

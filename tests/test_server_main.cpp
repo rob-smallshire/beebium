@@ -1118,15 +1118,14 @@ TEST_CASE("a launch's references are written in its preset's directory, else the
 
 namespace {
 
-// A container, a per-user directory and a system directory for both discs
-// (BEEBIUM_DISC_DIR) and ROMs (the explicit ROM directory), all empty.
+// A container, a per-user directory and a system ROM directory (the explicit
+// ROM directory), all empty.
 struct ReferenceTree {
     beebium::test::ScopedTempDir root{"beebium_references_"};
     std::filesystem::path container = root / "container";
     std::filesystem::path user = root / "user";
     std::filesystem::path system = root / "system";
     beebium::test::ScopedEnv user_env{"BEEBIUM_USER_DIRPATH", user.string()};
-    beebium::test::ScopedEnv disc_env{"BEEBIUM_DISC_DIR", system.string()};
 
     ReferenceTree() {
         for (const auto& d : {container / "sub", user / "discs", user / "roms", system}) {
@@ -1167,7 +1166,7 @@ TEST_CASE("a floppy found by search is loaded from the machine's own copy",
           "[server_main][disc][resource_paths]") {
     ReferenceTree t;
     const auto machine = t.root / "machine";
-    ReferenceTree::put_floppy(t.system / "game.ssd");
+    ReferenceTree::put_floppy(t.user / "discs" / "game.ssd");
     CHECK(floppy_loaded("game.ssd", t.container, machine) == machine / "game.ssd");
     CHECK_FALSE(floppy_loaded("nope.ssd", t.container, machine).has_value());
 }

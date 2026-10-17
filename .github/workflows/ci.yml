@@ -178,7 +178,6 @@ jobs:
             build/src/server/extensions/
             build/lib/libbeebium_extension_api.dylib
             build/lib/libbeebium_extension_ui_proto.dylib
-            build/discs/
           retention-days: 7
 
   server-macos-x86_64:
@@ -309,7 +308,6 @@ jobs:
             build/src/server/extensions/
             build/lib/libbeebium_extension_api.dylib
             build/lib/libbeebium_extension_ui_proto.dylib
-            build/discs/
           retention-days: 7
 
   server-linux:
@@ -462,7 +460,6 @@ jobs:
             build/src/server/extensions/
             build/lib/libbeebium_extension_api.so
             build/lib/libbeebium_extension_ui_proto.so
-            build/discs/
           retention-days: 7
 
   server-linux-arm64:
@@ -572,7 +569,6 @@ jobs:
             build/src/server/extensions/
             build/lib/libbeebium_extension_api.so
             build/lib/libbeebium_extension_ui_proto.so
-            build/discs/
           retention-days: 7
 
   server-windows:
@@ -738,7 +734,6 @@ jobs:
           name: beebium-server-windows
           path: |
             build/src/server/Release/
-            build/discs/
           retention-days: 7
 
   gui-client-macos-arm64:

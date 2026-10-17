@@ -83,10 +83,15 @@ struct ParameterSchema {
                                 // instance providing this attachment point
                                 // (e.g. "scsi") that the extension attaches
                                 // to; empty value = the default provider
-    std::string bundled;        // non-empty: a bare-name value refers to one
-                                // of the server's bundled images of this
-                                // kind (e.g. "hard-disc"), copied into the
-                                // machine's directory
+    std::string bundled;        // non-empty: a bare-name value refers to a
+                                // ROM this plugin ships of this kind
+                                // ("rom"), searched for ending in the
+                                // plugin's roms/ and read in place
+    std::string media;          // non-empty: the value names a medium of
+                                // this kind (an ExtensionStorage media_type,
+                                // e.g. "hard-disc"), searched for by bare
+                                // name and copied into the machine's
+                                // directory. Never with `bundled`.
     bool unique = false;        // the value must differ among the instances
                                 // attached to the same provider (e.g. a SCSI
                                 // target ID on one bus)

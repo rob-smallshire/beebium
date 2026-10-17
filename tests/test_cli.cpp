@@ -570,7 +570,6 @@ TEST_CASE("get_subcommands: contains expected subcommands", "[cli][get_subcomman
     REQUIRE(std::find(names.begin(), names.end(), "describe-preset-schema") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "list-presets") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "show-preset") != names.end());
-    REQUIRE(std::find(names.begin(), names.end(), "report-presets-dirpath") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "create-preset") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "delete-preset") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "import-preset") != names.end());
@@ -1778,54 +1777,6 @@ TEST_CASE("dispatch_subcommand: show-preset --help returns OK", "[cli][dispatch_
     auto result = dispatch_subcommand<MachineType>(args.argc(), args.data(), global);
 
     REQUIRE(result == ExitCode::OK);
-}
-
-// ============================================================================
-// report-presets-dirpath subcommand tests
-// ============================================================================
-
-TEST_CASE("parse_global_arguments: report-presets-dirpath subcommand", "[cli][parse_global_arguments][report-presets-dirpath]") {
-    ArgvHelper args{"beebium", "report-presets-dirpath"};
-    GlobalConfig global;
-
-    auto result = parse_global_arguments(args.argc(), args.data(), global);
-
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(global.subcommand_name == "report-presets-dirpath");
-}
-
-TEST_CASE("dispatch_subcommand: report-presets-dirpath returns OK", "[cli][dispatch_subcommand][report-presets-dirpath]") {
-    ArgvHelper args{"beebium", "report-presets-dirpath"};
-    GlobalConfig global;
-    global.subcommand_name = "report-presets-dirpath";
-    global.subcommand_argv_start = 2;
-
-    auto result = dispatch_subcommand<MachineType>(args.argc(), args.data(), global);
-
-    REQUIRE(result == ExitCode::OK);
-}
-
-TEST_CASE("dispatch_subcommand: report-presets-dirpath --help returns OK", "[cli][dispatch_subcommand][report-presets-dirpath]") {
-    ArgvHelper args{"beebium", "report-presets-dirpath", "--help"};
-    GlobalConfig global;
-    global.subcommand_name = "report-presets-dirpath";
-    global.subcommand_argv_start = 2;
-    global.help_requested = true;
-
-    auto result = dispatch_subcommand<MachineType>(args.argc(), args.data(), global);
-
-    REQUIRE(result == ExitCode::OK);
-}
-
-TEST_CASE("dispatch_subcommand: report-presets-dirpath with unknown arg returns USAGE", "[cli][dispatch_subcommand][report-presets-dirpath]") {
-    ArgvHelper args{"beebium", "report-presets-dirpath", "--unknown"};
-    GlobalConfig global;
-    global.subcommand_name = "report-presets-dirpath";
-    global.subcommand_argv_start = 2;
-
-    auto result = dispatch_subcommand<MachineType>(args.argc(), args.data(), global);
-
-    REQUIRE(result == ExitCode::USAGE);
 }
 
 // ============================================================================

@@ -25,7 +25,7 @@
             "type": "filepath",
             "position": 1,
             "required": true,
-            "bundled": "hard-disc",
+            "media": "hard-disc",
             "description": "Path to DAT disc image file"
         },
         {

@@ -50,8 +50,7 @@ jobs:
 
       # The artifact name matches the platform input exactly
       # (beebium-server-macos-arm64, ...-linux, ...-windows, ...). Every
-      # platform extracts at build/, so the RPATH layout matches and the bundled
-      # disc masters land in build/discs/ above the executables. run-id +
+      # platform extracts at build/, so the RPATH layout matches. run-id +
       # github-token pull from the other run.
       - name: Download server binary
         uses: actions/download-artifact@v8

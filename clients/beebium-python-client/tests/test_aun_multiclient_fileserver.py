@@ -102,8 +102,8 @@ def test_second_station_logs_on_to_file_server(
     if not nfs_rom_filepath.is_file():
         pytest.skip(f"{nfs_rom_filename} not available")
 
-    # The file server's SCSI disc is copied into its machine directory,
-    # leaving the bundled master untouched.
+    # The file server's SCSI disc, which the preset carries, is copied into
+    # its machine directory, leaving the preset untouched.
 
     ports = {station: _free_udp_port() for station in (FILE_SERVER_STATION, *CLIENT_STATIONS)}
 

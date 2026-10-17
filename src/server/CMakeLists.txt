@@ -18,70 +18,13 @@ target_link_libraries(beebium_server_headers INTERFACE beebium_zip)
 set(PRESETS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/presets")
 file(MAKE_DIRECTORY ${PRESETS_OUTPUT_DIR})
 
-# Bundled SCSI hard-disc masters. Shipped read-only under share/beebium/discs;
-# a launch copies a master into the machine's own directory (see DiscPaths)
-# so a shipped image is never mutated. Committed compressed
-# (discs/bundled/*.tar.xz, ~55 KB for the 99%-sparse L3FS image) and
-# decompressed here into the build tree so DiscPaths' walk-up finds them and
-# `start`/capture work from a dev build. CMAKE_BINARY_DIR/discs is the
-# config-independent location DiscPaths locates by walking up from the exe.
-set(DISCS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/discs")
-set(BUNDLED_DISCS_SRC_DIR "${CMAKE_SOURCE_DIR}/discs/bundled")
-
-# Each bundled master ships as <id>.tar.xz carrying <id>.dat + <id>.dsc, and
-# <id>.json beside it giving the name a user sees (see DiscPaths).
+# Bundled discs: a disc a system preset carries, committed compressed
+# (discs/bundled/<id>.tar.xz, ~55 KB for the 99%-sparse L3FS image, carrying
+# <id>.dat + <id>.dsc) and extracted into the preset as it is put together,
+# so it ships inside the preset's archive and nowhere else.
 # l3fs-v1_26b is the auto-starting revision (see packaging/discs/build-l3fs-image.sh).
+set(BUNDLED_DISCS_SRC_DIR "${CMAKE_SOURCE_DIR}/discs/bundled")
 set(BUNDLED_DISC_IDS l3fs-v1_26b)
-set(_bundled_disc_outputs "")
-foreach(_disc_id ${BUNDLED_DISC_IDS})
-    if(NOT EXISTS "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json")
-        message(FATAL_ERROR
-            "Bundled disc ${_disc_id} has no display name: "
-            "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json must give one as "
-            "{\"display_name\": \"...\"}")
-    endif()
-    set(_tarball "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.tar.xz")
-    set(_dat "${DISCS_OUTPUT_DIR}/${_disc_id}.dat")
-    set(_dsc "${DISCS_OUTPUT_DIR}/${_disc_id}.dsc")
-    add_custom_command(
-        OUTPUT "${_dat}" "${_dsc}"
-        COMMAND ${CMAKE_COMMAND}
-            -DTARBALL=${_tarball}
-            -DOUTDIR=${DISCS_OUTPUT_DIR}
-            -P ${CMAKE_SOURCE_DIR}/cmake/DecompressBundledDisc.cmake
-        DEPENDS "${_tarball}" ${CMAKE_SOURCE_DIR}/cmake/DecompressBundledDisc.cmake
-        COMMENT "Decompressing bundled disc master ${_disc_id}"
-        VERBATIM)
-    set(_json "${DISCS_OUTPUT_DIR}/${_disc_id}.json")
-    add_custom_command(
-        OUTPUT "${_json}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json" "${_json}"
-        DEPENDS "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json"
-        VERBATIM)
-    set(BUNDLED_DISC_OUTPUTS_${_disc_id} "${_dat}" "${_dsc}" "${_json}")
-    list(APPEND _bundled_disc_outputs ${BUNDLED_DISC_OUTPUTS_${_disc_id}})
-endforeach()
-add_custom_target(bundled_discs ALL DEPENDS ${_bundled_disc_outputs})
-
-# Set OUT_VAR to every build-tree output (master, descriptor and display-name
-# sidecar) of each bundled disc that a preset's create-preset arguments name.
-# create-preset resolves a named disc, and capture boots it, so the preset
-# depends on all of the disc's outputs -- derived from the arguments, not
-# listed by hand, so no preset can name a disc yet miss one of its files.
-function(bundled_disc_outputs_named OUT_VAR)
-    set(outputs "")
-    foreach(disc_id ${BUNDLED_DISC_IDS})
-        foreach(arg ${ARGN})
-            string(FIND "${arg}" "${disc_id}." position)
-            if(NOT position EQUAL -1)
-                list(APPEND outputs ${BUNDLED_DISC_OUTPUTS_${disc_id}})
-                break()
-            endif()
-        endforeach()
-    endforeach()
-    set(${OUT_VAR} "${outputs}" PARENT_SCOPE)
-endfunction()
 
 # Set OUT_VAR to the committed tarball of each bundled disc that a preset's
 # create-preset arguments name. The preset carries the disc: its master is
@@ -111,7 +54,6 @@ function(bundled_disc_extract_commands OUT_VAR source_dirpath)
             COMMAND ${CMAKE_COMMAND}
                 -DTARBALL=${tarball}
                 -DOUTDIR=${source_dirpath}
-                -DREAD_ONLY=OFF
                 -P ${CMAKE_SOURCE_DIR}/cmake/DecompressBundledDisc.cmake)
     endforeach()
     set(${OUT_VAR} "${commands}" PARENT_SCOPE)
@@ -380,10 +322,6 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_rfc2217_server_plugin
     )
 endif()
-# Bundled disc masters are decompressed into the build tree; include them so a
-# single `cmake --build --target beebium-servers` produces a complete dev tree
-# (and any disc-bearing preset's capture finds its master).
-list(APPEND BEEBIUM_SERVERS_DEPS bundled_discs)
 add_custom_target(beebium-servers DEPENDS ${BEEBIUM_SERVERS_DEPS})
 
 # Copy ROMs to build output directory for development
@@ -608,16 +546,4 @@ install(DIRECTORY ${PRESETS_OUTPUT_DIR}/
     DESTINATION share/beebium/presets
     FILES_MATCHING
         PATTERN "*.beebium-preset"
-)
-# Bundled disc masters ship READ-ONLY: they are immutable masters the server
-# copies into each machine's directory (see DiscPaths), never opened
-# writable. FILE_PERMISSIONS drops owner-write so even a system install cannot
-# scribble the shipped image.
-install(DIRECTORY ${DISCS_OUTPUT_DIR}/
-    DESTINATION share/beebium/discs
-    FILE_PERMISSIONS OWNER_READ GROUP_READ WORLD_READ
-    FILES_MATCHING
-        PATTERN "*.dat"
-        PATTERN "*.dsc"
-        PATTERN "*.json"
 )

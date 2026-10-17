@@ -113,11 +113,8 @@ target_link_libraries(test_cli_arg_parsers PRIVATE
 )
 catch_discover_tests(test_cli_arg_parsers)
 
-# DiscPaths copy-on-write resolution for bundled SCSI hard-disc masters.
+# DiscPaths: what a machine opens for a disc a launch names, and what it copies.
 add_executable(test_disc_paths test_disc_paths.cpp)
-target_compile_definitions(test_disc_paths PRIVATE
-    BEEBIUM_BUNDLED_DISCS_SRC_DIRPATH="${CMAKE_SOURCE_DIR}/discs/bundled"
-)
 target_link_libraries(test_disc_paths PRIVATE
     beebium_server_headers
     beebium_core

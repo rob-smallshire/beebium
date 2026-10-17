@@ -593,14 +593,15 @@ inline OptionParse parse_machine_option(
         if (!parse_result.ok) {
             return usage_error(parse_result.error);
         }
-        // A file path parameter: a resource ("bundled") as what it means; a
-        // location anchored only, a bare one being the extension's own (a
-        // keyword such as "none").
+        // A file path parameter: a resource (a medium, or a bundled ROM) as
+        // what it means; a location anchored only, a bare one being the
+        // extension's own (a keyword such as "none").
         for (const auto& p : manifest->parameters) {
             auto it = parse_result.config.find(p.key);
             if (p.type != "filepath" || it == parse_result.config.end()) continue;
-            it->second = p.bundled.empty() ? anchor_reference(it->second, container.dirpath())
-                                           : reference(it->second);
+            it->second = p.bundled.empty() && p.media.empty()
+                             ? anchor_reference(it->second, container.dirpath())
+                             : reference(it->second);
         }
         machine.extension_instances.push_back({
             manifest->name,

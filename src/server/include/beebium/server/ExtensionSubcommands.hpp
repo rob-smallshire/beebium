@@ -297,6 +297,7 @@ inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSche
         {"choices_from", p.choices_from},
         {"excludes", p.excludes},
         {"bundled", p.bundled},
+        {"media", p.media},
         {"unique", p.unique},
         {"provider_of", p.provider_of},
         {"item_format", p.item_format},
@@ -507,7 +508,7 @@ public:
                             std::cout << " [default: " << value << "]";
                         }
                         if (!p.bundled.empty()) {
-                            std::cout << " (or a bundled " << p.bundled << " image)";
+                            std::cout << " (or a bundled " << p.bundled << ")";
                         }
                         if (p.unique) std::cout << " (unique on its attachment)";
                         if (!p.provider_of.empty()) {

@@ -175,8 +175,8 @@ may be on another machine, so a sidebar edit is an `AunService` RPC
 reports the file path on the server's host, its entry count and the last
 load error.
 
-For scripts and hand setup, following `list-presets` / `create-preset` /
-`report-presets-dirpath`, any server executable offers:
+For scripts and hand setup, following `list-presets` / `create-preset`, any
+server executable offers:
 
 | Subcommand | Does |
 |------------|------|

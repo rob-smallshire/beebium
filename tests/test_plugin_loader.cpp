@@ -697,3 +697,27 @@ TEST_CASE("Manifest fields: fields that cannot describe their items refuse the m
         })") == 1);
     }
 }
+
+TEST_CASE("Manifest media: a parameter may name a medium, but not also a bundled ROM",
+          "[extension][plugin][media]") {
+    CHECK(manifests_scanned(R"({
+        "name": "disc", "library": "disc",
+        "parameters": [{"key": "image", "type": "filepath", "media": "hard-disc"}]
+    })") == 1);
+    CHECK(manifests_scanned(R"({
+        "name": "both", "library": "both",
+        "parameters": [{"key": "image", "type": "filepath", "media": "hard-disc",
+                        "bundled": "rom"}]
+    })") == 0);
+
+    auto dir = write_manifest(R"({
+        "name": "disc", "library": "disc",
+        "parameters": [{"key": "image", "type": "filepath", "media": "hard-disc"}]
+    })");
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    std::filesystem::remove_all(dir);
+    REQUIRE(manifests.size() == 1);
+    CHECK(manifests[0].parameters.at(0).media == "hard-disc");
+    CHECK(manifests[0].parameters.at(0).bundled.empty());
+}

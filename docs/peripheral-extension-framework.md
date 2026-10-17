@@ -123,7 +123,7 @@ Each extension has a `manifest.json` file alongside its shared library. The mani
          "default": "0", "min": 0, "max": 7, "unique": true,
          "description": "SCSI target ID (0-7)"},
         {"key": "image", "label": "Disc image", "type": "filepath", "position": 1,
-         "bundled": "hard-disc", "description": "Path to DAT disc image file"},
+         "media": "hard-disc", "description": "Path to DAT disc image file"},
         {"key": "adapter-id", "label": "SCSI adapter", "type": "string",
          "provider_of": "scsi", "description": "ID of SCSI adapter to attach to"}
     ]
@@ -185,16 +185,18 @@ Parameter schema fields:
   its `default`. A name this server does not know leaves the `default`
 - `excludes` -- keys that may not be given together with this one (declaring
   it on either side is enough; a default or an empty value does not count)
-- `bundled` -- for a `filepath`, whether it names a resource or a location.
-  Given, the parameter names a **resource** of that kind, and a bare name is
-  found on a search path (beside the preset, the per-user directory for the
-  kind, then the system's). `hard-disc`: the system's are the disc masters in
-  the server's disc directory, copied into the machine's directory.
-  `rom`: one of this extension's own `roms`, from its `roms/` directory, which
-  also limits the names that may be given. Absent, the parameter names a
-  **location** the extension owns and may create (AUN's `map-file`): it is
-  resolved from where it is written but never searched for, and a bare value
-  is the extension's own (`none`)
+- `media` and `bundled` -- for a `filepath`, what it names; a parameter gives
+  at most one of them (a manifest giving both is refused when loaded):
+  - `media` (`hard-disc`, as the extension's storage names its media): a
+    **medium**, searched for by bare name (in the launch's container -- beside
+    or inside the preset -- then the per-user `discs/`) and copied into the
+    machine's directory, so the guest's writes never reach the preset.
+  - `bundled` (`rom`): a **ROM** this extension ships, searched for by bare
+    name ending in its own `roms/` directory, which also limits the names that
+    may be given, and read in place.
+  - Neither: a **location** the extension owns and may create (AUN's
+    `map-file`), anchored where it is written but never searched for; a bare
+    value is the extension's own (`none`).
 - `provider_of` -- the value is the `id` of the instance providing the named
   attachment point to attach to (empty: the last one)
 - `unique` -- the value must differ among the instances on the same attachment

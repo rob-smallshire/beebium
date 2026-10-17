@@ -70,7 +70,6 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<ListPresetsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ShowPresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<ResolvePresetSubcommand<MachineType>>());
-        v.push_back(std::make_unique<ReportPresetsDirpathSubcommand<MachineType>>());
         v.push_back(std::make_unique<CreatePresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<DeletePresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<ImportPresetSubcommand<MachineType>>());

@@ -342,7 +342,8 @@ TEST_CASE("describe-extension --json describes the extension and each parameter"
     CHECK(scsi_id.at("default") == "0");
     CHECK(scsi_id.at("unique") == true);
     CHECK_FALSE(scsi_id.at("label").get<std::string>().empty());
-    CHECK(parameter(ext, "image").at("bundled") == "hard-disc");
+    CHECK(parameter(ext, "image").at("media") == "hard-disc");
+    CHECK(parameter(ext, "image").at("bundled") == "");
     CHECK(parameter(ext, "image").at("min").is_null());
 }
 

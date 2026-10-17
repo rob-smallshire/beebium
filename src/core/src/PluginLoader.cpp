@@ -227,6 +227,12 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
             param.provider_of = p.value("provider_of", "");
             param.unique = p.value("unique", false);
             param.bundled = p.value("bundled", "");
+            param.media = p.value("media", "");
+            if (!param.bundled.empty() && !param.media.empty()) {
+                throw std::runtime_error("Manifest " + manifest_filepath.string() +
+                                         ": parameter '" + param.key +
+                                         "' cannot be both bundled and media");
+            }
             param.label = p.value("label", "");
             param.choices_from = p.value("choices_from", "");
             param.default_from = p.value("default_from", "");

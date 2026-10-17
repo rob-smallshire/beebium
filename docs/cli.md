@@ -78,7 +78,7 @@ drive numbers in `--floppy`.
 |------|-----|--------|
 | `list-presets` | `presets` | Verb "list" indicates action |
 | `describe-preset-schema` | `preset-schema` | Verb "describe" indicates action |
-| `report-presets-dirpath` | `presets-dir` | Verb "report" indicates action |
+| `report-aun-map-filepath` | `aun-map` | Verb "report" indicates action |
 | `create-preset` | `new-preset` | "new" is an adjective, not a verb |
 | `delete-preset` | `preset-remove` | Verb should come first |
 
@@ -149,11 +149,18 @@ A reference is resolved from where it is written: a preset's directory for a
 preset, the working directory for the command line. Values given with
 `--preset` resolve as if written in the preset. So a bare name (`--mos my.rom`,
 `--floppy 0:elite.ssd`, `--scsi-hdd scsi-id=0:image=mine.dat`) is looked for
-first in the working directory, ahead of the per-user `roms/` or `discs/` and
-the system directories, and a hard disc found there is opened in place,
-writable; a relative path is resolved against the working directory; a
+first in the working directory, ahead of the per-user `roms/` or `discs/` (and,
+for a ROM, the system ROM directory), and a hard disc found there is opened in
+place, writable; a relative path is resolved against the working directory; a
 leading `~/` is the home directory, even where the shell does not expand it
 (inside `key=value`).
+
+The server ships no hard-disc images of its own: a preset that needs one
+carries it in its archive (the Level 3 File Server preset, `model-b-l3fs-aun`,
+carries its disc). To set that machine up again, duplicate the preset
+(`create-preset --from model-b-l3fs-aun --name ...`), which takes the disc with
+it; to get the image itself, unpack the preset
+(`export-preset model-b-l3fs-aun --unpack --output <dir>`).
 
 #### ROM Configuration
 
@@ -740,22 +747,6 @@ With `--thumbnail`, writes the preset's thumbnail (a PNG) to `--output`
 instead. A preset without a thumbnail is an error (`NOINPUT`, 66), with one
 line on stderr, and nothing is written.
 
-#### report-presets-dirpath
-
-Report the directory path where user presets are stored.
-
-```bash
-beebium-model-b report-presets-dirpath
-```
-
-Output (platform-specific):
-```
-/Users/alice/Library/Application Support/Beebium/presets
-```
-
-It is `presets/` in the per-user directory, which the `BEEBIUM_USER_DIRPATH`
-environment variable overrides.
-
 #### create-preset
 
 Create a new preset.
@@ -779,7 +770,7 @@ The preset is written as a `.beebium-preset` zip archive holding `preset.json`
 my-elite-setup
 ```
 
-`create-preset` also accepts every machine option `start` does that a preset can record: `--description`, `--release-date`, `--machine-name` (a name template, recorded as written; see [Machine Name](#machine-name)), `--speed`, `--screen-mode`, `--auto-boot`, `--links`, `--mos`, `--language-rom` (recorded as the model's language slot), `--fdc`, `--floppy` (a relative path is taken from the working directory, as for `start`, and recorded absolutely), `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. With `--from`, each flag overrides the source preset as it would on a `start` command line: a `--sideways` or `--floppy` replaces only the slot or drive it names. The file format is described in [preset-schema.md](preset-schema.md). The options are parsed exactly as `start` parses them (`--from` playing `--preset`), and only what was given is recorded: a parameter left to its default, or an instance id the server would generate, is left out, so the preset keeps following the defaults. For example `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "port": "0"}`. A relative path with a directory component (a `--floppy`, `--sideways` image, `--mos` or an extension file parameter) is taken from the working directory and recorded absolutely; a bare name (a ROM or bundled image) is kept. Options that configure the launch rather than the machine (`--port`, `--wait`, `--advertise`, ...) and those with no preset form (`--write-protect`, `--hide`, `--motherboard-link`, a board RTC) are refused.
+`create-preset` also accepts every machine option `start` does that a preset can record: `--description`, `--release-date`, `--machine-name` (a name template, recorded as written; see [Machine Name](#machine-name)), `--speed`, `--screen-mode`, `--auto-boot`, `--links`, `--mos`, `--language-rom` (recorded as the model's language slot), `--fdc`, `--floppy` (a relative path is taken from the working directory, as for `start`, and recorded absolutely), `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. With `--from`, each flag overrides the source preset as it would on a `start` command line: a `--sideways` or `--floppy` replaces only the slot or drive it names. The file format is described in [preset-schema.md](preset-schema.md). The options are parsed exactly as `start` parses them (`--from` playing `--preset`), and only what was given is recorded: a parameter left to its default, or an instance id the server would generate, is left out, so the preset keeps following the defaults. For example `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "port": "0"}`. A relative path with a directory component (a `--floppy`, `--sideways` image, `--mos` or an extension file parameter) is taken from the working directory and recorded absolutely; a bare name (a ROM, a bundled ROM or a hard disc to be searched for) is kept. Options that configure the launch rather than the machine (`--port`, `--wait`, `--advertise`, ...) and those with no preset form (`--write-protect`, `--hide`, `--motherboard-link`, a board RTC) are refused.
 
 If `--from` is omitted, creates a minimal "bare" preset for the model containing just the model ID, name, and release date.
 

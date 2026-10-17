@@ -1088,11 +1088,11 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
 
         // A file path parameter arrives anchored in the launch's container, by
         // the preset loader or the option parser (see ResourcePaths.hpp). One
-        // the manifest declares bundled names a resource, and a bare name is
-        // searched for: a hard disc through DiscPaths (copied into the
-        // machine's directory, so a shipped read-only master is never opened
-        // writable), a ROM on the ROM search path ending in the roms/ of
-        // the plugin that ships it. Any other names a location the extension
+        // the manifest declares a medium (media) or a bundled ROM names a
+        // resource, and a bare name is searched for: a medium through
+        // DiscPaths (copied into the machine's directory, so the guest's
+        // writes never reach the template), a ROM on the ROM search path
+        // ending in the roms/ of the plugin that ships it. Any other names a location the extension
         // owns, which is never searched. A file the launch's preset archive
         // holds is extracted for the extension (ReferenceContainer::materialize).
         const auto container = config.launch.reference_container();
@@ -1100,7 +1100,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             if (p.type != "filepath") continue;
             auto it = inst.config.find(p.key);
             if (it == inst.config.end() || it->second.empty()) continue;
-            if (p.bundled == "hard-disc") {
+            if (!p.media.empty()) {
                 try {
                     it->second = beebium::server::DiscPaths::resolve_disc_image(
                                      it->second, container, disc_destination)

@@ -184,7 +184,7 @@ System presets (shipped with the software) are searched in this order:
 Every stored preset is a `<id>.beebium-preset` zip archive holding its
 `preset.json` and its `thumbnail.png`. User presets (created with
 `create-preset` / `import-preset`) live in
-`presets/` in the per-user state directory (below). `report-presets-dirpath` prints the user presets directory.
+`presets/` in the per-user state directory (below). `list-presets --format jsonl` gives each preset's `filepath`.
 A preset id is looked up among the system presets first, then the user
 presets.
 

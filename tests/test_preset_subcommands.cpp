@@ -382,32 +382,6 @@ TEST_CASE("list-presets --help: returns OK", "[integration][preset][list-presets
 }
 
 // ============================================================================
-// report-presets-dirpath integration tests
-// ============================================================================
-
-TEST_CASE("report-presets-dirpath: returns a path", "[integration][preset][report-presets-dirpath]") {
-    auto result = run_command(EXECUTABLE + " report-presets-dirpath");
-
-    REQUIRE(result.exit_code == 0);
-    REQUIRE_FALSE(result.stdout_output.empty());
-    // Should contain a path separator
-    REQUIRE((result.stdout_output.find('/') != std::string::npos ||
-             result.stdout_output.find('\\') != std::string::npos));
-}
-
-TEST_CASE("report-presets-dirpath: follows BEEBIUM_USER_DIRPATH", "[integration][preset][report-presets-dirpath]") {
-    TempDirectory temp_dir;
-
-    auto result = run_command(
-        EXECUTABLE + " report-presets-dirpath",
-        {{"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}}
-    );
-
-    REQUIRE(result.exit_code == 0);
-    REQUIRE(result.stdout_output.find(temp_dir.presets().string()) != std::string::npos);
-}
-
-// ============================================================================
 // show-preset integration tests
 // ============================================================================
 
@@ -1998,8 +1972,8 @@ TEST_CASE("describe-preset-schema names every kind of bundled image a parameter 
     for (const auto& k : extensions.at("bundled_image_kinds")) {
         nouns[k.at("kind").get<std::string>()] = k.at("display_name").get<std::string>();
     }
-    CHECK(nouns.at("hard-disc") == "hard disc");
-    CHECK(nouns.at("rom") == "ROM");
+    // Plugins' ROMs only: hard discs travel in the presets that use them.
+    CHECK(nouns == std::map<std::string, std::string>{{"rom", "ROM"}});
 
     // Every kind bundled_images lists, and every kind a parameter names, is named.
     for (const auto& [kind, images] : extensions.at("bundled_images").items()) {
@@ -2089,7 +2063,17 @@ TEST_CASE("resolve-preset: every shipped preset resolves and round-trips through
         }
 
         TempDirectory user_dir;
-        store_preset(user_dir.presets(), "resolved", first.at("preset").dump(2));
+        // Stored with the files the shipped preset carries (a disc, say),
+        // which the copy takes with it.
+        const auto resolved_document = first.at("preset").dump(2);
+        std::vector<beebium::zip::ZipMember> members{
+            {"preset.json",
+             std::vector<std::uint8_t>(resolved_document.begin(), resolved_document.end())}};
+        beebium::zip::ZipReader shipped(preset_filepath);
+        for (const auto& name : shipped.member_names()) {
+            if (name != "preset.json") members.push_back({name, shipped.read(name)});
+        }
+        beebium::zip::write_zip(user_dir.presets() / "resolved.beebium-preset", std::move(members));
         auto saved_filepath = user_dir.path() / "saved.beebium-preset";
         const std::vector<std::pair<std::string, std::string>> env{
             {"BEEBIUM_USER_DIRPATH", user_dir.path().string()}};
@@ -2335,7 +2319,6 @@ TEST_CASE("describe-preset-schema: every bundled image has a display name",
     }
     CHECK(display_names.at("acorn-tube-6502_1_10.rom") == "Acorn 6502 Tube ROM 1.10");
     CHECK(display_names.at("acorn-tube-65c102_1_20.rom") == "Acorn 65C102 Tube ROM 1.20");
-    CHECK(display_names.at("l3fs-v1_26b.dat") == "Acorn Level 3 File Server 1.26");
 }
 
 TEST_CASE("describe-preset-schema: a coprocessor's ROM defaults to the one it ships",
@@ -2514,25 +2497,21 @@ TEST_CASE("start: a start time the RTC's layout cannot hold stops the launch wit
 }
 
 // ============================================================================
-// The bundled hard-disc masters, offered before launch
+// A hard disc is a medium a parameter names, not a bundled image
 // ============================================================================
 
-TEST_CASE("describe-preset-schema: the bundled hard-disc masters",
+TEST_CASE("describe-preset-schema: the bundled images are plugins' ROMs, never hard discs",
           "[integration][preset][describe-preset-schema][bundled]") {
     auto extensions = schema_section(describe_schema(EXECUTABLE), "extensions");
-    const auto& hard_discs = extensions.at("bundled_images").at("hard-disc");
-    bool l3fs = false;
-    for (const auto& image : hard_discs) {
-        if (image.at("image") == "l3fs-v1_26b.dat") {
-            l3fs = true;
-            CHECK(image.at("size_bytes").get<std::uint64_t>() > 0);
-        }
+    std::vector<std::string> kinds;
+    for (const auto& [kind, images] : extensions.at("bundled_images").items()) {
+        kinds.push_back(kind);
     }
-    CHECK(l3fs);
+    CHECK(kinds == std::vector<std::string>{"rom"});
 }
 
-TEST_CASE("describe-extension: a parameter that takes a bundled image says which kind",
-          "[integration][extension][describe-extension][bundled]") {
+TEST_CASE("describe-extension: a parameter that names a medium says which kind",
+          "[integration][extension][describe-extension][media]") {
     auto result = run_command(EXECUTABLE + " --format jsonl describe-extension scsi-hard-disc");
     REQUIRE(result.exit_code == 0);
     std::istringstream lines(result.stdout_output);
@@ -2540,23 +2519,24 @@ TEST_CASE("describe-extension: a parameter that takes a bundled image says which
     bool image_seen = false;
     while (std::getline(lines, line)) {
         auto p = nlohmann::json::parse(line);
+        CHECK(p.at("bundled") == "");
         if (p.at("key") == "image") {
             image_seen = true;
-            CHECK(p.at("bundled") == "hard-disc");
+            CHECK(p.at("media") == "hard-disc");
         } else {
-            CHECK(p.at("bundled") == "");
+            CHECK(p.at("media") == "");
         }
     }
     CHECK(image_seen);
 }
 
-TEST_CASE("resolve-preset: a bare hard-disc name that is not bundled is a warning",
-          "[integration][preset][resolve-preset][bundled]") {
+TEST_CASE("resolve-preset: a bare hard-disc name found nowhere is a warning",
+          "[integration][preset][resolve-preset][media]") {
     TempDirectory temp_dir;
     auto preset_filepath = temp_dir.path() / "nope.preset.beebium";
     std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
         {"name": "acorn-scsi"},
-        {"name": "scsi-hard-disc", "config": {"image": "no-such-master.dat"}}]})";
+        {"name": "scsi-hard-disc", "config": {"image": "no-such-disc.dat"}}]})";
 
     auto out = resolve_json(EXECUTABLE, preset_filepath.string());
 
@@ -2657,6 +2637,14 @@ ProcessResult run_command_in(const std::filesystem::path& dirpath, const std::st
     return result;
 }
 
+// Writes the Level 3 File Server hard disc the shipped L3FS preset carries
+// to `dat_filepath`, with its geometry beside it as the .dsc.
+void put_l3fs_disc(const std::filesystem::path& dat_filepath) {
+    beebium::zip::ZipReader preset(built_file("presets", "model-b-l3fs-aun.beebium-preset"));
+    preset.extract("l3fs-v1_26b.dat", dat_filepath);
+    preset.extract("l3fs-v1_26b.dsc", std::filesystem::path(dat_filepath).replace_extension(".dsc"));
+}
+
 std::string capture_command(const std::filesystem::path& png_filepath) {
     return EXECUTABLE + " capture-screenshot --duration 0 --output \"" +
            png_filepath.string() + "\"";
@@ -2744,10 +2732,7 @@ TEST_CASE("a command line's bare hard-disc name is found in the working director
     CHECK(missing.stderr_output.find("searched " + temp_dir.path().string()) !=
           std::string::npos);
 
-    std::filesystem::copy_file(built_file("discs", "l3fs-v1_26b.dat"),
-                               temp_dir.path() / "cwd-disc.dat");
-    std::filesystem::copy_file(built_file("discs", "l3fs-v1_26b.dsc"),
-                               temp_dir.path() / "cwd-disc.dsc");
+    put_l3fs_disc(temp_dir.path() / "cwd-disc.dat");
     auto found = run_command_in(temp_dir.path(),
                                 capture_command(temp_dir.path() / "hd.png") + scsi);
     INFO(found.stdout_output << found.stderr_output);
@@ -2763,11 +2748,7 @@ TEST_CASE("a preset's relative and bare per-user hard-disc images are both found
     beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
     std::filesystem::create_directories(temp_dir.path() / "pack" / "discs");
     std::filesystem::create_directories(user_dirpath / "discs");
-    for (const char* extension : {".dat", ".dsc"}) {
-        const auto master = built_file("discs", std::string("l3fs-v1_26b") + extension);
-        std::filesystem::copy_file(master, temp_dir.path() / "pack" / "discs" /
-                                               (std::string("relative") + extension));
-    }
+    put_l3fs_disc(temp_dir.path() / "pack" / "discs" / "relative.dat");
     const auto preset_filepath = temp_dir.path() / "pack" / "discs.preset.beebium";
     std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
         {"name": "acorn-scsi"},
@@ -2780,11 +2761,7 @@ TEST_CASE("a preset's relative and bare per-user hard-disc images are both found
     CHECK(before.exit_code == 78);
     CHECK(before.stderr_output.find("user-disc.dat' not found") != std::string::npos);
 
-    for (const char* extension : {".dat", ".dsc"}) {
-        const auto master = built_file("discs", std::string("l3fs-v1_26b") + extension);
-        std::filesystem::copy_file(master,
-                                   user_dirpath / "discs" / (std::string("user-disc") + extension));
-    }
+    put_l3fs_disc(user_dirpath / "discs" / "user-disc.dat");
     auto after = run_command(command);
     INFO(after.stdout_output << after.stderr_output);
     CHECK(after.exit_code == 0);
@@ -2792,12 +2769,14 @@ TEST_CASE("a preset's relative and bare per-user hard-disc images are both found
 
 TEST_CASE("a launch copies a template's disc into its own directory and removes it after",
           "[integration][preset][resource_paths][machine_directory]") {
-    // The L3FS master, named by its bare name, is copied into the machine's
-    // directory under machines/ -- never into the per-user discs/ -- and the
-    // directory is gone once the capture has shut the machine down.
+    // The L3FS disc beside the preset, named by its bare name, is copied into
+    // the machine's directory under machines/ -- never into the per-user
+    // discs/, and never written in place -- and the directory is gone once the
+    // capture has shut the machine down.
     TempDirectory temp_dir;
     const auto user_dirpath = temp_dir.path() / "user";
     beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
+    put_l3fs_disc(temp_dir.path() / "l3fs-v1_26b.dat");
     const auto preset_filepath = temp_dir.path() / "fs.preset.beebium";
     std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
         {"name": "acorn-scsi"},
@@ -2816,6 +2795,12 @@ namespace {
 std::vector<std::uint8_t> file_bytes(const std::filesystem::path& filepath) {
     std::ifstream in(filepath, std::ios::binary);
     return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(in), {});
+}
+
+// A member of the shipped L3FS preset (its disc), read.
+std::vector<std::uint8_t> l3fs_member(const std::string& name) {
+    return beebium::zip::ZipReader(built_file("presets", "model-b-l3fs-aun.beebium-preset"))
+        .read(name);
 }
 
 }  // namespace
@@ -2840,8 +2825,8 @@ TEST_CASE("a launch from a preset archive takes its discs and ROMs from inside i
     beebium::zip::write_zip(
         archive_filepath,
         {{"preset.json", std::vector<std::uint8_t>(document.begin(), document.end())},
-         {"discs/fs.dat", file_bytes(built_file("discs", "l3fs-v1_26b.dat"))},
-         {"discs/fs.dsc", file_bytes(built_file("discs", "l3fs-v1_26b.dsc"))},
+         {"discs/fs.dat", l3fs_member("l3fs-v1_26b.dat")},
+         {"discs/fs.dsc", l3fs_member("l3fs-v1_26b.dsc")},
          {"roms/dfs.rom", file_bytes(built_file("roms", "acorn-dfs_2_26.rom"))},
          {"acorn-tube-65c102_1_20.rom", file_bytes(built_file(std::filesystem::path("extensions") /
                                                  "acorn-65c102-coprocessor" / "roms",
@@ -2930,15 +2915,13 @@ TEST_CASE("the shipped L3FS preset carries its hard disc and needs nothing besid
     CHECK(archive.member_names() ==
           std::vector<std::string>{"l3fs-v1_26b.dat", "l3fs-v1_26b.dsc", "preset.json",
                                    "thumbnail.png"});
-    CHECK(archive.read("l3fs-v1_26b.dat") ==
-          file_bytes(built_file("discs", "l3fs-v1_26b.dat")));
+    CHECK(archive.read("l3fs-v1_26b.dat").size() == 10002432);  // the Level 3 image
 
-    // With no master directory to fall back on, the disc is still found.
+    // With nothing anywhere else, the disc is found in the preset.
     TempDirectory temp_dir;
     auto resolved = run_command(
         EXECUTABLE + " resolve-preset \"" + archive_filepath.string() + "\" --json",
-        {{"BEEBIUM_DISC_DIR", (temp_dir.path() / "no-masters").string()},
-         {"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}});
+        {{"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}});
     INFO(resolved.stdout_output << resolved.stderr_output);
     CHECK(resolved.exit_code == 0);
     for (const auto& d : nlohmann::json::parse(resolved.stdout_output).at("diagnostics")) {

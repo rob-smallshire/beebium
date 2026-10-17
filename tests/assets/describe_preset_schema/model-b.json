@@ -348,10 +348,6 @@
       },
       "bundled_image_kinds": [
         {
-          "kind": "hard-disc",
-          "display_name": "hard disc"
-        },
-        {
           "kind": "rom",
           "display_name": "ROM"
         }
