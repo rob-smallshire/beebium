@@ -22,12 +22,13 @@ from __future__ import annotations
 
 import os
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from beebium.client.installation import ServerInstallation
-from beebium.client.pytest_plugin import PRESET_EXTENSION, resolve_preset
+from beebium.client.pytest_plugin import resolve_preset
 
 pytest_plugins = ["pytester"]
 
@@ -224,35 +225,39 @@ def test_launch_bbc_skips_when_no_server_can_be_found(
 
 
 def test_resolve_preset_returns_an_existing_path_unchanged(tmp_path: Path) -> None:
-    preset_filepath = tmp_path / f"mine{PRESET_EXTENSION}"
+    preset_filepath = tmp_path / "mine.json"
     preset_filepath.write_text("{}")
     assert resolve_preset(preset_filepath) == preset_filepath
+    # A preset directory is a path too.
+    assert resolve_preset(tmp_path) == tmp_path
 
 
-def test_resolve_preset_finds_an_id_in_the_searched_directories(tmp_path: Path) -> None:
-    first = tmp_path / "system"
-    second = tmp_path / "user"
-    first.mkdir()
-    second.mkdir()
-    preset_filepath = second / f"mine{PRESET_EXTENSION}"
-    preset_filepath.write_text("{}")
-    assert resolve_preset("mine", search_dirpaths=[first, second]) == preset_filepath
+def test_resolve_preset_asks_the_server_for_a_user_preset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server_installation: ServerInstallation
+) -> None:
+    # The server's user presets are wherever it keeps them; the client asks.
+    monkeypatch.setenv("BEEBIUM_USER_DIRPATH", str(tmp_path))
+    archive_filepath = tmp_path / "presets" / "mine.beebium-preset"
+    archive_filepath.parent.mkdir()
+    with zipfile.ZipFile(archive_filepath, "w") as archive:
+        archive.writestr("preset.json", '{"model": "model-b", "name": "Mine"}')
+    assert resolve_preset("mine", server=server_installation) == archive_filepath
 
 
-def test_resolve_preset_names_where_it_looked_for_an_unknown_id(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match=r"no-such-preset.*searched: .*system"):
-        resolve_preset("no-such-preset", search_dirpaths=[tmp_path / "system"])
+def test_resolve_preset_says_when_the_server_lists_no_such_preset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server_installation: ServerInstallation
+) -> None:
+    monkeypatch.setenv("BEEBIUM_USER_DIRPATH", str(tmp_path))
+    with pytest.raises(FileNotFoundError, match=r"no preset 'no-such-preset' among the system and user presets"):
+        resolve_preset("no-such-preset", server=server_installation)
 
 
-def test_resolve_preset_says_when_there_is_no_server_to_search(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # BEEBIUM_SERVERS_DIRPATH names system presets without a server, so it
-    # must not leak in from a run pointed at a separate build.
-    monkeypatch.delenv("BEEBIUM_SERVERS_DIRPATH", raising=False)
+def test_resolve_preset_says_when_there_is_no_server_to_search(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="no server was found"):
         resolve_preset("model-b-disc", server=tmp_path / "no-such-server")
 
 
 def test_resolve_preset_finds_a_system_preset_by_id(server_installation: ServerInstallation) -> None:
     resolved = resolve_preset("model-b-disc", server=server_installation)
-    assert resolved.name == f"model-b-disc{PRESET_EXTENSION}"
+    assert resolved.name == "model-b-disc.beebium-preset"
     assert resolved.is_file()

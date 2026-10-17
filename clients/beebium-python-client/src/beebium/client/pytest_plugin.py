@@ -52,13 +52,14 @@ Configuring ``bbc`` and ``bbc_shared``, highest precedence first:
     3. ``beebium_preset = <id-or-path>`` in the pytest ini configuration.
     4. Otherwise no preset: a bare Model B with no disc controller.
 
-A preset is given as an existing file path or as the id ``list-presets``
-reports; :func:`resolve_preset` turns an id into its file.
+A preset is given as an existing path or as the id ``list-presets``
+reports; :func:`resolve_preset` asks the server for an id's file.
 """
 
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import subprocess
 from collections.abc import Callable, Iterator, Sequence
@@ -71,9 +72,6 @@ from beebium.client import Beebium
 from beebium.client.exceptions import BeebiumError, ServerNotFoundError
 from beebium.client.installation import DEFAULT_VARIANT, ServerInstallation
 from beebium.client.server import ServerProcess
-
-#: File name suffix of a stored preset (a zip archive).
-PRESET_EXTENSION = ".beebium-preset"
 
 #: The type of the ``launch_bbc`` factory.
 LaunchBbc = Callable[..., Beebium]
@@ -144,103 +142,60 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-def _preset_search_dirpaths(
-    server: ServerInstallation | str | Path | None, variant: str
-) -> tuple[list[Path], list[str]]:
-    """Where the server looks for a preset id, in the order it looks, and a
-    note for each place that could not be searched.
-
-    Mirrors the server's own search: the system presets (BEEBIUM_SERVERS_DIRPATH,
-    then beside the binary as in a build tree, then the installed
-    ``share/beebium/presets``), then the user presets directory. Only
-    BEEBIUM_SERVERS_DIRPATH needs no server; the rest are located from the
-    server, and the user directory is the one the server reports, so its
-    per-platform rules are not duplicated here.
-    """
-    candidates: list[Path | None] = []
-    notes: list[str] = []
-    servers_dirpath = os.environ.get("BEEBIUM_SERVERS_DIRPATH")
-    if servers_dirpath:
-        candidates.append(Path(servers_dirpath) / "presets")
-
-    try:
-        installation = ServerInstallation.default() if server is None else ServerInstallation.coerce(server)
-        executable_filepath = installation.executable_filepath(variant)
-    except ServerNotFoundError as e:
-        notes.append(f"no server was found ({e}), so neither its presets nor the user presets directory were searched")
-    else:
-        real_dirpath = executable_filepath.resolve().parent
-        candidates += [
-            installation.preset_dirpath,
-            real_dirpath / "presets",
-            real_dirpath.parent / "share" / "beebium" / "presets",
-        ]
-        try:
-            reported = subprocess.run(
-                [str(executable_filepath), "report-presets-dirpath"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=True,
-            ).stdout.strip()
-        except (OSError, subprocess.SubprocessError):
-            reported = ""
-        if reported:
-            candidates.append(Path(reported.splitlines()[-1]))
-        else:
-            notes.append(f"{executable_filepath.name} did not report a user presets directory")
-
-    dirpaths: list[Path] = []
-    for candidate in candidates:
-        if candidate is not None and candidate.is_dir() and candidate not in dirpaths:
-            dirpaths.append(candidate)
-    return dirpaths, notes
-
-
 def resolve_preset(
     preset: str | Path,
     server: ServerInstallation | str | Path | None = None,
     variant: str = DEFAULT_VARIANT,
-    *,
-    search_dirpaths: Sequence[Path] | None = None,
 ) -> Path:
-    """Turn a preset id or path into the preset file to pass as ``--preset``.
+    """Turn a preset id or path into the preset to pass as ``--preset``.
 
-    An existing file is returned as it is. Anything else is taken as a preset
-    id (as ``list-presets`` reports it, e.g. ``"model-b-disc"``) and looked up
-    in the directories the ``variant`` server searches.
+    An existing path (a preset file, directory or ``.beebium-preset`` archive)
+    is returned as it is. Anything else is taken as a preset id and asked of
+    the ``variant`` server, whose ``list-presets --all-models`` names every
+    system and user preset with its file: the server alone knows where its
+    presets are stored.
 
     Args:
-        preset: A preset file path, or a preset id.
+        preset: A preset path, or a preset id (as ``list-presets`` reports it,
+            e.g. ``"model-b-disc"``).
         server: The server installation, binary or install root the machine
             will run on; None applies the default resolution.
         variant: The machine variant, which selects the binary within the
             installation.
-        search_dirpaths: Search these directories for the id instead of the
-            server's.
 
     Raises:
-        FileNotFoundError: If the id names no preset in any searched
-            directory; the message names them, and anything that could not be
-            searched (such as when no server is found).
+        FileNotFoundError: If the id names no preset the server lists, or
+            there is no server to ask; the message says which.
     """
     path = Path(preset)
-    if path.is_file():
+    if path.exists():
         return path
 
     preset_id = str(preset)
-    notes: list[str] = []
-    if search_dirpaths is None:
-        dirpaths, notes = _preset_search_dirpaths(server, variant)
-    else:
-        dirpaths = list(search_dirpaths)
-    for dirpath in dirpaths:
-        candidate = dirpath / f"{preset_id}{PRESET_EXTENSION}"
-        if candidate.is_file():
-            return candidate
-    searched = ", ".join(str(d) for d in dirpaths) or "(no preset directories found)"
-    unsearched = "".join(f"; {note}" for note in notes)
-    raise FileNotFoundError(f"no preset {preset_id!r}; searched: {searched}{unsearched}")
+    try:
+        installation = ServerInstallation.default() if server is None else ServerInstallation.coerce(server)
+        executable_filepath = installation.executable_filepath(variant)
+    except ServerNotFoundError as e:
+        raise FileNotFoundError(f"no preset {preset_id!r}: no server was found to ask ({e})") from e
+    try:
+        listed = subprocess.run(
+            [str(executable_filepath), "--format", "jsonl", "list-presets", "--all-models"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError) as e:
+        raise FileNotFoundError(
+            f"no preset {preset_id!r}: {executable_filepath.name} could not list its presets ({e})"
+        ) from e
+    for line in listed.splitlines():
+        row = json.loads(line)
+        if row.get("id") == preset_id:
+            return Path(row["filepath"])
+    raise FileNotFoundError(
+        f"no preset {preset_id!r} among the system and user presets {executable_filepath.name} lists"
+    )
 
 
 @pytest.fixture(scope="session")
