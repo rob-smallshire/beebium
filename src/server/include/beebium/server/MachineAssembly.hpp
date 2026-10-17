@@ -92,12 +92,11 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
     }
 
     apply_rom_defaults(config);
-    const auto container_dirpath = config.launch.reference_container_dirpath();
+    const auto container = config.launch.reference_container();
 
     // Load MOS ROM
-    auto mos_path = RomPaths::find_rom(config.machine.mos_filepath, container_dirpath);
+    auto [mos_path, mos_data] = RomPaths::load_rom(config.machine.mos_filepath, container);
     std::cout << "Loading MOS ROM: " << mos_path << "\n";
-    auto mos_data = load_file(mos_path);
     if (mos_data.size() != 16384) {
         std::cerr << "Warning: MOS ROM is " << mos_data.size()
                   << " bytes, expected 16384\n";
@@ -125,9 +124,8 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
         }
 
         // Regular ROM loading - use unified API
-        auto rom_path = RomPaths::find_rom(marker_or_filepath, container_dirpath);
+        auto [rom_path, rom_data] = RomPaths::load_rom(marker_or_filepath, container);
         std::cout << "Loading ROM into slot " << static_cast<int>(slot) << ": " << rom_path << "\n";
-        auto rom_data = load_file(rom_path);
 
         if (rom_data.empty() || rom_data.size() > 16384
             || !std::has_single_bit(rom_data.size())) {
@@ -147,8 +145,8 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
     // These are processed after rom_slots to ensure the slot is already configured as RAM
     for (const auto& sideways_config : config.machine.sideways_configs) {
         if (sideways_config.type == SidewaysSlotType::Ram && !sideways_config.image_filepath.empty()) {
-            auto ram_path = RomPaths::find_rom(sideways_config.image_filepath, container_dirpath);
-            auto ram_data = load_file(ram_path);
+            auto [ram_path, ram_data] =
+                RomPaths::load_rom(sideways_config.image_filepath, container);
             std::cout << "Pre-loading RAM slot " << static_cast<int>(sideways_config.slot)
                       << " from " << ram_path << "\n";
             // Use load_sideways_data to load without changing slot type.
@@ -403,7 +401,7 @@ std::optional<int> install_econet(MachineType& machine,
 // Returns an exit code on error, or std::nullopt on success.
 inline std::optional<int> load_single_disc(DiscDrive& drive, int drive_num,
                                             const std::string& filepath_or_url,
-                                            const std::filesystem::path& container_dirpath,
+                                            const ReferenceContainer& container,
                                             const DiscPaths::CopyDestination& destination) {
     std::filesystem::path filepath(filepath_or_url);
     const bool is_url = filepath_or_url.find("://") != std::string::npos;
@@ -413,7 +411,7 @@ inline std::optional<int> load_single_disc(DiscDrive& drive, int drive_num,
         try {
             filepath = DiscPaths::resolve_disc_image(
                 local_url ? local_url->to_filepath().string() : filepath_or_url,
-                container_dirpath, destination);
+                container, destination);
         } catch (const std::runtime_error& e) {
             std::cerr << "Error: " << e.what() << "\n";
             return ExitCode::NOINPUT;
@@ -492,7 +490,7 @@ std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<Mac
         if (!config.machine.floppy_filepaths[0].empty()) {
             if (auto exit_code = load_single_disc(
                     machine.state().memory.disc_drive_0, 0, config.machine.floppy_filepaths[0],
-                    config.launch.reference_container_dirpath(), destination)) {
+                    config.launch.reference_container(), destination)) {
                 return exit_code;
             }
         }
@@ -500,7 +498,7 @@ std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<Mac
         if (!config.machine.floppy_filepaths[1].empty()) {
             if (auto exit_code = load_single_disc(
                     machine.state().memory.disc_drive_1, 1, config.machine.floppy_filepaths[1],
-                    config.launch.reference_container_dirpath(), destination)) {
+                    config.launch.reference_container(), destination)) {
                 return exit_code;
             }
         }
@@ -1035,7 +1033,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     const DiscPaths::CopyDestination disc_destination{
         am->machine_directory->dirpath(),
         config.launch.preset
-            ? std::optional(config.launch.reference_container_dirpath())
+            ? std::optional(config.launch.reference_container().dirpath())
             : std::nullopt};
 
     // Load disc images
@@ -1096,7 +1094,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         // writable), a ROM on the ROM search path ending in the roms/ of
         // the plugin that ships it. Any other names a location the extension
         // owns, which is never searched.
-        const auto container_dirpath = config.launch.reference_container_dirpath();
+        const auto container = config.launch.reference_container();
         for (const auto& p : manifest->parameters) {
             if (p.type != "filepath") continue;
             auto it = inst.config.find(p.key);
@@ -1104,7 +1102,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             if (p.bundled == "hard-disc") {
                 try {
                     it->second = beebium::server::DiscPaths::resolve_disc_image(
-                                     it->second, container_dirpath, disc_destination)
+                                     it->second, container, disc_destination)
                                      .string();
                 } catch (const std::exception& e) {
                     std::cerr << "Error: cannot resolve disc image for '"
@@ -1125,7 +1123,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
                 }
                 try {
                     it->second = resolve_reference(it->second, ResourceKind::Rom,
-                                                   container_dirpath,
+                                                   container,
                                                    {image->filepath.parent_path()})
                                      .path.string();
                 } catch (const std::exception& e) {

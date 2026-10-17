@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 
@@ -255,3 +256,50 @@ TEST_CASE("anchor_reference: Windows drive paths are absolute, backslashes separ
     CHECK(anchor_reference("discs\\x.dat", "D:\\presets") == normal("D:\\presets\\discs\\x.dat"));
 }
 #endif
+
+TEST_CASE("ReferenceContainer: which paths lie within it, by name", "[resource_paths][container]") {
+    const ReferenceContainer container(std::filesystem::path("/c/presets/p"));
+    CHECK(container.relative_path_of("/c/presets/p/discs/x.ssd") ==
+          std::filesystem::path("discs") / "x.ssd");
+    CHECK(container.relative_path_of("/c/presets/p/./discs/../x.ssd") ==
+          std::filesystem::path("x.ssd"));
+    CHECK_FALSE(container.relative_path_of("/c/presets/other/x.ssd").has_value());
+    CHECK_FALSE(container.relative_path_of("/c/presets/p/../x.ssd").has_value());
+}
+
+TEST_CASE("ReferenceContainer: reads and copies files within it and elsewhere",
+          "[resource_paths][container]") {
+    beebium::test::ScopedTempDir root("beebium_container_");
+    std::filesystem::create_directories(root / "c" / "sub");
+    std::ofstream(root / "c" / "sub" / "in.rom", std::ios::binary) << "INSIDE";
+    std::ofstream(root / "out.rom", std::ios::binary) << "OUTSIDE";
+    std::filesystem::permissions(root / "c" / "sub" / "in.rom",
+                                 std::filesystem::perms::owner_read);
+    const ReferenceContainer container(root / "c");
+
+    CHECK(container.has_file(root / "c" / "sub" / "in.rom"));
+    CHECK(container.has_file(root / "out.rom"));
+    CHECK_FALSE(container.has_file(root / "c" / "sub"));
+    CHECK_FALSE(container.has_file(root / "c" / "missing.rom"));
+
+    const auto inside = container.read_file(root / "c" / "sub" / "in.rom");
+    CHECK(std::string(inside.begin(), inside.end()) == "INSIDE");
+    const auto outside = container.read_file(root / "out.rom");
+    CHECK(std::string(outside.begin(), outside.end()) == "OUTSIDE");
+    CHECK_THROWS(container.read_file(root / "c" / "missing.rom"));
+
+    // A copy is writable even when the original is not.
+    container.copy_file(root / "c" / "sub" / "in.rom", root / "copy.rom");
+    std::ifstream copy(root / "copy.rom", std::ios::binary);
+    CHECK(std::string(std::istreambuf_iterator<char>(copy), {}) == "INSIDE");
+    CHECK((std::filesystem::status(root / "copy.rom").permissions() &
+           std::filesystem::perms::owner_write) != std::filesystem::perms::none);
+}
+
+TEST_CASE("command_line_reference: a bare name the container holds becomes its path",
+          "[resource_paths][container]") {
+    beebium::test::ScopedTempDir root("beebium_container_");
+    std::ofstream(root / "here.ssd") << "x";
+    CHECK(command_line_reference("here.ssd", root.path()) == (root / "here.ssd").string());
+    CHECK(command_line_reference("elsewhere.ssd", root.path()) == "elsewhere.ssd");
+}

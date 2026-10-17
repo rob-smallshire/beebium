@@ -195,11 +195,11 @@ struct LaunchSettings {
     std::vector<std::vector<beebium::ExtensionManifest>> extension_scan_results;
     beebium::ExtensionResolver extension_resolver;
 
-    // The directory this launch's file references are written in: the
+    // The container this launch's file references are written in: the
     // preset's, when launched from one (values given on the command line
     // beside --preset resolve as if written in it), else the working directory.
-    std::filesystem::path reference_container_dirpath() const {
-        return preset ? preset->container_dirpath() : std::filesystem::current_path();
+    ReferenceContainer reference_container() const {
+        return preset ? preset->container() : ReferenceContainer(std::filesystem::current_path());
     }
 };
 

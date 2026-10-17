@@ -1091,7 +1091,7 @@ private:
                                  const PresetConfig& preset, Warning warning) {
         auto check = [&](const std::string& path, const std::string& rom) {
             try {
-                (void)RomPaths::find_rom(rom, config.launch.reference_container_dirpath());
+                (void)RomPaths::find_rom(rom, config.launch.reference_container());
             } catch (const std::exception& e) {
                 warning(path, e.what());
             }
@@ -1126,7 +1126,7 @@ private:
                                            Error error, Warning warning) {
         bool failed = false;
         const auto images = bundled_images(config.launch.extension_resolver);
-        const auto container_dirpath = config.launch.reference_container_dirpath();
+        const auto container = config.launch.reference_container();
         std::vector<std::filesystem::path> disc_dirpaths;
         if (auto master_dirpath = DiscPaths::find_disc_directory()) {
             disc_dirpaths.push_back(*master_dirpath);
@@ -1149,7 +1149,7 @@ private:
                     continue;
                 }
                 try {
-                    (void)resolve_reference(it->second, ResourceKind::Disc, container_dirpath,
+                    (void)resolve_reference(it->second, ResourceKind::Disc, container,
                                             disc_dirpaths);
                 } catch (const std::exception& e) {
                     warning(path, e.what());
@@ -1165,6 +1165,7 @@ private:
         if (auto master_dirpath = DiscPaths::find_disc_directory()) {
             disc_dirpaths.push_back(*master_dirpath);
         }
+        const auto container = config.launch.reference_container();
         for (std::size_t drive = 0; drive < config.machine.floppy_filepaths.size(); ++drive) {
             const auto& uri = config.machine.floppy_filepaths[drive];
             if (uri.empty()) continue;
@@ -1176,16 +1177,14 @@ private:
                 filepath = url->to_filepath();
             } else {
                 try {
-                    filepath = resolve_reference(uri, ResourceKind::Disc,
-                                                 config.launch.reference_container_dirpath(),
+                    filepath = resolve_reference(uri, ResourceKind::Disc, container,
                                                  disc_dirpaths).path;
                 } catch (const std::exception& e) {
                     warning(path, e.what());
                     continue;
                 }
             }
-            std::error_code ec;
-            if (!std::filesystem::exists(filepath, ec)) {
+            if (!container.has_file(filepath)) {
                 warning(path, "disc image not found: " + filepath.string());
             }
         }

@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <beebium/server/ResourcePaths.hpp>
+
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
@@ -68,9 +70,9 @@ public:
                                            : container_dirpath_.filename().string();
     }
 
-    // The directory the preset's file references are written in: the
+    // The container the preset's file references are written in: the
     // preset's own directory, or the one holding the preset file.
-    const std::filesystem::path& container_dirpath() const { return container_dirpath_; }
+    ReferenceContainer container() const { return ReferenceContainer(container_dirpath_); }
 
     // The document as stored.
     const std::string& document_text() const { return document_text_; }

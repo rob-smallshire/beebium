@@ -1106,14 +1106,14 @@ TEST_CASE("a launch's references are written in its preset's directory, else the
     std::string error;
 
     LaunchSettings launch;
-    CHECK(launch.reference_container_dirpath() == std::filesystem::current_path());
+    CHECK(launch.reference_container().dirpath() == std::filesystem::current_path());
     launch.preset = PresetSource::open(root / "presets" / "x.preset.beebium", error);
     REQUIRE(launch.preset.has_value());
-    CHECK(launch.reference_container_dirpath() == root / "presets");
+    CHECK(launch.reference_container().dirpath() == root / "presets");
     // A directory preset's references are written in the directory itself.
     launch.preset = PresetSource::open(root / "presets" / "as-dir", error);
     REQUIRE(launch.preset.has_value());
-    CHECK(launch.reference_container_dirpath() == root / "presets" / "as-dir");
+    CHECK(launch.reference_container().dirpath() == root / "presets" / "as-dir");
 }
 
 namespace {
@@ -1185,31 +1185,6 @@ TEST_CASE("a floppy's path is the template's copy within it, the user's file out
     CHECK(floppy_loaded("sub/game.ssd", t.container, machine) == game);
     beebium::test::ScopedEnv home("HOME", t.container.string());
     CHECK(floppy_loaded("~/sub/game.ssd", t.root.path(), machine, t.root / "other") == game);
-}
-
-TEST_CASE("a ROM's bare name is found in the container, then per-user, then system",
-          "[server_main][load_roms][resource_paths]") {
-    ReferenceTree t;
-    ReferenceTree::put_rom(t.system / "x.rom");
-    CHECK(RomPaths::find_rom("x.rom", t.container) == t.system / "x.rom");
-    ReferenceTree::put_rom(t.user / "roms" / "x.rom");
-    CHECK(RomPaths::find_rom("x.rom", t.container) == t.user / "roms" / "x.rom");
-    ReferenceTree::put_rom(t.container / "x.rom");
-    CHECK(RomPaths::find_rom("x.rom", t.container) == t.container / "x.rom");
-    CHECK_THROWS(RomPaths::find_rom("nope.rom", t.container));
-}
-
-TEST_CASE("a ROM's path is anchored in the container, or home",
-          "[server_main][load_roms][resource_paths]") {
-    ReferenceTree t;
-    ReferenceTree::put_rom(t.container / "sub" / "x.rom");
-    CHECK(RomPaths::find_rom("sub/x.rom", t.container) ==
-          (t.container / "sub" / "x.rom").lexically_normal());
-    CHECK(RomPaths::find_rom((t.container / "sub" / "x.rom").string(), t.root.path()) ==
-          t.container / "sub" / "x.rom");
-    beebium::test::ScopedEnv home("HOME", t.container.string());
-    CHECK(RomPaths::find_rom("~/sub/x.rom", t.root.path()) ==
-          (t.container / "sub" / "x.rom").lexically_normal());
 }
 
 TEST_CASE("a preset's MOS and sideways ROMs are found beside the preset",

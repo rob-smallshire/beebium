@@ -27,21 +27,78 @@
 // A reference to a location rather than a resource (a file the extension owns
 // and may create, such as the AUN map file) follows 2, 3 and 4 but is never
 // searched for.
+//
+// Anchoring is lexical, on the container's directory. Whether a file is
+// there, and reading or copying it, goes through the ReferenceContainer, so a
+// file the container holds is reached the same way whatever holds it.
 
 #pragma once
 
 #include <beebium/PlatformUtils.hpp>
+#include <beebium/server/AtomicFile.hpp>
 
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <functional>
 #include <iostream>
+#include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace beebium::server {
+
+// Where a launch's file references are written: a preset's directory, or the
+// working directory for the command line. Every check that a referenced file
+// exists, and every read or copy of one, goes through it: a file within the
+// container is one it holds, and a file elsewhere is an ordinary file.
+class ReferenceContainer {
+public:
+    // A directory is a container.
+    ReferenceContainer(std::filesystem::path dirpath) : dirpath_(std::move(dirpath)) {}
+
+    // The directory references are anchored in.
+    const std::filesystem::path& dirpath() const { return dirpath_; }
+
+    // `filepath` relative to the container, when it lies within it (by its
+    // name, whether or not there is a file there).
+    std::optional<std::filesystem::path> relative_path_of(
+        const std::filesystem::path& filepath) const {
+        auto relative = filepath.lexically_normal().lexically_relative(dirpath_.lexically_normal());
+        if (relative.empty() || *relative.begin() == "..") return std::nullopt;
+        return relative;
+    }
+
+    // True when there is a file at `filepath`.
+    bool has_file(const std::filesystem::path& filepath) const {
+        std::error_code ec;
+        return std::filesystem::is_regular_file(filepath, ec);
+    }
+
+    // The bytes of the file at `filepath`. Throws when it cannot be read.
+    std::vector<std::uint8_t> read_file(const std::filesystem::path& filepath) const {
+        std::ifstream in(filepath, std::ios::binary);
+        if (!in) throw std::runtime_error("cannot read " + filepath.string());
+        return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(in), {});
+    }
+
+    // A writable copy of the file at `filepath` at `copy_filepath`, replacing
+    // it atomically (see write_file_atomically).
+    void copy_file(const std::filesystem::path& filepath,
+                   const std::filesystem::path& copy_filepath) const {
+        write_file_atomically(copy_filepath, [&](const std::filesystem::path& temp_filepath) {
+            std::filesystem::copy_file(filepath, temp_filepath);
+        });
+    }
+
+private:
+    std::filesystem::path dirpath_;
+};
 
 // True when `reference` names an absolute location: an absolute path on this
 // platform, or a path starting with '/', which a preset may use on every
@@ -89,15 +146,19 @@ inline std::string anchor_reference(const std::string& reference,
 }
 
 // The file called `name` (a bare name) in the first of `search_dirpaths` that
-// holds one. Throws when none does, naming every directory searched, in
-// order; `what` names the kind of file for the message ("ROM").
+// holds one, by `has_file`. Throws when none does, naming every directory
+// searched, in order; `what` names the kind of file for the message ("ROM").
 inline std::filesystem::path find_on_search_path(
     std::string_view name, const std::vector<std::filesystem::path>& search_dirpaths,
-    std::string_view what) {
+    std::string_view what,
+    const std::function<bool(const std::filesystem::path&)>& has_file =
+        [](const std::filesystem::path& filepath) {
+            std::error_code ec;
+            return std::filesystem::is_regular_file(filepath, ec);
+        }) {
     for (const auto& dirpath : search_dirpaths) {
         const auto filepath = dirpath / std::filesystem::path(name);
-        std::error_code ec;
-        if (std::filesystem::is_regular_file(filepath, ec)) {
+        if (has_file(filepath)) {
             return filepath;
         }
     }
@@ -122,14 +183,12 @@ inline bool is_bare_reference(const std::string& reference) {
 // container does not hold is kept: its meaning is the search, which still
 // holds wherever the preset is moved.
 inline std::string command_line_reference(const std::string& reference,
-                                          const std::filesystem::path& container_dirpath) {
+                                          const ReferenceContainer& container) {
     if (!is_bare_reference(reference)) {
-        return anchor_reference(reference, container_dirpath);
+        return anchor_reference(reference, container.dirpath());
     }
-    const auto filepath = container_dirpath / reference;
-    std::error_code ec;
-    return std::filesystem::is_regular_file(filepath, ec) ? filepath.lexically_normal().string()
-                                                          : reference;
+    const auto filepath = container.dirpath() / reference;
+    return container.has_file(filepath) ? filepath.lexically_normal().string() : reference;
 }
 
 // The kinds of resource a bare name is searched for, each with its per-user
@@ -159,19 +218,19 @@ struct ResolvedReference {
 // nowhere, naming every directory searched. Whether an anchored path exists
 // is the caller's concern.
 inline ResolvedReference resolve_reference(
-    const std::string& reference, ResourceKind kind,
-    const std::filesystem::path& container_dirpath,
+    const std::string& reference, ResourceKind kind, const ReferenceContainer& container,
     const std::vector<std::filesystem::path>& system_dirpaths) {
     if (!is_bare_reference(reference)) {
-        return {anchor_reference(reference, container_dirpath), ReferenceOrigin::Path};
+        return {anchor_reference(reference, container.dirpath()), ReferenceOrigin::Path};
     }
     const auto user_dirpath = user_resource_dirpath(kind);
-    std::vector<std::filesystem::path> search_dirpaths{container_dirpath, user_dirpath};
+    std::vector<std::filesystem::path> search_dirpaths{container.dirpath(), user_dirpath};
     search_dirpaths.insert(search_dirpaths.end(), system_dirpaths.begin(),
                            system_dirpaths.end());
     const auto found = find_on_search_path(
-        reference, search_dirpaths, kind == ResourceKind::Disc ? "Disc image" : "ROM");
-    const auto origin = found.parent_path() == container_dirpath ? ReferenceOrigin::Container
+        reference, search_dirpaths, kind == ResourceKind::Disc ? "Disc image" : "ROM",
+        [&](const std::filesystem::path& filepath) { return container.has_file(filepath); });
+    const auto origin = found.parent_path() == container.dirpath() ? ReferenceOrigin::Container
                         : found.parent_path() == user_dirpath    ? ReferenceOrigin::User
                                                                  : ReferenceOrigin::System;
     if (kind == ResourceKind::Rom && origin == ReferenceOrigin::User) {

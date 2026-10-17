@@ -470,13 +470,13 @@ OptionParse parse_board_option(const std::string& arg, int& i, int argc, char* a
 // An option that describes the machine, which a preset records: it writes
 // only `machine`. An extension's --<cli-name> flag is one, found by
 // `cli_name_to_manifest`. A file reference is recorded as what it means where
-// the command line is written, `container_dirpath` (command_line_reference).
+// the command line is written, `container` (command_line_reference).
 inline OptionParse parse_machine_option(
         const std::string& arg, int& i, int argc, char* argv[], MachineDescription& machine,
         const std::map<std::string, const beebium::ExtensionManifest*>& cli_name_to_manifest,
-        const std::filesystem::path& container_dirpath) {
+        const ReferenceContainer& container) {
     auto reference = [&](const std::string& value) {
-        return command_line_reference(value, container_dirpath);
+        return command_line_reference(value, container);
     };
     auto usage_error = [](const std::string& message) {
         std::cerr << "Error: " << message << "\n";
@@ -599,7 +599,7 @@ inline OptionParse parse_machine_option(
         for (const auto& p : manifest->parameters) {
             auto it = parse_result.config.find(p.key);
             if (p.type != "filepath" || it == parse_result.config.end()) continue;
-            it->second = p.bundled.empty() ? anchor_reference(it->second, container_dirpath)
+            it->second = p.bundled.empty() ? anchor_reference(it->second, container.dirpath())
                                            : reference(it->second);
         }
         machine.extension_instances.push_back({
@@ -712,7 +712,7 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
         }
         auto machine = parse_machine_option(arg, i, argc, argv, config.machine,
                                             cli_name_to_manifest,
-                                            config.launch.reference_container_dirpath());
+                                            config.launch.reference_container());
         if (machine.exit_code) return machine.exit_code;
         if (!machine.recognised) {
             std::cerr << "Unknown argument: " << arg << "\n";

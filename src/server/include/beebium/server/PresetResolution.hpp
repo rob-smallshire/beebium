@@ -385,7 +385,7 @@ std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& c
         inst.list_config = std::move(normalised.list_config);
         inst.explicit_keys = std::move(normalised.explicit_keys);
         if (config.launch.preset) {
-            const auto& preset_dirpath = config.launch.preset->container_dirpath();
+            const auto preset_dirpath = config.launch.preset->container().dirpath();
             for (const auto& p : manifest->parameters) {
                 auto it = inst.config.find(p.key);
                 if (p.type == "filepath" && it != inst.config.end() &&

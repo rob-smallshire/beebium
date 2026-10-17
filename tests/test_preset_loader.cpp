@@ -205,7 +205,7 @@ TEST_CASE("PresetSource: the document is kept exactly as stored", "[preset][pres
     REQUIRE(source.has_value());
     CHECK(source->document_text() == text);
     CHECK(source->path() == root / "p.json");
-    CHECK(source->container_dirpath() == root.path());
+    CHECK(source->container().dirpath() == root.path());
 }
 
 TEST_CASE("load_preset: unknown keys are ignored (forward compatibility)", "[preset][load_preset]") {

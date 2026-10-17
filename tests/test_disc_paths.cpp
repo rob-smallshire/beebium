@@ -94,45 +94,6 @@ void make_master(const fs::path& master_dir, const std::string& dat,
 
 }  // namespace
 
-TEST_CASE("copy_file_atomically: a failure mid-copy leaves the old copy intact",
-          "[disc][discpaths]") {
-    TmpTree tmp;
-    auto dir = tmp.subdir("work");
-    write_file(dir / "src.dat", std::string(4096, 'N'));
-    write_file(dir / "dst.dat", "OLD-WORKING-COPY");
-
-    // The copier writes half the image, then fails (a full disc, say).
-    auto failing_copy = [](const fs::path& src, const fs::path& dst) {
-        write_file(dst, read_file(src).substr(0, 2048));
-        throw std::runtime_error("simulated failure mid-copy");
-    };
-    CHECK_THROWS_AS(DiscPaths::copy_file_atomically(dir / "src.dat", dir / "dst.dat",
-                                                    failing_copy),
-                    std::runtime_error);
-
-    CHECK(read_file(dir / "dst.dat") == "OLD-WORKING-COPY");
-    // The partial temporary is cleaned up: only the two files remain.
-    size_t entries = 0;
-    for ([[maybe_unused]] const auto& e : fs::directory_iterator(dir)) ++entries;
-    CHECK(entries == 2);
-}
-
-TEST_CASE("copy_file_atomically replaces the destination with a writable copy",
-          "[disc][discpaths]") {
-    TmpTree tmp;
-    auto dir = tmp.subdir("work");
-    write_file(dir / "src.dat", "NEW");
-    fs::permissions(dir / "src.dat", fs::perms::owner_read);
-    write_file(dir / "dst.dat", "OLD");
-    fs::permissions(dir / "dst.dat", fs::perms::owner_read);
-
-    DiscPaths::copy_file_atomically(dir / "src.dat", dir / "dst.dat");
-
-    CHECK(read_file(dir / "dst.dat") == "NEW");
-    auto perms = fs::status(dir / "dst.dat").permissions();
-    CHECK((perms & fs::perms::owner_write) != fs::perms::none);
-}
-
 // ---------------------------------------------------------------------------
 // resolve_disc_image: the file reference rule, and what a machine copies
 // ---------------------------------------------------------------------------

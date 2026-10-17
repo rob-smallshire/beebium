@@ -14,7 +14,6 @@
 #define BEEBIUM_SERVER_DISC_PATHS_HPP
 
 #include <beebium/PlatformUtils.hpp>
-#include <beebium/server/AtomicFile.hpp>
 #include <beebium/server/ResourcePaths.hpp>
 
 #include <nlohmann/json.hpp>
@@ -24,7 +23,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -192,7 +190,7 @@ public:
     };
 
     // The path the emulator should open for a disc reference (a floppy or a
-    // hard disc) written in `container_dirpath`. Media a template names by
+    // hard disc) written in `container`. Media a template names by
     // search or by position within itself is the machine's own copy, made in
     // `destination`: a disc found by search -- in the container, the per-user
     // discs/ or among the masters -- or named by a path inside the template's
@@ -200,16 +198,17 @@ public:
     // elsewhere is the user's own file, opened in place. A master is checked
     // to be one (its .dsc and display name) before it is copied.
     static std::filesystem::path resolve_disc_image(
-        const std::string& image, const std::filesystem::path& container_dirpath,
+        const std::string& image, const ReferenceContainer& container,
         const CopyDestination& destination) {
         std::vector<std::filesystem::path> system_dirpaths;
         if (auto master_dirpath = find_disc_directory()) system_dirpaths.push_back(*master_dirpath);
         const auto found =
-            resolve_reference(image, ResourceKind::Disc, container_dirpath, system_dirpaths);
+            resolve_reference(image, ResourceKind::Disc, container, system_dirpaths);
         if (found.origin == ReferenceOrigin::System &&
             found.path.extension() == kAcornScsiHardDiscFormat.extension) {
             check_master(found.path);
-            return copy_into_machine(found.path, destination.dirpath / found.path.filename());
+            return copy_into_machine(container, found.path,
+                                     destination.dirpath / found.path.filename());
         }
         std::filesystem::path relative_path;
         if (found.origin != ReferenceOrigin::Path) {
@@ -220,27 +219,28 @@ public:
             if (!inside.empty() && *inside.begin() != "..") relative_path = inside;
         }
         if (relative_path.empty()) return found.path;
-        return copy_into_machine(found.path, destination.dirpath / relative_path);
+        return copy_into_machine(container, found.path, destination.dirpath / relative_path);
     }
 
-    // A copy of `source`, with a hard-disc image's geometry sidecar, at
-    // `copy_filepath`, made once: a second reference to the same file finds
-    // the first copy. A source that does not exist is returned as it is, for
-    // the caller to report.
-    static std::filesystem::path copy_into_machine(const std::filesystem::path& source,
+    // A copy of `source`, read through `container`, with a hard-disc
+    // image's geometry sidecar, at `copy_filepath`, made once: a second
+    // reference to the same file finds the first copy. A source that does not
+    // exist is returned as it is, for the caller to report.
+    static std::filesystem::path copy_into_machine(const ReferenceContainer& container,
+                                                   const std::filesystem::path& source,
                                                    const std::filesystem::path& copy_filepath) {
+        if (!container.has_file(source)) return source;
         std::error_code ec;
-        if (!std::filesystem::is_regular_file(source, ec)) return source;
         if (!std::filesystem::exists(copy_filepath, ec)) {
             std::filesystem::create_directories(copy_filepath.parent_path());
-            copy_file_atomically(source, copy_filepath);
+            container.copy_file(source, copy_filepath);
             if (source.extension() == kAcornScsiHardDiscFormat.extension) {
                 auto source_sidecar = source;
                 source_sidecar.replace_extension(kAcornScsiHardDiscFormat.sidecar_extension);
                 auto copy_sidecar = copy_filepath;
                 copy_sidecar.replace_extension(kAcornScsiHardDiscFormat.sidecar_extension);
-                if (std::filesystem::exists(source_sidecar, ec)) {
-                    copy_file_atomically(source_sidecar, copy_sidecar);
+                if (container.has_file(source_sidecar)) {
+                    container.copy_file(source_sidecar, copy_sidecar);
                 }
             }
         }
@@ -263,27 +263,6 @@ public:
                 std::filesystem::path(dat_filepath).replace_extension(".json").string() +
                 " must give one as {\"display_name\": \"...\"}");
         }
-    }
-
-    using FileCopier =
-        std::function<void(const std::filesystem::path&, const std::filesystem::path&)>;
-
-    // Replace dst with a writable copy of src, atomically (see
-    // write_file_atomically): the master is shipped read-only, the copy is
-    // not. `copy` performs the copy into the temporary; tests substitute one
-    // that fails part-way.
-    static void copy_file_atomically(const std::filesystem::path& src,
-                                     const std::filesystem::path& dst,
-                                     const FileCopier& copy = copy_file_plain) {
-        write_file_atomically(dst, [&](const std::filesystem::path& temp_filepath) {
-            copy(src, temp_filepath);
-        });
-    }
-
-private:
-    static void copy_file_plain(const std::filesystem::path& src,
-                                const std::filesystem::path& dst) {
-        std::filesystem::copy_file(src, dst);
     }
 };
 

@@ -2060,6 +2060,17 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_resource_paths)
 
+    # ROM lookup and reading through a launch's container (RomPaths.hpp)
+    add_executable(test_rom_paths test_rom_paths.cpp)
+    target_include_directories(test_rom_paths PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/server/include
+    )
+    target_link_libraries(test_rom_paths PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_rom_paths)
+
     # Atomic file replacement (AtomicFile.hpp) and the preset writer on it
     add_executable(test_atomic_file test_atomic_file.cpp)
     target_include_directories(test_atomic_file PRIVATE

@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_SERVER_ROM_PATHS_HPP
 #define BEEBIUM_SERVER_ROM_PATHS_HPP
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -112,11 +113,11 @@ public:
         return std::nullopt;
     }
 
-    // The ROM file a reference names, written in `container_dirpath` (see
+    // The ROM file a reference names, written in `container` (see
     // ResourcePaths.hpp). Throws when it does not exist, naming where it was
     // looked for.
     static std::filesystem::path find_rom(std::string_view reference,
-                                          const std::filesystem::path& container_dirpath) {
+                                          const ReferenceContainer& container) {
         std::vector<std::filesystem::path> system_dirpaths;
         if (auto rom_dirpath = find_rom_directory()) {
             system_dirpaths.push_back(*rom_dirpath);
@@ -124,17 +125,29 @@ public:
         std::filesystem::path filepath;
         try {
             filepath = resolve_reference(std::string(reference), ResourceKind::Rom,
-                                         container_dirpath, system_dirpaths).path;
+                                         container, system_dirpaths).path;
         } catch (const std::runtime_error& e) {
             if (!system_dirpaths.empty()) throw;
             throw std::runtime_error(std::string(e.what()) +
                                      " (no ROM directory found: set BEEBIUM_ROM_DIR "
                                      "or use --rom-dir)");
         }
-        if (!std::filesystem::exists(filepath)) {
+        if (!container.has_file(filepath)) {
             throw std::runtime_error("ROM file not found: " + filepath.string());
         }
         return filepath;
+    }
+
+    // The ROM a reference names (find_rom), and its bytes, read through
+    // `container`. Throws as find_rom does, or when it cannot be read.
+    struct LoadedRom {
+        std::filesystem::path filepath;
+        std::vector<std::uint8_t> data;
+    };
+    static LoadedRom load_rom(std::string_view reference, const ReferenceContainer& container) {
+        auto filepath = find_rom(reference, container);
+        auto data = container.read_file(filepath);
+        return {std::move(filepath), std::move(data)};
     }
 
 private:

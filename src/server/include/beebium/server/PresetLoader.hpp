@@ -581,7 +581,7 @@ inline PresetLoadResult load_preset(const PresetSource& source) {
 
     // Relative paths in the preset resolve from the directory it is written
     // in, wherever the preset was named from.
-    const auto& preset_dirpath = source.container_dirpath();
+    const auto preset_dirpath = source.container().dirpath();
 
     // Parse into PresetConfig
     PresetConfig config;
