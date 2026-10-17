@@ -36,6 +36,7 @@
 
 #include <beebium/PlatformUtils.hpp>
 #include <beebium/server/AtomicFile.hpp>
+#include <beebium/zip/ZipArchive.hpp>
 
 #include <cstdint>
 #include <filesystem>
@@ -43,6 +44,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -53,14 +55,28 @@
 
 namespace beebium::server {
 
-// Where a launch's file references are written: a preset's directory, or the
-// working directory for the command line. Every check that a referenced file
-// exists, and every read or copy of one, goes through it: a file within the
-// container is one it holds, and a file elsewhere is an ordinary file.
+// Where a launch's file references are written: a preset's directory or
+// archive, or the working directory for the command line. Every check that a
+// referenced file exists, and every read or copy of one, goes through it: a
+// file within the container is one it holds, and a file elsewhere is an
+// ordinary file.
+//
+// An archive (a stored preset) is anchored on its own path as if it were a
+// directory: "discs/x.ssd" written in /p/a.beebium-preset names the member
+// discs/x.ssd, at /p/a.beebium-preset/discs/x.ssd, and "../x.ssd" the file
+// /p/x.ssd beside it, as for a directory preset.
 class ReferenceContainer {
 public:
     // A directory is a container.
     ReferenceContainer(std::filesystem::path dirpath) : dirpath_(std::move(dirpath)) {}
+
+    // The zip archive at `archive_filepath`, read through `archive`.
+    static ReferenceContainer archive(std::filesystem::path archive_filepath,
+                                      std::shared_ptr<const zip::ZipReader> archive) {
+        ReferenceContainer container(std::move(archive_filepath));
+        container.archive_ = std::move(archive);
+        return container;
+    }
 
     // The directory references are anchored in.
     const std::filesystem::path& dirpath() const { return dirpath_; }
@@ -76,12 +92,14 @@ public:
 
     // True when there is a file at `filepath`.
     bool has_file(const std::filesystem::path& filepath) const {
+        if (auto member = member_name_of(filepath)) return archive_->contains(*member);
         std::error_code ec;
         return std::filesystem::is_regular_file(filepath, ec);
     }
 
     // The bytes of the file at `filepath`. Throws when it cannot be read.
     std::vector<std::uint8_t> read_file(const std::filesystem::path& filepath) const {
+        if (auto member = member_name_of(filepath)) return archive_->read(*member);
         std::ifstream in(filepath, std::ios::binary);
         if (!in) throw std::runtime_error("cannot read " + filepath.string());
         return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(in), {});
@@ -91,13 +109,45 @@ public:
     // it atomically (see write_file_atomically).
     void copy_file(const std::filesystem::path& filepath,
                    const std::filesystem::path& copy_filepath) const {
+        const auto member = member_name_of(filepath);
         write_file_atomically(copy_filepath, [&](const std::filesystem::path& temp_filepath) {
-            std::filesystem::copy_file(filepath, temp_filepath);
+            if (member) {
+                archive_->extract(*member, temp_filepath);
+            } else {
+                std::filesystem::copy_file(filepath, temp_filepath);
+            }
         });
     }
 
+    // A real file holding what is at `filepath`, for a consumer that opens it
+    // by path itself (an extension's file parameter): `filepath` itself,
+    // unless it is a member of an archive, which is extracted into
+    // `machine_dirpath` at its own relative path, once. Only a launch, which
+    // has a machine directory, calls this; a check without one asks has_file.
+    std::filesystem::path materialize(const std::filesystem::path& filepath,
+                                      const std::filesystem::path& machine_dirpath) const {
+        const auto relative = archive_ ? relative_path_of(filepath) : std::nullopt;
+        if (!relative || !archive_->contains(relative->generic_string())) return filepath;
+        const auto copy_filepath = machine_dirpath / *relative;
+        std::error_code ec;
+        if (!std::filesystem::exists(copy_filepath, ec)) {
+            std::filesystem::create_directories(copy_filepath.parent_path());
+            copy_file(filepath, copy_filepath);
+        }
+        return copy_filepath;
+    }
+
 private:
+    // The member of the archive `filepath` names, when the container is an
+    // archive and `filepath` lies within it.
+    std::optional<std::string> member_name_of(const std::filesystem::path& filepath) const {
+        if (!archive_) return std::nullopt;
+        if (auto relative = relative_path_of(filepath)) return relative->generic_string();
+        return std::nullopt;
+    }
+
     std::filesystem::path dirpath_;
+    std::shared_ptr<const zip::ZipReader> archive_;
 };
 
 // True when `reference` names an absolute location: an absolute path on this

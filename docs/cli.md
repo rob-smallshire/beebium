@@ -99,9 +99,11 @@ beebium-model-b [options]           # Equivalent (start is default)
 |--------|-------------|
 | `--preset <id\|path>` | Load configuration from a preset. CLI options override preset values. The file format is in [preset-schema.md](preset-schema.md) |
 
-The argument is first tried as a path: a preset file, or a directory holding the
-preset as `preset.json` (its file references are then written in that
-directory). If nothing exists at that path it is resolved as a preset id, the same way as `show-preset`: the system presets directory first, then the user presets directory. `list-presets` shows the ids available. If neither lookup succeeds the server exits with `NOINPUT` (66):
+The argument is first tried as a path: a preset file, or a directory or zip
+archive (such as a `.beebium-preset`) holding the preset as `preset.json`, whose
+file references are then written in that directory or archive: a disc or ROM
+the preset names inside it is taken from there (a disc copied, as always, into
+the machine's own directory). If nothing exists at that path it is resolved as a preset id, the same way as `show-preset`: the system presets directory first, then the user presets directory. `list-presets` shows the ids available. If neither lookup succeeds the server exits with `NOINPUT` (66):
 
 ```
 Error: Preset not found: 'x' (no such file, and no system or user preset with that id)
@@ -111,6 +113,7 @@ Error: Preset not found: 'x' (no such file, and no system or user preset with th
 beebium-model-b --preset model-b-disc                  # built-in preset by id
 beebium-model-b --preset ./my-game.preset.beebium      # preset file by path
 beebium-model-b --preset ./my-game                     # preset directory by path
+beebium-model-b --preset ./my-game.beebium-preset      # preset archive by path
 ```
 
 CLI-overrides-preset applies to the Econet transport too. A `--aun` (or

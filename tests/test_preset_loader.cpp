@@ -14,11 +14,15 @@
 // Tests for preset file loading and parsing (PresetLoader.hpp)
 
 #include <beebium/server/PresetLoader.hpp>
+#include <beebium/zip/ZipArchive.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "test_temp_paths.hpp"
 
 #include <filesystem>
 #include <fstream>
+#include <vector>
+#include <string>
+#include <cstdint>
 
 using namespace beebium::server;
 
@@ -184,6 +188,48 @@ TEST_CASE("load_preset: a directory without preset.json, or no preset at all, is
     CHECK(missing.unreadable);
     CHECK(missing.error()->message ==
           "Cannot open preset file: " + (root / "missing.json").string());
+}
+
+TEST_CASE("PresetSource: a zip archive is a preset, whatever its name, read from preset.json",
+          "[preset][preset_source][preset_archive]") {
+    beebium::test::ScopedTempDir root("beebium_preset_archive_");
+    const std::string document = R"({"model": "model-b",
+        "storage": {"floppy_drives": [{"drive": 0, "image_uri": "discs/game.ssd"}]}})";
+    const auto archive_filepath = root / "named-anything.zip";
+    beebium::zip::write_zip(
+        archive_filepath,
+        {{"preset.json", std::vector<std::uint8_t>(document.begin(), document.end())},
+         {"discs/game.ssd", std::vector<std::uint8_t>(2560, 0)}});
+    std::string error;
+    auto source = PresetSource::open(archive_filepath, error);
+    REQUIRE(source.has_value());
+    CHECK(source->form() == PresetSource::Form::Archive);
+    CHECK(source->document_text() == document);
+    CHECK(source->container().dirpath() == archive_filepath);
+    CHECK(source->container().has_file(archive_filepath / "discs" / "game.ssd"));
+
+    // References are written in the archive, as in a directory.
+    auto result = load_preset(*source);
+    REQUIRE(result.success());
+    CHECK(*result.config->storage->floppy_drives.at(0) ==
+          beebium::file_url_from_filepath(archive_filepath / "discs" / "game.ssd"));
+}
+
+TEST_CASE("PresetSource: an archive without preset.json, or not a sound archive, is unreadable",
+          "[preset][preset_source][preset_archive]") {
+    beebium::test::ScopedTempDir root("beebium_preset_archive_");
+    beebium::zip::write_zip(root / "empty.beebium-preset", {{"other.json", {'{', '}'}}});
+    std::string error;
+    CHECK_FALSE(PresetSource::open(root / "empty.beebium-preset", error).has_value());
+    CHECK(error == "No preset.json in preset archive: " +
+                       (root / "empty.beebium-preset").string());
+
+    // A zip's signature and nothing more.
+    std::ofstream(root / "broken.beebium-preset", std::ios::binary) << "PK\x03\x04 truncated";
+    CHECK_FALSE(PresetSource::open(root / "broken.beebium-preset", error).has_value());
+    CHECK(error.rfind("Cannot read preset archive: " +
+                          (root / "broken.beebium-preset").string() + ": not a zip archive",
+                      0) == 0);
 }
 
 TEST_CASE("PresetSource: the document is kept exactly as stored", "[preset][preset_source]") {

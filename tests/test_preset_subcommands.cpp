@@ -20,12 +20,14 @@
 #include <beebium/KeyboardMatrix.hpp>
 #include <beebium/PlatformUtils.hpp>
 #include <beebium/server/PresetLoader.hpp>
+#include <beebium/zip/ZipArchive.hpp>
 #include "stb_image.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <filesystem>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <set>
@@ -820,7 +822,8 @@ TEST_CASE("import-preset: a directory is refused", "[integration][preset][import
                               {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
 
     REQUIRE(result.exit_code == 64);
-    CHECK(result.stderr_output.find("takes a preset file, not a directory") != std::string::npos);
+    CHECK(result.stderr_output.find("takes a preset file, not a preset directory or archive") !=
+          std::string::npos);
     CHECK(std::filesystem::is_empty(user_dir.presets()));
 }
 
@@ -2745,6 +2748,107 @@ TEST_CASE("a launch copies a template's disc into its own directory and removes 
     CHECK(result.exit_code == 0);
     CHECK(std::filesystem::is_empty(user_dirpath / "machines"));
     CHECK_FALSE(std::filesystem::exists(user_dirpath / "discs"));
+}
+
+namespace {
+
+std::vector<std::uint8_t> file_bytes(const std::filesystem::path& filepath) {
+    std::ifstream in(filepath, std::ios::binary);
+    return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(in), {});
+}
+
+}  // namespace
+
+TEST_CASE("a launch from a preset archive takes its discs and ROMs from inside it",
+          "[integration][preset][resource_paths][preset_archive]") {
+    // Everything the preset names is in the archive: a hard disc and its
+    // geometry by path, a sideways ROM by path, and the coprocessor's ROM by
+    // bare name. Nothing is found anywhere else, so the launch succeeds only
+    // if each is taken from inside.
+    TempDirectory temp_dir;
+    const auto user_dirpath = temp_dir.path() / "user";
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
+    const std::string document = R"({"model": "model-b",
+        "sideways_bank": {"slots": [{"slot": 14, "type": "rom", "image_uri": "roms/dfs.rom"}]},
+        "extensions": [
+            {"name": "acorn-scsi"},
+            {"name": "scsi-hard-disc", "config": {"scsi-id": 0, "image": "discs/fs.dat"}},
+            {"name": "acorn-65c102-coprocessor",
+             "config": {"rom": "acorn-tube-65c102_1_20.rom"}}]})";
+    const auto archive_filepath = temp_dir.path() / "everything.beebium-preset";
+    beebium::zip::write_zip(
+        archive_filepath,
+        {{"preset.json", std::vector<std::uint8_t>(document.begin(), document.end())},
+         {"discs/fs.dat", file_bytes(built_file("discs", "l3fs-v1_26b.dat"))},
+         {"discs/fs.dsc", file_bytes(built_file("discs", "l3fs-v1_26b.dsc"))},
+         {"roms/dfs.rom", file_bytes(built_file("roms", "acorn-dfs_2_26.rom"))},
+         {"acorn-tube-65c102_1_20.rom", file_bytes(built_file(std::filesystem::path("extensions") /
+                                                 "acorn-65c102-coprocessor" / "roms",
+                                             "acorn-tube-65c102_1_20.rom"))}});
+
+    auto resolved = run_command(EXECUTABLE + " resolve-preset \"" + archive_filepath.string() +
+                                "\" --json");
+    INFO(resolved.stdout_output << resolved.stderr_output);
+    CHECK(resolved.exit_code == 0);
+    CHECK(nlohmann::json::parse(resolved.stdout_output).at("diagnostics").empty());
+
+    auto launched = run_command(capture_command(temp_dir.path() / "everything.png") +
+                                " --preset \"" + archive_filepath.string() + "\"");
+    INFO(launched.stdout_output << launched.stderr_output);
+    CHECK(launched.exit_code == 0);
+    // The sideways ROM was read from the archive; the hard disc was copied,
+    // and the coprocessor's ROM extracted, into the machine's directory (each
+    // at its own relative path), which is gone after.
+    std::ostringstream sideways_rom;  // as load_roms prints it
+    sideways_rom << (archive_filepath / "roms" / "dfs.rom").lexically_normal();
+    CHECK(launched.stdout_output.find(sideways_rom.str()) != std::string::npos);
+    const auto machines = (user_dirpath / "machines").string();
+    CHECK(launched.stdout_output.find("image=" + machines) != std::string::npos);
+    CHECK(launched.stdout_output.find("rom=" + machines) != std::string::npos);
+    CHECK(std::filesystem::is_empty(user_dirpath / "machines"));
+}
+
+TEST_CASE("show-preset reads a preset archive's document and thumbnail",
+          "[integration][preset][show-preset][preset_archive]") {
+    TempDirectory temp_dir;
+    const std::string document = R"({"model": "model-b-plus", "name": "Zipped"})";
+    const auto archive_filepath = temp_dir.path() / "zipped.beebium-preset";
+    beebium::zip::write_zip(
+        archive_filepath,
+        {{"preset.json", std::vector<std::uint8_t>(document.begin(), document.end())},
+         {"thumbnail.png", {'P', 'N', 'G'}}});
+
+    auto shown = run_command(EXECUTABLE + " show-preset \"" + archive_filepath.string() + "\"");
+    REQUIRE(shown.exit_code == 0);
+    CHECK(shown.stdout_output == document);
+
+    const auto png = temp_dir.path() / "thumb.png";
+    auto thumbnail = run_command(EXECUTABLE + " show-preset \"" + archive_filepath.string() +
+                                 "\" --thumbnail --output \"" + png.string() + "\"");
+    REQUIRE(thumbnail.exit_code == 0);
+    CHECK(file_bytes(png) == std::vector<std::uint8_t>{'P', 'N', 'G'});
+}
+
+TEST_CASE("import-preset and export-preset refuse a preset archive, for now",
+          "[integration][preset][preset_archive]") {
+    TempDirectory temp_dir;
+    const std::string document = R"({"model": "model-b"})";
+    const auto archive_filepath = temp_dir.path() / "zipped.beebium-preset";
+    beebium::zip::write_zip(
+        archive_filepath,
+        {{"preset.json", std::vector<std::uint8_t>(document.begin(), document.end())}});
+    std::vector<std::pair<std::string, std::string>> env{
+        {"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}};
+
+    auto imported =
+        run_command(EXECUTABLE + " import-preset \"" + archive_filepath.string() + "\"", env);
+    CHECK(imported.exit_code == 64);
+    CHECK(imported.stderr_output.find("not a preset directory or archive") != std::string::npos);
+    auto exported = run_command(EXECUTABLE + " export-preset \"" + archive_filepath.string() +
+                                    "\" --output \"" + (temp_dir.path() / "out").string() + "\"",
+                                env);
+    CHECK(exported.exit_code == 64);
+    CHECK_FALSE(std::filesystem::exists(temp_dir.path() / "out"));
 }
 
 TEST_CASE("create-preset records a bare name the working directory holds as its path",

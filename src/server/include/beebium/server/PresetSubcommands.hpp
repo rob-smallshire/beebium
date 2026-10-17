@@ -1390,17 +1390,17 @@ public:
             return ExitCode::USAGE;
         }
 
-        std::error_code ec;
-        if (std::filesystem::is_directory(source_filepath, ec)) {
-            std::cerr << "Error: import-preset takes a preset file, not a directory: "
-                      << source_filepath.string() << "\n";
-            return ExitCode::USAGE;
-        }
         std::string open_error;
         auto source = PresetSource::open(source_filepath, open_error);
         if (!source) {
             std::cerr << "Error: " << open_error << "\n";
             return ExitCode::NOINPUT;
+        }
+        if (source->form() != PresetSource::Form::File) {
+            std::cerr << "Error: import-preset takes a preset file, not a preset directory or "
+                         "archive: "
+                      << source_filepath.string() << "\n";
+            return ExitCode::USAGE;
         }
         std::string parse_error;
         auto parsed = source->parse_document(parse_error);
@@ -1534,6 +1534,12 @@ public:
         if (!source) {
             std::cerr << "Error: " << open_error << "\n";
             return ExitCode::NOINPUT;
+        }
+        if (source->form() != PresetSource::Form::File) {
+            std::cerr << "Error: export-preset takes a preset file, not a preset directory or "
+                         "archive: "
+                      << preset_arg << "\n";
+            return ExitCode::USAGE;
         }
 
         if (auto write_error = write_preset(source->document_text(), output_filepath);

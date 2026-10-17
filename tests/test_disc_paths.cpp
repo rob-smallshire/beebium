@@ -20,11 +20,13 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include "beebium/server/DiscPaths.hpp"
+#include "beebium/zip/ZipArchive.hpp"
 #include "test_env.hpp"
 #include "test_temp_paths.hpp"
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <fstream>
 #include <random>
 #include <stdexcept>
@@ -299,4 +301,33 @@ TEST_CASE("bundled_hard_disc_images of a missing directory is empty",
           "[disc_paths][bundled]") {
     beebium::test::ScopedTempDir dir("beebium_bundled_");
     CHECK(DiscPaths::bundled_hard_disc_images(dir / "absent").empty());
+}
+
+TEST_CASE("resolve_disc_image: a disc held in a preset archive is extracted into the machine",
+          "[disc][discpaths][resolve][preset_archive]") {
+    DiscSearchTree t;
+    const auto archive_filepath = t.root / "p.beebium-preset";
+    auto bytes = [](const std::string& text) {
+        return std::vector<std::uint8_t>(text.begin(), text.end());
+    };
+    beebium::zip::write_zip(archive_filepath, {{"top.ssd", bytes("TOP")},
+                                               {"discs/fs.dat", bytes("FS")},
+                                               {"discs/fs.dsc", bytes("FS-GEOMETRY")}});
+    const auto archive = beebium::server::ReferenceContainer::archive(
+        archive_filepath, std::make_shared<const beebium::zip::ZipReader>(archive_filepath));
+    const DiscPaths::CopyDestination destination{t.machine, archive_filepath};
+
+    // By bare name, and by path with its geometry beside it.
+    const auto top = DiscPaths::resolve_disc_image("top.ssd", archive, destination);
+    CHECK(top == t.machine / "top.ssd");
+    CHECK(read_file(top) == "TOP");
+    const auto fs_dat = DiscPaths::resolve_disc_image("discs/fs.dat", archive, destination);
+    CHECK(fs_dat == t.machine / "discs" / "fs.dat");
+    CHECK(read_file(fs_dat) == "FS");
+    CHECK(read_file(t.machine / "discs" / "fs.dsc") == "FS-GEOMETRY");
+    // The copy is the machine's to write.
+    CHECK((fs::status(fs_dat).permissions() & fs::perms::owner_write) != fs::perms::none);
+    // One the archive does not hold is the path, for the caller to report.
+    CHECK(DiscPaths::resolve_disc_image("discs/missing.ssd", archive, destination) ==
+          archive_filepath / "discs" / "missing.ssd");
 }

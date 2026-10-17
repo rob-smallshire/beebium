@@ -3,6 +3,12 @@
 # Common include directory for server templates
 set(SERVER_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# What a target including the server headers (include/beebium/server) needs
+# beyond them: the servers and the tests of those headers link it.
+add_library(beebium_server_headers INTERFACE)
+target_include_directories(beebium_server_headers INTERFACE ${SERVER_INCLUDE_DIR})
+target_link_libraries(beebium_server_headers INTERFACE beebium_zip)
+
 # Presets output directory. The install() rules below read presets from here,
 # so it MUST be a fixed, config-independent path: install(DIRECTORY) does not
 # evaluate generator expressions. Presets are generated straight into this
@@ -237,11 +243,6 @@ function(add_beebium_server TARGET_NAME SOURCE_FILE)
     set_target_properties(${TARGET_NAME} PROPERTIES
         JOB_POOL_COMPILE beebium_heavy_compile)
 
-    target_include_directories(${TARGET_NAME}
-        PRIVATE
-            ${SERVER_INCLUDE_DIR}
-    )
-
     target_compile_definitions(${TARGET_NAME}
         PRIVATE
             BEEBIUM_VERSION="${PROJECT_VERSION}"
@@ -258,6 +259,7 @@ function(add_beebium_server TARGET_NAME SOURCE_FILE)
     # to convert each to a plugin. acorn-65c02-coprocessor is now a plugin.
     target_link_libraries(${TARGET_NAME}
         PRIVATE
+            beebium_server_headers
             beebium_service
             beebium_ext_aun
             beebium_ext_host_serial

@@ -102,13 +102,11 @@ catch_discover_tests(test_attachment_plan)
 
 # Inline CLI argument parsers from ServerMain.hpp (case tolerance, error messages)
 add_executable(test_cli_arg_parsers test_cli_arg_parsers.cpp)
-target_include_directories(test_cli_arg_parsers PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/server/include
-)
 target_compile_definitions(test_cli_arg_parsers PRIVATE
     BEEBIUM_VERSION="${PROJECT_VERSION}"
 )
 target_link_libraries(test_cli_arg_parsers PRIVATE
+    beebium_server_headers
     beebium_core
     beebium_service
     Catch2::Catch2WithMain
@@ -117,13 +115,11 @@ catch_discover_tests(test_cli_arg_parsers)
 
 # DiscPaths copy-on-write resolution for bundled SCSI hard-disc masters.
 add_executable(test_disc_paths test_disc_paths.cpp)
-target_include_directories(test_disc_paths PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/server/include
-)
 target_compile_definitions(test_disc_paths PRIVATE
     BEEBIUM_BUNDLED_DISCS_SRC_DIRPATH="${CMAKE_SOURCE_DIR}/discs/bundled"
 )
 target_link_libraries(test_disc_paths PRIVATE
+    beebium_server_headers
     beebium_core
     Catch2::Catch2WithMain
 )
@@ -157,10 +153,8 @@ catch_discover_tests(test_disc_format_registry_errors)
 
 # Sideways slot topology + --sideways validation against each machine variant.
 add_executable(test_sideways_validation test_sideways_validation.cpp)
-target_include_directories(test_sideways_validation PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/server/include
-)
 target_link_libraries(test_sideways_validation PRIVATE
+    beebium_server_headers
     beebium_core
     Catch2::Catch2WithMain
 )
@@ -1944,10 +1938,8 @@ if(BEEBIUM_BUILD_SERVICE)
     # Server main helper function tests
     # Screenshot auto-crop geometry (pure header, no machine).
     add_executable(test_screenshot_crop test_screenshot_crop.cpp)
-    target_include_directories(test_screenshot_crop PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_screenshot_crop PRIVATE
+        beebium_server_headers
         beebium_core
         Catch2::Catch2WithMain
     )
@@ -1955,10 +1947,8 @@ if(BEEBIUM_BUILD_SERVICE)
 
     # Separable Lanczos-3 image resampler (pure header, no machine).
     add_executable(test_image_resample test_image_resample.cpp)
-    target_include_directories(test_image_resample PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_image_resample PRIVATE
+        beebium_server_headers
         beebium_core
         Catch2::Catch2WithMain
     )
@@ -1966,10 +1956,8 @@ if(BEEBIUM_BUILD_SERVICE)
 
     # The preset machinery without the server: PresetResolution.hpp alone.
     add_executable(test_preset_resolution test_preset_resolution.cpp)
-    target_include_directories(test_preset_resolution PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_preset_resolution PRIVATE
+        beebium_server_headers
         beebium_core
         nlohmann_json::nlohmann_json
         Catch2::Catch2WithMain
@@ -1977,10 +1965,8 @@ if(BEEBIUM_BUILD_SERVICE)
     catch_discover_tests(test_preset_resolution)
 
     add_executable(test_server_main test_server_main.cpp)
-    target_include_directories(test_server_main PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_server_main PRIVATE
+        beebium_server_headers
         beebium_service
         beebium_ext_test_scratch_ram
         beebium_ext_acorn_65c02
@@ -1999,10 +1985,8 @@ if(BEEBIUM_BUILD_SERVICE)
 
     # CLI subcommand architecture tests
     add_executable(test_cli test_cli.cpp)
-    target_include_directories(test_cli PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_cli PRIVATE
+        beebium_server_headers
         beebium_service
         beebium_ext_test_scratch_ram
         beebium_ext_acorn_65c02
@@ -2020,10 +2004,8 @@ if(BEEBIUM_BUILD_SERVICE)
 
     # Preset loader tests
     add_executable(test_preset_loader test_preset_loader.cpp)
-    target_include_directories(test_preset_loader PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_preset_loader PRIVATE
+        beebium_server_headers
         beebium_service
         nlohmann_json::nlohmann_json
         Catch2::Catch2WithMain
@@ -2036,10 +2018,8 @@ if(BEEBIUM_BUILD_SERVICE)
     # Machine directory tests: made, locked, swept and removed, including
     # against a real server holding its lock in another process
     add_executable(test_machine_directory test_machine_directory.cpp)
-    target_include_directories(test_machine_directory PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_machine_directory PRIVATE
+        beebium_server_headers
         beebium_service
         Catch2::Catch2WithMain
     )
@@ -2051,10 +2031,8 @@ if(BEEBIUM_BUILD_SERVICE)
 
     # File reference resolution tests
     add_executable(test_resource_paths test_resource_paths.cpp)
-    target_include_directories(test_resource_paths PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_resource_paths PRIVATE
+        beebium_server_headers
         beebium_service
         Catch2::Catch2WithMain
     )
@@ -2070,10 +2048,8 @@ if(BEEBIUM_BUILD_SERVICE)
 
     # ROM lookup and reading through a launch's container (RomPaths.hpp)
     add_executable(test_rom_paths test_rom_paths.cpp)
-    target_include_directories(test_rom_paths PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_rom_paths PRIVATE
+        beebium_server_headers
         beebium_service
         Catch2::Catch2WithMain
     )
@@ -2081,20 +2057,16 @@ if(BEEBIUM_BUILD_SERVICE)
 
     # Atomic file replacement (AtomicFile.hpp) and the preset writer on it
     add_executable(test_atomic_file test_atomic_file.cpp)
-    target_include_directories(test_atomic_file PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_atomic_file PRIVATE
+        beebium_server_headers
         Catch2::Catch2WithMain
     )
     catch_discover_tests(test_atomic_file)
 
     # Preset paths utility tests
     add_executable(test_preset_paths test_preset_paths.cpp)
-    target_include_directories(test_preset_paths PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_preset_paths PRIVATE
+        beebium_server_headers
         beebium_service
         Catch2::Catch2WithMain
     )
@@ -2102,10 +2074,8 @@ if(BEEBIUM_BUILD_SERVICE)
 
     # Preset subcommand integration tests
     add_executable(test_preset_subcommands test_preset_subcommands.cpp)
-    target_include_directories(test_preset_subcommands PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/server/include
-    )
     target_link_libraries(test_preset_subcommands PRIVATE
+        beebium_server_headers
         beebium_core
         nlohmann_json::nlohmann_json
         stb_image

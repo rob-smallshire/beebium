@@ -12,10 +12,12 @@
 
 // A preset as it is given: the one place a preset's document is read. Every
 // command that takes a preset opens it here, and reads its document and the
-// directory its file references are written in from it.
+// container its file references are written in from it.
 //
-// The form is told by what is there, not by its name: a directory holds the
-// document as preset.json; any other file is the document itself.
+// The form is told by what is there, not by its name: a zip archive (a
+// stored preset) and a directory each hold the document as preset.json, with
+// the files it references and its thumbnail beside it; any other file is the
+// document itself.
 
 #pragma once
 
@@ -26,6 +28,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -34,43 +37,68 @@ namespace beebium::server {
 
 class PresetSource {
 public:
-    // The name of the document in a directory preset.
+    // The name of the document in a directory or archive preset.
     static constexpr const char* DOCUMENT_FILENAME = "preset.json";
-    // The name of the thumbnail in a directory preset.
+    // The name of the thumbnail in a directory or archive preset.
     static constexpr const char* THUMBNAIL_FILENAME = "thumbnail.png";
+
+    // How a preset is held: a lone document, or a directory or zip archive
+    // holding the document and what it references.
+    enum class Form { File, Directory, Archive };
 
     // The preset at `path`, read; or nullopt with `error` saying why it
     // cannot be read.
     static std::optional<PresetSource> open(const std::filesystem::path& path,
                                             std::string& error) {
-        std::error_code ec;
-        const bool is_directory = std::filesystem::is_directory(path, ec);
-        const auto document_filepath = is_directory ? path / DOCUMENT_FILENAME : path;
-        if (is_directory && !std::filesystem::is_regular_file(document_filepath, ec)) {
-            error = "No " + std::string(DOCUMENT_FILENAME) + " in preset directory: " +
-                    path.string();
-            return std::nullopt;
-        }
-        std::ifstream file(document_filepath, std::ios::binary);
-        if (!file.is_open()) {
-            error = "Cannot open preset file: " + document_filepath.string();
-            return std::nullopt;
-        }
-        std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         const auto absolute_path = std::filesystem::absolute(path);
-        return PresetSource(path, is_directory ? absolute_path : absolute_path.parent_path(),
-                            document_filepath, std::move(text));
+        std::error_code ec;
+        if (std::filesystem::is_directory(path, ec)) {
+            const auto document_filepath = path / DOCUMENT_FILENAME;
+            if (!std::filesystem::is_regular_file(document_filepath, ec)) {
+                error = "No " + std::string(DOCUMENT_FILENAME) + " in preset directory: " +
+                        path.string();
+                return std::nullopt;
+            }
+            auto text = read_text(document_filepath, error);
+            if (!text) return std::nullopt;
+            return PresetSource(path, Form::Directory, ReferenceContainer(absolute_path),
+                                document_filepath, std::move(*text));
+        }
+        if (is_zip_archive(path)) {
+            std::shared_ptr<const zip::ZipReader> archive;
+            try {
+                archive = std::make_shared<const zip::ZipReader>(path);
+            } catch (const zip::ZipError& e) {
+                error = std::string("Cannot read preset archive: ") + e.what();
+                return std::nullopt;
+            }
+            if (!archive->contains(DOCUMENT_FILENAME)) {
+                error = "No " + std::string(DOCUMENT_FILENAME) + " in preset archive: " +
+                        path.string();
+                return std::nullopt;
+            }
+            const auto bytes = archive->read(DOCUMENT_FILENAME);
+            return PresetSource(path, Form::Archive,
+                                ReferenceContainer::archive(absolute_path, archive),
+                                path / DOCUMENT_FILENAME,
+                                std::string(bytes.begin(), bytes.end()));
+        }
+        auto text = read_text(path, error);
+        if (!text) return std::nullopt;
+        return PresetSource(path, Form::File, ReferenceContainer(absolute_path.parent_path()),
+                            path, std::move(*text));
     }
 
     // The path the preset was given by.
     const std::filesystem::path& path() const { return path_; }
 
-    // True when the preset is a directory holding its document.
-    bool is_directory() const { return document_filepath_ != path_; }
+    // How the preset is held.
+    Form form() const { return form_; }
 
     // The container the preset's file references are written in: the
-    // preset's own directory, or the one holding the preset file.
-    ReferenceContainer container() const { return ReferenceContainer(container_dirpath_); }
+    // preset's own directory or archive, or the directory holding a lone
+    // preset file.
+    const ReferenceContainer& container() const { return container_; }
 
     // The document as stored.
     const std::string& document_text() const { return document_text_; }
@@ -90,15 +118,38 @@ public:
     }
 
 private:
-    PresetSource(std::filesystem::path path, std::filesystem::path container_dirpath,
+    PresetSource(std::filesystem::path path, Form form, ReferenceContainer container,
                  std::filesystem::path document_filepath, std::string document_text)
         : path_(std::move(path)),
-          container_dirpath_(std::move(container_dirpath)),
+          form_(form),
+          container_(std::move(container)),
           document_filepath_(std::move(document_filepath)),
           document_text_(std::move(document_text)) {}
 
+    // True when the file at `path` starts as a zip archive does.
+    static bool is_zip_archive(const std::filesystem::path& path) {
+        std::ifstream file(path, std::ios::binary);
+        char signature[4] = {};
+        if (!file.read(signature, sizeof(signature))) return false;
+        return signature[0] == 'P' && signature[1] == 'K' &&
+               ((signature[2] == '\x03' && signature[3] == '\x04') ||   // a member
+                (signature[2] == '\x05' && signature[3] == '\x06'));    // empty
+    }
+
+    static std::optional<std::string> read_text(const std::filesystem::path& filepath,
+                                                std::string& error) {
+        std::ifstream file(filepath, std::ios::binary);
+        if (!file.is_open()) {
+            error = "Cannot open preset file: " + filepath.string();
+            return std::nullopt;
+        }
+        return std::string((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+    }
+
     std::filesystem::path path_;
-    std::filesystem::path container_dirpath_;
+    Form form_;
+    ReferenceContainer container_;
     std::filesystem::path document_filepath_;
     std::string document_text_;
 };

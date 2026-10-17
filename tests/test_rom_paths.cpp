@@ -15,6 +15,7 @@
 // the launch's container (RomPaths.hpp).
 
 #include <beebium/server/RomPaths.hpp>
+#include <beebium/zip/ZipArchive.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
@@ -24,6 +25,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -98,4 +100,25 @@ TEST_CASE("load_rom: the ROM's file and its bytes, read through the container", 
     CHECK(from_container.data == std::vector<std::uint8_t>(16384, 'C'));
 
     CHECK_THROWS(RomPaths::load_rom("nope.rom", t.container));
+}
+
+TEST_CASE("load_rom: a ROM held in a preset archive, by bare name or path",
+          "[rom_paths][preset_archive]") {
+    RomTree t;
+    RomTree::put_rom(t.system / "x.rom", 'S');
+    const auto archive_filepath = t.root / "p.beebium-preset";
+    beebium::zip::write_zip(archive_filepath,
+                            {{"x.rom", std::vector<std::uint8_t>(16384, 'A')},
+                             {"sub/y.rom", std::vector<std::uint8_t>(16384, 'B')}});
+    const auto archive = ReferenceContainer::archive(
+        archive_filepath, std::make_shared<const beebium::zip::ZipReader>(archive_filepath));
+
+    // The archive's x.rom comes before the system one.
+    const auto x = RomPaths::load_rom("x.rom", archive);
+    CHECK(x.filepath == archive_filepath / "x.rom");
+    CHECK(x.data == std::vector<std::uint8_t>(16384, 'A'));
+    const auto y = RomPaths::load_rom("sub/y.rom", archive);
+    CHECK(y.data == std::vector<std::uint8_t>(16384, 'B'));
+    CHECK_THROWS_WITH(RomPaths::load_rom("sub/missing.rom", archive),
+                      Catch::Matchers::ContainsSubstring("ROM file not found: "));
 }

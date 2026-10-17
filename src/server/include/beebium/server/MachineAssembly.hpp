@@ -1093,7 +1093,8 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         // machine's directory, so a shipped read-only master is never opened
         // writable), a ROM on the ROM search path ending in the roms/ of
         // the plugin that ships it. Any other names a location the extension
-        // owns, which is never searched.
+        // owns, which is never searched. A file the launch's preset archive
+        // holds is extracted for the extension (ReferenceContainer::materialize).
         const auto container = config.launch.reference_container();
         for (const auto& p : manifest->parameters) {
             if (p.type != "filepath") continue;
@@ -1131,6 +1132,14 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
                               << "\n";
                     return {nullptr, ExitCode::CONFIG};
                 }
+            }
+            // The extension opens the file itself, so one held in a preset
+            // archive is given to it as a file in the machine's directory.
+            try {
+                it->second = container.materialize(it->second, disc_destination.dirpath).string();
+            } catch (const std::exception& e) {
+                std::cerr << "Error: " << inst.name << " " << p.key << ": " << e.what() << "\n";
+                return {nullptr, ExitCode::IOERR};
             }
         }
 

@@ -14,6 +14,7 @@
 // Tests for resolving file references (ResourcePaths.hpp)
 
 #include <beebium/server/ResourcePaths.hpp>
+#include <beebium/zip/ZipArchive.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -21,12 +22,15 @@
 #include "test_temp_paths.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 using namespace beebium::server;
 
@@ -302,4 +306,97 @@ TEST_CASE("command_line_reference: a bare name the container holds becomes its p
     std::ofstream(root / "here.ssd") << "x";
     CHECK(command_line_reference("here.ssd", root.path()) == (root / "here.ssd").string());
     CHECK(command_line_reference("elsewhere.ssd", root.path()) == "elsewhere.ssd");
+}
+
+namespace {
+
+std::vector<std::uint8_t> as_bytes(const std::string& text) {
+    return std::vector<std::uint8_t>(text.begin(), text.end());
+}
+
+// A preset archive at root/p.beebium-preset holding discs/x.rom and
+// roms/x.rom (two members of one name in different places), with a file
+// beside the archive, and its container.
+struct ArchiveTree {
+    beebium::test::ScopedTempDir root{"beebium_archive_container_"};
+    std::filesystem::path archive_filepath = root / "p.beebium-preset";
+    ReferenceContainer container = make();
+
+    ReferenceContainer make() {
+        beebium::zip::write_zip(archive_filepath, {{"discs/x.rom", as_bytes("DISCS")},
+                                                   {"roms/x.rom", as_bytes("ROMS")},
+                                                   {"top.rom", as_bytes("TOP")}});
+        std::ofstream(root / "beside.rom", std::ios::binary) << "BESIDE";
+        return ReferenceContainer::archive(
+            archive_filepath, std::make_shared<const beebium::zip::ZipReader>(archive_filepath));
+    }
+};
+
+}  // namespace
+
+TEST_CASE("ReferenceContainer: an archive is anchored on its own path as a directory",
+          "[resource_paths][container][preset_archive]") {
+    ArchiveTree t;
+    CHECK(t.container.dirpath() == t.archive_filepath);
+    CHECK(anchor_reference("roms/x.rom", t.container.dirpath()) ==
+          (t.archive_filepath / "roms" / "x.rom").string());
+    // Beside the archive, as beside a directory preset.
+    CHECK(anchor_reference("../beside.rom", t.container.dirpath()) ==
+          (t.root / "beside.rom").string());
+}
+
+TEST_CASE("ReferenceContainer: an archive's members are its files; others are ordinary files",
+          "[resource_paths][container][preset_archive]") {
+    ArchiveTree t;
+    CHECK(t.container.has_file(t.archive_filepath / "roms" / "x.rom"));
+    CHECK_FALSE(t.container.has_file(t.archive_filepath / "roms"));
+    CHECK_FALSE(t.container.has_file(t.archive_filepath / "missing.rom"));
+    CHECK(t.container.has_file(t.root / "beside.rom"));
+
+    CHECK(t.container.read_file(t.archive_filepath / "roms" / "x.rom") == as_bytes("ROMS"));
+    CHECK(t.container.read_file(t.root / "beside.rom") == as_bytes("BESIDE"));
+    CHECK_THROWS(t.container.read_file(t.archive_filepath / "missing.rom"));
+
+    t.container.copy_file(t.archive_filepath / "discs" / "x.rom", t.root / "copy.rom");
+    std::ifstream copy(t.root / "copy.rom", std::ios::binary);
+    CHECK(std::string(std::istreambuf_iterator<char>(copy), {}) == "DISCS");
+}
+
+TEST_CASE("ReferenceContainer: a bare name is searched for among an archive's members",
+          "[resource_paths][container][preset_archive]") {
+    ArchiveTree t;
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", (t.root / "user").string());
+    const auto found = resolve_reference("top.rom", ResourceKind::Rom, t.container, {});
+    CHECK(found.path == t.archive_filepath / "top.rom");
+    CHECK(found.origin == ReferenceOrigin::Container);
+    CHECK(command_line_reference("top.rom", t.container) ==
+          (t.archive_filepath / "top.rom").string());
+}
+
+TEST_CASE("ReferenceContainer::materialize: a member becomes a file at its own relative path "
+          "in the machine directory, once",
+          "[resource_paths][container][preset_archive]") {
+    ArchiveTree t;
+    const auto machine = t.root / "machine";
+    const auto discs_x = t.container.materialize(t.archive_filepath / "discs" / "x.rom", machine);
+    const auto roms_x = t.container.materialize(t.archive_filepath / "roms" / "x.rom", machine);
+    CHECK(discs_x == machine / "discs" / "x.rom");
+    CHECK(roms_x == machine / "roms" / "x.rom");
+    auto read = [](const std::filesystem::path& filepath) {
+        std::ifstream in(filepath, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(in), {});
+    };
+    CHECK(read(discs_x) == "DISCS");
+    CHECK(read(roms_x) == "ROMS");
+    // Once: a second call finds the first copy, written to since.
+    std::ofstream(roms_x, std::ios::binary) << "WRITTEN";
+    CHECK(t.container.materialize(t.archive_filepath / "roms" / "x.rom", machine) == roms_x);
+    CHECK(read(roms_x) == "WRITTEN");
+    // Not a member: the path itself, nothing written.
+    CHECK(t.container.materialize(t.root / "beside.rom", machine) == t.root / "beside.rom");
+    CHECK(t.container.materialize(t.archive_filepath / "missing.rom", machine) ==
+          t.archive_filepath / "missing.rom");
+    // A directory container's files are real already.
+    const ReferenceContainer directory(t.root.path());
+    CHECK(directory.materialize(t.root / "beside.rom", machine) == t.root / "beside.rom");
 }

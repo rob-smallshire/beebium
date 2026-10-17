@@ -179,11 +179,11 @@ public:
         return PresetSource::open(*path, error);
     }
 
-    // A preset's thumbnail, when it has one: thumbnail.png in a directory
-    // preset, or the <id>.thumbnail.png beside a stored preset file.
+    // A preset's thumbnail, when it has one: thumbnail.png in a directory or
+    // archive preset, or the <id>.thumbnail.png beside a stored preset file.
     static std::optional<std::filesystem::path> find_thumbnail(const PresetSource& source) {
         std::optional<std::filesystem::path> filepath;
-        if (source.is_directory()) {
+        if (source.form() != PresetSource::Form::File) {
             filepath = source.container().dirpath() / PresetSource::THUMBNAIL_FILENAME;
         } else if (auto id = id_from_filename(source.path())) {
             filepath = source.container().dirpath() / (*id + THUMBNAIL_SUFFIX);
