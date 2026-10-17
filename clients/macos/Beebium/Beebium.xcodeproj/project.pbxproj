@@ -95,6 +95,7 @@
 		4D9536D54F0C9291F5ECD326 /* DiscClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6562062957B62B8C099A42 /* DiscClient.swift */; };
 		4DD0F4094D0E603CFF35DF6C /* FileCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1031975F4050BF5875549DFA /* FileCommands.swift */; };
 		4EF3D3F96612464D542D66F3 /* peripheral_extension.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6694597902ECB3A929A58055 /* peripheral_extension.pb.swift */; };
+		4F2191D03485C8683FE70F49 /* FileCommandsImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 560CD4997F297C12AD3CA81C /* FileCommandsImportTests.swift */; };
 		4F522FC6B586A81F9B0C6507 /* indicator.proto in Resources */ = {isa = PBXBuildFile; fileRef = 87E7F7F1255B32F8C85FAFDA /* indicator.proto */; };
 		4F70A7E16C384FDF27FB7DA7 /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = A6F79E0D4FC1B7716CD1EEB9 /* SwiftProtobuf */; };
 		51546794B48C64AC5EB80E80 /* VideoSettingsCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 607580C54AA31C57AD9627C8 /* VideoSettingsCacheTests.swift */; };
@@ -203,6 +204,7 @@
 		C5D7C5C9382566ADEAA92341 /* video.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B269A5937DAC1914CA8BF39 /* video.grpc.swift */; };
 		C6AED867FD53B569CAD5A945 /* ConfigurationEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */; };
 		C7CFB3597A51313102A58455 /* PopoverTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BCB8ED24D409A21A27A8C /* PopoverTextField.swift */; };
+		C8A9065DC655ACA33F00D0F0 /* UTType+BeebiumPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1022577F48C48C283B9D31DB /* UTType+BeebiumPreset.swift */; };
 		CBC5ABA53015DE535C5F17A4 /* video.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 642BEA30A8664289314B2D9E /* video.pb.swift */; };
 		CC184BBA4B126032E36F04DB /* FocusDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9D42AD7DD904E1B5B80617 /* FocusDiagnostics.swift */; };
 		CC3CDA8C1FB5B978B592EADE /* EconetClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115851A5C42EB33AAB063B35 /* EconetClientTests.swift */; };
@@ -292,6 +294,7 @@
 		0C19550BD759DAA9DFA9A015 /* extension_ui.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = extension_ui.pb.swift; sourceTree = "<group>"; };
 		0D5A2AE88C148E2DBEC585C6 /* CoreCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreCLI.swift; sourceTree = "<group>"; };
 		0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarLEDs.swift; sourceTree = "<group>"; };
+		1022577F48C48C283B9D31DB /* UTType+BeebiumPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UTType+BeebiumPreset.swift"; sourceTree = "<group>"; };
 		1031975F4050BF5875549DFA /* FileCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileCommands.swift; sourceTree = "<group>"; };
 		10DDDBA41F04259ED4E39CF0 /* DisplayStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayStyle.swift; sourceTree = "<group>"; };
 		115851A5C42EB33AAB063B35 /* EconetClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetClientTests.swift; sourceTree = "<group>"; };
@@ -347,6 +350,7 @@
 		5485C89172467F6E009C0EA5 /* AttachmentChooser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentChooser.swift; sourceTree = "<group>"; };
 		54F38B119FC4AA35BEF5E396 /* StructuredListItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredListItemTests.swift; sourceTree = "<group>"; };
 		55B1EDE37C44C9225386BC79 /* ExtensionsSchemaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsSchemaSection.swift; sourceTree = "<group>"; };
+		560CD4997F297C12AD3CA81C /* FileCommandsImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileCommandsImportTests.swift; sourceTree = "<group>"; };
 		5635C71D7BCFDC74AE40070B /* econet_transport.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet_transport.grpc.swift; sourceTree = "<group>"; };
 		57967139EC7DEA91FCF67161 /* debugger.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = debugger.pb.swift; sourceTree = "<group>"; };
 		58D505651495B05B9E0A01F5 /* ScreenSelectionGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenSelectionGeometryTests.swift; sourceTree = "<group>"; };
@@ -668,6 +672,7 @@
 				9483385D371D21EC9020EC06 /* SidewaysSchemaSection.swift */,
 				01E245F485CE5D4FA57FA06E /* StartupSchemaSection.swift */,
 				E14137BA5B8968468AC84092 /* StorageSchemaSection.swift */,
+				1022577F48C48C283B9D31DB /* UTType+BeebiumPreset.swift */,
 			);
 			path = Presets;
 			sourceTree = "<group>";
@@ -871,6 +876,7 @@
 				F089797F79A7218E079F7DB1 /* ExtensionInstanceModelTests.swift */,
 				1E743CB023485025EA33E39A /* ExtensionManifestTests.swift */,
 				F7C227E77662BB0306D67158 /* FailurePopoverDecisionTests.swift */,
+				560CD4997F297C12AD3CA81C /* FileCommandsImportTests.swift */,
 				AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */,
 				89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
@@ -1066,6 +1072,7 @@
 				126DBA1313A772F81CD27E02 /* ExtensionInstanceModelTests.swift in Sources */,
 				F5336AD96DB468018D7B5AE9 /* ExtensionManifestTests.swift in Sources */,
 				95B33A93F1C85A115681CA0D /* FailurePopoverDecisionTests.swift in Sources */,
+				4F2191D03485C8683FE70F49 /* FileCommandsImportTests.swift in Sources */,
 				1FE8AE12703189FD243A6977 /* FileReferenceMenuTests.swift in Sources */,
 				A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
@@ -1255,6 +1262,7 @@
 				F911B573D5974E32CD568A35 /* TitleClickMonitor.swift in Sources */,
 				2883A894AD63C6DEF4FD0046 /* TransientMessage.swift in Sources */,
 				AFE73F855C924CA7EC10D01C /* URL+DiscImageReference.swift in Sources */,
+				C8A9065DC655ACA33F00D0F0 /* UTType+BeebiumPreset.swift in Sources */,
 				F4E79C3B365AB2D13A5B5984 /* VideoClient.swift in Sources */,
 				116FC39CBA4CBBA8B1F63FD1 /* VideoSettings.swift in Sources */,
 				150640ADACCA6EFA9A60A624 /* VideoSettingsCache.swift in Sources */,

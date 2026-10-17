@@ -462,23 +462,24 @@ class PresetManager: ObservableObject {
         return true
     }
 
-    /// Import a preset from a file.
-    /// - Parameters:
-    ///   - filepath: The source file path
-    ///   - executablePath: The executable to use for import (determines model)
-    /// - Returns: The ID of the imported preset, or nil on failure
-    func importPreset(from filepath: String, using executablePath: String) async -> String? {
-        let (newPresetId, error) = await coreCLI.importPreset(filepath: filepath, executablePath: executablePath)
-        if let error = error {
-            NSLog("[PresetManager] Failed to import preset: \(error)")
-            return nil
+    /// Import one or more presets, each a `.beebium-preset` archive, a
+    /// directory laid out like one, or a lone JSON preset, then rediscover
+    /// once. import-preset validates each file and names its model itself, so
+    /// any one executable serves whatever model a preset is for.
+    /// - Returns: the file names that failed, empty when all succeeded.
+    func importPresets(from filepaths: [String], using executablePath: String) async -> [String] {
+        var failures: [String] = []
+        for filepath in filepaths {
+            let (newPresetId, error) = await coreCLI.importPreset(filepath: filepath, executablePath: executablePath)
+            if let error = error {
+                NSLog("[PresetManager] Failed to import \(filepath): \(error)")
+                failures.append(URL(fileURLWithPath: filepath).lastPathComponent)
+            } else {
+                NSLog("[PresetManager] Imported preset: \(newPresetId ?? "")")
+            }
         }
-        NSLog("[PresetManager] Imported preset: \(newPresetId ?? "")")
-
-        // Reload presets
         await discoverPresets()
-
-        return newPresetId
+        return failures
     }
 
     /// Reveal a preset's directory in Finder.

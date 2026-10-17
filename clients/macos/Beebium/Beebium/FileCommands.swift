@@ -89,38 +89,41 @@ struct FileCommands: Commands {
 
     private func importPreset() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "beebium") ?? .data]
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.title = "Import Preset"
-        panel.message = "Select a preset file to import."
+        // A .beebium-preset archive, a directory laid out like one, or a lone
+        // JSON preset -- several at once. import-preset validates each file and
+        // names its model itself, so the client no longer parses the file to
+        // pick an executable; any one serves.
+        panel.allowedContentTypes = [.beebiumPreset, .json]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.title = "Import Presets"
+        panel.message = "Select presets to import."
 
-        if panel.runModal() == .OK, let url = panel.url {
-            // Parse the preset file to determine which model it's for
-            guard let data = FileManager.default.contents(atPath: url.path),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let model = json["model"] as? String else {
-                NSLog("[FileCommands] Failed to parse preset file or missing model field")
-                showImportErrorAlert(message: "Invalid preset file. The file must contain a valid model field.")
-                return
-            }
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        guard let executablePath = presetManager.anyCoreExecutablePath else {
+            showImportErrorAlert(message: "No machine core is available to import presets.")
+            return
+        }
 
-            // Find a matching system preset to get the executable path
-            guard let matchingPreset = presetManager.systemPresets.first(where: {
-                $0.coreExecutablePath.contains("beebium-\(model)")
-            }) else {
-                NSLog("[FileCommands] No matching executable found for model: \(model)")
-                showImportErrorAlert(message: "No matching machine core found for model \"\(model)\". The preset cannot be imported.")
-                return
-            }
-
-            Task { @MainActor in
-                let result = await presetManager.importPreset(from: url.path, using: matchingPreset.coreExecutablePath)
-                if result == nil {
-                    showImportErrorAlert(message: "Failed to import the preset. Check the console for details.")
-                }
+        let filepaths = panel.urls.map(\.path)
+        Task { @MainActor in
+            let failures = await presetManager.importPresets(from: filepaths, using: executablePath)
+            if let message = Self.importFailureMessage(failures: failures, total: filepaths.count) {
+                showImportErrorAlert(message: message)
             }
         }
+    }
+
+    /// The alert message for an import of `total` files of which `failures`
+    /// failed, or nil when none did. A pure seam so the wording is testable.
+    static func importFailureMessage(failures: [String], total: Int) -> String? {
+        guard !failures.isEmpty else { return nil }
+        let list = failures.joined(separator: ", ")
+        if failures.count == 1 {
+            return "Could not import \(list). Check the console for details."
+        }
+        return "Could not import \(failures.count) of \(total) presets: \(list). Check the console for details."
     }
 
     private func showImportErrorAlert(message: String) {
