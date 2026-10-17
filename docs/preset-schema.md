@@ -18,7 +18,7 @@ commands that list, show, create, import, export and delete presets are in
 
 - [An example](#an-example)
 - [Top-level keys](#top-level-keys)
-- [Paths](#paths)
+- [File references](#file-references)
 - [Machine settings](#machine-settings): `speed`, `startup`, `mos_image_uri`
 - [Storage](#storage)
 - [Sideways ROM/RAM bank](#sideways-romram-bank)
@@ -93,32 +93,58 @@ sections in it. Any other top-level key is ignored with a warning. A `null` valu
 same as leaving the key out, so a `resolve-preset` document, which writes
 `null` for "nothing here", loads as it reads.
 
-## Paths
+## File references
 
 A preset refers to files in four places: floppy images, sideways ROM and RAM
 images, the MOS, and extension parameters whose manifest type is `filepath`
-(a hard-disc image, a coprocessor ROM, AUN's `map-file`). They follow one
-rule, wherever the preset was named from:
+(a hard-disc image, a coprocessor ROM, AUN's `map-file`). Every one of them,
+and every file named on the command line, is resolved by one rule. A
+reference is resolved from where it is written, its **container**: a preset's
+directory for a preset, the working directory for the command line. Values
+given with `--preset` resolve as if written in the preset.
 
-1. **An absolute path** (and on Windows a path beginning `/`) is used as it is.
-   So is a URI (`file:///...`).
+1. **A bare name** (no directory component, such as `game.ssd` or
+   `acorn-dfs_2_26.rom`) is looked for on a search path:
+   1. the container;
+   2. the per-user directory for that kind of resource: `discs/` for floppy
+      and hard-disc images, `roms/` for ROMs, under the per-user Beebium
+      directory ([deployment.md](deployment.md#environment-variables));
+   3. the system directory for it: the bundled disc masters
+      ([deployment.md](deployment.md#bundled-discs-and-copy-on-write)), the ROM
+      directory ([deployment.md](deployment.md#rom-discovery-algorithm)), or,
+      for a coprocessor's ROM, the `roms/` of the plugin that ships it.
 2. **A relative path with a directory component** (`discs/game.ssd`,
-   `../roms/forth.rom`) is resolved against the directory holding the preset.
-3. **A bare name** (no directory component) is resolved by the resource's own
-   search: a ROM name on the ROM search path ([deployment.md](deployment.md#rom-discovery-algorithm)),
-   a hard-disc name among the bundled disc masters with a per-user working
-   copy ([deployment.md](deployment.md#bundled-discs-and-copy-on-write)), a
-   coprocessor ROM in its plugin. A bare floppy name is the exception: it is
-   resolved against the preset's directory, as in rule 2. A bare name is also
-   how a keyword such as AUN's `map-file: "none"` is written.
+   `../roms/forth.rom`) is resolved against the container.
+3. **An absolute path** is used as it is; a path beginning `/` counts as
+   absolute on Windows too. So is a URI (`file:///...`).
+4. **A leading `~/`** (or `~\`) is the home directory (`HOME`, else
+   `USERPROFILE`), on every platform, before rules 2 and 3.
 
-Floppy images are stored as `file://` URIs once resolved. ROM and extension
-paths stay paths.
+A name found nowhere is an error naming every directory searched, in order.
+When a per-user ROM takes the place of a system or plugin ROM of the same
+name, the server says so on one line, naming both files.
 
-The longer-term rule, in which a bare name is looked for beside the preset
-first, is set out in
-[presets-and-machine-directories.md](discussion/presets-and-machine-directories.md#2-path-resolution-one-rule-for-all-three)
-(#135).
+What is done with the file found depends on who owns it. A disc image in the
+container or the per-user `discs/` is the user's own: it is opened in place,
+writable. A bundled disc master is never opened: its name resolves to a
+per-user working copy ([deployment.md](deployment.md#bundled-discs-and-copy-on-write)).
+Because those working copies are made in the per-user `discs/` too, a file
+there with a master's name is taken to be that master's working copy, and no
+notice is given (until machine directories hold working copies, #103a). ROMs
+are only read.
+
+A `filepath` parameter its manifest does not declare `bundled` names a
+**location** the extension owns and may create (AUN's `map-file`), not a
+resource: rules 2-4 apply, but it is never searched for, so a file that does
+not exist yet is not an error, and a bare value is the extension's own (such
+as `map-file: "none"`).
+
+The reference is kept as written. A bare name stays bare in `resolve-preset`'s
+output, so a preset and the files beside it can move together; a relative
+path is written absolute; a floppy path is written as a `file://` URI,
+percent-encoded. `create-preset` records what the command line meant: a bare
+name found in the working directory as that file's path, a bare name found
+per-user or in a system directory bare, since its meaning is the search.
 
 ## Machine settings
 
@@ -208,7 +234,7 @@ are described in [sideways-slots.md](sideways-slots.md).
 |-----|------|---------|
 | `slot` | integer 0-15 | Required. A slot the model has; addressing a socket at any of its slots addresses the socket |
 | `type` | `rom`, `ram` or `empty` | Required |
-| `image_uri` | string | Required for `rom`; for `ram`, an image pre-loaded into the RAM; not allowed for `empty`. A name or path, see [Paths](#paths) |
+| `image_uri` | string | Required for `rom`; for `ram`, an image pre-loaded into the RAM; not allowed for `empty`. A name or path, see [File references](#file-references) |
 | `write_protected` | bool | `ram` only: engage the slot's write-protect switch at power-up, where its socket has one. The switch can also be toggled at runtime (`SidewaysService.SetSlotProtection`) |
 
 Slots a preset does not name keep the model's defaults: the language ROM
@@ -282,7 +308,7 @@ item is located at the item (`/extensions/<index>/config/<key>/<item>`), since
 a string has no field to point into. An Econet transport's are under
 `/econet/transport/parameters/` instead. `resolve-preset` writes each item in
 the form the preset gave it. A `filepath` parameter is resolved as in
-[Paths](#paths).
+[File references](#file-references).
 
 ### Attachment
 
@@ -317,8 +343,11 @@ master in the server's disc directory, used through a per-user copy-on-write
 working copy, never the master
 ([deployment.md](deployment.md#bundled-discs-and-copy-on-write)). `rom` (a
 coprocessor's `rom`): one of the ROMs that extension itself ships in its
-`roms/` directory; a bare name it does not ship is an error (write `./name`
-for a file of that name in the working directory). `describe-preset-schema`
+`roms/` directory. The manifest decides which bare names may be given, and a
+name it does not ship is an error (write `./name` for a file of your own); the
+search of [File references](#file-references) decides where the file comes
+from, so a ROM of that name beside the preset or in the per-user `roms/` is
+used in place of the plugin's. `describe-preset-schema`
 lists the bundled images of both kinds, each with a `display_name`: a ROM's
 from its manifest `roms` entry, a disc master's from the `<name>.json` it
 must have beside it (a `.dat` and `.dsc` without one are not a master). No floppy images are bundled.
@@ -390,8 +419,7 @@ configuration check finds. Problems
 that do not stop a launch are warnings: an unknown top-level key, the older
 top-level `auto_boot`, an extension check's warnings (for what the launch may
 still accept), and (from
-`resolve-preset`) a ROM or floppy image that cannot be found, or a bare name in
-a `bundled` parameter that is not a bundled image.
+`resolve-preset`) a ROM, floppy or hard-disc image that cannot be found.
 
 An extension's plugin may check its own configuration once the preset's
 instances are normalised and their attachments are sound, for what its

@@ -159,9 +159,10 @@ Parameter schema fields:
   `label` and a `description`)
 - `description` -- one line of human-readable description (used in help, error
   messages and forms)
-- `type` -- `string`, `integer`, `boolean`, or `filepath` (a file path, which a
-  preset resolves against its own directory; see
-  [preset-schema.md](preset-schema.md#paths))
+- `type` -- `string`, `integer`, `boolean`, or `filepath` (a file path,
+  resolved by the server before the extension is configured, by the rule in
+  [preset-schema.md](preset-schema.md#file-references); the extension is given
+  an absolute path, or a bare value it owns)
 - `position` -- positional index (0, 1, ...); omit or -1 for keyword-only
 - `required` -- whether the parameter must be provided (default: false)
 - `default` -- default value if not provided
@@ -184,10 +185,16 @@ Parameter schema fields:
   its `default`. A name this server does not know leaves the `default`
 - `excludes` -- keys that may not be given together with this one (declaring
   it on either side is enough; a default or an empty value does not count)
-- `bundled` -- for a `filepath`, a kind of image that ships with Beebium: a
-  bare name refers to one. `hard-disc`: a disc master in the server's disc
-  directory, used through a copy-on-write working copy. `rom`: one of this
-  extension's own `roms`, loaded from its `roms/` directory
+- `bundled` -- for a `filepath`, whether it names a resource or a location.
+  Given, the parameter names a **resource** of that kind, and a bare name is
+  found on a search path (beside the preset, the per-user directory for the
+  kind, then the system's). `hard-disc`: the system's are the disc masters in
+  the server's disc directory, used through a copy-on-write working copy.
+  `rom`: one of this extension's own `roms`, from its `roms/` directory, which
+  also limits the names that may be given. Absent, the parameter names a
+  **location** the extension owns and may create (AUN's `map-file`): it is
+  resolved from where it is written but never searched for, and a bare value
+  is the extension's own (`none`)
 - `provider_of` -- the value is the `id` of the instance providing the named
   attachment point to attach to (empty: the last one)
 - `unique` -- the value must differ among the instances on the same attachment

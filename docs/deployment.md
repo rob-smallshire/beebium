@@ -131,15 +131,18 @@ At startup, Beebium searches for the ROM directory in this order:
 4. **Installed layout**: `<executable_dir>/../share/beebium/roms/`
 5. **Compile-time fallback**: `BEEBIUM_DEFAULT_ROM_DIR` (if defined)
 
-The first existing directory wins.
+The first existing directory wins. It is the system directory for ROMs: none
+existing is not an error until a ROM is found nowhere else.
 
 ### Individual ROM Resolution
 
-When loading a ROM file (via `--mos`, `--language-rom`, `--sideways ...:image=`, or a preset):
-
-1. **Absolute path**: Used as-is (e.g., `/path/to/custom.rom`)
-2. **Relative path with directory**: Resolved against the current working directory (e.g., `./roms/custom.rom`); in a preset, against the directory holding the preset (see [preset-schema.md](preset-schema.md#paths))
-3. **Simple filename**: Looked up in the ROM directory (e.g., `dfs.rom` becomes `<rom_dir>/dfs.rom`)
+A ROM given by `--mos`, `--language-rom`, `--sideways ...:image=` or a preset
+is found by the file reference rule in
+[preset-schema.md](preset-schema.md#file-references): a bare name is looked
+for beside the preset (or in the working directory, for the command line),
+then in the per-user `roms/`, then in the ROM directory; a path is resolved
+from the preset's directory (or the working directory), or from home with a
+leading `~/`.
 
 ## Installation
 
@@ -179,8 +182,7 @@ System presets (shipped with the software) are searched in this order:
 3. `<executable_dir>/../share/beebium/presets/` (installed layout)
 
 User presets (created with `create-preset` / `import-preset`) live in
-`$BEEBIUM_USER_PRESETS_DIRPATH` if set, else `presets/` in the per-user state
-directory (below). `report-presets-dirpath` prints the user presets directory.
+`presets/` in the per-user state directory (below). `report-presets-dirpath` prints the user presets directory.
 A preset id is looked up among the system presets first, then the user
 presets.
 
@@ -204,6 +206,17 @@ opens a master; instead, on first use of a bundled image it copies the master
 to a **per-user working copy** and opens that. This keeps a shipped image (or a
 signed/sealed macOS app bundle) from ever being modified.
 
+A hard disc is named like any other file reference
+([preset-schema.md](preset-schema.md#file-references)): a bare name is looked
+for beside the preset (or in the working directory), then in the per-user
+`discs/`, then among the masters. A disc found beside the preset, in the
+working directory or in the per-user `discs/` is the user's own and is opened
+in place, writable, never copied: to use a downloaded image, drop its `.dat`
+and `.dsc` into the per-user `discs/` (or beside the preset) and name it.
+Only a master's name resolves to a working copy. As working copies are made
+in the per-user `discs/` too, a file there with a master's name is taken to be
+its working copy (until machine directories hold working copies, #103a).
+
 Working copies live in the per-user Beebium state directory. That one
 directory holds all of Beebium's per-user state: the user presets in
 `presets/`, the disc working copies in `discs/`, the shared AUN map file
@@ -214,9 +227,9 @@ lock file `aun-auto-next.lock`):
 - Windows: `%APPDATA%\Beebium\`
 - Linux: `$XDG_CONFIG_HOME/beebium/` (or `~/.config/beebium/`)
 
-Each location can be overridden separately (see Environment Variables); the
-working-copy directory is replaced by `BEEBIUM_DISC_WORK_DIR`, which also
-changes the copy policy. `report-aun-map-filepath` prints the map file path in
+`BEEBIUM_USER_DIRPATH` moves the whole directory, and the AUN files can be
+moved separately (see Environment Variables); the working-copy directory is
+replaced by `BEEBIUM_DISC_WORK_DIR`, which also changes the copy policy. `report-aun-map-filepath` prints the map file path in
 effect. For the map file and the hint file, see `docs/networking.md`.
 
 **Reset a disc to its shipped state**: delete its working copy; the next boot
@@ -262,7 +275,6 @@ launcher enables it.
 | `BEEBIUM_ROM_DIR` | Path to ROM directory (overrides auto-detection) |
 | `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets (overrides auto-detection) |
 | `BEEBIUM_USER_DIRPATH` | The per-user state directory (overrides the platform default); its `presets/`, `discs/`, `aun-map.json` and `aun-auto-next` follow it. For tests and CI, to keep a run away from the real user's files |
-| `BEEBIUM_USER_PRESETS_DIRPATH` | User presets directory (overrides the per-user default) |
 | `BEEBIUM_DISC_DIR` | Path to the bundled disc **master** directory (overrides auto-detection) |
 | `BEEBIUM_DISC_WORK_DIR` | Working-copy directory. When set, selects an ephemeral "scratch" mode that always re-copies the master fresh (used by the build to keep thumbnail capture deterministic and stateless); when unset, working copies persist in the per-user discs directory |
 | `BEEBIUM_AUN_MAP_FILEPATH` | AUN map file path (overrides the per-user `aun-map.json`; `--aun map-file=` overrides this, and `map-file=none` disables the map file) |
@@ -294,11 +306,13 @@ The executable couldn't locate a ROM directory. Solutions:
 
 ### "ROM file not found"
 
-A specific ROM file is missing. Check:
+A specific ROM file is missing. The message names every directory searched.
+Check:
 
-1. The file exists in the ROM directory
+1. The file exists in one of them: beside the preset (or in the working
+   directory), the per-user `roms/`, or the ROM directory
 2. The filename matches exactly (case-sensitive on Unix)
-3. For custom ROMs, use the full path or place in the ROM directory
+3. For a ROM elsewhere, give its path
 
 ### Verifying ROM Discovery
 

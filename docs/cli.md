@@ -134,6 +134,21 @@ an unknown parameter, a missing required one, a value of the wrong type or an
 unknown extension name stops the launch with `CONFIG` (78), and the manifest's
 defaults are filled in for the parameters the preset leaves out.
 
+#### File References
+
+Every option that names a file (`--mos`, `--language-rom`, `--sideways ...:image=`,
+`--floppy`, an extension's file parameter such as `--scsi-hdd ...:image=`)
+follows the one rule in [preset-schema.md](preset-schema.md#file-references).
+A reference is resolved from where it is written: a preset's directory for a
+preset, the working directory for the command line. Values given with
+`--preset` resolve as if written in the preset. So a bare name (`--mos my.rom`,
+`--floppy 0:elite.ssd`, `--scsi-hdd scsi-id=0:image=mine.dat`) is looked for
+first in the working directory, ahead of the per-user `roms/` or `discs/` and
+the system directories, and a hard disc found there is opened in place,
+writable; a relative path is resolved against the working directory; a
+leading `~/` is the home directory, even where the shell does not expand it
+(inside `key=value`).
+
 #### ROM Configuration
 
 | Option | Description |
@@ -718,7 +733,8 @@ Output (platform-specific):
 /Users/alice/Library/Application Support/Beebium/presets
 ```
 
-This path can be overridden with the `BEEBIUM_USER_PRESETS_DIRPATH` environment variable.
+It is `presets/` in the per-user directory, which the `BEEBIUM_USER_DIRPATH`
+environment variable overrides.
 
 #### create-preset
 

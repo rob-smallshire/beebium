@@ -79,7 +79,7 @@ User presets are stored in platform-specific locations following OS conventions:
 
 **Note**: These directories are hidden by default on all platforms. Users interact with presets by name through the application UI, not by navigating to filesystem paths. The hidden directory is purely a storage backend.
 
-**Environment variable override**: Set `BEEBIUM_USER_PRESETS_DIRPATH` to use a custom location for user presets. This is useful for advanced users, portable installations, or unusual setups.
+**Environment variable override**: Set `BEEBIUM_USER_DIRPATH` to move the whole per-user directory, user presets included (they are its `presets/`).
 
 User presets can be edited or deleted through the application UI.
 
@@ -227,7 +227,7 @@ class PresetManager: ObservableObject {
 2. `Beebium.app/Contents/Resources/presets/` (app bundle, production)
 3. `~/Code/beebium/build/src/server/presets/` (development fallback)
 
-**User presets** (platform-specific, can be overridden with `BEEBIUM_USER_PRESETS_DIRPATH`):
+**User presets** (platform-specific, moved with the per-user directory by `BEEBIUM_USER_DIRPATH`):
 - macOS: `~/Library/Application Support/Beebium/presets/`
 - Linux: `$XDG_CONFIG_HOME/beebium/presets/` (defaults to `~/.config/beebium/presets/`)
 - Windows: `%APPDATA%\Beebium\presets\`
