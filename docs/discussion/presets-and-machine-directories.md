@@ -83,7 +83,7 @@ elite-client-80.beebium-preset        (a zip archive)
   preset.json                        the one preset
   thumbnail.png
   elite.ssd
-  extensions/<name>/<id>/            data owned by one extension instance
+  extensions/<id>/                   data owned by one extension instance
   README.md
 ```
 
@@ -189,7 +189,7 @@ Elite Server.beebium-machine/
                         keeps when powered off: board RAM, CMOS, RTC offset,
                         one file per hardware unit (never volatile RAM or
                         CPU state)
-  extensions/<name>/<id>/ data owned by one extension instance (section 4.9)
+  extensions/<id>/      data owned by one extension instance (section 4.9)
   lock                  held by the running server (section 4.4)
   Elite Server.beebium-machine
                         the openable document file on Windows and Linux: a
@@ -215,7 +215,8 @@ under the per-user `machines/` area (or the platform temp directory),
 extracts the preset into it, pins an instance id in `preset.json` for
 every extension instance that has none (ids are otherwise generated fresh
 on each launch, which a persistent directory cannot be keyed by; pinned
-ids are ordinals, `1`, `2`, unless the author named one), and launches on
+ids follow the existing scheme, `<name>`, `<name>-1`, unless the author
+named one), and launches on
 that directory.
 
 What the machine then owns, and what it only refers to:
@@ -399,15 +400,16 @@ board on the 1 MHz bus, implemented as an extension, has non-volatile
 contents to keep exactly as the Integra-B does, and the core has no idea
 of its layout.
 
-So each extension instance owns a subdirectory,
-`extensions/<extension name>/<instance id>/`, in both the preset archive
-and the machine directory. The extension name makes the directory
-readable (`extensions/scsi-hard-disc/`, `extensions/paged-ram-1mhz/`);
-the instance id is needed because one preset can fit two instances of the
-same extension (two SCSI discs on one adapter). Ids an author does not
-choose are pinned at instantiation as ordinals, so the common case reads
-`extensions/scsi-hard-disc/1/` and an author-named one
-`extensions/scsi-hard-disc/boot-disc/`.
+So each extension instance owns a subdirectory, `extensions/<instance id>/`,
+in both the preset archive and the machine directory. Instance ids keep
+the scheme already in force (decided 2026-10-17): the extension name for
+the first instance, then `<name>-1`, `<name>-2` for further instances of
+the same extension (two SCSI discs on one adapter), or a name the author
+chose. The id already carries the extension name, so the directory is
+readable as it stands: `extensions/scsi-hard-disc/`,
+`extensions/scsi-hard-disc-1/`, `extensions/boot-disc/`. Ids an author
+does not choose are pinned at instantiation so that a persistent directory
+can be keyed by them.
 
 - **In a preset**, it holds whatever the author ships for that instance
   (a pre-loaded RAM image, a configuration file). The core extracts it
@@ -424,7 +426,7 @@ choose are pinned at instantiation as ordinals, so the common case reads
 
 Instance ids are pinned in the machine's `preset.json` at instantiation
 (section 4.1), so an instance finds the same directory on every open. A
-preset author who ships `extensions/<name>/<id>/` data pins the id in the
+preset author who ships `extensions/<id>/` data pins the id in the
 preset so the shipped directory matches.
 
 Core-owned non-volatile state stays in `nvram/` rather than moving under
@@ -567,7 +569,18 @@ machine are RPCs, following the existing rule.
    `machines/` area, the copy rules of 4.1 apply, the lock lands, and the
    per-preset working copy keyed by image name in `DiscPaths` is retired
    (with the migration offer of 4.7 deferred to step 4, when there is a
-   saved form to offer). No proto change.
+   saved form to offer). No proto change. Scope decided 2026-10-17: the
+   step 2 machine directory holds only the copied media and the lock;
+   `preset.json`, `machine.json`, pinned instance ids and
+   `extensions/<id>/` arrive with extraction (step 3) and Save/Open
+   (step 4), since nothing reads them before then. Copy rule: media a
+   template names by search or by position within itself (a system
+   master, a per-user `discs/` file, a file beside the preset) becomes
+   the machine's own copy; media the user names by location (an absolute
+   or `~/` path, a command-line file in the working directory, media
+   inserted at runtime) is the user's own file, opened in place. From
+   this step the L3FS disc no longer persists between launches until
+   Save exists, so master is not released between steps 2 and 4.
 3. **#136, preset archives** (server, then macOS): the zip stored form
    with its vendored zip library and one-shot migration, `create-preset`
    writing zips for the build, the three input forms, `export-preset
@@ -590,10 +603,10 @@ would be discarded one step later.
 - Should a preset be allowed to reference a resource outside its archive
   (a bare ROM name that resolves to the system ROMs, yes; a relative path
   climbing out of the archive, no)?
-- Is the transient `machines/` area under Application Support, or the
-  platform temp directory? Application Support makes crash recovery
-  (an orphaned directory offered for saving, like an unsaved document)
-  possible; temp makes cleanup automatic.
+- (Resolved 2026-10-17) Transient machine directories live under the
+  per-user `machines/<uuid>/`, removed on clean exit; a directory left by
+  a crash is swept at the next start once its lock can be taken. Crash
+  recovery as an offer to save is a later refinement.
 - Should Save be allowed while the machine is running, or only when paused?
   A hard-disc image copied mid-write is not consistent; the server can
   quiesce the emulation for the copy, which the existing pause primitive
