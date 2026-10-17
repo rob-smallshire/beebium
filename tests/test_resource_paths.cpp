@@ -174,11 +174,17 @@ TEST_CASE("resolve_reference: the container comes first, then per-user, then sys
     const auto user_dirpath = t.user / (kind == ResourceKind::Disc ? "discs" : "roms");
 
     SearchTree::put(t.system / "x");
-    CHECK(resolve_reference("x", kind, t.container, {t.system}) == t.system / "x");
+    auto found = resolve_reference("x", kind, t.container, {t.system});
+    CHECK(found.path == t.system / "x");
+    CHECK(found.origin == ReferenceOrigin::System);
     SearchTree::put(user_dirpath / "x");
-    CHECK(resolve_reference("x", kind, t.container, {t.system}) == user_dirpath / "x");
+    found = resolve_reference("x", kind, t.container, {t.system});
+    CHECK(found.path == user_dirpath / "x");
+    CHECK(found.origin == ReferenceOrigin::User);
     SearchTree::put(t.container / "x");
-    CHECK(resolve_reference("x", kind, t.container, {t.system}) == t.container / "x");
+    found = resolve_reference("x", kind, t.container, {t.system});
+    CHECK(found.path == t.container / "x");
+    CHECK(found.origin == ReferenceOrigin::Container);
 }
 
 TEST_CASE("resolve_reference: not found names every directory searched, in order",
@@ -226,15 +232,17 @@ TEST_CASE("resolve_reference: a path is anchored, never searched",
     SearchTree t;
     SearchTree::put(t.user / "roms" / "x.rom");
     // Rule 2: from the container, whether or not the file exists.
-    CHECK(resolve_reference("sub/x.rom", ResourceKind::Rom, t.container, {t.system}) ==
+    CHECK(resolve_reference("sub/x.rom", ResourceKind::Rom, t.container, {t.system}).path ==
           (t.container / "sub" / "x.rom").lexically_normal());
     // Rule 3: as is.
     const auto absolute = (t.root / "else" / "x.rom").lexically_normal();
-    CHECK(resolve_reference(absolute.string(), ResourceKind::Rom, t.container, {t.system}) ==
-          absolute);
+    const auto anchored =
+        resolve_reference(absolute.string(), ResourceKind::Rom, t.container, {t.system});
+    CHECK(anchored.path == absolute);
+    CHECK(anchored.origin == ReferenceOrigin::Path);
     // Rule 4: from home.
     beebium::test::ScopedEnv home("HOME", t.root.path().string());
-    CHECK(resolve_reference("~/x.rom", ResourceKind::Rom, t.container, {t.system}) ==
+    CHECK(resolve_reference("~/x.rom", ResourceKind::Rom, t.container, {t.system}).path ==
           (t.root / "x.rom").lexically_normal());
 }
 

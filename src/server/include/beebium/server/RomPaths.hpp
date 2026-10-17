@@ -124,7 +124,7 @@ public:
         std::filesystem::path filepath;
         try {
             filepath = resolve_reference(std::string(reference), ResourceKind::Rom,
-                                         container_dirpath, system_dirpaths);
+                                         container_dirpath, system_dirpaths).path;
         } catch (const std::runtime_error& e) {
             if (!system_dirpaths.empty()) throw;
             throw std::runtime_error(std::string(e.what()) +

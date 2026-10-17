@@ -1211,7 +1211,7 @@ private:
                 try {
                     filepath = resolve_reference(uri, ResourceKind::Disc,
                                                  config.launch.reference_container_dirpath(),
-                                                 disc_dirpaths);
+                                                 disc_dirpaths).path;
                 } catch (const std::exception& e) {
                     warning(path, e.what());
                     continue;

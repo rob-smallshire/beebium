@@ -141,19 +141,29 @@ inline std::filesystem::path user_resource_dirpath(ResourceKind kind) {
            (kind == ResourceKind::Disc ? "discs" : "roms");
 }
 
-// The file a reference names (the rule above): anchored in its container
-// unless it is a bare name, which is found on the search path of the
-// container, the kind's per-user directory and then `system_dirpaths`. A
-// per-user ROM that hides a system ROM of the same name is reported on
-// stderr, naming both. Throws when a bare name is found nowhere, naming every
-// directory searched. Whether an anchored path exists is the caller's
-// concern.
-inline std::filesystem::path resolve_reference(
+// Where a reference's file was found: named by a path (anchored, not
+// searched), or found by search in the container, the per-user directory for
+// its kind, or a system directory. Who owns the file follows from it.
+enum class ReferenceOrigin { Path, Container, User, System };
+
+struct ResolvedReference {
+    std::filesystem::path path;
+    ReferenceOrigin origin;
+};
+
+// The file a reference names (the rule above), and where it was found:
+// anchored in its container unless it is a bare name, which is found on the
+// search path of the container, the kind's per-user directory and then
+// `system_dirpaths`. A per-user ROM that hides a system ROM of the same name
+// is reported on stderr, naming both. Throws when a bare name is found
+// nowhere, naming every directory searched. Whether an anchored path exists
+// is the caller's concern.
+inline ResolvedReference resolve_reference(
     const std::string& reference, ResourceKind kind,
     const std::filesystem::path& container_dirpath,
     const std::vector<std::filesystem::path>& system_dirpaths) {
     if (!is_bare_reference(reference)) {
-        return anchor_reference(reference, container_dirpath);
+        return {anchor_reference(reference, container_dirpath), ReferenceOrigin::Path};
     }
     const auto user_dirpath = user_resource_dirpath(kind);
     std::vector<std::filesystem::path> search_dirpaths{container_dirpath, user_dirpath};
@@ -161,7 +171,10 @@ inline std::filesystem::path resolve_reference(
                            system_dirpaths.end());
     const auto found = find_on_search_path(
         reference, search_dirpaths, kind == ResourceKind::Disc ? "Disc image" : "ROM");
-    if (kind == ResourceKind::Rom && found.parent_path() == user_dirpath) {
+    const auto origin = found.parent_path() == container_dirpath ? ReferenceOrigin::Container
+                        : found.parent_path() == user_dirpath    ? ReferenceOrigin::User
+                                                                 : ReferenceOrigin::System;
+    if (kind == ResourceKind::Rom && origin == ReferenceOrigin::User) {
         for (const auto& dirpath : system_dirpaths) {
             std::error_code ec;
             if (std::filesystem::is_regular_file(dirpath / reference, ec)) {
@@ -172,7 +185,7 @@ inline std::filesystem::path resolve_reference(
             }
         }
     }
-    return found;
+    return {found, origin};
 }
 
 } // namespace beebium::server

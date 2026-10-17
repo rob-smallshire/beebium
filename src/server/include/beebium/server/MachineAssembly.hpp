@@ -411,7 +411,7 @@ inline std::optional<int> load_single_disc(DiscDrive& drive, int drive_num,
         }
         try {
             filepath = resolve_reference(filepath_or_url, ResourceKind::Disc, container_dirpath,
-                                         system_dirpaths);
+                                         system_dirpaths).path;
         } catch (const std::runtime_error& e) {
             std::cerr << "Error: " << e.what() << "\n";
             return ExitCode::NOINPUT;
@@ -1108,7 +1108,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
                     it->second = resolve_reference(it->second, ResourceKind::Rom,
                                                    container_dirpath,
                                                    {image->filepath.parent_path()})
-                                     .string();
+                                     .path.string();
                 } catch (const std::exception& e) {
                     std::cerr << "Error: " << inst.name << " " << p.key << ": " << e.what()
                               << "\n";

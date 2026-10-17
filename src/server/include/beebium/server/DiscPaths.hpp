@@ -245,7 +245,8 @@ public:
         }
         std::vector<std::filesystem::path> system_dirpaths;
         if (master_dirpath) system_dirpaths.push_back(*master_dirpath);
-        return resolve_reference(image, ResourceKind::Disc, container_dirpath, system_dirpaths);
+        return resolve_reference(image, ResourceKind::Disc, container_dirpath, system_dirpaths)
+            .path;
     }
 
     // Core copy-on-write policy, with the master and working directories
