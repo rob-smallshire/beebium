@@ -72,8 +72,8 @@ from beebium.client.exceptions import BeebiumError, ServerNotFoundError
 from beebium.client.installation import DEFAULT_VARIANT, ServerInstallation
 from beebium.client.server import ServerProcess
 
-#: File name suffix of a preset file.
-PRESET_EXTENSION = ".preset.beebium"
+#: File name suffix of a stored preset (a zip archive).
+PRESET_EXTENSION = ".beebium-preset"
 
 #: The type of the ``launch_bbc`` factory.
 LaunchBbc = Callable[..., Beebium]

@@ -15,12 +15,17 @@
 
 #include "beebium/server/Platform.hpp"
 #include "beebium/server/PresetSource.hpp"
+#include "beebium/server/PresetWriter.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <fstream>
+#include <iostream>
 #include <iterator>
 #include <filesystem>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -119,24 +124,85 @@ public:
     // The id of the stored preset named `filename`, or nullopt when
     // `filename` is not a stored preset's name.
     static std::optional<std::string> id_from_filename(const std::filesystem::path& filename) {
-        const std::string name = filename.filename().string();
-        if (name.size() <= PRESET_EXTENSION.size() ||
-            name.compare(name.size() - PRESET_EXTENSION.size(), PRESET_EXTENSION.size(),
-                         PRESET_EXTENSION) != 0) {
-            return std::nullopt;
-        }
-        return name.substr(0, name.size() - PRESET_EXTENSION.size());
+        return without_suffix(filename.filename().string(), PRESET_EXTENSION);
+    }
+
+    // The name a preset at `path` is called by, to make an id from: a stored
+    // preset's id, the name of a file in the earlier stored form without its
+    // suffix, or else the name of a directory or the stem of any other file.
+    static std::string name_of(const std::filesystem::path& path) {
+        const auto named = path.has_filename() ? path : path.parent_path();
+        const auto filename = named.filename().string();
+        if (auto id = without_suffix(filename, PRESET_EXTENSION)) return *id;
+        if (auto id = without_suffix(filename, LEGACY_PRESET_EXTENSION)) return *id;
+        std::error_code ec;
+        return std::filesystem::is_directory(named, ec) ? filename : named.stem().string();
     }
 
     // Every stored preset, in search order: the system presets, then the
-    // user presets, each by id.
+    // user presets, each by id. The user store's presets in the earlier
+    // stored form are first made archives (migrate_user_presets).
     static std::vector<Entry> enumerate() {
         std::vector<Entry> entries;
         if (auto system_dirpath = get_system_presets_dirpath()) {
             append_entries(*system_dirpath, Origin::System, entries);
         }
+        migrate_user_presets(get_user_presets_dirpath());
         append_entries(get_user_presets_dirpath(), Origin::User, entries);
         return entries;
+    }
+
+    // Makes each preset in `dirpath` stored in the earlier form -- a lone
+    // <id>.preset.beebium, with its thumbnail beside it as <id>.thumbnail.png
+    // -- an archive, <id>.beebium-preset, with one line on stderr for each.
+    // When the store cannot be written it is left as it is, with a one-line
+    // notice, and the old files are ignored. Run on the user store only, once
+    // a process for each store. One-shot: removed after the release that
+    // ships it.
+    static void migrate_user_presets(const std::filesystem::path& dirpath) {
+        static std::set<std::filesystem::path> migrated_dirpaths;
+        if (!migrated_dirpaths.insert(dirpath).second) return;
+        std::error_code ec;
+        std::vector<std::filesystem::path> legacy_filepaths;
+        for (const auto& entry : std::filesystem::directory_iterator(dirpath, ec)) {
+            if (entry.is_regular_file(ec) &&
+                without_suffix(entry.path().filename().string(), LEGACY_PRESET_EXTENSION)) {
+                legacy_filepaths.push_back(entry.path());
+            }
+        }
+        std::sort(legacy_filepaths.begin(), legacy_filepaths.end());
+        for (const auto& legacy_filepath : legacy_filepaths) {
+            const auto id =
+                without_suffix(legacy_filepath.filename().string(), LEGACY_PRESET_EXTENSION);
+            const auto target_filepath = dirpath / filename_for(*id);
+            if (std::filesystem::exists(target_filepath, ec)) {
+                std::cerr << "Not migrating the preset " << legacy_filepath.string() << ": "
+                          << target_filepath.string() << " already exists\n";
+                continue;
+            }
+            std::ifstream in(legacy_filepath, std::ios::binary);
+            const std::string document((std::istreambuf_iterator<char>(in)),
+                                       std::istreambuf_iterator<char>());
+            auto members = preset_members(document);
+            const auto thumbnail_filepath = dirpath / (*id + LEGACY_THUMBNAIL_SUFFIX);
+            if (std::filesystem::is_regular_file(thumbnail_filepath, ec)) {
+                std::ifstream thumbnail(thumbnail_filepath, std::ios::binary);
+                members.push_back({PresetSource::THUMBNAIL_FILENAME,
+                                   std::vector<std::uint8_t>(
+                                       std::istreambuf_iterator<char>(thumbnail), {})});
+            }
+            if (auto error = write_preset(std::move(members), target_filepath); !error.empty()) {
+                std::cerr << "Cannot migrate the presets in " << dirpath.string() << " to "
+                          << PRESET_EXTENSION << " archives (" << error
+                          << "); those stored as " << LEGACY_PRESET_EXTENSION
+                          << " are ignored\n";
+                return;
+            }
+            std::filesystem::remove(legacy_filepath, ec);
+            std::filesystem::remove(thumbnail_filepath, ec);
+            std::cerr << "Migrated the preset " << legacy_filepath.string() << " to "
+                      << target_filepath.string() << "\n";
+        }
     }
 
     // The stored preset with `id`, the first in search order, or only from
@@ -180,15 +246,11 @@ public:
     }
 
     // A preset's thumbnail, when it has one: thumbnail.png in a directory or
-    // archive preset, or the <id>.thumbnail.png beside a stored preset file.
+    // archive preset. A lone preset file has none.
     static std::optional<std::filesystem::path> find_thumbnail(const PresetSource& source) {
-        std::optional<std::filesystem::path> filepath;
-        if (source.form() != PresetSource::Form::File) {
-            filepath = source.container().dirpath() / PresetSource::THUMBNAIL_FILENAME;
-        } else if (auto id = id_from_filename(source.path())) {
-            filepath = source.container().dirpath() / (*id + THUMBNAIL_SUFFIX);
-        }
-        if (filepath && source.container().has_file(*filepath)) return filepath;
+        if (source.form() == PresetSource::Form::File) return std::nullopt;
+        auto filepath = source.container().dirpath() / PresetSource::THUMBNAIL_FILENAME;
+        if (source.container().has_file(filepath)) return filepath;
         return std::nullopt;
     }
 
@@ -255,9 +317,22 @@ public:
 
 private:
     // The suffix of a stored preset's file name: the one place it is named.
-    static constexpr std::string_view PRESET_EXTENSION = ".preset.beebium";
-    // The suffix of the thumbnail beside a stored preset file.
-    static constexpr const char* THUMBNAIL_SUFFIX = ".thumbnail.png";
+    static constexpr std::string_view PRESET_EXTENSION = ".beebium-preset";
+    // The earlier stored form, a lone document with its thumbnail beside it,
+    // named for migrate_user_presets and name_of only.
+    static constexpr std::string_view LEGACY_PRESET_EXTENSION = ".preset.beebium";
+    static constexpr const char* LEGACY_THUMBNAIL_SUFFIX = ".thumbnail.png";
+
+    // `name` without `suffix`, or nullopt when it does not end with it or is
+    // nothing more.
+    static std::optional<std::string> without_suffix(const std::string& name,
+                                                     std::string_view suffix) {
+        if (name.size() <= suffix.size() ||
+            name.compare(name.size() - suffix.size(), suffix.size(), suffix) != 0) {
+            return std::nullopt;
+        }
+        return name.substr(0, name.size() - suffix.size());
+    }
 
     // The stored presets directly in `dirpath`, by id.
     static void append_entries(const std::filesystem::path& dirpath, Origin origin,

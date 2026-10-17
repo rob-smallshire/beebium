@@ -16,6 +16,7 @@
 
 #include <beebium/server/AtomicFile.hpp>
 #include <beebium/server/PresetWriter.hpp>
+#include <beebium/zip/ZipArchive.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "test_temp_paths.hpp"
@@ -25,6 +26,7 @@
 #include <iterator>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 using namespace beebium::server;
 namespace fs = std::filesystem;
@@ -83,15 +85,37 @@ TEST_CASE("write_file_atomically: a read-only file is replaced by a writable one
     CHECK((fs::status(dir / "f.txt").permissions() & fs::perms::owner_write) != fs::perms::none);
 }
 
-TEST_CASE("write_preset: writes the document, or says why it cannot", "[atomic_file][preset]") {
+TEST_CASE("write_preset: writes the preset as an archive, or says why it cannot",
+          "[atomic_file][preset]") {
     beebium::test::ScopedTempDir dir("beebium_atomic_");
-    CHECK(write_preset("{\"name\": \"P\"}\n", dir / "p.preset.beebium").empty());
-    CHECK(read_file(dir / "p.preset.beebium") == "{\"name\": \"P\"}\n");
+    auto members = preset_members("{\"name\": \"P\"}\n");
+    members.push_back({"discs/x.ssd", {1, 2, 3}});
+    CHECK(write_preset(members, dir / "p.beebium-preset").empty());
+    beebium::zip::ZipReader archive(dir / "p.beebium-preset");
+    CHECK(archive.member_names() == std::vector<std::string>{"discs/x.ssd", "preset.json"});
+    const auto document = archive.read("preset.json");
+    CHECK(std::string(document.begin(), document.end()) == "{\"name\": \"P\"}\n");
 
     const auto missing_dirpath = dir / "no-such-dir";
-    const auto error = write_preset("{}", missing_dirpath / "p.preset.beebium");
-    CHECK(error.rfind("cannot write preset file: " +
-                          (missing_dirpath / "p.preset.beebium").string() + " (",
+    const auto error = write_preset(members, missing_dirpath / "p.beebium-preset");
+    CHECK(error.rfind("cannot write preset: " +
+                          (missing_dirpath / "p.beebium-preset").string() + " (",
                       0) == 0);
     CHECK_FALSE(fs::exists(missing_dirpath));
+}
+
+TEST_CASE("write_preset_directory: writes the preset unpacked into a new directory",
+          "[atomic_file][preset]") {
+    beebium::test::ScopedTempDir dir("beebium_atomic_");
+    auto members = preset_members("{}");
+    members.push_back({"discs/x.ssd", {'X'}});
+    CHECK(write_preset_directory(members, dir / "unpacked").empty());
+    CHECK(read_file(dir / "unpacked" / "preset.json") == "{}");
+    CHECK(read_file(dir / "unpacked" / "discs" / "x.ssd") == "X");
+    CHECK(entry_count(dir.path()) == 1);  // no temporary left behind
+
+    // One that exists already is refused, and left as it was.
+    const auto error = write_preset_directory(members, dir / "unpacked");
+    CHECK(error == "cannot write preset: " + (dir / "unpacked").string() + " already exists");
+    CHECK(read_file(dir / "unpacked" / "preset.json") == "{}");
 }

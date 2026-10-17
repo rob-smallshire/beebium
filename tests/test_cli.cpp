@@ -15,10 +15,12 @@
 
 #include <beebium/server/ServerMain.hpp>
 #include <beebium/Machines.hpp>
+#include <beebium/zip/ZipArchive.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <set>
 #include <sstream>
@@ -1320,12 +1322,26 @@ namespace {
         static const beebium::test::ScopedTempDir dir("beebium_test_no_user_presets_");
         return dir.path();
     }
+
+    // Stores the test asset storage.preset.beebium in the store `store_dirpath`
+    // as the archive <id>.beebium-preset; returns the archive's path.
+    std::filesystem::path store_storage_preset(const std::filesystem::path& store_dirpath,
+                                               const std::string& id) {
+        std::filesystem::create_directories(store_dirpath);
+        std::ifstream in(presets_dirpath() / "storage.preset.beebium", std::ios::binary);
+        const auto filepath = store_dirpath / (id + ".beebium-preset");
+        beebium::zip::write_zip(
+            filepath, {{"preset.json", std::vector<std::uint8_t>(
+                                           std::istreambuf_iterator<char>(in), {})}});
+        return filepath;
+    }
 }
 
 TEST_CASE("parse_start_arguments: --preset resolves a bare id as a system preset", "[cli][parse_start_arguments][preset]") {
-    // BEEBIUM_SERVERS_DIRPATH/presets is the system presets directory, so the
-    // test assets directory supplies "storage" as a system preset id.
-    ScopedPresetDirs dirs{BEEBIUM_TEST_ASSETS_DIR, empty_user_presets_dirpath()};
+    // BEEBIUM_SERVERS_DIRPATH/presets is the system presets directory.
+    beebium::test::ScopedTempDir servers_dir("beebium_test_system_presets_");
+    store_storage_preset(servers_dir / "presets", "storage");
+    ScopedPresetDirs dirs{servers_dir.path(), empty_user_presets_dirpath()};
     ArgvHelper args{"beebium", "start", "--preset", "storage"};
     ServerConfig<MachineType> config;
 
@@ -1334,16 +1350,13 @@ TEST_CASE("parse_start_arguments: --preset resolves a bare id as a system preset
     REQUIRE_FALSE(result.has_value());
     REQUIRE(config.machine.fdc_type == "acorn-1770");
     REQUIRE(config.launch.preset.has_value());
-    REQUIRE(config.launch.preset->path().filename() == "storage.preset.beebium");
+    REQUIRE(config.launch.preset->path().filename() == "storage.beebium-preset");
 }
 
 TEST_CASE("parse_start_arguments: --preset resolves a bare id as a user preset", "[cli][parse_start_arguments][preset]") {
     beebium::test::ScopedTempDir user_dir("beebium_test_user_presets_104_");
     const auto& user_dirpath = user_dir.path();
-    std::filesystem::create_directories(user_dirpath / "presets");
-    std::filesystem::copy_file(presets_dirpath() / "storage.preset.beebium",
-                               user_dirpath / "presets" / "my-storage.preset.beebium",
-                               std::filesystem::copy_options::overwrite_existing);
+    store_storage_preset(user_dirpath / "presets", "my-storage");
     ScopedPresetDirs dirs{empty_user_presets_dirpath(), user_dirpath};
     ArgvHelper args{"beebium", "start", "--preset", "my-storage"};
     ServerConfig<MachineType> config;

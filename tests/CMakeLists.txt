@@ -2059,6 +2059,7 @@ if(BEEBIUM_BUILD_SERVICE)
     add_executable(test_atomic_file test_atomic_file.cpp)
     target_link_libraries(test_atomic_file PRIVATE
         beebium_server_headers
+        beebium_core
         Catch2::Catch2WithMain
     )
     catch_discover_tests(test_atomic_file)

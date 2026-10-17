@@ -111,7 +111,7 @@ Error: Preset not found: 'x' (no such file, and no system or user preset with th
 
 ```bash
 beebium-model-b --preset model-b-disc                  # built-in preset by id
-beebium-model-b --preset ./my-game.preset.beebium      # preset file by path
+beebium-model-b --preset ./my-game.json                # preset file by path
 beebium-model-b --preset ./my-game                     # preset directory by path
 beebium-model-b --preset ./my-game.beebium-preset      # preset archive by path
 ```
@@ -669,7 +669,7 @@ diagnostics.
 
 ```bash
 beebium-model-b resolve-preset model-b-l3fs-aun          # the document on stdout
-beebium-model-b resolve-preset ./my.preset.beebium --json
+beebium-model-b resolve-preset ./my.beebium-preset --json
 ```
 
 With `--json`, stdout is `{"preset": <document or null>, "diagnostics": [...]}`,
@@ -719,8 +719,8 @@ preset gives (a field it does not give is omitted, never `null`), then
 `filepath` and `thumbnail` (whether `show-preset --thumbnail` has one to write),
 in that order:
 ```json
-{"id":"model-b","name":"BBC Model B","source":"system","model":"model-b","description":"A standard Model B","release_date":"1981","filepath":"/usr/share/beebium/presets/model-b.preset.beebium","thumbnail":true}
-{"id":"my-elite-setup","name":"My Elite Setup","source":"user","model":"model-b","filepath":"/home/me/.config/beebium/presets/my-elite-setup.preset.beebium","thumbnail":false}
+{"id":"model-b","name":"BBC Model B","source":"system","model":"model-b","description":"A standard Model B","release_date":"1981","filepath":"/usr/share/beebium/presets/model-b.beebium-preset","thumbnail":true}
+{"id":"my-elite-setup","name":"My Elite Setup","source":"user","model":"model-b","filepath":"/home/me/.config/beebium/presets/my-elite-setup.beebium-preset","thumbnail":false}
 ```
 
 #### show-preset
@@ -767,12 +767,14 @@ beebium-model-b create-preset --name "My Elite Setup" [--from <source-id>] [--ou
 | Option | Description |
 |--------|-------------|
 | `--name <name>` | Display name for the preset (required) |
-| `--from <id>` | Source preset to copy configuration from (optional) |
+| `--from <id\|path>` | Source preset to copy configuration from (optional). The files a directory or archive preset holds beside its document (not its thumbnail) come with it, still named as the source names them |
 | `--output <path>` | Write preset to specified path instead of user presets directory |
+| `--unpack` | With `--output`: write a new directory laid out as the archive is, for editing, instead of the archive |
 | `--station <1-254>\|auto[:lo-hi]` | Fit Econet, recorded as `econet.station` (`auto` is recorded verbatim and resolved at each launch) |
 | `--aun ...` / `--piconet ...` | Recorded as the preset's `econet.transport`, same grammar as `start`. Requires `--station`; at most one transport |
 
-The preset ID is derived by slugifying the name. Outputs the created preset ID (or path if `--output` used) on success:
+The preset is written as a `.beebium-preset` zip archive holding `preset.json`
+(see [preset-schema.md](preset-schema.md)). The preset ID is derived by slugifying the name. Outputs the created preset ID (or path if `--output` used) on success:
 ```
 my-elite-setup
 ```
@@ -781,9 +783,12 @@ my-elite-setup
 
 If `--from` is omitted, creates a minimal "bare" preset for the model containing just the model ID, name, and release date.
 
-**Build system usage**: CMake uses `create-preset --output` to generate bare preset files at build time:
+**Build system usage**: CMake generates each system preset unpacked, boots it to
+capture its thumbnail into it, and exports it as the archive:
 ```bash
-beebium-model-b create-preset --name "BBC Model B" --output presets/model-b.preset.beebium
+beebium-model-b create-preset --name "BBC Model B" --output preset-sources/model-b --unpack
+beebium-model-b capture-screenshot --preset preset-sources/model-b --output preset-sources/model-b/thumbnail.png
+beebium-model-b export-preset preset-sources/model-b --output presets/model-b.beebium-preset
 ```
 
 #### delete-preset
@@ -798,13 +803,17 @@ Only user presets can be deleted. Attempting to delete a system preset returns a
 
 #### import-preset
 
-Import a preset file into the user presets directory.
+Import a preset into the user presets directory.
 
 ```bash
-beebium-model-b import-preset <filepath>
+beebium-model-b import-preset <path>
 ```
 
-Copies the preset file to the user presets directory, exactly as written. Any
+Stores the preset in the user presets directory as a `.beebium-preset` zip
+archive: an archive with every member it holds, a directory archived with every
+file it holds (hidden files such as `.DS_Store` left out), or a lone preset file
+wrapped; its document is stored exactly as written. The id comes from the name
+it is imported by, without a preset suffix. Any
 executable imports any model's preset: the preset's `model` must name a known
 model, and nothing more is checked here; `resolve-preset` and `start`, in that
 model's executable, check the whole preset. Handles ID conflicts by appending
@@ -817,12 +826,14 @@ Outputs the imported preset ID on success.
 Export a preset to a specified path.
 
 ```bash
-beebium-model-b export-preset <id-or-path> --output <filepath>
+beebium-model-b export-preset <id-or-path> --output <path> [--unpack]
 ```
 
-Copies the preset file to the specified location. The preset is named as
-`--preset` names one: a file or directory path or, failing that, the id of a system or user
-preset.
+Writes the preset as a `.beebium-preset` zip archive holding `preset.json` and
+every file the preset holds beside it, or with `--unpack` as a new directory
+laid out as the archive is, for editing. The preset is named as `--preset` names
+one: a file, directory or archive path or, failing that, the id of a system or
+user preset.
 
 ### AUN Map Subcommands
 

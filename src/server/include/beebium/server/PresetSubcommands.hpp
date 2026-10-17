@@ -782,9 +782,13 @@ public:
                   << "  --name <name>         Display name for the preset (required)\n"
                   << "  --description <text>  Short one-line description shown in the picker\n"
                   << "  --release-date <date> Release date (YYYY, YYYY-MM, or YYYY-MM-DD)\n"
-                  << "  --from <id|filepath>  Source preset: the baseline the machine options\n"
-                  << "                        override, as 'start --preset' does\n"
+                  << "  --from <id|path>      Source preset: the baseline the machine options\n"
+                  << "                        override, as 'start --preset' does; the files it\n"
+                  << "                        holds beside its document (not its thumbnail)\n"
+                  << "                        come with it\n"
                   << "  --output <path>       Write to this path instead of the user directory\n"
+                  << "  --unpack              With --output, write a directory laid out as the\n"
+                  << "                        archive is, for editing\n"
                   << "\n"
                   << "Machine options, as for 'start' (see 'start --help'):\n"
                   << "  --machine-name, --speed, --screen-mode, --auto-boot, --links, --mos,\n"
@@ -796,7 +800,8 @@ public:
                   << "--wait, --advertise, ...) and those with no preset form\n"
                   << "(--write-protect, --hide, --motherboard-link, a board RTC) are refused.\n"
                   << "\n"
-                  << "The preset ID is derived by slugifying the name.\n"
+                  << "The preset is written as a .beebium-preset zip archive holding\n"
+                  << "preset.json. The preset ID is derived by slugifying the name.\n"
                   << "Outputs the created preset ID (or path if --output used).\n";
     }
 
@@ -814,6 +819,7 @@ public:
         std::string preset_description;
         std::string release_date;
         std::string output_filepath;
+        bool unpack = false;
         std::vector<std::string> machine_args{argv[0]};
         for (int i = global.subcommand_argv_start; i < argc; ++i) {
             std::string arg = argv[i];
@@ -828,6 +834,8 @@ public:
                 release_date = argv[++i];
             } else if (arg == "--output" && i + 1 < argc) {
                 output_filepath = argv[++i];
+            } else if (arg == "--unpack") {
+                unpack = true;
             } else if (arg == "--from" && i + 1 < argc) {
                 machine_args.push_back("--preset");
                 machine_args.push_back(argv[++i]);
@@ -837,6 +845,11 @@ public:
         }
         if (preset_name.empty()) {
             std::cerr << "Error: --name is required\n";
+            help(argv[0]);
+            return ExitCode::USAGE;
+        }
+        if (unpack && output_filepath.empty()) {
+            std::cerr << "Error: --unpack requires --output\n";
             help(argv[0]);
             return ExitCode::USAGE;
         }
@@ -902,9 +915,32 @@ public:
             target_filepath = PresetPaths::user_filepath_for(preset_id);
         }
 
-        if (auto write_error = write_preset(preset.dump(2) + "\n", target_filepath);
-            !write_error.empty()) {
-            std::cerr << "Error: " << write_error << "\n";
+        // The document, and what the source preset holds beside its own:
+        // the copy takes a directory's or archive's files with it, and names
+        // them as the source did, within itself.
+        nlohmann::ordered_json document_out = preset;
+        const bool carries_files =
+            config.launch.preset && config.launch.preset->form() != PresetSource::Form::File;
+        if (carries_files) make_references_relative(document_out, config.launch.preset->container());
+        auto members = preset_members(document_out.dump(2) + "\n");
+        if (carries_files) {
+            try {
+                for (auto& member : preset_members(*config.launch.preset)) {
+                    if (member.name == PresetSource::DOCUMENT_FILENAME ||
+                        member.name == PresetSource::THUMBNAIL_FILENAME) {
+                        continue;
+                    }
+                    members.push_back(std::move(member));
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "Error: cannot read the source preset: " << e.what() << "\n";
+                return ExitCode::IOERR;
+            }
+        }
+        const auto store_error = unpack ? write_preset_directory(members, target_filepath)
+                                        : write_preset(std::move(members), target_filepath);
+        if (!store_error.empty()) {
+            std::cerr << "Error: " << store_error << "\n";
             return ExitCode::IOERR;
         }
 
@@ -1343,15 +1379,17 @@ template<typename MachineType>
 class ImportPresetSubcommand : public Subcommand<MachineType> {
 public:
     std::string_view name() const override { return "import-preset"; }
-    std::string_view description() const override { return "Import a preset file into user directory"; }
+    std::string_view description() const override { return "Import a preset into the user directory"; }
 
     void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " import-preset <filepath>\n"
+        std::cerr << "Usage: " << program_name << " import-preset <path>\n"
                   << "\n"
-                  << "Imports a preset file into the user presets directory. Works on any\n"
-                  << "model's preset: its model field must name a known model, and nothing\n"
-                  << "more is checked here. resolve-preset and start, in the executable for\n"
-                  << "that model, check the whole preset.\n"
+                  << "Stores a preset in the user presets directory as a .beebium-preset zip\n"
+                  << "archive: an archive as it is, a directory laid out as one archived,\n"
+                  << "or a lone preset file wrapped. Works on any model's preset: its model\n"
+                  << "field must name a known model, and nothing more is checked here.\n"
+                  << "resolve-preset and start, in the executable for that model, check the\n"
+                  << "whole preset.\n"
                   << "Outputs the imported preset ID.\n";
     }
 
@@ -1396,12 +1434,6 @@ public:
             std::cerr << "Error: " << open_error << "\n";
             return ExitCode::NOINPUT;
         }
-        if (source->form() != PresetSource::Form::File) {
-            std::cerr << "Error: import-preset takes a preset file, not a preset directory or "
-                         "archive: "
-                      << source_filepath.string() << "\n";
-            return ExitCode::USAGE;
-        }
         std::string parse_error;
         auto parsed = source->parse_document(parse_error);
         if (!parsed) {
@@ -1426,9 +1458,8 @@ public:
             return ExitCode::DATAERR;
         }
 
-        // Determine ID from filename: a stored preset's id, else its stem.
-        std::string preset_id = PresetPaths::slugify(
-            PresetPaths::id_from_filename(source_filepath).value_or(source_filepath.stem().string()));
+        // The id comes from the name it is imported by (PresetPaths::name_of).
+        std::string preset_id = PresetPaths::slugify(PresetPaths::name_of(source_filepath));
         if (preset_id.empty()) {
             // Fall back to using name field if present
             if (preset.contains("name") && preset["name"].is_string()) {
@@ -1451,8 +1482,16 @@ public:
         // Write to user presets directory
         std::filesystem::path target_filepath = PresetPaths::user_filepath_for(preset_id);
 
-        // The document is stored as written, not re-serialised.
-        if (auto write_error = write_preset(source->document_text(), target_filepath);
+        // The document is stored as written, not re-serialised, with every
+        // file the preset holds beside it.
+        std::vector<beebium::zip::ZipMember> members;
+        try {
+            members = preset_members(*source);
+        } catch (const std::exception& e) {
+            std::cerr << "Error: cannot read the preset: " << e.what() << "\n";
+            return ExitCode::IOERR;
+        }
+        if (auto write_error = write_preset(std::move(members), target_filepath);
             !write_error.empty()) {
             std::cerr << "Error: " << write_error << "\n";
             return ExitCode::IOERR;
@@ -1471,13 +1510,17 @@ public:
     std::string_view description() const override { return "Export a preset to a file"; }
 
     void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " export-preset <id-or-path> --output <filepath>\n"
+        std::cerr << "Usage: " << program_name
+                  << " export-preset <id-or-path> --output <path> [--unpack]\n"
                   << "\n"
-                  << "Exports a preset (a preset file, or the system or user preset with\n"
-                  << "that id) to the specified file path.\n"
+                  << "Exports a preset (a preset file, directory or archive, or the system\n"
+                  << "or user preset with that id) as a .beebium-preset zip archive holding\n"
+                  << "preset.json and every file the preset holds beside it.\n"
                   << "\n"
                   << "Options:\n"
-                  << "  --output <path>   Output file path (required)\n";
+                  << "  --output <path>   Output path (required)\n"
+                  << "  --unpack          Write a new directory laid out as the archive is,\n"
+                  << "                    for editing, instead of the archive\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
@@ -1490,11 +1533,14 @@ public:
         // Parse subcommand options
         std::string preset_arg;
         std::filesystem::path output_filepath;
+        bool unpack = false;
         for (int i = global.subcommand_argv_start; i < argc; ++i) {
             std::string_view arg = argv[i];
             if (arg == "--help" || arg == "-h") {
                 help(argv[0]);
                 return ExitCode::OK;
+            } else if (arg == "--unpack") {
+                unpack = true;
             } else if (arg == "--output" || arg == "-o") {
                 if (i + 1 >= argc) {
                     std::cerr << "Error: --output requires a path\n";
@@ -1535,15 +1581,16 @@ public:
             std::cerr << "Error: " << open_error << "\n";
             return ExitCode::NOINPUT;
         }
-        if (source->form() != PresetSource::Form::File) {
-            std::cerr << "Error: export-preset takes a preset file, not a preset directory or "
-                         "archive: "
-                      << preset_arg << "\n";
-            return ExitCode::USAGE;
+        std::vector<beebium::zip::ZipMember> members;
+        try {
+            members = preset_members(*source);
+        } catch (const std::exception& e) {
+            std::cerr << "Error: cannot read the preset: " << e.what() << "\n";
+            return ExitCode::IOERR;
         }
-
-        if (auto write_error = write_preset(source->document_text(), output_filepath);
-            !write_error.empty()) {
+        const auto write_error = unpack ? write_preset_directory(members, output_filepath)
+                                        : write_preset(std::move(members), output_filepath);
+        if (!write_error.empty()) {
             std::cerr << "Error: " << write_error << "\n";
             return ExitCode::IOERR;
         }

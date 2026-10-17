@@ -25,6 +25,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -32,6 +33,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace beebium::server {
 
@@ -78,10 +80,11 @@ public:
                 return std::nullopt;
             }
             const auto bytes = archive->read(DOCUMENT_FILENAME);
-            return PresetSource(path, Form::Archive,
+            PresetSource source(path, Form::Archive,
                                 ReferenceContainer::archive(absolute_path, archive),
-                                path / DOCUMENT_FILENAME,
-                                std::string(bytes.begin(), bytes.end()));
+                                path / DOCUMENT_FILENAME, std::string(bytes.begin(), bytes.end()));
+            source.archive_ = std::move(archive);
+            return source;
         }
         auto text = read_text(path, error);
         if (!text) return std::nullopt;
@@ -102,6 +105,32 @@ public:
 
     // The document as stored.
     const std::string& document_text() const { return document_text_; }
+
+    // The names of the files a directory or archive preset holds, the
+    // document among them, as archive members are named; none for a lone
+    // file. A directory's hidden files (a component starting with '.', such
+    // as .DS_Store) are left out.
+    std::vector<std::string> file_names() const {
+        if (archive_) return archive_->member_names();
+        std::vector<std::string> names;
+        if (form_ != Form::Directory) return names;
+        const auto& dirpath = container_.dirpath();
+        std::error_code ec;
+        for (auto it = std::filesystem::recursive_directory_iterator(dirpath, ec);
+             !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+            const auto relative = it->path().lexically_relative(dirpath);
+            const bool hidden = std::any_of(relative.begin(), relative.end(), [](const auto& c) {
+                return c.string().rfind('.', 0) == 0;
+            });
+            if (hidden) {
+                if (it->is_directory(ec)) it.disable_recursion_pending();
+                continue;
+            }
+            if (it->is_regular_file(ec)) names.push_back(relative.generic_string());
+        }
+        std::sort(names.begin(), names.end());
+        return names;
+    }
 
     // The document, parsed; or nullopt with `error` saying why it is not a
     // JSON object.
@@ -152,6 +181,7 @@ private:
     ReferenceContainer container_;
     std::filesystem::path document_filepath_;
     std::string document_text_;
+    std::shared_ptr<const zip::ZipReader> archive_;
 };
 
 }  // namespace beebium::server

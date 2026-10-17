@@ -1,6 +1,6 @@
 # Preset Schema
 
-A **preset** is a JSON file (`<id>.preset.beebium`) that describes one machine
+A **preset** is a JSON document (`preset.json`, stored in a `<id>.beebium-preset` zip archive) that describes one machine
 configuration: the model, the ROMs, the disc and network hardware, the
 extensions plugged into it, and how it starts. `start --preset <id|filepath>`
 launches the machine a preset describes. A front-end's New Machine dialog

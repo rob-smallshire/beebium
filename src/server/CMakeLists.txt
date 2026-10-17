@@ -90,9 +90,15 @@ endfunction()
 # so the working-directory step of the search finds nothing there either.
 set(PRESET_USER_DIRPATH "${CMAKE_CURRENT_BINARY_DIR}/user-state")
 
-# Generate a system preset and its thumbnail at build time, using the same
-# create-preset code path that users create their own presets with. Extra
-# create-preset arguments (e.g. --fdc, --sideways) are forwarded via ARGN.
+# Where a system preset is put together before it is archived: a directory
+# laid out as its archive (preset.json, then the captured thumbnail.png).
+set(PRESET_SOURCES_DIR "${CMAKE_CURRENT_BINARY_DIR}/preset-sources")
+
+# Generate a system preset at build time, using the same create-preset code
+# path that users create their own presets with, as <id>.beebium-preset: the
+# preset is created unpacked, booted to capture its thumbnail into it, and
+# exported as the archive. Extra create-preset arguments (e.g. --fdc,
+# --sideways) are forwarded via ARGN.
 function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
     # DESCRIPTION is a one-value keyword forwarded as create-preset's
     # --description (the concise one-liner the picker card shows); the rest of
@@ -113,17 +119,18 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
     # in a per-config Release/presets on multi-config generators, where the
     # fixed install() source never found them -- so the Windows bundle shipped
     # an empty share/beebium/presets.)
-    set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.preset.beebium")
-    set(thumbnail_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.thumbnail.png")
+    set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.beebium-preset")
+    set(source_dirpath "${PRESET_SOURCES_DIR}/${PRESET_ID}")
     add_custom_command(TARGET ${EXECUTABLE} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}" "${PRESET_SOURCES_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${source_dirpath}"
         COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
             $<TARGET_FILE:${EXECUTABLE}> create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
             ${description_args}
             ${PRESET_UNPARSED_ARGUMENTS}
-            --output "${preset_filepath}"
+            --output "${source_dirpath}" --unpack
         # Capture boots the preset, with the master dir at the build tree: a
         # bundled disc is copied into the capture's own machine directory, so
         # every build boots a pristine image (deterministic thumbnail).
@@ -131,11 +138,15 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
             "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
             "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
             $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
-            --preset "${preset_filepath}"
-            --output "${thumbnail_filepath}"
+            --preset "${source_dirpath}"
+            --output "${source_dirpath}/thumbnail.png"
             --rom-dir "${BEEBIUM_ROM_DIR}"
             --crop auto
-        COMMENT "Generating preset ${PRESET_ID} and its thumbnail"
+        COMMAND ${CMAKE_COMMAND} -E rm -f "${preset_filepath}"
+        COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
+            $<TARGET_FILE:${EXECUTABLE}> export-preset "${source_dirpath}"
+            --output "${preset_filepath}"
+        COMMENT "Generating preset ${PRESET_ID}"
         VERBATIM
     )
     # Multi-config generators (e.g. Visual Studio) nest the executable in a
@@ -148,7 +159,6 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
             COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets"
             COMMAND ${CMAKE_COMMAND} -E copy
                 "${preset_filepath}"
-                "${thumbnail_filepath}"
                 "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets/"
             VERBATIM
         )
@@ -179,44 +189,51 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
         set(description_args --description "${PRESET_DESCRIPTION}")
     endif()
     bundled_disc_outputs_named(disc_outputs ${PRESET_UNPARSED_ARGUMENTS})
-    set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.preset.beebium")
-    set(thumbnail_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.thumbnail.png")
+    set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.beebium-preset")
+    set(source_dirpath "${PRESET_SOURCES_DIR}/${PRESET_ID}")
     set(copy_commands "")
     if(CMAKE_CONFIGURATION_TYPES)
         set(copy_commands
             COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets"
             COMMAND ${CMAKE_COMMAND} -E copy
-                "${preset_filepath}" "${thumbnail_filepath}"
+                "${preset_filepath}"
                 "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets/")
     endif()
+    # One command makes the archive from nothing, so its OUTPUT is everything
+    # preset_<id> needs: the unpacked directory and the thumbnail captured into
+    # it are made and consumed within it, never by another target.
     add_custom_command(
-        OUTPUT "${preset_filepath}" "${thumbnail_filepath}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}"
+        OUTPUT "${preset_filepath}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}" "${PRESET_SOURCES_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${source_dirpath}"
         COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
             $<TARGET_FILE:${EXECUTABLE}> create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
             ${description_args}
             ${PRESET_UNPARSED_ARGUMENTS}
-            --output "${preset_filepath}"
+            --output "${source_dirpath}" --unpack
         # Build-tree master dir (see add_system_preset): a bundled disc boots
         # from a pristine copy in the capture's own machine directory.
         COMMAND ${CMAKE_COMMAND} -E env
             "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
             "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
             $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
-            --preset "${preset_filepath}"
-            --output "${thumbnail_filepath}"
+            --preset "${source_dirpath}"
+            --output "${source_dirpath}/thumbnail.png"
             --rom-dir "${BEEBIUM_ROM_DIR}"
             --crop auto
             ${capture_duration_args}
+        COMMAND ${CMAKE_COMMAND} -E rm -f "${preset_filepath}"
+        COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
+            $<TARGET_FILE:${EXECUTABLE}> export-preset "${source_dirpath}"
+            --output "${preset_filepath}"
         ${copy_commands}
         DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET} ${PRESET_EXTRA_DEPENDS} ${disc_outputs}
-        COMMENT "Generating plugin preset ${PRESET_ID} and its thumbnail"
+        COMMENT "Generating plugin preset ${PRESET_ID}"
         VERBATIM
     )
-    add_custom_target(preset_${PRESET_ID} ALL
-        DEPENDS "${preset_filepath}" "${thumbnail_filepath}")
+    add_custom_target(preset_${PRESET_ID} ALL DEPENDS "${preset_filepath}")
     # The disc outputs are bundled_discs' commands; build that target first so
     # the two never run them concurrently and this one finds them up to date.
     if(disc_outputs)
@@ -552,8 +569,7 @@ install(DIRECTORY ${BEEBIUM_ROM_DIR}/
 install(DIRECTORY ${PRESETS_OUTPUT_DIR}/
     DESTINATION share/beebium/presets
     FILES_MATCHING
-        PATTERN "*.preset.beebium"
-        PATTERN "*.thumbnail.png"
+        PATTERN "*.beebium-preset"
 )
 # Bundled disc masters ship READ-ONLY: they are immutable masters the server
 # copies into each machine's directory (see DiscPaths), never opened

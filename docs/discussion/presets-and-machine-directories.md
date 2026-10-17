@@ -1,6 +1,8 @@
 # Presets as archives and machine directories
 
-Status: draft for discussion (2026-09-30). Issues: #136 (presets as archives),
+Status: draft for discussion (2026-09-30). Step 3 (#136): stored presets are
+`.beebium-preset` archives. The one-shot migration of the user store (section
+3.1) ships in the next release and is removed in the release after it. Issues: #136 (presets as archives),
 #103 (machine instances), #135 (disc image reference resolution), #134
 (multi-select preset import). Prompted by Mark Moxon's Elite-over-Econet
 preset pack (https://stardot.org.uk/forums/viewtopic.php?p=493669#p493669),

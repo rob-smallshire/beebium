@@ -562,7 +562,7 @@ parse_sideways_section(const nlohmann::json& sideways_json) {
 // (PresetLoadResult::warnings).
 //
 // Usage:
-//   auto result = load_preset("/path/to/game.preset.beebium");
+//   auto result = load_preset("/path/to/game.beebium-preset");
 //   if (result) {
 //       // Use result.config
 //   } else {

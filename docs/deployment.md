@@ -67,7 +67,7 @@ build/
 ├── src/server/
 │   ├── beebium-model-b, beebium-model-b-plus, ...
 │   ├── extensions/<name>/{<plugin library>, manifest.json}
-│   └── presets/   (*.preset.beebium, *.thumbnail.png)
+│   └── presets/   (*.beebium-preset)
 ├── roms/
 │   ├── acorn-mos_1_20.rom
 │   ├── acorn-mos_2_0.rom
@@ -94,7 +94,7 @@ When installed via `cmake --install`, the tree is relocatable and self-describin
 │   └── libbeebium_extension_ui_proto.so
 └── share/beebium/
     ├── roms/      (acorn-mos_1_20.rom, ...)
-    ├── presets/   (*.preset.beebium, *.thumbnail.png)
+    ├── presets/   (*.beebium-preset)
     └── discs/     (bundled disc masters, read-only)
 ```
 
@@ -181,7 +181,9 @@ System presets (shipped with the software) are searched in this order:
 2. `<executable_dir>/presets/` (build layout)
 3. `<executable_dir>/../share/beebium/presets/` (installed layout)
 
-User presets (created with `create-preset` / `import-preset`) live in
+Every stored preset is a `<id>.beebium-preset` zip archive holding its
+`preset.json` and its `thumbnail.png`. User presets (created with
+`create-preset` / `import-preset`) live in
 `presets/` in the per-user state directory (below). `report-presets-dirpath` prints the user presets directory.
 A preset id is looked up among the system presets first, then the user
 presets.

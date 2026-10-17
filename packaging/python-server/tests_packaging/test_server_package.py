@@ -83,9 +83,9 @@ def test_presets_are_present_when_the_bundle_ships_them():
         pytest.skip(
             f"this bundle ships no presets ({presets} absent) -- the Windows wheel omits "
             f"share/beebium/presets (empty in the bundle); expected the model-b / model-b-plus / "
-            f"model-b-plus-128k / model-b-romram .preset.beebium files. Tracked as a bundle gap."
+            f"model-b-plus-128k / model-b-romram .beebium-preset archives. Tracked as a bundle gap."
         )
-    assert any(presets.glob("*.preset.beebium")), f"preset directory {presets} is present but has no presets"
+    assert any(presets.glob("*.beebium-preset")), f"preset directory {presets} is present but has no presets"
 
 
 @pytest.mark.parametrize("variant", VARIANTS)

@@ -30,6 +30,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <fstream>
 #include <sstream>
@@ -172,6 +173,32 @@ public:
 
 const std::string EXECUTABLE = find_executable("beebium-model-b").string();
 
+// Stores a preset whose document is `document` in the store `dirpath` as
+// the archive <id>.beebium-preset, with `thumbnail` inside when given;
+// returns the archive's path.
+std::filesystem::path store_preset(const std::filesystem::path& dirpath, const std::string& id,
+                                   const std::string& document,
+                                   const std::optional<std::string>& thumbnail = std::nullopt) {
+    std::vector<beebium::zip::ZipMember> members{
+        {"preset.json", std::vector<std::uint8_t>(document.begin(), document.end())}};
+    if (thumbnail) {
+        members.push_back(
+            {"thumbnail.png", std::vector<std::uint8_t>(thumbnail->begin(), thumbnail->end())});
+    }
+    const auto filepath = dirpath / (id + ".beebium-preset");
+    beebium::zip::write_zip(filepath, std::move(members));
+    return filepath;
+}
+
+// The document of the preset at `path`, in whichever form it is held.
+std::string document_of(const std::filesystem::path& path) {
+    std::string error;
+    auto source = beebium::server::PresetSource::open(path, error);
+    INFO(error);
+    REQUIRE(source.has_value());
+    return source->document_text();
+}
+
 }  // namespace
 
 // ============================================================================
@@ -200,8 +227,7 @@ namespace {
 const std::string LONG_PRESET_ID = "a-thirty-character-preset-id-x";
 
 void write_long_id_user_preset(const std::filesystem::path& user_dirpath) {
-    std::ofstream out(user_dirpath / (LONG_PRESET_ID + ".preset.beebium"));
-    out << R"({"model": "model-b", "name": "Long Id Preset"})";
+    store_preset(user_dirpath, LONG_PRESET_ID, R"({"model": "model-b", "name": "Long Id Preset"})");
 }
 
 }  // namespace
@@ -251,7 +277,7 @@ TEST_CASE("list-presets: --format jsonl and --json yield the same rows", "[integ
                                     {"source", "user"},
                                     {"model", "model-b"},
                                     {"filepath", (temp_dir.presets() /
-                                                  (LONG_PRESET_ID + ".preset.beebium")).string()},
+                                                  (LONG_PRESET_ID + ".beebium-preset")).string()},
                                     {"thumbnail", false}};
     REQUIRE(jsonl.stdout_output.find(expected.dump() + "\n") != std::string::npos);
 }
@@ -272,10 +298,10 @@ std::string jsonl_row(const std::string& output, const std::string& id) {
 TEST_CASE("list-presets jsonl: every field a preset gives, in a fixed order, and its thumbnail",
           "[integration][preset][list-presets]") {
     TempDirectory user_dir;
-    const auto filepath = user_dir.presets() / "full.preset.beebium";
-    std::ofstream(filepath) << R"({"release_date": "1984", "model": "model-b",
-        "description": "Every field", "machine_name": "Full {station}", "name": "Full"})";
-    std::ofstream(user_dir.presets() / "full.thumbnail.png", std::ios::binary) << "PNG";
+    const auto filepath = store_preset(user_dir.presets(), "full",
+                                       R"({"release_date": "1984", "model": "model-b",
+        "description": "Every field", "machine_name": "Full {station}", "name": "Full"})",
+                                       "PNG");
 
     auto result = run_command(EXECUTABLE + " --format jsonl list-presets",
                               {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
@@ -297,10 +323,10 @@ TEST_CASE("list-presets jsonl: a field a preset does not give is omitted, and an
           "is called by its model's name",
           "[integration][preset][list-presets]") {
     TempDirectory user_dir;
-    const auto plus_filepath = user_dir.presets() / "plus.preset.beebium";
-    const auto any_filepath = user_dir.presets() / "any.preset.beebium";
-    std::ofstream(plus_filepath) << R"({"model": "model-b-plus"})";
-    std::ofstream(any_filepath) << R"({"description": "Suits any model"})";
+    const auto plus_filepath =
+        store_preset(user_dir.presets(), "plus", R"({"model": "model-b-plus"})");
+    const auto any_filepath =
+        store_preset(user_dir.presets(), "any", R"({"description": "Suits any model"})");
     std::vector<std::pair<std::string, std::string>> env{
         {"BEEBIUM_USER_DIRPATH", user_dir.path().string()}};
 
@@ -389,8 +415,7 @@ TEST_CASE("show-preset: shows a preset named by id or by path", "[integration][p
     TempDirectory user_dir;
     TempDirectory elsewhere;
     {
-        std::ofstream(user_dir.presets() / "mine.preset.beebium")
-            << R"({"model": "model-b", "name": "By Id"})";
+        store_preset(user_dir.presets(), "mine", R"({"model": "model-b", "name": "By Id"})");
         std::ofstream(elsewhere.path() / "loose.json")
             << R"({"model": "model-b", "name": "By Path"})";
     }
@@ -419,8 +444,7 @@ TEST_CASE("show-preset --thumbnail: writes a stored or directory preset's thumbn
           "[integration][preset][show-preset]") {
     TempDirectory user_dir;
     TempDirectory out_dir;
-    std::ofstream(user_dir.presets() / "pic.preset.beebium") << R"({"model": "model-b"})";
-    std::ofstream(user_dir.presets() / "pic.thumbnail.png", std::ios::binary) << "STORED-PNG";
+    store_preset(user_dir.presets(), "pic", R"({"model": "model-b"})", "STORED-PNG");
     const auto dirpath = out_dir.path() / "dir-preset";
     std::filesystem::create_directories(dirpath);
     std::ofstream(dirpath / "preset.json") << R"({"model": "model-b-plus"})";
@@ -449,7 +473,7 @@ TEST_CASE("show-preset --thumbnail: writes a stored or directory preset's thumbn
 TEST_CASE("show-preset --thumbnail: a preset without one writes nothing and says so",
           "[integration][preset][show-preset]") {
     TempDirectory user_dir;
-    std::ofstream(user_dir.presets() / "bare.preset.beebium") << R"({"model": "model-b"})";
+    store_preset(user_dir.presets(), "bare", R"({"model": "model-b"})");
     const auto png = user_dir.path() / "out.png";
 
     auto result = run_command(EXECUTABLE + " show-preset bare --thumbnail --output \"" +
@@ -483,22 +507,38 @@ TEST_CASE("create-preset: missing --name returns USAGE (64)", "[integration][pre
     REQUIRE(result.exit_code == 64);
 }
 
-TEST_CASE("create-preset --output: creates preset file", "[integration][preset][create-preset]") {
+TEST_CASE("create-preset --output: writes the preset as an archive holding preset.json",
+          "[integration][preset][create-preset]") {
     TempDirectory temp_dir;
-    auto output_filepath = temp_dir.path() / "test-preset.preset.beebium";
+    auto output_filepath = temp_dir.path() / "test-preset.beebium-preset";
 
     auto result = run_command(EXECUTABLE + " create-preset --name \"Test Preset\" --output \"" +
                               output_filepath.string() + "\"");
 
     REQUIRE(result.exit_code == 0);
-    REQUIRE(std::filesystem::exists(output_filepath));
+    CHECK(beebium::zip::ZipReader(output_filepath).member_names() ==
+          std::vector<std::string>{"preset.json"});
+    const auto content = document_of(output_filepath);
+    CHECK(content.find("\"model\": \"model-b\"") != std::string::npos);
+    CHECK(content.find("\"name\": \"Test Preset\"") != std::string::npos);
+}
 
-    // Verify content
-    std::ifstream f(output_filepath);
-    std::string content((std::istreambuf_iterator<char>(f)),
-                        std::istreambuf_iterator<char>());
-    REQUIRE(content.find("\"model\": \"model-b\"") != std::string::npos);
-    REQUIRE(content.find("\"name\": \"Test Preset\"") != std::string::npos);
+TEST_CASE("create-preset --unpack: writes the preset as a directory, laid out as its archive",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    const auto output_dirpath = temp_dir.path() / "unpacked";
+
+    auto result = run_command(EXECUTABLE + " create-preset --name Unpacked --unpack --output \"" +
+                              output_dirpath.string() + "\"");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(std::filesystem::is_regular_file(output_dirpath / "preset.json"));
+    CHECK(document_of(output_dirpath).find("\"name\": \"Unpacked\"") != std::string::npos);
+    // Not over an existing directory, and not without --output.
+    CHECK(run_command(EXECUTABLE + " create-preset --name Again --unpack --output \"" +
+                      output_dirpath.string() + "\"")
+              .exit_code == 74);
+    CHECK(run_command(EXECUTABLE + " create-preset --name Nowhere --unpack").exit_code == 64);
 }
 
 TEST_CASE("create-preset: creates preset in user directory", "[integration][preset][create-preset]") {
@@ -514,7 +554,7 @@ TEST_CASE("create-preset: creates preset in user directory", "[integration][pres
     REQUIRE(result.stdout_output.find("my-test-setup") != std::string::npos);
 
     // Verify file was created
-    auto preset_filepath = temp_dir.presets() / "my-test-setup.preset.beebium";
+    auto preset_filepath = temp_dir.presets() / "my-test-setup.beebium-preset";
     REQUIRE(std::filesystem::exists(preset_filepath));
 }
 
@@ -773,11 +813,8 @@ TEST_CASE("delete-preset: deletes user preset", "[integration][preset][delete-pr
     TempDirectory temp_dir;
 
     // First create a preset
-    auto preset_filepath = temp_dir.presets() / "deleteme.preset.beebium";
-    {
-        std::ofstream f(preset_filepath);
-        f << R"({"model": "model-b", "name": "Delete Me"})";
-    }
+    auto preset_filepath = store_preset(temp_dir.presets(), "deleteme",
+                                        R"({"model": "model-b", "name": "Delete Me"})");
     REQUIRE(std::filesystem::exists(preset_filepath));
 
     // Delete it
@@ -813,18 +850,47 @@ TEST_CASE("import-preset: nonexistent file returns NOINPUT (66)", "[integration]
     REQUIRE(result.exit_code == 66);
 }
 
-TEST_CASE("import-preset: a directory is refused", "[integration][preset][import-preset]") {
+TEST_CASE("import-preset: a directory is stored archived, with every file it holds",
+          "[integration][preset][import-preset]") {
     TempDirectory user_dir;
     TempDirectory source_dir;
-    std::ofstream(source_dir.path() / "preset.json") << R"({"model": "model-b"})";
+    const auto dirpath = source_dir.path() / "My Game";
+    std::filesystem::create_directories(dirpath / "discs");
+    std::ofstream(dirpath / "preset.json") << R"({"model": "model-b"})";
+    std::ofstream(dirpath / "thumbnail.png", std::ios::binary) << "PNG";
+    std::ofstream(dirpath / "discs" / "game.ssd", std::ios::binary) << "DISC";
+    std::ofstream(dirpath / ".DS_Store") << "hidden";
 
-    auto result = run_command(EXECUTABLE + " import-preset \"" + source_dir.path().string() + "\"",
+    auto result = run_command(EXECUTABLE + " import-preset \"" + dirpath.string() + "\"",
                               {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
 
-    REQUIRE(result.exit_code == 64);
-    CHECK(result.stderr_output.find("takes a preset file, not a preset directory or archive") !=
-          std::string::npos);
-    CHECK(std::filesystem::is_empty(user_dir.presets()));
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_output == "my-game\n");
+    beebium::zip::ZipReader stored(user_dir.presets() / "my-game.beebium-preset");
+    CHECK(stored.member_names() ==
+          std::vector<std::string>{"discs/game.ssd", "preset.json", "thumbnail.png"});
+    CHECK(stored.read("discs/game.ssd") == std::vector<std::uint8_t>{'D', 'I', 'S', 'C'});
+}
+
+TEST_CASE("import-preset: an archive is stored with every member it holds",
+          "[integration][preset][import-preset]") {
+    TempDirectory user_dir;
+    TempDirectory source_dir;
+    const std::string document = R"({"model": "model-b-plus"})";
+    beebium::zip::write_zip(
+        source_dir.path() / "zipped.zip",
+        {{"preset.json", std::vector<std::uint8_t>(document.begin(), document.end())},
+         {"roms/x.rom", {'R'}}});
+
+    auto result = run_command(
+        EXECUTABLE + " import-preset \"" + (source_dir.path() / "zipped.zip").string() + "\"",
+        {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_output == "zipped\n");
+    beebium::zip::ZipReader stored(user_dir.presets() / "zipped.beebium-preset");
+    CHECK(stored.member_names() == std::vector<std::string>{"preset.json", "roms/x.rom"});
+    CHECK(document_of(user_dir.presets() / "zipped.beebium-preset") == document);
 }
 
 TEST_CASE("import-preset: imports valid preset", "[integration][preset][import-preset]") {
@@ -846,11 +912,9 @@ TEST_CASE("import-preset: imports valid preset", "[integration][preset][import-p
     REQUIRE(result.exit_code == 0);
     REQUIRE(result.stdout_output.find("importme") != std::string::npos);
 
-    // The preset is stored exactly as written, not re-serialised.
-    auto imported_filepath = dest_dir.presets() / "importme.preset.beebium";
-    std::ifstream f(imported_filepath, std::ios::binary);
-    std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    CHECK(content == R"({"model": "model-b", "name": "Import Me"})");
+    // The preset is stored as an archive, its document exactly as written.
+    auto imported_filepath = dest_dir.presets() / "importme.beebium-preset";
+    CHECK(document_of(imported_filepath) == R"({"model": "model-b", "name": "Import Me"})");
 }
 
 TEST_CASE("import-preset: another model's preset is imported by any executable",
@@ -865,7 +929,7 @@ TEST_CASE("import-preset: another model's preset is imported by any executable",
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_output == "plus\n");
-    CHECK(std::filesystem::exists(user_dir.presets() / "plus.preset.beebium"));
+    CHECK(std::filesystem::exists(user_dir.presets() / "plus.beebium-preset"));
 }
 
 TEST_CASE("import-preset: a preset naming an unknown model is refused",
@@ -896,7 +960,7 @@ TEST_CASE("import-preset --help: returns OK", "[integration][preset][import-pres
 // ============================================================================
 
 TEST_CASE("export-preset: missing ID returns USAGE (64)", "[integration][preset][export-preset]") {
-    auto result = run_command(EXECUTABLE + " export-preset --output /tmp/out.preset.beebium");
+    auto result = run_command(EXECUTABLE + " export-preset --output /tmp/out.beebium-preset");
 
     REQUIRE(result.exit_code == 64);
 }
@@ -909,7 +973,7 @@ TEST_CASE("export-preset: missing --output returns USAGE (64)", "[integration][p
 
 TEST_CASE("export-preset: nonexistent preset returns NOINPUT (66)", "[integration][preset][export-preset]") {
     TempDirectory temp_dir;
-    auto output_filepath = temp_dir.path() / "exported.preset.beebium";
+    auto output_filepath = temp_dir.path() / "exported.beebium-preset";
 
     auto result = run_command(EXECUTABLE + " export-preset nonexistent-12345 --output \"" +
                               output_filepath.string() + "\"");
@@ -922,13 +986,10 @@ TEST_CASE("export-preset: exports user preset", "[integration][preset][export-pr
     TempDirectory output_dir;
 
     // Create source preset in user directory
-    auto source_filepath = user_dir.presets() / "mypreset.preset.beebium";
-    {
-        std::ofstream f(source_filepath);
-        f << R"({"model": "model-b", "name": "My Preset"})";
-    }
+    store_preset(user_dir.presets(), "mypreset", R"({"model": "model-b", "name": "My Preset"})",
+                 "PNG");
 
-    auto output_filepath = output_dir.path() / "exported.preset.beebium";
+    auto output_filepath = output_dir.path() / "exported.beebium-preset";
 
     auto result = run_command(
         EXECUTABLE + " export-preset mypreset --output \"" + output_filepath.string() + "\"",
@@ -936,13 +997,31 @@ TEST_CASE("export-preset: exports user preset", "[integration][preset][export-pr
     );
 
     REQUIRE(result.exit_code == 0);
-    REQUIRE(std::filesystem::exists(output_filepath));
+    // The archive, thumbnail and all.
+    CHECK(beebium::zip::ZipReader(output_filepath).member_names() ==
+          std::vector<std::string>{"preset.json", "thumbnail.png"});
+    CHECK(document_of(output_filepath).find("\"name\": \"My Preset\"") != std::string::npos);
+}
 
-    // Verify content matches
-    std::ifstream f(output_filepath);
-    std::string content((std::istreambuf_iterator<char>(f)),
-                        std::istreambuf_iterator<char>());
-    REQUIRE(content.find("\"name\": \"My Preset\"") != std::string::npos);
+TEST_CASE("export-preset --unpack: writes a new directory laid out as the archive",
+          "[integration][preset][export-preset]") {
+    TempDirectory user_dir;
+    const auto unpacked = user_dir.path() / "unpacked";
+    store_preset(user_dir.presets(), "pic", R"({"model": "model-b"})", "PNG");
+    std::vector<std::pair<std::string, std::string>> env{
+        {"BEEBIUM_USER_DIRPATH", user_dir.path().string()}};
+
+    auto result = run_command(
+        EXECUTABLE + " export-preset pic --unpack --output \"" + unpacked.string() + "\"", env);
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(document_of(unpacked) == R"({"model": "model-b"})");
+    std::ifstream png(unpacked / "thumbnail.png", std::ios::binary);
+    CHECK(std::string(std::istreambuf_iterator<char>(png), {}) == "PNG");
+    // Never over an existing directory.
+    auto again = run_command(
+        EXECUTABLE + " export-preset pic --unpack --output \"" + unpacked.string() + "\"", env);
+    CHECK(again.exit_code == 74);
 }
 
 TEST_CASE("export-preset: exports a preset named by path", "[integration][preset][export-preset]") {
@@ -950,15 +1029,13 @@ TEST_CASE("export-preset: exports a preset named by path", "[integration][preset
     TempDirectory output_dir;
     const auto source_filepath = source_dir.path() / "loose.json";
     std::ofstream(source_filepath) << R"({"model": "model-b", "name": "Loose"})";
-    const auto output_filepath = output_dir.path() / "exported.preset.beebium";
+    const auto output_filepath = output_dir.path() / "exported.beebium-preset";
 
     auto result = run_command(EXECUTABLE + " export-preset \"" + source_filepath.string() +
                               "\" --output \"" + output_filepath.string() + "\"");
 
     REQUIRE(result.exit_code == 0);
-    std::ifstream f(output_filepath);
-    std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    CHECK(content.find("\"name\": \"Loose\"") != std::string::npos);
+    CHECK(document_of(output_filepath) == R"({"model": "model-b", "name": "Loose"})");
 }
 
 TEST_CASE("export-preset: an output that cannot be written is an IO error",
@@ -966,13 +1043,13 @@ TEST_CASE("export-preset: an output that cannot be written is an IO error",
     TempDirectory source_dir;
     const auto source_filepath = source_dir.path() / "loose.json";
     std::ofstream(source_filepath) << R"({"model": "model-b"})";
-    const auto output_filepath = source_dir.path() / "no-such-dir" / "out.preset.beebium";
+    const auto output_filepath = source_dir.path() / "no-such-dir" / "out.beebium-preset";
 
     auto result = run_command(EXECUTABLE + " export-preset \"" + source_filepath.string() +
                               "\" --output \"" + output_filepath.string() + "\"");
 
     REQUIRE(result.exit_code == 74);  // IOERR
-    CHECK(result.stderr_output.find("cannot write preset file: " + output_filepath.string()) !=
+    CHECK(result.stderr_output.find("cannot write preset: " + output_filepath.string()) !=
           std::string::npos);
 }
 
@@ -1007,11 +1084,11 @@ TEST_CASE("Full preset workflow: create, export, import, delete", "[integration]
     REQUIRE_FALSE(preset_id.empty());
 
     // Verify preset file exists
-    auto preset_filepath = user_dir.presets() / (preset_id + ".preset.beebium");
+    auto preset_filepath = user_dir.presets() / (preset_id + ".beebium-preset");
     REQUIRE(std::filesystem::exists(preset_filepath));
 
     // Step 2: Export the preset
-    auto export_filepath = export_dir.path() / "exported.preset.beebium";
+    auto export_filepath = export_dir.path() / "exported.beebium-preset";
     auto export_result = run_command(
         EXECUTABLE + " export-preset " + preset_id + " --output \"" + export_filepath.string() + "\"",
         {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}}
@@ -1035,7 +1112,7 @@ TEST_CASE("Full preset workflow: create, export, import, delete", "[integration]
     REQUIRE(import_result.exit_code == 0);
 
     // Verify imported file exists
-    auto imported_filepath = import_dir.presets() / "exported.preset.beebium";
+    auto imported_filepath = import_dir.presets() / "exported.beebium-preset";
     REQUIRE(std::filesystem::exists(imported_filepath));
 }
 
@@ -1068,20 +1145,10 @@ TEST_CASE("create-preset --from and export-preset preserve sideways_bank",
     TempDirectory user_dir;
 
     // A source preset carrying a sideways_bank DFS slot.
-    auto source_filepath = user_dir.presets() / "sideways-src.preset.beebium";
-    {
-        std::ofstream f(source_filepath);
-        f << R"({"name": "Sideways Source", "model": "model-b", )"
-             R"("sideways_bank": { "slots": [ )"
-             R"({ "slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_26.rom" } ] }})";
-    }
-
-    auto read_file = [](const std::filesystem::path& p) {
-        std::ifstream f(p);
-        std::ostringstream ss;
-        ss << f.rdbuf();
-        return ss.str();
-    };
+    store_preset(user_dir.presets(), "sideways-src",
+                 R"({"name": "Sideways Source", "model": "model-b", )"
+                 R"("sideways_bank": { "slots": [ )"
+                 R"({ "slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_26.rom" } ] }})");
 
     // Copy via create-preset --from: the section should survive the copy.
     auto create_result = run_command(
@@ -1097,21 +1164,21 @@ TEST_CASE("create-preset --from and export-preset preserve sideways_bank",
     }
     REQUIRE_FALSE(new_id.empty());
 
-    auto copy_filepath = user_dir.presets() / (new_id + ".preset.beebium");
+    auto copy_filepath = user_dir.presets() / (new_id + ".beebium-preset");
     REQUIRE(std::filesystem::exists(copy_filepath));
-    std::string copy_contents = read_file(copy_filepath);
+    std::string copy_contents = document_of(copy_filepath);
     REQUIRE(copy_contents.find("sideways_bank") != std::string::npos);
     REQUIRE(copy_contents.find("acorn-dfs_2_26.rom") != std::string::npos);
 
     // Export the copy: the section should survive export too.
-    auto export_filepath = user_dir.presets() / "exported-sideways.preset.beebium";
+    auto export_filepath = user_dir.path() / "exported-sideways.beebium-preset";
     auto export_result = run_command(
         EXECUTABLE + " export-preset " + new_id + " --output \"" + export_filepath.string() + "\"",
         {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}}
     );
     REQUIRE(export_result.exit_code == 0);
     REQUIRE(std::filesystem::exists(export_filepath));
-    std::string export_contents = read_file(export_filepath);
+    std::string export_contents = document_of(export_filepath);
     REQUIRE(export_contents.find("sideways_bank") != std::string::npos);
     REQUIRE(export_contents.find("acorn-dfs_2_26.rom") != std::string::npos);
 }
@@ -1119,14 +1186,12 @@ TEST_CASE("create-preset --from and export-preset preserve sideways_bank",
 TEST_CASE("create-preset --from: --sideways replaces only the slots it names",
           "[integration][preset][create-preset][sideways]") {
     TempDirectory user_dir;
-    {
-        std::ofstream f(user_dir.presets() / "slots-src.preset.beebium");
-        f << R"({"name": "Slots Source", "model": "model-b", "auto_boot": true, )"
-             R"("sideways_bank": { "slots": [ )"
-             R"({ "slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_26.rom" }, )"
-             R"({ "slot": 13, "type": "empty" } ] }})";
-    }
-    auto output_filepath = user_dir.presets() / "slots-copy.preset.beebium";
+    store_preset(user_dir.presets(), "slots-src",
+                 R"({"name": "Slots Source", "model": "model-b", "auto_boot": true, )"
+                 R"("sideways_bank": { "slots": [ )"
+                 R"({ "slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_26.rom" }, )"
+                 R"({ "slot": 13, "type": "empty" } ] }})");
+    auto output_filepath = user_dir.path() / "slots-copy.beebium-preset";
     auto result = run_command(
         EXECUTABLE + " create-preset --from slots-src --name \"Slots Copy\" "
         "--sideways slot=13:type=ram --output \"" + output_filepath.string() + "\"",
@@ -1177,7 +1242,7 @@ TEST_CASE("model-b-romram boots without an auto-loaded DFS ROM",
 
 TEST_CASE("create-preset --fdc and --sideways build a loadable rich preset",
           "[integration][preset][create-preset][sideways]") {
-    auto output_filepath = beebium::test::unique_temp_path("beebium_gen_disc_", ".preset.beebium");
+    auto output_filepath = beebium::test::unique_temp_path("beebium_gen_disc_", ".beebium-preset");
 
     auto create_result = run_command(
         EXECUTABLE + " create-preset --name \"Gen Disc\" --release-date 1982"
@@ -1186,10 +1251,7 @@ TEST_CASE("create-preset --fdc and --sideways build a loadable rich preset",
     REQUIRE(create_result.exit_code == 0);
     REQUIRE(std::filesystem::exists(output_filepath));
 
-    std::ifstream f(output_filepath);
-    std::ostringstream ss;
-    ss << f.rdbuf();
-    std::string contents = ss.str();
+    std::string contents = document_of(output_filepath);
     REQUIRE(contents.find("\"acorn-1770\"") != std::string::npos);
     REQUIRE(contents.find("sideways_bank") != std::string::npos);
     REQUIRE(contents.find("acorn-dfs_2_26.rom") != std::string::npos);
@@ -1228,7 +1290,7 @@ TEST_CASE("shipped system presets load, validate, and boot",
     for (const auto& c : cases) {
         auto executable = find_executable(c.executable);
         auto preset_filepath =
-            executable.parent_path() / "presets" / (c.preset_id + ".preset.beebium");
+            executable.parent_path() / "presets" / (c.preset_id + ".beebium-preset");
         INFO("preset: " << c.preset_id);
         REQUIRE(std::filesystem::exists(preset_filepath));
 
@@ -1281,8 +1343,8 @@ TEST_CASE("capture-screenshot runs the Tube coprocessor from a preset",
     for (const auto& c : cases) {
         auto executable = find_executable(c.executable);
         auto presets_dir = executable.parent_path() / "presets";
-        auto tube_preset = presets_dir / (c.tube_preset + ".preset.beebium");
-        auto host_preset = presets_dir / (c.host_preset + ".preset.beebium");
+        auto tube_preset = presets_dir / (c.tube_preset + ".beebium-preset");
+        auto host_preset = presets_dir / (c.host_preset + ".beebium-preset");
         INFO("tube preset: " << c.tube_preset);
         REQUIRE(std::filesystem::exists(tube_preset));
         REQUIRE(std::filesystem::exists(host_preset));
@@ -1367,7 +1429,7 @@ TEST_CASE("capture-screenshot --crop none is byte-identical to the default and t
     // is none). Existing output is unchanged; the master baseline is verified
     // separately in the branch's acceptance.
     auto exe = find_executable("beebium-model-b");
-    auto preset = exe.parent_path() / "presets" / "model-b-disc.preset.beebium";
+    auto preset = exe.parent_path() / "presets" / "model-b-disc.beebium-preset";
     REQUIRE(std::filesystem::exists(preset));
 
     auto none_png = beebium::test::unique_temp_path("beebium_crop_none_", ".png");
@@ -1411,7 +1473,7 @@ TEST_CASE("capture-screenshot --crop auto enlarges the content relative to the f
 
     for (const auto& c : cases) {
         auto exe = find_executable(c.executable);
-        auto preset = exe.parent_path() / "presets" / (c.preset_id + ".preset.beebium");
+        auto preset = exe.parent_path() / "presets" / (c.preset_id + ".beebium-preset");
         INFO("preset: " << c.preset_id);
         REQUIRE(std::filesystem::exists(preset));
 
@@ -1704,7 +1766,7 @@ std::vector<std::filesystem::path> shipped_preset_filepaths() {
     std::vector<std::filesystem::path> filepaths;
     for (const auto& entry : std::filesystem::directory_iterator(presets_dirpath)) {
         const auto name = entry.path().filename().string();
-        if (name.size() > 15 && name.substr(name.size() - 15) == ".preset.beebium") {
+        if (name.size() > 15 && name.substr(name.size() - 15) == ".beebium-preset") {
             filepaths.push_back(entry.path());
         }
     }
@@ -1713,8 +1775,7 @@ std::vector<std::filesystem::path> shipped_preset_filepaths() {
 }
 
 std::string model_of(const std::filesystem::path& preset_filepath) {
-    std::ifstream f(preset_filepath);
-    return nlohmann::json::parse(f).at("model").get<std::string>();
+    return nlohmann::json::parse(document_of(preset_filepath)).at("model").get<std::string>();
 }
 
 }  // namespace
@@ -2028,8 +2089,8 @@ TEST_CASE("resolve-preset: every shipped preset resolves and round-trips through
         }
 
         TempDirectory user_dir;
-        std::ofstream(user_dir.presets() / "resolved.preset.beebium") << first.at("preset").dump(2);
-        auto saved_filepath = user_dir.presets() / "saved.preset.beebium";
+        store_preset(user_dir.presets(), "resolved", first.at("preset").dump(2));
+        auto saved_filepath = user_dir.path() / "saved.beebium-preset";
         const std::vector<std::pair<std::string, std::string>> env{
             {"BEEBIUM_USER_DIRPATH", user_dir.path().string()}};
         auto created = run_command(
@@ -2829,26 +2890,36 @@ TEST_CASE("show-preset reads a preset archive's document and thumbnail",
     CHECK(file_bytes(png) == std::vector<std::uint8_t>{'P', 'N', 'G'});
 }
 
-TEST_CASE("import-preset and export-preset refuse a preset archive, for now",
-          "[integration][preset][preset_archive]") {
-    TempDirectory temp_dir;
-    const std::string document = R"({"model": "model-b"})";
-    const auto archive_filepath = temp_dir.path() / "zipped.beebium-preset";
+TEST_CASE("create-preset --from: the copy holds the source's files, not its thumbnail",
+          "[integration][preset][create-preset][preset_archive]") {
+    TempDirectory user_dir;
+    const std::string document = R"({"name": "Source", "model": "model-b",
+        "sideways_bank": {"slots": [{"slot": 14, "type": "rom", "image_uri": "roms/dfs.rom"}]}})";
+    std::ifstream dfs(built_file("roms", "acorn-dfs_2_26.rom"), std::ios::binary);
     beebium::zip::write_zip(
-        archive_filepath,
-        {{"preset.json", std::vector<std::uint8_t>(document.begin(), document.end())}});
-    std::vector<std::pair<std::string, std::string>> env{
-        {"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}};
+        user_dir.presets() / "source.beebium-preset",
+        {{"preset.json", std::vector<std::uint8_t>(document.begin(), document.end())},
+         {"roms/dfs.rom", std::vector<std::uint8_t>(std::istreambuf_iterator<char>(dfs), {})},
+         {"thumbnail.png", {'P', 'N', 'G'}}});
 
-    auto imported =
-        run_command(EXECUTABLE + " import-preset \"" + archive_filepath.string() + "\"", env);
-    CHECK(imported.exit_code == 64);
-    CHECK(imported.stderr_output.find("not a preset directory or archive") != std::string::npos);
-    auto exported = run_command(EXECUTABLE + " export-preset \"" + archive_filepath.string() +
-                                    "\" --output \"" + (temp_dir.path() / "out").string() + "\"",
-                                env);
-    CHECK(exported.exit_code == 64);
-    CHECK_FALSE(std::filesystem::exists(temp_dir.path() / "out"));
+    auto result = run_command(EXECUTABLE + " create-preset --from source --name Copy",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+
+    REQUIRE(result.exit_code == 0);
+    beebium::zip::ZipReader copy(user_dir.presets() / "copy.beebium-preset");
+    CHECK(copy.member_names() == std::vector<std::string>{"preset.json", "roms/dfs.rom"});
+    // ...and names its own copy of the ROM, as the source named its.
+    const auto copied = nlohmann::json::parse(document_of(user_dir.presets() /
+                                                            "copy.beebium-preset"));
+    CHECK(copied.at("sideways_bank").at("slots")[0].at("image_uri") == "roms/dfs.rom");
+    // The copy stands alone: with the source gone, its ROM reference still
+    // reaches the ROM inside it.
+    std::filesystem::remove(user_dir.presets() / "source.beebium-preset");
+    auto resolved = run_command(EXECUTABLE + " resolve-preset copy --json",
+                                {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+    INFO(resolved.stdout_output << resolved.stderr_output);
+    CHECK(resolved.exit_code == 0);
+    CHECK(nlohmann::json::parse(resolved.stdout_output).at("diagnostics").empty());
 }
 
 TEST_CASE("create-preset records a bare name the working directory holds as its path",
@@ -2866,7 +2937,7 @@ TEST_CASE("create-preset records a bare name the working directory holds as its 
     std::ofstream(cwd / "here.rom") << "rom";
     std::ofstream(user_dirpath / "discs" / "mine.ssd") << "disc";
     std::ofstream(user_dirpath / "roms" / "mine.rom") << "rom";
-    const auto output_filepath = temp_dir.path() / "elsewhere" / "p.preset.beebium";
+    const auto output_filepath = temp_dir.path() / "elsewhere" / "p.beebium-preset";
     std::filesystem::create_directories(output_filepath.parent_path());
 
     auto result = run_command_in(
@@ -2877,7 +2948,7 @@ TEST_CASE("create-preset records a bare name the working directory holds as its 
     INFO(result.stdout_output << result.stderr_output);
     REQUIRE(result.exit_code == 0);
 
-    const auto preset = nlohmann::json::parse(std::ifstream(output_filepath));
+    const auto preset = nlohmann::json::parse(document_of(output_filepath));
     const auto& drives = preset.at("storage").at("floppy_drives");
     CHECK(drives[0].at("image_uri") == beebium::DiscUrl::from_filepath(cwd / "here.ssd").url());
     CHECK(drives[1].at("image_uri") == "mine.ssd");
@@ -2979,8 +3050,7 @@ TEST_CASE("start: a preset whose content is invalid is a configuration error",
 namespace {
 
 nlohmann::json read_json(const std::filesystem::path& filepath) {
-    std::ifstream f(filepath);
-    return nlohmann::json::parse(f);
+    return nlohmann::json::parse(document_of(filepath));
 }
 
 }  // namespace
@@ -3058,18 +3128,17 @@ TEST_CASE("create-preset: a machine option with no preset form is refused",
 TEST_CASE("create-preset --from: a flag overrides the source preset as start would",
           "[integration][preset][create-preset][given]") {
     TempDirectory user_dir;
-    std::filesystem::create_directory(user_dir.presets() / "discs");
-    {
-        std::ofstream f(user_dir.presets() / "source.preset.beebium");
-        f << R"({"model": "model-b", "name": "Source", "description": "From here",
+    std::filesystem::create_directory(user_dir.path() / "discs");
+    const auto source_filepath = user_dir.path() / "source.json";
+    std::ofstream(source_filepath)
+        << R"({"model": "model-b", "name": "Source", "description": "From here",
                  "storage": {"floppy_drives": [{"drive": 0, "image_uri": "discs/game.ssd"}]},
                  "extensions": [{"name": "host-serial",
                                  "config": {"id": "modem", "mode": "device",
                                             "path": "/dev/ttyUSB0", "baud": 9600}}]})";
-    }
-    auto output_filepath = user_dir.presets() / "copy.preset.beebium";
+    auto output_filepath = user_dir.path() / "copy.beebium-preset";
     auto result = run_command(
-        EXECUTABLE + " create-preset --from source --name \"Copy\" "
+        EXECUTABLE + " create-preset --from \"" + source_filepath.string() + "\" --name \"Copy\" "
         "--host-serial id=modem:baud=2400 --output \"" + output_filepath.string() + "\"",
         {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
     INFO(result.stderr_output);
@@ -3082,10 +3151,11 @@ TEST_CASE("create-preset --from: a flag overrides the source preset as start wou
     CHECK(preset.at("extensions")[0].at("config") ==
           nlohmann::json{{"baud", 2400}, {"id", "modem"}, {"mode", "device"},
                          {"path", "/dev/ttyUSB0"}});
-    // The source's relative floppy meant its own directory; the copy says so.
+    // The lone source's relative floppy meant the directory beside it, which
+    // the copy does not take with it; the copy says so.
     CHECK(preset.at("storage").at("floppy_drives")[0].at("image_uri") ==
           beebium::server::normalize_image_uri(
-              (std::filesystem::absolute(user_dir.presets()) / "discs" / "game.ssd").string(), {}));
+              (std::filesystem::absolute(user_dir.path()) / "discs" / "game.ssd").string(), {}));
 }
 
 // ============================================================================
