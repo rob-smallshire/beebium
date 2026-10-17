@@ -29,8 +29,8 @@
 // System Reset, then *CONFIGURE LANG 3 (BASIC in motherboard slot 3, this
 // machine's default), then *TIME / *DATE to start the clock. They match the
 // defaults other emulators hard-code (e.g. OSMODE 4 at &83B2, century &14 at
-// &83B5, RAM in banks 4-7 at &83FF). Battery-backed contents are not persisted
-// between launches.
+// &83B5, RAM in banks 4-7 at &83FF). These are the seed of the board's
+// battery-backed units (BatteryBackedUnit).
 namespace beebium::integra_b_battery_seed {
 
 // Register A: 32.768 kHz time base, no periodic interrupt.
@@ -66,7 +66,8 @@ inline constexpr PrivateRamByte PRIVATE_RAM[] = {
     {0x83B8, 0xFF}, {0x83B9, 0xFF}, {0x83BA, 0x90}, {0x83FF, 0x0F},
 };
 
-inline void apply(Ram<32768>& shadow_and_private_ram, Mc146818Rtc& rtc) {
+// The clock's battery-backed registers, as set up.
+inline void apply_to_clock(Mc146818Rtc& rtc) {
     Mc146818Rtc::BatteryImage image{};
     image[Mc146818Rtc::REG_A] = RTC_REGISTER_A;
     image[Mc146818Rtc::REG_B] = RTC_REGISTER_B;
@@ -74,7 +75,12 @@ inline void apply(Ram<32768>& shadow_and_private_ram, Mc146818Rtc& rtc) {
         image[Mc146818Rtc::FIRST_RAM_REGISTER + i] = CMOS_RAM[i];
     }
     rtc.load_battery_image(image);
+}
 
+// The IBOS workspace in private RAM, as set up, the rest of the shadow and
+// private RAM being zero.
+inline void apply_to_board_ram(Ram<32768>& shadow_and_private_ram) {
+    shadow_and_private_ram.clear();
     // Private RAM at CPU address &8000 is chip address &0000.
     for (const auto& byte : PRIVATE_RAM) {
         shadow_and_private_ram.write(static_cast<uint16_t>(byte.address - 0x8000), byte.value);

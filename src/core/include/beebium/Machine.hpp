@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_MACHINE_HPP
 #define BEEBIUM_MACHINE_HPP
 
+#include "BatteryBackedUnit.hpp"
 #include "BusStretching.hpp"
 #include "Clock.hpp"
 #include "ClockBinding.hpp"
@@ -510,6 +511,16 @@ public:
     // State access
     const State& state() const { return state_; }
     State& state() { return state_; }
+
+    // The machine's battery-backed units (BatteryBackedUnit), or none for a
+    // machine whose hardware keeps nothing while it is switched off.
+    std::vector<BatteryBackedUnit*> battery_units() {
+        if constexpr (requires(MemoryPolicy& memory) { memory.battery_units(); }) {
+            return state_.memory.battery_units();
+        } else {
+            return {};
+        }
+    }
 
     // CPU access
     const M6502& cpu() const { return state_.cpu; }

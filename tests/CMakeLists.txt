@@ -368,6 +368,11 @@ add_executable(test_model_b_integra_b_hardware test_model_b_integra_b_hardware.c
 target_link_libraries(test_model_b_integra_b_hardware PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_model_b_integra_b_hardware)
 
+# A machine's battery-backed units (BatteryBackedUnit)
+add_executable(test_battery_units test_battery_units.cpp)
+target_link_libraries(test_battery_units PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_battery_units)
+
 # MC146818 / CDP6818 real-time clock tests
 add_executable(test_mc146818_rtc test_mc146818_rtc.cpp)
 target_link_libraries(test_mc146818_rtc PRIVATE beebium_core Catch2::Catch2WithMain)

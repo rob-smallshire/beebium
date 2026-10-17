@@ -19,6 +19,7 @@
 #include "AddressableLatch.hpp"
 #include "AudioBuffer.hpp"
 #include "ClockTypes.hpp"
+#include "BatteryBackedUnit.hpp"
 #include "IntegraBBatterySeed.hpp"
 #include "IrqAggregator.hpp"
 #include "PacingConfig.hpp"
@@ -46,10 +47,15 @@
 #include "serial/SerialSocket.hpp"
 #include "tube/TubeSocket.hpp"
 #include "indicators/Indicators.hpp"
+#include <algorithm>
+#include <array>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace beebium {
@@ -81,9 +87,9 @@ namespace beebium {
 //   is written to &FE38 and data read/written at &FE3C. Its IRQ output drives
 //   the CPU IRQ line and its RESET input is the 6502 reset line.
 //
-// - Battery backup for all board RAM and the clock. Battery-backed contents are
-//   not persisted between launches; each launch starts from a board that has
-//   been set up (IntegraBBatterySeed), not from a flat battery.
+// - Battery backup for all board RAM and the clock: two battery-backed units
+//   (battery_units), the board RAM and the clock, each seeded as a board that
+//   has been set up (IntegraBBatterySeed), not a flat battery.
 //
 // - Per-chip write-protect switches (IBOS guide 9-6): a switch holds one 32K
 //   RAM chip's write-enable high, protecting both of its 16K slots together.
@@ -905,14 +911,113 @@ private:
         rtc.reset();
     }
 
-    // Fit the board's own sideways RAM and give the battery-backed memory the
+    // Fit the board's own sideways RAM and give its battery-backed units the
     // contents of a board that has been set up.
     void fit_board_ram() {
         for (uint8_t slot = FIRST_BOARD_RAM_SLOT; slot <= LAST_BOARD_RAM_SLOT; ++slot) {
             sideways.configure_slot_as_ram(slot);
         }
-        integra_b_battery_seed::apply(shadow_and_private_ram, rtc);
+        for (auto* unit : battery_units()) unit->seed();
     }
+
+    // The board RAM a battery keeps: the shadow and private RAM, then the
+    // sideways RAM banks 4-7.
+    class BoardRamUnit final : public BatteryBackedUnit {
+    public:
+        explicit BoardRamUnit(ModelBIntegraBHardware& board) : board_(board) {}
+        BoardRamUnit(const BoardRamUnit&) = delete;
+        BoardRamUnit& operator=(const BoardRamUnit&) = delete;
+
+        std::string_view name() const override { return "integra-b-board-ram"; }
+        std::uint32_t layout_version() const override { return 1; }
+        std::string hardware_descriptor() const override {
+            return "Integra-B: 32K shadow and private RAM, sideways RAM banks 4-7";
+        }
+        void seed() override {
+            integra_b_battery_seed::apply_to_board_ram(board_.shadow_and_private_ram);
+            static const std::array<uint8_t, BANK_SIZE> empty{};
+            for (uint8_t slot = FIRST_BOARD_RAM_SLOT; slot <= LAST_BOARD_RAM_SLOT; ++slot) {
+                board_.sideways.load_sideways_data(slot, empty.data(), empty.size());
+            }
+        }
+        std::vector<uint8_t> serialise() const override {
+            const auto* ram = board_.shadow_and_private_ram.data();
+            std::vector<uint8_t> contents(ram, ram + 32768);
+            for (uint8_t slot = FIRST_BOARD_RAM_SLOT; slot <= LAST_BOARD_RAM_SLOT; ++slot) {
+                for (uint16_t offset = 0; offset < BANK_SIZE; ++offset) {
+                    contents.push_back(board_.sideways.peek_bank(slot, offset));
+                }
+            }
+            return contents;
+        }
+        bool restore(std::span<const uint8_t> contents) override {
+            if (contents.size() != SIZE) return false;
+            board_.shadow_and_private_ram.load(contents.data(), 32768);
+            const uint8_t* bank = contents.data() + 32768;
+            for (uint8_t slot = FIRST_BOARD_RAM_SLOT; slot <= LAST_BOARD_RAM_SLOT; ++slot) {
+                board_.sideways.load_sideways_data(slot, bank, BANK_SIZE);
+                bank += BANK_SIZE;
+            }
+            return true;
+        }
+
+    private:
+        static constexpr std::size_t BANK_SIZE = 16384;
+        static constexpr std::size_t SIZE =
+            32768 + BANK_SIZE * (LAST_BOARD_RAM_SLOT - FIRST_BOARD_RAM_SLOT + 1);
+        ModelBIntegraBHardware& board_;
+    };
+
+    // The clock a battery keeps running: its battery-backed registers and
+    // CMOS RAM, then how far it is set from host time (seconds, little-endian
+    // two's complement, 8 bytes).
+    class ClockUnit final : public BatteryBackedUnit {
+    public:
+        explicit ClockUnit(ModelBIntegraBHardware& board) : board_(board) {}
+        ClockUnit(const ClockUnit&) = delete;
+        ClockUnit& operator=(const ClockUnit&) = delete;
+
+        std::string_view name() const override { return "integra-b-rtc"; }
+        std::uint32_t layout_version() const override { return 1; }
+        std::string hardware_descriptor() const override { return "Integra-B: CDP6818"; }
+        void seed() override {
+            integra_b_battery_seed::apply_to_clock(board_.rtc);
+            board_.rtc.set_clock_offset(std::chrono::seconds(0));
+        }
+        std::vector<uint8_t> serialise() const override {
+            const auto image = board_.rtc.battery_image();
+            std::vector<uint8_t> contents(image.begin(), image.end());
+            auto offset = static_cast<std::uint64_t>(board_.rtc.clock_offset().count());
+            for (int i = 0; i < 8; ++i) {
+                contents.push_back(static_cast<uint8_t>(offset >> (8 * i)));
+            }
+            return contents;
+        }
+        bool restore(std::span<const uint8_t> contents) override {
+            Mc146818Rtc::BatteryImage image{};
+            if (contents.size() != image.size() + 8) return false;
+            std::copy_n(contents.begin(), image.size(), image.begin());
+            std::uint64_t offset = 0;
+            for (int i = 0; i < 8; ++i) {
+                offset |= static_cast<std::uint64_t>(contents[image.size() + i]) << (8 * i);
+            }
+            board_.rtc.load_battery_image(image);
+            board_.rtc.set_clock_offset(std::chrono::seconds(static_cast<std::int64_t>(offset)));
+            return true;
+        }
+
+    private:
+        ModelBIntegraBHardware& board_;
+    };
+
+    BoardRamUnit board_ram_unit_{*this};
+    ClockUnit clock_unit_{*this};
+
+public:
+    // The board's battery-backed units: its RAM and its clock.
+    std::vector<BatteryBackedUnit*> battery_units() { return {&board_ram_unit_, &clock_unit_}; }
+
+private:
 
     // Unchecked accessors - caller must validate region and address first
     uint8_t peek_region_unchecked(std::string_view name, uint32_t address) const {
