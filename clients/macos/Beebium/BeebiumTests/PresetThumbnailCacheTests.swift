@@ -31,7 +31,7 @@ final class PresetThumbnailCacheTests: XCTestCase {
         MachinePreset(
             id: UUID(), presetId: id, name: id,
             coreExecutablePath: "/srv/beebium-model-b",
-            presetFilepath: "/presets/\(id).preset.beebium",
+            presetFilepath: "/presets/\(id).beebium-preset",
             source: .systemPreset, machineName: nil, modelName: "BBC Model B",
             modelDescription: nil, releaseDate: nil, hasThumbnail: hasThumbnail)
     }

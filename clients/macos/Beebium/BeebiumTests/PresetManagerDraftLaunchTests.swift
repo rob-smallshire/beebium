@@ -20,7 +20,7 @@ final class PresetManagerDraftLaunchTests: XCTestCase {
 
     func testLaunchArgumentsAreServerPlumbingOnly() {
         let args = PresetManager.draftLaunchArguments(
-            presetFilepath: "/tmp/x.preset.beebium",
+            presetFilepath: "/tmp/x.beebium-preset",
             machineName: "Model B {machine-ordinal}",
             ordinal: 2,
             provenanceUUID: "UUID-1",
@@ -28,7 +28,7 @@ final class PresetManagerDraftLaunchTests: XCTestCase {
 
         XCTAssertEqual(args, [
             "start",
-            "--preset", "/tmp/x.preset.beebium",
+            "--preset", "/tmp/x.beebium-preset",
             "--port", "0",
             "--advertise",
             "--wait=api",
@@ -47,7 +47,7 @@ final class PresetManagerDraftLaunchTests: XCTestCase {
 
     func testLaunchArgumentsAppendRomDirWhenBundled() {
         let args = PresetManager.draftLaunchArguments(
-            presetFilepath: "/tmp/x.preset.beebium",
+            presetFilepath: "/tmp/x.beebium-preset",
             machineName: "M {machine-ordinal}",
             ordinal: 1,
             provenanceUUID: "U",

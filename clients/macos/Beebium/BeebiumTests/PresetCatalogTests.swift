@@ -22,7 +22,7 @@ final class PresetListingDecodeTests: XCTestCase {
 
     /// A system preset naming a model, with a thumbnail and no machine_name.
     func testDecodesPlainSystemRow() throws {
-        let line = #"{"id":"model-b","name":"Model B","source":"system","model":"model-b","description":"32K Model B, no disc","release_date":"1981-12","filepath":"/presets/model-b.preset.beebium","thumbnail":true}"#
+        let line = #"{"id":"model-b","name":"Model B","source":"system","model":"model-b","description":"32K Model B, no disc","release_date":"1981-12","filepath":"/presets/model-b.beebium-preset","thumbnail":true}"#
         let rows = CoreCLI.decodeListPresets(line)
         XCTAssertEqual(rows.count, 1)
         let row = try XCTUnwrap(rows.first)
@@ -33,13 +33,13 @@ final class PresetListingDecodeTests: XCTestCase {
         XCTAssertNil(row.machineName)
         XCTAssertEqual(row.description, "32K Model B, no disc")
         XCTAssertEqual(row.releaseDate, "1981-12")
-        XCTAssertEqual(row.filepath, "/presets/model-b.preset.beebium")
+        XCTAssertEqual(row.filepath, "/presets/model-b.beebium-preset")
         XCTAssertTrue(row.thumbnail)
     }
 
     /// machine_name is read from the snake_case key when present.
     func testDecodesMachineNameTemplate() throws {
-        let line = #"{"id":"model-b-disc-aun-80","name":"Station 80 (AUN, Model B)","source":"system","model":"model-b","machine_name":"Station {econet-station} (AUN, Model B)","description":"Econet over AUN (UDP), ANFS + DFS","release_date":"1985","filepath":"/presets/model-b-disc-aun-80.preset.beebium","thumbnail":true}"#
+        let line = #"{"id":"model-b-disc-aun-80","name":"Station 80 (AUN, Model B)","source":"system","model":"model-b","machine_name":"Station {econet-station} (AUN, Model B)","description":"Econet over AUN (UDP), ANFS + DFS","release_date":"1985","filepath":"/presets/model-b-disc-aun-80.beebium-preset","thumbnail":true}"#
         let row = try XCTUnwrap(CoreCLI.decodeListPresets(line).first)
         XCTAssertEqual(row.machineName, "Station {econet-station} (AUN, Model B)")
         XCTAssertEqual(row.source, "system")
@@ -47,7 +47,7 @@ final class PresetListingDecodeTests: XCTestCase {
 
     /// A user preset: source "user", no thumbnail to write.
     func testDecodesUserRowWithoutThumbnail() throws {
-        let line = #"{"id":"model-b-with-integra-b-disc-copy","name":"Model B with Integra-B (Disc) Copy","source":"user","model":"model-b-integra-b","description":"Model B, Integra-B board","release_date":"1988","filepath":"/Users/me/Library/Application Support/Beebium/presets/model-b-with-integra-b-disc-copy.preset.beebium","thumbnail":false}"#
+        let line = #"{"id":"model-b-with-integra-b-disc-copy","name":"Model B with Integra-B (Disc) Copy","source":"user","model":"model-b-integra-b","description":"Model B, Integra-B board","release_date":"1988","filepath":"/Users/me/Library/Application Support/Beebium/presets/model-b-with-integra-b-disc-copy.beebium-preset","thumbnail":false}"#
         let row = try XCTUnwrap(CoreCLI.decodeListPresets(line).first)
         XCTAssertEqual(row.source, "user")
         XCTAssertEqual(row.model, "model-b-integra-b")
@@ -57,7 +57,7 @@ final class PresetListingDecodeTests: XCTestCase {
     /// The optional keys are genuinely optional: a row that gives only the
     /// always-present keys decodes with the rest nil.
     func testDecodesRowWithNoOptionalKeys() throws {
-        let line = #"{"id":"bare","name":"Bare","source":"system","filepath":"/presets/bare.preset.beebium","thumbnail":false}"#
+        let line = #"{"id":"bare","name":"Bare","source":"system","filepath":"/presets/bare.beebium-preset","thumbnail":false}"#
         let row = try XCTUnwrap(CoreCLI.decodeListPresets(line).first)
         XCTAssertNil(row.model)
         XCTAssertNil(row.machineName)
@@ -69,10 +69,10 @@ final class PresetListingDecodeTests: XCTestCase {
     /// rather than aborting the whole listing.
     func testDecodesMultipleRowsSkippingNoise() {
         let text = """
-        {"id":"model-b","name":"Model B","source":"system","model":"model-b","description":"d","release_date":"1981-12","filepath":"/p/model-b.preset.beebium","thumbnail":true}
+        {"id":"model-b","name":"Model B","source":"system","model":"model-b","description":"d","release_date":"1981-12","filepath":"/p/model-b.beebium-preset","thumbnail":true}
 
         this is not json
-        {"id":"model-b-disc","name":"Model B (Disc)","source":"system","model":"model-b","description":"d","release_date":"1982","filepath":"/p/model-b-disc.preset.beebium","thumbnail":true}
+        {"id":"model-b-disc","name":"Model B (Disc)","source":"system","model":"model-b","description":"d","release_date":"1982","filepath":"/p/model-b-disc.beebium-preset","thumbnail":true}
         """
         let rows = CoreCLI.decodeListPresets(text)
         XCTAssertEqual(rows.map(\.id), ["model-b", "model-b-disc"])
@@ -91,7 +91,7 @@ final class PresetCatalogBuildTests: XCTestCase {
         PresetListing(
             id: id, name: id.capitalized, source: source, model: model,
             machineName: nil, description: "desc of \(id)", releaseDate: "1982",
-            filepath: filepath ?? "/presets/\(id).preset.beebium", thumbnail: thumbnail)
+            filepath: filepath ?? "/presets/\(id).beebium-preset", thumbnail: thumbnail)
     }
 
     /// A row's model is paired with `beebium-<model>` under the servers
@@ -116,7 +116,7 @@ final class PresetCatalogBuildTests: XCTestCase {
         let sys = result.system[0]
         XCTAssertEqual(sys.presetId, "model-b")
         XCTAssertEqual(sys.coreExecutablePath, "/srv/beebium-model-b")
-        XCTAssertEqual(sys.presetFilepath, "/presets/model-b.preset.beebium")
+        XCTAssertEqual(sys.presetFilepath, "/presets/model-b.beebium-preset")
         XCTAssertEqual(sys.modelDescription, "desc of model-b")
         XCTAssertEqual(sys.modelName, "BBC Model B")
         XCTAssertEqual(sys.source, .systemPreset)

@@ -32,14 +32,14 @@ enum CoreLaunchError: LocalizedError {
     }
 }
 
-/// Manages machine presets by discovering preset files and querying their configurations.
+/// Manages machine presets discovered from the server's `list-presets` listing.
 ///
-/// Discovers presets via:
+/// Locates the server executables via:
 /// 1. `BEEBIUM_SERVERS_DIRPATH` environment variable (if set)
 /// 2. Fallback to `~/Code/beebium/build/src/server/` for development
 ///
-/// Preset files are located in the `presets/` subdirectory with `.preset.beebium` extension.
-/// Each preset declares a `model` field that maps to an executable (beebium-{model}).
+/// Each listing row names the preset's model, which maps to an executable
+/// (beebium-{model}); the server owns the stored form (a .beebium-preset archive).
 @MainActor
 class PresetManager: ObservableObject {
     static let shared = PresetManager()

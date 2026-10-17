@@ -208,7 +208,7 @@ private struct HardDiscRowView: View {
                     .truncationMode(.middle)
                     .help(disc.image ?? "")
                 if disc.isBundledMaster {
-                    Text("Bundled master - a per-machine working copy is used")
+                    Text("A per-machine working copy is used")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }

@@ -12,7 +12,7 @@
 
 import Foundation
 
-/// The preset document (`*.preset.beebium`) as an editable Swift model.
+/// The preset document (preset.json inside a .beebium-preset archive) as an editable Swift model.
 ///
 /// The New Machine dialog edits a `MachineDraft`; each configuration section is
 /// an editor over part of this document, and launching serialises it to a
@@ -436,8 +436,8 @@ extension MachineDraft {
         try JSONDecoder().decode(MachineDraft.self, from: data)
     }
 
-    /// Encode the draft as pretty-printed preset-file bytes, ready to write to a
-    /// `*.preset.beebium` file. Keys are sorted so the output is stable.
+    /// Encode the draft as pretty-printed preset bytes, ready to write as the
+    /// preset document (preset.json). Keys are sorted so the output is stable.
     func encoded() throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

@@ -19,7 +19,7 @@ import Foundation
 struct MachinePreset: Identifiable, Hashable {
     /// The origin of a preset.
     enum Source: Hashable {
-        /// System-provided preset from presets/*.preset.beebium
+        /// System-provided preset: a .beebium-preset archive in the presets directory.
         case systemPreset
         /// User-created preset from ~/Library/Application Support/...
         case userPreset
