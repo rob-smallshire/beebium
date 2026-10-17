@@ -10,9 +10,10 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Unit tests for DiscPaths copy-on-write resolution. Exercise the
-// dir-injecting core (prepare_working_image) with temp master/working
-// directories, so no environment or per-user state is touched.
+// Unit tests for DiscPaths: the shipped masters, how a disc reference
+// resolves, and what a machine copies into its own directory. Every
+// directory is a temporary one, pinned through the environment where the
+// server reads it, so no real per-user state is touched.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -22,17 +23,14 @@
 #include "test_env.hpp"
 #include "test_temp_paths.hpp"
 
-#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <random>
 #include <stdexcept>
 #include <string>
-#include <thread>
 
 using beebium::server::DiscPaths;
-using beebium::server::DiscWorkMode;
 
 namespace {
 
@@ -96,90 +94,6 @@ void make_master(const fs::path& master_dir, const std::string& dat,
 
 }  // namespace
 
-TEST_CASE("prepare_working_image copies a read-only master to a writable copy",
-          "[disc][discpaths]") {
-    TmpTree tmp;
-    auto master = tmp.subdir("master");
-    auto work = tmp.subdir("work");
-    make_master(master, "DATA-A", "DSC-A");
-
-    auto working = DiscPaths::prepare_working_image(
-        "l3fs-v1_26.dat", master, work, DiscWorkMode::Persistent);
-
-    // Returned path is in the working dir, never the master.
-    CHECK(working == work / "l3fs-v1_26.dat");
-    CHECK(read_file(working) == "DATA-A");
-    // The .dsc sidecar came along.
-    CHECK(read_file(work / "l3fs-v1_26.dsc") == "DSC-A");
-
-    // Working copy is writable even though the master is read-only.
-    auto perms = fs::status(working).permissions();
-    CHECK((perms & fs::perms::owner_write) != fs::perms::none);
-
-    // Master is untouched and still read-only.
-    CHECK(read_file(master / "l3fs-v1_26.dat") == "DATA-A");
-    auto master_perms = fs::status(master / "l3fs-v1_26.dat").permissions();
-    CHECK((master_perms & fs::perms::owner_write) == fs::perms::none);
-}
-
-TEST_CASE("prepare_working_image (Persistent) keeps an existing working copy",
-          "[disc][discpaths]") {
-    TmpTree tmp;
-    auto master = tmp.subdir("master");
-    auto work = tmp.subdir("work");
-    make_master(master, "DATA-A", "DSC-A");
-
-    auto working = DiscPaths::prepare_working_image(
-        "l3fs-v1_26.dat", master, work, DiscWorkMode::Persistent);
-
-    // The emulator writes to its working copy.
-    write_file(working, "MODIFIED-BY-GUEST");
-
-    // Persistent resolution must NOT clobber the user's working copy.
-    auto again = DiscPaths::prepare_working_image(
-        "l3fs-v1_26.dat", master, work, DiscWorkMode::Persistent);
-    CHECK(again == working);
-    CHECK(read_file(again) == "MODIFIED-BY-GUEST");
-}
-
-TEST_CASE("prepare_working_image (Scratch) always refreshes from the master",
-          "[disc][discpaths]") {
-    TmpTree tmp;
-    auto master = tmp.subdir("master");
-    auto work = tmp.subdir("work");
-    make_master(master, "DATA-A", "DSC-A");
-
-    auto working = DiscPaths::prepare_working_image(
-        "l3fs-v1_26.dat", master, work, DiscWorkMode::Scratch);
-    write_file(working, "STALE");
-
-    // Scratch resolution replaces the stale copy with a pristine master copy.
-    auto again = DiscPaths::prepare_working_image(
-        "l3fs-v1_26.dat", master, work, DiscWorkMode::Scratch);
-    CHECK(read_file(again) == "DATA-A");
-    // Refreshed copy is writable.
-    auto perms = fs::status(again).permissions();
-    CHECK((perms & fs::perms::owner_write) != fs::perms::none);
-}
-
-TEST_CASE("prepare_working_image (Scratch) replaces a read-only stale copy",
-          "[disc][discpaths]") {
-    // A previous scratch build may have left a read-only copy; the refresh
-    // must still truncate/replace it, not fail.
-    TmpTree tmp;
-    auto master = tmp.subdir("master");
-    auto work = tmp.subdir("work");
-    make_master(master, "DATA-A", "DSC-A");
-
-    write_file(work / "l3fs-v1_26.dat", "OLD");
-    write_file(work / "l3fs-v1_26.dsc", "OLD");
-    fs::permissions(work / "l3fs-v1_26.dat", fs::perms::owner_read);
-
-    auto again = DiscPaths::prepare_working_image(
-        "l3fs-v1_26.dat", master, work, DiscWorkMode::Scratch);
-    CHECK(read_file(again) == "DATA-A");
-}
-
 TEST_CASE("copy_file_atomically: a failure mid-copy leaves the old copy intact",
           "[disc][discpaths]") {
     TmpTree tmp;
@@ -217,63 +131,6 @@ TEST_CASE("copy_file_atomically replaces the destination with a writable copy",
     CHECK(read_file(dir / "dst.dat") == "NEW");
     auto perms = fs::status(dir / "dst.dat").permissions();
     CHECK((perms & fs::perms::owner_write) != fs::perms::none);
-}
-
-#ifndef _WIN32
-// Two preparations of the same scratch target racing, as two servers sharing
-// one BEEBIUM_DISC_WORK_DIR do, while a reader repeatedly opens the working
-// image: the reader must only ever see the complete image. (Not on Windows,
-// where replacing a file another process holds open fails by design.)
-TEST_CASE("prepare_working_image (Scratch): a reader never sees a short image",
-          "[disc][discpaths]") {
-    TmpTree tmp;
-    auto master = tmp.subdir("master");
-    auto work = tmp.subdir("work");
-    const std::string image(4 * 1024 * 1024, 'D');
-    make_master(master, image, "DSC");
-    DiscPaths::prepare_working_image("l3fs-v1_26.dat", master, work, DiscWorkMode::Scratch);
-
-    std::atomic<bool> done{false};
-    auto preparer = [&] {
-        while (!done.load()) {
-            DiscPaths::prepare_working_image("l3fs-v1_26.dat", master, work,
-                                             DiscWorkMode::Scratch);
-        }
-    };
-    std::thread first(preparer);
-    std::thread second(preparer);
-
-    int short_or_missing = 0;
-    for (int i = 0; i < 300; ++i) {
-        std::error_code ec;
-        const auto size = fs::file_size(work / "l3fs-v1_26.dat", ec);
-        if (ec || size != image.size()) ++short_or_missing;
-    }
-    done.store(true);
-    first.join();
-    second.join();
-
-    CHECK(short_or_missing == 0);
-}
-#endif
-
-TEST_CASE("prepare_working_image throws when the master is absent",
-          "[disc][discpaths]") {
-    TmpTree tmp;
-    auto master = tmp.subdir("master");  // empty
-    auto work = tmp.subdir("work");
-    CHECK_THROWS(DiscPaths::prepare_working_image(
-        "nope.dat", master, work, DiscWorkMode::Persistent));
-}
-
-TEST_CASE("prepare_working_image throws when the .dsc sidecar is missing",
-          "[disc][discpaths]") {
-    TmpTree tmp;
-    auto master = tmp.subdir("master");
-    auto work = tmp.subdir("work");
-    write_file(master / "l3fs-v1_26.dat", "DATA-A");  // no .dsc
-    CHECK_THROWS(DiscPaths::prepare_working_image(
-        "l3fs-v1_26.dat", master, work, DiscWorkMode::Persistent));
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +174,31 @@ TEST_CASE("resolve_disc_image: a master is copied into the machine, never into d
     CHECK(read_file(resolved) == "MASTER");
     CHECK(fs::exists(t.machine / "l3fs.dsc"));
     CHECK(fs::is_empty(t.user / "discs"));
+}
+
+TEST_CASE("resolve_disc_image: a read-only master's copy is writable; the master is untouched",
+          "[disc][discpaths][resolve]") {
+    DiscSearchTree t;
+    make_master(t.master, "DATA-A", "DSC-A");
+    const auto copy = DiscPaths::resolve_disc_image("l3fs-v1_26.dat", t.container, t.destination);
+    CHECK(read_file(copy) == "DATA-A");
+    CHECK(read_file(t.machine / "l3fs-v1_26.dsc") == "DSC-A");
+    CHECK((fs::status(copy).permissions() & fs::perms::owner_write) != fs::perms::none);
+    CHECK((fs::status(t.master / "l3fs-v1_26.dat").permissions() & fs::perms::owner_write) ==
+          fs::perms::none);
+}
+
+TEST_CASE("resolve_disc_image: a master without its .dsc or display name is refused",
+          "[disc][discpaths][resolve]") {
+    DiscSearchTree t;
+    make_master(t.master, "DATA-A", "DSC-A");
+    fs::remove(t.master / "l3fs-v1_26.json");
+    CHECK_THROWS_WITH(DiscPaths::resolve_disc_image("l3fs-v1_26.dat", t.container, t.destination),
+                      Catch::Matchers::ContainsSubstring("l3fs-v1_26.json"));
+    write_file(t.master / "lone.dat", "DATA");
+    CHECK_THROWS_WITH(DiscPaths::resolve_disc_image("lone.dat", t.container, t.destination),
+                      Catch::Matchers::ContainsSubstring("lone.dsc"));
+    CHECK(fs::is_empty(t.machine));
 }
 
 TEST_CASE("resolve_disc_image: a per-user disc found by search is copied, the original kept",
@@ -431,23 +313,6 @@ TEST_CASE("bundled_hard_disc_images takes a master's display name from its .json
     REQUIRE(images.size() == 1);
     CHECK(images[0].image == "named.dat");
     CHECK(images[0].display_name == "A Named Disc");
-}
-
-TEST_CASE("prepare_working_image refuses a master with no display name",
-          "[disc][discpaths]") {
-    TmpTree tmp;
-    auto master = tmp.subdir("master");
-    auto work = tmp.subdir("work");
-    make_master(master, "DATA-A", "DSC-A");
-    fs::remove(master / "l3fs-v1_26.json");
-
-    try {
-        DiscPaths::prepare_working_image("l3fs-v1_26.dat", master, work,
-                                         DiscWorkMode::Persistent);
-        FAIL("a master with no .json was used");
-    } catch (const std::runtime_error& e) {
-        CHECK(std::string(e.what()).find("l3fs-v1_26.json") != std::string::npos);
-    }
 }
 
 TEST_CASE("every committed disc master has a .json giving its display name",

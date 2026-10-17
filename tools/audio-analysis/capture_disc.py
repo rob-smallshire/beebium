@@ -180,8 +180,7 @@ def main() -> None:
     run_dir = Path(tempfile.mkdtemp(prefix="beebium_capture_"))
     disc_filepath = run_dir / source_disc_filepath.name
     shutil.copyfile(source_disc_filepath, disc_filepath)
-    os.environ["BEEBIUM_DISC_WORK_DIR"] = str(run_dir / "workdir")
-    os.makedirs(os.environ["BEEBIUM_DISC_WORK_DIR"], exist_ok=True)
+    os.environ["BEEBIUM_USER_DIRPATH"] = str(run_dir / "user")
     disc_sha1_before = _sha1(disc_filepath)
     print(f"mounted a fresh copy of {source_disc_filepath.name} (sha1 {disc_sha1_before})")
 

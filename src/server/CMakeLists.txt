@@ -13,8 +13,8 @@ set(PRESETS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/presets")
 file(MAKE_DIRECTORY ${PRESETS_OUTPUT_DIR})
 
 # Bundled SCSI hard-disc masters. Shipped read-only under share/beebium/discs;
-# the server copies a master to a per-user working copy on first use (see
-# DiscPaths) so a shipped image is never mutated. Committed compressed
+# a launch copies a master into the machine's own directory (see DiscPaths)
+# so a shipped image is never mutated. Committed compressed
 # (discs/bundled/*.tar.xz, ~55 KB for the 99%-sparse L3FS image) and
 # decompressed here into the build tree so DiscPaths' walk-up finds them and
 # `start`/capture work from a dev build. CMAKE_BINARY_DIR/discs is the
@@ -118,15 +118,12 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
             ${description_args}
             ${PRESET_UNPARSED_ARGUMENTS}
             --output "${preset_filepath}"
-        # Capture boots the preset. Force SCRATCH disc mode (an ephemeral,
-        # always-refreshed working copy) and point the master dir at the build
-        # tree, so a preset carrying a bundled disc boots from a pristine image
-        # every build (deterministic thumbnail) and never reads or writes the
-        # user's working copies. Harmless for disc-less presets.
+        # Capture boots the preset, with the master dir at the build tree: a
+        # bundled disc is copied into the capture's own machine directory, so
+        # every build boots a pristine image (deterministic thumbnail).
         COMMAND ${CMAKE_COMMAND} -E env
             "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
             "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
-            "BEEBIUM_DISC_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/disc-scratch/${PRESET_ID}"
             $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
             --preset "${preset_filepath}"
             --output "${thumbnail_filepath}"
@@ -196,13 +193,11 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
             ${description_args}
             ${PRESET_UNPARSED_ARGUMENTS}
             --output "${preset_filepath}"
-        # SCRATCH disc mode + build-tree master dir (see add_system_preset):
-        # a bundled disc boots from a pristine, ephemeral copy every build and
-        # never touches user working copies. Harmless for disc-less presets.
+        # Build-tree master dir (see add_system_preset): a bundled disc boots
+        # from a pristine copy in the capture's own machine directory.
         COMMAND ${CMAKE_COMMAND} -E env
             "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
             "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
-            "BEEBIUM_DISC_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/disc-scratch/${PRESET_ID}"
             $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
             --preset "${preset_filepath}"
             --output "${thumbnail_filepath}"
@@ -499,7 +494,7 @@ endif()
 # the Econet side, station 254 (the conventional file-server station) over AUN
 # so clients find it via _aun._udp discovery, and the RTC in its L3-v1.26 layout
 # for date/time. The disc image is referenced by its bare, version-named
-# filename and copied to a per-user working copy on first use (see DiscPaths);
+# filename and copied into each launch's machine directory (see DiscPaths);
 # the shipped master is never modified. Needs the SCSI adapter + hard-disc + RTC
 # plugins deployed before create-preset/capture run, hence EXTRA_DEPENDS; the
 # disc it names is depended on automatically. Advertising (--advertise) is a
@@ -559,7 +554,7 @@ install(DIRECTORY ${PRESETS_OUTPUT_DIR}/
         PATTERN "*.thumbnail.png"
 )
 # Bundled disc masters ship READ-ONLY: they are immutable masters the server
-# copies to a per-user working copy on first use (see DiscPaths), never opened
+# copies into each machine's directory (see DiscPaths), never opened
 # writable. FILE_PERMISSIONS drops owner-write so even a system install cannot
 # scribble the shipped image.
 install(DIRECTORY ${DISCS_OUTPUT_DIR}/

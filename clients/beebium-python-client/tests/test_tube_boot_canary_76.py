@@ -179,15 +179,12 @@ class TestTubeBootCanary76:
         beebium_server_filepath: Path | None,
         dfs_1770_rom_filepath: Path,
         elite_disc_filepath: Path,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> Beebium:
         """A BBC Micro + 6502 second processor booting second-processor Elite.
 
-        Its own disc work directory keeps it isolated; the server picks its own
+        Its own machine directory keeps it isolated; the server picks its own
         PID and an ephemeral port, so it is safe on a shared box.
         """
-        monkeypatch.setenv("BEEBIUM_DISC_WORK_DIR", str(tmp_path / "disc_work"))
         try:
             with Beebium.launch(
                 mos_filepath=mos_filepath,

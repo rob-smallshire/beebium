@@ -70,12 +70,11 @@ def main() -> None:
                     else _repo_root() / "roms" / "acorn-dfs_2_26.rom")
     source_disc_filepath = Path(args.disc).expanduser().resolve()
 
-    # Isolate the run: a fresh copy of the disc and an empty disc work directory.
+    # Isolate the run: a fresh copy of the disc and an empty per-user directory.
     run_dirpath = Path(tempfile.mkdtemp(prefix="beebium_rate_"))
     disc_filepath = run_dirpath / source_disc_filepath.name
     shutil.copyfile(source_disc_filepath, disc_filepath)
-    os.environ["BEEBIUM_DISC_WORK_DIR"] = str(run_dirpath / "workdir")
-    os.makedirs(os.environ["BEEBIUM_DISC_WORK_DIR"], exist_ok=True)
+    os.environ["BEEBIUM_USER_DIRPATH"] = str(run_dirpath / "user")
 
     produced_end = [0]  # produced index just past the latest chunk
     lock = threading.Lock()

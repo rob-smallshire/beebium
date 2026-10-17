@@ -90,16 +90,13 @@ def bbc_tube(
     basic_filepath: Path | None,
     beebium_server_filepath: Path | None,
     dfs_1770_rom_filepath: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> Beebium:
     """A BBC Micro + 6502 second processor + 1770 DFS, booted to the Tube banner.
 
     Each test gets its own server process (own PID, and port 0 lets the OS pick a
-    free port), and its own disc work directory, so parallel runs on a shared
-    machine do not collide.
+    free port), and the server its own machine directory, so parallel runs on a
+    shared machine do not collide.
     """
-    monkeypatch.setenv("BEEBIUM_DISC_WORK_DIR", str(tmp_path / "disc_work"))
     try:
         with Beebium.launch(
             mos_filepath=mos_filepath,

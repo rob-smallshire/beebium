@@ -1793,8 +1793,7 @@ TEST_CASE("resolve-preset: every shipped preset resolves and round-trips through
         auto png_filepath = user_dir.presets() / "saved.png";
         auto built = run_command(
             executable + " capture-screenshot --preset \"" + saved_filepath.string() +
-                "\" --duration 0 --output \"" + png_filepath.string() + "\"",
-            {{"BEEBIUM_DISC_WORK_DIR", (user_dir.path() / "discs").string()}});
+                "\" --duration 0 --output \"" + png_filepath.string() + "\"");
         INFO(built.stdout_output << built.stderr_output);
         CHECK(built.exit_code == 0);
     }

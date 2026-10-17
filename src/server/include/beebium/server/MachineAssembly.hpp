@@ -1091,9 +1091,9 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         // A file path parameter arrives anchored in the launch's container, by
         // the preset loader or the option parser (see ResourcePaths.hpp). One
         // the manifest declares bundled names a resource, and a bare name is
-        // searched for: a hard disc through DiscPaths (a master resolves to a
-        // per-user working copy, so the shipped read-only master is never
-        // opened writable), a ROM on the ROM search path ending in the roms/ of
+        // searched for: a hard disc through DiscPaths (copied into the
+        // machine's directory, so a shipped read-only master is never opened
+        // writable), a ROM on the ROM search path ending in the roms/ of
         // the plugin that ships it. Any other names a location the extension
         // owns, which is never searched.
         const auto container_dirpath = config.launch.reference_container_dirpath();

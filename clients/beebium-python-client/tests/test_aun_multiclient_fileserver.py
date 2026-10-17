@@ -96,17 +96,14 @@ def _command(bbc: Beebium, text: str) -> str:
 @pytest.mark.parametrize("nfs_rom_filename", ["acorn-anfs_4_18.rom", "acorn-nfs_3_34.rom"])
 def test_second_station_logs_on_to_file_server(
     launch_bbc: LaunchBbc,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     nfs_rom_filename: str,
 ) -> None:
     nfs_rom_filepath = TEST_ROMS_DIRPATH / nfs_rom_filename
     if not nfs_rom_filepath.is_file():
         pytest.skip(f"{nfs_rom_filename} not available")
 
-    # The file server's SCSI disc is copied on write into the work directory,
+    # The file server's SCSI disc is copied into its machine directory,
     # leaving the bundled master untouched.
-    monkeypatch.setenv("BEEBIUM_DISC_WORK_DIR", str(tmp_path / "discwork"))
 
     ports = {station: _free_udp_port() for station in (FILE_SERVER_STATION, *CLIENT_STATIONS)}
 

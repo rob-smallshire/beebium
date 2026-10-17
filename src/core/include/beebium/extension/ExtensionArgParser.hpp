@@ -85,8 +85,8 @@ struct ParameterSchema {
                                 // to; empty value = the default provider
     std::string bundled;        // non-empty: a bare-name value refers to one
                                 // of the server's bundled images of this
-                                // kind (e.g. "hard-disc"), used through a
-                                // per-user copy-on-write working copy
+                                // kind (e.g. "hard-disc"), copied into the
+                                // machine's directory
     bool unique = false;        // the value must differ among the instances
                                 // attached to the same provider (e.g. a SCSI
                                 // target ID on one bus)

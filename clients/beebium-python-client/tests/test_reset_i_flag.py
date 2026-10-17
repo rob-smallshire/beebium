@@ -85,11 +85,8 @@ def bbc_model_b(
     basic_filepath: Path | None,
     beebium_server_filepath: Path | None,
     dfs_1770_rom_filepath: Path,
-    tmp_path: pytest.TempPathFactory,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> Beebium:
     """A stock Model B + 1770 DFS booted to BASIC, isolated per test."""
-    monkeypatch.setenv("BEEBIUM_DISC_WORK_DIR", str(Path(tmp_path) / "disc_work"))
     try:
         with Beebium.launch(
             mos_filepath=mos_filepath,

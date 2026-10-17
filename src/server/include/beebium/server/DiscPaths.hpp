@@ -39,36 +39,22 @@
 
 namespace beebium::server {
 
-// Discovery + copy-on-write resolution for bundled SCSI hard-disc images.
+// Discovery of the shipped hard-disc masters, and what a machine copies.
 //
 // Beebium ships read-only MASTER disc images under share/beebium/discs (and
 // the build tree's discs/). A master must never be opened writable or
 // mutated: the emulated filing system writes to disc, and letting those
 // writes land on a shipped image (or, worse, a signed/sealed app bundle) is
-// how emulator disc images silently rot. So a preset references a disc by a
-// BARE, version-named filename ("l3fs-v1_26.dat"), and this resolver copies
-// the master to a per-user working copy on first use and hands the emulator
-// the WORKING copy -- never the master.
+// how emulator disc images silently rot. A preset names a master by its
+// BARE, version-named filename ("l3fs-v1_26b.dat").
 //
-// A reference is resolved by the file reference rule (ResourcePaths.hpp),
-// with the master directory as the system directory for discs. A file found
-// in the container or the per-user discs/ is the user's own: opened in place,
-// writable. A bare name that names a master, and is not in the container,
-// resolves to a working copy of it (below).
-//
-// Working-copy modes:
-//   * Persistent (real emulator sessions): the working copy lives in the
-//     per-user discs directory (a sibling of the user presets directory, so
-//     all Beebium per-user state co-locates). Copied from the master only if
-//     absent; kept thereafter. "Reset to a good image" = delete the working
-//     copy. Persistence across runs.
-//   * Scratch (build-time create-preset/capture-screenshot boots): the
-//     working copy lives in an ephemeral directory named by
-//     BEEBIUM_DISC_WORK_DIR and is ALWAYS re-copied fresh from the master, so
-//     a thumbnail boots from a pristine image every build (deterministic) and
-//     never touches user state or the master.
-//
-// The .dsc geometry sidecar sits beside the .dat and is copied with it.
+// A disc reference is resolved by the file reference rule (ResourcePaths.hpp),
+// with the master directory as the system directory for discs. The media a
+// template names -- found by search, a master among them, or named by a path
+// inside the template's directory -- are copied into the machine's own
+// directory (MachineDirectory) and the copy is opened; the media a user names
+// by location are opened in place. The .dsc geometry sidecar sits beside the
+// .dat and is copied with it.
 
 // A hard-disc image format: the pair of files an Acorn SCSI hard disc is kept
 // in. Floppy formats are DiscFormatRegistry's; this is their hard-disc
@@ -90,11 +76,6 @@ inline constexpr HardDiscImageFormat kAcornScsiHardDiscFormat{
 // Every hard-disc image format, in the order list-disc-formats gives them.
 inline constexpr std::array<HardDiscImageFormat, 1> kHardDiscImageFormats{
     kAcornScsiHardDiscFormat};
-
-enum class DiscWorkMode {
-    Persistent,  // per-user working copy, copy-if-absent, kept
-    Scratch,     // ephemeral working copy, always refreshed from the master
-};
 
 class DiscPaths {
 public:
@@ -202,12 +183,6 @@ public:
                               : std::vector<BundledImage>{};
     }
 
-    // Per-user working-copy directory: the per-user discs directory. Not
-    // created here; prepare_working_image() creates it.
-    static std::filesystem::path get_user_disc_working_dirpath() {
-        return user_resource_dirpath(ResourceKind::Disc);
-    }
-
     // Where a launch copies the media a template names: the machine's own
     // directory, and the directory of the template it was launched from (the
     // preset's), when it was launched from one.
@@ -233,9 +208,8 @@ public:
             resolve_reference(image, ResourceKind::Disc, container_dirpath, system_dirpaths);
         if (found.origin == ReferenceOrigin::System &&
             found.path.extension() == kAcornScsiHardDiscFormat.extension) {
-            return prepare_working_image(found.path.filename().string(),
-                                         found.path.parent_path(), destination.dirpath,
-                                         DiscWorkMode::Persistent);
+            check_master(found.path);
+            return copy_into_machine(found.path, destination.dirpath / found.path.filename());
         }
         std::filesystem::path relative_path;
         if (found.origin != ReferenceOrigin::Path) {
@@ -273,66 +247,22 @@ public:
         return copy_filepath;
     }
 
-    // Core copy-on-write policy, with the master and working directories
-    // supplied explicitly (so it is unit-testable without touching env or the
-    // real per-user directory). `image` must be a bare filename.
-    //
-    //   * The master (master_dir/image + its .dsc) is only ever READ, as a
-    //     copy source -- never returned, so it can never be opened writable.
-    //   * Persistent: copy master -> working only if the working .dat/.dsc is
-    //     absent; otherwise keep the existing working copy.
-    //   * Scratch: always replace the working copy with a fresh master copy.
-    //     Each file is replaced atomically (see copy_file_atomically), so a
-    //     server mounting it -- or another preparation racing this one on a
-    //     shared work directory -- sees the old image or the new, never a
-    //     missing or partly written one.
-    //   * The working copy is made writable regardless of the master's
-    //     permissions (the master is shipped read-only).
-    //
-    // Returns the working .dat path (the emulator opens it read/write; the
-    // .dsc sits beside it).
-    static std::filesystem::path prepare_working_image(
-        std::string_view image,
-        const std::filesystem::path& master_dir,
-        const std::filesystem::path& work_dir,
-        DiscWorkMode mode) {
-        std::filesystem::path dat_name(image);
-        if (dat_name.has_parent_path()) {
-            throw std::runtime_error(
-                "prepare_working_image requires a bare filename, got: " +
-                std::string(image));
+    // Throws unless `dat_filepath` is a whole master: its .dsc beside it and a
+    // .json giving its display name.
+    static void check_master(const std::filesystem::path& dat_filepath) {
+        auto dsc_filepath = dat_filepath;
+        dsc_filepath.replace_extension(kAcornScsiHardDiscFormat.sidecar_extension);
+        if (!std::filesystem::exists(dsc_filepath)) {
+            throw std::runtime_error("Bundled disc image " + dat_filepath.string() +
+                                     " has no " + dsc_filepath.filename().string() +
+                                     " beside it");
         }
-        std::filesystem::path dsc_name =
-            std::filesystem::path(dat_name).replace_extension(
-                kAcornScsiHardDiscFormat.sidecar_extension);
-
-        const auto master_dat = master_dir / dat_name;
-        const auto master_dsc = master_dir / dsc_name;
-        if (!std::filesystem::exists(master_dat) ||
-            !std::filesystem::exists(master_dsc)) {
+        if (!master_display_name(dat_filepath)) {
             throw std::runtime_error(
-                "Bundled disc image not found: " + master_dat.string() +
-                " (with its .dsc sidecar)");
-        }
-        if (!master_display_name(master_dat)) {
-            throw std::runtime_error(
-                "Bundled disc image " + master_dat.string() + " has no display name: " +
-                std::filesystem::path(master_dat).replace_extension(".json").string() +
+                "Bundled disc image " + dat_filepath.string() + " has no display name: " +
+                std::filesystem::path(dat_filepath).replace_extension(".json").string() +
                 " must give one as {\"display_name\": \"...\"}");
         }
-
-        const auto working_dat = work_dir / dat_name;
-        const auto working_dsc = work_dir / dsc_name;
-
-        const bool need_copy = (mode == DiscWorkMode::Scratch) ||
-                               !std::filesystem::exists(working_dat) ||
-                               !std::filesystem::exists(working_dsc);
-        if (need_copy) {
-            std::filesystem::create_directories(work_dir);
-            copy_master_to_working(master_dat, working_dat);
-            copy_master_to_working(master_dsc, working_dsc);
-        }
-        return working_dat;
     }
 
     using FileCopier =
@@ -379,11 +309,6 @@ public:
     }
 
 private:
-    static void copy_master_to_working(const std::filesystem::path& src,
-                                       const std::filesystem::path& dst) {
-        copy_file_atomically(src, dst);
-    }
-
     static void copy_file_plain(const std::filesystem::path& src,
                                 const std::filesystem::path& dst) {
         std::filesystem::copy_file(src, dst);

@@ -114,15 +114,12 @@ def bbc_copro(
     basic_filepath: Path | None,
     beebium_server_filepath: Path | None,
     dfs_1770_rom_filepath: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> Beebium:
     """A BBC Micro with the named coprocessor and 1770 DFS, booted to the banner.
 
-    Own server process (port 0 picks a free port) and own disc work directory,
-    so parallel runs on a shared machine do not collide.
+    Own server process (port 0 picks a free port) and its own machine
+    directory, so parallel runs on a shared machine do not collide.
     """
-    monkeypatch.setenv("BEEBIUM_DISC_WORK_DIR", str(tmp_path / "disc_work"))
     try:
         with Beebium.launch(
             mos_filepath=mos_filepath,
