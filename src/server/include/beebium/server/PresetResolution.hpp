@@ -98,20 +98,10 @@ inline nlohmann::ordered_json station_json(const MachineDescription& machine) {
     return "auto:" + std::to_string(r.lo) + "-" + std::to_string(r.hi);
 }
 
-// A path given on the command line, as a preset records it: a relative path
-// with a directory component meant the working directory, so it is made
-// absolute; a bare name (a ROM or bundled image name), an absolute path and a
-// URI are kept.
+// A path given on the command line, as a preset records it: anchored in the
+// working directory, the container a command line is written in.
 inline std::string path_for_preset(const std::string& value) {
-    if (value.empty() || value.find("://") != std::string::npos ||
-        is_unix_absolute_path(value)) {
-        return value;
-    }
-    std::filesystem::path path(value);
-    if (path.is_absolute() || !path.has_parent_path()) {
-        return value;
-    }
-    return (std::filesystem::current_path() / path).lexically_normal().string();
+    return anchor_reference(value, std::filesystem::current_path());
 }
 
 // An extension instance's config as a preset writes it: each value typed by
@@ -366,7 +356,7 @@ std::string instance_parameter_pointer(const Instance& inst, const std::string& 
 // parameter made a one-element list. The keys the preset gave become the
 // instance's explicit_keys. An extension name no manifest has is an error.
 // A relative path the preset gives for a "filepath" parameter is resolved
-// against the preset's directory (resolve_preset_relative_filepath), as its
+// against the preset's directory (anchor_reference), as its
 // floppy images are; a bare name is left for the extension's own search.
 //
 // Runs after CLI parsing, when the resolver is populated.
@@ -407,7 +397,7 @@ std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& c
                 auto it = inst.config.find(p.key);
                 if (p.type == "filepath" && it != inst.config.end() &&
                     inst.explicit_keys.count(p.key) != 0) {
-                    it->second = resolve_preset_relative_filepath(it->second, preset_dirpath);
+                    it->second = anchor_reference(it->second, preset_dirpath);
                 }
             }
         }

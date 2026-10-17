@@ -19,6 +19,7 @@
 #include <string_view>
 #include <stdexcept>
 #include <beebium/PlatformUtils.hpp>
+#include <beebium/server/ResourcePaths.hpp>
 
 namespace beebium::server {
 
@@ -130,7 +131,8 @@ public:
 
         // Relative path with directory component - resolve against cwd
         if (filepath.has_parent_path()) {
-            auto resolved = std::filesystem::current_path() / filepath;
+            const std::filesystem::path resolved =
+                anchor_reference(std::string(filename), std::filesystem::current_path());
             if (!std::filesystem::exists(resolved)) {
                 throw std::runtime_error("ROM file not found: " + resolved.string());
             }

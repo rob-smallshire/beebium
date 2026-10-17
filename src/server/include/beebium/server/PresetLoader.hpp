@@ -16,6 +16,7 @@
 #include <beebium/econet/StationSelection.hpp>
 #include <beebium/extension/ExtensionArgParser.hpp>
 #include <beebium/server/CliArgParsers.hpp>
+#include <beebium/server/ResourcePaths.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -282,14 +283,6 @@ parse_startup_section(const nlohmann::json& startup_json) {
     return {startup, {}};
 }
 
-// Check if a path string represents a Unix-style absolute path.
-// On Unix, paths starting with '/' are absolute.
-// On Windows, std::filesystem considers '/path' relative (no drive letter),
-// but for preset portability we treat paths starting with '/' as absolute.
-inline bool is_unix_absolute_path(const std::string& path_str) {
-    return !path_str.empty() && path_str[0] == '/';
-}
-
 // Normalize a path or URI to a file:// URI.
 //
 // If the input contains "://", it's treated as a URI and returned unchanged.
@@ -314,8 +307,7 @@ inline std::string normalize_image_uri(const std::string& uri_or_path,
     // Resolve relative paths against base directory.
     // On Windows, treat Unix-style absolute paths (starting with /) as absolute
     // for preset portability, even though std::filesystem considers them relative.
-    bool is_absolute = path.is_absolute() || is_unix_absolute_path(uri_or_path);
-    if (!is_absolute) {
+    if (!is_absolute_reference(uri_or_path)) {
         path = base_dirpath / path;
     }
 
@@ -331,26 +323,6 @@ inline std::string normalize_image_uri(const std::string& uri_or_path,
         return "file:///" + path_str;
     }
     return "file://" + path_str;
-}
-
-// Resolve a file path parameter of a preset's extension config against the
-// directory holding the preset. A relative path with a directory component
-// (e.g. "discs/l3fs.dat", "../maps/aun.json") is joined to the preset's
-// directory. A bare name (no directory component) is left as given: it names
-// a resource the extension finds on its own search path (a bundled hard-disc
-// image, a plugin ROM) or a keyword such as "none". Absolute paths, Unix-style
-// absolute paths on Windows, URIs and the empty string are unchanged.
-inline std::string resolve_preset_relative_filepath(const std::string& value,
-                                                    const std::filesystem::path& preset_dirpath) {
-    if (value.empty() || value.find("://") != std::string::npos ||
-        is_unix_absolute_path(value)) {
-        return value;
-    }
-    std::filesystem::path path(value);
-    if (path.is_absolute() || !path.has_parent_path()) {
-        return value;
-    }
-    return (preset_dirpath / path).lexically_normal().string();
 }
 
 // Parse the storage section from JSON
@@ -726,7 +698,7 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
                 // A ROM name or path, resolved like --mos.
                 if (value.is_string()) {
                     config.mos_image_uri =
-                        resolve_preset_relative_filepath(value.get<std::string>(), preset_dirpath);
+                        anchor_reference(value.get<std::string>(), preset_dirpath);
                 }
                 break;
             case PresetKey::Storage:
@@ -741,7 +713,7 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
                 if (!slots) break;
                 for (auto& slot : *slots) {
                     slot.image_filepath =
-                        resolve_preset_relative_filepath(slot.image_filepath, preset_dirpath);
+                        anchor_reference(slot.image_filepath, preset_dirpath);
                 }
                 config.sideways = std::move(*slots);
                 break;

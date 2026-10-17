@@ -2033,6 +2033,14 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_preset_loader)
 
+    # File reference resolution tests
+    add_executable(test_resource_paths test_resource_paths.cpp)
+    target_include_directories(test_resource_paths PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/server/include
+    )
+    target_link_libraries(test_resource_paths PRIVATE Catch2::Catch2WithMain)
+    catch_discover_tests(test_resource_paths)
+
     # Preset paths utility tests
     add_executable(test_preset_paths test_preset_paths.cpp)
     target_include_directories(test_preset_paths PRIVATE

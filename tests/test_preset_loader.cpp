@@ -223,33 +223,6 @@ TEST_CASE("load_preset: a preset named by a relative path resolves floppies from
 }
 
 // ============================================================================
-// resolve_preset_relative_filepath() tests
-// ============================================================================
-
-TEST_CASE("resolve_preset_relative_filepath: a path with a directory resolves from the preset",
-          "[preset][resolve_preset_relative_filepath]") {
-    CHECK(resolve_preset_relative_filepath("discs/l3fs.dat", "/home/u/presets") ==
-          std::filesystem::path("/home/u/presets/discs/l3fs.dat").lexically_normal().string());
-    CHECK(resolve_preset_relative_filepath("../discs/l3fs.dat", "/home/u/presets") ==
-          std::filesystem::path("/home/u/discs/l3fs.dat").lexically_normal().string());
-}
-
-TEST_CASE("resolve_preset_relative_filepath: a bare name is left for the extension's search",
-          "[preset][resolve_preset_relative_filepath]") {
-    CHECK(resolve_preset_relative_filepath("l3fs-v1_26b.dat", "/home/u/presets") ==
-          "l3fs-v1_26b.dat");
-    CHECK(resolve_preset_relative_filepath("none", "/home/u/presets") == "none");
-}
-
-TEST_CASE("resolve_preset_relative_filepath: absolute paths and URIs are unchanged",
-          "[preset][resolve_preset_relative_filepath]") {
-    CHECK(resolve_preset_relative_filepath("/dev/ttyUSB0", "/home/u/presets") == "/dev/ttyUSB0");
-    CHECK(resolve_preset_relative_filepath("file:///x/y.dat", "/home/u/presets") ==
-          "file:///x/y.dat");
-    CHECK(resolve_preset_relative_filepath("", "/home/u/presets").empty());
-}
-
-// ============================================================================
 // PresetStorageConfig tests
 // ============================================================================
 
