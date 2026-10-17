@@ -150,9 +150,11 @@ A saved machine is a directory that outlives the run. Its `preset.json` is the
 configuration, read as `--preset` would read it (so the files it holds are its
 own, and the guest's writes to them stay in it from one run to the next), and
 its `machine.json` its identity: the machine keeps its uuid and name on every
-run. Battery-backed state (an Integra-B's board RAM and clock) is restored at
-power-on, over the preset's sideways loads, and kept again at a graceful
-shutdown. Command-line options override the machine's configuration for that
+run. Battery-backed state (an Integra-B's board RAM and clock, an extension's
+such as the Acorn RTC) is restored at power-on, over the preset's sideways
+loads, and kept again, with the machine's last screen (`thumbnail.png`), at a
+graceful shutdown. The directory's layout and formats are in
+[machine-directory.md](machine-directory.md). Command-line options override the machine's configuration for that
 run only; `--machine-uuid` cannot change its identity (exit 64). A machine of
 another model is refused (exit 78).
 

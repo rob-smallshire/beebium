@@ -542,9 +542,16 @@ Response (abridged):
     "nameTemplate": "Station {econet-station} (AUN, Model B)"
   },
   "clockSpeedHz": 2000000,
-  "protocolFingerprint": "..."
+  "protocolFingerprint": "...",
+  "machineDirpath": "/Users/me/Library/Application Support/Beebium/machines/6f1c...",
+  "machineSaved": false
 }
 ```
+
+`machineDirpath` is the machine's directory on the server's host: a saved
+machine's, or the transient one a machine not yet saved runs in;
+`machineSaved` says which, so a front-end offers Save for the one and Save
+As for the other (see [machine-directory.md](machine-directory.md)).
 
 `identity.name` is the name to show; `identity.nameTemplate` is the name as the
 user edits it. The name is a template (#153): text in which `{key}` stands for
@@ -627,8 +634,57 @@ Events:
 
 `SERVER_STATUS_IDENTITY_CHANGED` carries the new identity whenever the name
 changes: a `SetMachineName`, or a re-rendering in which a placeholder's value
-changed (a renumbered station, at its next Break). Use this to detect server
+changed (a renumbered station, at its next Break), or the uuid does (a Save
+As). Every event, heartbeats included, carries `templateMediaWritten`: true
+while a machine not yet saved has written to the copies of the media its
+preset named, which are lost unless it is saved, so a front-end can ask
+whether to save it before closing. It is always false for a saved machine, and
+a Save clears it. Use this to detect server
 shutdown and cleanly disconnect clients. The `shutdownGraceMs` field indicates how long clients have to finish pending operations before the server terminates.
+
+#### SaveMachine
+
+Saves the machine without stopping it. With emulation paused, the server
+flushes the drives, makes the destination whole beside it and renames it into
+place, re-points every medium open in the old directory at its copy, and moves
+the machine's lock; the machine then runs on from the saved directory. Three
+forms, by the machine and `destinationDirpath`:
+
+| Machine | Destination | Result |
+|---------|-------------|--------|
+| not yet saved | a new directory | saved there with its uuid; its transient directory is removed |
+| saved | empty | its battery-backed state, screen and name written in place |
+| saved | a new directory | Save As: a copy with a new uuid, from which the machine runs on |
+
+The response gives the machine's directory and identity now. A destination
+that exists is refused with `ALREADY_EXISTS`, unless `replaceExisting`: then
+a saved machine there, which no process is running and which is not this
+machine's own, is replaced once the new one is whole (put back if anything
+fails); any other is refused with `FAILED_PRECONDITION`, saying why. A machine
+not yet saved with no destination is `INVALID_ARGUMENT`; a directory that
+cannot be written is `INTERNAL`, with the machine left where it was.
+
+```bash
+grpcurl -plaintext -d '{"destinationDirpath": "/Users/me/Documents/Elite.beebium-machine"}' \
+  -import-path src/service/proto -proto system.proto \
+  localhost:48875 beebium.SystemService/SaveMachine
+```
+
+Two things a Save As does not change. An Econet transport keeps the uuid it
+was given when the machine started (the AUN transport's identity on the
+network) until the next start. The directory the machine leaves keeps its
+media as they were written up to the moment of the Save -- media are written
+continuously -- while its battery-backed state and screen are as at its last
+Save.
+
+#### ResetBattery
+
+Forgets the machine's battery-backed state, as taking out the battery does,
+and returns the units forgotten (`resetUnits`: the machine's own, such as
+`integra-b-rtc`, and its extensions', as `<instance id>/<unit>`, such as
+`clock/saf3019p`). It takes effect when the machine is next started: the
+running machine is unchanged, and neither a shutdown nor a Save keeps what it
+holds. The command-line form is `reset-battery`.
 
 ### EconetService
 

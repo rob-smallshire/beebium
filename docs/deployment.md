@@ -215,13 +215,22 @@ A bare name is looked for as any file reference is
 ([preset-schema.md](preset-schema.md#file-references)). To use a downloaded
 image in a preset, drop its `.dat` and `.dsc` into the per-user `discs/` (or
 beside the preset) and name it. The guest's writes to a copied disc last as
-long as the machine: the Level 3 File Server's disc, like a preset's own
-floppy, starts from its shipped image at every launch until machines can be
-saved. ROMs are only read, never copied.
+long as the machine: a machine started from a preset starts from the preset's
+images at every launch, and keeps what it writes only once it is saved. ROMs
+are only read, never copied.
+
+**A saved machine** is a machine directory that outlives the server, kept
+wherever the user puts it (the Documents folder by default in the macOS
+app): made with `create-machine`, run with `start --machine`, or saved while
+it runs (`SystemService.SaveMachine`, File > Save... in the macOS app). It
+holds its own copies of its media, its configuration and identity, its last
+screen and its battery-backed state, so every run continues from the last.
+The server never chooses where one goes. Its layout and file formats are in
+[machine-directory.md](machine-directory.md).
 
 That per-user directory holds all of Beebium's per-user state: the user
 presets in `presets/`, user-supplied disc and ROM images in `discs/` and
-`roms/`, running machines in `machines/`, the shared AUN map file
+`roms/`, the directories of machines not yet saved in `machines/`, the shared AUN map file
 `aun-map.json`, and the AUN automatic-station hint `aun-auto-next` (with its
 lock file `aun-auto-next.lock`):
 

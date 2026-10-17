@@ -517,7 +517,9 @@ if(TARGET beebium_ext_acorn_65c02_plugin
         # (CAPTURE_ARGS below) without the preset doing so.
         --acorn-rtc id=clock:layout=7bit-year-in-r7
         --acorn-scsi
-        --scsi-hdd scsi-id=0:image=l3fs-v1_26b.dat
+        # The disc has an id so that a machine made from the preset can be
+        # given another image in its place (--scsi-hdd id=disc:image=...).
+        --scsi-hdd scsi-id=0:image=l3fs-v1_26b.dat:id=disc
         --tube-65c02
         EXTRA_DEPENDS
             beebium_ext_acorn_scsi_plugin

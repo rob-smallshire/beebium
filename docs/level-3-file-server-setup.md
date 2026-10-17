@@ -32,9 +32,10 @@ station 254). The bundled disc has users `SYST`, `ChrisC` and `HermannH`; the
 root catalogue holds `Library` and `Passwords`.
 
 The SCSI image (`l3fs-v1_26b.dat`) is carried inside the preset, and each
-launch copies it into the machine's own directory, so the file server starts
-from the shipped disc every time; what clients write to it lasts until the
-server shuts down. To use the image elsewhere, unpack the preset
+launch copies it into the machine's own directory, so a file server started
+from the preset starts from the shipped disc every time; what clients write
+to it lasts until the server shuts down, unless the machine is saved (below).
+To use the image elsewhere, unpack the preset
 (`export-preset model-b-l3fs-aun --unpack --output <dir>`). See [deployment.md](deployment.md#bundled-discs-and-machine-directories).
 mDNS advertisement of the gRPC service (`--advertise`) is a launch flag, not
 part of the preset; the AUN transport's `_aun._udp` announcement is governed
@@ -42,6 +43,44 @@ by `--aun discovery=` (default `on`). To keep a server off the LAN, override
 the preset's transport parameters on the command line, which merge with the
 preset's (`--aun discovery=off:map-file=none`).
 
+
+### Keeping the File Server's Disc: a Saved Machine
+
+A file server that keeps what is written to it is a saved machine: a
+directory holding its own copy of the disc, its configuration, and the
+file server clock's state (see [machine-directory.md](machine-directory.md)).
+Make one from the preset and run it:
+
+```bash
+beebium-model-b create-machine --preset model-b-l3fs-aun --output "File Server.beebium-machine"
+beebium-model-b start --machine "File Server.beebium-machine"
+```
+
+Every run continues from the last: the disc is the machine's own, and the
+Acorn RTC carries on from the time it was set, as it would on its battery. A
+file server started from the preset can also be saved while it runs (File >
+Save... in the macOS app, or `SystemService.SaveMachine`), and carries on
+from the saved directory without a restart.
+
+**A disc from an earlier version.** Before saved machines, the file server's
+disc was kept as a working copy, `l3fs-v1_26b.dat` (with its `.dsc`), in the
+per-user `discs/` directory. That copy is left where it is and is no longer
+used. To carry it on, make a saved machine from the preset and either:
+
+- give the machine the old disc as its own: copy the old `l3fs-v1_26b.dat`
+  and `l3fs-v1_26b.dsc` over the ones in the machine directory, which the
+  machine then writes to; or
+- keep using the old file where it is: name it in place of the preset's hard
+  disc, whose instance id is `disc`, when making the machine:
+
+  ```bash
+  beebium-model-b create-machine --preset model-b-l3fs-aun \
+      --scsi-hdd id=disc:image=<path to the old l3fs-v1_26b.dat> \
+      --output "File Server.beebium-machine"
+  ```
+
+  A disc named by its path is the user's own file: it is opened in place on
+  every run, never copied, so the machine writes to the old file.
 
 ## Hardware Configuration
 

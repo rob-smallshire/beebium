@@ -5,7 +5,11 @@ Status: draft for discussion (2026-09-30). Step 3 (#136): stored presets are
 3.1) ships in the next release and is removed in the release after it. The
 bundled disc masters are gone: the Level 3 File Server preset carries its disc,
 which `create-preset --from` takes into a copy and `export-preset --unpack`
-writes out. Issues: #136 (presets as archives),
+writes out. Step 4 (#103b): machines can be saved -- `create-machine`,
+`start --machine`, `describe-machine`, `reset-battery`, and
+`SystemService.SaveMachine` / `ResetBattery` on a running machine; the
+directory as built is described in [../machine-directory.md](../machine-directory.md).
+Issues: #136 (presets as archives),
 #103 (machine instances), #135 (disc image reference resolution), #134
 (multi-select preset import). Prompted by Mark Moxon's Elite-over-Econet
 preset pack (https://stardot.org.uk/forums/viewtopic.php?p=493669#p493669),
@@ -432,6 +436,16 @@ can be keyed by them.
 - **`reset-battery`** applies to extensions too: the framework asks each
   instance to reset its persistent data, and an instance that has none
   does nothing.
+
+As built (step 4, R4; approved 2026-10-17): an extension keeps its state in
+the shape the core's own hardware does, not in a free-form directory. It opts
+in with the `ExtensionPersistence` capability and gives `BatteryBackedUnit`s,
+which the server keeps through the same store as `nvram/`, in
+`extensions/<id>/nvram/<unit>.bin`. Layout and hardware checks, `stale/`, and
+`reset-battery` (which then needs no plugin loaded) come with it; the rest of
+`extensions/<id>/` stays the instance's, for files a preset ships. A
+free-form directory can be added behind the same accessor if a plugin ever
+needs one.
 
 Instance ids are pinned in the machine's `preset.json` at instantiation
 (section 4.1), so an instance finds the same directory on every open. A

@@ -242,6 +242,7 @@ WD1770 controller with:
 - `sound-subsystem.md` - SN76489 and audio pipeline
 - `video-subsystem.md` - Display rendering pipeline
 - `grpc-server.md` - Service API documentation
+- `machine-directory.md` - A machine's directory, transient or saved: layout, machine.json, the document file, battery-backed state (nvram/, extensions/<id>/nvram/), the lock, and Save of a running machine
 - `lifecycle-management.md` - Connection liveness (heartbeat, graceful/crash/unreachable), client teardown, window/server shutdown, and the rules behind them
 - `screen-text-library.md` - Reading text off the screen: the standalone recognition library and its CLI
 - `tube-subsystem.md` - The Tube as built: hardware reference, the coprocessor contract in summary, execution, debugger, plugins and firmware
