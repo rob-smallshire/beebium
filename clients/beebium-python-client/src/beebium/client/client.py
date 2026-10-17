@@ -223,6 +223,7 @@ class Beebium:
             preset=preset,
         )
 
+        client: Beebium | None = None
         try:
             process.start(timeout=startup_timeout)
             connection = Connection(process.target, timeout=connection_timeout)
@@ -236,7 +237,14 @@ class Beebium:
             client._verify_protocol(installation_description=process.installation.describe())
             yield client
         finally:
-            process.stop()
+            # Shut the server down as a user would, so it keeps what a
+            # graceful shutdown keeps (a saved machine's battery-backed state
+            # and screen); stopping the process alone is a hard kill on
+            # Windows.
+            if client is not None:
+                client.close()
+            else:
+                process.stop()
 
     def _verify_protocol(self, installation_description: str | None = None) -> None:
         """Assert the server's wire protocol matches this client's.
@@ -691,25 +699,25 @@ class Beebium:
         For managed servers (created via launch()), this first requests
         graceful shutdown via RPC before falling back to SIGTERM.
         """
-        # Try graceful RPC shutdown first if we're managing a server
+        # Ask a server we manage to shut down gracefully, over RPC, and let it
+        # finish: terminating the process is SIGTERM on POSIX, which the server
+        # also handles gracefully, but TerminateProcess on Windows, which kills
+        # it before it keeps a saved machine's state.
+        shutdown_requested = False
         if self._server is not None and self._server.is_running:
             try:
                 # Import here to avoid circular dependency
                 from beebium.client.system import ShutdownMode
 
                 response = self.system.request_shutdown(mode=ShutdownMode.GRACEFUL)
-                # If accepted, give it a brief moment to take effect
-                if response.accepted:
-                    import time
-
-                    time.sleep(0.1)  # Brief wait for graceful shutdown to start
+                shutdown_requested = response.accepted
             except (BeebiumError, grpc.RpcError):
-                # If RPC fails, fall back to SIGTERM
+                # If RPC fails, fall back to terminating the process
                 pass
 
         self._connection.close()
         if self._server is not None:
-            self._server.stop()
+            self._server.stop(shutdown_requested=shutdown_requested)
             self._server = None
 
     def __enter__(self) -> Beebium:

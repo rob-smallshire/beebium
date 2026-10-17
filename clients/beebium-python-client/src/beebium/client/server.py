@@ -225,7 +225,7 @@ class ServerProcess:
                 error_msg += f"\nServer stdout:\n{stdout_output}"
             raise ServerStartupError(error_msg)
 
-    def stop(self, timeout: float = 5.0) -> None:
+    def stop(self, timeout: float = 5.0, *, shutdown_requested: bool = False) -> None:
         """Stop the server gracefully, then forcefully if needed.
 
         If the server has already exited on its own before this call -- i.e. it
@@ -235,8 +235,17 @@ class ServerProcess:
 
         Args:
             timeout: Maximum time to wait for graceful shutdown (seconds).
+            shutdown_requested: The server has already been asked to shut down
+                (SystemService.RequestShutdown) and accepted: wait up to
+                ``timeout`` for it to exit by itself before terminating it,
+                and do not report its exit as unexpected.
         """
-        self._stop(timeout, report_unexpected_exit=True)
+        if shutdown_requested and self._process is not None:
+            try:
+                self._process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                pass
+        self._stop(timeout, report_unexpected_exit=not shutdown_requested)
 
     def _stop(self, timeout: float, *, report_unexpected_exit: bool) -> None:
         proc = self._process
