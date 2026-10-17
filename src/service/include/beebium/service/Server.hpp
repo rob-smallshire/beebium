@@ -112,26 +112,10 @@ public:
 
     /// Where the machine is kept on disk, for SaveMachine, ResetBattery and
     /// SystemInfo. Call before start(); it must outlive the server.
-    void set_machine_store(MachineStore* store) {
-        impl_->machine_store = store;
-        impl_->document_name_placeholders.set_machine_store(store);
-    }
-
-    /// The template of the name a machine not yet saved would have, which
-    /// {document} renders for it. Call before start().
-    void set_default_name_template(std::string name_template) {
-        impl_->document_name_placeholders.set_default_template(std::move(name_template),
-                                                              &impl_->name_placeholders);
-    }
+    void set_machine_store(MachineStore* store) { impl_->machine_store = store; }
 
     /// The frame the machine last presented, as clients are sent it.
     const FrameBuffer& frame_buffer() const { return impl_->frame_buffer; }
-
-    /// The launcher's instance number for this machine, for the
-    /// machine-ordinal placeholder ("#3"). Call before start().
-    void set_launch_ordinal(unsigned ordinal) {
-        impl_->machine_name_placeholders.set_ordinal(ordinal);
-    }
 
     /// Get the address the server is bound to
     std::string address() const;
@@ -202,7 +186,6 @@ private:
         EconetNamePlaceholders<MachineType> econet_name_placeholders{machine};
         StorageNamePlaceholders<MachineType> storage_name_placeholders{machine};
         CoprocessorNamePlaceholders coprocessor_name_placeholders;
-        DocumentNamePlaceholders document_name_placeholders;
         NamePlaceholderRegistry name_placeholders;
 
         TeletextGrid teletext_grid;
@@ -238,7 +221,6 @@ private:
             name_placeholders.add(econet_name_placeholders, "econet socket");
             name_placeholders.add(storage_name_placeholders, "disc controller socket");
             name_placeholders.add(coprocessor_name_placeholders, "tube coprocessor");
-            name_placeholders.add(document_name_placeholders, "machine document");
         }
 
         // Background thread that consumes video_output queue and renders to frame_buffer
@@ -355,7 +337,7 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
 
     // Render the name template before anyone can ask for the name.
     impl_->econet_name_placeholders.set_transport_registry(transport_registry);
-    impl_->system_service->set_name_placeholders(&impl_->name_placeholders);
+    impl_->system_service->set_description_placeholders(&impl_->name_placeholders);
 
     // Surface every machine reset (Break, Ctrl-Break, Reset RPC) to
     // WatchServerStatus subscribers, so clients resync as they do at boot. The
@@ -441,7 +423,7 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
     }
 
     // Follow placeholder values that change under the template.
-    impl_->system_service->start_name_refresh();
+    impl_->system_service->start_description_refresh();
 
     impl_->running = true;
 
@@ -457,10 +439,10 @@ void Server<MachineType>::stop() {
 
     impl_->running = false;
 
-    // Stop the name refresh first, so it cannot re-announce the machine
-    // while the advertisement is being withdrawn.
+    // Stop the description refresh first, so it cannot notify watchers of a
+    // machine that is going away.
     if (impl_->system_service) {
-        impl_->system_service->stop_name_refresh();
+        impl_->system_service->stop_description_refresh();
     }
 
     // Stop mDNS advertisement

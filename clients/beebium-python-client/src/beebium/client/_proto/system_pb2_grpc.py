@@ -58,15 +58,20 @@ class SystemServiceStub(object):
                 request_serializer=system__pb2.SetMachineNameRequest.SerializeToString,
                 response_deserializer=system__pb2.SetMachineNameResponse.FromString,
                 _registered_method=True)
-        self.ListNamePlaceholders = channel.unary_unary(
-                '/beebium.SystemService/ListNamePlaceholders',
-                request_serializer=system__pb2.ListNamePlaceholdersRequest.SerializeToString,
-                response_deserializer=system__pb2.ListNamePlaceholdersResponse.FromString,
+        self.SetMachineDescription = channel.unary_unary(
+                '/beebium.SystemService/SetMachineDescription',
+                request_serializer=system__pb2.SetMachineDescriptionRequest.SerializeToString,
+                response_deserializer=system__pb2.SetMachineDescriptionResponse.FromString,
                 _registered_method=True)
-        self.PreviewMachineName = channel.unary_unary(
-                '/beebium.SystemService/PreviewMachineName',
-                request_serializer=system__pb2.PreviewMachineNameRequest.SerializeToString,
-                response_deserializer=system__pb2.PreviewMachineNameResponse.FromString,
+        self.ListDescriptionPlaceholders = channel.unary_unary(
+                '/beebium.SystemService/ListDescriptionPlaceholders',
+                request_serializer=system__pb2.ListDescriptionPlaceholdersRequest.SerializeToString,
+                response_deserializer=system__pb2.ListDescriptionPlaceholdersResponse.FromString,
+                _registered_method=True)
+        self.PreviewMachineDescription = channel.unary_unary(
+                '/beebium.SystemService/PreviewMachineDescription',
+                request_serializer=system__pb2.PreviewMachineDescriptionRequest.SerializeToString,
+                response_deserializer=system__pb2.PreviewMachineDescriptionResponse.FromString,
                 _registered_method=True)
         self.WatchServerStatus = channel.unary_stream(
                 '/beebium.SystemService/WatchServerStatus',
@@ -128,24 +133,34 @@ class SystemServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def SetMachineName(self, request, context):
-        """Set the machine's name template (a plain name is a template with no
-        placeholders). See MachineIdentity.name_template.
+        """Set a machine's name: plain text, never a template. Only for a machine
+        not yet saved; a saved machine's name is its document's, so the
+        document is renamed instead. Errors: INVALID_ARGUMENT for an empty
+        name; FAILED_PRECONDITION for a saved machine.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ListNamePlaceholders(self, request, context):
-        """List the placeholders a name template can use on this server, with
-        their current values. Clients carry no list of keys; they ask.
+    def SetMachineDescription(self, request, context):
+        """Set the machine's description template (empty: no description). See
+        MachineIdentity.description_template.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def PreviewMachineName(self, request, context):
-        """Render a name template against the current values without changing
-        anything, for a live preview while the user edits.
+    def ListDescriptionPlaceholders(self, request, context):
+        """List the placeholders a description template can use on this server,
+        with their current values. Clients carry no list of keys; they ask.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PreviewMachineDescription(self, request, context):
+        """Render a description template against the current values without
+        changing anything, for a live preview while the user edits.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -242,15 +257,20 @@ def add_SystemServiceServicer_to_server(servicer, server):
                     request_deserializer=system__pb2.SetMachineNameRequest.FromString,
                     response_serializer=system__pb2.SetMachineNameResponse.SerializeToString,
             ),
-            'ListNamePlaceholders': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListNamePlaceholders,
-                    request_deserializer=system__pb2.ListNamePlaceholdersRequest.FromString,
-                    response_serializer=system__pb2.ListNamePlaceholdersResponse.SerializeToString,
+            'SetMachineDescription': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetMachineDescription,
+                    request_deserializer=system__pb2.SetMachineDescriptionRequest.FromString,
+                    response_serializer=system__pb2.SetMachineDescriptionResponse.SerializeToString,
             ),
-            'PreviewMachineName': grpc.unary_unary_rpc_method_handler(
-                    servicer.PreviewMachineName,
-                    request_deserializer=system__pb2.PreviewMachineNameRequest.FromString,
-                    response_serializer=system__pb2.PreviewMachineNameResponse.SerializeToString,
+            'ListDescriptionPlaceholders': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListDescriptionPlaceholders,
+                    request_deserializer=system__pb2.ListDescriptionPlaceholdersRequest.FromString,
+                    response_serializer=system__pb2.ListDescriptionPlaceholdersResponse.SerializeToString,
+            ),
+            'PreviewMachineDescription': grpc.unary_unary_rpc_method_handler(
+                    servicer.PreviewMachineDescription,
+                    request_deserializer=system__pb2.PreviewMachineDescriptionRequest.FromString,
+                    response_serializer=system__pb2.PreviewMachineDescriptionResponse.SerializeToString,
             ),
             'WatchServerStatus': grpc.unary_stream_rpc_method_handler(
                     servicer.WatchServerStatus,
@@ -365,7 +385,7 @@ class SystemService(object):
             _registered_method=True)
 
     @staticmethod
-    def ListNamePlaceholders(request,
+    def SetMachineDescription(request,
             target,
             options=(),
             channel_credentials=None,
@@ -378,9 +398,9 @@ class SystemService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.SystemService/ListNamePlaceholders',
-            system__pb2.ListNamePlaceholdersRequest.SerializeToString,
-            system__pb2.ListNamePlaceholdersResponse.FromString,
+            '/beebium.SystemService/SetMachineDescription',
+            system__pb2.SetMachineDescriptionRequest.SerializeToString,
+            system__pb2.SetMachineDescriptionResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -392,7 +412,7 @@ class SystemService(object):
             _registered_method=True)
 
     @staticmethod
-    def PreviewMachineName(request,
+    def ListDescriptionPlaceholders(request,
             target,
             options=(),
             channel_credentials=None,
@@ -405,9 +425,36 @@ class SystemService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.SystemService/PreviewMachineName',
-            system__pb2.PreviewMachineNameRequest.SerializeToString,
-            system__pb2.PreviewMachineNameResponse.FromString,
+            '/beebium.SystemService/ListDescriptionPlaceholders',
+            system__pb2.ListDescriptionPlaceholdersRequest.SerializeToString,
+            system__pb2.ListDescriptionPlaceholdersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PreviewMachineDescription(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.SystemService/PreviewMachineDescription',
+            system__pb2.PreviewMachineDescriptionRequest.SerializeToString,
+            system__pb2.PreviewMachineDescriptionResponse.FromString,
             options,
             channel_credentials,
             insecure,

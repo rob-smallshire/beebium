@@ -22,7 +22,6 @@
 #include "beebium/service/HostFingerprint.hpp"
 #include "beebium/service/MachineStore.hpp"
 #include "beebium/service/ProtocolFingerprint.hpp"
-#include "beebium/service/ReannounceLimiter.hpp"
 #include "beebium/service/ShutdownPolicy.hpp"
 #include "beebium/service/ShutdownCoordinator.hpp"
 #include <beebium/discovery/Advertiser.hpp>
@@ -53,17 +52,20 @@ struct Provenance {
 };
 
 /// Machine identity information
-/// Stable UUID and mutable name for identification and labeling
+/// Stable UUID, plain name and live description for identification and labeling
 struct MachineIdentity {
     std::string uuid;       // RFC 4122 v4 UUID, stable for machine lifetime
-    // The name to show: name_template rendered against its placeholders'
-    // current values (#153). At construction, the template when
-    // name_template is empty.
+    // The machine's name: plain text, never a template (see system.proto's
+    // MachineIdentity.name). A saved machine's is its document's name.
     std::string name;
     std::string model_type; // e.g., "ModelB" (immutable)
     std::string model_name; // e.g., "BBC Model B" (immutable)
-    // The name as the user edits it, with {key} placeholders. Mutable.
-    std::string name_template;
+    // The description as the user edits it, with {key} placeholders; empty
+    // for none. Mutable.
+    std::string description_template;
+    // description_template rendered against its placeholders' current values
+    // (#153).
+    std::string description;
 };
 
 /// The TXT keys a machine's service advertisement always carries: its uuid,
@@ -81,22 +83,15 @@ inline std::map<std::string, std::string> machine_txt_records(const MachineIdent
     };
 }
 
-/// How often the name is re-rendered, so it follows placeholder values that
-/// change under a fixed template (#153). A placeholder value needs no push;
-/// polling at this rate is cheap.
-inline constexpr std::chrono::seconds kNameRefreshInterval{1};
-
-/// The least time between two re-publications of the _beebium._tcp
-/// announcement that a changing rendered name causes; see
-/// ReannounceLimiter.hpp. Long enough to cover a registration's probe and
-/// announcement burst (some three seconds), short enough that a renumbered
-/// station's new name reaches browsers promptly.
-inline constexpr std::chrono::seconds kMinReannounceInterval{5};
+/// How often the description is re-rendered, so it follows placeholder
+/// values that change under a fixed template (#153). A placeholder value
+/// needs no push; polling at this rate is cheap.
+inline constexpr std::chrono::seconds kDescriptionRefreshInterval{1};
 
 namespace detail {
 
 // Copy what a rendering could not substitute into its protobuf report.
-inline void populate_report(const NameRendering& rendering, NameTemplateReport* out) {
+inline void populate_report(const NameRendering& rendering, DescriptionTemplateReport* out) {
     for (const auto& key : rendering.unknown_keys) out->add_unknown_keys(key);
     for (const auto& key : rendering.inapplicable_keys) out->add_inapplicable_keys(key);
     for (const auto& fragment : rendering.malformed) out->add_malformed(fragment);
@@ -120,7 +115,7 @@ public:
                       ShutdownPolicyConfig policy_config = {},
                       ShutdownCoordinator* shutdown_coordinator = nullptr,
                       ShutdownCallback shutdown_callback = nullptr);
-    ~SystemServiceImpl() override { stop_name_refresh(); }
+    ~SystemServiceImpl() override { stop_description_refresh(); }
 
     // Non-copyable
     SystemServiceImpl(const SystemServiceImpl&) = delete;
@@ -156,15 +151,20 @@ public:
         const SetMachineNameRequest* request,
         SetMachineNameResponse* response) override;
 
-    grpc::Status ListNamePlaceholders(
+    grpc::Status SetMachineDescription(
         grpc::ServerContext* context,
-        const ListNamePlaceholdersRequest* request,
-        ListNamePlaceholdersResponse* response) override;
+        const SetMachineDescriptionRequest* request,
+        SetMachineDescriptionResponse* response) override;
 
-    grpc::Status PreviewMachineName(
+    grpc::Status ListDescriptionPlaceholders(
         grpc::ServerContext* context,
-        const PreviewMachineNameRequest* request,
-        PreviewMachineNameResponse* response) override;
+        const ListDescriptionPlaceholdersRequest* request,
+        ListDescriptionPlaceholdersResponse* response) override;
+
+    grpc::Status PreviewMachineDescription(
+        grpc::ServerContext* context,
+        const PreviewMachineDescriptionRequest* request,
+        PreviewMachineDescriptionResponse* response) override;
 
     grpc::Status WatchServerStatus(
         grpc::ServerContext* context,
@@ -232,32 +232,30 @@ public:
     /// Must be called before advertisement can work correctly.
     void set_server_port(uint16_t port);
 
-    /// The placeholders name templates are rendered against (#153), or
-    /// nullptr for none. Renders the current template at once. Call before
+    /// The placeholders description templates are rendered against (#153),
+    /// or nullptr for none. Renders the current template at once. Call before
     /// the server accepts connections; the registry must outlive the service.
-    void set_name_placeholders(const NamePlaceholderRegistry* registry);
+    void set_description_placeholders(const NamePlaceholderRegistry* registry);
 
-    /// Start re-rendering the name every kNameRefreshInterval on a thread of
-    /// its own (never the emulation thread). A changed rendering is sent to
-    /// watchers as an identity change and re-announced, rate-limited.
-    void start_name_refresh();
+    /// Start re-rendering the description every kDescriptionRefreshInterval
+    /// on a thread of its own (never the emulation thread). A changed
+    /// rendering is sent to watchers as an identity change.
+    void start_description_refresh();
 
     /// Stop the refresh thread and wait for it. Idempotent; the destructor
-    /// calls it. Call before stopping the advertiser, so the refresh cannot
-    /// re-announce a machine that is going away.
-    void stop_name_refresh();
+    /// calls it.
+    void stop_description_refresh();
 
     /// Start the _beebium._tcp announcement under the current name.
     void start_advertisement();
 
 private:
-    /// Render a template; a blank rendering falls back to the model's display
-    /// name, since a machine must have a name to show and to announce.
-    NameRendering render_name(std::string_view name_template) const;
+    /// Render a description template.
+    NameRendering render_description(std::string_view description_template) const;
 
-    /// Re-render the current template; on a change, notify watchers and ask
-    /// for a re-announcement. Then re-announce if the limiter allows.
-    void refresh_name();
+    /// Re-render the current description template; on a change, notify
+    /// watchers.
+    void refresh_description();
 
     /// Re-announce under the current name, if advertising.
     /// Caller holds advertisement_mutex_.
@@ -315,18 +313,16 @@ private:
     std::atomic<uint64_t> reset_generation_{0};
     std::atomic<bool> last_reset_hard_{false};
 
-    // Machine-name templates (#153).
-    const NamePlaceholderRegistry* name_placeholders_ = nullptr;
-    std::thread name_refresh_thread_;
-    std::mutex name_refresh_mutex_;
-    std::condition_variable name_refresh_cv_;
-    bool name_refresh_stop_ = false;
+    // Description templates (#153).
+    const NamePlaceholderRegistry* description_placeholders_ = nullptr;
+    std::thread description_refresh_thread_;
+    std::mutex description_refresh_mutex_;
+    std::condition_variable description_refresh_cv_;
+    bool description_refresh_stop_ = false;
 
     // Serialises every start, stop and re-publication of the advertisement
-    // (the RPCs, a rename and the name refresh run on different threads), and
-    // guards reannounce_limiter_.
+    // (the RPCs, a rename and a Save run on different threads).
     std::mutex advertisement_mutex_;
-    ReannounceLimiter reannounce_limiter_{kMinReannounceInterval};
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -352,11 +348,7 @@ SystemServiceImpl<MachineType>::SystemServiceImpl(
     , shutdown_coordinator_(shutdown_coordinator)
     , shutdown_callback_(std::move(shutdown_callback))
     , server_port_(server_port)
-    , clock_speed_hz_(clock_speed_hz) {
-    if (identity_.name_template.empty()) {
-        identity_.name_template = identity_.name;
-    }
-}
+    , clock_speed_hz_(clock_speed_hz) {}
 
 template<typename MachineType>
 void SystemServiceImpl<MachineType>::populate_identity_proto(
@@ -365,7 +357,8 @@ void SystemServiceImpl<MachineType>::populate_identity_proto(
     proto->set_name(identity_.name);
     proto->set_model_type(identity_.model_type);
     proto->set_model_name(identity_.model_name);
-    proto->set_name_template(identity_.name_template);
+    proto->set_description_template(identity_.description_template);
+    proto->set_description(identity_.description);
 }
 
 template<typename MachineType>
@@ -426,15 +419,15 @@ grpc::Status SystemServiceImpl<MachineType>::SaveMachine(
                             "this server keeps its machine nowhere");
     }
     std::string uuid;
-    std::string name_template;
+    std::string description_template;
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
         uuid = identity_.uuid;
-        name_template = identity_.name_template;
+        description_template = identity_.description_template;
     }
     const auto outcome =
         machine_store_->save(request->destination_dirpath(), request->replace_existing(), uuid,
-                             name_template);
+                             description_template);
     using Error = MachineStore::SaveOutcome::Error;
     switch (outcome.error) {
         case Error::None:
@@ -452,7 +445,7 @@ grpc::Status SystemServiceImpl<MachineType>::SaveMachine(
     // A Save As makes another machine, with an identity of its own; and a
     // first save or a Save As gives the machine a document, whose name it is
     // known by from now on.
-    const auto rendering = render_name(name_template);
+    const auto name = machine_store_->document_name();
     bool identity_changed = false;
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
@@ -460,8 +453,8 @@ grpc::Status SystemServiceImpl<MachineType>::SaveMachine(
             identity_.uuid = outcome.machine_uuid;
             identity_changed = true;
         }
-        if (identity_.name != rendering.text) {
-            identity_.name = rendering.text;
+        if (!name.empty() && identity_.name != name) {
+            identity_.name = name;
             identity_changed = true;
         }
         populate_identity_proto(response->mutable_identity());
@@ -545,112 +538,85 @@ void SystemServiceImpl<MachineType>::start_advertisement() {
     }
     std::lock_guard<std::mutex> lock(advertisement_mutex_);
     advertiser_->start(build_service_info());
-    reannounce_limiter_.note_published(ReannounceLimiter::Clock::now());
 }
 
 template<typename MachineType>
-NameRendering SystemServiceImpl<MachineType>::render_name(
-    std::string_view name_template) const {
-    auto render = [this](std::string_view text) {
-        return name_placeholders_
-            ? name_placeholders_->render(text)
-            : render_name_template(text,
-                  [](std::string_view) -> std::optional<NamePlaceholderValue> {
-                      return std::nullopt;
-                  });
-    };
-    NameRendering rendering = render(name_template);
-    // A saved machine is known by its document's name, unless its template
-    // places that name itself. The report stays the template's as written.
-    if (machine_store_ && machine_store_->machine_saved()) {
-        bool places_document = false;
-        render_name_template(name_template,
-            [&](std::string_view key) -> std::optional<NamePlaceholderValue> {
-                if (key == "document") places_document = true;
-                return NamePlaceholderValue{};
-            });
-        if (!places_document) rendering.text = render("{document}").text;
-    }
-    const bool blank = rendering.text.find_first_not_of(" \t\r\n") == std::string::npos;
-    if (blank) {
-        // model_name is immutable, so this read needs no lock.
-        rendering.text = identity_.model_name;
-    }
-    return rendering;
+NameRendering SystemServiceImpl<MachineType>::render_description(
+    std::string_view description_template) const {
+    return description_placeholders_
+        ? description_placeholders_->render(description_template)
+        : render_name_template(description_template,
+              [](std::string_view) -> std::optional<NamePlaceholderValue> {
+                  return std::nullopt;
+              });
 }
 
 template<typename MachineType>
-void SystemServiceImpl<MachineType>::set_name_placeholders(
+void SystemServiceImpl<MachineType>::set_description_placeholders(
     const NamePlaceholderRegistry* registry) {
-    name_placeholders_ = registry;
-    std::string name_template;
+    description_placeholders_ = registry;
+    std::string description_template;
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
-        name_template = identity_.name_template;
+        description_template = identity_.description_template;
     }
-    const auto rendering = render_name(name_template);
+    const auto rendering = render_description(description_template);
     std::lock_guard<std::mutex> lock(watchers_mutex_);
-    identity_.name = rendering.text;
+    identity_.description = rendering.text;
 }
 
 template<typename MachineType>
-void SystemServiceImpl<MachineType>::refresh_name() {
-    std::string name_template;
+void SystemServiceImpl<MachineType>::refresh_description() {
+    std::string description_template;
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
-        name_template = identity_.name_template;
+        description_template = identity_.description_template;
     }
     // Rendered outside the lock: a provider may take locks of its own.
-    const auto rendering = render_name(name_template);
+    const auto rendering = render_description(description_template);
     bool changed = false;
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
-        // A rename while rendering has already set the name for its own
-        // template; this rendering is of the old one.
-        if (identity_.name_template == name_template && identity_.name != rendering.text) {
-            identity_.name = rendering.text;
+        // A SetMachineDescription while rendering has already rendered its
+        // own template; this rendering is of the old one.
+        if (identity_.description_template == description_template &&
+            identity_.description != rendering.text) {
+            identity_.description = rendering.text;
             changed = true;
         }
     }
     if (changed) {
         notify_identity_changed();
     }
-    std::lock_guard<std::mutex> lock(advertisement_mutex_);
-    if (changed) {
-        reannounce_limiter_.request();
-    }
-    if (reannounce_limiter_.take(ReannounceLimiter::Clock::now())) {
-        republish_advertisement_locked();
-    }
 }
 
 template<typename MachineType>
-void SystemServiceImpl<MachineType>::start_name_refresh() {
-    std::lock_guard<std::mutex> lock(name_refresh_mutex_);
-    if (name_refresh_thread_.joinable()) {
+void SystemServiceImpl<MachineType>::start_description_refresh() {
+    std::lock_guard<std::mutex> lock(description_refresh_mutex_);
+    if (description_refresh_thread_.joinable()) {
         return;
     }
-    name_refresh_stop_ = false;
-    name_refresh_thread_ = std::thread([this] {
-        std::unique_lock<std::mutex> lock(name_refresh_mutex_);
-        while (!name_refresh_cv_.wait_for(lock, kNameRefreshInterval,
-                                          [this] { return name_refresh_stop_; })) {
+    description_refresh_stop_ = false;
+    description_refresh_thread_ = std::thread([this] {
+        std::unique_lock<std::mutex> lock(description_refresh_mutex_);
+        while (!description_refresh_cv_.wait_for(lock, kDescriptionRefreshInterval,
+                                                 [this] { return description_refresh_stop_; })) {
             lock.unlock();
-            refresh_name();
+            refresh_description();
             lock.lock();
         }
     });
 }
 
 template<typename MachineType>
-void SystemServiceImpl<MachineType>::stop_name_refresh() {
+void SystemServiceImpl<MachineType>::stop_description_refresh() {
     {
-        std::lock_guard<std::mutex> lock(name_refresh_mutex_);
-        name_refresh_stop_ = true;
+        std::lock_guard<std::mutex> lock(description_refresh_mutex_);
+        description_refresh_stop_ = true;
     }
-    name_refresh_cv_.notify_all();
-    if (name_refresh_thread_.joinable()) {
-        name_refresh_thread_.join();
+    description_refresh_cv_.notify_all();
+    if (description_refresh_thread_.joinable()) {
+        description_refresh_thread_.join();
     }
 }
 
@@ -660,46 +626,61 @@ grpc::Status SystemServiceImpl<MachineType>::SetMachineName(
     const SetMachineNameRequest* request,
     SetMachineNameResponse* response) {
 
-    const std::string& name_template = request->name_template();
-    if (name_template.empty()) {
+    const std::string& name = request->name();
+    if (name.empty()) {
         return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Name cannot be empty");
     }
-
-    const auto rendering = render_name(name_template);
+    // A saved machine's name is its document's: there is one way to rename
+    // it, and that is to rename the document.
+    if (machine_store_ && machine_store_->machine_saved()) {
+        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                            "a saved machine is named by its document: rename the document");
+    }
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
-        identity_.name_template = name_template;
-        identity_.name = rendering.text;
+        identity_.name = name;
         populate_identity_proto(response->mutable_identity());
     }
-    detail::populate_report(rendering, response->mutable_report());
-    if (machine_store_) machine_store_->renamed(name_template);
 
     // The name on the network is the name in the title bar of anyone looking
     // at this machine, so it has to follow the rename rather than wait for a
-    // restart. A rename is deliberate and rare, so it is not delayed by the
-    // limiter that paces re-announcements of changing placeholder values.
+    // restart.
     {
         std::lock_guard<std::mutex> lock(advertisement_mutex_);
         republish_advertisement_locked();
-        reannounce_limiter_.note_published(ReannounceLimiter::Clock::now());
     }
-
-    // Notify watchers of the change
     notify_identity_changed();
-
     return grpc::Status::OK;
 }
 
 template<typename MachineType>
-grpc::Status SystemServiceImpl<MachineType>::ListNamePlaceholders(
+grpc::Status SystemServiceImpl<MachineType>::SetMachineDescription(
     grpc::ServerContext* /*context*/,
-    const ListNamePlaceholdersRequest* /*request*/,
-    ListNamePlaceholdersResponse* response) {
-    if (!name_placeholders_) {
+    const SetMachineDescriptionRequest* request,
+    SetMachineDescriptionResponse* response) {
+    const std::string& description_template = request->description_template();
+    const auto rendering = render_description(description_template);
+    {
+        std::lock_guard<std::mutex> lock(watchers_mutex_);
+        identity_.description_template = description_template;
+        identity_.description = rendering.text;
+        populate_identity_proto(response->mutable_identity());
+    }
+    detail::populate_report(rendering, response->mutable_report());
+    if (machine_store_) machine_store_->described(description_template);
+    notify_identity_changed();
+    return grpc::Status::OK;
+}
+
+template<typename MachineType>
+grpc::Status SystemServiceImpl<MachineType>::ListDescriptionPlaceholders(
+    grpc::ServerContext* /*context*/,
+    const ListDescriptionPlaceholdersRequest* /*request*/,
+    ListDescriptionPlaceholdersResponse* response) {
+    if (!description_placeholders_) {
         return grpc::Status::OK;
     }
-    for (const auto& placeholder : name_placeholders_->snapshot()) {
+    for (const auto& placeholder : description_placeholders_->snapshot()) {
         auto* out = response->add_placeholders();
         out->set_key(placeholder.key);
         out->set_label(placeholder.label);
@@ -713,12 +694,12 @@ grpc::Status SystemServiceImpl<MachineType>::ListNamePlaceholders(
 }
 
 template<typename MachineType>
-grpc::Status SystemServiceImpl<MachineType>::PreviewMachineName(
+grpc::Status SystemServiceImpl<MachineType>::PreviewMachineDescription(
     grpc::ServerContext* /*context*/,
-    const PreviewMachineNameRequest* request,
-    PreviewMachineNameResponse* response) {
-    const auto rendering = render_name(request->name_template());
-    response->set_name(rendering.text);
+    const PreviewMachineDescriptionRequest* request,
+    PreviewMachineDescriptionResponse* response) {
+    const auto rendering = render_description(request->description_template());
+    response->set_description(rendering.text);
     detail::populate_report(rendering, response->mutable_report());
     return grpc::Status::OK;
 }
@@ -967,7 +948,6 @@ grpc::Status SystemServiceImpl<MachineType>::SetAdvertisement(
     std::lock_guard<std::mutex> lock(advertisement_mutex_);
     if (request->enabled()) {
         advertiser_->start(build_service_info());
-        reannounce_limiter_.note_published(ReannounceLimiter::Clock::now());
     } else {
         // Stop advertising
         advertiser_->stop();

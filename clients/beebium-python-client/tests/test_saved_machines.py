@@ -101,7 +101,7 @@ def test_create_machine_makes_a_described_machine_directory(run, describe, tmp_p
 
     description = describe(machine)
     assert description["machine_dirpath"] == str(machine)
-    assert description["document_name"] == "Disc Machine"
+    assert description["name"] == "Disc Machine"  # its document's name
     assert description["model"] == "model-b"
     assert description["preset"] == "model-b-disc"
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", description["created"])
@@ -131,7 +131,7 @@ def test_describe_machine_refuses_a_directory_that_is_not_a_machine(run, tmp_pat
 def test_a_machine_keeps_its_identity_on_every_run(installation, run, describe,
                                                     tmp_path: Path):
     machine = tmp_path / "Kept.beebium-machine"
-    assert run("create-machine", "--machine-description", "Kept {model}",
+    assert run("create-machine", "--machine-description", "Kept {machine-model}",
                "--output", machine).returncode == 0
     uuid = describe(machine)["uuid"]
 
@@ -139,7 +139,8 @@ def test_a_machine_keeps_its_identity_on_every_run(installation, run, describe,
         with _launch(installation, machine) as bbc:
             identity = bbc.system.identity
             assert identity.uuid == uuid
-            assert identity.name_template == "Kept {model}"
+            assert identity.description_template == "Kept {machine-model}"
+            assert identity.description == "Kept BBC Model B"
             assert identity.name == "Kept"  # known by its document's name
         assert describe(machine)["uuid"] == uuid
     assert "last_used" in describe(machine)
@@ -315,35 +316,36 @@ def test_a_save_replaces_a_saved_machine_only_when_asked_and_only_one_it_may(
         assert bbc.system.identity.uuid == uuid
 
 
-def test_document_names_a_machine_not_yet_saved_as_a_launcher_would(installation):
-    """For a machine not yet saved, {document} is the name it would otherwise
-    have: its preset's (here, with none, its model's) and its instance number."""
-    with Beebium.launch(server=installation,
-                        extra_args=["--machine-description", "{document} here",
-                                    "--machine-ordinal", "3"]) as bbc:
-        assert bbc.system.identity.name == "BBC Model B #3 here"
-
-
-def test_a_saved_machine_that_places_its_document_name_keeps_the_rest(
-        installation, run, tmp_path: Path):
+def test_a_saved_machine_is_renamed_only_by_its_document(installation, run, tmp_path: Path):
+    """A saved machine's name is its document's: SetMachineName is refused,
+    and the description, a template, is unaffected."""
     machine = tmp_path / "Elite.beebium-machine"
-    assert run("create-machine", "--machine-description", "{document} ({machine-model})",
+    assert run("create-machine", "--machine-description", "On {machine-model}",
                "--output", machine).returncode == 0
-    with _launch(installation, machine) as bbc:
-        assert bbc.system.identity.name == "Elite (BBC Model B)"
+    with _launch(installation, machine, "--machine-name", "Ignored") as bbc:
+        identity = bbc.system.identity
+        assert identity.name == "Elite"
+        assert identity.description == "On BBC Model B"
+        with pytest.raises(grpc.RpcError) as refused:
+            bbc.system.set_machine_name("Other")
+        assert refused.value.code() == grpc.StatusCode.FAILED_PRECONDITION
+        assert "rename the document" in refused.value.details()
 
 
-def test_a_saved_machine_keeps_its_new_name_and_its_last_screen(installation, run, describe,
-                                                                tmp_path: Path):
+def test_a_saved_machine_keeps_its_new_description_and_its_last_screen(
+        installation, run, describe, tmp_path: Path):
     machine = tmp_path / "Named.beebium-machine"
     assert run("create-machine", "--output", machine).returncode == 0
+    assert "description" not in describe(machine)  # none given
     assert "thumbnail_filepath" not in describe(machine)
     with _launch(installation, machine) as bbc:
-        bbc.system.set_machine_name("Renamed {model}")
+        bbc.system.set_machine_description("Described {machine-model}")
         _run_for(bbc, 0.5)
     description = describe(machine)
-    assert description["description"] == "Renamed {model}"
+    assert description["description"] == "Described {machine-model}"
     assert Path(description["thumbnail_filepath"]).is_file()  # kept at shutdown
+    with _launch(installation, machine) as bbc:
+        assert bbc.system.identity.description == "Described BBC Model B"
 
 
 # ---------------------------------------------------------------------------

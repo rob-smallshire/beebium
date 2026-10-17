@@ -58,17 +58,31 @@ inline std::string preset_id_of(const PresetSource& source) {
     return path.stem().string();
 }
 
-// The identity record of a new machine made from `config`, named
-// `name_template` (empty: the configuration's name, else the model's).
+// The name a machine runs under, plain text: a saved machine's document
+// name; else the name it was launched with (--machine-name); else its
+// preset's name (else its model's) and its launcher's instance number
+// (--machine-ordinal), as "Model B (Disc) #2".
+template<typename MachineType>
+std::string machine_launch_name(const ServerConfig<MachineType>& config) {
+    using Memory = typename MachineType::Memory;
+    if (config.launch.machine_dirpath) return machine_document_name(*config.launch.machine_dirpath);
+    if (!config.launch.machine_name.empty()) return config.launch.machine_name;
+    std::string name = config.launch.preset_name.empty()
+                           ? std::string(Memory::MACHINE_DISPLAY_NAME)
+                           : config.launch.preset_name;
+    if (config.launch.machine_ordinal) name += " #" + std::to_string(*config.launch.machine_ordinal);
+    return name;
+}
+
+// The identity record of a new machine made from `config`, described by
+// `description_template` (empty for no description).
 template<typename MachineType>
 MachineRecord new_machine_record(const ServerConfig<MachineType>& config, std::string uuid,
-                                 const std::string& name_template) {
+                                 const std::string& description_template) {
     using Memory = typename MachineType::Memory;
     MachineRecord record;
     record.uuid = std::move(uuid);
-    record.description = !name_template.empty()                ? name_template
-                  : !config.machine.machine_description.empty() ? config.machine.machine_description
-                                                         : std::string(Memory::MACHINE_DISPLAY_NAME);
+    record.description = description_template;
     record.model = std::string(Memory::MACHINE_TYPE);
     record.created = iso8601_utc_now();
     if (config.launch.preset) record.source_preset = preset_id_of(*config.launch.preset);

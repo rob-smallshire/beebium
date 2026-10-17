@@ -11,10 +11,11 @@ import type {
     SystemInfo,
     ServerStatusEvent as ProtoServerStatusEvent,
     MachineIdentity as ProtoMachineIdentity,
-    NamePlaceholder as ProtoNamePlaceholder,
+    DescriptionPlaceholder as ProtoDescriptionPlaceholder,
     SetMachineNameResponse as ProtoSetMachineNameResponse,
-    ListNamePlaceholdersResponse as ProtoListNamePlaceholdersResponse,
-    PreviewMachineNameResponse as ProtoPreviewMachineNameResponse,
+    SetMachineDescriptionResponse as ProtoSetMachineDescriptionResponse,
+    ListDescriptionPlaceholdersResponse as ProtoListDescriptionPlaceholdersResponse,
+    PreviewMachineDescriptionResponse as ProtoPreviewMachineDescriptionResponse,
     LaunchProvenance as ProtoLaunchProvenance,
     ShutdownConditionStatus as ProtoShutdownConditionStatus,
     AdvertisementState as ProtoAdvertisementState,
@@ -55,28 +56,35 @@ export interface Provenance {
 export interface MachineIdentity {
     uuid: string;
     /**
-     * The name to show: `nameTemplate` rendered against the current values
-     * of its placeholders. The server re-renders it about once a second; a
-     * change arrives as an IDENTITY_CHANGED status event.
+     * The machine's name, plain text and never a template: what titles and
+     * the network announcement show. A saved machine's is its document's
+     * name; a machine not yet saved can be renamed with `setMachineName`.
+     * A change arrives as an IDENTITY_CHANGED status event.
      */
     name: string;
     /**
-     * The name as the user edits it: ordinary text in which `{key}` stands
-     * for a placeholder's current value, e.g.
-     * "Station {econet-station} (AUN, Model B)". A template without braces
-     * is a plain name. See docs/discussion/machine-name-templates.md.
+     * The machine's description, shown beside its name: `descriptionTemplate`
+     * rendered against the current values of its placeholders, re-rendered
+     * about once a second. Empty when there is no template.
      */
-    nameTemplate: string;
+    description: string;
+    /**
+     * The description as the user edits it: ordinary text in which `{key}`
+     * stands for a placeholder's current value, e.g.
+     * "Station {econet-station} (AUN)"; empty for none. See
+     * docs/discussion/machine-name-templates.md.
+     */
+    descriptionTemplate: string;
     modelType: string;
     modelName: string;
 }
 
 /**
- * A placeholder a machine name template can use, and its value on this
- * machine. The server owns the set: a client lists it rather than knowing
- * any keys itself.
+ * A placeholder a machine description template can use, and its value on
+ * this machine. The server owns the set: a client lists it rather than
+ * knowing any keys itself.
  */
-export interface NamePlaceholder {
+export interface DescriptionPlaceholder {
     /** Used in templates as `{key}`, e.g. "econet-station". */
     key: string;
     /** Short human name for a picker: "Econet station". */
@@ -103,7 +111,7 @@ export interface NamePlaceholder {
  * What a rendering could not substitute, so a caller can warn without
  * parsing the template itself.
  */
-export interface NameTemplateReport {
+export interface DescriptionTemplateReport {
     /**
      * The inner text of each `{...}` that is not a known key (rendered
      * verbatim), once each, in order; "" for an empty `{}`.
@@ -115,20 +123,20 @@ export interface NameTemplateReport {
     malformed: string[];
 }
 
-/** The rendering of a template, without the machine being renamed. */
-export interface MachineNamePreview {
-    /** The name as `MachineIdentity.name` would be with this template. */
-    name: string;
+/** The rendering of a description template, without anything changing. */
+export interface MachineDescriptionPreview {
+    /** The description as `MachineIdentity.description` would be with this template. */
+    description: string;
     /** What the rendering could not substitute. */
-    report: NameTemplateReport;
+    report: DescriptionTemplateReport;
 }
 
-/** The outcome of renaming a machine. */
-export interface SetMachineNameResult {
+/** The outcome of setting a machine's description template. */
+export interface SetMachineDescriptionResult {
     /** The updated identity: the template and its rendering. */
     identity: MachineIdentity;
     /** What the rendering could not substitute. */
-    report: NameTemplateReport;
+    report: DescriptionTemplateReport;
 }
 
 export interface ShutdownResponse {
@@ -211,13 +219,14 @@ function toMachineIdentity(proto: ProtoMachineIdentity): MachineIdentity {
     return {
         uuid: proto.uuid,
         name: proto.name,
-        nameTemplate: proto.nameTemplate,
+        description: proto.description,
+        descriptionTemplate: proto.descriptionTemplate,
         modelType: proto.modelType,
         modelName: proto.modelName,
     };
 }
 
-function toNamePlaceholder(proto: ProtoNamePlaceholder): NamePlaceholder {
+function toDescriptionPlaceholder(proto: ProtoDescriptionPlaceholder): DescriptionPlaceholder {
     return {
         key: proto.key,
         label: proto.label,
@@ -229,7 +238,9 @@ function toNamePlaceholder(proto: ProtoNamePlaceholder): NamePlaceholder {
     };
 }
 
-function toNameTemplateReport(proto: NameTemplateReport | undefined): NameTemplateReport {
+function toDescriptionTemplateReport(
+    proto: DescriptionTemplateReport | undefined,
+): DescriptionTemplateReport {
     return {
         unknownKeys: [...(proto?.unknownKeys ?? [])],
         inapplicableKeys: [...(proto?.inapplicableKeys ?? [])],
@@ -316,54 +327,72 @@ export class System {
     }
 
     /**
-     * Rename the machine. `nameTemplate` is the name as the user edits it;
-     * a plain name is a template without placeholders. It must not be empty.
-     *
-     * Returns the updated identity (template and rendering) and what the
-     * rendering could not substitute. Unknown keys do not make the rename
-     * fail: they render verbatim, braces included.
+     * Rename a machine not yet saved. A name is plain text, never a
+     * template, and must not be empty. A saved machine is named by its
+     * document, which is renamed instead: the server refuses with
+     * FAILED_PRECONDITION.
      */
-    async setMachineName(nameTemplate: string): Promise<SetMachineNameResult> {
-        const response = await promisify<{ nameTemplate: string }, ProtoSetMachineNameResponse>(
+    async setMachineName(name: string): Promise<MachineIdentity> {
+        const response = await promisify<{ name: string }, ProtoSetMachineNameResponse>(
             this.stub as unknown as Record<string, Function>,
             "setMachineName",
-            { nameTemplate },
+            { name },
         );
         if (!response.identity) {
             throw new Error("Server returned no identity after setMachineName");
         }
+        return toMachineIdentity(response.identity);
+    }
+
+    /**
+     * Set the machine's description template (empty for none). Returns the
+     * updated identity (template and rendering) and what the rendering could
+     * not substitute. Unknown keys do not make it fail: they render verbatim,
+     * braces included.
+     */
+    async setMachineDescription(descriptionTemplate: string): Promise<SetMachineDescriptionResult> {
+        const response = await promisify<
+            { descriptionTemplate: string },
+            ProtoSetMachineDescriptionResponse
+        >(this.stub as unknown as Record<string, Function>, "setMachineDescription", {
+            descriptionTemplate,
+        });
+        if (!response.identity) {
+            throw new Error("Server returned no identity after setMachineDescription");
+        }
         return {
             identity: toMachineIdentity(response.identity),
-            report: toNameTemplateReport(response.report),
+            report: toDescriptionTemplateReport(response.report),
         };
     }
 
     /**
-     * List the placeholders a name template can use on this server, with
-     * their current values on this machine, in a stable order.
+     * List the placeholders a description template can use on this server,
+     * with their current values on this machine, in a stable order.
      */
-    async listNamePlaceholders(): Promise<NamePlaceholder[]> {
-        const response = await promisify<{}, ProtoListNamePlaceholdersResponse>(
+    async listDescriptionPlaceholders(): Promise<DescriptionPlaceholder[]> {
+        const response = await promisify<{}, ProtoListDescriptionPlaceholdersResponse>(
             this.stub as unknown as Record<string, Function>,
-            "listNamePlaceholders",
+            "listDescriptionPlaceholders",
             {},
         );
-        return response.placeholders.map(toNamePlaceholder);
+        return response.placeholders.map(toDescriptionPlaceholder);
     }
 
     /**
-     * Render `nameTemplate` against this machine without renaming it, for a
-     * live preview while the user edits a name.
+     * Render `descriptionTemplate` against this machine without changing
+     * anything, for a live preview while the user edits a description.
      */
-    async previewMachineName(nameTemplate: string): Promise<MachineNamePreview> {
-        const response = await promisify<{ nameTemplate: string }, ProtoPreviewMachineNameResponse>(
-            this.stub as unknown as Record<string, Function>,
-            "previewMachineName",
-            { nameTemplate },
-        );
+    async previewMachineDescription(descriptionTemplate: string): Promise<MachineDescriptionPreview> {
+        const response = await promisify<
+            { descriptionTemplate: string },
+            ProtoPreviewMachineDescriptionResponse
+        >(this.stub as unknown as Record<string, Function>, "previewMachineDescription", {
+            descriptionTemplate,
+        });
         return {
-            name: response.name,
-            report: toNameTemplateReport(response.report),
+            description: response.description,
+            report: toDescriptionTemplateReport(response.report),
         };
     }
 

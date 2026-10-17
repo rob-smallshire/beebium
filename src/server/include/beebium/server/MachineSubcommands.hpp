@@ -187,7 +187,7 @@ public:
 
         // Its identity, written with the rest, so the directory is a machine
         // whole or does not appear at all.
-        const auto record = new_machine_record(config, generate_uuid_v4(), "");
+        const auto record = new_machine_record(config, generate_uuid_v4(), config.machine.machine_description);
         const auto record_text = machine_record_text(record);
         members->push_back({std::string(machine_layout::RECORD_FILENAME),
                             std::vector<std::uint8_t>(record_text.begin(), record_text.end())});
@@ -228,10 +228,9 @@ public:
                   << "Describes the saved machine at <dirpath> (or whose document file is\n"
                   << "named), of any model:\n"
                   << "  machine_dirpath     the machine directory\n"
-                  << "  document_name       the directory's name without .beebium-machine,\n"
-                  << "                      which the machine is known by unless its name\n"
-                  << "                      places {document}\n"
-                  << "  description         its description (a template)\n"
+                  << "  name                its name: the directory's name without\n"
+                  << "                      .beebium-machine\n"
+                  << "  description         its description (a template), absent when none\n"
                   << "  uuid                its identity, the same on every run\n"
                   << "  model               its model id\n"
                   << "  preset              the preset it was made from, if known\n"
@@ -298,8 +297,8 @@ public:
 
         nlohmann::ordered_json out;
         out["machine_dirpath"] = dirpath->string();
-        out["document_name"] = machine_document_name(*dirpath);
-        out["description"] = record->description;
+        out["name"] = machine_document_name(*dirpath);
+        if (!record->description.empty()) out["description"] = record->description;
         out["uuid"] = record->uuid;
         out["model"] = record->model;
         if (!record->source_preset.empty()) out["preset"] = record->source_preset;

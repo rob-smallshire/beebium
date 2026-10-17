@@ -327,14 +327,19 @@ class MachineIdentity(_message.Message):
     NAME_FIELD_NUMBER: _builtins.int
     MODEL_TYPE_FIELD_NUMBER: _builtins.int
     MODEL_NAME_FIELD_NUMBER: _builtins.int
-    NAME_TEMPLATE_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_TEMPLATE_FIELD_NUMBER: _builtins.int
     uuid: _builtins.str
     """RFC 4122 v4 UUID, stable for machine lifetime"""
     name: _builtins.str
-    """The name to show: name_template rendered against the current values of
-    its placeholders. Titles, the _beebium._tcp announcement and every
-    consumer that displays the machine use this. Re-rendered about once a
-    second; a change arrives as SERVER_STATUS_IDENTITY_CHANGED.
+    """The machine's name, plain text and never a template: what titles, the
+    _beebium._tcp announcement and every consumer that names the machine
+    show. A saved machine's is its document's name (its directory's name
+    without .beebium-machine, as it was when the machine was opened or
+    last saved); a machine not yet saved has the name it was launched with
+    (--machine-name), else its preset's name (else its model's) and its
+    launcher's instance number ("Model B (Disc) #2"), until SetMachineName
+    gives it another. A change arrives as SERVER_STATUS_IDENTITY_CHANGED.
     """
     model_type: _builtins.str
     """Machine model type identifier (e.g., "ModelB", "ModelBPlus")
@@ -344,14 +349,21 @@ class MachineIdentity(_message.Message):
     """Human-readable model name (e.g., "BBC Model B 32K")
     Immutable, set at creation
     """
-    name_template: _builtins.str
-    """The name as the user edits it, mutable via SetMachineName: ordinary
-    text in which {key} stands for a placeholder's current value, e.g.
-    "Station {econet-station} (AUN, Model B)". {{ and }} are literal
-    braces; an unknown key renders verbatim; a placeholder that does not
-    apply to this machine renders empty; ':' '|' '?' '!' inside braces are
-    reserved. A template without braces is a plain name. See
-    docs/discussion/machine-name-templates.md.
+    description: _builtins.str
+    """The machine's description, shown beside its name (a window subtitle):
+    description_template rendered against the current values of its
+    placeholders, re-rendered about once a second. Empty when there is no
+    template. A change arrives as SERVER_STATUS_IDENTITY_CHANGED.
+    """
+    description_template: _builtins.str
+    """The description as the user edits it, mutable via
+    SetMachineDescription; empty for none: ordinary text in which {key}
+    stands for a placeholder's current value, e.g. "Station
+    {econet-station} (AUN)". {{ and }} are literal braces; an unknown key
+    renders verbatim; a placeholder that does not apply to this machine
+    renders empty; ':' '|' '?' '!' inside braces are reserved. From a
+    preset's machine_description, --machine-description, or a saved
+    machine's machine.json. See docs/discussion/machine-name-templates.md.
     """
     def __init__(
         self,
@@ -360,11 +372,12 @@ class MachineIdentity(_message.Message):
         name: _builtins.str = ...,
         model_type: _builtins.str = ...,
         model_name: _builtins.str = ...,
-        name_template: _builtins.str = ...,
+        description: _builtins.str = ...,
+        description_template: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["model_name", b"model_name", "model_type", b"model_type", "name", b"name", "name_template", b"name_template", "uuid", b"uuid"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "description_template", b"description_template", "model_name", b"model_name", "model_type", b"model_type", "name", b"name", "uuid", b"uuid"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -496,17 +509,17 @@ class SetMachineNameRequest(_message.Message):
 
     DESCRIPTOR: _descriptor.Descriptor
 
-    NAME_TEMPLATE_FIELD_NUMBER: _builtins.int
-    name_template: _builtins.str
-    """The new name template (must not be empty)."""
+    NAME_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    """The new name, plain text (must not be empty)."""
     def __init__(
         self,
         *,
-        name_template: _builtins.str = ...,
+        name: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["name_template", b"name_template"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -517,23 +530,65 @@ class SetMachineNameResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     IDENTITY_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def identity(self) -> Global___MachineIdentity:
+        """The updated identity."""
+
+    def __init__(
+        self,
+        *,
+        identity: Global___MachineIdentity | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SetMachineNameResponse: _TypeAlias = SetMachineNameResponse  # noqa: Y015
+
+@_typing.final
+class SetMachineDescriptionRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    DESCRIPTION_TEMPLATE_FIELD_NUMBER: _builtins.int
+    description_template: _builtins.str
+    """The new description template; empty for no description."""
+    def __init__(
+        self,
+        *,
+        description_template: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description_template", b"description_template"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SetMachineDescriptionRequest: _TypeAlias = SetMachineDescriptionRequest  # noqa: Y015
+
+@_typing.final
+class SetMachineDescriptionResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    IDENTITY_FIELD_NUMBER: _builtins.int
     REPORT_FIELD_NUMBER: _builtins.int
     @_builtins.property
     def identity(self) -> Global___MachineIdentity:
         """The updated identity: the template and its rendering."""
 
     @_builtins.property
-    def report(self) -> Global___NameTemplateReport:
+    def report(self) -> Global___DescriptionTemplateReport:
         """What the rendering could not substitute, so a client can warn without
         parsing the template. Only the caller gets this; a client watching the
-        status stream that wants it calls PreviewMachineName.
+        status stream that wants it calls PreviewMachineDescription.
         """
 
     def __init__(
         self,
         *,
         identity: Global___MachineIdentity | None = ...,
-        report: Global___NameTemplateReport | None = ...,
+        report: Global___DescriptionTemplateReport | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "report", b"report"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
@@ -541,11 +596,11 @@ class SetMachineNameResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___SetMachineNameResponse: _TypeAlias = SetMachineNameResponse  # noqa: Y015
+Global___SetMachineDescriptionResponse: _TypeAlias = SetMachineDescriptionResponse  # noqa: Y015
 
 @_typing.final
-class NameTemplateReport(_message.Message):
-    """What a template's rendering could not substitute."""
+class DescriptionTemplateReport(_message.Message):
+    """What a description template's rendering could not substitute."""
 
     DESCRIPTOR: _descriptor.Descriptor
 
@@ -581,11 +636,11 @@ class NameTemplateReport(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___NameTemplateReport: _TypeAlias = NameTemplateReport  # noqa: Y015
+Global___DescriptionTemplateReport: _TypeAlias = DescriptionTemplateReport  # noqa: Y015
 
 @_typing.final
-class ListNamePlaceholdersRequest(_message.Message):
-    """=== Name placeholders ==="""
+class ListDescriptionPlaceholdersRequest(_message.Message):
+    """=== Description placeholders ==="""
 
     DESCRIPTOR: _descriptor.Descriptor
 
@@ -598,11 +653,13 @@ class ListNamePlaceholdersRequest(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___ListNamePlaceholdersRequest: _TypeAlias = ListNamePlaceholdersRequest  # noqa: Y015
+Global___ListDescriptionPlaceholdersRequest: _TypeAlias = ListDescriptionPlaceholdersRequest  # noqa: Y015
 
 @_typing.final
-class NamePlaceholder(_message.Message):
-    """A placeholder a name template can use, and its value on this machine."""
+class DescriptionPlaceholder(_message.Message):
+    """A placeholder a description template can use, and its value on this
+    machine.
+    """
 
     DESCRIPTOR: _descriptor.Descriptor
 
@@ -650,21 +707,21 @@ class NamePlaceholder(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___NamePlaceholder: _TypeAlias = NamePlaceholder  # noqa: Y015
+Global___DescriptionPlaceholder: _TypeAlias = DescriptionPlaceholder  # noqa: Y015
 
 @_typing.final
-class ListNamePlaceholdersResponse(_message.Message):
+class ListDescriptionPlaceholdersResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     PLACEHOLDERS_FIELD_NUMBER: _builtins.int
     @_builtins.property
-    def placeholders(self) -> _containers.RepeatedCompositeFieldContainer[Global___NamePlaceholder]:
+    def placeholders(self) -> _containers.RepeatedCompositeFieldContainer[Global___DescriptionPlaceholder]:
         """Every placeholder on this server, in a stable order."""
 
     def __init__(
         self,
         *,
-        placeholders: _abc.Iterable[Global___NamePlaceholder] | None = ...,
+        placeholders: _abc.Iterable[Global___DescriptionPlaceholder] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
@@ -672,52 +729,54 @@ class ListNamePlaceholdersResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___ListNamePlaceholdersResponse: _TypeAlias = ListNamePlaceholdersResponse  # noqa: Y015
+Global___ListDescriptionPlaceholdersResponse: _TypeAlias = ListDescriptionPlaceholdersResponse  # noqa: Y015
 
 @_typing.final
-class PreviewMachineNameRequest(_message.Message):
+class PreviewMachineDescriptionRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
-    NAME_TEMPLATE_FIELD_NUMBER: _builtins.int
-    name_template: _builtins.str
+    DESCRIPTION_TEMPLATE_FIELD_NUMBER: _builtins.int
+    description_template: _builtins.str
     def __init__(
         self,
         *,
-        name_template: _builtins.str = ...,
+        description_template: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["name_template", b"name_template"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description_template", b"description_template"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___PreviewMachineNameRequest: _TypeAlias = PreviewMachineNameRequest  # noqa: Y015
+Global___PreviewMachineDescriptionRequest: _TypeAlias = PreviewMachineDescriptionRequest  # noqa: Y015
 
 @_typing.final
-class PreviewMachineNameResponse(_message.Message):
+class PreviewMachineDescriptionResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
-    NAME_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
     REPORT_FIELD_NUMBER: _builtins.int
-    name: _builtins.str
-    """The rendering, as MachineIdentity.name would be with this template."""
+    description: _builtins.str
+    """The rendering, as MachineIdentity.description would be with this
+    template.
+    """
     @_builtins.property
-    def report(self) -> Global___NameTemplateReport:
+    def report(self) -> Global___DescriptionTemplateReport:
         """What the rendering could not substitute."""
 
     def __init__(
         self,
         *,
-        name: _builtins.str = ...,
-        report: Global___NameTemplateReport | None = ...,
+        description: _builtins.str = ...,
+        report: Global___DescriptionTemplateReport | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["report", b"report"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "report", b"report"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "report", b"report"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___PreviewMachineNameResponse: _TypeAlias = PreviewMachineNameResponse  # noqa: Y015
+Global___PreviewMachineDescriptionResponse: _TypeAlias = PreviewMachineDescriptionResponse  # noqa: Y015
 
 @_typing.final
 class ShutdownRequest(_message.Message):
@@ -861,7 +920,9 @@ class ServerStatusEvent(_message.Message):
     """
     @_builtins.property
     def identity(self) -> Global___MachineIdentity:
-        """For IDENTITY_CHANGED: the updated identity"""
+        """For IDENTITY_CHANGED: the updated identity, sent when its uuid, name or
+        description changes
+        """
 
     @_builtins.property
     def shutdown_conditions(self) -> _containers.RepeatedCompositeFieldContainer[Global___ShutdownConditionStatus]:

@@ -210,20 +210,16 @@ public:
                 timestamp
             };
 
-            // Apply identity defaults (the uuid is the one assemble_machine
-            // resolved)
-            if (config.machine.machine_description.empty()) {
-                config.machine.machine_description = std::string(Memory::MACHINE_DISPLAY_NAME);
-            }
-
-            // The name is a template (#153); the server renders it, and
-            // re-renders it as its placeholders' values change.
+            // The machine's identity: the uuid assemble_machine resolved, a
+            // plain name, and its description, a template (#153) the server
+            // renders and re-renders as its placeholders' values change.
             beebium::service::MachineIdentity identity{
                 config.launch.machine_uuid,
-                config.machine.machine_description,
+                machine_launch_name(config),
                 std::string(Memory::MACHINE_TYPE),
                 std::string(Memory::MACHINE_DISPLAY_NAME),
-                config.machine.machine_description
+                config.machine.machine_description,
+                {}
             };
 
             // Print provenance details for debugging (before move)
@@ -237,7 +233,8 @@ public:
 
             // Print identity details
             std::cout << "Identity: uuid=" << identity.uuid
-                      << ", name_template='" << identity.name_template
+                      << ", name='" << identity.name
+                      << "', description_template='" << identity.description_template
                       << "', model_type='" << identity.model_type
                       << "', model_name='" << identity.model_name
                       << "'" << std::endl;
@@ -259,8 +256,8 @@ public:
             server.set_initial_speed_multiplier(
                 config.machine.speed_multiplier_override.value_or(1.0));
 
-            // Placeholders the loaded extensions offer for the machine's name
-            // template. A plugin that breaks the registration rules loses its
+            // Placeholders the loaded extensions offer for the machine's
+            // description template. A plugin that breaks the registration rules loses its
             // placeholders, not the machine.
             for (auto* ext : extension_registry.extensions()) {
                 register_extension_name_placeholders(server, *ext);
@@ -269,24 +266,7 @@ public:
                 register_extension_name_placeholders(server, *transport);
             }
             server.set_launch_preset_name(config.launch.preset_name);
-            // What {document} renders for a machine not yet saved: its
-            // preset's name (else the model's) and its instance number, as a
-            // launcher names a new machine.
-            {
-                std::string base = config.launch.preset_name.empty()
-                                       ? std::string(Memory::MACHINE_DISPLAY_NAME)
-                                       : config.launch.preset_name;
-                std::string escaped;
-                for (char c : base) {
-                    escaped += c;
-                    if (c == '{' || c == '}') escaped += c;
-                }
-                server.set_default_name_template(escaped + " {machine-ordinal}");
-            }
             server.set_launch_coprocessor(am.coprocessor);
-            if (config.launch.machine_ordinal) {
-                server.set_launch_ordinal(*config.launch.machine_ordinal);
-            }
 
             server.start(std::move(provenance), std::move(identity),
                         config.launch.advertise, shutdown_policy_config, std::move(shutdown_callback),

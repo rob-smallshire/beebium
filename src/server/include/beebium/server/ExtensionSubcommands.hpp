@@ -11,7 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 // The extension subcommands: list-extensions, describe-extension,
-// list-attachment-points and list-name-placeholders.
+// list-attachment-points and list-description-placeholders.
 
 #pragma once
 
@@ -666,21 +666,21 @@ public:
     }
 };
 
-// ListNamePlaceholders subcommand: the placeholders a machine description template
+// ListDescriptionPlaceholders subcommand: the placeholders a machine description template
 // can use (#153), for people writing presets and launch commands. Lists the
 // core's placeholders without launching a machine, so only values fixed
 // before launch are shown; a running server's ListNamePlaceholders RPC lists
 // every placeholder, extensions' included, with live values.
 template<typename MachineType>
-class ListNamePlaceholdersSubcommand : public Subcommand<MachineType> {
+class ListDescriptionPlaceholdersSubcommand : public Subcommand<MachineType> {
 public:
-    std::string_view name() const override { return "list-name-placeholders"; }
+    std::string_view name() const override { return "list-description-placeholders"; }
     std::string_view description() const override {
         return "List the placeholders a machine description template can use";
     }
 
     void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " list-name-placeholders\n"
+        std::cerr << "Usage: " << program_name << " list-description-placeholders\n"
                   << "\n"
                   << "Lists the placeholders a machine description template\n"
                   << "(--machine-description, a preset's machine_description) can use: each\n"

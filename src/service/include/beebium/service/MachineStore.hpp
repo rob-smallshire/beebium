@@ -51,19 +51,20 @@ public:
     };
 
     // Saves the machine, as SystemService.SaveMachine describes, given its
-    // uuid and name template now. An empty `destination_dirpath` saves a
-    // saved machine in place; `replace_existing` replaces a saved machine
-    // there.
+    // uuid and description template now. An empty `destination_dirpath`
+    // saves a saved machine in place; `replace_existing` replaces a saved
+    // machine there.
     virtual SaveOutcome save(const std::string& destination_dirpath, bool replace_existing,
                              const std::string& machine_uuid,
-                             const std::string& name_template) = 0;
+                             const std::string& description_template) = 0;
 
     // Forgets the battery-backed state, from the next start; returns the
     // units forgotten.
     virtual std::vector<std::string> reset_battery() = 0;
 
-    // Records a new name template, for a saved machine in its directory.
-    virtual void renamed(const std::string& name_template) = 0;
+    // Records a new description template, for a saved machine in its
+    // directory.
+    virtual void described(const std::string& description_template) = 0;
 };
 
 }  // namespace beebium::service

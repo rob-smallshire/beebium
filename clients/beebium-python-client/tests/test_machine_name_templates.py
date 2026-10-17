@@ -10,13 +10,16 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Machine names as templates, against a real server (issue #153).
 
-A machine's name is a template whose placeholders the server fills from the
-machine's state: launched as ``Station {econet-station}`` with station 80, it
-is called "Station 80". The client knows no placeholder keys of its own; it
-reads the template and the rendering, lists what the server offers, previews,
-and sets. See docs/discussion/machine-name-templates.md.
+"""A machine's plain name and its description template, against a real
+server (issue #153).
+
+A machine's name is plain text: never a template. Its description, shown
+beside it, is a template whose placeholders the server fills from the
+machine's state: described as ``Station {econet-station}`` with station 80,
+it reads "Station 80". The client knows no placeholder keys of its own; it
+reads the template and the rendering, lists what the server offers,
+previews, and sets. See docs/discussion/machine-name-templates.md.
 """
 
 from __future__ import annotations
@@ -44,7 +47,8 @@ def station_80(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> Iterator[Beebium]:
-    """A machine on AUN station 80 whose name is a template of its station.
+    """A machine on AUN station 80 whose description is a template of its
+    station.
 
     The AUN transport is hermetic: an OS-chosen port, no discovery, no map
     file, and a private auto-station state file.
@@ -66,23 +70,26 @@ def station_80(
         yield bbc
 
 
-def _wait_for_name(bbc: Beebium, name: str) -> str:
-    """The machine's rendered name, once it is `name` or the timeout passes."""
+def _wait_for_description(bbc: Beebium, description: str) -> str:
+    """The machine's rendered description, once it is `description` or the
+    timeout passes."""
     deadline = time.monotonic() + RENDER_TIMEOUT
-    current = bbc.system.identity.name
-    while current != name and time.monotonic() < deadline:
+    current = bbc.system.identity.description
+    while current != description and time.monotonic() < deadline:
         time.sleep(0.2)
-        current = bbc.system.identity.name
+        current = bbc.system.identity.description
     return current
 
 
-def test_a_launch_template_renders_the_station(station_80: Beebium) -> None:
-    assert _wait_for_name(station_80, "Station 80") == "Station 80"
-    assert station_80.system.identity.name_template == TEMPLATE
+def test_a_launch_template_renders_the_station_beside_a_plain_name(station_80: Beebium) -> None:
+    assert _wait_for_description(station_80, "Station 80") == "Station 80"
+    identity = station_80.system.identity
+    assert identity.description_template == TEMPLATE
+    assert identity.name == "BBC Model B"  # no preset, no ordinal: the model's name
 
 
 def test_placeholders_include_the_econet_station_with_its_value(station_80: Beebium) -> None:
-    placeholders = {p.key: p for p in station_80.system.list_name_placeholders()}
+    placeholders = {p.key: p for p in station_80.system.list_description_placeholders()}
     station = placeholders["econet-station"]
     assert station.value == "80"
     assert station.applicable
@@ -90,58 +97,65 @@ def test_placeholders_include_the_econet_station_with_its_value(station_80: Beeb
     assert station.label
     assert station.group
     assert station.description
+    assert "machine-ordinal" not in placeholders
 
 
-def test_preview_reports_unknown_keys_without_renaming(station_80: Beebium) -> None:
-    _wait_for_name(station_80, "Station 80")
-    preview = station_80.system.preview_machine_name("Station {econet-station} {no-such-key}")
-    assert preview.name == "Station 80 {no-such-key}"
+def test_preview_reports_unknown_keys_without_changing_anything(station_80: Beebium) -> None:
+    _wait_for_description(station_80, "Station 80")
+    preview = station_80.system.preview_machine_description("Station {econet-station} {no-such-key}")
+    assert preview.description == "Station 80 {no-such-key}"
     assert preview.report.unknown_keys == ("no-such-key",)
     assert preview.report.inapplicable_keys == ()
     assert preview.report.malformed == ()
 
     identity = station_80.system.identity
-    assert identity.name == "Station 80"
-    assert identity.name_template == TEMPLATE
+    assert identity.description == "Station 80"
+    assert identity.description_template == TEMPLATE
 
 
 def test_preview_reports_malformed_fragments(station_80: Beebium) -> None:
-    preview = station_80.system.preview_machine_name("Station {econet-station")
+    preview = station_80.system.preview_machine_description("Station {econet-station")
     assert preview.report.malformed
-    assert preview.name.startswith("Station ")
+    assert preview.description.startswith("Station ")
 
 
 def test_set_applies_the_template_and_reports_unknown_keys(station_80: Beebium) -> None:
-    change = station_80.system.set_machine_name("Net {econet-station} {no-such-key}")
+    change = station_80.system.set_machine_description("Net {econet-station} {no-such-key}")
     assert change.report.unknown_keys == ("no-such-key",)
-    assert change.identity.name_template == "Net {econet-station} {no-such-key}"
-    assert change.identity.name == "Net 80 {no-such-key}"
+    assert change.identity.description_template == "Net {econet-station} {no-such-key}"
+    assert change.identity.description == "Net 80 {no-such-key}"
 
     identity = station_80.system.identity
-    assert identity.name_template == "Net {econet-station} {no-such-key}"
-    assert identity.name == "Net 80 {no-such-key}"
+    assert identity.description_template == "Net {econet-station} {no-such-key}"
+    assert identity.description == "Net 80 {no-such-key}"
 
 
-def test_a_plain_name_is_a_template_of_itself(station_80: Beebium) -> None:
+def test_an_empty_template_clears_the_description(station_80: Beebium) -> None:
+    station_80.system.set_machine_description("")
     identity = station_80.system.identity
-    identity.name = "Girton"
-    assert identity.name == "Girton"
-    assert identity.name_template == "Girton"
-    assert station_80.system.identity.name_template == "Girton"
+    assert identity.description == ""
+    assert identity.description_template == ""
 
 
-def test_setting_name_template_on_the_identity_renders_it(station_80: Beebium) -> None:
+def test_setting_the_template_on_the_identity_renders_it(station_80: Beebium) -> None:
     identity = station_80.system.identity
-    identity.name_template = "Girton {econet-station}"
-    assert identity.name_template == "Girton {econet-station}"
-    assert identity.name == "Girton 80"
+    identity.description_template = "Girton {econet-station}"
+    assert identity.description_template == "Girton {econet-station}"
+    assert identity.description == "Girton 80"
 
 
-def test_an_empty_template_is_refused(station_80: Beebium) -> None:
+def test_a_name_is_plain_text(station_80: Beebium) -> None:
+    identity = station_80.system.identity
+    identity.name = "Girton {econet-station}"
+    assert identity.name == "Girton {econet-station}"
+    assert station_80.system.identity.name == "Girton {econet-station}"
+    assert station_80.system.identity.description_template == TEMPLATE
+
+
+def test_an_empty_name_is_refused(station_80: Beebium) -> None:
     with pytest.raises(grpc.RpcError) as excinfo:
         station_80.system.set_machine_name("")
     assert excinfo.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-    assert station_80.system.identity.name_template == TEMPLATE
 
 
 def test_a_placeholder_without_econet_is_inapplicable_and_renders_empty(
@@ -153,13 +167,14 @@ def test_a_placeholder_without_econet_is_inapplicable_and_renders_empty(
         mos_filepath=mos_filepath,
         startup_timeout=30.0,
     ) as bbc:
-        placeholders = {p.key: p for p in bbc.system.list_name_placeholders()}
+        assert bbc.system.identity.description == ""  # none given
+        placeholders = {p.key: p for p in bbc.system.list_description_placeholders()}
         station = placeholders["econet-station"]
         assert not station.applicable
         assert station.value == ""
 
-        preview = bbc.system.preview_machine_name("Station [{econet-station}]")
-        assert preview.name == "Station []"
+        preview = bbc.system.preview_machine_description("Station [{econet-station}]")
+        assert preview.description == "Station []"
         assert preview.report.inapplicable_keys == ("econet-station",)
         assert preview.report.unknown_keys == ()
 
@@ -167,13 +182,13 @@ def test_a_placeholder_without_econet_is_inapplicable_and_renders_empty(
 @pytest.mark.parametrize(
     ("extra_args", "expected"),
     [
-        (["--machine-ordinal", "3"], "X #3"),
-        # No ordinal: the placeholder renders empty and the trailing space is
-        # trimmed.
-        ([], "X"),
+        (["--machine-ordinal", "3"], "BBC Model B #3"),
+        ([], "BBC Model B"),
+        (["--machine-name", "Girton {not-a-placeholder}", "--machine-ordinal", "3"],
+         "Girton {not-a-placeholder}"),
     ],
 )
-def test_machine_ordinal_renders_the_launch_ordinal(
+def test_the_default_name_is_the_model_or_preset_and_the_ordinal(
     mos_filepath: Path,
     server_installation: ServerInstallation,
     extra_args: list[str],
@@ -182,12 +197,10 @@ def test_machine_ordinal_renders_the_launch_ordinal(
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--machine-description", "X {machine-ordinal}", *extra_args],
+        extra_args=extra_args,
         startup_timeout=30.0,
     ) as bbc:
         assert bbc.system.identity.name == expected
-        ordinal = {p.key: p for p in bbc.system.list_name_placeholders()}["machine-ordinal"]
-        assert ordinal.applicable == bool(extra_args)
 
 
 @pytest.mark.parametrize(
@@ -197,12 +210,12 @@ def test_machine_ordinal_renders_the_launch_ordinal(
         ("model-b-plus-128k-65c102-copro", "model-b-plus-128k", "Model B+ 128K, 65C102 Copro (4 MHz)"),
     ],
 )
-def test_a_coprocessor_preset_names_the_machine_from_its_coprocessor(
+def test_a_coprocessor_preset_describes_the_machine_from_its_coprocessor(
     launch_bbc, preset: str, variant: str, expected: str
 ) -> None:
     # The template takes the CPU and clock from the coprocessor plugin
-    # (#173), so the name equals the preset's title.
+    # (#173), so the description equals the preset's title.
     bbc = launch_bbc(preset=preset, variant=variant, startup_timeout=30.0)
     identity = bbc.system.identity
-    assert "{coprocessor-cpu}" in identity.name_template
-    assert identity.name == expected
+    assert "{coprocessor-cpu}" in identity.description_template
+    assert identity.description == expected

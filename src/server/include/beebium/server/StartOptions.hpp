@@ -151,12 +151,17 @@ void print_usage(const char* program_name) {
               << "  --provenance-uuid <uuid> Provenance instance UUID (RFC 4122)\n"
               << "  --provenance-version <v> Provenance version string\n"
               << "  --machine-uuid <uuid>    Machine identity UUID (RFC 4122, default: auto-generated)\n"
-              << "  --machine-description <template> Machine description: text with {key} placeholders\n"
-              << "                           filled from the machine's state, e.g.\n"
-              << "                           'Station {econet-station}'; see\n"
-              << "                           list-name-placeholders (default: from model)\n"
+              << "  --machine-name <name>    The machine's name, plain text (default: the\n"
+              << "                           preset's name, else the model's, and the\n"
+              << "                           --machine-ordinal as \" #n\"); a saved machine is\n"
+              << "                           named by its document instead\n"
+              << "  --machine-description <template>\n"
+              << "                           The machine's description: text with {key}\n"
+              << "                           placeholders filled from the machine's state,\n"
+              << "                           e.g. 'Station {econet-station}'; see\n"
+              << "                           list-description-placeholders (default: none)\n"
               << "  --machine-ordinal <n>    This machine's instance number from its\n"
-              << "                           launcher, shown by {machine-ordinal} as '#n'\n"
+              << "                           launcher, added to the default name as ' #n'\n"
               << "  --allow-shutdown         Allow any client to shut down the server\n"
               << "  --advertise              Enable mDNS service advertisement\n"
               << "  --extension-dir <path>   Add an extension search directory. Repeatable;\n"
@@ -410,6 +415,9 @@ inline OptionParse parse_launch_option(const std::string& arg, int& i, int argc,
         if (!is_valid_uuid(launch.machine_uuid)) {
             return usage_error("--machine-uuid must be a valid UUID");
         }
+    } else if (arg == "--machine-name" && i + 1 < argc) {
+        launch.machine_name = argv[++i];
+        if (launch.machine_name.empty()) return usage_error("--machine-name must not be empty");
     } else if (arg == "--machine-ordinal") {
         if (i + 1 >= argc) {
             return usage_error("--machine-ordinal requires a positive integer");

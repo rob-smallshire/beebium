@@ -67,27 +67,29 @@ class Provenance:
 
 
 class MachineIdentity:
-    """Machine identity - UUID, name template and rendered name.
+    """Machine identity - UUID, plain name and live description.
 
-    A machine's name is a *template*: ordinary text in which ``{key}`` stands
-    for the current value of a placeholder the server provides, such as
-    ``"Station {econet-station} (AUN, Model B)"``. The server renders it into
-    the *name* to show, and re-renders it (about once a second) as the values
-    change. A template without braces is a plain name and renders as itself.
+    A machine's *name* is plain text, never a template: what titles and the
+    network announcement show. A saved machine's is its document's name (its
+    directory's name without ``.beebium-machine``), and is changed by renaming
+    the document; a machine not yet saved can be renamed with
+    :meth:`System.set_machine_name`.
 
-    Which placeholders exist, what they mean and what their values are belong
-    to the server: ask :meth:`System.list_name_placeholders`, and use
-    :meth:`System.preview_machine_name` to see how a template would render.
-
-    The `name` and `name_template` properties can be read and written. Writing
-    either sends the new template to the server and updates both from its
-    reply; to learn which placeholders did not render, use
-    :meth:`System.set_machine_name` instead.
+    Its *description* is shown beside the name (a window subtitle) and is a
+    *template*: ordinary text in which ``{key}`` stands for the current value
+    of a placeholder the server provides, such as
+    ``"Station {econet-station} (AUN)"``. The server renders it and re-renders
+    it (about once a second) as the values change. Which placeholders exist
+    belongs to the server: ask :meth:`System.list_description_placeholders`,
+    and use :meth:`System.preview_machine_description` to see how a template
+    would render.
 
     Attributes:
         uuid: RFC 4122 v4 UUID, stable for machine lifetime (read-only)
-        name: The rendered name to show (read/write; writing sets the template)
-        name_template: The name as the user edits it (read/write)
+        name: The machine's name, plain text (read/write; writing renames)
+        description: The rendered description; empty for none (read-only)
+        description_template: The description as the user edits it
+            (read/write; writing sets it)
         model_type: e.g., "ModelB" (read-only)
         model_name: e.g., "BBC Model B" (read-only)
         system: Reference to the parent System object (read-only)
@@ -101,22 +103,24 @@ class MachineIdentity:
         model_name: str,
         system: System,
         *,
-        name_template: str | None = None,
+        description: str = "",
+        description_template: str = "",
     ):
         """Create a MachineIdentity.
 
         Args:
             uuid: The machine's UUID.
-            name: The rendered name.
+            name: The machine's name.
             model_type: Machine model type identifier.
             model_name: Human-readable model name.
-            system: The parent System object, used to rename.
-            name_template: The template `name` was rendered from. Defaults to
-                `name` itself, since a plain name is a template of itself.
+            system: The parent System object, used to rename and describe.
+            description: The rendered description.
+            description_template: The template `description` was rendered from.
         """
         self._uuid = uuid
         self._name = name
-        self._name_template = name if name_template is None else name_template
+        self._description = description
+        self._description_template = description_template
         self._model_type = model_type
         self._model_name = model_name
         self._system = system
@@ -126,7 +130,8 @@ class MachineIdentity:
         return cls(
             uuid=identity.uuid,
             name=identity.name,
-            name_template=identity.name_template,
+            description=identity.description,
+            description_template=identity.description_template,
             model_type=identity.model_type,
             model_name=identity.model_name,
             system=system,
@@ -139,38 +144,41 @@ class MachineIdentity:
 
     @property
     def name(self) -> str:
-        """The name to show: the name template rendered by the server.
-
-        This is what window titles, the network announcement and status
-        events carry. It is a snapshot: it changes on the server when a
-        placeholder's value does, and a fresh identity arrives with each
-        IDENTITY_CHANGED event from :meth:`System.watch_status`.
-        """
+        """The machine's name, plain text: what titles and the network
+        announcement show. A snapshot; a fresh identity arrives with each
+        IDENTITY_CHANGED event from :meth:`System.watch_status`."""
         return self._name
 
     @name.setter
     def name(self, value: str) -> None:
-        """Set the machine's name template via gRPC (a plain name is a template)."""
-        self._adopt(self._system.set_machine_name(value).identity)
+        """Rename a machine not yet saved via gRPC (a saved machine refuses)."""
+        self._adopt(self._system.set_machine_name(value))
 
     @property
-    def name_template(self) -> str:
-        """The name as the user edits it, from which `name` is rendered.
+    def description(self) -> str:
+        """The description, rendered by the server from its template; empty
+        when there is none. A snapshot: it changes on the server when a
+        placeholder's value does."""
+        return self._description
 
-        ``{key}`` stands for a placeholder's current value; ``{{`` and ``}}``
-        are literal braces. A key the server does not know renders verbatim,
-        and a placeholder that does not apply to this machine renders empty.
-        """
-        return self._name_template
+    @property
+    def description_template(self) -> str:
+        """The description as the user edits it, from which `description` is
+        rendered. ``{key}`` stands for a placeholder's current value; ``{{``
+        and ``}}`` are literal braces. A key the server does not know renders
+        verbatim, and a placeholder that does not apply to this machine
+        renders empty."""
+        return self._description_template
 
-    @name_template.setter
-    def name_template(self, value: str) -> None:
-        """Set the machine's name template via gRPC."""
-        self._adopt(self._system.set_machine_name(value).identity)
+    @description_template.setter
+    def description_template(self, value: str) -> None:
+        """Set the machine's description template via gRPC."""
+        self._adopt(self._system.set_machine_description(value).identity)
 
     def _adopt(self, other: MachineIdentity) -> None:
         self._name = other._name
-        self._name_template = other._name_template
+        self._description = other._description
+        self._description_template = other._description_template
 
     @property
     def model_type(self) -> str:
@@ -190,7 +198,8 @@ class MachineIdentity:
     def __repr__(self) -> str:
         return (
             f"MachineIdentity(uuid={self._uuid!r}, name={self._name!r}, "
-            f"name_template={self._name_template!r}, "
+            f"description={self._description!r}, "
+            f"description_template={self._description_template!r}, "
             f"model_type={self._model_type!r}, model_name={self._model_name!r})"
         )
 
@@ -200,17 +209,18 @@ class MachineIdentity:
         return (
             self._uuid == other._uuid
             and self._name == other._name
-            and self._name_template == other._name_template
+            and self._description == other._description
+            and self._description_template == other._description_template
             and self._model_type == other._model_type
             and self._model_name == other._model_name
         )
 
 
 @dataclass(frozen=True)
-class NamePlaceholder:
-    """A placeholder a machine name template can use, and its value here.
+class DescriptionPlaceholder:
+    """A placeholder a machine description template can use, and its value here.
 
-    Records come from the server (:meth:`System.list_name_placeholders`);
+    Records come from the server (:meth:`System.list_description_placeholders`);
     the client knows no keys of its own. A picker shows `label` under
     `group` with the current `value`, and inserts `insertion` -- the server
     supplies the insertion text so that clients need not build it.
@@ -226,8 +236,8 @@ class NamePlaceholder:
 
 
 @dataclass(frozen=True)
-class NameTemplateReport:
-    """What a name template's rendering could not substitute.
+class DescriptionTemplateReport:
+    """What a description template's rendering could not substitute.
 
     Lets a client warn without parsing the template. All three are empty when
     the template rendered fully.
@@ -238,7 +248,7 @@ class NameTemplateReport:
     malformed: tuple[str, ...] = ()  # Fragments rendered literally: an unterminated "{..." or a lone "}"
 
     @classmethod
-    def _from_proto(cls, proto) -> NameTemplateReport:
+    def _from_proto(cls, proto) -> DescriptionTemplateReport:
         return cls(
             unknown_keys=tuple(proto.unknown_keys),
             inapplicable_keys=tuple(proto.inapplicable_keys),
@@ -247,23 +257,23 @@ class NameTemplateReport:
 
 
 @dataclass(frozen=True)
-class MachineNamePreview:
-    """How a name template renders now, without changing anything."""
+class MachineDescriptionPreview:
+    """How a description template renders now, without changing anything."""
 
-    name: str  # The rendering, as MachineIdentity.name would be with this template
-    report: NameTemplateReport = NameTemplateReport()  # What the rendering could not substitute
+    description: str  # The rendering, as MachineIdentity.description would be with this template
+    report: DescriptionTemplateReport = DescriptionTemplateReport()  # What it could not substitute
 
 
 @dataclass(frozen=True)
-class MachineNameChange:
-    """The result of setting a machine's name template.
+class MachineDescriptionChange:
+    """The result of setting a machine's description template.
 
     The template is applied even when parts of it did not render; the report
     says which, so a client can warn.
     """
 
     identity: MachineIdentity  # The updated identity: the template and its rendering
-    report: NameTemplateReport = NameTemplateReport()  # What the rendering could not substitute
+    report: DescriptionTemplateReport = DescriptionTemplateReport()  # What it could not substitute
 
 
 @dataclass(frozen=True)
@@ -346,16 +356,16 @@ class System:
         print(f"Machine: {identity.model_name}")
         print(f"Name: {identity.name}")
 
-        # Change machine name (triggers gRPC call)
+        # Rename a machine not yet saved (triggers gRPC call)
         identity.name = "My BBC Micro"
 
-        # A name can be a template of server-provided placeholders
-        for placeholder in bbc.system.list_name_placeholders():
+        # A description is a template of server-provided placeholders
+        for placeholder in bbc.system.list_description_placeholders():
             print(f"{placeholder.insertion}: {placeholder.label} = {placeholder.value!r}")
-        preview = bbc.system.preview_machine_name("Station {econet-station}")
-        print(f"Would be: {preview.name}, unknown: {preview.report.unknown_keys}")
-        change = bbc.system.set_machine_name("Station {econet-station}")
-        print(f"Now: {change.identity.name} from {change.identity.name_template}")
+        preview = bbc.system.preview_machine_description("Station {econet-station}")
+        print(f"Would be: {preview.description}, unknown: {preview.report.unknown_keys}")
+        change = bbc.system.set_machine_description("Station {econet-station}")
+        print(f"Now: {change.identity.description} from {change.identity.description_template}")
 
         # Watch for status changes
         for event in bbc.system.watch_status():
@@ -387,10 +397,11 @@ class System:
     def identity(self) -> MachineIdentity:
         """Get machine identity, as the server has it now.
 
-        Returns a MachineIdentity object whose `name` and `name_template`
-        properties can be read or written (writing updates the server).
-        Each read asks the server, because the rendered name changes on its
-        own as placeholder values change; the object returned is a snapshot.
+        Returns a MachineIdentity object whose `name` and
+        `description_template` properties can be read or written (writing
+        updates the server). Each read asks the server, because the rendered
+        description changes on its own as placeholder values change; the
+        object returned is a snapshot.
         To follow changes as they happen, watch for IDENTITY_CHANGED events
         from :meth:`watch_status`.
         """
@@ -398,60 +409,64 @@ class System:
         response = self._stub.GetSystemInfo(request)
         return MachineIdentity._from_proto(response.identity, self)
 
-    def set_machine_name(self, name_template: str) -> MachineNameChange:
-        """Set the machine's name template.
+    def set_machine_name(self, name: str) -> MachineIdentity:
+        """Rename a machine not yet saved.
 
-        The server renders the template into the machine's name at once and
-        keeps it current as placeholder values change. A plain name is a
-        template with no placeholders. The template is applied even if some
-        of it does not render; the result reports what did not, so a caller
-        can warn.
-
-        Args:
-            name_template: The new template, e.g. "Station {econet-station}".
-                It must not be empty: the server rejects an empty template
-                (grpc.RpcError with status INVALID_ARGUMENT).
+        A name is plain text, never a template. A saved machine is named by
+        its document, which is renamed instead: the server refuses
+        (grpc.RpcError with status FAILED_PRECONDITION). An empty name is
+        refused with INVALID_ARGUMENT.
 
         Returns:
-            MachineNameChange with the updated identity and a report of the
-            unknown keys, inapplicable keys and malformed fragments in the
-            template.
+            The updated identity.
+        """
+        request = system_pb2.SetMachineNameRequest(name=name)
+        response = self._stub.SetMachineName(request)
+        return MachineIdentity._from_proto(response.identity, self)
+
+    def set_machine_description(self, description_template: str) -> MachineDescriptionChange:
+        """Set the machine's description template (empty for none).
+
+        The server renders the template into the description at once and
+        keeps it current as placeholder values change. The template is
+        applied even if some of it does not render; the result reports what
+        did not, so a caller can warn. A saved machine keeps it in its
+        directory.
+
+        Returns:
+            MachineDescriptionChange with the updated identity and a report of
+            the unknown keys, inapplicable keys and malformed fragments.
 
         Example:
-            change = bbc.system.set_machine_name("Station {econet-station}")
+            change = bbc.system.set_machine_description("Station {econet-station}")
             if change.report.unknown_keys:
                 print(f"Not known to this server: {change.report.unknown_keys}")
-            print(change.identity.name)  # e.g. "Station 80"
+            print(change.identity.description)  # e.g. "Station 80"
         """
-        request = system_pb2.SetMachineNameRequest(name_template=name_template)
-        response = self._stub.SetMachineName(request)
-        return MachineNameChange(
+        request = system_pb2.SetMachineDescriptionRequest(description_template=description_template)
+        response = self._stub.SetMachineDescription(request)
+        return MachineDescriptionChange(
             identity=MachineIdentity._from_proto(response.identity, self),
-            report=NameTemplateReport._from_proto(response.report),
+            report=DescriptionTemplateReport._from_proto(response.report),
         )
 
-    def preview_machine_name(self, name_template: str) -> MachineNamePreview:
-        """Render a name template against current values without changing anything.
-
-        Use this for a live preview while a name is being edited, rather than
-        implementing the template syntax in the client.
-
-        Args:
-            name_template: The template to render.
+    def preview_machine_description(self, description_template: str) -> MachineDescriptionPreview:
+        """Render a description template against current values without
+        changing anything, for a live preview while it is being edited.
 
         Returns:
-            MachineNamePreview with the rendering and what it could not
+            MachineDescriptionPreview with the rendering and what it could not
             substitute.
         """
-        request = system_pb2.PreviewMachineNameRequest(name_template=name_template)
-        response = self._stub.PreviewMachineName(request)
-        return MachineNamePreview(
-            name=response.name,
-            report=NameTemplateReport._from_proto(response.report),
+        request = system_pb2.PreviewMachineDescriptionRequest(description_template=description_template)
+        response = self._stub.PreviewMachineDescription(request)
+        return MachineDescriptionPreview(
+            description=response.description,
+            report=DescriptionTemplateReport._from_proto(response.report),
         )
 
-    def list_name_placeholders(self) -> tuple[NamePlaceholder, ...]:
-        """List the placeholders a name template can use on this server.
+    def list_description_placeholders(self) -> tuple[DescriptionPlaceholder, ...]:
+        """List the placeholders a description template can use on this server.
 
         The set is the server's -- its core machine, its Econet socket and
         any loaded extensions each contribute -- so it varies between
@@ -462,14 +477,14 @@ class System:
             The placeholders, in the server's stable order.
 
         Example:
-            for p in bbc.system.list_name_placeholders():
+            for p in bbc.system.list_description_placeholders():
                 state = p.value if p.applicable else "(not applicable)"
                 print(f"[{p.group}] {p.insertion} {p.label}: {state}")
         """
-        request = system_pb2.ListNamePlaceholdersRequest()
-        response = self._stub.ListNamePlaceholders(request)
+        request = system_pb2.ListDescriptionPlaceholdersRequest()
+        response = self._stub.ListDescriptionPlaceholders(request)
         return tuple(
-            NamePlaceholder(
+            DescriptionPlaceholder(
                 key=p.key,
                 label=p.label,
                 description=p.description,

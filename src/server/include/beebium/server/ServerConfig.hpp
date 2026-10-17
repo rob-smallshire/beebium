@@ -174,6 +174,10 @@ struct LaunchSettings {
     // The launching preset's display name ("" without a preset), for the
     // machine-preset name placeholder.
     std::string preset_name;
+    // The machine's name, plain text (--machine-name); empty for the
+    // default (machine_launch_name). Not for a saved machine, whose name is
+    // its document's.
+    std::string machine_name;
     // The launcher's instance number for this machine (--machine-ordinal),
     // for the machine-ordinal name placeholder.
     std::optional<unsigned> machine_ordinal;

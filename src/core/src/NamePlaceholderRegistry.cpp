@@ -55,14 +55,11 @@ void NamePlaceholderRegistry::add(const NamePlaceholderProvider& provider,
                 who + ": key " + in_quotes(info.key) +
                 " is not lowercase words joined by single hyphens");
         }
-        // A key is in a domain when it begins with the domain and '-', or
-        // is the domain itself (the domain's one placeholder, "{document}").
         const bool in_domain = std::any_of(domains.begin(), domains.end(),
             [&](const std::string& domain) {
-                return info.key == domain ||
-                       (info.key.size() > domain.size() + 1 &&
-                        info.key.compare(0, domain.size(), domain) == 0 &&
-                        info.key[domain.size()] == '-');
+                return info.key.size() > domain.size() + 1 &&
+                       info.key.compare(0, domain.size(), domain) == 0 &&
+                       info.key[domain.size()] == '-';
             });
         if (!in_domain) {
             std::string list;

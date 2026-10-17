@@ -147,13 +147,13 @@ public:
     }
 
     SaveOutcome save(const std::string& destination_dirpath, bool replace_existing,
-                     const std::string& machine_uuid, const std::string& name_template) override {
+                     const std::string& machine_uuid, const std::string& description_template) override {
         std::lock_guard lock(mutex_);
         SaveOutcome outcome;
         am_.machine.with_emulation_paused([&] {
             try {
                 outcome = save_paused(destination_dirpath, replace_existing, machine_uuid,
-                                      name_template);
+                                      description_template);
             } catch (const std::exception& e) {
                 outcome.error = SaveOutcome::Error::Internal;
                 outcome.message = e.what();
@@ -184,22 +184,23 @@ public:
         return units;
     }
 
-    void renamed(const std::string& name_template) override {
+    void described(const std::string& description_template) override {
         std::lock_guard lock(mutex_);
         if (am_.machine_directory->transient()) return;
         const auto& dirpath = am_.machine_directory->dirpath();
         std::string error;
         auto record = read_machine_record(dirpath, error);
         if (!record) {
-            std::cerr << "Warning: cannot record the machine's new name: " << error << "\n";
+            std::cerr << "Warning: cannot record the machine's new description: " << error
+                      << "\n";
             return;
         }
-        record->description = name_template;
+        record->description = description_template;
         try {
             write_machine_record(dirpath, *record);
-            write_machine_document_files(dirpath, *record, machine_document_name(dirpath));
         } catch (const std::exception& e) {
-            std::cerr << "Warning: cannot record the machine's new name: " << e.what() << "\n";
+            std::cerr << "Warning: cannot record the machine's new description: " << e.what()
+                      << "\n";
         }
     }
 
@@ -231,7 +232,7 @@ private:
     }
 
     SaveOutcome save_paused(const std::string& destination, bool replace_existing,
-                            const std::string& machine_uuid, const std::string& name_template) {
+                            const std::string& machine_uuid, const std::string& description_template) {
         flush_disc_drives(am_.machine);
         const bool saved = !am_.machine_directory->transient();
         const auto home = am_.machine_directory->dirpath();
@@ -241,7 +242,7 @@ private:
                         "a machine not yet saved is saved into a new directory: give a "
                         "destination", {}, {}};
             }
-            save_in_place(home, name_template);
+            save_in_place(home, description_template);
             return {Error::None, {}, utf8_of(home), machine_uuid};
         }
 
@@ -262,16 +263,16 @@ private:
         }
         // A copy saved as another machine has an identity of its own.
         const auto uuid = saved ? generate_uuid_v4() : machine_uuid;
-        save_as(home, target, saved, uuid, name_template, replacing);
+        save_as(home, target, saved, uuid, description_template, replacing);
         return {Error::None, {}, utf8_of(target), uuid};
     }
 
-    void save_in_place(const std::filesystem::path& home, const std::string& name_template) {
+    void save_in_place(const std::filesystem::path& home, const std::string& description_template) {
         keep_state(home);
         std::string error;
         auto record = read_machine_record(home, error);
         if (!record) throw std::runtime_error(error);
-        record->description = name_template;
+        record->description = description_template;
         write_machine_record(home, *record);
         write_machine_document_files(home, *record, machine_document_name(home));
     }
@@ -306,7 +307,7 @@ private:
     // at `target` is put aside once the new one is whole, removed once the
     // running machine is on the new one, and put back on a failure.
     void save_as(const std::filesystem::path& home, const std::filesystem::path& target,
-                 bool saved, const std::string& uuid, const std::string& name_template,
+                 bool saved, const std::string& uuid, const std::string& description_template,
                  bool replacing) {
         // Made beside the target, so it appears there whole or not at all.
         std::random_device rd;
@@ -327,10 +328,10 @@ private:
                 record = *kept;
                 record.created = iso8601_utc_now();
             } else {
-                record = new_machine_record(config_, uuid, name_template);
+                record = new_machine_record(config_, uuid, description_template);
             }
             record.uuid = uuid;
-            record.description = name_template;
+            record.description = description_template;
             record.last_used = iso8601_utc_now();
             write_machine_record(partial, record);
             keep_state(partial);

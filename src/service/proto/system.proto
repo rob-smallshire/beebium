@@ -8,17 +8,23 @@ service SystemService {
     // Get current system/machine information
     rpc GetSystemInfo(GetSystemInfoRequest) returns (SystemInfo);
 
-    // Set the machine's name template (a plain name is a template with no
-    // placeholders). See MachineIdentity.name_template.
+    // Set a machine's name: plain text, never a template. Only for a machine
+    // not yet saved; a saved machine's name is its document's, so the
+    // document is renamed instead. Errors: INVALID_ARGUMENT for an empty
+    // name; FAILED_PRECONDITION for a saved machine.
     rpc SetMachineName(SetMachineNameRequest) returns (SetMachineNameResponse);
 
-    // List the placeholders a name template can use on this server, with
-    // their current values. Clients carry no list of keys; they ask.
-    rpc ListNamePlaceholders(ListNamePlaceholdersRequest) returns (ListNamePlaceholdersResponse);
+    // Set the machine's description template (empty: no description). See
+    // MachineIdentity.description_template.
+    rpc SetMachineDescription(SetMachineDescriptionRequest) returns (SetMachineDescriptionResponse);
 
-    // Render a name template against the current values without changing
-    // anything, for a live preview while the user edits.
-    rpc PreviewMachineName(PreviewMachineNameRequest) returns (PreviewMachineNameResponse);
+    // List the placeholders a description template can use on this server,
+    // with their current values. Clients carry no list of keys; they ask.
+    rpc ListDescriptionPlaceholders(ListDescriptionPlaceholdersRequest) returns (ListDescriptionPlaceholdersResponse);
+
+    // Render a description template against the current values without
+    // changing anything, for a live preview while the user edits.
+    rpc PreviewMachineDescription(PreviewMachineDescriptionRequest) returns (PreviewMachineDescriptionResponse);
 
     // Subscribe to server status events (shutdown notifications, identity changes, etc.)
     // Server sends READY immediately upon subscription, then status changes.
@@ -127,10 +133,14 @@ message MachineIdentity {
     // RFC 4122 v4 UUID, stable for machine lifetime
     string uuid = 1;
 
-    // The name to show: name_template rendered against the current values of
-    // its placeholders. Titles, the _beebium._tcp announcement and every
-    // consumer that displays the machine use this. Re-rendered about once a
-    // second; a change arrives as SERVER_STATUS_IDENTITY_CHANGED.
+    // The machine's name, plain text and never a template: what titles, the
+    // _beebium._tcp announcement and every consumer that names the machine
+    // show. A saved machine's is its document's name (its directory's name
+    // without .beebium-machine, as it was when the machine was opened or
+    // last saved); a machine not yet saved has the name it was launched with
+    // (--machine-name), else its preset's name (else its model's) and its
+    // launcher's instance number ("Model B (Disc) #2"), until SetMachineName
+    // gives it another. A change arrives as SERVER_STATUS_IDENTITY_CHANGED.
     string name = 2;
 
     // Machine model type identifier (e.g., "ModelB", "ModelBPlus")
@@ -141,14 +151,24 @@ message MachineIdentity {
     // Immutable, set at creation
     string model_name = 4;
 
-    // The name as the user edits it, mutable via SetMachineName: ordinary
-    // text in which {key} stands for a placeholder's current value, e.g.
-    // "Station {econet-station} (AUN, Model B)". {{ and }} are literal
-    // braces; an unknown key renders verbatim; a placeholder that does not
-    // apply to this machine renders empty; ':' '|' '?' '!' inside braces are
-    // reserved. A template without braces is a plain name. See
-    // docs/discussion/machine-name-templates.md.
-    string name_template = 5;
+    reserved 5;
+    reserved "name_template";
+
+    // The machine's description, shown beside its name (a window subtitle):
+    // description_template rendered against the current values of its
+    // placeholders, re-rendered about once a second. Empty when there is no
+    // template. A change arrives as SERVER_STATUS_IDENTITY_CHANGED.
+    string description = 6;
+
+    // The description as the user edits it, mutable via
+    // SetMachineDescription; empty for none: ordinary text in which {key}
+    // stands for a placeholder's current value, e.g. "Station
+    // {econet-station} (AUN)". {{ and }} are literal braces; an unknown key
+    // renders verbatim; a placeholder that does not apply to this machine
+    // renders empty; ':' '|' '?' '!' inside braces are reserved. From a
+    // preset's machine_description, --machine-description, or a saved
+    // machine's machine.json. See docs/discussion/machine-name-templates.md.
+    string description_template = 7;
 }
 
 // Connection tracking information
@@ -231,22 +251,32 @@ message SystemInfo {
 // === SetMachineName RPC ===
 
 message SetMachineNameRequest {
-    // The new name template (must not be empty).
-    string name_template = 1;
+    // The new name, plain text (must not be empty).
+    string name = 1;
 }
 
 message SetMachineNameResponse {
+    // The updated identity.
+    MachineIdentity identity = 1;
+}
+
+message SetMachineDescriptionRequest {
+    // The new description template; empty for no description.
+    string description_template = 1;
+}
+
+message SetMachineDescriptionResponse {
     // The updated identity: the template and its rendering.
     MachineIdentity identity = 1;
 
     // What the rendering could not substitute, so a client can warn without
     // parsing the template. Only the caller gets this; a client watching the
-    // status stream that wants it calls PreviewMachineName.
-    NameTemplateReport report = 2;
+    // status stream that wants it calls PreviewMachineDescription.
+    DescriptionTemplateReport report = 2;
 }
 
-// What a template's rendering could not substitute.
-message NameTemplateReport {
+// What a description template's rendering could not substitute.
+message DescriptionTemplateReport {
     // The inner text of each {...} that is not a known key (rendered
     // verbatim), once each, in order; "" for an empty {}.
     repeated string unknown_keys = 1;
@@ -257,13 +287,14 @@ message NameTemplateReport {
     repeated string malformed = 3;
 }
 
-// === Name placeholders ===
+// === Description placeholders ===
 
-message ListNamePlaceholdersRequest {
+message ListDescriptionPlaceholdersRequest {
 }
 
-// A placeholder a name template can use, and its value on this machine.
-message NamePlaceholder {
+// A placeholder a description template can use, and its value on this
+// machine.
+message DescriptionPlaceholder {
     // Used in templates as {key}. Begins with its owner's domain
     // ("econet-station", "machine-model"); never renamed once shipped.
     string key = 1;
@@ -283,20 +314,21 @@ message NamePlaceholder {
     bool applicable = 7;
 }
 
-message ListNamePlaceholdersResponse {
+message ListDescriptionPlaceholdersResponse {
     // Every placeholder on this server, in a stable order.
-    repeated NamePlaceholder placeholders = 1;
+    repeated DescriptionPlaceholder placeholders = 1;
 }
 
-message PreviewMachineNameRequest {
-    string name_template = 1;
+message PreviewMachineDescriptionRequest {
+    string description_template = 1;
 }
 
-message PreviewMachineNameResponse {
-    // The rendering, as MachineIdentity.name would be with this template.
-    string name = 1;
+message PreviewMachineDescriptionResponse {
+    // The rendering, as MachineIdentity.description would be with this
+    // template.
+    string description = 1;
     // What the rendering could not substitute.
-    NameTemplateReport report = 2;
+    DescriptionTemplateReport report = 2;
 }
 
 // === Shutdown RPC ===
@@ -363,7 +395,8 @@ message ServerStatusEvent {
     // Clients should disconnect within this time
     uint32 shutdown_grace_ms = 3;
 
-    // For IDENTITY_CHANGED: the updated identity
+    // For IDENTITY_CHANGED: the updated identity, sent when its uuid, name or
+    // description changes
     MachineIdentity identity = 4;
 
     // For SHUTDOWN_PROGRESS: status of each subsystem condition

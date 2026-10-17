@@ -64,7 +64,7 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<DescribeExtensionSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListAttachmentPointsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListSerialPortsSubcommand<MachineType>>());
-        v.push_back(std::make_unique<ListNamePlaceholdersSubcommand<MachineType>>());
+        v.push_back(std::make_unique<ListDescriptionPlaceholdersSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribePresetSchemaSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeRomSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeDiscImageSubcommand<MachineType>>());

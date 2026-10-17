@@ -90,7 +90,7 @@ describe("Integration: System Service", () => {
 // System Service - Machine name templates
 // =========================================================================
 
-describe("Integration: Machine name templates", () => {
+describe("Integration: Machine description templates", () => {
     const TEMPLATE = "Station {econet-station}";
     const AUN_ARGS = [
         "--machine-description", TEMPLATE,
@@ -123,17 +123,18 @@ describe("Integration: Machine name templates", () => {
         }
     }
 
-    it("renders the launch template and reports both forms", async () => {
+    it("renders the launch template and reports both forms beside a plain name", async () => {
         await withStationServer(async (system) => {
             const identity = await system.getIdentity();
-            expect(identity.nameTemplate).toBe(TEMPLATE);
-            expect(identity.name).toBe("Station 80");
+            expect(identity.descriptionTemplate).toBe(TEMPLATE);
+            expect(identity.description).toBe("Station 80");
+            expect(identity.name).toBe("BBC Model B");
         });
     });
 
     it("lists econet-station with its current value", async () => {
         await withStationServer(async (system) => {
-            const placeholders = await system.listNamePlaceholders();
+            const placeholders = await system.listDescriptionPlaceholders();
             const station = placeholders.find((p) => p.key === "econet-station");
             expect(station).toBeDefined();
             expect(station!.value).toBe("80");
@@ -144,30 +145,38 @@ describe("Integration: Machine name templates", () => {
         });
     });
 
-    it("previews a template with unknown keys without renaming", async () => {
+    it("previews a template with unknown keys without changing anything", async () => {
         await withStationServer(async (system) => {
-            const preview = await system.previewMachineName("Station {econet-station} {no-such-key}");
-            expect(preview.name).toBe("Station 80 {no-such-key}");
+            const preview = await system.previewMachineDescription("Station {econet-station} {no-such-key}");
+            expect(preview.description).toBe("Station 80 {no-such-key}");
             expect(preview.report.unknownKeys).toEqual(["no-such-key"]);
             expect(preview.report.inapplicableKeys).toEqual([]);
             expect(preview.report.malformed).toEqual([]);
 
             const identity = await system.getIdentity();
-            expect(identity.nameTemplate).toBe(TEMPLATE);
-            expect(identity.name).toBe("Station 80");
+            expect(identity.descriptionTemplate).toBe(TEMPLATE);
+            expect(identity.description).toBe("Station 80");
         });
     });
 
-    it("renames to a template and reports unknown keys", async () => {
+    it("sets a description template and reports unknown keys", async () => {
         await withStationServer(async (system) => {
-            const result = await system.setMachineName("Net {econet-station} {no-such-key}");
-            expect(result.identity.nameTemplate).toBe("Net {econet-station} {no-such-key}");
-            expect(result.identity.name).toBe("Net 80 {no-such-key}");
+            const result = await system.setMachineDescription("Net {econet-station} {no-such-key}");
+            expect(result.identity.descriptionTemplate).toBe("Net {econet-station} {no-such-key}");
+            expect(result.identity.description).toBe("Net 80 {no-such-key}");
             expect(result.report.unknownKeys).toEqual(["no-such-key"]);
 
             const identity = await system.getIdentity();
-            expect(identity.nameTemplate).toBe("Net {econet-station} {no-such-key}");
-            expect(identity.name).toBe("Net 80 {no-such-key}");
+            expect(identity.descriptionTemplate).toBe("Net {econet-station} {no-such-key}");
+            expect(identity.description).toBe("Net 80 {no-such-key}");
+        });
+    });
+
+    it("renames a machine not yet saved to a plain name", async () => {
+        await withStationServer(async (system) => {
+            const identity = await system.setMachineName("Girton {econet-station}");
+            expect(identity.name).toBe("Girton {econet-station}");
+            expect((await system.getIdentity()).name).toBe("Girton {econet-station}");
         });
     });
 });

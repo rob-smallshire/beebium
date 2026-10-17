@@ -23,10 +23,11 @@ function createMockStub(methods: Record<string, (req: any) => any>) {
 const FULL_SYSTEM_INFO = {
     identity: {
         uuid: "abc-123",
-        name: "Station 80 (AUN)",
+        name: "Lab Beeb",
         modelType: "ModelB",
         modelName: "BBC Model B",
-        nameTemplate: "Station {econet-station} (AUN)",
+        description: "Station 80 (AUN)",
+        descriptionTemplate: "Station {econet-station} (AUN)",
     },
     provenance: {
         type: "launched",
@@ -50,8 +51,9 @@ describe("System", () => {
             const identity = await sys.getIdentity();
             expect(identity).toEqual({
                 uuid: "abc-123",
-                name: "Station 80 (AUN)",
-                nameTemplate: "Station {econet-station} (AUN)",
+                name: "Lab Beeb",
+                description: "Station 80 (AUN)",
+                descriptionTemplate: "Station {econet-station} (AUN)",
                 modelType: "ModelB",
                 modelName: "BBC Model B",
             });
@@ -91,56 +93,22 @@ describe("System", () => {
     });
 
     describe("setMachineName", () => {
-        it("sends the template and returns the identity and report", async () => {
+        it("sends the plain name and returns the identity", async () => {
             const stub = createMockStub({
                 setMachineName: () => ({
-                    identity: {
-                        uuid: "abc-123",
-                        name: "Station 80 {nope}",
-                        modelType: "ModelB",
-                        modelName: "BBC Model B",
-                        nameTemplate: "Station {econet-station} {nope}",
-                    },
-                    report: { unknownKeys: ["nope"], inapplicableKeys: [], malformed: [] },
+                    identity: { ...FULL_SYSTEM_INFO.identity, name: "Girton" },
                 }),
             });
             const sys = new System(stub as any);
-            const result = await sys.setMachineName("Station {econet-station} {nope}");
-            expect(result).toEqual({
-                identity: {
-                    uuid: "abc-123",
-                    name: "Station 80 {nope}",
-                    nameTemplate: "Station {econet-station} {nope}",
-                    modelType: "ModelB",
-                    modelName: "BBC Model B",
-                },
-                report: { unknownKeys: ["nope"], inapplicableKeys: [], malformed: [] },
-            });
-            expect(stub.setMachineName).toHaveBeenCalledWith(
-                { nameTemplate: "Station {econet-station} {nope}" },
-                expect.any(Function),
-            );
-        });
-
-        it("reports inapplicable keys and malformed fragments", async () => {
-            const stub = createMockStub({
-                setMachineName: () => ({
-                    identity: { ...FULL_SYSTEM_INFO.identity },
-                    report: { unknownKeys: [], inapplicableKeys: ["econet-station"], malformed: ["{oops"] },
-                }),
-            });
-            const sys = new System(stub as any);
-            const result = await sys.setMachineName("x");
-            expect(result.report.inapplicableKeys).toEqual(["econet-station"]);
-            expect(result.report.malformed).toEqual(["{oops"]);
+            const identity = await sys.setMachineName("Girton");
+            expect(identity.name).toBe("Girton");
+            expect(identity.descriptionTemplate).toBe("Station {econet-station} (AUN)");
+            expect(stub.setMachineName).toHaveBeenCalledWith({ name: "Girton" }, expect.any(Function));
         });
 
         it("throws when no identity returned", async () => {
             const stub = createMockStub({
-                setMachineName: () => ({
-                    identity: undefined,
-                    report: { unknownKeys: [], inapplicableKeys: [], malformed: [] },
-                }),
+                setMachineName: () => ({ identity: undefined }),
             });
             const sys = new System(stub as any);
             await expect(sys.setMachineName("test")).rejects.toThrow(
@@ -149,7 +117,68 @@ describe("System", () => {
         });
     });
 
-    describe("listNamePlaceholders", () => {
+    describe("setMachineDescription", () => {
+        it("sends the template and returns the identity and report", async () => {
+            const stub = createMockStub({
+                setMachineDescription: () => ({
+                    identity: {
+                        uuid: "abc-123",
+                        name: "Lab Beeb",
+                        modelType: "ModelB",
+                        modelName: "BBC Model B",
+                        description: "Station 80 {nope}",
+                        descriptionTemplate: "Station {econet-station} {nope}",
+                    },
+                    report: { unknownKeys: ["nope"], inapplicableKeys: [], malformed: [] },
+                }),
+            });
+            const sys = new System(stub as any);
+            const result = await sys.setMachineDescription("Station {econet-station} {nope}");
+            expect(result).toEqual({
+                identity: {
+                    uuid: "abc-123",
+                    name: "Lab Beeb",
+                    description: "Station 80 {nope}",
+                    descriptionTemplate: "Station {econet-station} {nope}",
+                    modelType: "ModelB",
+                    modelName: "BBC Model B",
+                },
+                report: { unknownKeys: ["nope"], inapplicableKeys: [], malformed: [] },
+            });
+            expect(stub.setMachineDescription).toHaveBeenCalledWith(
+                { descriptionTemplate: "Station {econet-station} {nope}" },
+                expect.any(Function),
+            );
+        });
+
+        it("reports inapplicable keys and malformed fragments", async () => {
+            const stub = createMockStub({
+                setMachineDescription: () => ({
+                    identity: { ...FULL_SYSTEM_INFO.identity },
+                    report: { unknownKeys: [], inapplicableKeys: ["econet-station"], malformed: ["{oops"] },
+                }),
+            });
+            const sys = new System(stub as any);
+            const result = await sys.setMachineDescription("x");
+            expect(result.report.inapplicableKeys).toEqual(["econet-station"]);
+            expect(result.report.malformed).toEqual(["{oops"]);
+        });
+
+        it("throws when no identity returned", async () => {
+            const stub = createMockStub({
+                setMachineDescription: () => ({
+                    identity: undefined,
+                    report: { unknownKeys: [], inapplicableKeys: [], malformed: [] },
+                }),
+            });
+            const sys = new System(stub as any);
+            await expect(sys.setMachineDescription("test")).rejects.toThrow(
+                "Server returned no identity after setMachineDescription",
+            );
+        });
+    });
+
+    describe("listDescriptionPlaceholders", () => {
         it("maps every placeholder record the server returns, in order", async () => {
             const records = [
                 {
@@ -172,46 +201,46 @@ describe("System", () => {
                 },
             ];
             const stub = createMockStub({
-                listNamePlaceholders: () => ({ placeholders: records }),
+                listDescriptionPlaceholders: () => ({ placeholders: records }),
             });
             const sys = new System(stub as any);
-            const placeholders = await sys.listNamePlaceholders();
+            const placeholders = await sys.listDescriptionPlaceholders();
             expect(placeholders).toEqual(records);
-            expect(stub.listNamePlaceholders).toHaveBeenCalledWith({}, expect.any(Function));
+            expect(stub.listDescriptionPlaceholders).toHaveBeenCalledWith({}, expect.any(Function));
         });
 
         it("returns an empty list when the server has no placeholders", async () => {
             const stub = createMockStub({
-                listNamePlaceholders: () => ({ placeholders: [] }),
+                listDescriptionPlaceholders: () => ({ placeholders: [] }),
             });
             const sys = new System(stub as any);
-            expect(await sys.listNamePlaceholders()).toEqual([]);
+            expect(await sys.listDescriptionPlaceholders()).toEqual([]);
         });
     });
 
-    describe("previewMachineName", () => {
+    describe("previewMachineDescription", () => {
         it("sends the template and returns the rendering and report", async () => {
             const stub = createMockStub({
-                previewMachineName: () => ({
-                    name: "Station 80 {nope}",
+                previewMachineDescription: () => ({
+                    description: "Station 80 {nope}",
                     report: { unknownKeys: ["nope"], inapplicableKeys: ["econet-net"], malformed: ["}"] },
                 }),
             });
             const sys = new System(stub as any);
-            const preview = await sys.previewMachineName("Station {econet-station} {nope}");
+            const preview = await sys.previewMachineDescription("Station {econet-station} {nope}");
             expect(preview).toEqual({
-                name: "Station 80 {nope}",
+                description: "Station 80 {nope}",
                 report: { unknownKeys: ["nope"], inapplicableKeys: ["econet-net"], malformed: ["}"] },
             });
-            expect(stub.previewMachineName).toHaveBeenCalledWith(
-                { nameTemplate: "Station {econet-station} {nope}" },
+            expect(stub.previewMachineDescription).toHaveBeenCalledWith(
+                { descriptionTemplate: "Station {econet-station} {nope}" },
                 expect.any(Function),
             );
         });
     });
 
     describe("watchStatus", () => {
-        it("carries the name template on identity-changed events", async () => {
+        it("carries the name and description on identity-changed events", async () => {
             const stream = Object.assign(new EventEmitter(), { cancel: vi.fn() });
             const stub = { watchServerStatus: vi.fn(() => stream) };
             const sys = new System(stub as any);
@@ -227,8 +256,9 @@ describe("System", () => {
             const event = (await next).value;
             await events.return?.(undefined);
             expect(event.status).toBe(ServerStatus.IDENTITY_CHANGED);
-            expect(event.identity?.name).toBe("Station 80 (AUN)");
-            expect(event.identity?.nameTemplate).toBe("Station {econet-station} (AUN)");
+            expect(event.identity?.name).toBe("Lab Beeb");
+            expect(event.identity?.description).toBe("Station 80 (AUN)");
+            expect(event.identity?.descriptionTemplate).toBe("Station {econet-station} (AUN)");
         });
     });
 
