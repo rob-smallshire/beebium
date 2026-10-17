@@ -29,6 +29,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <map>
@@ -56,9 +57,36 @@ inline std::optional<std::filesystem::path> relative_within(const std::filesyste
     return relative;
 }
 
-// Every regular file under `dirpath`, but its lock, with its size and time.
-using FileStamps = std::map<std::filesystem::path, std::pair<std::uintmax_t,
-                                                             std::filesystem::file_time_type>>;
+// A file's size and the time it was last written, as the file has them now,
+// not as the directory listing it last recorded them. On Windows a directory
+// entry is not brought up to date while another handle holds the file open
+// for writing (a hard disc image does, for the whole run), so the file is
+// asked through a handle of its own.
+using FileStamp = std::pair<std::uint64_t, std::uint64_t>;
+inline FileStamp file_stamp(const std::filesystem::path& filepath) {
+#ifdef _WIN32
+    const HANDLE handle = ::CreateFileW(filepath.c_str(), FILE_READ_ATTRIBUTES,
+                                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) return {0, 0};
+    BY_HANDLE_FILE_INFORMATION info{};
+    const bool ok = ::GetFileInformationByHandle(handle, &info) != 0;
+    ::CloseHandle(handle);
+    if (!ok) return {0, 0};
+    return {(static_cast<std::uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow,
+            (static_cast<std::uint64_t>(info.ftLastWriteTime.dwHighDateTime) << 32) |
+                info.ftLastWriteTime.dwLowDateTime};
+#else
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(filepath, ec);
+    const auto time = std::filesystem::last_write_time(filepath, ec);
+    return {static_cast<std::uint64_t>(size),
+            static_cast<std::uint64_t>(time.time_since_epoch().count())};
+#endif
+}
+
+// Every regular file under `dirpath`, but its lock, with its stamp.
+using FileStamps = std::map<std::filesystem::path, FileStamp>;
 inline FileStamps file_stamps(const std::filesystem::path& dirpath) {
     FileStamps stamps;
     std::error_code ec;
@@ -67,7 +95,7 @@ inline FileStamps file_stamps(const std::filesystem::path& dirpath) {
         if (!it->is_regular_file(ec) || it->path().filename() == machine_layout::LOCK_FILENAME) {
             continue;
         }
-        stamps[it->path()] = {it->file_size(ec), it->last_write_time(ec)};
+        stamps[it->path()] = file_stamp(it->path());
     }
     return stamps;
 }
@@ -97,7 +125,7 @@ public:
 
     std::string machine_dirpath() const override {
         std::lock_guard lock(mutex_);
-        return am_.machine_directory->dirpath().string();
+        return utf8_of(am_.machine_directory->dirpath());
     }
 
     bool machine_saved() const override {
@@ -214,16 +242,16 @@ private:
                         "destination", {}, {}};
             }
             save_in_place(home, name_template);
-            return {Error::None, {}, home.string(), machine_uuid};
+            return {Error::None, {}, utf8_of(home), machine_uuid};
         }
 
-        const auto target = std::filesystem::absolute(destination).lexically_normal();
+        const auto target = std::filesystem::absolute(path_from_utf8(destination)).lexically_normal();
         std::error_code ec;
         const bool replacing = std::filesystem::exists(target, ec);
         if (replacing) {
             if (!replace_existing) {
                 return {Error::AlreadyExists,
-                        target.string() +
+                        utf8_of(target) +
                             " already exists; a machine is saved into a new directory, or "
                             "replaces a saved machine",
                         {}, {}};
@@ -235,7 +263,7 @@ private:
         // A copy saved as another machine has an identity of its own.
         const auto uuid = saved ? generate_uuid_v4() : machine_uuid;
         save_as(home, target, saved, uuid, name_template, replacing);
-        return {Error::None, {}, target.string(), uuid};
+        return {Error::None, {}, utf8_of(target), uuid};
     }
 
     void save_in_place(const std::filesystem::path& home, const std::string& name_template) {
@@ -254,19 +282,19 @@ private:
     static std::optional<std::string> why_not_replaceable(const std::filesystem::path& target,
                                                           const std::filesystem::path& home) {
         if (!is_machine_directory(target)) {
-            return target.string() + " is not a saved machine, so it is not replaced";
+            return utf8_of(target) + " is not a saved machine, so it is not replaced";
         }
         std::error_code ec;
         if (std::filesystem::equivalent(target, home, ec)) {
-            return target.string() + " is this machine's own directory; save it in place";
+            return utf8_of(target) + " is this machine's own directory; save it in place";
         }
         try {
             if (auto holder = machine_lock_holder(target)) {
-                return target.string() + " is in use by process " +
+                return utf8_of(target) + " is in use by process " +
                        (holder->empty() ? "?" : *holder);
             }
         } catch (const std::exception& e) {
-            return std::string("cannot tell whether ") + target.string() +
+            return std::string("cannot tell whether ") + utf8_of(target) +
                    " is in use: " + e.what();
         }
         return std::nullopt;
@@ -284,7 +312,7 @@ private:
         std::random_device rd;
         const auto suffix = std::to_string(rd());
         const auto partial =
-            target.parent_path() / (target.filename().string() + ".partial-" + suffix);
+            std::filesystem::path(target) += ".partial-" + suffix;
         std::optional<std::filesystem::path> aside;
         bool at_target = false;
         try {
@@ -307,7 +335,7 @@ private:
             write_machine_record(partial, record);
             keep_state(partial);
             if (replacing) {
-                aside = target.parent_path() / (target.filename().string() + ".replaced-" + suffix);
+                aside = std::filesystem::path(target) += ".replaced-" + suffix;
                 clear_directory_readonly(target);
                 std::filesystem::rename(target, *aside);
             }
@@ -431,7 +459,7 @@ private:
                 std::string error;
                 if (!storage->reopen(device.id, target / *relative, error)) {
                     throw std::runtime_error("cannot move " + device.id + " to " +
-                                             (target / *relative).string() + ": " + error);
+                                             utf8_of(target / *relative) + ": " + error);
                 }
             }
         }

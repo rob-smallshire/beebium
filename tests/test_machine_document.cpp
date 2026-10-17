@@ -170,3 +170,16 @@ TEST_CASE("iso8601_utc_now: the time to the second, in UTC", "[machine_document]
     CHECK(std::regex_match(iso8601_utc_now(),
                            std::regex(R"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)")));
 }
+
+TEST_CASE("paths cross the gRPC boundary as UTF-8", "[machine_document]") {
+    // "<E-acute>lite S<a-umlaut>ve", in UTF-8: beyond ASCII, and beyond a
+    // Windows ANSI code page's reach for a plain std::string.
+    const std::string name = "\xC3\x89lite S\xC3\xA4ve";
+    beebium::test::ScopedTempDir root("beebium_machine_doc_");
+    const auto machine = root / path_from_utf8(name + ".beebium-machine");
+    fs::create_directories(machine);
+    CHECK(fs::is_directory(machine));
+    CHECK(utf8_of(path_from_utf8(name)) == name);
+    CHECK(machine_document_name(machine) == name);
+    CHECK(machine_document_name(path_from_utf8("Plain")) == "Plain");
+}

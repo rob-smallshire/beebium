@@ -227,14 +227,25 @@ inline void write_machine_record(const std::filesystem::path& dirpath,
     write_text_atomically(dirpath / machine_layout::RECORD_FILENAME, machine_record_text(record));
 }
 
+// `text` (UTF-8) as a path, and a path as UTF-8: how paths cross the gRPC
+// boundary, whose strings are UTF-8. On Windows a path made from, or
+// converted to, a plain std::string uses the ANSI code page instead.
+inline std::filesystem::path path_from_utf8(std::string_view text) {
+    return std::filesystem::path(std::u8string(text.begin(), text.end()));
+}
+inline std::string utf8_of(const std::filesystem::path& path) {
+    const auto text = path.u8string();
+    return std::string(text.begin(), text.end());
+}
+
 // The name of the document a machine directory is: the directory's name
 // without the document suffix ("Elite Server" for "Elite
 // Server.beebium-machine"), what {document} renders for a saved machine.
 inline std::string machine_document_name(const std::filesystem::path& dirpath) {
     auto filename = dirpath.filename();
     if (filename.empty()) filename = dirpath.parent_path().filename();
-    return filename.extension() == machine_layout::DOCUMENT_SUFFIX ? filename.stem().string()
-                                                                   : filename.string();
+    return utf8_of(filename.extension() == machine_layout::DOCUMENT_SUFFIX ? filename.stem()
+                                                                           : filename);
 }
 
 // The document file of the machine directory `dirpath`: named after the
