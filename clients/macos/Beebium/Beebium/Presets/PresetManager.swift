@@ -52,6 +52,12 @@ class PresetManager: ObservableObject {
     /// Cached user presets directory path (retrieved from CLI)
     private var cachedUserPresetsDirpath: String?
 
+    /// Model id -> model display name (e.g. "model-b" -> "BBC Model B"), from
+    /// describe-preset-schema, kept for the app's lifetime so a model's name is
+    /// fetched at most once however many presets name it or how often presets
+    /// are rediscovered.
+    private var cachedModelDisplayNames: [String: String] = [:]
+
     /// Numbers machines per preset, for this run of the app only.
     private let nameSequence = MachineNameSequence()
 
@@ -68,7 +74,12 @@ class PresetManager: ObservableObject {
 
     private init() {}
 
-    /// Discover preset files and build system and user presets.
+    /// Discover presets from the server's listing and build the system and user
+    /// lists. The server is the single source of truth for what presets exist
+    /// and what they are called, so this reads `list-presets --all-models`
+    /// rather than opening preset files: one executable reports every model's
+    /// presets, system and user alike, each row carrying its id, display name,
+    /// source, model, description and stored path.
     func discoverPresets() async {
         isDiscovering = true
         discoveryError = nil
@@ -76,49 +87,74 @@ class PresetManager: ObservableObject {
         userPresets = []
 
         let dirpath = serversDirpath()
-        let systemPresetsDirpathValue = systemPresetsDirpath()
-        var discoveredSystem: [MachinePreset] = []
-        var discoveredUser: [MachinePreset] = []
-        var configFailures: [String] = []
-
-        NSLog("[PresetManager] Searching for system presets in: \(systemPresetsDirpathValue)")
-
-        // Discover system presets
-        let (systemFilepaths, directoryError) = findPresetFiles(in: systemPresetsDirpathValue)
-        NSLog("[PresetManager] Found \(systemFilepaths.count) system preset file(s)")
-
-        for presetFilepath in systemFilepaths {
-            if let preset = await loadPreset(from: presetFilepath, source: .systemPreset, serversDirpath: dirpath, configFailures: &configFailures) {
-                discoveredSystem.append(preset)
-            }
+        let listingExecutablePath = "\(dirpath)/beebium-model-b"
+        guard FileManager.default.isExecutableFile(atPath: listingExecutablePath) else {
+            NSLog("[PresetManager] No server executable to list presets at: \(listingExecutablePath)")
+            isDiscovering = false
+            discoveryError = "No server executable found in \(dirpath)"
+            return
         }
 
-        // Discover user presets (need an executable to query the user presets directory)
-        if let firstSystemPreset = discoveredSystem.first,
-           let userDirpath = await fetchUserPresetsDirpath(using: firstSystemPreset.coreExecutablePath) {
-            NSLog("[PresetManager] Searching for user presets in: \(userDirpath)")
-            let (userFilepaths, _) = findPresetFiles(in: userDirpath)
-            NSLog("[PresetManager] Found \(userFilepaths.count) user preset file(s)")
-
-            for presetFilepath in userFilepaths {
-                if let preset = await loadPreset(from: presetFilepath, source: .userPreset, serversDirpath: dirpath, configFailures: &configFailures) {
-                    discoveredUser.append(preset)
-                }
-            }
+        let (rows, error) = await coreCLI.listPresets(allModels: true, executablePath: listingExecutablePath)
+        if let error = error {
+            NSLog("[PresetManager] list-presets failed: \(error)")
+            isDiscovering = false
+            discoveryError = "Could not list presets: \(error)"
+            return
         }
+        NSLog("[PresetManager] Listed \(rows.count) preset(s)")
 
-        systemPresets = sortPresets(discoveredSystem)
-        userPresets = sortPresets(discoveredUser)
+        // Resolve each distinct model's display name once (for the "Based on"
+        // label), rather than once per preset as the old file-by-file discovery
+        // did; the preset's own name and description come from the row.
+        let modelNames = await modelDisplayNames(for: rows, serversDirpath: dirpath,
+                                                 listingExecutablePath: listingExecutablePath)
+
+        let catalog = PresetCatalog.build(
+            rows: rows,
+            serversDirpath: dirpath,
+            listingExecutablePath: listingExecutablePath,
+            executableExists: { FileManager.default.isExecutableFile(atPath: $0) },
+            modelDisplayName: { modelNames[$0.model ?? ""] ?? "" })
+
+        systemPresets = sortPresets(catalog.system)
+        userPresets = sortPresets(catalog.user)
         isDiscovering = false
 
-        if let directoryError = directoryError {
-            discoveryError = directoryError
-        } else if systemFilepaths.isEmpty {
-            discoveryError = "No preset files found in \(systemPresetsDirpathValue)"
-        } else if discoveredSystem.isEmpty {
-            let failedList = configFailures.joined(separator: ", ")
-            discoveryError = "Found \(systemFilepaths.count) preset(s) but failed to load: \(failedList)"
+        if !catalog.skipped.isEmpty {
+            NSLog("[PresetManager] Skipped \(catalog.skipped.count) preset(s) with no matching executable: \(catalog.skipped.joined(separator: ", "))")
         }
+
+        if systemPresets.isEmpty && userPresets.isEmpty {
+            discoveryError = rows.isEmpty
+                ? "No presets found"
+                : "Found \(rows.count) preset(s) but no matching server executable"
+        }
+    }
+
+    /// The display name of each distinct model among `rows` (e.g. "model-b" ->
+    /// "BBC Model B"), from `describe-preset-schema`, fetched once per model and
+    /// cached for the app's lifetime. A row naming no model is keyed by "" and
+    /// resolved against the listing executable. The map's value is "" for a
+    /// model whose executable is absent or whose schema cannot be read.
+    private func modelDisplayNames(for rows: [PresetListing], serversDirpath: String,
+                                   listingExecutablePath: String) async -> [String: String] {
+        var names: [String: String] = [:]
+        for model in Set(rows.map { $0.model ?? "" }) {
+            if let cached = cachedModelDisplayNames[model] {
+                names[model] = cached
+                continue
+            }
+            let executablePath = model.isEmpty
+                ? listingExecutablePath
+                : "\(serversDirpath)/beebium-\(model)"
+            guard FileManager.default.isExecutableFile(atPath: executablePath) else { continue }
+            let (schema, _) = await coreCLI.presetSchema(executablePath: executablePath)
+            let name = schema?.model.name ?? ""
+            cachedModelDisplayNames[model] = name
+            names[model] = name
+        }
+        return names
     }
 
     /// Load a single preset from a file path.

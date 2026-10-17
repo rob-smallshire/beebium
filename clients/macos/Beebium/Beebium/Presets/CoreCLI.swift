@@ -185,6 +185,39 @@ struct CoreCLI {
         return (parsed.preset, parsed.diagnostics)
     }
 
+    // MARK: - Preset listing
+
+    /// `list-presets --format jsonl`, with `--all-models` so one executable
+    /// reports every model's presets (and the user's), not just its own.
+    /// Returns (rows, errorMessage) with the error nil on success; an empty
+    /// array is a real answer.
+    func listPresets(allModels: Bool, executablePath: String) async -> ([PresetListing], String?) {
+        var arguments = ["--format", "jsonl", "list-presets"]
+        if allModels {
+            arguments.append("--all-models")
+        }
+        let (output, error) = await run(executablePath: executablePath, arguments: arguments)
+        if let error = error { return ([], error) }
+        return (Self.decodeListPresets(output), nil)
+    }
+
+    /// Decode `list-presets --format jsonl` output: one PresetListing per
+    /// non-blank line, skipping any line that does not decode. A pure,
+    /// side-effect-free seam, so the decode is testable against pinned samples
+    /// without running a server.
+    nonisolated static func decodeListPresets(_ text: String) -> [PresetListing] {
+        let decoder = JSONDecoder()
+        var out: [PresetListing] = []
+        for raw in text.split(whereSeparator: \.isNewline) {
+            guard let data = raw.data(using: .utf8),
+                  let row = try? decoder.decode(PresetListing.self, from: data) else {
+                continue
+            }
+            out.append(row)
+        }
+        return out
+    }
+
     // MARK: - Preset management
 
     /// `report-presets-dirpath`, trimmed. Returns (dirpath, errorMessage) with
