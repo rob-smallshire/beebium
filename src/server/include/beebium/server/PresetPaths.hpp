@@ -180,16 +180,15 @@ public:
                           << target_filepath.string() << " already exists\n";
                 continue;
             }
-            std::ifstream in(legacy_filepath, std::ios::binary);
-            const std::string document((std::istreambuf_iterator<char>(in)),
-                                       std::istreambuf_iterator<char>());
-            auto members = preset_members(document);
+            // Each file is read whole and closed here, before it is removed
+            // below: Windows will not remove a file that is still open.
+            const auto document = read_whole_file(legacy_filepath);
+            auto members = preset_members(std::string(document.begin(), document.end()));
             const auto thumbnail_filepath = dirpath / (*id + LEGACY_THUMBNAIL_SUFFIX);
-            if (std::filesystem::is_regular_file(thumbnail_filepath, ec)) {
-                std::ifstream thumbnail(thumbnail_filepath, std::ios::binary);
-                members.push_back({PresetSource::THUMBNAIL_FILENAME,
-                                   std::vector<std::uint8_t>(
-                                       std::istreambuf_iterator<char>(thumbnail), {})});
+            const bool has_thumbnail = std::filesystem::is_regular_file(thumbnail_filepath, ec);
+            if (has_thumbnail) {
+                members.push_back(
+                    {PresetSource::THUMBNAIL_FILENAME, read_whole_file(thumbnail_filepath)});
             }
             if (auto error = write_preset(std::move(members), target_filepath); !error.empty()) {
                 std::cerr << "Cannot migrate the presets in " << dirpath.string() << " to "
@@ -198,10 +197,17 @@ public:
                           << " are ignored\n";
                 return;
             }
-            std::filesystem::remove(legacy_filepath, ec);
-            std::filesystem::remove(thumbnail_filepath, ec);
             std::cerr << "Migrated the preset " << legacy_filepath.string() << " to "
                       << target_filepath.string() << "\n";
+            // The archive stands; an old file left behind is said, not hidden.
+            for (const auto& old_filepath : {legacy_filepath, thumbnail_filepath}) {
+                if (old_filepath == thumbnail_filepath && !has_thumbnail) continue;
+                if (!std::filesystem::remove(old_filepath, ec) && ec) {
+                    std::cerr << "Cannot remove " << old_filepath.string()
+                              << " after migrating it (" << ec.message()
+                              << "); remove it by hand\n";
+                }
+            }
         }
     }
 
@@ -322,6 +328,12 @@ private:
     // named for migrate_user_presets and name_of only.
     static constexpr std::string_view LEGACY_PRESET_EXTENSION = ".preset.beebium";
     static constexpr const char* LEGACY_THUMBNAIL_SUFFIX = ".thumbnail.png";
+
+    // The bytes of the file at `filepath`, read and closed.
+    static std::vector<std::uint8_t> read_whole_file(const std::filesystem::path& filepath) {
+        std::ifstream in(filepath, std::ios::binary);
+        return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(in), {});
+    }
 
     // `name` without `suffix`, or nullopt when it does not end with it or is
     // nothing more.

@@ -30,6 +30,9 @@
 #ifndef _WIN32
 #include <unistd.h>
 #endif
+#ifdef __APPLE__
+#include <sys/stat.h>
+#endif
 
 using namespace beebium::server;
 
@@ -409,6 +412,40 @@ TEST_CASE("enumerate: the user store's earlier presets become archives, one line
     // Once done, nothing more is said.
     CHECK(cerr_of([] { (void)PresetPaths::enumerate(); }).empty());
 }
+
+#if defined(_WIN32) || defined(__APPLE__)
+TEST_CASE("enumerate: an earlier preset that cannot be removed after migrating is said, not hidden",
+          "[PresetPaths][migration]") {
+    // Provoked where it can be without privilege: on Windows by holding the
+    // old file open (a file open without delete sharing cannot be removed);
+    // on macOS by the user-immutable flag. Linux needs root for its
+    // equivalent, so the case is not run there.
+    PresetStores stores;
+    const auto old_filepath = stores.user_dirpath() / "old.preset.beebium";
+    std::ofstream(old_filepath, std::ios::binary) << R"({"name": "Old"})";
+
+    std::vector<PresetPaths::Entry> entries;
+    std::string said;
+    {
+#ifdef _WIN32
+        std::ifstream held(old_filepath, std::ios::binary);
+        REQUIRE(held.is_open());
+        said = cerr_of([&] { entries = PresetPaths::enumerate(); });
+#else
+        REQUIRE(::chflags(old_filepath.c_str(), UF_IMMUTABLE) == 0);
+        said = cerr_of([&] { entries = PresetPaths::enumerate(); });
+        REQUIRE(::chflags(old_filepath.c_str(), 0) == 0);
+#endif
+    }
+
+    // The archive stands, and the old file left behind is reported.
+    CHECK(ids_of(entries) == std::vector<std::string>{"old"});
+    CHECK(said.find("Migrated the preset " + old_filepath.string()) != std::string::npos);
+    CHECK(said.find("Cannot remove " + old_filepath.string() + " after migrating it (") !=
+          std::string::npos);
+    CHECK(std::filesystem::exists(old_filepath));
+}
+#endif
 
 #ifndef _WIN32
 TEST_CASE("enumerate: a user store that cannot be written is left as it is, with one notice",
