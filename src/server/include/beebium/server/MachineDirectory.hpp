@@ -23,6 +23,7 @@
 #pragma once
 
 #include <beebium/PlatformUtils.hpp>
+#include <beebium/server/MachineDocument.hpp>
 
 #include <filesystem>
 #include <iostream>
@@ -165,8 +166,8 @@ public:
         for (int attempt = 0;; ++attempt) {
             try {
                 std::filesystem::create_directories(dirpath);
-                MachineDirectoryLock lock(dirpath / "lock");
-                if (!std::filesystem::exists(dirpath / "lock")) {
+                MachineDirectoryLock lock(dirpath / machine_layout::LOCK_FILENAME);
+                if (!std::filesystem::exists(dirpath / machine_layout::LOCK_FILENAME)) {
                     throw std::runtime_error("removed while being made: " + dirpath.string());
                 }
                 return MachineDirectory(dirpath, std::move(lock));
@@ -184,7 +185,7 @@ public:
         if (!std::filesystem::is_directory(dirpath, ec)) {
             throw std::runtime_error(dirpath.string() + " is not a machine directory");
         }
-        MachineDirectoryLock lock(dirpath / "lock");
+        MachineDirectoryLock lock(dirpath / machine_layout::LOCK_FILENAME);
         MachineDirectory directory(dirpath, std::move(lock));
         directory.transient_ = false;
         return directory;
@@ -198,7 +199,7 @@ public:
         for (const auto& entry : std::filesystem::directory_iterator(machines_dirpath, ec)) {
             if (!entry.is_directory(ec)) continue;
             try {
-                MachineDirectoryLock lock(entry.path() / "lock");
+                MachineDirectoryLock lock(entry.path() / machine_layout::LOCK_FILENAME);
 #ifdef _WIN32
                 // Windows will not delete a file this process has open, and a
                 // launch that locks it after this release cannot have it

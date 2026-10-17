@@ -2057,6 +2057,15 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_rom_paths)
 
+    # The files of a machine directory the core defines (MachineDocument.hpp)
+    add_executable(test_machine_document test_machine_document.cpp)
+    target_link_libraries(test_machine_document PRIVATE
+        beebium_server_headers
+        beebium_core
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_machine_document)
+
     # Atomic file replacement (AtomicFile.hpp) and the preset writer on it
     add_executable(test_atomic_file test_atomic_file.cpp)
     target_link_libraries(test_atomic_file PRIVATE
