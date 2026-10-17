@@ -2033,6 +2033,22 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_preset_loader)
 
+    # Machine directory tests: made, locked, swept and removed, including
+    # against a real server holding its lock in another process
+    add_executable(test_machine_directory test_machine_directory.cpp)
+    target_include_directories(test_machine_directory PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/server/include
+    )
+    target_link_libraries(test_machine_directory PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    target_compile_definitions(test_machine_directory PRIVATE
+        BEEBIUM_SERVER_FILEPATH="$<TARGET_FILE:beebium-model-b>"
+    )
+    add_dependencies(test_machine_directory beebium-servers)
+    catch_discover_tests(test_machine_directory)
+
     # File reference resolution tests
     add_executable(test_resource_paths test_resource_paths.cpp)
     target_include_directories(test_resource_paths PRIVATE

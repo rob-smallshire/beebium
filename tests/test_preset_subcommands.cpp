@@ -2475,6 +2475,27 @@ TEST_CASE("a preset's relative and bare per-user hard-disc images are both found
     CHECK(after.exit_code == 0);
 }
 
+TEST_CASE("a launch copies a template's disc into its own directory and removes it after",
+          "[integration][preset][resource_paths][machine_directory]") {
+    // The L3FS master, named by its bare name, is copied into the machine's
+    // directory under machines/ -- never into the per-user discs/ -- and the
+    // directory is gone once the capture has shut the machine down.
+    TempDirectory temp_dir;
+    const auto user_dirpath = temp_dir.path() / "user";
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
+    const auto preset_filepath = temp_dir.path() / "fs.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
+        {"name": "acorn-scsi"},
+        {"name": "scsi-hard-disc", "config": {"scsi-id": 0, "image": "l3fs-v1_26b.dat"}}]})";
+
+    auto result = run_command(capture_command(temp_dir.path() / "fs.png") + " --preset \"" +
+                              preset_filepath.string() + "\"");
+    INFO(result.stdout_output << result.stderr_output);
+    CHECK(result.exit_code == 0);
+    CHECK(std::filesystem::is_empty(user_dirpath / "machines"));
+    CHECK_FALSE(std::filesystem::exists(user_dirpath / "discs"));
+}
+
 TEST_CASE("create-preset records a bare name the working directory holds as its path",
           "[integration][preset][create-preset][resource_paths]") {
     // What the command line meant: the file in the working directory. A bare

@@ -21,6 +21,7 @@
 #include "beebium/server/SidewaysValidation.hpp"
 #include "beebium/server/CoprocessorDebuggerAdapter.hpp"
 #include "beebium/server/DiscPaths.hpp"
+#include "beebium/server/MachineDirectory.hpp"
 #include "beebium/server/RomPaths.hpp"
 #include "beebium/extension/CoprocessorExtension.hpp"
 #include "beebium/extension/CpuDebugTarget.hpp"
@@ -875,6 +876,10 @@ void run_emulation_loop(MachineType& machine,
 // machine. Moving it above the machine would be a use-after-free.
 template<typename MachineType>
 struct AssembledMachine {
+    // The directory the machine owns, its media copies in it. Declared first,
+    // so it is removed last, once the machine and its extensions have closed
+    // those files (Windows will not remove an open file).
+    std::optional<MachineDirectory> machine_directory;
     MachineType machine;
     beebium::EconetTransportRegistry transport_registry;
     beebium::ExtensionRegistry extension_registry;
@@ -925,6 +930,12 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
 
     auto am = std::make_unique<AssembledMachine<MachineType>>();
     auto& machine = am->machine;
+    try {
+        am->machine_directory.emplace(MachineDirectory::create());
+    } catch (const std::exception& e) {
+        std::cerr << "Error: cannot make the machine directory: " << e.what() << "\n";
+        return {nullptr, ExitCode::IOERR};
+    }
 
     // Load ROMs
     load_roms(machine, config);
@@ -1020,9 +1031,12 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         }
     }
 
-    // Where a master's working copy is made, decided once for every disc this
-    // launch loads.
-    const auto disc_destination = DiscPaths::launch_copy_destination();
+    // Where the media a template names are copied: the machine's directory.
+    const DiscPaths::CopyDestination disc_destination{
+        am->machine_directory->dirpath(),
+        config.launch.preset_filepath
+            ? std::optional(config.launch.reference_container_dirpath())
+            : std::nullopt};
 
     // Load disc images
     if (auto exit_code = load_disc_images(machine, config, disc_destination)) {

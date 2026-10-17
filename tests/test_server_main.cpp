@@ -624,7 +624,9 @@ TEST_CASE("load_disc_images: handles empty floppy paths (no-op)", "[server_main]
     // config.machine.floppy_filepaths are empty
 
     // Should not throw
-    REQUIRE_NOTHROW(load_disc_images(machine, config, DiscPaths::launch_copy_destination()));
+    REQUIRE_NOTHROW(load_disc_images(
+        machine, config,
+        DiscPaths::CopyDestination{std::filesystem::temp_directory_path(), std::nullopt}));
 }
 
 // ============================================================================
@@ -1134,11 +1136,16 @@ struct ReferenceTree {
     }
 };
 
-// The file a floppy reference loads, or nullopt when the load fails.
-std::optional<std::filesystem::path> floppy_loaded(const std::string& reference,
-                                                   const std::filesystem::path& container) {
+// The file a floppy reference loads, copying into `machine` what the launch
+// copies (launched from `template_dirpath` when given), or nullopt when the
+// load fails.
+std::optional<std::filesystem::path> floppy_loaded(
+    const std::string& reference, const std::filesystem::path& container,
+    const std::filesystem::path& machine,
+    std::optional<std::filesystem::path> template_dirpath = std::nullopt) {
     beebium::DiscDrive drive;
-    if (load_single_disc(drive, 0, reference, container, DiscPaths::launch_copy_destination())) {
+    if (load_single_disc(drive, 0, reference, container,
+                         DiscPaths::CopyDestination{machine, std::move(template_dirpath)})) {
         return std::nullopt;
     }
     return beebium::DiscUrl::parse(drive.source_url())->to_filepath();
@@ -1146,27 +1153,28 @@ std::optional<std::filesystem::path> floppy_loaded(const std::string& reference,
 
 }  // namespace
 
-TEST_CASE("a floppy's bare name is found in the container, then per-user, then system",
+TEST_CASE("a floppy found by search is loaded from the machine's own copy",
           "[server_main][disc][resource_paths]") {
     ReferenceTree t;
+    const auto machine = t.root / "machine";
     ReferenceTree::put_floppy(t.system / "game.ssd");
-    CHECK(floppy_loaded("game.ssd", t.container) == t.system / "game.ssd");
-    ReferenceTree::put_floppy(t.user / "discs" / "game.ssd");
-    CHECK(floppy_loaded("game.ssd", t.container) == t.user / "discs" / "game.ssd");
-    ReferenceTree::put_floppy(t.container / "game.ssd");
-    CHECK(floppy_loaded("game.ssd", t.container) == t.container / "game.ssd");
-    CHECK_FALSE(floppy_loaded("nope.ssd", t.container).has_value());
+    CHECK(floppy_loaded("game.ssd", t.container, machine) == machine / "game.ssd");
+    CHECK_FALSE(floppy_loaded("nope.ssd", t.container, machine).has_value());
 }
 
-TEST_CASE("a floppy's path is anchored in the container, or home",
+TEST_CASE("a floppy's path is the template's copy within it, the user's file outside it",
           "[server_main][disc][resource_paths]") {
     ReferenceTree t;
-    ReferenceTree::put_floppy(t.container / "sub" / "game.ssd");
-    CHECK(floppy_loaded("sub/game.ssd", t.container) == t.container / "sub" / "game.ssd");
-    CHECK(floppy_loaded((t.container / "sub" / "game.ssd").string(), t.root.path()) ==
-          t.container / "sub" / "game.ssd");
+    const auto machine = t.root / "machine";
+    const auto game = t.container / "sub" / "game.ssd";
+    ReferenceTree::put_floppy(game);
+    CHECK(floppy_loaded("sub/game.ssd", t.container, machine, t.container) ==
+          machine / "sub" / "game.ssd");
+    // Outside the template, or with none (the command line): in place.
+    CHECK(floppy_loaded(game.string(), t.root.path(), machine, t.root / "other") == game);
+    CHECK(floppy_loaded("sub/game.ssd", t.container, machine) == game);
     beebium::test::ScopedEnv home("HOME", t.container.string());
-    CHECK(floppy_loaded("~/sub/game.ssd", t.root.path()) == t.container / "sub" / "game.ssd");
+    CHECK(floppy_loaded("~/sub/game.ssd", t.root.path(), machine, t.root / "other") == game);
 }
 
 TEST_CASE("a ROM's bare name is found in the container, then per-user, then system",
@@ -1240,7 +1248,7 @@ TEST_CASE("load_single_disc records a path as the file URL DiscUrl spells",
 
     beebium::DiscDrive drive;
     REQUIRE_FALSE(load_single_disc(drive, 0, image_filepath.string(), temp_dir.path(),
-                                   DiscPaths::launch_copy_destination())
+                                   DiscPaths::CopyDestination{temp_dir / "machine", std::nullopt})
                       .has_value());
 
     const auto& url = drive.source_url();
@@ -1264,8 +1272,8 @@ TEST_CASE("load_single_disc records a URL as given", "[server_main][disc]") {
     const auto url = beebium::DiscUrl::from_filepath(image_filepath).url();
 
     beebium::DiscDrive drive;
-    REQUIRE_FALSE(
-        load_single_disc(drive, 0, url, temp_dir.path(), DiscPaths::launch_copy_destination())
-            .has_value());
+    REQUIRE_FALSE(load_single_disc(drive, 0, url, temp_dir.path(),
+                                   DiscPaths::CopyDestination{temp_dir / "machine", std::nullopt})
+                      .has_value());
     CHECK(drive.source_url() == url);
 }

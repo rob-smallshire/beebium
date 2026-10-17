@@ -208,46 +208,69 @@ public:
         return user_resource_dirpath(ResourceKind::Disc);
     }
 
-    // Where a launch makes the working copy of a master, and how.
+    // Where a launch copies the media a template names: the machine's own
+    // directory, and the directory of the template it was launched from (the
+    // preset's), when it was launched from one.
     struct CopyDestination {
         std::filesystem::path dirpath;
-        DiscWorkMode mode;
+        std::optional<std::filesystem::path> template_dirpath;
     };
 
-    // The copy destination a launch uses: BEEBIUM_DISC_WORK_DIR in Scratch
-    // mode when it is set, else the per-user discs directory, Persistent.
-    static CopyDestination launch_copy_destination() {
-        if (auto env = beebium::platform::get_env("BEEBIUM_DISC_WORK_DIR")) {
-            return {std::filesystem::path(*env), DiscWorkMode::Scratch};
-        }
-        return {get_user_disc_working_dirpath(), DiscWorkMode::Persistent};
-    }
-
-    // The path the emulator should open for a hard-disc "image" reference
-    // written in `container_dirpath`, using find_disc_directory() as the
-    // master source and making a master's working copy at `destination`.
+    // The path the emulator should open for a disc reference (a floppy or a
+    // hard disc) written in `container_dirpath`. Media a template names by
+    // search or by position within itself is the machine's own copy, made in
+    // `destination`: a disc found by search -- in the container, the per-user
+    // discs/ or among the masters -- or named by a path inside the template's
+    // directory, at the same relative path. Media the user names by location
+    // elsewhere is the user's own file, opened in place. A master is checked
+    // to be one (its .dsc and display name) before it is copied.
     static std::filesystem::path resolve_disc_image(
         const std::string& image, const std::filesystem::path& container_dirpath,
         const CopyDestination& destination) {
-        const auto master_dirpath = find_disc_directory();
-        std::error_code ec;
-        // Working copies are not user files: the per-user discs/ doubles as the
-        // directory working copies are made in, so a file there named like a
-        // master is taken to be that master's working copy, and the master's
-        // name resolves through copy-on-write, never through the search (and
-        // never with a notice). A consequence of the shared directory, to be
-        // deleted when machine directories hold the working copies (#103a).
-        if (is_bare_reference(image) && master_dirpath &&
-            std::filesystem::path(image).extension() == kAcornScsiHardDiscFormat.extension &&
-            std::filesystem::is_regular_file(*master_dirpath / image, ec) &&
-            !std::filesystem::is_regular_file(container_dirpath / image, ec)) {
-            return prepare_working_image(image, *master_dirpath, destination.dirpath,
-                                         destination.mode);
-        }
         std::vector<std::filesystem::path> system_dirpaths;
-        if (master_dirpath) system_dirpaths.push_back(*master_dirpath);
-        return resolve_reference(image, ResourceKind::Disc, container_dirpath, system_dirpaths)
-            .path;
+        if (auto master_dirpath = find_disc_directory()) system_dirpaths.push_back(*master_dirpath);
+        const auto found =
+            resolve_reference(image, ResourceKind::Disc, container_dirpath, system_dirpaths);
+        if (found.origin == ReferenceOrigin::System &&
+            found.path.extension() == kAcornScsiHardDiscFormat.extension) {
+            return prepare_working_image(found.path.filename().string(),
+                                         found.path.parent_path(), destination.dirpath,
+                                         DiscWorkMode::Persistent);
+        }
+        std::filesystem::path relative_path;
+        if (found.origin != ReferenceOrigin::Path) {
+            relative_path = found.path.filename();
+        } else if (destination.template_dirpath) {
+            const auto inside = found.path.lexically_normal().lexically_relative(
+                destination.template_dirpath->lexically_normal());
+            if (!inside.empty() && *inside.begin() != "..") relative_path = inside;
+        }
+        if (relative_path.empty()) return found.path;
+        return copy_into_machine(found.path, destination.dirpath / relative_path);
+    }
+
+    // A copy of `source`, with a hard-disc image's geometry sidecar, at
+    // `copy_filepath`, made once: a second reference to the same file finds
+    // the first copy. A source that does not exist is returned as it is, for
+    // the caller to report.
+    static std::filesystem::path copy_into_machine(const std::filesystem::path& source,
+                                                   const std::filesystem::path& copy_filepath) {
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(source, ec)) return source;
+        if (!std::filesystem::exists(copy_filepath, ec)) {
+            std::filesystem::create_directories(copy_filepath.parent_path());
+            copy_file_atomically(source, copy_filepath);
+            if (source.extension() == kAcornScsiHardDiscFormat.extension) {
+                auto source_sidecar = source;
+                source_sidecar.replace_extension(kAcornScsiHardDiscFormat.sidecar_extension);
+                auto copy_sidecar = copy_filepath;
+                copy_sidecar.replace_extension(kAcornScsiHardDiscFormat.sidecar_extension);
+                if (std::filesystem::exists(source_sidecar, ec)) {
+                    copy_file_atomically(source_sidecar, copy_sidecar);
+                }
+            }
+        }
+        return copy_filepath;
     }
 
     // Core copy-on-write policy, with the master and working directories

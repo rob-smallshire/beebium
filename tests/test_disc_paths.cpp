@@ -26,8 +26,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
-#include <sstream>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -70,6 +68,7 @@ struct TmpTree {
 };
 
 void write_file(const fs::path& p, const std::string& content) {
+    fs::create_directories(p.parent_path());
     std::ofstream out(p, std::ios::binary | std::ios::trunc);
     out << content;
 }
@@ -278,107 +277,101 @@ TEST_CASE("prepare_working_image throws when the .dsc sidecar is missing",
 }
 
 // ---------------------------------------------------------------------------
-// resolve_disc_image: the file reference rule for a hard disc
+// resolve_disc_image: the file reference rule, and what a machine copies
 // ---------------------------------------------------------------------------
 
 namespace {
 
-// A preset's directory, a per-user directory and a master directory, pinned
-// through the environment, with copy-on-write into the per-user discs/ in
-// Persistent mode (`destination`).
+// A preset's directory (the template), a per-user directory, a master
+// directory and a machine directory, the first three pinned through the
+// environment. `destination` copies into the machine, launched from the
+// template; `cli` as a launch with no template.
 struct DiscSearchTree {
     beebium::test::ScopedTempDir root{"beebium_disc_search_"};
     fs::path container = root / "container";
     fs::path user = root / "user";
     fs::path master = root / "master";
+    fs::path machine = root / "machine";
     beebium::test::ScopedEnv user_env{"BEEBIUM_USER_DIRPATH", user.string()};
     beebium::test::ScopedEnv master_env{"BEEBIUM_DISC_DIR", master.string()};
-    DiscPaths::CopyDestination destination{user / "discs", DiscWorkMode::Persistent};
+    DiscPaths::CopyDestination destination{machine, container};
+    DiscPaths::CopyDestination cli{machine, std::nullopt};
 
     DiscSearchTree() {
-        for (const auto& d : {container, user / "discs", master}) fs::create_directories(d);
+        for (const auto& d : {container, user / "discs", master, machine}) {
+            fs::create_directories(d);
+        }
         write_file(master / "l3fs.dat", "MASTER");
         write_file(master / "l3fs.dsc", "geometry");
         write_file(master / "l3fs.json", R"({"display_name": "L3FS"})");
     }
 };
 
-template <typename F>
-std::string cerr_of(F body) {
-    std::ostringstream captured;
-    auto* previous = std::cerr.rdbuf(captured.rdbuf());
-    body();
-    std::cerr.rdbuf(previous);
-    return captured.str();
-}
-
 }  // namespace
 
-TEST_CASE("launch_copy_destination: per-user and kept, or BEEBIUM_DISC_WORK_DIR and fresh",
-          "[disc][discpaths][resolve]") {
-    beebium::test::ScopedTempDir root("beebium_disc_destination_");
-    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", root.path().string());
-    {
-        beebium::test::ScopedEnv work_env("BEEBIUM_DISC_WORK_DIR", "");
-        const auto destination = DiscPaths::launch_copy_destination();
-        CHECK(destination.dirpath == root / "discs");
-        CHECK(destination.mode == DiscWorkMode::Persistent);
-    }
-    beebium::test::ScopedEnv work_env("BEEBIUM_DISC_WORK_DIR", (root / "work").string());
-    const auto destination = DiscPaths::launch_copy_destination();
-    CHECK(destination.dirpath == root / "work");
-    CHECK(destination.mode == DiscWorkMode::Scratch);
-}
-
-TEST_CASE("resolve_disc_image: a master's name is a per-user working copy, with no notice",
+TEST_CASE("resolve_disc_image: a master is copied into the machine, never into discs/",
           "[disc][discpaths][resolve]") {
     DiscSearchTree t;
-    fs::path resolved;
-    CHECK(cerr_of([&] {
-              resolved = DiscPaths::resolve_disc_image("l3fs.dat", t.container, t.destination);
-          })
-              .empty());
-    CHECK(resolved == t.user / "discs" / "l3fs.dat");
+    const auto resolved = DiscPaths::resolve_disc_image("l3fs.dat", t.container, t.destination);
+    CHECK(resolved == t.machine / "l3fs.dat");
     CHECK(read_file(resolved) == "MASTER");
-    CHECK(fs::exists(t.user / "discs" / "l3fs.dsc"));
+    CHECK(fs::exists(t.machine / "l3fs.dsc"));
+    CHECK(fs::is_empty(t.user / "discs"));
 }
 
-TEST_CASE("resolve_disc_image: a per-user file named like a master is its working copy",
-          "[disc][discpaths][resolve]") {
-    // The per-user discs/ is also where working copies are made (until
-    // machine directories, #103a): a file there named like a master is kept
-    // and used, never replaced, and never reported as hiding the master.
-    DiscSearchTree t;
-    write_file(t.user / "discs" / "l3fs.dat", "USED");
-    write_file(t.user / "discs" / "l3fs.dsc", "geometry");
-    fs::path resolved;
-    CHECK(cerr_of([&] {
-              resolved = DiscPaths::resolve_disc_image("l3fs.dat", t.container, t.destination);
-          })
-              .empty());
-    CHECK(resolved == t.user / "discs" / "l3fs.dat");
-    CHECK(read_file(resolved) == "USED");
-}
-
-TEST_CASE("resolve_disc_image: the container's own file comes first, opened in place",
-          "[disc][discpaths][resolve]") {
-    DiscSearchTree t;
-    write_file(t.container / "l3fs.dat", "MINE");
-    write_file(t.container / "other.dat", "OTHER");
-    write_file(t.user / "discs" / "other.dat", "USER");
-    CHECK(DiscPaths::resolve_disc_image("l3fs.dat", t.container, t.destination) ==
-          t.container / "l3fs.dat");
-    CHECK(DiscPaths::resolve_disc_image("other.dat", t.container, t.destination) ==
-          t.container / "other.dat");
-    CHECK_FALSE(fs::exists(t.user / "discs" / "l3fs.dat"));
-}
-
-TEST_CASE("resolve_disc_image: a per-user disc of the user's own is opened in place",
+TEST_CASE("resolve_disc_image: a per-user disc found by search is copied, the original kept",
           "[disc][discpaths][resolve]") {
     DiscSearchTree t;
     write_file(t.user / "discs" / "mine.dat", "MINE");
-    CHECK(DiscPaths::resolve_disc_image("mine.dat", t.container, t.destination) ==
-          t.user / "discs" / "mine.dat");
+    write_file(t.user / "discs" / "mine.dsc", "geometry");
+    const auto resolved = DiscPaths::resolve_disc_image("mine.dat", t.container, t.cli);
+    CHECK(resolved == t.machine / "mine.dat");
+    CHECK(read_file(resolved) == "MINE");
+    CHECK(read_file(t.machine / "mine.dsc") == "geometry");
+    write_file(resolved, "WRITTEN");
+    CHECK(read_file(t.user / "discs" / "mine.dat") == "MINE");
+}
+
+TEST_CASE("resolve_disc_image: the template's own discs are copied, at their own paths",
+          "[disc][discpaths][resolve]") {
+    DiscSearchTree t;
+    write_file(t.container / "l3fs.dat", "BESIDE");
+    write_file(t.container / "sub" / "game.ssd", "GAME");
+    // Beside the template, by bare name, ahead of the master of that name.
+    const auto bare = DiscPaths::resolve_disc_image("l3fs.dat", t.container, t.destination);
+    CHECK(bare == t.machine / "l3fs.dat");
+    CHECK(read_file(bare) == "BESIDE");
+    // By a path within it, anchored or absolute.
+    CHECK(DiscPaths::resolve_disc_image("sub/game.ssd", t.container, t.destination) ==
+          t.machine / "sub" / "game.ssd");
+    CHECK(DiscPaths::resolve_disc_image((t.container / "sub" / "game.ssd").string(), t.container,
+                                        t.destination) == t.machine / "sub" / "game.ssd");
+    CHECK(read_file(t.container / "sub" / "game.ssd") == "GAME");
+}
+
+TEST_CASE("resolve_disc_image: media named by location outside the template is used in place",
+          "[disc][discpaths][resolve]") {
+    DiscSearchTree t;
+    const auto elsewhere = (t.root / "elsewhere" / "game.ssd").lexically_normal();
+    write_file(elsewhere, "MINE");
+    CHECK(DiscPaths::resolve_disc_image(elsewhere.string(), t.container, t.destination) ==
+          elsewhere);
+    beebium::test::ScopedEnv home("HOME", (t.root / "elsewhere").string());
+    CHECK(DiscPaths::resolve_disc_image("~/game.ssd", t.container, t.destination) == elsewhere);
+    // Without a template, every path is the user's: the command line's.
+    write_file(t.container / "cwd.ssd", "CWD");
+    CHECK(DiscPaths::resolve_disc_image((t.container / "cwd.ssd").string(), t.container, t.cli) ==
+          t.container / "cwd.ssd");
+    CHECK(fs::is_empty(t.machine));
+}
+
+TEST_CASE("resolve_disc_image: a disc named twice is copied once",
+          "[disc][discpaths][resolve]") {
+    DiscSearchTree t;
+    const auto first = DiscPaths::resolve_disc_image("l3fs.dat", t.container, t.destination);
+    write_file(first, "WRITTEN");
+    CHECK(DiscPaths::resolve_disc_image("l3fs.dat", t.container, t.destination) == first);
+    CHECK(read_file(first) == "WRITTEN");
 }
 
 TEST_CASE("resolve_disc_image: a name found nowhere names every directory searched",
@@ -389,31 +382,11 @@ TEST_CASE("resolve_disc_image: a name found nowhere names every directory search
                           ", " + (t.user / "discs").string() + ", " + t.master.string());
 }
 
-TEST_CASE("resolve_disc_image: paths are anchored, not searched or copied",
+TEST_CASE("resolve_disc_image: a path to nothing is returned for its user to report",
           "[disc][discpaths][resolve]") {
     DiscSearchTree t;
-    CHECK(DiscPaths::resolve_disc_image("sub/l3fs.dat", t.container, t.destination) ==
-          (t.container / "sub" / "l3fs.dat").lexically_normal());
-    const auto absolute = (t.root / "elsewhere" / "x.dat").lexically_normal();
-    CHECK(DiscPaths::resolve_disc_image(absolute.string(), t.container, t.destination) ==
-          absolute);
-    beebium::test::ScopedEnv home("HOME", t.root.path().string());
-    CHECK(DiscPaths::resolve_disc_image("~/x.dat", t.container, t.destination) ==
-          (t.root / "x.dat").lexically_normal());
-}
-
-TEST_CASE("resolve_disc_image: a command line's bare name is found in the working directory",
-          "[disc][discpaths][resolve]") {
-    // Opened in place, writable: the user's own file, never copy-on-write.
-    DiscSearchTree t;
-    write_file(t.container / "l3fs.dat", "CWD");
-    const auto saved_cwd = fs::current_path();
-    fs::current_path(t.container);
-    const auto resolved =
-        DiscPaths::resolve_disc_image("l3fs.dat", fs::current_path(), t.destination);
-    fs::current_path(saved_cwd);
-    CHECK(fs::equivalent(resolved, t.container / "l3fs.dat"));
-    CHECK_FALSE(fs::exists(t.user / "discs" / "l3fs.dat"));
+    CHECK(DiscPaths::resolve_disc_image("sub/missing.ssd", t.container, t.destination) ==
+          (t.container / "sub" / "missing.ssd").lexically_normal());
 }
 
 // ---------------------------------------------------------------------------
