@@ -56,10 +56,7 @@ struct FileCommands: Commands {
                 renameMachine?()
             }
             .keyboardShortcut("r", modifiers: .command)
-            .disabled(!Self.renameEnabled(
-                hasFocusedMachineWindow: renameMachine != nil,
-                isSaved: machineSaveActions?.isSaved ?? false))
-            .help(Self.renameHelp(isSaved: machineSaveActions?.isSaved ?? false))
+            .disabled(!Self.renameEnabled(hasFocusedMachineWindow: renameMachine != nil))
 
             Divider()
 
@@ -114,24 +111,12 @@ struct FileCommands: Commands {
     }
 
     /// Whether File > Rename Machine... should be enabled: a machine window is
-    /// focused and its machine is transient. A saved machine is named by its
-    /// document, so the server refuses an in-place rename; it is renamed with
-    /// Save As or in Finder when closed. Pure, so the rule is testable.
-    static func renameEnabled(hasFocusedMachineWindow: Bool, isSaved: Bool) -> Bool {
-        hasFocusedMachineWindow && !isSaved
+    /// focused. Both transient and saved machines rename in place (a saved
+    /// machine's document is renamed), so there is one rule for both. Pure, so
+    /// it is testable.
+    static func renameEnabled(hasFocusedMachineWindow: Bool) -> Bool {
+        hasFocusedMachineWindow
     }
-
-    /// The tooltip for File > Rename Machine...: an explanation when a saved
-    /// machine makes it unavailable, and nothing otherwise (a transient machine
-    /// renames in place, which needs no explaining). Pure, so the wording is
-    /// testable.
-    static func renameHelp(isSaved: Bool) -> String {
-        isSaved ? renameUnavailableHelp : ""
-    }
-
-    /// Why Rename Machine... is unavailable for a saved machine.
-    static let renameUnavailableHelp =
-        "Rename a saved machine with Save As, or in Finder when it's closed."
 
     /// Whether there are saved machines to revisit, gating File > Open Recent.
     private var hasRecentMachines: Bool {

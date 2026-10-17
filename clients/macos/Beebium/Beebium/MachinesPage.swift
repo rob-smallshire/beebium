@@ -47,6 +47,9 @@ struct MachinesPage: View {
             }
         }
         .task { await model.reload() }
+        .onReceive(NotificationCenter.default.publisher(for: .savedMachinesDidChange)) { _ in
+            Task { await model.reload() }
+        }
     }
 
     private var emptyState: some View {

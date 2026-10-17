@@ -187,29 +187,63 @@ final class SystemClient: ObservableObject, Disconnectable {
         errorMessage = nil
     }
 
-    /// A failure to set the machine name, surfaced to the rename popover so it
-    /// can stay open and show the reason, the way the station editor does.
-    enum MachineNameError: Error, LocalizedError {
+    /// A failure to rename the machine, surfaced to the rename popover so it can
+    /// stay open and show the reason, the way the station editor does.
+    enum MachineNameError: Error, LocalizedError, Equatable {
         case notConnected
-        case operationFailed(String)
+        /// A sibling of the chosen name already exists (saved machine).
+        case nameInUse(attempted: String)
+        /// The name is not a valid file name; carries the server's own message.
+        case invalidName(String)
+        case failed(String)
 
         var errorDescription: String? {
             switch self {
-            case .notConnected:            return "Not connected to the server."
-            case .operationFailed(let m):  return m
+            case .notConnected:
+                return "Not connected to the server."
+            case .nameInUse(let name):
+                return "A machine named \"\(name)\" already exists in this folder."
+            case .invalidName(let m):
+                return m
+            case .failed(let m):
+                return m
             }
         }
     }
 
-    /// Set the machine's name: plain text, never a template; an empty one is
-    /// refused (INVALID_ARGUMENT). Only a machine not yet saved can be renamed
-    /// this way -- a saved machine is named by its document, so the server
-    /// refuses with FAILED_PRECONDITION -- but the message is surfaced either
-    /// way. On success the response's identity (with the new name) is applied at
-    /// once so the window title updates without waiting for the next status
-    /// event, and the server also emits an IDENTITY_CHANGED event that reaches
-    /// updateIdentity by the same path. Returns the outcome so the caller can
-    /// stay open on failure.
+    /// Map a SetMachineName failure to a rename error. ALREADY_EXISTS names the
+    /// attempted name (a sibling document already has it); INVALID_ARGUMENT
+    /// carries the server's own message (it validates the name as a file name on
+    /// every host: no slashes, no < > : " | ? *, no trailing space or dot, no
+    /// reserved device names); anything else is a plain failure. Pure, so the
+    /// mapping is testable without a server.
+    nonisolated static func renameError(from error: Error, attemptedName: String) -> MachineNameError {
+        guard let status = error as? GRPCStatus else { return .failed(error.localizedDescription) }
+        switch status.code {
+        case .alreadyExists:
+            return .nameInUse(attempted: attemptedName)
+        case .invalidArgument:
+            return .invalidName(Self.message(status, or: "That name can't be used."))
+        default:
+            return .failed(Self.message(status, or: "Couldn't rename the machine."))
+        }
+    }
+
+    private nonisolated static func message(_ status: GRPCStatus, or fallback: String) -> String {
+        let message = status.message ?? ""
+        return message.isEmpty ? fallback : message
+    }
+
+    /// Set the machine's name: plain text, never a template; an empty or
+    /// otherwise invalid name is refused (INVALID_ARGUMENT). A machine not yet
+    /// saved is simply renamed; a saved machine's document is renamed in place
+    /// by the server (its directory and so its machine_dirpath change), refused
+    /// with ALREADY_EXISTS if a sibling already has that name. On success the
+    /// response's identity (the new name) is applied at once so the window title
+    /// updates immediately, then GetSystemInfo is re-fetched because the renamed
+    /// document's new directory is not in the response -- the window's
+    /// represented URL follows machineDirpath. Returns the outcome so the caller
+    /// can stay open on failure.
     func setMachineName(_ name: String) async -> Result<Void, MachineNameError> {
         guard let client = client else { return .failure(.notConnected) }
         do {
@@ -217,9 +251,10 @@ final class SystemClient: ObservableObject, Disconnectable {
             request.name = name
             let response = try await client.setMachineName(request).response.get()
             updateIdentity(response.identity)
+            await refreshSystemInfo()
             return .success(())
         } catch {
-            return .failure(.operationFailed(error.localizedDescription))
+            return .failure(Self.renameError(from: error, attemptedName: name))
         }
     }
 
@@ -446,34 +481,34 @@ final class SystemClient: ObservableObject, Disconnectable {
         }
     }
 
-    /// Fetch system information from the server
+    /// Fetch system information from the server (fire-and-forget, at connect).
     private func fetchSystemInfo() {
+        Task { [weak self] in await self?.refreshSystemInfo() }
+    }
+
+    /// Fetch system info and apply it: identity, host locality, the machine's
+    /// directory and saved state, and the client count. Awaitable so a caller
+    /// that needs the refreshed state can wait for it -- a rename re-points a
+    /// saved machine's directory, which the SetMachineName response does not
+    /// carry, so machineDirpath (and the represented URL that follows it) only
+    /// becomes current after this.
+    func refreshSystemInfo() async {
         guard let client = client else { return }
-
-        Task { [weak self] in
-            do {
-                let request = Beebium_GetSystemInfoRequest()
-                let response = try await client.getSystemInfo(request).response.get()
-
-                await MainActor.run {
-                    self?.checkProtocolFingerprint(
-                        response.protocolFingerprint,
-                        executablePath: response.executablePath)
-                    self?.updateIdentity(response.identity)
-                    self?.isServerLocal =
-                        HostFingerprint.isThisHost(response.hostFingerprint)
-                    self?.machineDirpath = response.machineDirpath
-                    self?.machineSaved = response.machineSaved
-                    self?.clientCount = Int(response.connections.clientCount)
-                    self?.isLoaded = true
-                    self?.errorMessage = nil
-                }
-            } catch {
-                await MainActor.run {
-                    self?.errorMessage = error.localizedDescription
-                    self?.isLoaded = false
-                }
-            }
+        do {
+            let response = try await client.getSystemInfo(
+                Beebium_GetSystemInfoRequest()).response.get()
+            checkProtocolFingerprint(response.protocolFingerprint,
+                                     executablePath: response.executablePath)
+            updateIdentity(response.identity)
+            isServerLocal = HostFingerprint.isThisHost(response.hostFingerprint)
+            machineDirpath = response.machineDirpath
+            machineSaved = response.machineSaved
+            clientCount = Int(response.connections.clientCount)
+            isLoaded = true
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoaded = false
         }
     }
 

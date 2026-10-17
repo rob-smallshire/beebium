@@ -127,6 +127,9 @@ final class WelcomeWindowRegistry {
 /// the new window (preset card, New Machine dialog, Connect dialog, etc.).
 extension Notification.Name {
     static let didOpenEmulatorWindow = Notification.Name("BeebiumDidOpenEmulatorWindow")
+    /// Posted when the saved-machines recents change out from under an open
+    /// Machines page (a rename moves an entry), so the page can reload.
+    static let savedMachinesDidChange = Notification.Name("BeebiumSavedMachinesDidChange")
 }
 
 // Renaming acts on the machine in the focused window, so it is a focused value

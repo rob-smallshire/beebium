@@ -20,6 +20,7 @@ import AppKit
 @MainActor
 protocol RecentDocumentsStore {
     func noteRecent(_ url: URL)
+    func removeRecent(_ url: URL)
     var recentURLs: [URL] { get }
     func clearRecents()
 }
@@ -33,6 +34,20 @@ protocol RecentDocumentsStore {
 struct SystemRecentDocumentsStore: RecentDocumentsStore {
     func noteRecent(_ url: URL) {
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
+    }
+    /// Drop one entry. NSDocumentController offers no single-remove, so the list
+    /// is rebuilt without the target -- cleared and the survivors re-noted
+    /// oldest-first, which keeps their order (noteNew puts each at the top). We
+    /// only ever note machine directories, so nothing else is lost.
+    func removeRecent(_ url: URL) {
+        let target = url.standardizedFileURL.path
+        let survivors = NSDocumentController.shared.recentDocumentURLs
+            .filter { $0.standardizedFileURL.path != target }
+        guard survivors.count != NSDocumentController.shared.recentDocumentURLs.count else { return }
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        for survivor in survivors.reversed() {
+            NSDocumentController.shared.noteNewRecentDocumentURL(survivor)
+        }
     }
     var recentURLs: [URL] { NSDocumentController.shared.recentDocumentURLs }
     func clearRecents() {
@@ -63,6 +78,15 @@ final class MachineRecents {
     /// move can leave behind.
     var machineDirpaths: [URL] {
         Self.deduplicatedByPath(store.recentURLs)
+    }
+
+    /// Move a renamed machine's recents entry from its old directory to its new
+    /// one: the old path no longer exists on disk, so drop it and record the
+    /// new. Order is otherwise preserved, with the renamed machine now most
+    /// recent.
+    func rename(from oldURL: URL, to newURL: URL) {
+        store.removeRecent(oldURL)
+        store.noteRecent(newURL.standardizedFileURL)
     }
 
     func clear() {

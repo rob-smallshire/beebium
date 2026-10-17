@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 import XCTest
+import GRPC
 @testable import Beebium
 
 /// The seam both the SetMachineName response and the IDENTITY_CHANGED status
@@ -66,5 +67,51 @@ final class SystemClientIdentityTests: XCTestCase {
         XCTAssertEqual(client.machineName, "Girton")
         XCTAssertEqual(client.machineDescription, "")
         XCTAssertEqual(client.machineDescriptionTemplate, "")
+    }
+}
+
+/// Mapping a SetMachineName failure to a rename error: ALREADY_EXISTS names the
+/// attempted name, INVALID_ARGUMENT keeps the server's message, anything else is
+/// a plain failure. Pure.
+final class SystemClientRenameErrorTests: XCTestCase {
+
+    func testAlreadyExistsNamesTheAttemptedName() {
+        let error = SystemClient.renameError(
+            from: GRPCStatus(code: .alreadyExists, message: "exists"),
+            attemptedName: "Elite Server")
+        XCTAssertEqual(error, .nameInUse(attempted: "Elite Server"))
+        XCTAssertEqual(error.errorDescription,
+                       "A machine named \"Elite Server\" already exists in this folder.")
+    }
+
+    func testInvalidArgumentKeepsTheServerMessage() {
+        XCTAssertEqual(
+            SystemClient.renameError(
+                from: GRPCStatus(code: .invalidArgument, message: "a name cannot contain '/'"),
+                attemptedName: "a/b"),
+            .invalidName("a name cannot contain '/'"))
+    }
+
+    func testInvalidArgumentFallsBackWhenTheServerIsSilent() {
+        XCTAssertEqual(
+            SystemClient.renameError(
+                from: GRPCStatus(code: .invalidArgument, message: nil),
+                attemptedName: ""),
+            .invalidName("That name can't be used."))
+    }
+
+    func testOtherStatusesAreAPlainFailure() {
+        XCTAssertEqual(
+            SystemClient.renameError(
+                from: GRPCStatus(code: .internalError, message: "boom"),
+                attemptedName: "x"),
+            .failed("boom"))
+    }
+
+    func testANonGRPCErrorIsAPlainFailure() {
+        struct SomeError: Error, LocalizedError { var errorDescription: String? { "nope" } }
+        XCTAssertEqual(
+            SystemClient.renameError(from: SomeError(), attemptedName: "x"),
+            .failed("nope"))
     }
 }

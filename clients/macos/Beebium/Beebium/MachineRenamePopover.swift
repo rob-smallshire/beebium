@@ -18,10 +18,11 @@ import SwiftUI
 ///
 /// A machine's name is plain text, never a template (the templated string is
 /// the machine's description, a separate thing shown as the window subtitle and
-/// edited elsewhere). Only a machine not yet saved is renamed here; a saved
-/// machine is named by its document, so the server refuses the rename and the
-/// menu that opens this is disabled for it. The field shows the current name
-/// and commits it with SetMachineName.
+/// edited elsewhere). Both kinds of machine rename here: a transient machine is
+/// simply renamed; a saved machine's document is renamed in place by the server,
+/// which moves its directory, so its recents entry and the window's represented
+/// URL are updated afterwards. The field shows the current name and commits it
+/// with SetMachineName.
 // Not private so a hosted test can open the real editor and observe its field.
 struct MachineRenameEditor: View {
     @ObservedObject var systemClient: SystemClient
@@ -91,12 +92,14 @@ struct MachineRenameEditor: View {
 
     /// Commit the name. On success the popover closes and the window title
     /// updates from the applied identity (and again from the status stream's
-    /// IDENTITY_CHANGED). On failure the popover stays open and shows the reason
-    /// (a saved machine is refused with the server's explanation), the way the
-    /// station editor does.
+    /// IDENTITY_CHANGED); a saved machine's moved directory is reflected in its
+    /// recents entry and an open Machines page. On failure the popover stays
+    /// open and shows the reason (a duplicate name, or the server's file-name
+    /// complaint), the way the station editor does.
     private func save() {
         guard isDirty, !isSaving else { return }
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previousDirpath = systemClient.machineDirpath
         isSaving = true
         saveError = nil
         Task {
@@ -104,11 +107,27 @@ struct MachineRenameEditor: View {
             isSaving = false
             switch result {
             case .success:
+                noteRenameInRecents(from: previousDirpath)
                 dismiss()
             case .failure(let error):
                 saveError = error.localizedDescription
             }
         }
+    }
+
+    /// After a saved machine's document is renamed in place its directory moves,
+    /// so move its recents entry from the old path to the new (the window's
+    /// represented URL already follows systemClient.machineDirpath, re-fetched
+    /// by setMachineName) and tell an open Machines page to reload. A transient
+    /// machine has no saved directory, so there is nothing to record.
+    private func noteRenameInRecents(from previousDirpath: String) {
+        guard systemClient.machineSaved else { return }
+        let newDirpath = systemClient.machineDirpath
+        guard !previousDirpath.isEmpty, !newDirpath.isEmpty,
+              previousDirpath != newDirpath else { return }
+        MachineRecents().rename(from: URL(fileURLWithPath: previousDirpath),
+                                to: URL(fileURLWithPath: newDirpath))
+        NotificationCenter.default.post(name: .savedMachinesDidChange, object: nil)
     }
 }
 

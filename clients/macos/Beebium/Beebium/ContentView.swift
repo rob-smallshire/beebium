@@ -240,13 +240,11 @@ struct ContentView: View {
         systemClient.machineDescription
     }
 
-    /// Open the rename popover on the window showing this machine. Only a
-    /// transient machine can be renamed in place: the server refuses to rename a
-    /// saved one, whose name follows its document (rename it with Save As, or in
-    /// Finder when it is closed). So this is a no-op on a saved machine, and the
-    /// menu item that reaches it is disabled with a tooltip saying as much.
+    /// Open the rename popover on the window showing this machine. Both kinds of
+    /// machine rename this way: a transient machine is renamed directly, and a
+    /// saved machine's document is renamed in place by the server.
     private func beginRenamingMachine() {
-        guard !systemClient.machineSaved, let window = currentWindow else { return }
+        guard let window = currentWindow else { return }
         renamePopover.show(in: window, systemClient: systemClient)
     }
 

@@ -27,6 +27,9 @@ final class InMemoryRecentDocumentsStore: RecentDocumentsStore {
         urls.removeAll { $0.standardizedFileURL.path == url.standardizedFileURL.path }
         urls.insert(url, at: 0)
     }
+    func removeRecent(_ url: URL) {
+        urls.removeAll { $0.standardizedFileURL.path == url.standardizedFileURL.path }
+    }
     var recentURLs: [URL] { urls }
     func clearRecents() { urls.removeAll() }
 }
@@ -51,6 +54,22 @@ final class MachineRecentsTests: XCTestCase {
         recents.remember(machineDirpath: URL(fileURLWithPath: "/m/a.beebium-machine"))
         XCTAssertEqual(recents.machineDirpaths.map(\.path),
                        ["/m/a.beebium-machine", "/m/b.beebium-machine"])
+    }
+
+    func testRenameMovesTheEntryFromOldPathToNewAtFront() {
+        let store = InMemoryRecentDocumentsStore()
+        let recents = MachineRecents(store: store)
+        recents.remember(machineDirpath: URL(fileURLWithPath: "/m/a.beebium-machine"))
+        recents.remember(machineDirpath: URL(fileURLWithPath: "/m/old.beebium-machine"))
+        recents.remember(machineDirpath: URL(fileURLWithPath: "/m/c.beebium-machine"))
+
+        recents.rename(from: URL(fileURLWithPath: "/m/old.beebium-machine"),
+                       to: URL(fileURLWithPath: "/m/new.beebium-machine"))
+
+        // The old path is gone, the new path is most recent, and the others keep
+        // their order.
+        XCTAssertEqual(recents.machineDirpaths.map(\.path),
+                       ["/m/new.beebium-machine", "/m/c.beebium-machine", "/m/a.beebium-machine"])
     }
 
     func testClearEmptiesTheList() {
