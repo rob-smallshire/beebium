@@ -99,16 +99,8 @@ TEST_CASE("ScsiHardDiscExtension publishes exactly one FIXED hard-disc device",
     const auto& dev = devices[0];
     REQUIRE(dev.kind == beebium::StorageDeviceInfo::Kind::Fixed);
     REQUIRE(dev.media_type == "hard-disc");
-    // The backing_path is resolved through std::filesystem::absolute
-    // + lexically_normal before publication, so the wire form is
-    // platform-dependent: a Unix-rooted input like "/tmp/example.dat"
-    // ends up as "D:\tmp\example.dat" on Windows (drive prefix from
-    // the cwd's drive, native separators). Construct the expected
-    // string the same way the server does so this assertion is
-    // portable rather than encoding a host-specific layout.
-    auto expected_path = std::filesystem::absolute("/tmp/example.dat")
-                            .lexically_normal().string();
-    REQUIRE(dev.backing_path == expected_path);
+    // The backing_path is the image as the server resolved it and gave it.
+    REQUIRE(dev.backing_path == "/tmp/example.dat");
     // The id matches the extension's id so the frontend can associate
     // the row back to the Peripherals tree node.
     REQUIRE(dev.id == "scsi-hard-disc");

@@ -116,6 +116,22 @@ inline bool is_bare_reference(const std::string& reference) {
            !std::filesystem::path(reference).has_parent_path();
 }
 
+// A reference given on a command line, as a preset records what it meant: a
+// path anchored in its container, and a bare name the container holds made
+// the path to that file, whose meaning is that file. A bare name the
+// container does not hold is kept: its meaning is the search, which still
+// holds wherever the preset is moved.
+inline std::string command_line_reference(const std::string& reference,
+                                          const std::filesystem::path& container_dirpath) {
+    if (!is_bare_reference(reference)) {
+        return anchor_reference(reference, container_dirpath);
+    }
+    const auto filepath = container_dirpath / reference;
+    std::error_code ec;
+    return std::filesystem::is_regular_file(filepath, ec) ? filepath.lexically_normal().string()
+                                                          : reference;
+}
+
 // The kinds of resource a bare name is searched for, each with its per-user
 // directory.
 enum class ResourceKind { Disc, Rom };

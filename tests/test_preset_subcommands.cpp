@@ -2486,6 +2486,40 @@ TEST_CASE("a preset's relative and bare per-user hard-disc images are both found
     CHECK(after.exit_code == 0);
 }
 
+TEST_CASE("create-preset records a bare name the working directory holds as its path",
+          "[integration][preset][create-preset][resource_paths]") {
+    // What the command line meant: the file in the working directory. A bare
+    // name found per-user means the search, which survives the preset moving.
+    TempDirectory temp_dir;
+    const auto cwd = temp_dir.path() / "cwd";
+    const auto user_dirpath = temp_dir.path() / "user";
+    std::filesystem::create_directories(cwd);
+    std::filesystem::create_directories(user_dirpath / "discs");
+    std::filesystem::create_directories(user_dirpath / "roms");
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
+    std::ofstream(cwd / "here.ssd") << "disc";
+    std::ofstream(cwd / "here.rom") << "rom";
+    std::ofstream(user_dirpath / "discs" / "mine.ssd") << "disc";
+    std::ofstream(user_dirpath / "roms" / "mine.rom") << "rom";
+    const auto output_filepath = temp_dir.path() / "elsewhere" / "p.preset.beebium";
+    std::filesystem::create_directories(output_filepath.parent_path());
+
+    auto result = run_command_in(
+        cwd, EXECUTABLE + " create-preset --name Meant --fdc acorn-1770"
+                          " --floppy 0:here.ssd --floppy 1:mine.ssd --mos here.rom"
+                          " --sideways slot=14:type=rom:image=mine.rom --output \"" +
+                 output_filepath.string() + "\"");
+    INFO(result.stdout_output << result.stderr_output);
+    REQUIRE(result.exit_code == 0);
+
+    const auto preset = nlohmann::json::parse(std::ifstream(output_filepath));
+    const auto& drives = preset.at("storage").at("floppy_drives");
+    CHECK(drives[0].at("image_uri") == beebium::DiscUrl::from_filepath(cwd / "here.ssd").url());
+    CHECK(drives[1].at("image_uri") == "mine.ssd");
+    CHECK(preset.at("mos_image_uri") == (cwd / "here.rom").string());
+    CHECK(preset.at("sideways_bank").at("slots")[0].at("image_uri") == "mine.rom");
+}
+
 TEST_CASE("an AUN map file not yet made is a location, not a search",
           "[integration][resource_paths][aun]") {
     // The transport makes its map file on the first edit, so a map-file path

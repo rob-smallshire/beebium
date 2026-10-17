@@ -469,18 +469,23 @@ OptionParse parse_board_option(const std::string& arg, int& i, int argc, char* a
 
 // An option that describes the machine, which a preset records: it writes
 // only `machine`. An extension's --<cli-name> flag is one, found by
-// `cli_name_to_manifest`.
+// `cli_name_to_manifest`. A file reference is recorded as what it means where
+// the command line is written, `container_dirpath` (command_line_reference).
 inline OptionParse parse_machine_option(
         const std::string& arg, int& i, int argc, char* argv[], MachineDescription& machine,
-        const std::map<std::string, const beebium::ExtensionManifest*>& cli_name_to_manifest) {
+        const std::map<std::string, const beebium::ExtensionManifest*>& cli_name_to_manifest,
+        const std::filesystem::path& container_dirpath) {
+    auto reference = [&](const std::string& value) {
+        return command_line_reference(value, container_dirpath);
+    };
     auto usage_error = [](const std::string& message) {
         std::cerr << "Error: " << message << "\n";
         return OptionParse{true, ExitCode::USAGE};
     };
     if (arg == "--mos" && i + 1 < argc) {
-        machine.mos_filepath = argv[++i];
+        machine.mos_filepath = reference(argv[++i]);
     } else if (arg == "--language-rom" && i + 1 < argc) {
-        machine.language_rom_filepath = argv[++i];
+        machine.language_rom_filepath = reference(argv[++i]);
     } else if (arg == "--sideways" && i + 1 < argc) {
         std::string value = argv[++i];
         SidewaysConfig sideways_config;
@@ -488,6 +493,9 @@ inline OptionParse parse_machine_option(
             sideways_config = parse_sideways_arg(value);
         } catch (const std::runtime_error& e) {
             return usage_error(e.what());
+        }
+        if (!sideways_config.image_filepath.empty()) {
+            sideways_config.image_filepath = reference(sideways_config.image_filepath);
         }
         machine.sideways_configs.push_back(sideways_config);
         // Add ALL slot types to rom_slots to prevent default ROM loading
@@ -504,7 +512,8 @@ inline OptionParse parse_machine_option(
         complete_colon_arg(value, i, argc, argv);
         try {
             auto [drive, filepath] = parse_floppy_arg(value);
-            machine.floppy_filepaths[drive] = filepath;
+            machine.floppy_filepaths[drive] =
+                filepath.find("://") == std::string::npos ? reference(filepath) : filepath;
         } catch (const std::runtime_error& e) {
             return usage_error(e.what());
         }
@@ -583,6 +592,15 @@ inline OptionParse parse_machine_option(
             manifest->effective_cli_name(), arg_string, manifest->parameters);
         if (!parse_result.ok) {
             return usage_error(parse_result.error);
+        }
+        // A file path parameter: a resource ("bundled") as what it means; a
+        // location anchored only, a bare one being the extension's own (a
+        // keyword such as "none").
+        for (const auto& p : manifest->parameters) {
+            auto it = parse_result.config.find(p.key);
+            if (p.type != "filepath" || it == parse_result.config.end()) continue;
+            it->second = p.bundled.empty() ? anchor_reference(it->second, container_dirpath)
+                                           : reference(it->second);
         }
         machine.extension_instances.push_back({
             manifest->name,
@@ -693,7 +711,8 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             if (board.recognised) continue;
         }
         auto machine = parse_machine_option(arg, i, argc, argv, config.machine,
-                                            cli_name_to_manifest);
+                                            cli_name_to_manifest,
+                                            config.launch.reference_container_dirpath());
         if (machine.exit_code) return machine.exit_code;
         if (!machine.recognised) {
             std::cerr << "Unknown argument: " << arg << "\n";

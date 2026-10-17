@@ -1068,13 +1068,14 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             return {nullptr, ExitCode::CONFIG};
         }
 
-        // A file path parameter is a file reference written in the launch's
-        // container (see ResourcePaths.hpp). One the manifest declares bundled
-        // names a resource, and a bare name is searched for: a hard disc
-        // through DiscPaths (a master resolves to a per-user working copy, so
-        // the shipped read-only master is never opened writable), a ROM on the
-        // ROM search path ending in the roms/ of the plugin that ships it. Any
-        // other names a location the extension owns, which is never searched.
+        // A file path parameter arrives anchored in the launch's container, by
+        // the preset loader or the option parser (see ResourcePaths.hpp). One
+        // the manifest declares bundled names a resource, and a bare name is
+        // searched for: a hard disc through DiscPaths (a master resolves to a
+        // per-user working copy, so the shipped read-only master is never
+        // opened writable), a ROM on the ROM search path ending in the roms/ of
+        // the plugin that ships it. Any other names a location the extension
+        // owns, which is never searched.
         const auto container_dirpath = config.launch.reference_container_dirpath();
         for (const auto& p : manifest->parameters) {
             if (p.type != "filepath") continue;
@@ -1090,9 +1091,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
                               << inst.name << "': " << e.what() << "\n";
                     return {nullptr, ExitCode::CONFIG};
                 }
-            } else if (p.bundled.empty() || !is_bare_reference(it->second)) {
-                it->second = anchor_reference(it->second, container_dirpath);
-            } else {
+            } else if (!p.bundled.empty() && is_bare_reference(it->second)) {
                 // The manifest decides which names may be given; the search
                 // decides where the file comes from.
                 const auto images = bundled_images(config.launch.extension_resolver);

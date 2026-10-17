@@ -98,12 +98,6 @@ inline nlohmann::ordered_json station_json(const MachineDescription& machine) {
     return "auto:" + std::to_string(r.lo) + "-" + std::to_string(r.hi);
 }
 
-// A path given on the command line, as a preset records it: anchored in the
-// working directory, the container a command line is written in.
-inline std::string path_for_preset(const std::string& value) {
-    return anchor_reference(value, std::filesystem::current_path());
-}
-
 // An extension instance's config as a preset writes it: each value typed by
 // its manifest parameter (an integer parameter as a JSON number, a boolean as
 // true/false, anything else a string) and each list parameter as an array.
@@ -910,8 +904,7 @@ struct PresetDocumentHeader {
 };
 
 // An extension instance's config for preset_document: with Given, only the
-// parameters in its explicit_keys, a given relative file path made absolute
-// (path_for_preset); with Every, every manifest parameter.
+// parameters in its explicit_keys; with Every, every manifest parameter.
 template<typename Instance>
 nlohmann::ordered_json document_config_json(const beebium::ExtensionManifest* manifest,
                                             const Instance& inst, DocumentKeys keys) {
@@ -922,14 +915,7 @@ nlohmann::ordered_json document_config_json(const beebium::ExtensionManifest* ma
     std::map<std::string, std::string> config;
     std::map<std::string, std::vector<std::string>> list_config;
     for (const auto& [key, value] : inst.config) {
-        if (inst.explicit_keys.count(key) == 0) continue;
-        bool filepath = false;
-        if (manifest) {
-            for (const auto& p : manifest->parameters) {
-                if (p.key == key && p.type == "filepath") filepath = true;
-            }
-        }
-        config[key] = filepath ? path_for_preset(value) : value;
+        if (inst.explicit_keys.count(key) != 0) config[key] = value;
     }
     std::map<std::string, std::vector<beebium::ConfigListItem>> given_items;
     for (const auto& [key, values] : inst.list_config) {
@@ -1038,7 +1024,7 @@ std::optional<nlohmann::ordered_json> preset_document(const MachineDescription& 
                 break;
             case PresetKey::MosImageUri:
                 if (!machine.mos_filepath.empty()) {
-                    doc[key] = path_for_preset(machine.mos_filepath);
+                    doc[key] = machine.mos_filepath;
                 }
                 break;
             case PresetKey::Storage: {
@@ -1065,8 +1051,7 @@ std::optional<nlohmann::ordered_json> preset_document(const MachineDescription& 
                         {{"drive", drive},
                          {"image_uri", image.empty()
                                            ? ojson(nullptr)
-                                           : ojson(normalize_image_uri(
-                                                 image, std::filesystem::current_path()))}});
+                                           : ojson(normalize_image_uri(image, {}))}});
                 }
                 if (!drives.empty()) storage["floppy_drives"] = std::move(drives);
                 if (!storage.empty()) doc[key] = std::move(storage);
@@ -1095,19 +1080,18 @@ std::optional<nlohmann::ordered_json> preset_document(const MachineDescription& 
                         slots.push_back(sideways_slot_json(entry, /*every_key=*/true));
                     }
                 } else {
-                    for (auto slot : machine.sideways_configs) {
+                    for (const auto& slot : machine.sideways_configs) {
                         if (!machine.language_rom_filepath.empty() &&
                             slot.slot == Memory::DEFAULT_LANGUAGE_SLOT) {
                             continue;
                         }
-                        slot.image_filepath = path_for_preset(slot.image_filepath);
                         slots.push_back(sideways_slot_json(slot, /*every_key=*/false));
                     }
                     if (!machine.language_rom_filepath.empty()) {
                         SidewaysConfig language{};
                         language.slot = Memory::DEFAULT_LANGUAGE_SLOT;
                         language.type = SidewaysSlotType::Rom;
-                        language.image_filepath = path_for_preset(machine.language_rom_filepath);
+                        language.image_filepath = machine.language_rom_filepath;
                         slots.push_back(sideways_slot_json(language, /*every_key=*/false));
                     }
                 }
