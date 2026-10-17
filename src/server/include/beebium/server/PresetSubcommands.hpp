@@ -17,6 +17,7 @@
 #pragma once
 
 #include "beebium/server/ExtensionSubcommands.hpp"
+#include "beebium/MachineModels.hpp"
 #include "beebium/server/PresetWriter.hpp"
 #include "beebium/server/RomPaths.hpp"
 #include "beebium/disc/DiscControllerRegistry.hpp"
@@ -472,17 +473,23 @@ template<typename MachineType>
 class ListPresetsSubcommand : public Subcommand<MachineType> {
 public:
     std::string_view name() const override { return "list-presets"; }
-    std::string_view description() const override { return "List available presets for this model"; }
+    std::string_view description() const override { return "List available presets for this model, or every model"; }
 
     void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " [--format pretty|tsv|jsonl] list-presets [--json]\n"
+        std::cerr << "Usage: " << program_name
+                  << " [--format pretty|tsv|jsonl] list-presets [--all-models] [--json]\n"
                   << "\n"
-                  << "Lists presets compatible with this machine model. The output format\n"
-                  << "follows the global --format option (pretty on a terminal, tsv when\n"
-                  << "piped); rows carry the preset id, name and source (system or user).\n"
+                  << "Lists presets compatible with this machine model, or with --all-models\n"
+                  << "every model's. The output format follows the global --format option\n"
+                  << "(pretty on a terminal, tsv when piped); rows carry the preset id, name\n"
+                  << "and source (system or user). A jsonl row also carries what the preset\n"
+                  << "gives of model, machine_name, description and release_date, its\n"
+                  << "filepath, and whether it has a thumbnail (show-preset --thumbnail).\n"
+                  << "A preset with no name is called by its model's display name.\n"
                   << "\n"
                   << "Options:\n"
-                  << "  --json    Same as --format jsonl\n";
+                  << "  --all-models  List the presets for every model\n"
+                  << "  --json        Same as --format jsonl\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
@@ -496,6 +503,7 @@ public:
 
         // Parse subcommand options
         bool json_output = false;
+        bool all_models = false;
         for (int i = global.subcommand_argv_start; i < argc; ++i) {
             std::string_view arg = argv[i];
             if (arg == "--help" || arg == "-h") {
@@ -503,6 +511,8 @@ public:
                 return ExitCode::OK;
             } else if (arg == "--json") {
                 json_output = true;
+            } else if (arg == "--all-models") {
+                all_models = true;
             } else {
                 std::cerr << "Unknown argument: " << arg << "\n";
                 help(argv[0]);
@@ -510,28 +520,37 @@ public:
             }
         }
 
-        // Get model ID for this executable
-        std::string_view model_id = Memory::MACHINE_TYPE;
-
-        // Collect the stored presets for this model, system then user.
+        // Collect the stored presets, system then user: this model's (and
+        // those naming none), or with --all-models every model's.
         struct PresetEntry {
             std::string id;
             std::string name;
             std::string source;  // "system" or "user"
+            std::optional<std::string> model;
+            std::optional<std::string> machine_name;
+            std::optional<std::string> description;
+            std::optional<std::string> release_date;
+            std::filesystem::path filepath;
+            bool thumbnail = false;
         };
         std::vector<PresetEntry> system_presets;
         std::vector<PresetEntry> user_presets;
         for (const auto& entry : PresetPaths::enumerate()) {
-            auto result = load_preset(entry.filepath);
+            std::string open_error;
+            auto source = PresetSource::open(entry.filepath, open_error);
+            if (!source) continue;
+            auto result = load_preset(*source);
             if (!result) continue;
-            if (result.config->model && *result.config->model != model_id) {
+            const PresetConfig& preset = *result.config;
+            if (!all_models && preset.model && *preset.model != Memory::MACHINE_TYPE) {
                 continue;  // Skip presets for other models
             }
-            if (entry.origin == PresetPaths::Origin::System) {
-                system_presets.push_back({entry.id, result.config->name, "system"});
-            } else {
-                user_presets.push_back({entry.id, result.config->name, "user"});
-            }
+            const bool system = entry.origin == PresetPaths::Origin::System;
+            (system ? system_presets : user_presets)
+                .push_back({entry.id, preset_display_name<Memory>(preset),
+                            system ? "system" : "user", preset.model, preset.machine_name,
+                            preset.description, preset.release_date, entry.filepath,
+                            PresetPaths::find_thumbnail(*source).has_value()});
         }
 
         OutputFormat format = json_output ? OutputFormat::Jsonl
@@ -577,7 +596,17 @@ public:
             case OutputFormat::Jsonl:
                 for (const auto* presets : {&system_presets, &user_presets}) {
                     for (const auto& p : *presets) {
-                        nlohmann::json row{{"id", p.id}, {"name", p.name}, {"source", p.source}};
+                        // Fields in a fixed order; one with no value is omitted.
+                        nlohmann::ordered_json row{
+                            {"id", p.id}, {"name", p.name}, {"source", p.source}};
+                        for (const auto& [key, value] :
+                             {std::pair{"model", &p.model}, {"machine_name", &p.machine_name},
+                              {"description", &p.description},
+                              {"release_date", &p.release_date}}) {
+                            if (*value) row[key] = **value;
+                        }
+                        row["filepath"] = p.filepath.string();
+                        row["thumbnail"] = p.thumbnail;
                         std::cout << row.dump() << "\n";
                     }
                 }
@@ -601,9 +630,18 @@ public:
 
     void help(const char* program_name) const override {
         std::cerr << "Usage: " << program_name << " show-preset <id-or-path>\n"
+                  << "       " << program_name
+                  << " show-preset <id-or-path> --thumbnail --output <filepath>\n"
                   << "\n"
-                  << "Outputs the JSON contents of a preset: a preset file, or the\n"
-                  << "system or user preset with that id.\n";
+                  << "Outputs the JSON contents of a preset: a preset file or directory, or\n"
+                  << "the system or user preset with that id. Works on any model's preset.\n"
+                  << "\n"
+                  << "Options:\n"
+                  << "  --thumbnail        Write the preset's thumbnail (PNG) instead; a\n"
+                  << "                     preset without one is an error, and nothing is\n"
+                  << "                     written\n"
+                  << "  --output <path>    Where to write the thumbnail (required with\n"
+                  << "                     --thumbnail)\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
@@ -615,11 +653,22 @@ public:
 
         // Parse subcommand options
         std::string preset_arg;
+        bool thumbnail = false;
+        std::filesystem::path output_filepath;
         for (int i = global.subcommand_argv_start; i < argc; ++i) {
             std::string_view arg = argv[i];
             if (arg == "--help" || arg == "-h") {
                 help(argv[0]);
                 return ExitCode::OK;
+            } else if (arg == "--thumbnail") {
+                thumbnail = true;
+            } else if (arg == "--output" || arg == "-o") {
+                if (i + 1 >= argc) {
+                    std::cerr << "Error: --output requires a path\n";
+                    help(argv[0]);
+                    return ExitCode::USAGE;
+                }
+                output_filepath = argv[++i];
             } else if (!arg.empty() && arg[0] != '-') {
                 if (preset_arg.empty()) {
                     preset_arg = std::string(arg);
@@ -640,12 +689,33 @@ public:
             help(argv[0]);
             return ExitCode::USAGE;
         }
+        if (thumbnail != !output_filepath.empty()) {
+            std::cerr << "Error: --thumbnail and --output go together\n";
+            help(argv[0]);
+            return ExitCode::USAGE;
+        }
 
         std::string open_error;
         auto source = PresetPaths::open(preset_arg, open_error);
         if (!source) {
             std::cerr << "Error: " << open_error << "\n";
             return ExitCode::NOINPUT;
+        }
+
+        if (thumbnail) {
+            const auto thumbnail_filepath = PresetPaths::find_thumbnail(*source);
+            if (!thumbnail_filepath) {
+                std::cerr << "Error: preset " << preset_arg << " has no thumbnail\n";
+                return ExitCode::NOINPUT;
+            }
+            try {
+                source->container().copy_file(*thumbnail_filepath, output_filepath);
+            } catch (const std::exception& e) {
+                std::cerr << "Error: cannot write thumbnail: " << output_filepath.string()
+                          << " (" << e.what() << ")\n";
+                return ExitCode::IOERR;
+            }
+            return ExitCode::OK;
         }
 
         // The document as stored
@@ -1074,7 +1144,8 @@ private:
         std::string write_error;
         document = preset_document<MachineType>(
             config.machine, config.launch.extension_resolver,
-            PresetDocumentHeader{preset.name, preset.description, preset.release_date,
+            PresetDocumentHeader{preset_display_name<Memory>(preset), preset.description,
+                                 preset.release_date,
                                  preset.thumbnail_capture_delay_seconds},
             DocumentKeys::Every, write_error);
         if (!document) {
@@ -1277,14 +1348,14 @@ public:
     void help(const char* program_name) const override {
         std::cerr << "Usage: " << program_name << " import-preset <filepath>\n"
                   << "\n"
-                  << "Imports a preset file into the user presets directory.\n"
-                  << "The preset's model field must match this executable's model.\n"
+                  << "Imports a preset file into the user presets directory. Works on any\n"
+                  << "model's preset: its model field must name a known model, and nothing\n"
+                  << "more is checked here. resolve-preset and start, in the executable for\n"
+                  << "that model, check the whole preset.\n"
                   << "Outputs the imported preset ID.\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
-        using Memory = typename MachineType::Memory;
-
         // Handle --help
         if (global.help_requested) {
             help(argv[0]);
@@ -1339,16 +1410,19 @@ public:
         }
         const nlohmann::json& preset = *parsed;
 
-        // Verify model field matches this executable
+        // The preset must name a known model; any executable stores it.
         if (!preset.contains("model") || !preset["model"].is_string()) {
             std::cerr << "Error: preset missing 'model' field\n";
             return ExitCode::DATAERR;
         }
-
-        std::string preset_model = preset["model"].get<std::string>();
-        if (preset_model != Memory::MACHINE_TYPE) {
-            std::cerr << "Error: preset model '" << preset_model << "' does not match this executable's model '"
-                      << Memory::MACHINE_TYPE << "'\n";
+        const std::string preset_model = preset["model"].get<std::string>();
+        if (!beebium::machine_models::find(preset_model)) {
+            std::string known;
+            for (const auto& model : beebium::machine_models::kAll) {
+                known += (known.empty() ? "" : ", ") + std::string(model.id);
+            }
+            std::cerr << "Error: preset model '" << preset_model
+                      << "' is not a known model (one of: " << known << ")\n";
             return ExitCode::DATAERR;
         }
 

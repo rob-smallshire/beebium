@@ -166,19 +166,9 @@ TEST_CASE("load_preset: a directory preset is read from its preset.json, and its
 
     auto result = load_preset(dirpath);
     REQUIRE(result.success());
-    CHECK(result.config->name == "my-game");
     const auto& drive0 = result.config->storage->floppy_drives.at(0);
     REQUIRE(drive0.has_value());
     CHECK(*drive0 == beebium::file_url_from_filepath(dirpath / "discs" / "game.ssd"));
-}
-
-TEST_CASE("load_preset: a file preset's name falls back to its file name without the extension",
-          "[preset][load_preset][preset_source]") {
-    beebium::test::ScopedTempDir root("beebium_preset_file_");
-    std::ofstream(root / "loose.json") << "{}";
-    auto result = load_preset(root / "loose.json");
-    REQUIRE(result.success());
-    CHECK(result.config->name == "loose");
 }
 
 TEST_CASE("load_preset: a directory without preset.json, or no preset at all, is unreadable",
@@ -218,7 +208,7 @@ TEST_CASE("load_preset: unknown keys are ignored (forward compatibility)", "[pre
     REQUIRE(result.config->storage->fdc_socket_id == "acorn-1770");
 }
 
-TEST_CASE("load_preset: name falls back to filename stem", "[preset][load_preset]") {
+TEST_CASE("load_preset: a preset with no name has none", "[preset][load_preset]") {
     // Create a test preset without a name field
     beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
     std::filesystem::path temp_filepath = temp_dir / "no_name.preset.beebium";
@@ -230,7 +220,8 @@ TEST_CASE("load_preset: name falls back to filename stem", "[preset][load_preset
     auto result = load_preset(temp_filepath);
 
     REQUIRE(result.success());
-    REQUIRE(result.config->name == "no_name.preset");  // Stem of filename
+    // The loader invents no name; preset_display_name gives the model's.
+    REQUIRE(result.config->name.empty());
 
     std::filesystem::remove(temp_filepath);
 }

@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "beebium/MachineModels.hpp"
 #include "extension/OneMHzBusPort.hpp"
 #include "extension/UserPort.hpp"
 #include "extension/SerialPort.hpp"
@@ -119,9 +120,9 @@ namespace beebium {
 class ModelBPlus128KHardware {
 public:
     // Machine identification and region names (compile-time constants)
-    static constexpr std::string_view MACHINE_TYPE = "model-b-plus-128k";
+    static constexpr std::string_view MACHINE_TYPE = machine_models::kModelBPlus128K.id;
     constexpr std::string_view machine_type() const { return MACHINE_TYPE; }
-    static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B+ 128K";
+    static constexpr std::string_view MACHINE_DISPLAY_NAME = machine_models::kModelBPlus128K.display_name;
     static constexpr std::string_view MACHINE_DESCRIPTION = "Enhanced Model B with 64KB RAM and built-in FDC";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
     static constexpr std::string_view REGION_SHADOW_RAM = "shadow_ram";

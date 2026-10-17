@@ -80,7 +80,7 @@ struct PresetStartupConfig {
 };
 
 struct PresetConfig {
-    std::string name;
+    std::string name;  // empty when the preset gives none (see preset_display_name)
     std::optional<std::string> description;       // One-line description shown in the picker
     std::optional<std::string> release_date;      // YYYY, YYYY-MM or YYYY-MM-DD
     std::optional<std::string> machine_name;      // Machine label the preset launches with
@@ -596,9 +596,6 @@ inline PresetLoadResult load_preset(const PresetSource& source) {
                                    Diagnostic::Severity::Warning});
         }
     }
-
-    // The name falls back to the preset's own, so a preset always has one.
-    config.name = source.fallback_name();
 
     for (const auto& info : kPresetKeys) {
         const std::string name(info.name);

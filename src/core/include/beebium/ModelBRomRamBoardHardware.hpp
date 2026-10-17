@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "beebium/MachineModels.hpp"
 #include "extension/OneMHzBusPort.hpp"
 #include "extension/UserPort.hpp"
 #include "extension/SerialPort.hpp"
@@ -67,9 +68,9 @@ namespace beebium {
 class ModelBRomRamBoardHardware {
 public:
     // Machine identification and region names (compile-time constants)
-    static constexpr std::string_view MACHINE_TYPE = "model-b-romram";
+    static constexpr std::string_view MACHINE_TYPE = machine_models::kModelBRomRam.id;
     constexpr std::string_view machine_type() const { return MACHINE_TYPE; }
-    static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B with ROM/RAM Board";
+    static constexpr std::string_view MACHINE_DISPLAY_NAME = machine_models::kModelBRomRam.display_name;
     static constexpr std::string_view MACHINE_DESCRIPTION = "Model B with expansion board providing 16 independent sideways slots";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
     static constexpr std::string_view REGION_MOS_ROM = "mos_rom";

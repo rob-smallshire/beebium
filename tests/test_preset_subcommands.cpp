@@ -244,9 +244,106 @@ TEST_CASE("list-presets: --format jsonl and --json yield the same rows", "[integ
     REQUIRE(json.exit_code == 0);
     REQUIRE(jsonl.stdout_output == json.stdout_output);
     INFO(jsonl.stdout_output);
-    REQUIRE(jsonl.stdout_output.find(
-        "{\"id\":\"" + LONG_PRESET_ID + "\",\"name\":\"Long Id Preset\",\"source\":\"user\"}\n")
-        != std::string::npos);
+    nlohmann::ordered_json expected{{"id", LONG_PRESET_ID},
+                                    {"name", "Long Id Preset"},
+                                    {"source", "user"},
+                                    {"model", "model-b"},
+                                    {"filepath", (temp_dir.presets() /
+                                                  (LONG_PRESET_ID + ".preset.beebium")).string()},
+                                    {"thumbnail", false}};
+    REQUIRE(jsonl.stdout_output.find(expected.dump() + "\n") != std::string::npos);
+}
+
+namespace {
+
+// The jsonl row list-presets gives for `id`, as printed, or "" when none.
+std::string jsonl_row(const std::string& output, const std::string& id) {
+    std::istringstream lines(output);
+    for (std::string line; std::getline(lines, line);) {
+        if (nlohmann::json::parse(line).at("id") == id) return line;
+    }
+    return "";
+}
+
+}  // namespace
+
+TEST_CASE("list-presets jsonl: every field a preset gives, in a fixed order, and its thumbnail",
+          "[integration][preset][list-presets]") {
+    TempDirectory user_dir;
+    const auto filepath = user_dir.presets() / "full.preset.beebium";
+    std::ofstream(filepath) << R"({"release_date": "1984", "model": "model-b",
+        "description": "Every field", "machine_name": "Full {station}", "name": "Full"})";
+    std::ofstream(user_dir.presets() / "full.thumbnail.png", std::ios::binary) << "PNG";
+
+    auto result = run_command(EXECUTABLE + " --format jsonl list-presets",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+
+    REQUIRE(result.exit_code == 0);
+    nlohmann::ordered_json expected{{"id", "full"},
+                                    {"name", "Full"},
+                                    {"source", "user"},
+                                    {"model", "model-b"},
+                                    {"machine_name", "Full {station}"},
+                                    {"description", "Every field"},
+                                    {"release_date", "1984"},
+                                    {"filepath", filepath.string()},
+                                    {"thumbnail", true}};
+    CHECK(jsonl_row(result.stdout_output, "full") == expected.dump());
+}
+
+TEST_CASE("list-presets jsonl: a field a preset does not give is omitted, and an unnamed preset "
+          "is called by its model's name",
+          "[integration][preset][list-presets]") {
+    TempDirectory user_dir;
+    const auto plus_filepath = user_dir.presets() / "plus.preset.beebium";
+    const auto any_filepath = user_dir.presets() / "any.preset.beebium";
+    std::ofstream(plus_filepath) << R"({"model": "model-b-plus"})";
+    std::ofstream(any_filepath) << R"({"description": "Suits any model"})";
+    std::vector<std::pair<std::string, std::string>> env{
+        {"BEEBIUM_USER_DIRPATH", user_dir.path().string()}};
+
+    // This executable's model: the model-b-plus preset is not listed; the one
+    // naming no model is, called by this model's name.
+    auto own = run_command(EXECUTABLE + " --format jsonl list-presets", env);
+    REQUIRE(own.exit_code == 0);
+    CHECK(jsonl_row(own.stdout_output, "plus").empty());
+    nlohmann::ordered_json any{{"id", "any"},
+                               {"name", "BBC Model B"},
+                               {"source", "user"},
+                               {"description", "Suits any model"},
+                               {"filepath", any_filepath.string()},
+                               {"thumbnail", false}};
+    CHECK(jsonl_row(own.stdout_output, "any") == any.dump());
+
+    // Every model's: the model-b-plus preset is called by its own model's name.
+    auto all = run_command(EXECUTABLE + " --format jsonl list-presets --all-models", env);
+    REQUIRE(all.exit_code == 0);
+    nlohmann::ordered_json plus{{"id", "plus"},
+                                {"name", "BBC Model B+ 64K"},
+                                {"source", "user"},
+                                {"model", "model-b-plus"},
+                                {"filepath", plus_filepath.string()},
+                                {"thumbnail", false}};
+    CHECK(jsonl_row(all.stdout_output, "plus") == plus.dump());
+    CHECK(jsonl_row(all.stdout_output, "any") == any.dump());
+}
+
+TEST_CASE("list-presets --all-models lists every model's system presets from one executable",
+          "[integration][preset][list-presets]") {
+    TempDirectory user_dir;
+    auto result = run_command(EXECUTABLE + " --format jsonl list-presets --all-models",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+    REQUIRE(result.exit_code == 0);
+    std::set<std::string> models;
+    std::istringstream lines(result.stdout_output);
+    for (std::string line; std::getline(lines, line);) {
+        auto row = nlohmann::json::parse(line);
+        CHECK(row.at("source") == "system");
+        if (row.contains("model")) models.insert(row.at("model").get<std::string>());
+    }
+    CHECK(models.count("model-b") == 1);
+    CHECK(models.count("model-b-plus") == 1);
+    CHECK(models.count("model-b-integra-b") == 1);
 }
 
 TEST_CASE("list-presets --help: returns OK", "[integration][preset][list-presets]") {
@@ -314,6 +411,57 @@ TEST_CASE("show-preset: a preset named by nothing says what was searched", "[int
     CHECK(result.stderr_output.find("Preset not found: 'nonexistent-preset-12345' (no such file, "
                                     "and no system or user preset with that id)") !=
           std::string::npos);
+}
+
+TEST_CASE("show-preset --thumbnail: writes a stored or directory preset's thumbnail",
+          "[integration][preset][show-preset]") {
+    TempDirectory user_dir;
+    TempDirectory out_dir;
+    std::ofstream(user_dir.presets() / "pic.preset.beebium") << R"({"model": "model-b"})";
+    std::ofstream(user_dir.presets() / "pic.thumbnail.png", std::ios::binary) << "STORED-PNG";
+    const auto dirpath = out_dir.path() / "dir-preset";
+    std::filesystem::create_directories(dirpath);
+    std::ofstream(dirpath / "preset.json") << R"({"model": "model-b-plus"})";
+    std::ofstream(dirpath / "thumbnail.png", std::ios::binary) << "DIR-PNG";
+    std::vector<std::pair<std::string, std::string>> env{
+        {"BEEBIUM_USER_DIRPATH", user_dir.path().string()}};
+    auto read = [](const std::filesystem::path& filepath) {
+        std::ifstream f(filepath, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    };
+
+    const auto stored_png = out_dir.path() / "stored.png";
+    auto stored = run_command(EXECUTABLE + " show-preset pic --thumbnail --output \"" +
+                                  stored_png.string() + "\"", env);
+    REQUIRE(stored.exit_code == 0);
+    CHECK(read(stored_png) == "STORED-PNG");
+
+    // Another model's preset, named by path: any executable shows it.
+    const auto dir_png = out_dir.path() / "dir.png";
+    auto dir = run_command(EXECUTABLE + " show-preset \"" + dirpath.string() +
+                               "\" --thumbnail --output \"" + dir_png.string() + "\"", env);
+    REQUIRE(dir.exit_code == 0);
+    CHECK(read(dir_png) == "DIR-PNG");
+}
+
+TEST_CASE("show-preset --thumbnail: a preset without one writes nothing and says so",
+          "[integration][preset][show-preset]") {
+    TempDirectory user_dir;
+    std::ofstream(user_dir.presets() / "bare.preset.beebium") << R"({"model": "model-b"})";
+    const auto png = user_dir.path() / "out.png";
+
+    auto result = run_command(EXECUTABLE + " show-preset bare --thumbnail --output \"" +
+                                  png.string() + "\"",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+
+    REQUIRE(result.exit_code == 66);
+    CHECK(result.stderr_output == "Error: preset bare has no thumbnail\n");
+    CHECK_FALSE(std::filesystem::exists(png));
+}
+
+TEST_CASE("show-preset: --thumbnail and --output go together", "[integration][preset][show-preset]") {
+    CHECK(run_command(EXECUTABLE + " show-preset model-b --thumbnail").exit_code == 64);
+    CHECK(run_command(EXECUTABLE + " show-preset model-b --output x.png").exit_code == 64);
 }
 
 TEST_CASE("show-preset --help: returns OK", "[integration][preset][show-preset]") {
@@ -702,20 +850,35 @@ TEST_CASE("import-preset: imports valid preset", "[integration][preset][import-p
     CHECK(content == R"({"model": "model-b", "name": "Import Me"})");
 }
 
-TEST_CASE("import-preset: rejects wrong model", "[integration][preset][import-preset]") {
-    TempDirectory temp_dir;
+TEST_CASE("import-preset: another model's preset is imported by any executable",
+          "[integration][preset][import-preset]") {
+    TempDirectory source_dir;
+    TempDirectory user_dir;
+    const auto source_filepath = source_dir.path() / "plus.preset.beebium";
+    std::ofstream(source_filepath) << R"({"model": "model-b-plus", "name": "Plus"})";
 
-    // Create preset with wrong model
-    auto source_filepath = temp_dir.path() / "wrong-model.preset.beebium";
-    {
-        std::ofstream f(source_filepath);
-        f << R"({"model": "wrong-model", "name": "Wrong Model"})";
-    }
+    auto result = run_command(EXECUTABLE + " import-preset \"" + source_filepath.string() + "\"",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
 
-    auto result = run_command(EXECUTABLE + " import-preset \"" + source_filepath.string() + "\"");
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_output == "plus\n");
+    CHECK(std::filesystem::exists(user_dir.presets() / "plus.preset.beebium"));
+}
+
+TEST_CASE("import-preset: a preset naming an unknown model is refused",
+          "[integration][preset][import-preset]") {
+    TempDirectory source_dir;
+    TempDirectory user_dir;
+    const auto source_filepath = source_dir.path() / "wrong-model.preset.beebium";
+    std::ofstream(source_filepath) << R"({"model": "wrong-model", "name": "Wrong Model"})";
+
+    auto result = run_command(EXECUTABLE + " import-preset \"" + source_filepath.string() + "\"",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
 
     REQUIRE(result.exit_code == 65);  // DATAERR
-    REQUIRE(result.stderr_output.find("does not match") != std::string::npos);
+    CHECK(result.stderr_output.find("preset model 'wrong-model' is not a known model (one of: "
+                                    "model-b, model-b-plus, ") != std::string::npos);
+    CHECK(std::filesystem::is_empty(user_dir.presets()));
 }
 
 TEST_CASE("import-preset --help: returns OK", "[integration][preset][import-preset]") {
@@ -1597,7 +1760,7 @@ TEST_CASE("resolve-preset: a directory preset resolves its references in the dir
 
     CHECK(out.at("diagnostics").empty());
     const auto& p = out.at("preset");
-    CHECK(p.at("name") == "my-game");
+    CHECK(p.at("name") == "BBC Model B");  // unnamed: its model's display name
     CHECK(p.at("storage").at("floppy_drives")[0].at("image_uri") ==
           beebium::file_url_from_filepath(dirpath / "discs" / "game.ssd"));
 }

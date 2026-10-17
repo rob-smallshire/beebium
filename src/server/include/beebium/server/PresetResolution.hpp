@@ -21,6 +21,7 @@
 // no service or machine-running code, so it is unit-tested on its own
 // (test_preset_resolution).
 
+#include "beebium/MachineModels.hpp"
 #include "beebium/server/DiscPaths.hpp"
 #include "beebium/server/PresetLoader.hpp"
 #include "beebium/server/PresetPaths.hpp"
@@ -180,6 +181,19 @@ inline nlohmann::ordered_json extension_config_json(
 
 // Apply preset configuration to ServerConfig.
 // Preset values provide defaults that can be overridden by CLI arguments.
+// What a preset is called: its name, else the display name of its model --
+// the model it names or, naming none, the one it runs as (`Memory`'s).
+template<typename Memory>
+std::string preset_display_name(const PresetConfig& preset) {
+    if (!preset.name.empty()) return preset.name;
+    if (preset.model) {
+        if (const auto* model = beebium::machine_models::find(*preset.model)) {
+            return std::string(model->display_name);
+        }
+    }
+    return std::string(Memory::MACHINE_DISPLAY_NAME);
+}
+
 template<typename MachineType>
 void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset) {
     using Instance = typename ServerConfig<MachineType>::ExtensionInstance;
@@ -195,7 +209,8 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
             case PresetKey::AutoBoot:  // already folded into startup by the loader
                 break;
             case PresetKey::Name:
-                config.launch.preset_name = preset.name;
+                config.launch.preset_name =
+                    preset_display_name<typename MachineType::Memory>(preset);
                 break;
             case PresetKey::MachineName:
                 if (preset.machine_name && config.machine.machine_name.empty()) {

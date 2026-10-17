@@ -681,13 +681,16 @@ These subcommands manage preset files. GUIs invoke these rather than implementin
 
 #### list-presets
 
-List available presets for this model.
+List available presets for this model (and those naming no model), or with
+`--all-models` every model's, from any one executable.
 
 ```bash
-beebium-model-b [--format pretty|tsv|jsonl] list-presets [--json]
+beebium-model-b [--format pretty|tsv|jsonl] list-presets [--all-models] [--json]
 ```
 
 The output follows the global `--format` option: pretty on a terminal, TSV when piped. `--json` is an alias of `--format jsonl`.
+A preset with no `name` is listed by its model's display name (the model it
+names or, naming none, this executable's).
 
 **`pretty`** (the id column is as wide as the longest id plus a two-space gap):
 ```
@@ -707,10 +710,14 @@ model-b-with-acorn-dfs	BBC Model B with Acorn DFS	system
 my-elite-setup	My Elite Setup	user
 ```
 
-**`jsonl`** (one object per preset):
+**`jsonl`** (one object per preset). Each row has `id`, `name` and `source`,
+then whichever of `model`, `machine_name`, `description` and `release_date` the
+preset gives (a field it does not give is omitted, never `null`), then
+`filepath` and `thumbnail` (whether `show-preset --thumbnail` has one to write),
+in that order:
 ```json
-{"id":"model-b","name":"BBC Model B","source":"system"}
-{"id":"my-elite-setup","name":"My Elite Setup","source":"user"}
+{"id":"model-b","name":"BBC Model B","source":"system","model":"model-b","description":"A standard Model B","release_date":"1981","filepath":"/usr/share/beebium/presets/model-b.preset.beebium","thumbnail":true}
+{"id":"my-elite-setup","name":"My Elite Setup","source":"user","model":"model-b","filepath":"/home/me/.config/beebium/presets/my-elite-setup.preset.beebium","thumbnail":false}
 ```
 
 #### show-preset
@@ -719,11 +726,16 @@ Output the contents of a preset file.
 
 ```bash
 beebium-model-b show-preset <id-or-path>
+beebium-model-b show-preset <id-or-path> --thumbnail --output <filepath>
 ```
 
 Outputs the preset JSON to stdout. Useful for inspection or piping to editors.
 The preset is named as `--preset` names one: a file or directory path or, failing that, the
-id of a system or user preset.
+id of a system or user preset. Any executable shows any model's preset.
+
+With `--thumbnail`, writes the preset's thumbnail (a PNG) to `--output`
+instead. A preset without a thumbnail is an error (`NOINPUT`, 66), with one
+line on stderr, and nothing is written.
 
 #### report-presets-dirpath
 
@@ -789,7 +801,11 @@ Import a preset file into the user presets directory.
 beebium-model-b import-preset <filepath>
 ```
 
-Validates the preset file and copies it to the user presets directory. Handles ID conflicts by appending numbers (e.g., `elite-setup-2`).
+Copies the preset file to the user presets directory, exactly as written. Any
+executable imports any model's preset: the preset's `model` must name a known
+model, and nothing more is checked here; `resolve-preset` and `start`, in that
+model's executable, check the whole preset. Handles ID conflicts by appending
+numbers (e.g., `elite-setup-2`); an id is never one a system preset has.
 
 Outputs the imported preset ID on success.
 

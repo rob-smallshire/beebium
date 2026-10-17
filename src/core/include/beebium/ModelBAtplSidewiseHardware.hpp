@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "beebium/MachineModels.hpp"
 #include "extension/OneMHzBusPort.hpp"
 #include "extension/UserPort.hpp"
 #include "extension/SerialPort.hpp"
@@ -83,9 +84,9 @@ public:
     static constexpr uint8_t SLOT_15 = 15;
 
     // Machine identification and region names (compile-time constants)
-    static constexpr std::string_view MACHINE_TYPE = "model-b-atpl-sidewise";
+    static constexpr std::string_view MACHINE_TYPE = machine_models::kModelBAtplSidewise.id;
     constexpr std::string_view machine_type() const { return MACHINE_TYPE; }
-    static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B with ATPL Sidewise";
+    static constexpr std::string_view MACHINE_DISPLAY_NAME = machine_models::kModelBAtplSidewise.display_name;
     static constexpr std::string_view MACHINE_DESCRIPTION = "Model B fitted with the ATPL Sidewise sideways ROM/RAM expansion board (16 slots; slot 15 RAM/ROM with write-through and write-protect)";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
     static constexpr std::string_view REGION_MOS_ROM = "mos_rom";

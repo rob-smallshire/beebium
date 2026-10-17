@@ -179,6 +179,19 @@ public:
         return PresetSource::open(*path, error);
     }
 
+    // A preset's thumbnail, when it has one: thumbnail.png in a directory
+    // preset, or the <id>.thumbnail.png beside a stored preset file.
+    static std::optional<std::filesystem::path> find_thumbnail(const PresetSource& source) {
+        std::optional<std::filesystem::path> filepath;
+        if (source.is_directory()) {
+            filepath = source.container().dirpath() / PresetSource::THUMBNAIL_FILENAME;
+        } else if (auto id = id_from_filename(source.path())) {
+            filepath = source.container().dirpath() / (*id + THUMBNAIL_SUFFIX);
+        }
+        if (filepath && source.container().has_file(*filepath)) return filepath;
+        return std::nullopt;
+    }
+
     // Where a user preset with `id` is stored.
     static std::filesystem::path user_filepath_for(std::string_view id) {
         return get_user_presets_dirpath() / filename_for(id);
@@ -243,6 +256,8 @@ public:
 private:
     // The suffix of a stored preset's file name: the one place it is named.
     static constexpr std::string_view PRESET_EXTENSION = ".preset.beebium";
+    // The suffix of the thumbnail beside a stored preset file.
+    static constexpr const char* THUMBNAIL_SUFFIX = ".thumbnail.png";
 
     // The stored presets directly in `dirpath`, by id.
     static void append_entries(const std::filesystem::path& dirpath, Origin origin,

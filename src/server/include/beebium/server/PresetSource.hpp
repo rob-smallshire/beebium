@@ -36,6 +36,8 @@ class PresetSource {
 public:
     // The name of the document in a directory preset.
     static constexpr const char* DOCUMENT_FILENAME = "preset.json";
+    // The name of the thumbnail in a directory preset.
+    static constexpr const char* THUMBNAIL_FILENAME = "thumbnail.png";
 
     // The preset at `path`, read; or nullopt with `error` saying why it
     // cannot be read.
@@ -63,12 +65,8 @@ public:
     // The path the preset was given by.
     const std::filesystem::path& path() const { return path_; }
 
-    // The name of the preset when its document gives none: the directory's
-    // name, or the file's without its last extension.
-    std::string fallback_name() const {
-        return document_filepath_ == path_ ? path_.stem().string()
-                                           : container_dirpath_.filename().string();
-    }
+    // True when the preset is a directory holding its document.
+    bool is_directory() const { return document_filepath_ != path_; }
 
     // The container the preset's file references are written in: the
     // preset's own directory, or the one holding the preset file.

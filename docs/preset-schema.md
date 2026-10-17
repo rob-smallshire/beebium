@@ -72,7 +72,7 @@ model's default, which `resolve-preset` shows.
 | Key | Type | Meaning |
 |-----|------|---------|
 | `model` | string | The machine type, e.g. `model-b`, `model-b-plus`. Must match the executable's model, or the launch fails with `CONFIG` (78) |
-| `name` | string | The preset's display name. Default: the file name without its suffix |
+| `name` | string | The preset's display name. Default: the display name of its model (the model it names or, naming none, the one it runs as) |
 | `release_date` | string | `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, for sorting in a picker |
 | `description` | string | One line for a preset picker |
 | `machine_name` | string | The launched machine's name, a template with `{key}` placeholders (see `list-name-placeholders` and [cli.md](cli.md#machine-name)). Default: the model's name |

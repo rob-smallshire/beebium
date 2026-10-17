@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "beebium/MachineModels.hpp"
 #include "extension/OneMHzBusPort.hpp"
 #include "extension/UserPort.hpp"
 #include "extension/SerialPort.hpp"
@@ -93,9 +94,9 @@ public:
     static constexpr uint8_t SLOT_14 = 14;
 
     // Machine identification and region names (compile-time constants)
-    static constexpr std::string_view MACHINE_TYPE = "model-b-watford-rom-ram";
+    static constexpr std::string_view MACHINE_TYPE = machine_models::kModelBWatfordRomRam.id;
     constexpr std::string_view machine_type() const { return MACHINE_TYPE; }
-    static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B with Watford ROM/RAM board";
+    static constexpr std::string_view MACHINE_DISPLAY_NAME = machine_models::kModelBWatfordRomRam.display_name;
     static constexpr std::string_view MACHINE_DESCRIPTION = "Model B fitted with the Watford Electronics ROM/RAM board (8 sideways RAM banks 0-7, ROM sockets 8-15, a &FF30 write-select latch, and S1/S2 links)";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
     static constexpr std::string_view REGION_MOS_ROM = "mos_rom";

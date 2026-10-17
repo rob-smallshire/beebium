@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "beebium/MachineModels.hpp"
 #include "extension/OneMHzBusPort.hpp"
 #include "extension/UserPort.hpp"
 #include "extension/SerialPort.hpp"
@@ -93,11 +94,11 @@ namespace beebium {
 class ModelBHardware {
 public:
     // Machine identification and region names (compile-time constants)
-    static constexpr std::string_view MACHINE_TYPE = "model-b";
+    static constexpr std::string_view MACHINE_TYPE = machine_models::kModelB.id;
     // Instance accessor so the debugger reaches the machine type through the
     // same call on the host memory map and on a coprocessor's region model.
     constexpr std::string_view machine_type() const { return MACHINE_TYPE; }
-    static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B";
+    static constexpr std::string_view MACHINE_DISPLAY_NAME = machine_models::kModelB.display_name;
     static constexpr std::string_view MACHINE_DESCRIPTION = "The original BBC Microcomputer with 32KB RAM";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
     static constexpr std::string_view REGION_MOS_ROM = "mos_rom";

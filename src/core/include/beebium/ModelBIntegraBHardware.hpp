@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "beebium/MachineModels.hpp"
 #include "extension/OneMHzBusPort.hpp"
 #include "extension/UserPort.hpp"
 #include "extension/SerialPort.hpp"
@@ -92,9 +93,9 @@ namespace beebium {
 class ModelBIntegraBHardware {
 public:
     // Machine identification and region names (compile-time constants)
-    static constexpr std::string_view MACHINE_TYPE = "model-b-integra-b";
+    static constexpr std::string_view MACHINE_TYPE = machine_models::kModelBIntegraB.id;
     constexpr std::string_view machine_type() const { return MACHINE_TYPE; }
-    static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B with Integra-B";
+    static constexpr std::string_view MACHINE_DISPLAY_NAME = machine_models::kModelBIntegraB.display_name;
     static constexpr std::string_view MACHINE_DESCRIPTION = "Model B fitted with the Computech Integra-B board (IBOS, sideways RAM banks 4-7, eight ROM/RAM sockets 8-15, 20K shadow RAM, 12K private RAM, real-time clock)";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
     static constexpr std::string_view REGION_SHADOW_RAM = "shadow_ram";

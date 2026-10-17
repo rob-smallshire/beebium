@@ -1101,7 +1101,26 @@ namespace {
     }
 }
 
-TEST_CASE("parse_start_arguments: --preset sets preset_filepath", "[cli][parse_start_arguments][preset]") {
+TEST_CASE("parse_start_arguments: a preset is called by its name, else its model's",
+          "[cli][parse_start_arguments][preset]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_name_");
+    std::ofstream(dir / "named.json") << R"({"model": "model-b", "name": "Named"})";
+    std::ofstream(dir / "unnamed.json") << R"({"model": "model-b"})";
+    std::ofstream(dir / "any.json") << R"({})";
+    auto preset_name = [&](const char* filename) {
+        const auto filepath = (dir / filename).string();
+        ArgvHelper args{"beebium", "start", "--preset", filepath.c_str()};
+        ServerConfig<MachineType> config;
+        REQUIRE_FALSE(parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config));
+        return config.launch.preset_name;
+    };
+    CHECK(preset_name("named.json") == "Named");
+    CHECK(preset_name("unnamed.json") == "BBC Model B");
+    // Naming no model, it is called by the model it runs as.
+    CHECK(preset_name("any.json") == std::string(MachineType::Memory::MACHINE_DISPLAY_NAME));
+}
+
+TEST_CASE("parse_start_arguments: --preset sets the preset source", "[cli][parse_start_arguments][preset]") {
     auto preset_path = presets_dirpath() / "minimal.preset.beebium";
     ArgvHelper args{"beebium", "start", "--preset", preset_path.string().c_str()};
     ServerConfig<MachineType> config;
