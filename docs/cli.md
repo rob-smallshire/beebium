@@ -759,7 +759,7 @@ beebium-model-b create-preset --name "My Elite Setup" [--from <source-id>] [--ou
 |--------|-------------|
 | `--name <name>` | Display name for the preset (required) |
 | `--from <id\|path>` | Source preset to copy configuration from (optional). The files a directory or archive preset holds beside its document (not its thumbnail) come with it, still named as the source names them |
-| `--output <path>` | Write preset to specified path instead of user presets directory |
+| `--output <path>` | Write preset to specified path instead of user presets directory; never the `--from` preset itself (`USAGE`) |
 | `--unpack` | With `--output`: write a new directory laid out as the archive is, for editing, instead of the archive |
 | `--station <1-254>\|auto[:lo-hi]` | Fit Econet, recorded as `econet.station` (`auto` is recorded verbatim and resolved at each launch) |
 | `--aun ...` / `--piconet ...` | Recorded as the preset's `econet.transport`, same grammar as `start`. Requires `--station`; at most one transport |
@@ -824,7 +824,7 @@ Writes the preset as a `.beebium-preset` zip archive holding `preset.json` and
 every file the preset holds beside it, or with `--unpack` as a new directory
 laid out as the archive is, for editing. The preset is named as `--preset` names
 one: a file, directory or archive path or, failing that, the id of a system or
-user preset.
+user preset. An `--output` naming the preset being read is refused (`USAGE`).
 
 ### AUN Map Subcommands
 

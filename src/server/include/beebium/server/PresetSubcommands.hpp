@@ -873,6 +873,13 @@ public:
             target_filepath = PresetPaths::user_filepath_for(preset_id);
         }
 
+        // Never over the source itself: the result is another preset.
+        if (config.launch.preset && config.launch.preset->is_at(target_filepath)) {
+            std::cerr << "Error: --output names the preset being read: "
+                      << target_filepath.string() << "; write the new preset elsewhere\n";
+            return ExitCode::USAGE;
+        }
+
         // The document, and what the source preset holds beside its own:
         // the copy takes a directory's or archive's files with it, and names
         // them as the source did, within itself.
@@ -1529,6 +1536,12 @@ public:
             std::cerr << "Error: " << open_error << "\n";
             return ExitCode::NOINPUT;
         }
+        if (source->is_at(output_filepath)) {
+            std::cerr << "Error: --output names the preset being read: "
+                      << output_filepath.string() << "; export it elsewhere\n";
+            return ExitCode::USAGE;
+        }
+
         std::vector<beebium::zip::ZipMember> members;
         try {
             members = preset_members(*source);

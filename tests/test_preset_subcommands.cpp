@@ -1027,6 +1027,42 @@ TEST_CASE("export-preset: an output that cannot be written is an IO error",
           std::string::npos);
 }
 
+TEST_CASE("export-preset and create-preset --from refuse to write over the preset they read",
+          "[integration][preset][export-preset][create-preset]") {
+    TempDirectory temp_dir;
+    const auto archive_filepath =
+        store_preset(temp_dir.path(), "same", R"({"model": "model-b", "name": "Same"})", "PNG");
+    std::ifstream before_file(archive_filepath, std::ios::binary);
+    const std::string before((std::istreambuf_iterator<char>(before_file)), {});
+    before_file.close();
+    // The same file, spelt another way.
+    const auto respelt = temp_dir.path() / "." / "same.beebium-preset";
+
+    auto exported = run_command(EXECUTABLE + " export-preset \"" + archive_filepath.string() +
+                                "\" --output \"" + respelt.string() + "\"");
+    CHECK(exported.exit_code == 64);
+    CHECK(exported.stderr_output.find("--output names the preset being read") !=
+          std::string::npos);
+
+    auto created = run_command(EXECUTABLE + " create-preset --name Copy --from \"" +
+                               archive_filepath.string() + "\" --output \"" +
+                               archive_filepath.string() + "\"");
+    CHECK(created.exit_code == 64);
+    CHECK(created.stderr_output.find("--output names the preset being read") !=
+          std::string::npos);
+
+    // A directory preset unpacked over itself, likewise.
+    const auto dirpath = temp_dir.path() / "dir-preset";
+    std::filesystem::create_directories(dirpath);
+    std::ofstream(dirpath / "preset.json") << R"({"model": "model-b"})";
+    auto unpacked = run_command(EXECUTABLE + " export-preset \"" + dirpath.string() +
+                                "\" --unpack --output \"" + dirpath.string() + "\"");
+    CHECK(unpacked.exit_code == 64);
+
+    std::ifstream after_file(archive_filepath, std::ios::binary);
+    CHECK(std::string((std::istreambuf_iterator<char>(after_file)), {}) == before);
+}
+
 TEST_CASE("export-preset --help: returns OK", "[integration][preset][export-preset]") {
     auto result = run_command(EXECUTABLE + " export-preset --help");
 

@@ -98,6 +98,13 @@ public:
     // How the preset is held.
     Form form() const { return form_; }
 
+    // True when `path` names this preset itself: the file or directory it
+    // was read from. Writing there would overwrite what is being read.
+    bool is_at(const std::filesystem::path& path) const {
+        std::error_code ec;
+        return std::filesystem::equivalent(path, path_, ec);
+    }
+
     // The container the preset's file references are written in: the
     // preset's own directory or archive, or the directory holding a lone
     // preset file.
