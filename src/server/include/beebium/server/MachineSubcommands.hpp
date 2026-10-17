@@ -176,6 +176,15 @@ public:
             return ExitCode::CANTCREAT;
         }
 
+        // Every extension instance's id is pinned, the one it was given or
+        // the one generated now, so it finds the same extensions/<id>/ on
+        // every run, whatever is added to the machine later.
+        for (auto& inst : config.machine.extension_instances) {
+            const auto* manifest = config.launch.extension_resolver.find_by_name(inst.name);
+            const bool transport = manifest && manifest->extension_kind == "econet-transport";
+            if (!transport && inst.config.count("id") != 0) inst.explicit_keys.insert("id");
+        }
+
         // The machine's preset: what the configuration records, and the
         // files of the preset it was read from, thumbnail included (the
         // machine's first screen until it has one of its own).
@@ -367,9 +376,10 @@ public:
                   << " reset-battery <dirpath|document filepath>\n"
                   << "\n"
                   << "Forgets everything the battery-backed units of the saved machine at\n"
-                  << "<dirpath> kept (board RAM, a clock's CMOS RAM and time), as taking out\n"
-                  << "the battery does: at its next run each starts from the contents of a\n"
-                  << "newly set up board. The machine must not be running; exits "
+                  << "<dirpath> kept (board RAM, a clock's CMOS RAM and time, an extension's\n"
+                  << "clock), as taking out the battery does: at its next run each starts\n"
+                  << "from the contents of a newly set up board. The machine must not be\n"
+                  << "running; exits "
                   << ExitCode::TEMPFAIL << ",\n"
                   << "naming the process, when it is.\n";
     }
@@ -389,7 +399,9 @@ public:
         try {
             // Held while forgetting, so no run starts meanwhile.
             const auto directory = MachineDirectory::open(*dirpath);
-            forget_battery_units(*dirpath / machine_layout::NVRAM_DIRNAME);
+            for (const auto& battery_dirpath : battery_dirpaths(*dirpath)) {
+                forget_battery_units(battery_dirpath);
+            }
         } catch (const MachineInUse& e) {
             std::cerr << "Error: " << e.what() << "\n";
             return ExitCode::TEMPFAIL;

@@ -27,10 +27,13 @@
 #include <6502/6502.h>
 
 #include <AcornScsiHostAdapter.hpp>
+#include <ScsiHardDisc.hpp>
 #include <ScsiHardDiscExtension.hpp>
 
 #include "test_keyboard_helpers.hpp"
+#include "test_temp_paths.hpp"
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 
@@ -189,6 +192,50 @@ TEST_CASE("ScsiHardDiscExtension init without indicators does not throw",
     // Construct the context WITHOUT indicators (4th arg defaulted to nullptr).
     ExtensionContext ctx(&machine.memory().one_mhz_bus());
     REQUIRE_NOTHROW(registry.resolve_and_init(ctx));
+}
+
+TEST_CASE("ScsiHardDiscExtension reopened at a copy serves and writes the copy",
+          "[scsi][hdd][reopen]") {
+    if (!adfs_available()) SKIP("SCSI disc image not available");
+    beebium::test::ScopedTempDir dir("beebium_scsi_reopen_");
+    for (const auto* name : {"original", "copy"}) {
+        std::filesystem::copy_file(kAssetsDir / "scsi" / "scsi0.dat",
+                                   dir / (std::string(name) + ".dat"));
+        std::filesystem::copy_file(kAssetsDir / "scsi" / "scsi0.dsc",
+                                   dir / (std::string(name) + ".dsc"));
+    }
+
+    ModelBPlus machine;
+    ExtensionRegistry registry;
+    registry.register_extension_point("1mhz-bus");
+    auto adapter = AcornScsiHostAdapter::create();
+    auto* adapter_ptr = adapter.get();
+    registry.register_extension(with_default_id(std::move(adapter)));
+    auto hdd_ext = ScsiHardDiscExtension::create();
+    auto* hdd = hdd_ext.get();
+    hdd_ext->set_config({{"scsi-id", "0"},
+                         {"image", (dir / "original.dat").string()},
+                         {"id", "boot"}});
+    registry.register_extension(with_default_id(std::move(hdd_ext)));
+    ExtensionContext ctx(&machine.memory().one_mhz_bus());
+    registry.resolve_and_init(ctx);
+
+    std::string error;
+    REQUIRE(hdd->reopen("boot", dir / "copy.dat", error));
+    CHECK(hdd->devices().at(0).backing_path == (dir / "copy.dat").string());
+
+    auto* target = static_cast<ScsiHardDisc*>(adapter_ptr->target_registry().target(0));
+    REQUIRE(target->image()->dat_filepath() == dir / "copy.dat");
+    std::array<uint8_t, 256> sector{};
+    sector.fill(0xA5);
+    REQUIRE(target->image()->write_sector(sector.data(), 0));
+
+    auto first_byte = [](const std::filesystem::path& filepath) {
+        std::ifstream in(filepath, std::ios::binary);
+        return static_cast<uint8_t>(in.get());
+    };
+    CHECK(first_byte(dir / "copy.dat") == 0xA5);
+    CHECK(first_byte(dir / "original.dat") == first_byte(kAssetsDir / "scsi" / "scsi0.dat"));
 }
 
 TEST_CASE("ADFS SCSI boot and *CAT on Model B+", "[scsi][adfs][e2e]") {

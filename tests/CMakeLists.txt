@@ -822,6 +822,15 @@ if(BEEBIUM_BUILD_SERVICE)
         Catch2::Catch2WithMain
     )
     catch_discover_tests(test_acorn_rtc_ui)
+
+    # The clock acorn-rtc keeps on its battery (ExtensionPersistence)
+    add_executable(test_acorn_rtc_persistence test_acorn_rtc_persistence.cpp)
+    target_link_libraries(test_acorn_rtc_persistence PRIVATE
+        beebium_ext_acorn_rtc
+        beebium_extension_ui_proto
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_acorn_rtc_persistence)
 endif()
 
 # SN76489 sound chip tests

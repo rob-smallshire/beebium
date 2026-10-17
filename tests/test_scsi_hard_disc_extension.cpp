@@ -156,3 +156,24 @@ TEST_CASE("ScsiHardDiscExtension publishes empty path when no image configured",
     REQUIRE(devices.size() == 1);
     REQUIRE(devices[0].backing_path.empty());
 }
+
+TEST_CASE("ScsiHardDiscExtension reopen refuses another device or a drive with no image",
+          "[scsi][hard-disc][extension]") {
+    auto ext = ScsiHardDiscExtension::create();
+    ext->set_config({{"id", "boot"}, {"scsi-id", "0"}});
+    std::string error;
+    CHECK_FALSE(ext->reopen("other", "/tmp/copy.dat", error));
+    CHECK(error == "no storage device 'other' in boot");
+    CHECK_FALSE(ext->reopen("boot", "/tmp/copy.dat", error));
+    CHECK(error == "boot has no image open");
+}
+
+TEST_CASE("ExtensionStorage cannot move a device unless the extension says how",
+          "[scsi][hard-disc][extension]") {
+    struct FixedStorage : ExtensionStorage {
+        std::vector<StorageDeviceInfo> devices() const override { return {}; }
+    } storage;
+    std::string error;
+    CHECK_FALSE(storage.reopen("rom-disc", "/tmp/copy.img", error));
+    CHECK(error == "storage device 'rom-disc' cannot be moved to another image");
+}

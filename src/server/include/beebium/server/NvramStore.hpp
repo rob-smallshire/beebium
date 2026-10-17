@@ -163,6 +163,31 @@ inline std::vector<std::string> restore_battery_units(const std::vector<BatteryB
     return restored;
 }
 
+// Where the instance `extension_id` of a machine at `machine_dirpath` keeps
+// its battery-backed units: extensions/<id>/nvram/, beside whatever else the
+// instance keeps in extensions/<id>/.
+inline std::filesystem::path extension_nvram_dirpath(const std::filesystem::path& machine_dirpath,
+                                                     std::string_view extension_id) {
+    return machine_dirpath / machine_layout::EXTENSIONS_DIRNAME / std::string(extension_id) /
+           machine_layout::NVRAM_DIRNAME;
+}
+
+// Every directory of a machine at `machine_dirpath` in which battery-backed
+// units are kept: the core's nvram/ and each extension instance's.
+inline std::vector<std::filesystem::path> battery_dirpaths(
+    const std::filesystem::path& machine_dirpath) {
+    std::vector<std::filesystem::path> dirpaths{machine_dirpath / machine_layout::NVRAM_DIRNAME};
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(
+             machine_dirpath / machine_layout::EXTENSIONS_DIRNAME, ec)) {
+        if (entry.is_directory(ec)) {
+            dirpaths.push_back(extension_nvram_dirpath(machine_dirpath,
+                                                       entry.path().filename().string()));
+        }
+    }
+    return dirpaths;
+}
+
 // Forgets everything the units kept in `dirpath`, as removing the battery
 // does: the directory is removed, so every unit starts from its seed at the
 // next power-on. Throws when it cannot be removed.

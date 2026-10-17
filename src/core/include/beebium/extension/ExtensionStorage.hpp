@@ -15,7 +15,9 @@
 
 #include "Export.hpp"
 
+#include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace beebium {
@@ -62,6 +64,17 @@ public:
     // (vanishingly few publish zero in practice, since the whole
     // point of opting in is to publish at least one).
     virtual std::vector<StorageDeviceInfo> devices() const = 0;
+
+    // Re-point the device `device_id` at `filepath`, a copy of its image
+    // already made, holding everything written so far: close the image it
+    // has open and open that one in its place, so later writes land there
+    // and devices() reports it. Used when a running machine is saved and its
+    // media move with it. Called with emulation paused. Returns false, with
+    // `error` saying why and the device left on its old image, when it
+    // cannot; the default cannot.
+    BEEBIUM_EXT_API virtual bool reopen(std::string_view device_id,
+                                        const std::filesystem::path& filepath,
+                                        std::string& error);
 };
 
 }  // namespace beebium

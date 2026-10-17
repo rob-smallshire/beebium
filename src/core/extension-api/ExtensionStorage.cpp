@@ -21,4 +21,10 @@ namespace beebium {
 
 ExtensionStorage::~ExtensionStorage() = default;
 
+bool ExtensionStorage::reopen(std::string_view device_id, const std::filesystem::path&,
+                              std::string& error) {
+    error = "storage device '" + std::string(device_id) + "' cannot be moved to another image";
+    return false;
+}
+
 }  // namespace beebium

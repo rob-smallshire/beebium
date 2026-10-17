@@ -246,6 +246,31 @@ The typed dispatcher (Step 3) and the UI (Step 4) are **not** redundant -- they
 serve different audiences (scripting vs. humans). See
 `feedback_extension_multi_api`.
 
+## Step 4b (optional): state a saved machine keeps
+
+A device that keeps state while the machine is switched off -- a clock on its
+battery, battery-backed RAM -- carries it from one run of a saved machine to
+the next. Multiply-inherit `ExtensionPersistence`
+(`beebium/extension/ExtensionPersistence.hpp`), return `this` from
+`persistence()`, and give the state as one or more `BatteryBackedUnit`s
+(`beebium/BatteryBackedUnit.hpp`, the surface the core's own battery-backed
+hardware uses): a name unique within the instance, a layout version, a
+hardware descriptor, `seed()`, `serialise()` and `restore()`. The server keeps
+each unit in `extensions/<instance id>/nvram/<name>.bin` of the machine
+directory: restored after `init()`, before the machine runs; kept at a
+graceful shutdown and on Save; forgotten by `reset-battery`. Contents saved in
+another layout version or for another hardware descriptor are not restored
+but kept aside, and a unit with nothing kept keeps what `init()` gave it, so
+`init()` sets up the seed. A transient machine keeps nothing. `acorn-rtc` is
+the reference: its clock runs on by the time since it was kept.
+
+A storage device (`ExtensionStorage`) whose image is a file should also
+override `reopen(device_id, filepath, error)`: when a running machine is saved
+its media move with it, and the server hands the device the copy of its image,
+already made, to open in place of the one it has open (with emulation paused).
+The default refuses, and a Save of a machine with such a device then fails.
+`scsi-hard-disc` is the reference.
+
 ## Step 5: build it
 
 ### Plugin or built-in?

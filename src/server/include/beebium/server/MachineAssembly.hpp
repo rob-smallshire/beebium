@@ -26,6 +26,7 @@
 #include "beebium/server/NvramStore.hpp"
 #include "beebium/server/RomPaths.hpp"
 #include "beebium/extension/CoprocessorExtension.hpp"
+#include "beebium/extension/ExtensionPersistence.hpp"
 #include "beebium/extension/CpuDebugTarget.hpp"
 #include "beebium/extension/EconetTransportRegistry.hpp"
 #include "beebium/extension/ExtensionContext.hpp"
@@ -901,6 +902,26 @@ struct AssembledMachine {
     AssembledMachine& operator=(const AssembledMachine&) = delete;
 };
 
+// Calls `fn(units, dirpath)` for each extension instance of `am` that keeps
+// battery-backed state (ExtensionPersistence), with the directory of its
+// machine directory it keeps it in.
+template<typename MachineType, typename Fn>
+void for_each_extension_battery(AssembledMachine<MachineType>& am, Fn fn) {
+    const auto& machine_dirpath = am.machine_directory->dirpath();
+    auto visit = [&](beebium::Extension& ext) {
+        auto* persistence = ext.persistence();
+        if (!persistence) return;
+        if (ext.id().empty()) {
+            std::cerr << "Warning: " << ext.name()
+                      << " keeps no battery-backed state: it has no instance id\n";
+            return;
+        }
+        fn(persistence->battery_units(), extension_nvram_dirpath(machine_dirpath, ext.id()));
+    };
+    for (auto* ext : am.extension_registry.extensions()) visit(*ext);
+    for (const auto& transport : am.transport_registry.extensions()) visit(*transport);
+}
+
 // Result of assemble_machine: the machine on success, or an exit code to
 // return when assembly failed (assembled == nullptr).
 template<typename MachineType>
@@ -1205,6 +1226,14 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         &machine.state().memory.indicators,
         beebium::HasSerialPort<Memory> ? &machine.state().memory.serial_port() : nullptr);
     extension_registry.resolve_and_init(*am->extension_context);
+
+    // A saved machine's extensions take back what their batteries kept,
+    // over what their initialisation gave them.
+    if (!am->machine_directory->transient()) {
+        for_each_extension_battery(*am, [](const auto& units, const auto& dirpath) {
+            restore_battery_units(units, dirpath);
+        });
+    }
 
     // Wire the bus quiescer into every extension dispatcher so a gRPC-thread
     // handler halts the emulation thread across a device mutation. The server

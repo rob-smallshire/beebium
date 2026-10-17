@@ -205,6 +205,7 @@ add_library(beebium_extension_api SHARED
     EconetTransportExtension.cpp
     CpuDebugTarget.cpp
     CoprocessorExtension.cpp
+    ExtensionPersistence.cpp
     ExtensionStorage.cpp
     ExtensionUi.cpp
     ExtensionRpc.cpp

@@ -134,6 +134,7 @@ void ScsiHardDiscExtension::init(ExtensionContext& ctx) {
         heads_ = image->heads();
         write_protected_ = image->is_write_protected();
         disc_ = std::make_unique<ScsiHardDisc>(std::move(image));
+        target_ = disc_.get();
         scsi_adapter->target_registry().install(target_id, std::move(disc_));
         scsi_adapter->target_registry().wire_to_bus(scsi_adapter->bus());
 
@@ -159,7 +160,32 @@ void ScsiHardDiscExtension::shutdown() {
     // Target is owned by the registry, not by us, so nothing to clean up
     // (the registry's unique_ptr was moved in init)
     disc_ = nullptr;
+    target_ = nullptr;
     adapter_ = nullptr;
+}
+
+bool ScsiHardDiscExtension::reopen(std::string_view device_id,
+                                   const std::filesystem::path& filepath, std::string& error) {
+    if (device_id != id()) {
+        error = "no storage device '" + std::string(device_id) + "' in " + std::string(id());
+        return false;
+    }
+    if (!target_) {
+        error = std::string(id()) + " has no image open";
+        return false;
+    }
+    // Writes are flushed as they are made, so the copy already holds them.
+    std::unique_ptr<HardDiskImage> image;
+    try {
+        image = HardDiskImage::open(filepath);
+    } catch (const std::exception& e) {
+        error = e.what();
+        return false;
+    }
+    write_protected_ = image->is_write_protected();
+    target_->replace_image(std::move(image));
+    set_config_value("image", filepath.string());
+    return true;
 }
 
 }  // namespace beebium

@@ -39,6 +39,14 @@ public:
     HardDiskImage* image() { return image_.get(); }
     const HardDiskImage* image() const { return image_.get(); }
 
+    // Serve `image` in place of the image open now, which is closed. Its
+    // sense data is kept: to the initiator it is the same disc.
+    void replace_image(std::unique_ptr<HardDiskImage> image) {
+        image_ = std::move(image);
+        description_ = "SCSI hard disc";
+        if (image_) description_ += " (" + image_->dat_filepath().filename().string() + ")";
+    }
+
 private:
     // Command handlers
     ScsiCommandResult handle_test_unit_ready();

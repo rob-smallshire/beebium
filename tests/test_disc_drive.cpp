@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <filesystem>
 #include <vector>
 
 using namespace beebium;
@@ -523,4 +524,29 @@ TEST_CASE("DiscDrive cancel_eject does nothing to a drive at rest",
 
     CHECK_FALSE(drive.cancel_eject());
     CHECK(drive.state() == DriveState::Loaded);
+}
+
+TEST_CASE("DiscDrive reopen_at writes what it holds to the old image, later writes to the new",
+          "[disc][pulsedrive]") {
+    DiscDrive drive;
+    CHECK_FALSE(drive.reopen_at("/tmp/copy.ssd", "file:///tmp/copy.ssd"));
+
+    auto disc = make_test_disc();
+    std::vector<std::filesystem::path> written_to;
+    disc->set_write_track_callback(
+        [&](Disc& d, bool, uint32_t) { written_to.push_back(d.source_filepath()); });
+    disc->set_source_filepath("/tmp/test.ssd");
+    drive.insert(std::move(disc), "file:///tmp/test.ssd");
+    drive.set_motor(true);
+    drive.write_pulses(0x12345678);
+
+    REQUIRE(drive.reopen_at("/tmp/copy.ssd", "file:///tmp/copy.ssd"));
+    CHECK(written_to == std::vector<std::filesystem::path>{"/tmp/test.ssd"});
+    CHECK(drive.source_url() == "file:///tmp/copy.ssd");
+    CHECK(drive.state() == DriveState::Loaded);
+
+    drive.write_pulses(0x12345678);
+    drive.flush_if_dirty();
+    CHECK(written_to ==
+          std::vector<std::filesystem::path>{"/tmp/test.ssd", "/tmp/copy.ssd"});
 }

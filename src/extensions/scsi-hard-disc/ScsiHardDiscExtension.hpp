@@ -78,6 +78,8 @@ public:
 
     // ExtensionStorage interface
     std::vector<StorageDeviceInfo> devices() const override;
+    bool reopen(std::string_view device_id, const std::filesystem::path& filepath,
+                std::string& error) override;
 
     // Geometry + state of the loaded disc image. Captured by init()
     // from HardDiskImage at open time; remain at defaults if no image
@@ -106,6 +108,7 @@ private:
     uint8_t heads_ = 0;
     bool write_protected_ = false;
     std::unique_ptr<ScsiHardDisc> disc_;
+    ScsiHardDisc* target_ = nullptr;  // the installed target, owned by the adapter's registry
     PeripheralExtension* adapter_ = nullptr;  // non-owning, from context
     ScsiHardDiscUi ui_{*this};
 };

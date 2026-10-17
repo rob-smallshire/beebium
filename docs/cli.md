@@ -867,6 +867,8 @@ beside every file the preset holds, its thumbnail included; a `machine.json`
 giving it a new uuid, its name (`--machine-name`, else the preset's machine
 name, else the model's name), its model, the preset it came from and when it
 was made; and the `<name>.beebium-machine` document file and folder metadata.
+Every extension instance's id is recorded in `preset.json`, so the instance
+finds the state it keeps (`extensions/<id>/`) on every run.
 A file an option names by location (an absolute path) stays the user's own and
 is opened in place on every run.
 
@@ -901,8 +903,9 @@ beebium-model-b reset-battery <dirpath|document>
 ```
 
 Forgets the battery-backed state of a saved machine that is not running, as
-taking out the battery does: at its next run each battery-backed unit starts
-from the contents of a newly set-up board. Exits `TEMPFAIL` (75), naming the
+taking out the battery does: at its next run each battery-backed unit -- the
+core's (an Integra-B's board RAM and clock) and each extension's (an
+`acorn-rtc` clock) -- starts from the contents of a newly set-up board. Exits `TEMPFAIL` (75), naming the
 process, when the machine is running.
 
 ### AUN Map Subcommands

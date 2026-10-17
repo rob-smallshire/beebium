@@ -338,12 +338,16 @@ public:
             // cannot race the in-emulation flush. Persist any remaining writes.
             flush_disc_drives(machine);
 
-            // A saved machine keeps what its battery-backed units hold.
+            // A saved machine keeps what its battery-backed units hold, its
+            // extensions' as well as its own.
             if (!am.machine_directory->transient()) {
                 try {
                     save_battery_units(machine.battery_units(),
                                        am.machine_directory->dirpath() /
                                            machine_layout::NVRAM_DIRNAME);
+                    for_each_extension_battery(am, [](const auto& units, const auto& dirpath) {
+                        save_battery_units(units, dirpath);
+                    });
                 } catch (const std::exception& e) {
                     std::cerr << "Error: cannot keep the machine's battery-backed state: "
                               << e.what() << "\n";

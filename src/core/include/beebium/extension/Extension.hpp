@@ -31,6 +31,7 @@ namespace beebium {
 
 class ExtensionUi;             // forward decl; defined in ExtensionUi.hpp
 class ExtensionStorage;        // forward decl; defined in ExtensionStorage.hpp
+class ExtensionPersistence;    // forward decl; defined in ExtensionPersistence.hpp
 class ExtensionRpcDispatcher;  // forward decl; defined in ExtensionRpc.hpp
 class NamePlaceholderProvider;  // forward decl; defined in NamePlaceholderProvider.hpp
 
@@ -184,6 +185,12 @@ public:
     // virtual accessor avoids requiring dynamic_cast (and its cross-
     // plugin typeinfo dependency) at the framework level.
     virtual ExtensionStorage* storage() { return nullptr; }
+
+    // Optional persistence-capability hook. Returns nullptr by default;
+    // an extension whose device keeps state while the machine is off (a
+    // battery-backed clock or RAM) multiply-inherits ExtensionPersistence
+    // and overrides this to return `this`. See ExtensionPersistence.hpp.
+    virtual ExtensionPersistence* persistence() { return nullptr; }
 
     // Optional remote-control hook. Returns the extension's RPC dispatchers
     // (zero or more), each serving one logical service over the core-hosted

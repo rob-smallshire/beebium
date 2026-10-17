@@ -32,6 +32,7 @@ import pytest
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.installation import ServerInstallation
+from beebium.ext.peripheral.acorn_rtc import AcornRtc
 
 EX_CANTCREAT = 73
 EX_TEMPFAIL = 75
@@ -175,6 +176,42 @@ def test_a_saved_machine_keeps_its_own_identity(run, tmp_path: Path):
                  "--machine-uuid", "12345678-1234-1234-1234-123456789abc")
     assert result.returncode != 0
     assert "cannot change a saved machine's identity" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# An extension's battery-backed state
+# ---------------------------------------------------------------------------
+
+
+def test_a_saved_machine_keeps_its_clock_until_its_battery_is_reset(installation, run,
+                                                                     tmp_path: Path):
+    """The acorn-rtc clock runs on its battery: set on one run, it reads the
+    same on the next, and a reset of the battery returns it to where its
+    configuration starts it."""
+    machine = tmp_path / "Clock.beebium-machine"
+    created = run("create-machine", "--acorn-rtc",
+                  "layout=7bit-year-in-r7:time=1990-01-01T1200", "--output", machine)
+    assert created.returncode == 0, created.stderr
+
+    # Its instance id is pinned, so it finds its state on every run.
+    preset = json.loads((machine / "preset.json").read_text())
+    (rtc_entry,) = [e for e in preset["extensions"] if e["name"] == "acorn-rtc"]
+    instance_id = rtc_entry["config"]["id"]
+    assert instance_id
+
+    def clock_time() -> tuple[int, int, int, int]:
+        with _launch(installation, machine) as bbc:
+            now = bbc.extensions[AcornRtc].get_time()
+            return now.year, now.month, now.day, now.hour
+
+    assert clock_time() == (1990, 1, 1, 12)
+    with _launch(installation, machine) as bbc:
+        bbc.extensions[AcornRtc].set_time("2001-02-03T04:05")
+    assert clock_time() == (2001, 2, 3, 4)
+    assert (machine / "extensions" / instance_id / "nvram" / "saf3019p.bin").is_file()
+
+    assert run("reset-battery", machine).returncode == 0
+    assert clock_time() == (1990, 1, 1, 12)
 
 
 # ---------------------------------------------------------------------------

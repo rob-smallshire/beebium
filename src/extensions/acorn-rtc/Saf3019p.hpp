@@ -120,6 +120,17 @@ public:
     uint8_t read_register(int reg) const;
     void write_register(int reg, uint8_t bcd_value);
 
+    // What the battery keeps: the eight registers, as they are, with none of
+    // the side effects a write through the bus has.
+    std::array<uint8_t, 8> battery_image() const {
+        std::lock_guard lock(mutex_);
+        return registers_;
+    }
+    void load_battery_image(const std::array<uint8_t, 8>& registers) {
+        std::lock_guard lock(mutex_);
+        registers_ = registers;
+    }
+
     // Decode current register state into a DateTime.
     DateTime current_datetime() const;
 

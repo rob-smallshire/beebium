@@ -17,6 +17,9 @@
 #include <beebium/extension/ExtensionContext.hpp>
 #include <beebium/extension/UserPort.hpp>
 
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 
@@ -35,6 +38,16 @@ std::span<const std::string_view> AcornRtcExtension::provides() const {
 }
 
 void AcornRtcExtension::init(ExtensionContext& ctx) {
+    start_clock();
+
+    // Create the channel dispatcher for the RTC's typed API.
+    dispatcher_ = std::make_unique<AcornRtcDispatcher>(chip_);
+
+    // Attach to User Port
+    ctx.get<UserPort>().attach(*this);
+}
+
+void AcornRtcExtension::start_clock() {
     // The start time and register layout, read as the pre-launch check
     // (check_acorn_rtc_config) reads them. The framework has already refused
     // a time given with an offset (the manifest's "start" group).
@@ -63,12 +76,46 @@ void AcornRtcExtension::init(ExtensionContext& ctx) {
               << (target_dt.day < 10 ? "0" : "") << target_dt.day << "T"
               << (target_dt.hour < 10 ? "0" : "") << target_dt.hour << ":"
               << (target_dt.minute < 10 ? "0" : "") << target_dt.minute << "\n";
+}
 
-    // Create the channel dispatcher for the RTC's typed API.
-    dispatcher_ = std::make_unique<AcornRtcDispatcher>(chip_);
+std::string AcornRtcExtension::ClockUnit::hardware_descriptor() const {
+    // The layout says what the registers mean, so contents kept under one
+    // are not restored under another.
+    return "Acorn RTC: SAF3019P, layout " +
+           std::string(extension_.config_value("layout").value_or(""));
+}
 
-    // Attach to User Port
-    ctx.get<UserPort>().attach(*this);
+std::vector<uint8_t> AcornRtcExtension::ClockUnit::serialise() const {
+    const auto registers = extension_.chip_.battery_image();
+    std::vector<uint8_t> contents(registers.begin(), registers.end());
+    const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    for (int i = 0; i < 8; ++i) {
+        contents.push_back(static_cast<uint8_t>(static_cast<std::uint64_t>(now) >> (8 * i)));
+    }
+    contents.push_back(static_cast<uint8_t>(extension_.chip_.accumulated_seconds()));
+    return contents;
+}
+
+bool AcornRtcExtension::ClockUnit::restore(std::span<const uint8_t> contents) {
+    std::array<uint8_t, 8> registers{};
+    if (contents.size() != registers.size() + 8 + 1) return false;
+    std::copy_n(contents.begin(), registers.size(), registers.begin());
+    std::uint64_t kept = 0;
+    for (int i = 0; i < 8; ++i) {
+        kept |= static_cast<std::uint64_t>(contents[registers.size() + i]) << (8 * i);
+    }
+    const int prescaler = contents[registers.size() + 8];
+    if (prescaler >= 60) return false;
+
+    const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    const std::int64_t since = std::max<std::int64_t>(0, now - static_cast<std::int64_t>(kept));
+    const std::int64_t seconds = prescaler + since;
+    extension_.chip_.load_battery_image(registers);
+    extension_.chip_.advance_by_minutes(static_cast<int>(seconds / 60));
+    extension_.chip_.set_accumulated_seconds(static_cast<int>(seconds % 60));
+    return true;
 }
 
 void AcornRtcExtension::shutdown() {

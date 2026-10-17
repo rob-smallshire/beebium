@@ -132,6 +132,20 @@ public:
         notify(event);
     }
 
+    // Point the loaded disc at `filepath`, a copy of its image already made,
+    // and record `url` as its source: dirty tracks are written to the old
+    // image first, and later writes go to the new one. The disc stays in
+    // the drive, its head where it was, and no event is raised: to the guest
+    // nothing has happened. Used when a running machine is saved and its
+    // media move with it. Returns false when the drive is empty.
+    bool reopen_at(const std::filesystem::path& filepath, const std::string& url) {
+        if (!disc_) return false;
+        disc_->flush_dirty_tracks();
+        disc_->set_source_filepath(filepath);
+        source_url_ = url;
+        return true;
+    }
+
     // =========================================================================
     // Disc Ejection
     // =========================================================================
