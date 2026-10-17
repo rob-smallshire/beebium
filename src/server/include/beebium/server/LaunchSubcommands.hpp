@@ -188,10 +188,8 @@ public:
                 timestamp
             };
 
-            // Apply identity defaults
-            if (config.launch.machine_uuid.empty()) {
-                config.launch.machine_uuid = generate_uuid_v4();
-            }
+            // Apply identity defaults (the uuid is the one assemble_machine
+            // resolved)
             if (config.machine.machine_name.empty()) {
                 config.machine.machine_name = std::string(Memory::MACHINE_DISPLAY_NAME);
             }

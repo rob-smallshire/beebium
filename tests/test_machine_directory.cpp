@@ -81,13 +81,15 @@ std::string cerr_of(F body) {
 }
 
 // A server started by this test, waiting for its API (so it runs until it is
-// stopped), with its output discarded. Only ever stops the process it started.
+// stopped), with `extra_args` after its own and its output discarded. Only
+// ever stops the process it started.
 class ServerChild {
 public:
-    ServerChild() {
+    explicit ServerChild(const std::vector<std::string>& extra_args = {}) {
 #ifdef _WIN32
         std::wstring command = L"\"" + fs::path(BEEBIUM_SERVER_FILEPATH).wstring() +
                                L"\" start --wait=api --port 0";
+        for (const auto& arg : extra_args) command += L" " + fs::path(arg).wstring();
         STARTUPINFOW startup{};
         startup.cb = sizeof(startup);
         REQUIRE(::CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE,
@@ -100,8 +102,11 @@ public:
             const int null_fd = ::open("/dev/null", O_WRONLY);
             ::dup2(null_fd, STDOUT_FILENO);
             ::dup2(null_fd, STDERR_FILENO);
-            ::execl(BEEBIUM_SERVER_FILEPATH, BEEBIUM_SERVER_FILEPATH, "start", "--wait=api",
-                    "--port", "0", static_cast<char*>(nullptr));
+            std::vector<const char*> argv{BEEBIUM_SERVER_FILEPATH, "start", "--wait=api",
+                                          "--port", "0"};
+            for (const auto& arg : extra_args) argv.push_back(arg.c_str());
+            argv.push_back(nullptr);
+            ::execv(BEEBIUM_SERVER_FILEPATH, const_cast<char* const*>(argv.data()));
             ::_exit(127);
         }
         pid_value_ = pid;
@@ -172,15 +177,16 @@ std::optional<fs::path> wait_for_locked_machine(const fs::path& machines_dirpath
 
 }  // namespace
 
-TEST_CASE("MachineDirectory: made under machines/, locked by this process, removed when done",
+TEST_CASE("MachineDirectory: made under machines/, named by the machine, locked, removed when done",
           "[machine_directory]") {
     beebium::test::ScopedTempDir user("beebium_machine_dir_");
     beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user.path().string());
+    const std::string uuid = "11111111-2222-3333-4444-555555555555";
     fs::path dirpath;
     {
-        auto machine = MachineDirectory::create();
+        auto machine = MachineDirectory::create(uuid);
         dirpath = machine.dirpath();
-        CHECK(dirpath.parent_path() == user / "machines");
+        CHECK(dirpath == user / "machines" / uuid);
         CHECK(read_text(dirpath / "lock") == current_pid());
         std::ofstream(dirpath / "game.ssd") << "copy";
     }
@@ -201,6 +207,30 @@ TEST_CASE("MachineDirectory: a directory whose process has gone is swept, one li
     CHECK(fs::exists(machines / "not-a-directory"));
     CHECK_THAT(said, Catch::Matchers::ContainsSubstring(
                          (machines / "left-by-a-crash").string()));
+}
+
+TEST_CASE("MachineDirectory: a machine already running has its directory refused to another",
+          "[machine_directory]") {
+    beebium::test::ScopedTempDir user("beebium_machine_dir_");
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user.path().string());
+    const std::string uuid = "11111111-2222-3333-4444-555555555555";
+    auto first = MachineDirectory::create(uuid);
+    // flock and LockFileEx are per open file description, so a second lock
+    // from this process is refused too, as another process's would be.
+    CHECK_THROWS_WITH(MachineDirectory::create(uuid),
+                      Catch::Matchers::ContainsSubstring("in use by process " + current_pid()));
+    CHECK(fs::exists(first.dirpath()));
+}
+
+TEST_CASE("MachineDirectory: a server's directory is named by its machine's one uuid",
+          "[machine_directory][integration]") {
+    beebium::test::ScopedTempDir user("beebium_machine_dir_");
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user.path().string());
+    const std::string uuid = "12345678-1234-1234-1234-123456789abc";
+    ServerChild server({"--machine-uuid", uuid});
+    const auto lock_filepath = wait_for_locked_machine(user / "machines");
+    REQUIRE(lock_filepath.has_value());
+    CHECK(lock_filepath->parent_path() == user / "machines" / uuid);
 }
 
 TEST_CASE("MachineDirectory: a running server's directory is locked against another process",

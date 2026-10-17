@@ -928,8 +928,15 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
 
     auto am = std::make_unique<AssembledMachine<MachineType>>();
     auto& machine = am->machine;
+    // The machine's one identity, resolved here, before anything is built
+    // from it: its directory is named by it, transport extensions are given
+    // it (inst.config["machine_uuid"]), and the MachineIdentity served later
+    // carries it.
+    if (config.launch.machine_uuid.empty()) {
+        config.launch.machine_uuid = generate_uuid_v4();
+    }
     try {
-        am->machine_directory.emplace(MachineDirectory::create());
+        am->machine_directory.emplace(MachineDirectory::create(config.launch.machine_uuid));
     } catch (const std::exception& e) {
         std::cerr << "Error: cannot make the machine directory: " << e.what() << "\n";
         return {nullptr, ExitCode::IOERR};
@@ -941,14 +948,6 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     // Install disc controller
     if (auto exit_code = install_disc_controller(machine, config)) {
         return {nullptr, *exit_code};
-    }
-
-    // Resolve the machine identity UUID up front so transport extensions can
-    // pick it up via inst.config["machine_uuid"] before their create_backend
-    // runs. The MachineIdentity proper is constructed later (serving), but the
-    // UUID -- the only value extensions need -- is fixed once generated.
-    if (config.launch.machine_uuid.empty()) {
-        config.launch.machine_uuid = generate_uuid_v4();
     }
 
     beebium::PluginLoader plugin_loader;

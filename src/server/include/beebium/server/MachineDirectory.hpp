@@ -20,7 +20,6 @@
 #pragma once
 
 #include <beebium/PlatformUtils.hpp>
-#include <beebium/server/SubcommandCommon.hpp>
 
 #include <filesystem>
 #include <iostream>
@@ -152,14 +151,15 @@ public:
         return beebium::platform::user_state_base_dirpath() / "machines";
     }
 
-    // A new machine directory, locked by this process, after removing any
-    // left by a process that has gone. Throws when one cannot be made.
-    static MachineDirectory create() {
+    // A new machine directory for the machine `machine_uuid`, named by it and
+    // locked by this process, after removing any left by a process that has
+    // gone. Throws when one cannot be made, or another process runs it.
+    static MachineDirectory create(const std::string& machine_uuid) {
         sweep(machines_dirpath());
+        const auto dirpath = machines_dirpath() / machine_uuid;
         // A sweep running in another launch may take the lock of a directory
-        // just made, before its maker does, and remove it; make another.
+        // just made, before its maker does, and remove it; make it again.
         for (int attempt = 0;; ++attempt) {
-            const auto dirpath = machines_dirpath() / generate_uuid_v4();
             try {
                 std::filesystem::create_directories(dirpath);
                 MachineDirectoryLock lock(dirpath / "lock");
