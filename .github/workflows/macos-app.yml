@@ -457,7 +457,7 @@ jobs:
           apid=$!
           started=""
           for _ in $(seq 1 20); do
-            grep -q "system preset file" "${app_log}" 2>/dev/null && started=1 && break
+            grep -q "Preset catalogue:" "${app_log}" 2>/dev/null && started=1 && break
             kill -0 "${apid}" 2>/dev/null || break
             sleep 1
           done
@@ -465,7 +465,7 @@ jobs:
           wait "${apid}" 2>/dev/null || true
           if [ -n "${started}" ]; then
             echo "app process launched and ran preset discovery from the bundle"
-            grep -E "system preset|Discovered:" "${app_log}" | head -12 || true
+            grep -E "Preset catalogue:|Listed [0-9]+ preset" "${app_log}" | head -12 || true
           else
             echo "::notice::headless GUI launch did not confirm preset discovery (a hosted runner may lack a window-server/Metal session); codesign + embedded-server boot passed, which is the D2 bar."
             tail -20 "${app_log}" || true

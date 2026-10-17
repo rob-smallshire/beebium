@@ -123,6 +123,11 @@ class PresetManager: ObservableObject {
         userPresets = sortPresets(catalog.user)
         isDiscovering = false
 
+        // One line per catalogue build naming the counts, so a launch can be
+        // confirmed to have discovered presets (the app-launch CI step greps
+        // for this).
+        NSLog("[PresetManager] Preset catalogue: \(systemPresets.count) system, \(userPresets.count) user")
+
         if !catalog.skipped.isEmpty {
             NSLog("[PresetManager] Skipped \(catalog.skipped.count) preset(s) with no matching executable: \(catalog.skipped.joined(separator: ", "))")
         }
