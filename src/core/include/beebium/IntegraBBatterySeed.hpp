@@ -21,9 +21,11 @@
 //
 // A new board (or one whose battery has gone flat) boots to the MOS
 // "Language?" prompt until IBOS's Full System Reset is run (hold CTRL and @
-// and press BREAK, then answer Y) and the clock is set. Each launch of the
-// emulated board instead starts as a board that has been through that set-up,
-// as a real board would be on every power-on thanks to its battery.
+// and press BREAK, then answer Y) and the clock is set. The emulated board
+// instead starts as one that has been through that set-up whenever it has
+// nothing kept of its own: on every launch of a machine not yet saved, on the
+// first launch of a saved machine, and after reset-battery. A saved machine
+// otherwise keeps its board's state from one run to the next (NvramStore).
 //
 // The values were captured from the emulator itself running IBOS 1.26: Full
 // System Reset, then *CONFIGURE LANG 3 (BASIC in motherboard slot 3, this

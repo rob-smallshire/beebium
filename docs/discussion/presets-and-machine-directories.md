@@ -287,10 +287,14 @@ returns every unit to its seed. That is question 7.
   second `start --machine` on a locked directory fails with a clear message
   naming the holder's PID. No shared opens (question 9).
 - Tests, `capture-screenshot`, `create-preset` and thumbnail generation run
-  transient machines whose directories are created under
-  `BEEBIUM_MACHINE_WORK_DIR` when set (the existing `BEEBIUM_DISC_WORK_DIR`
-  generalised) and always start from the seed. They never read a saved
-  directory unless a test asks for one explicitly (question 8).
+  transient machines, whose directories are made under the per-user
+  `machines/` area, and always start from the seed. They never read a saved
+  directory unless a test asks for one explicitly (question 8). There is no
+  separate work-directory variable: a test isolates its machines by pinning
+  `BEEBIUM_USER_DIRPATH` (decided at step 4).
+- The lock is taken while the machine is assembled, before the server
+  handles a request to stop. A process stopped in between leaves its
+  transient directory to the next launch's sweep, as a crash does.
 
 ### 4.5 Identity and naming
 

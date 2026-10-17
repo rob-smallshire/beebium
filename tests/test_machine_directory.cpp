@@ -81,11 +81,17 @@ std::string cerr_of(F body) {
 }
 
 // A server started by this test, waiting for its API (so it runs until it is
-// stopped), with `extra_args` after its own and its output discarded. Only
-// ever stops the process it started.
+// stopped), with `extra_args` after its own and its output discarded, or on
+// POSIX its standard output kept in `stdout_filepath`. Only ever stops the
+// process it started.
 class ServerChild {
 public:
-    explicit ServerChild(const std::vector<std::string>& extra_args = {}) {
+    explicit ServerChild(const std::vector<std::string>& extra_args = {},
+                         [[maybe_unused]] const fs::path& stdout_filepath = {})
+#ifndef _WIN32
+        : stdout_filepath_(stdout_filepath)
+#endif
+    {
 #ifdef _WIN32
         std::wstring command = L"\"" + fs::path(BEEBIUM_SERVER_FILEPATH).wstring() +
                                L"\" start --wait=api --port 0";
@@ -100,7 +106,11 @@ public:
         REQUIRE(pid >= 0);
         if (pid == 0) {
             const int null_fd = ::open("/dev/null", O_WRONLY);
-            ::dup2(null_fd, STDOUT_FILENO);
+            const int stdout_fd =
+                stdout_filepath.empty()
+                    ? null_fd
+                    : ::open(stdout_filepath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            ::dup2(stdout_fd, STDOUT_FILENO);
             ::dup2(null_fd, STDERR_FILENO);
             std::vector<const char*> argv{BEEBIUM_SERVER_FILEPATH, "start", "--wait=api",
                                           "--port", "0"};
@@ -120,9 +130,23 @@ public:
 
     const std::string& pid() const { return pid_; }
 
+#ifndef _WIN32
+    // True once the server says it is listening, by which time it has
+    // installed its handling of a request to stop (it takes its machine
+    // directory's lock earlier, during assembly). Needs a stdout_filepath.
+    bool wait_until_listening() const {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (read_text(stdout_filepath_).find("Listening on port") != std::string::npos) {
+                return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        return false;
+    }
+
     // Asks the server to stop as a user would, and waits for it. POSIX only:
     // Windows has no such signal for a console-less child.
-#ifndef _WIN32
     int terminate() {
         ::kill(pid_value_, SIGTERM);
         return wait();
@@ -156,6 +180,7 @@ private:
         return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
     }
     pid_t pid_value_ = -1;
+    fs::path stdout_filepath_;
 #else
     PROCESS_INFORMATION process_{};
 #endif
@@ -262,7 +287,7 @@ TEST_CASE("MachineDirectory: a running server's directory is locked against anot
     beebium::test::ScopedTempDir user("beebium_machine_dir_");
     beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user.path().string());
     const auto machines = user / "machines";
-    ServerChild server;
+    ServerChild server({}, user / "server.out");
     const auto lock_filepath = wait_for_locked_machine(machines);
     REQUIRE(lock_filepath.has_value());
     CHECK(read_text(*lock_filepath) == server.pid());
@@ -276,6 +301,7 @@ TEST_CASE("MachineDirectory: a running server's directory is locked against anot
 
 #ifndef _WIN32
     SECTION("a server stopped cleanly removes its directory") {
+        REQUIRE(server.wait_until_listening());
         CHECK(server.terminate() == 0);
         CHECK_FALSE(fs::exists(lock_filepath->parent_path()));
     }
