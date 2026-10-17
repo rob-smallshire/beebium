@@ -70,6 +70,28 @@ targets:
               - public.data
             UTTypeTagSpecification:
               public.filename-extension: [beebium-preset]
+          # The saved-machine document type: a .beebium-machine DIRECTORY, shown
+          # by Finder as one item with the app's icon and opened on double-click.
+          # Conforming to com.apple.package is what makes Finder present the
+          # directory as a document (see docs section 4.11). The on-disk layout
+          # is a plain directory on every platform; the suffix and this
+          # declaration are only how macOS recognises it.
+          - UTTypeIdentifier: com.beebium.machine
+            UTTypeDescription: Beebium machine
+            UTTypeConformsTo:
+              - com.apple.package
+            UTTypeTagSpecification:
+              public.filename-extension: [beebium-machine]
+        # Register the app as the handler that opens a saved machine, so a
+        # double-click or an Open panel can launch one. The preset type needs no
+        # document-type entry: presets are brought in through Import, not opened.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Beebium machine
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSTypeIsPackage: true
+            LSItemContentTypes:
+              - com.beebium.machine
     dependencies:
       - package: grpc-swift
         product: GRPC
