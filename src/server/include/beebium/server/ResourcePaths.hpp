@@ -18,8 +18,11 @@
 #pragma once
 
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <vector>
 
 namespace beebium::server {
 
@@ -48,6 +51,26 @@ inline std::string anchor_reference(const std::string& reference,
         return reference;
     }
     return (container_dirpath / path).lexically_normal().string();
+}
+
+// The file called `name` (a bare name) in the first of `search_dirpaths` that
+// holds one. Throws when none does, naming every directory searched, in
+// order; `what` names the kind of file for the message ("ROM").
+inline std::filesystem::path find_on_search_path(
+    std::string_view name, const std::vector<std::filesystem::path>& search_dirpaths,
+    std::string_view what) {
+    for (const auto& dirpath : search_dirpaths) {
+        const auto filepath = dirpath / std::filesystem::path(name);
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(filepath, ec)) {
+            return filepath;
+        }
+    }
+    std::string message = std::string(what) + " '" + std::string(name) + "' not found; searched ";
+    for (std::size_t i = 0; i < search_dirpaths.size(); ++i) {
+        message += (i == 0 ? "" : ", ") + search_dirpaths[i].string();
+    }
+    throw std::runtime_error(message);
 }
 
 } // namespace beebium::server

@@ -140,14 +140,7 @@ public:
         }
 
         // Simple filename - look in ROM directory
-        auto rom_dirpath = find_rom_directory();
-        auto rom_filepath = rom_dirpath / filepath;
-        if (!std::filesystem::exists(rom_filepath)) {
-            throw std::runtime_error(
-                "ROM file not found: " + rom_filepath.string() +
-                " (searched in " + rom_dirpath.string() + ")");
-        }
-        return rom_filepath;
+        return find_on_search_path(filename, {find_rom_directory()}, "ROM");
     }
 
 private:

@@ -14,6 +14,7 @@
 #define BEEBIUM_SERVER_DISC_PATHS_HPP
 
 #include <beebium/PlatformUtils.hpp>
+#include <beebium/server/ResourcePaths.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -234,7 +235,9 @@ public:
         const std::filesystem::path work_dir =
             work_override ? *work_override : get_user_disc_working_dirpath();
 
-        return prepare_working_image(image, find_disc_directory(), work_dir, mode);
+        const auto master_dat =
+            find_on_search_path(image, {find_disc_directory()}, "Hard disc image");
+        return prepare_working_image(image, master_dat.parent_path(), work_dir, mode);
     }
 
     // Core copy-on-write policy, with the master and working directories
