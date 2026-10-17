@@ -155,6 +155,32 @@ TEST_CASE("write_zip: the same members give byte-identical archives, in any orde
     CHECK(read_file(dir / "one.zip") == read_file(dir / "two.zip"));
 }
 
+TEST_CASE("write_zip: every member is dated 1980-01-01 12:00", "[zip]") {
+    beebium::test::ScopedTempDir dir("beebium_zip_");
+    write_zip(dir / "a.zip", {{"a", bytes("A")}, {"d/b", std::vector<std::uint8_t>(5000, 1)}});
+    const auto data = read_file(dir / "a.zip");
+    auto get16 = [&](std::size_t at) { return data.at(at) | (data.at(at + 1) << 8); };
+    // Every local header and central directory entry: time 0x6000, date 0x0021.
+    int local = 0;
+    int central = 0;
+    for (std::size_t at = 0; at + 4 <= data.size(); ++at) {
+        if (get16(at) == 0x4b50 && get16(at + 2) == 0x0403) {
+            CHECK(get16(at + 10) == 0x6000);
+            CHECK(get16(at + 12) == 0x0021);
+            ++local;
+        } else if (get16(at) == 0x4b50 && get16(at + 2) == 0x0201) {
+            CHECK(get16(at + 12) == 0x6000);
+            CHECK(get16(at + 14) == 0x0021);
+            ++central;
+        }
+    }
+    CHECK(local == 2);
+    CHECK(central == 2);
+    // Still a sound archive.
+    ZipReader reader(dir / "a.zip");
+    CHECK(reader.read("d/b") == std::vector<std::uint8_t>(5000, 1));
+}
+
 TEST_CASE("write_zip: refuses a name that is not a member name, or two members alike", "[zip]") {
     beebium::test::ScopedTempDir dir("beebium_zip_");
     for (const char* name : {"../up", "/abs", "a\\b", "dir/", ""}) {

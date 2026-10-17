@@ -19,8 +19,10 @@
 // opened, so no member can reach outside the directory it is extracted into.
 //
 // An archive written from the same members is byte-identical: members are
-// written in name order, every timestamp is zero, and nothing else of the
-// writing machine (permissions, owner, time zone) is recorded.
+// written in name order, every member is dated 1980-01-01 12:00, and nothing
+// else of the writing machine (permissions, owner, time zone) is recorded.
+// (macOS ditto -x -k and bsdtar -xf extract miniz's zero date as 1979-11-30,
+// and ditto shifts a time by an hour, so the date is set, at noon.)
 //
 // Files are written directly; a caller that must never leave a partial file
 // writes to a temporary and renames it (the server's write_file_atomically).

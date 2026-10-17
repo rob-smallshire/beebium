@@ -37,6 +37,51 @@ size_t read_from_stream(void* opaque, mz_uint64 offset, void* buffer, size_t siz
     return static_cast<size_t>(in.gcount());
 }
 
+// The DOS time and date every member is stamped with: 1980-01-01 12:00, the
+// first day a zip can say, at noon so that a tool shifting it by a time zone
+// still shows that day. miniz, built without time, writes zeros (a date tools
+// read as before 1980), and with time would go through localtime.
+constexpr std::uint16_t kDosTime = 12 << 11;  // 12:00:00
+constexpr std::uint16_t kDosDate = (0 << 9) | (1 << 5) | 1;  // 1980, January, 1st
+
+std::uint16_t get16(const std::vector<std::uint8_t>& data, std::size_t at) {
+    return static_cast<std::uint16_t>(data.at(at) | (data.at(at + 1) << 8));
+}
+std::uint32_t get32(const std::vector<std::uint8_t>& data, std::size_t at) {
+    return get16(data, at) | (static_cast<std::uint32_t>(get16(data, at + 2)) << 16);
+}
+void put16(std::vector<std::uint8_t>& data, std::size_t at, std::uint16_t value) {
+    data.at(at) = static_cast<std::uint8_t>(value & 0xff);
+    data.at(at + 1) = static_cast<std::uint8_t>(value >> 8);
+}
+
+// Stamps every member of the archive `data` (as write_zip writes it: no
+// archive comment, no zip64) with kDosTime and kDosDate, in its central
+// directory entry and its local header. The fields are outside the CRC.
+void stamp_dos_times(std::vector<std::uint8_t>& data) {
+    constexpr std::size_t kEndSize = 22;
+    if (data.size() < kEndSize || get32(data, data.size() - kEndSize) != 0x06054b50) {
+        throw ZipError("the archive written has no end record where expected");
+    }
+    const std::size_t end = data.size() - kEndSize;
+    const std::size_t count = get16(data, end + 10);
+    std::size_t entry = get32(data, end + 16);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (get32(data, entry) != 0x02014b50) {
+            throw ZipError("the archive written has no directory entry where expected");
+        }
+        put16(data, entry + 12, kDosTime);
+        put16(data, entry + 14, kDosDate);
+        const std::size_t local = get32(data, entry + 42);
+        if (get32(data, local) != 0x04034b50) {
+            throw ZipError("the archive written has no local header where expected");
+        }
+        put16(data, local + 10, kDosTime);
+        put16(data, local + 12, kDosDate);
+        entry += 46 + get16(data, entry + 28) + get16(data, entry + 30) + get16(data, entry + 32);
+    }
+}
+
 size_t write_to_stream(void* opaque, mz_uint64 offset, const void* buffer, size_t size) {
     auto& out = *static_cast<std::ofstream*>(opaque);
     out.seekp(static_cast<std::streamoff>(offset));
@@ -172,12 +217,12 @@ void write_zip(const std::filesystem::path& filepath, std::vector<ZipMember> mem
         }
     }
 
-    std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
-    if (!out) fail("cannot write");
+    // Built in memory, so every member's time can be stamped before the
+    // archive is written.
     mz_zip_archive zip{};
-    zip.m_pWrite = write_to_stream;
-    zip.m_pIO_opaque = &out;
-    if (!mz_zip_writer_init(&zip, 0)) fail("cannot start the archive (" + miniz_error(zip) + ")");
+    if (!mz_zip_writer_init_heap(&zip, 0, 0)) {
+        fail("cannot start the archive (" + miniz_error(zip) + ")");
+    }
     for (const auto& member : members) {
         if (!mz_zip_writer_add_mem_ex(&zip, member.name.c_str(), member.data.data(),
                                       member.data.size(), nullptr, 0,
@@ -187,10 +232,23 @@ void write_zip(const std::filesystem::path& filepath, std::vector<ZipMember> mem
             fail("cannot add " + member.name + " (" + error + ")");
         }
     }
-    const bool finished = mz_zip_writer_finalize_archive(&zip);
+    void* buffer = nullptr;
+    size_t size = 0;
+    const bool finished = mz_zip_writer_finalize_heap_archive(&zip, &buffer, &size);
     const auto error = finished ? std::string() : miniz_error(zip);
+    std::vector<std::uint8_t> archive;
+    if (finished) {
+        const auto* begin = static_cast<const std::uint8_t*>(buffer);
+        archive.assign(begin, begin + size);
+        zip.m_pFree(zip.m_pAlloc_opaque, buffer);  // finalizing gave it to us
+    }
     mz_zip_writer_end(&zip);
     if (!finished) fail("cannot finish the archive (" + error + ")");
+    stamp_dos_times(archive);
+
+    std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
+    out.write(reinterpret_cast<const char*>(archive.data()),
+              static_cast<std::streamsize>(archive.size()));
     out.close();
     if (!out) fail("cannot write");
 }
