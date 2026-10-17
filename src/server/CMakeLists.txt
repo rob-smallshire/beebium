@@ -83,6 +83,40 @@ function(bundled_disc_outputs_named OUT_VAR)
     set(${OUT_VAR} "${outputs}" PARENT_SCOPE)
 endfunction()
 
+# Set OUT_VAR to the committed tarball of each bundled disc that a preset's
+# create-preset arguments name. The preset carries the disc: its master is
+# extracted from the tarball into the preset before it is archived, so the
+# preset depends on the tarball itself -- derived from the arguments, not
+# listed by hand.
+function(bundled_disc_tarballs_named OUT_VAR)
+    set(tarballs "")
+    foreach(disc_id ${BUNDLED_DISC_IDS})
+        foreach(arg ${ARGN})
+            string(FIND "${arg}" "${disc_id}." position)
+            if(NOT position EQUAL -1)
+                list(APPEND tarballs "${BUNDLED_DISCS_SRC_DIR}/${disc_id}.tar.xz")
+                break()
+            endif()
+        endforeach()
+    endforeach()
+    set(${OUT_VAR} "${tarballs}" PARENT_SCOPE)
+endfunction()
+
+# Set OUT_VAR to the commands that extract each of `tarballs` into the
+# preset directory `source_dirpath`, where the preset names it by bare name.
+function(bundled_disc_extract_commands OUT_VAR source_dirpath)
+    set(commands "")
+    foreach(tarball ${ARGN})
+        list(APPEND commands
+            COMMAND ${CMAKE_COMMAND}
+                -DTARBALL=${tarball}
+                -DOUTDIR=${source_dirpath}
+                -DREAD_ONLY=OFF
+                -P ${CMAKE_SOURCE_DIR}/cmake/DecompressBundledDisc.cmake)
+    endforeach()
+    set(${OUT_VAR} "${commands}" PARENT_SCOPE)
+endfunction()
+
 # The per-user directory every build-time create-preset and capture runs
 # with: the build's own, so a bare name a preset gives is never found in the
 # developer's per-user discs/ or roms/. They run in this directory's binary
@@ -108,12 +142,9 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
     if(DEFINED PRESET_DESCRIPTION)
         set(description_args --description "${PRESET_DESCRIPTION}")
     endif()
-    # A POST_BUILD step has no file dependencies of its own: build the bundled
-    # discs it names before the executable, so they exist when it runs.
-    bundled_disc_outputs_named(disc_outputs ${PRESET_UNPARSED_ARGUMENTS})
-    if(disc_outputs)
-        add_dependencies(${EXECUTABLE} bundled_discs)
-    endif()
+    # A bundled disc the arguments name is extracted into the preset, from
+    # its committed tarball (a source file, so always there for POST_BUILD).
+    bundled_disc_tarballs_named(disc_tarballs ${PRESET_UNPARSED_ARGUMENTS})
     # Generate into the config-independent PRESETS_OUTPUT_DIR that install()
     # reads. (Writing to $<TARGET_FILE_DIR:...>/presets instead put the presets
     # in a per-config Release/presets on multi-config generators, where the
@@ -121,6 +152,7 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
     # an empty share/beebium/presets.)
     set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.beebium-preset")
     set(source_dirpath "${PRESET_SOURCES_DIR}/${PRESET_ID}")
+    bundled_disc_extract_commands(extract_commands "${source_dirpath}" ${disc_tarballs})
     add_custom_command(TARGET ${EXECUTABLE} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}" "${PRESET_SOURCES_DIR}"
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${source_dirpath}"
@@ -131,11 +163,11 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
             ${description_args}
             ${PRESET_UNPARSED_ARGUMENTS}
             --output "${source_dirpath}" --unpack
-        # Capture boots the preset, with the master dir at the build tree: a
-        # bundled disc is copied into the capture's own machine directory, so
-        # every build boots a pristine image (deterministic thumbnail).
+        ${extract_commands}
+        # Capture boots the preset: a disc it carries is copied into the
+        # capture's own machine directory, so every build boots a pristine
+        # image (deterministic thumbnail).
         COMMAND ${CMAKE_COMMAND} -E env
-            "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
             "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
             $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
             --preset "${source_dirpath}"
@@ -178,8 +210,12 @@ endfunction()
 function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEASE_DATE)
     # EXTRA_DEPENDS: further coprocessor/peripheral plugin targets, beyond the
     # primary PLUGIN_TARGET, that create-preset/capture need. Bundled discs the
-    # arguments name are found by bundled_disc_outputs_named.
-    cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY;DESCRIPTION" "EXTRA_DEPENDS" ${ARGN})
+    # arguments name are found by bundled_disc_tarballs_named. CAPTURE_ARGS go
+    # to capture-screenshot only, never into the preset: what the thumbnail
+    # needs fixed so that every build captures the same image (a clock the
+    # screen shows), where the preset itself follows the host.
+    cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY;DESCRIPTION" "EXTRA_DEPENDS;CAPTURE_ARGS"
+                          ${ARGN})
     set(capture_duration_args "")
     if(DEFINED PRESET_THUMBNAIL_DELAY)
         set(capture_duration_args --duration ${PRESET_THUMBNAIL_DELAY})
@@ -188,9 +224,10 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
     if(DEFINED PRESET_DESCRIPTION)
         set(description_args --description "${PRESET_DESCRIPTION}")
     endif()
-    bundled_disc_outputs_named(disc_outputs ${PRESET_UNPARSED_ARGUMENTS})
+    bundled_disc_tarballs_named(disc_tarballs ${PRESET_UNPARSED_ARGUMENTS})
     set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.beebium-preset")
     set(source_dirpath "${PRESET_SOURCES_DIR}/${PRESET_ID}")
+    bundled_disc_extract_commands(extract_commands "${source_dirpath}" ${disc_tarballs})
     set(copy_commands "")
     if(CMAKE_CONFIGURATION_TYPES)
         set(copy_commands
@@ -213,10 +250,10 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
             ${description_args}
             ${PRESET_UNPARSED_ARGUMENTS}
             --output "${source_dirpath}" --unpack
-        # Build-tree master dir (see add_system_preset): a bundled disc boots
-        # from a pristine copy in the capture's own machine directory.
+        ${extract_commands}
+        # A disc the preset carries boots from a pristine copy in the
+        # capture's own machine directory (see add_system_preset).
         COMMAND ${CMAKE_COMMAND} -E env
-            "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
             "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
             $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
             --preset "${source_dirpath}"
@@ -224,21 +261,18 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
             --rom-dir "${BEEBIUM_ROM_DIR}"
             --crop auto
             ${capture_duration_args}
+            ${PRESET_CAPTURE_ARGS}
         COMMAND ${CMAKE_COMMAND} -E rm -f "${preset_filepath}"
         COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
             $<TARGET_FILE:${EXECUTABLE}> export-preset "${source_dirpath}"
             --output "${preset_filepath}"
         ${copy_commands}
-        DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET} ${PRESET_EXTRA_DEPENDS} ${disc_outputs}
+        DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET} ${PRESET_EXTRA_DEPENDS} ${disc_tarballs}
+            ${CMAKE_SOURCE_DIR}/cmake/DecompressBundledDisc.cmake
         COMMENT "Generating plugin preset ${PRESET_ID}"
         VERBATIM
     )
     add_custom_target(preset_${PRESET_ID} ALL DEPENDS "${preset_filepath}")
-    # The disc outputs are bundled_discs' commands; build that target first so
-    # the two never run them concurrently and this one finds them up to date.
-    if(disc_outputs)
-        add_dependencies(preset_${PRESET_ID} bundled_discs)
-    endif()
     # Unlike add_system_preset (whose POST_BUILD runs when beebium-servers builds
     # the executable), this preset is its own target, so wire it into the
     # beebium-servers aggregate that CI and the release build actually build --
@@ -541,14 +575,18 @@ if(TARGET beebium_ext_acorn_65c02_plugin
         # client station (both AUN) coexist on one host with no bind conflict;
         # the real bound port is advertised over _aun._udp for mDNS discovery.
         --station 254 --aun port=0
-        --acorn-rtc layout=7bit-year-in-r7
+        # The clock has an id so that the capture can start it at a fixed time
+        # (CAPTURE_ARGS below) without the preset doing so.
+        --acorn-rtc id=clock:layout=7bit-year-in-r7
         --acorn-scsi
         --scsi-hdd scsi-id=0:image=l3fs-v1_26b.dat
         --tube-65c02
         EXTRA_DEPENDS
             beebium_ext_acorn_scsi_plugin
             beebium_ext_scsi_hard_disc_plugin
-            beebium_ext_acorn_rtc_plugin)
+            beebium_ext_acorn_rtc_plugin
+        # The file server shows the clock's date and time once ready.
+        CAPTURE_ARGS --acorn-rtc id=clock:time=1985-03-15T1030)
 endif()
 
 # Install rules

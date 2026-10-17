@@ -2922,6 +2922,30 @@ TEST_CASE("create-preset --from: the copy holds the source's files, not its thum
     CHECK(nlohmann::json::parse(resolved.stdout_output).at("diagnostics").empty());
 }
 
+TEST_CASE("the shipped L3FS preset carries its hard disc and needs nothing beside it",
+          "[integration][preset][shipped][preset_archive]") {
+    const auto archive_filepath = std::filesystem::absolute(std::filesystem::path(EXECUTABLE))
+                                      .parent_path() / "presets" / "model-b-l3fs-aun.beebium-preset";
+    beebium::zip::ZipReader archive(archive_filepath);
+    CHECK(archive.member_names() ==
+          std::vector<std::string>{"l3fs-v1_26b.dat", "l3fs-v1_26b.dsc", "preset.json",
+                                   "thumbnail.png"});
+    CHECK(archive.read("l3fs-v1_26b.dat") ==
+          file_bytes(built_file("discs", "l3fs-v1_26b.dat")));
+
+    // With no master directory to fall back on, the disc is still found.
+    TempDirectory temp_dir;
+    auto resolved = run_command(
+        EXECUTABLE + " resolve-preset \"" + archive_filepath.string() + "\" --json",
+        {{"BEEBIUM_DISC_DIR", (temp_dir.path() / "no-masters").string()},
+         {"BEEBIUM_USER_DIRPATH", temp_dir.path().string()}});
+    INFO(resolved.stdout_output << resolved.stderr_output);
+    CHECK(resolved.exit_code == 0);
+    for (const auto& d : nlohmann::json::parse(resolved.stdout_output).at("diagnostics")) {
+        CHECK(d.at("message").get<std::string>().find("l3fs") == std::string::npos);
+    }
+}
+
 TEST_CASE("create-preset records a bare name the working directory holds as its path",
           "[integration][preset][create-preset][resource_paths]") {
     // What the command line meant: the file in the working directory. A bare
