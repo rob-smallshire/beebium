@@ -598,6 +598,35 @@ machine are RPCs, following the existing rule.
    `reset-battery`, the Machines page of the Welcome window, and the two
    RPCs. The only step that moves the protocol fingerprint.
 
+Step 4 rulings (2026-10-17), taken on the implementation plans:
+
+- Order: one machine identity, the machine home lifted out of assembly,
+  the battery unit seam, then the directory files, the nvram store and the
+  CLI (`create-machine`, `start --machine`, `reset-battery`,
+  `describe-machine`), and only then the media re-pointing (extension ABI
+  6) and the RPCs. The protocol fingerprint moves once, in the RPC commit.
+  After the CLI commit a saved L3FS machine persists by command line, so a
+  release could be cut there if wanted; that is the user's decision.
+- Save of a running transient machine quiesces, flushes, copies the
+  directory, re-points every template medium, moves the lock, removes the
+  old directory and resumes. It never cold-boots the machine.
+- Save As on a saved machine duplicates it into the new directory with a
+  new UUID and the running machine continues on the new directory.
+- The migration offer of 4.7 is dropped (pre-1.0, no backward
+  compatibility); the old per-user `discs/` working copy is left in place
+  and the setup guide gives the `create-machine` recipe for reusing it.
+- The "written to template media" signal of 4.7 ships with the RPCs as
+  one boolean on the existing server status event
+  (`template_media_written`), so the fingerprint does not move again for
+  it. The macOS prompt built on it may follow later.
+- `SystemInfo` gains `machine_dirpath` and `machine_saved`; the front-end
+  chooses Save against Save As from them.
+- The front-end never reads `machine.json` itself: `describe-machine`
+  reports name, UUID, model, preset, times, the thumbnail path and the
+  locking process, and the Machines page reads the thumbnail by that path.
+- `create-preset --from <running machine>` (section 7) stays out of
+  step 4. No `BEEBIUM_MACHINE_WORK_DIR`: tests pin `BEEBIUM_USER_DIRPATH`.
+
 Step 2 was moved ahead of the archives so that writable media shipped in
 an archive never pass through the legacy per-user working copy, where two
 presets shipping an image of the same name would collide and the code
