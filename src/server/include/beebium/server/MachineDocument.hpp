@@ -195,9 +195,8 @@ inline void clear_file_attributes([[maybe_unused]] const std::filesystem::path& 
 
 }  // namespace machine_document_detail
 
-// Writes `record` to machine.json at `dirpath`, atomically.
-inline void write_machine_record(const std::filesystem::path& dirpath,
-                                 const MachineRecord& record) {
+// `record` as machine.json holds it.
+inline std::string machine_record_text(const MachineRecord& record) {
     nlohmann::ordered_json json{{"format", machine_layout::FORMAT},
                                 {"version", machine_layout::FORMAT_VERSION},
                                 {"uuid", record.uuid},
@@ -206,19 +205,36 @@ inline void write_machine_record(const std::filesystem::path& dirpath,
                                 {"created", record.created},
                                 {"last_used", record.last_used}};
     if (!record.source_preset.empty()) json["source_preset"] = record.source_preset;
-    write_text_atomically(dirpath / machine_layout::RECORD_FILENAME, json.dump(2) + "\n");
+    return json.dump(2) + "\n";
+}
+
+// Writes `record` to machine.json at `dirpath`, atomically.
+inline void write_machine_record(const std::filesystem::path& dirpath,
+                                 const MachineRecord& record) {
+    write_text_atomically(dirpath / machine_layout::RECORD_FILENAME, machine_record_text(record));
+}
+
+// The document file of the machine directory `dirpath`: named after the
+// directory, with the document suffix whether or not the directory has it.
+inline std::filesystem::path machine_document_filepath(const std::filesystem::path& dirpath) {
+    auto filename = dirpath.filename().string();
+    if (std::filesystem::path(filename).extension() != machine_layout::DOCUMENT_SUFFIX) {
+        filename += machine_layout::DOCUMENT_SUFFIX;
+    }
+    return dirpath / filename;
 }
 
 // Writes the files that present the machine at `dirpath` as a document,
-// atomically, from its record and the name to show: the document file named
-// after the directory (any other document file, left by an earlier name of
-// the directory, is removed), desktop.ini and .directory. On Windows the
+// atomically, from its record and the name to show: the document file
+// (machine_document_filepath; any other document file, left by an earlier
+// name of the directory, is removed), desktop.ini and .directory. On Windows the
 // directory is made read-only and desktop.ini hidden and system, as Explorer
 // requires before it honours desktop.ini. None of these is ever read back.
 inline void write_machine_document_files(const std::filesystem::path& dirpath,
                                          const MachineRecord& record,
                                          const std::string& display_name) {
-    const auto document_filename = dirpath.filename();
+    const auto document_filepath = machine_document_filepath(dirpath);
+    const auto document_filename = document_filepath.filename();
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(dirpath, ec)) {
         const auto name = entry.path().filename();
@@ -230,7 +246,7 @@ inline void write_machine_document_files(const std::filesystem::path& dirpath,
     nlohmann::ordered_json document{{"format", machine_layout::FORMAT},
                                     {"version", machine_layout::FORMAT_VERSION},
                                     {"uuid", record.uuid}};
-    write_text_atomically(dirpath / document_filename, document.dump(2) + "\n");
+    write_text_atomically(document_filepath, document.dump(2) + "\n");
 
     const auto desktop_ini = dirpath / machine_layout::DESKTOP_INI_FILENAME;
     machine_document_detail::clear_file_attributes(desktop_ini);

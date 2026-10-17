@@ -140,6 +140,31 @@ an unknown parameter, a missing required one, a value of the wrong type or an
 unknown extension name stops the launch with `CONFIG` (78), and the manifest's
 defaults are filled in for the parameters the preset leaves out.
 
+#### Saved Machines
+
+| Option | Description |
+|--------|-------------|
+| `--machine <dirpath\|document>` | Run the saved machine at `<dirpath>` (made by [`create-machine`](#create-machine)), or the one whose `<name>.beebium-machine` document file is named. Not with `--preset` |
+
+A saved machine is a directory that outlives the run. Its `preset.json` is the
+configuration, read as `--preset` would read it (so the files it holds are its
+own, and the guest's writes to them stay in it from one run to the next), and
+its `machine.json` its identity: the machine keeps its uuid and name on every
+run. Battery-backed state (an Integra-B's board RAM and clock) is restored at
+power-on, over the preset's sideways loads, and kept again at a graceful
+shutdown. Command-line options override the machine's configuration for that
+run only; `--machine-uuid` cannot change its identity (exit 64). A machine of
+another model is refused (exit 78).
+
+One process runs a machine at a time. A `start --machine` on a machine another
+process is running exits with `TEMPFAIL` (75), naming that process:
+
+```
+Error: /Users/me/Documents/Elite Server.beebium-machine is in use by process 4321
+```
+
+The same process id is `describe-machine`'s `locked_by_pid`.
+
 #### File References
 
 Every option that names a file (`--mos`, `--language-rom`, `--sideways ...:image=`,
@@ -825,6 +850,60 @@ every file the preset holds beside it, or with `--unpack` as a new directory
 laid out as the archive is, for editing. The preset is named as `--preset` names
 one: a file, directory or archive path or, failing that, the id of a system or
 user preset. An `--output` naming the preset being read is refused (`USAGE`).
+
+### Saved Machine Subcommands
+
+#### create-machine
+
+```bash
+beebium-model-b create-machine --output <dirpath> [--preset <id|path>] [machine options]
+```
+
+Makes a saved machine at `<dirpath>`, which must not exist (`CANTCREAT`, 73,
+when it does), without running it, and prints its path. The directory holds
+the preset unpacked, with any machine options recorded over it as
+`create-preset` records them (launch options are refused), as `preset.json`
+beside every file the preset holds, its thumbnail included; a `machine.json`
+giving it a new uuid, its name (`--machine-name`, else the preset's machine
+name, else the model's name), its model, the preset it came from and when it
+was made; and the `<name>.beebium-machine` document file and folder metadata.
+A file an option names by location (an absolute path) stays the user's own and
+is opened in place on every run.
+
+```bash
+beebium-model-b create-machine --preset model-b-l3fs-aun --output "File Server.beebium-machine"
+beebium-model-b start --machine "File Server.beebium-machine"
+```
+
+#### describe-machine
+
+```bash
+beebium-model-b describe-machine <dirpath|document> [--format pretty|tsv|jsonl]
+```
+
+Describes a saved machine of any model: `machine_dirpath`, `name` (a name
+template), `uuid`, `model`, `preset` (absent when unknown), `created`,
+`last_used` (absent until it has run), `thumbnail_filepath` (absent until it
+has one) and `locked_by_pid` (absent when no process is running it). Times are
+ISO 8601 UTC. `--format` may also be given before the subcommand. Exits
+`NOINPUT` (66) for a path that is not a saved machine and `DATAERR` (65) when
+its `machine.json` cannot be read.
+
+```
+$ beebium-model-b describe-machine "File Server.beebium-machine" --format jsonl
+{"machine_dirpath":"/Users/me/File Server.beebium-machine","name":"L3 File Server, station {econet-station}","uuid":"f146a756-...","model":"model-b","preset":"model-b-l3fs-aun","created":"2026-10-17T15:28:56Z","thumbnail_filepath":"/Users/me/File Server.beebium-machine/thumbnail.png"}
+```
+
+#### reset-battery
+
+```bash
+beebium-model-b reset-battery <dirpath|document>
+```
+
+Forgets the battery-backed state of a saved machine that is not running, as
+taking out the battery does: at its next run each battery-backed unit starts
+from the contents of a newly set-up board. Exits `TEMPFAIL` (75), naming the
+process, when the machine is running.
 
 ### AUN Map Subcommands
 

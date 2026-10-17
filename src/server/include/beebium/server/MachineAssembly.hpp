@@ -22,6 +22,8 @@
 #include "beebium/server/CoprocessorDebuggerAdapter.hpp"
 #include "beebium/server/DiscPaths.hpp"
 #include "beebium/server/MachineDirectory.hpp"
+#include "beebium/server/MachineDocument.hpp"
+#include "beebium/server/NvramStore.hpp"
 #include "beebium/server/RomPaths.hpp"
 #include "beebium/extension/CoprocessorExtension.hpp"
 #include "beebium/extension/CpuDebugTarget.hpp"
@@ -940,13 +942,37 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             config.launch.machine_dirpath
                 ? MachineDirectory::open(*config.launch.machine_dirpath)
                 : MachineDirectory::create(config.launch.machine_uuid));
+    } catch (const MachineInUse& e) {
+        std::cerr << "Error: " << e.what() << "\n";
+        return {nullptr, ExitCode::TEMPFAIL};
     } catch (const std::exception& e) {
         std::cerr << "Error: cannot make or open the machine directory: " << e.what() << "\n";
         return {nullptr, ExitCode::IOERR};
     }
 
+    // A saved machine records when it was last opened.
+    if (!am->machine_directory->transient()) {
+        std::string error;
+        if (auto record = read_machine_record(am->machine_directory->dirpath(), error)) {
+            record->last_used = iso8601_utc_now();
+            try {
+                write_machine_record(am->machine_directory->dirpath(), *record);
+            } catch (const std::exception& e) {
+                std::cerr << "Warning: cannot record when the machine was last used: "
+                          << e.what() << "\n";
+            }
+        }
+    }
+
     // Load ROMs
     load_roms(machine, config);
+
+    // A saved machine's battery-backed units take back what they kept,
+    // over the preset's sideways loads (the template) and before power-on.
+    if (!am->machine_directory->transient()) {
+        restore_battery_units(machine.battery_units(),
+                              am->machine_directory->dirpath() / machine_layout::NVRAM_DIRNAME);
+    }
 
     // Install disc controller
     if (auto exit_code = install_disc_controller(machine, config)) {

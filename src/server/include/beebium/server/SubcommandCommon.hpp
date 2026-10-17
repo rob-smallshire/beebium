@@ -106,7 +106,9 @@ namespace ExitCode {
     constexpr int DATAERR = 65;     // Data format error (EX_DATAERR)
     constexpr int NOINPUT = 66;     // Cannot open input file (EX_NOINPUT)
     constexpr int SOFTWARE = 70;    // Internal software error (EX_SOFTWARE)
+    constexpr int CANTCREAT = 73;   // Cannot create output (EX_CANTCREAT)
     constexpr int IOERR = 74;       // I/O error (EX_IOERR)
+    constexpr int TEMPFAIL = 75;    // In use; try again later (EX_TEMPFAIL)
     constexpr int CONFIG = 78;      // Configuration error (EX_CONFIG)
 }
 

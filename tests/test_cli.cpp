@@ -574,6 +574,9 @@ TEST_CASE("get_subcommands: contains expected subcommands", "[cli][get_subcomman
     REQUIRE(std::find(names.begin(), names.end(), "delete-preset") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "import-preset") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "export-preset") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "create-machine") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "describe-machine") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "reset-battery") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "capture-screenshot") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "help") != names.end());
 }

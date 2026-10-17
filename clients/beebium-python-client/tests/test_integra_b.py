@@ -29,6 +29,7 @@ from __future__ import annotations
 import datetime
 import re
 import shutil
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -36,6 +37,7 @@ import pytest
 
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError, ServerStartupError
+from beebium.client.installation import ServerInstallation
 from beebium.client.sideways import ProtectionKind, SlotStatusReport
 
 VARIANT = "model-b-integra-b"
@@ -547,3 +549,54 @@ def test_reset_mode_without_reset_unplugs_other_roms(integra_b):
     screen = integra_b.screen()
     assert re.search(r"\b3 \(\s*U\s*L\) BASIC", screen), screen
     assert re.search(r"\b1 \(\s*US\s*\) DFS", screen), screen
+
+
+# ---------------------------------------------------------------------------
+# A saved machine's battery-backed state (#103)
+# ---------------------------------------------------------------------------
+
+
+def _configured_mode(screen: str) -> str:
+    match = re.search(r"MODE\s+(\d+)", screen)
+    assert match, screen
+    return match.group(1)
+
+
+def test_a_saved_machine_keeps_its_configuration_until_its_battery_is_reset(
+        beebium_server_filepath: Path | None, tmp_path: Path):
+    """The board RAM and clock a battery keeps outlive the run: a setting
+    *CONFIGUREd on one run is the setting at power-on of the next, and
+    reset-battery returns the board to the seed."""
+    try:
+        installation = (ServerInstallation.default() if beebium_server_filepath is None
+                        else ServerInstallation.coerce(beebium_server_filepath))
+        executable_filepath = installation.executable_filepath(VARIANT)
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+    machine = tmp_path / "Integra.beebium-machine"
+
+    def server_command(*args: str) -> None:
+        result = subprocess.run([str(executable_filepath), *args, str(machine)],
+                                capture_output=True, text=True, timeout=60)
+        assert result.returncode == 0, result.stderr
+
+    def run_machine(body: Callable[[IntegraB], str | None]) -> str | None:
+        with Beebium.launch(server=installation, variant=VARIANT,
+                            extra_args=EMULATED_CLOCK + ["--machine", str(machine)]) as bbc:
+            return body(_booted(bbc))
+
+    def configured_mode(machine: IntegraB) -> str:
+        return _configured_mode(machine.command("*STATUS MODE"))
+
+    def configure_mode_3(machine: IntegraB) -> None:
+        machine.type("*CONFIGURE MODE 3")
+
+    server_command("create-machine", *DISC_ARGS, "--output")
+    seeded = run_machine(configured_mode)
+    assert seeded != "3"
+
+    run_machine(configure_mode_3)
+    assert run_machine(configured_mode) == "3"
+
+    server_command("reset-battery")
+    assert run_machine(configured_mode) == seeded

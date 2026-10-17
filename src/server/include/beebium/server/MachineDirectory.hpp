@@ -27,6 +27,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -45,14 +46,30 @@
 
 namespace beebium::server {
 
+// Thrown when another process holds a machine directory's lock: names the
+// directory and the holder's process id ("" when it cannot be read).
+class MachineInUse : public std::runtime_error {
+public:
+    MachineInUse(const std::filesystem::path& dirpath, std::string holder)
+        : std::runtime_error(dirpath.string() + " is in use by process " +
+                             (holder.empty() ? "?" : holder)),
+          holder_(std::move(holder)) {}
+
+    const std::string& holder() const { return holder_; }
+
+private:
+    std::string holder_;
+};
+
 // An exclusive advisory lock on a file, held until destroyed: flock on POSIX,
 // LockFileEx on Windows, both released by the system if the process dies.
 // The holder's process id is written at the start of the file, outside the
 // locked byte range on Windows, so another process can name the holder.
 class MachineDirectoryLock {
 public:
-    // Takes the lock on `lock_filepath`, creating the file. Throws, naming the
-    // holder's process id, when another process holds it.
+    // Takes the lock on `lock_filepath`, creating the file. Throws
+    // MachineInUse, naming the holder's process id, when another process
+    // holds it.
     explicit MachineDirectoryLock(const std::filesystem::path& lock_filepath) {
 #ifdef _WIN32
         // Not FILE_SHARE_DELETE: while this handle is open no other process can
@@ -120,8 +137,7 @@ public:
 private:
     [[noreturn]] static void throw_in_use(const std::filesystem::path& lock_filepath,
                                           const std::string& holder) {
-        throw std::runtime_error(lock_filepath.parent_path().string() +
-                                 " is in use by process " + (holder.empty() ? "?" : holder));
+        throw MachineInUse(lock_filepath.parent_path(), holder);
     }
 
 #ifdef _WIN32
@@ -147,6 +163,22 @@ private:
     int fd_ = -1;
 #endif
 };
+
+// Who runs the machine at `dirpath`: the holder's process id ("" when it
+// cannot be read), or nullopt when no process holds its lock. Finds out by
+// taking the lock and at once releasing it, so the id is read only when the
+// lock cannot be taken; a directory with no lock file is not run by anyone.
+inline std::optional<std::string> machine_lock_holder(const std::filesystem::path& dirpath) {
+    const auto lock_filepath = dirpath / machine_layout::LOCK_FILENAME;
+    std::error_code ec;
+    if (!std::filesystem::exists(lock_filepath, ec)) return std::nullopt;
+    try {
+        MachineDirectoryLock lock(lock_filepath);
+        return std::nullopt;
+    } catch (const MachineInUse& e) {
+        return e.holder();
+    }
+}
 
 class MachineDirectory {
 public:

@@ -723,6 +723,64 @@ public:
 };
 
 // CreatePreset subcommand - create a new preset
+// The descriptive fields of a preset made from `config`: `name`, and the
+// other fields as given or, when not, as the preset the configuration was
+// read from (its --preset) gives them.
+template<typename MachineType>
+PresetDocumentHeader recorded_preset_header(const ServerConfig<MachineType>& config,
+                                            std::string name, std::string description,
+                                            std::string release_date) {
+    std::optional<PresetConfig> source;
+    if (config.launch.preset) {
+        auto loaded = load_preset(*config.launch.preset);
+        if (loaded) source = std::move(*loaded.config);
+    }
+    if (name.empty() && source) name = source->name;
+    if (description.empty() && source && source->description) description = *source->description;
+    if (release_date.empty() && source && source->release_date) release_date = *source->release_date;
+    return {std::move(name), std::move(description), std::move(release_date),
+            source ? source->thumbnail_capture_delay_seconds : std::nullopt};
+}
+
+// The files of a preset recording the machine `config` describes, under
+// `header`: its document, holding only what was given, and every file the
+// preset it was read from holds beside its own document, named as that
+// preset names them within itself (its thumbnail too when
+// `with_thumbnail`). nullopt, with `error` and `exit_code`, when the
+// document cannot be made or the source cannot be read.
+template<typename MachineType>
+std::optional<std::vector<zip::ZipMember>> recorded_preset_members(
+    const ServerConfig<MachineType>& config, const PresetDocumentHeader& header,
+    bool with_thumbnail, std::string& error, int& exit_code) {
+    auto document = preset_document<MachineType>(config.machine, config.launch.extension_resolver,
+                                                 header, DocumentKeys::Given, error);
+    if (!document) {
+        exit_code = ExitCode::USAGE;
+        return std::nullopt;
+    }
+    nlohmann::ordered_json document_out = *document;
+    const bool carries_files =
+        config.launch.preset && config.launch.preset->form() != PresetSource::Form::File;
+    if (carries_files) make_references_relative(document_out, config.launch.preset->container());
+    auto members = preset_members(document_out.dump(2) + "\n");
+    if (carries_files) {
+        try {
+            for (auto& member : preset_members(*config.launch.preset)) {
+                if (member.name == PresetSource::DOCUMENT_FILENAME ||
+                    (!with_thumbnail && member.name == PresetSource::THUMBNAIL_FILENAME)) {
+                    continue;
+                }
+                members.push_back(std::move(member));
+            }
+        } catch (const std::exception& e) {
+            error = std::string("cannot read the source preset: ") + e.what();
+            exit_code = ExitCode::IOERR;
+            return std::nullopt;
+        }
+    }
+    return members;
+}
+
 template<typename MachineType>
 class CreatePresetSubcommand : public Subcommand<MachineType> {
 public:
@@ -828,31 +886,6 @@ public:
             return ExitCode::USAGE;
         }
 
-        // The source preset's descriptive fields are the baseline for the
-        // copy's (its machine settings arrived through parse_start_arguments).
-        std::optional<PresetConfig> source;
-        if (config.launch.preset) {
-            auto loaded = load_preset(*config.launch.preset);
-            if (loaded) source = std::move(*loaded.config);
-        }
-        if (preset_description.empty() && source && source->description) {
-            preset_description = *source->description;
-        }
-        if (release_date.empty() && source && source->release_date) {
-            release_date = *source->release_date;
-        }
-
-        PresetDocumentHeader header{preset_name, preset_description, release_date,
-                                    source ? source->thumbnail_capture_delay_seconds
-                                           : std::nullopt};
-        std::string write_error;
-        auto document = preset_document<MachineType>(config.machine, config.launch.extension_resolver, header, DocumentKeys::Given, write_error);
-        if (!document) {
-            std::cerr << "Error: " << write_error << "\n";
-            return ExitCode::USAGE;
-        }
-        const auto& preset = *document;
-
         // Determine output path
         std::filesystem::path target_filepath;
         std::string preset_id;
@@ -880,30 +913,21 @@ public:
             return ExitCode::USAGE;
         }
 
-        // The document, and what the source preset holds beside its own:
-        // the copy takes a directory's or archive's files with it, and names
-        // them as the source did, within itself.
-        nlohmann::ordered_json document_out = preset;
-        const bool carries_files =
-            config.launch.preset && config.launch.preset->form() != PresetSource::Form::File;
-        if (carries_files) make_references_relative(document_out, config.launch.preset->container());
-        auto members = preset_members(document_out.dump(2) + "\n");
-        if (carries_files) {
-            try {
-                for (auto& member : preset_members(*config.launch.preset)) {
-                    if (member.name == PresetSource::DOCUMENT_FILENAME ||
-                        member.name == PresetSource::THUMBNAIL_FILENAME) {
-                        continue;
-                    }
-                    members.push_back(std::move(member));
-                }
-            } catch (const std::exception& e) {
-                std::cerr << "Error: cannot read the source preset: " << e.what() << "\n";
-                return ExitCode::IOERR;
-            }
+        // The document, and what the source preset holds beside its own (its
+        // machine settings arrived through parse_start_arguments, its
+        // descriptive fields are the copy's baseline).
+        std::string members_error;
+        int members_exit_code = ExitCode::OK;
+        auto members = recorded_preset_members(
+            config,
+            recorded_preset_header(config, preset_name, preset_description, release_date),
+            /*with_thumbnail=*/false, members_error, members_exit_code);
+        if (!members) {
+            std::cerr << "Error: " << members_error << "\n";
+            return members_exit_code;
         }
-        const auto store_error = unpack ? write_preset_directory(members, target_filepath)
-                                        : write_preset(std::move(members), target_filepath);
+        const auto store_error = unpack ? write_preset_directory(*members, target_filepath)
+                                        : write_preset(std::move(*members), target_filepath);
         if (!store_error.empty()) {
             std::cerr << "Error: " << store_error << "\n";
             return ExitCode::IOERR;

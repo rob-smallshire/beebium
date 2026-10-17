@@ -19,6 +19,7 @@
 
 #include "beebium/server/SubcommandCommon.hpp"
 #include "beebium/server/BuiltinExtensions.hpp"
+#include "beebium/server/MachineDocument.hpp"
 #include "beebium/server/ServerConfig.hpp"
 #include "beebium/server/PresetLoader.hpp"
 #include "beebium/server/PresetResolution.hpp"
@@ -68,6 +69,13 @@ void print_usage(const char* program_name) {
               << "  --preset <id|filepath>   Load configuration from a preset file, or from\n"
               << "                           a system or user preset by id (see list-presets;\n"
               << "                           CLI options override preset values)\n"
+              << "  --machine <dirpath|document filepath>\n"
+              << "                           Open a saved machine (see create-machine) and run\n"
+              << "                           it: its preset.json is the configuration, its\n"
+              << "                           machine.json its identity, and its battery-backed\n"
+              << "                           state is restored and kept at shutdown. CLI\n"
+              << "                           options override it for this run only. Exits " << ExitCode::TEMPFAIL << "\n"
+              << "                           when another process runs the machine.\n"
               << "  --mos <filepath>         MOS ROM filepath (default: " << Memory::DEFAULT_MOS_ROM << ")\n"
               << "  --language-rom <filepath> Language ROM image for this machine's default\n"
               << "                           language slot (slot " << static_cast<int>(Memory::DEFAULT_LANGUAGE_SLOT)
@@ -620,9 +628,30 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
                                           StartOptionScope scope = StartOptionScope::Everything) {
     using Memory = typename MachineType::Memory;
 
-    // First pass: find --preset and --extension-dir before other options
-    // --preset is loaded first so CLI can override; --extension-dir is needed
-    // to scan manifests so extension CLI flags can be recognised in second pass
+    // The baseline the command line overrides: a preset, read and checked
+    // against this executable.
+    auto apply_baseline = [&config](const PresetSource& source) -> std::optional<int> {
+        auto result = load_preset(source);
+        if (!result) {
+            for (const auto& e : result.errors()) {
+                std::cerr << "Error: " << e.message << "\n";
+            }
+            return result.unreadable ? ExitCode::NOINPUT : ExitCode::CONFIG;
+        }
+        if (auto err = preset_model_error<Memory>(*result.config)) {
+            std::cerr << "Error: " << *err << "\n";
+            return ExitCode::CONFIG;
+        }
+        apply_preset(config, *result.config);
+        return std::nullopt;
+    };
+
+    std::string saved_machine_uuid;  // a saved machine's, which nothing changes
+
+    // First pass: find --preset, --machine and --extension-dir before other
+    // options. The preset (a saved machine's own preset.json) is loaded first
+    // so CLI can override; --extension-dir is needed to scan manifests so
+    // extension CLI flags can be recognised in second pass
     for (int i = start_index; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--extension-dir" && i + 1 < argc) {
@@ -630,11 +659,49 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             ++i;
             continue;
         }
-        if (arg == "--preset" && i + 1 < argc) {
-            if (config.launch.preset) {
-                std::cerr << "Error: --preset may be given only once\n";
+        if ((arg == "--preset" || arg == "--machine") && i + 1 < argc && config.launch.preset) {
+            std::cerr << "Error: give one of --preset or --machine, once\n";
+            return ExitCode::USAGE;
+        }
+        if (arg == "--machine" && i + 1 < argc) {
+            if (scope == StartOptionScope::MachineOnly) {
+                std::cerr << "Error: --machine names a machine to run; a preset cannot record it\n";
                 return ExitCode::USAGE;
             }
+            // The directory, or the document file inside it.
+            const std::filesystem::path named(argv[++i]);
+            const auto dirpath = machine_dirpath_named(named);
+            if (!dirpath) {
+                std::cerr << "Error: " << named.string() << " is not a saved machine (no "
+                          << machine_layout::RECORD_FILENAME << ")\n";
+                return ExitCode::NOINPUT;
+            }
+            std::string error;
+            const auto record = read_machine_record(*dirpath, error);
+            if (!record) {
+                std::cerr << "Error: " << error << "\n";
+                return ExitCode::DATAERR;
+            }
+            if (!record->model.empty() && record->model != Memory::MACHINE_TYPE) {
+                std::cerr << "Error: " << dirpath->string() << " is a '" << record->model
+                          << "' machine but this executable is '" << Memory::MACHINE_TYPE
+                          << "'\n";
+                return ExitCode::CONFIG;
+            }
+            config.launch.preset = PresetSource::open(*dirpath, error);
+            if (!config.launch.preset) {
+                std::cerr << "Error: " << error << "\n";
+                return ExitCode::NOINPUT;
+            }
+            if (auto exit_code = apply_baseline(*config.launch.preset)) return exit_code;
+            // The machine's own identity, over its preset's.
+            config.launch.machine_dirpath = std::filesystem::absolute(*dirpath);
+            config.launch.machine_uuid = record->uuid;
+            saved_machine_uuid = record->uuid;
+            if (!record->name.empty()) config.machine.machine_name = record->name;
+            continue;
+        }
+        if (arg == "--preset" && i + 1 < argc) {
             // The argument is a preset path or, failing that, a preset id
             // resolved like show-preset: system presets, then user presets.
             std::string open_error;
@@ -643,21 +710,7 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
                 std::cerr << "Error: " << open_error << "\n";
                 return ExitCode::NOINPUT;
             }
-            auto result = load_preset(*config.launch.preset);
-            if (!result) {
-                for (const auto& e : result.errors()) {
-                    std::cerr << "Error: " << e.message << "\n";
-                }
-                return result.unreadable ? ExitCode::NOINPUT : ExitCode::CONFIG;
-            }
-
-            if (auto err = preset_model_error<Memory>(*result.config)) {
-                std::cerr << "Error: " << *err << "\n";
-                return ExitCode::CONFIG;
-            }
-
-            // Apply preset as baseline configuration
-            apply_preset(config, *result.config);
+            if (auto exit_code = apply_baseline(*config.launch.preset)) return exit_code;
         }
     }
 
@@ -675,7 +728,8 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
     for (int i = start_index; i < argc; ++i) {
         std::string arg = argv[i];
 
-        if ((arg == "--preset" || arg == "--extension-dir") && i + 1 < argc) {
+        if ((arg == "--preset" || arg == "--machine" || arg == "--extension-dir") &&
+            i + 1 < argc) {
             // Already handled in first pass, skip
             ++i;
             continue;
@@ -720,6 +774,12 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             print_usage<MachineType>(argv[0]);
             return ExitCode::USAGE;
         }
+    }
+
+    if (!saved_machine_uuid.empty() && config.launch.machine_uuid != saved_machine_uuid) {
+        std::cerr << "Error: --machine-uuid cannot change a saved machine's identity ("
+                  << saved_machine_uuid << ")\n";
+        return ExitCode::USAGE;
     }
 
     // Fold preset-supplied sideways slots in as a baseline now that all CLI

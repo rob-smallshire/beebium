@@ -100,6 +100,20 @@ TEST_CASE("machine directory: known by machine.json, named by itself or its docu
     CHECK_FALSE(machine_dirpath_named(root / "missing").has_value());
 }
 
+TEST_CASE("a machine directory named without the suffix has a suffixed document file",
+          "[machine_document]") {
+    beebium::test::ScopedTempDir root("beebium_machine_doc_");
+    const auto machine = root / "Elite Server";
+    fs::create_directories(machine);
+    CHECK(machine_document_filepath(machine) == machine / "Elite Server.beebium-machine");
+    CHECK(machine_document_filepath(root / "Elite.beebium-machine") ==
+          root / "Elite.beebium-machine" / "Elite.beebium-machine");
+
+    write_machine_document_files(machine, a_record(), "Elite Server");
+    CHECK(fs::is_regular_file(machine / "Elite Server.beebium-machine"));
+    CHECK_FALSE(fs::exists(machine / "Elite Server"));  // no suffix-less document
+}
+
 TEST_CASE("the document file, desktop.ini and .directory present the machine",
           "[machine_document]") {
     beebium::test::ScopedTempDir root("beebium_machine_doc_");

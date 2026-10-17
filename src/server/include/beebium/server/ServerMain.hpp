@@ -21,6 +21,7 @@
 #include "beebium/server/ExtensionSubcommands.hpp"
 #include "beebium/server/LaunchSubcommands.hpp"
 #include "beebium/server/ListingSubcommands.hpp"
+#include "beebium/server/MachineSubcommands.hpp"
 #include "beebium/server/PresetSubcommands.hpp"
 #include "beebium/server/SubcommandCommon.hpp"
 
@@ -74,6 +75,9 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<DeletePresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<ImportPresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<ExportPresetSubcommand<MachineType>>());
+        v.push_back(std::make_unique<CreateMachineSubcommand<MachineType>>());
+        v.push_back(std::make_unique<DescribeMachineSubcommand<MachineType>>());
+        v.push_back(std::make_unique<ResetBatterySubcommand<MachineType>>());
         v.push_back(std::make_unique<ReportAunMapFilepathSubcommand<MachineType>>());
         v.push_back(std::make_unique<CreateAunMapSubcommand<MachineType>>());
         v.push_back(std::make_unique<ShowAunMapSubcommand<MachineType>>());

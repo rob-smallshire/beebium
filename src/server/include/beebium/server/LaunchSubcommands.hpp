@@ -91,6 +91,7 @@ public:
             return ExitCode::USAGE;
         }
         auto timestamp = std::chrono::system_clock::now();
+        int shutdown_exit_code = ExitCode::OK;
 
         try {
             // Set ROM directory if specified
@@ -337,6 +338,19 @@ public:
             // cannot race the in-emulation flush. Persist any remaining writes.
             flush_disc_drives(machine);
 
+            // A saved machine keeps what its battery-backed units hold.
+            if (!am.machine_directory->transient()) {
+                try {
+                    save_battery_units(machine.battery_units(),
+                                       am.machine_directory->dirpath() /
+                                           machine_layout::NVRAM_DIRNAME);
+                } catch (const std::exception& e) {
+                    std::cerr << "Error: cannot keep the machine's battery-backed state: "
+                              << e.what() << "\n";
+                    shutdown_exit_code = ExitCode::IOERR;
+                }
+            }
+
             server.stop();
             extension_registry.shutdown();
 
@@ -345,7 +359,7 @@ public:
             return ExitCode::SOFTWARE;
         }
 
-        return ExitCode::OK;
+        return shutdown_exit_code;
     }
 };
 

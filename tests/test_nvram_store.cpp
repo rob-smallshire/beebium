@@ -133,6 +133,42 @@ TEST_CASE("nvram: contents for another layout, other hardware or that do not fit
     CHECK(entry_count(nvram / "stale") == 3);
 }
 
+TEST_CASE("nvram: contents cut short are kept aside", "[nvram]") {
+    beebium::test::ScopedTempDir dir("beebium_nvram_");
+    const auto nvram = dir / "nvram";
+    FakeUnit unit("unit-a");
+    unit.contents = {1, 2, 3};
+    save_battery_units({&unit}, nvram);
+    fs::resize_file(nvram / "unit-a.bin", fs::file_size(nvram / "unit-a.bin") - 1);
+
+    unit.contents = {9, 9, 9};
+    std::ostringstream warnings;
+    CHECK(restore_battery_units({&unit}, nvram, warnings).empty());
+    CHECK(unit.contents == std::vector<std::uint8_t>{9, 9, 9});
+    CHECK_THAT(warnings.str(), ContainsSubstring("unit-a starts afresh"));
+    CHECK_THAT(warnings.str(), ContainsSubstring("it is cut short"));
+    CHECK_FALSE(fs::exists(nvram / "unit-a.bin"));
+    CHECK(entry_count(nvram / "stale") == 1);
+}
+
+TEST_CASE("nvram: contents the unit refuses are kept aside", "[nvram]") {
+    beebium::test::ScopedTempDir dir("beebium_nvram_");
+    const auto nvram = dir / "nvram";
+    // The right layout and hardware, but four bytes where the unit holds three.
+    FakeUnit unit("unit-a");
+    unit.contents = {1, 2, 3, 4};
+    save_battery_units({&unit}, nvram);
+
+    unit.contents = {9, 9, 9};
+    std::ostringstream warnings;
+    CHECK(restore_battery_units({&unit}, nvram, warnings).empty());
+    CHECK(unit.contents == std::vector<std::uint8_t>{9, 9, 9});
+    CHECK_THAT(warnings.str(), ContainsSubstring("unit-a starts afresh"));
+    CHECK_THAT(warnings.str(), ContainsSubstring("the unit cannot hold it"));
+    CHECK_FALSE(fs::exists(nvram / "unit-a.bin"));
+    CHECK(entry_count(nvram / "stale") == 1);
+}
+
 TEST_CASE("nvram: forgetting removes every unit's contents", "[nvram]") {
     beebium::test::ScopedTempDir dir("beebium_nvram_");
     FakeUnit a("unit-a");
