@@ -27,6 +27,18 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
     /// app-level; each window consumes it via `.onReceive` (see ContentView).
     private let powerMonitor: SystemPowerMonitoring = MacSystemPowerMonitor()
 
+    /// A saved machine opened from Finder -- a double-clicked `.beebium-machine`
+    /// package, or one dropped on the app or its Dock icon. Routed to the same
+    /// open flow as File > Open...; if it arrives before the first window has
+    /// registered the opener (a cold launch by opening a document) it is queued
+    /// and delivered then. The server identifies a machine by its machine.json,
+    /// so a renamed directory opens too.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            AppActions.shared.requestOpenSavedMachine(url)
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Start browsing now rather than when something first asks. Naming a
         // new machine consults what is on the network but will not wait for

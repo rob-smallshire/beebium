@@ -31,6 +31,7 @@ struct MainWindowRouter: View {
     @State private var provenanceUUID: String?
     @State private var showSidebar: Bool?
     @State private var currentWindow: NSWindow?
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -76,6 +77,17 @@ struct MainWindowRouter: View {
             }
         }
         .onAppear {
+            // Register how to open a saved machine, now that this scene holds
+            // openWindow. Any window works, and setting it again is harmless;
+            // a request queued before the first window registers is flushed
+            // here (a document opened at launch). See AppActions.
+            AppActions.shared.openSavedMachine = { [openWindow] url in
+                Task { @MainActor in
+                    await SavedMachineOpening.open(openedURL: url,
+                                                   openMainWindow: { openWindow(id: "main") })
+                }
+            }
+
             let (target, run, prov, sidebar) = ConnectWindowState.shared.consumePendingTarget()
             connectionTarget = target
             needsRun = run

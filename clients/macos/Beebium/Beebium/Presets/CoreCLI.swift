@@ -264,4 +264,32 @@ struct CoreCLI {
         if let error = error { return (nil, error) }
         return (output.trimmingCharacters(in: .whitespacesAndNewlines), nil)
     }
+
+    // MARK: - Saved machines
+
+    /// `describe-machine <dir|document> --format jsonl`, decoded to one
+    /// MachineDescription. nil when the executable could not be run or the
+    /// output did not decode. Needs no running server; the model is irrelevant,
+    /// so any core executable serves.
+    func describeMachine(path: String, executablePath: String) async -> MachineDescription? {
+        let (output, error) = await run(
+            executablePath: executablePath, arguments: ["describe-machine", path, "--format", "jsonl"])
+        if error != nil { return nil }
+        return Self.decodeDescribeMachine(output)
+    }
+
+    /// Decode `describe-machine --format jsonl` output: the one machine object
+    /// on the first line that decodes. A pure, side-effect-free seam, so the
+    /// decode is testable against pinned samples without running a server.
+    nonisolated static func decodeDescribeMachine(_ text: String) -> MachineDescription? {
+        let decoder = JSONDecoder()
+        for raw in text.split(whereSeparator: \.isNewline) {
+            guard let data = raw.data(using: .utf8),
+                  let row = try? decoder.decode(MachineDescription.self, from: data) else {
+                continue
+            }
+            return row
+        }
+        return nil
+    }
 }

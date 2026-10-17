@@ -35,4 +35,19 @@ final class FileCommandsImportTests: XCTestCase {
             message,
             "Could not import 2 of 3 presets: a.beebium-preset, b.beebium-preset. Check the console for details.")
     }
+
+    // MARK: - Save / Save As enable rules
+
+    func testSaveEnabledOnlyWithAFocusedMachineWindow() {
+        XCTAssertTrue(FileCommands.saveEnabled(hasFocusedMachineWindow: true))
+        XCTAssertFalse(FileCommands.saveEnabled(hasFocusedMachineWindow: false))
+    }
+
+    func testSaveAsEnabledOnlyForASavedFocusedMachine() {
+        XCTAssertTrue(FileCommands.saveAsEnabled(hasFocusedMachineWindow: true, isSaved: true))
+        // A transient machine has nothing to duplicate yet.
+        XCTAssertFalse(FileCommands.saveAsEnabled(hasFocusedMachineWindow: true, isSaved: false))
+        // No machine window focused.
+        XCTAssertFalse(FileCommands.saveAsEnabled(hasFocusedMachineWindow: false, isSaved: true))
+    }
 }

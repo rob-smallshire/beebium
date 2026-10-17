@@ -733,6 +733,39 @@ class PresetManager: ObservableObject {
         return arguments
     }
 
+    // MARK: - Saved machines
+
+    /// Describe a saved machine directory (or its document file) via
+    /// `describe-machine`. Any core executable serves -- the subcommand reads
+    /// the directory, not a running server. nil before presets have been
+    /// discovered (no executable to run) or when the directory could not be read.
+    func describeMachine(path: String) async -> MachineDescription? {
+        guard let executablePath = anyCoreExecutablePath else { return nil }
+        return await coreCLI.describeMachine(path: path, executablePath: executablePath)
+    }
+
+    /// Open an existing saved machine directory: launch a core on it with
+    /// `start --machine`. The executable must match the machine's model (the
+    /// server refuses another model), so the caller passes the model from
+    /// describe-machine. Like launchCore(_:) but with no name or ordinal -- a
+    /// saved machine's name lives in its machine.json.
+    func launchMachine(machineDirpath: String, model: String) async -> Result<LaunchedCore, CoreLaunchError> {
+        let provenanceUUID = UUID().uuidString
+        let arguments = Self.machineLaunchArguments(
+            machineDirpath: machineDirpath,
+            provenanceUUID: provenanceUUID,
+            romDirpath: bundledRomDirpath())
+        return await spawnCore(executablePath: coreExecutablePath(forModel: model),
+                               arguments: arguments,
+                               provenanceUUID: provenanceUUID)
+    }
+
+    /// The server executable for `model`, under the servers directory
+    /// (`beebium-<model>`).
+    func coreExecutablePath(forModel model: String) -> String {
+        "\(serversDirpath())/beebium-\(model)"
+    }
+
     /// Serialise a draft to a fresh temporary JSON file and return its URL.
     /// Each call returns a distinct path. The name carries a neutral `.json`
     /// extension rather than a preset suffix: the server reads this as a lone

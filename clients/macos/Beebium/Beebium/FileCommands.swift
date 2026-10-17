@@ -37,14 +37,17 @@ struct FileCommands: Commands {
         }
 
         CommandGroup(after: .newItem) {
-            Button("Open...") { }
+            Button("Open...") { openMachine() }
             .keyboardShortcut("o", modifiers: .command)
-            .disabled(true)
+            .disabled(presetManager.systemPresets.isEmpty)
 
-            Menu("Open Recent") {
-                Text("No Recent Items")
-            }
-            .disabled(true)
+            // A single item, not a submenu: File > Open Recent opens the Welcome
+            // window on its Machines page, which previews each machine -- a
+            // better recents list than a menu of names (section 4.8). The
+            // standard recents submenu is not used; the Machines page is the
+            // recents view, and Clear is a button there.
+            Button("Open Recent") { appActions.showWelcome?() }
+            .disabled(appActions.showWelcome == nil || !hasRecentMachines)
 
             Divider()
 
@@ -71,6 +74,11 @@ struct FileCommands: Commands {
         }
 
         CommandGroup(replacing: .saveItem) {
+            // Save and Save As stay disabled until the SaveMachine RPC exists
+            // (it lands in a later commit). Their enable rule is already
+            // decided -- see saveEnabled / saveAsEnabled -- and is wired to the
+            // real actions then; for now the items are present but inert so the
+            // menu shape does not change under the user when Save arrives.
             Button("Save") { }
             .keyboardShortcut("s", modifiers: .command)
             .disabled(true)
@@ -85,6 +93,42 @@ struct FileCommands: Commands {
             .disabled(true)
         }
         // Close (Cmd-W) provided automatically by SwiftUI
+    }
+
+    /// Whether File > Save should be enabled: a machine window is focused, so
+    /// there is a machine -- transient or saved -- to save. Pure, so the rule is
+    /// testable; it is wired to the action with the SaveMachine RPC.
+    static func saveEnabled(hasFocusedMachineWindow: Bool) -> Bool {
+        hasFocusedMachineWindow
+    }
+
+    /// Whether File > Save As... should be enabled: a machine window is focused
+    /// and its machine is already saved, since Save As duplicates a saved
+    /// machine into a new directory with a new UUID (section 4.8). Pure.
+    static func saveAsEnabled(hasFocusedMachineWindow: Bool, isSaved: Bool) -> Bool {
+        hasFocusedMachineWindow && isSaved
+    }
+
+    /// Whether there are saved machines to revisit, gating File > Open Recent.
+    private var hasRecentMachines: Bool {
+        !MachineRecents().machineDirpaths.isEmpty
+    }
+
+    /// Open a saved machine chosen from an open panel. The panel offers
+    /// `.beebium-machine` documents (the macOS package) and also plain folders,
+    /// since a machine directory renamed or stripped of its suffix still opens.
+    private func openMachine() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.beebiumMachine]
+        panel.allowsMultipleSelection = false
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.treatsFilePackagesAsDirectories = false
+        panel.title = "Open Machine"
+        panel.message = "Choose a saved Beebium machine."
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        appActions.requestOpenSavedMachine(url)
     }
 
     private func importPreset() {

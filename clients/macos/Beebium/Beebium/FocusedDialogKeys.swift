@@ -29,6 +29,33 @@ class AppActions: ObservableObject {
     var showWelcome: (() -> Void)? {
         willSet { objectWillChange.send() }
     }
+
+    /// Open a saved machine from a directory or document URL -- File > Open...,
+    /// a double-clicked .beebium-machine package, or the Machines page. Set by
+    /// the main window once it can open windows (it needs SwiftUI's openWindow).
+    /// A request that arrives before then -- a cold launch by opening a document
+    /// -- is queued and delivered when the handler is set.
+    var openSavedMachine: ((URL) -> Void)? {
+        willSet { objectWillChange.send() }
+        didSet {
+            guard openSavedMachine != nil, !pendingOpenMachineURLs.isEmpty else { return }
+            let queued = pendingOpenMachineURLs
+            pendingOpenMachineURLs = []
+            for url in queued { openSavedMachine?(url) }
+        }
+    }
+    private var pendingOpenMachineURLs: [URL] = []
+
+    /// Request that a saved machine be opened, queuing the URL if the handler is
+    /// not ready yet (a document opened at launch, before the first window has
+    /// registered its opener).
+    func requestOpenSavedMachine(_ url: URL) {
+        if let openSavedMachine {
+            openSavedMachine(url)
+        } else {
+            pendingOpenMachineURLs.append(url)
+        }
+    }
 }
 
 /// Enforces the "at most one Welcome window" invariant by real window identity.

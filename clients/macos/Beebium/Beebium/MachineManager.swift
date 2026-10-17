@@ -146,6 +146,20 @@ class MachineManager: ObservableObject {
         machines.values.filter { $0.lifetimeLinked && !$0.unlinkRequested }
     }
 
+    /// The process ids of every server this app has launched and still tracks.
+    /// Used to tell a saved machine locked by one of our own windows (bring it
+    /// forward) from one locked by a process we did not launch.
+    var launchedProcessIdentifiers: Set<Int> {
+        Set(machines.values.map { Int($0.process.processIdentifier) })
+    }
+
+    /// The connection target of a machine this app launched whose server has
+    /// `pid`, if any -- so a running saved machine's window can be brought
+    /// forward rather than launched a second time.
+    func target(forProcessIdentifier pid: Int) -> ConnectionTarget? {
+        machines.values.first { Int($0.process.processIdentifier) == pid }?.target
+    }
+
     // MARK: - Window Close Decision
 
     /// Determine what action to take when a window viewing this address closes.
