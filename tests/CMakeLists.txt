@@ -2173,7 +2173,13 @@ if(BEEBIUM_BUILD_SERVER AND NOT WIN32)
             -DEXE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
             -P ${CMAKE_SOURCE_DIR}/cmake/InstallSmokeTest.cmake
     )
-    set_tests_properties(install_smoke PROPERTIES LABELS "packaging")
+    # The one test registered outside the catch_discover_tests wrapper, so it
+    # is given the hermetic per-user directory here: the server it boots makes
+    # a machine directory, which its TIMEOUT kill would otherwise leave in the
+    # developer's real machines/.
+    set_tests_properties(install_smoke PROPERTIES
+        LABELS "packaging"
+        ENVIRONMENT "BEEBIUM_USER_DIRPATH=${CMAKE_BINARY_DIR}/test-user-state")
 endif()
 
 # The test bodies poke 6502 addresses and byte values with integer literals, so
