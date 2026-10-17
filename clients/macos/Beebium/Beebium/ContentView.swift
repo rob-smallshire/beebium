@@ -231,33 +231,13 @@ struct ContentView: View {
         return name.isEmpty ? "Beebium" : name
     }
 
-    /// A warning that this machine's name is not unique, or "" if it is.
-    ///
-    /// Only machines discovery can currently see count, and only those that
-    /// are not this one -- a machine advertises itself, so it always finds its
-    /// own name on the network. The UUID tells the difference.
-    ///
-    /// Duplicate names are allowed: they live on a network nobody owns, so
-    /// preventing them is somewhere between hard and impossible, and renaming
-    /// is a menu item away. Saying so is enough.
-    private var duplicateNameWarning: String {
-        let name = systemClient.machineName
-        guard !name.isEmpty else { return "" }
-        let clash = discoveryClient
-            .machinesOtherThan(uuid: systemClient.machineUUID)
-            .first { $0.instanceName == name }
-        guard let clash else { return "" }
-        return "\u{26A0}\u{FE0E} name also used on \(clash.displayHost)"
-    }
-
-    /// The window's subtitle, beneath the name. The server's rendered machine
-    /// description (its templated identity string, e.g. "Station 254 (AUN,
-    /// Model B)") when it has one; otherwise the duplicate-name warning, so a
-    /// machine whose name clashes on the network still says so. Empty when there
-    /// is neither, leaving the window with its name alone.
+    /// The window's subtitle, beneath the name: the server's rendered machine
+    /// description (its description template with the placeholders replaced,
+    /// e.g. "Station 254 (AUN, Model B)"), re-rendered on the status stream.
+    /// Empty when the machine has no description, which leaves the window with
+    /// its name alone.
     private var windowSubtitle: String {
-        let description = systemClient.machineDescription
-        return description.isEmpty ? duplicateNameWarning : description
+        systemClient.machineDescription
     }
 
     /// Open the rename popover on the window showing this machine. Only a
@@ -381,9 +361,8 @@ struct ContentView: View {
         // the Window menu, Mission Control and every window switcher, so it
         // still has to say which machine this is.
         .navigationTitle(windowTitle)
-        // Beneath the name: the machine's rendered description when it has one,
-        // else the duplicate-name warning. Empty when there is neither, so an
-        // ordinary window carries the name alone.
+        // Beneath the name: the machine's rendered description, or empty when it
+        // has none, so an ordinary window carries the name alone.
         .navigationSubtitle(windowSubtitle)
         .focusedValue(\.renameMachine, { beginRenamingMachine() })
         .focusedValue(\.machineSaveActions, MachineSaveActions(

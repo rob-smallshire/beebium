@@ -17,8 +17,8 @@ import Foundation
 ///
 /// A machine's name is per instance, not part of a preset: two machines built
 /// from one preset are still two machines. The ordinal is what distinguishes
-/// them -- "#1", "#2" -- and the app writes it into the machine's name template
-/// as literal text at launch (see `MachineLaunchName`).
+/// them -- the app supplies it with `--machine-ordinal` and the server appends
+/// it to the default name as "#2".
 ///
 /// Counting is per preset, and per run of the app. Numbers are never reused
 /// within a session -- closing #1 does not free the number for the next
@@ -34,44 +34,5 @@ final class MachineNameSequence {
         let ordinal = (issued[presetName] ?? 0) + 1
         issued[presetName] = ordinal
         return ordinal
-    }
-}
-
-/// How the app composes the name template it passes to a machine at launch
-/// (`--machine-name`), kept pure so the composition is testable without a
-/// launch.
-///
-/// The template is the preset's own `machine_name` when it has one -- a preset
-/// author may write placeholders like `Station {econet-station}` -- otherwise
-/// the preset's display name with its braces escaped so a literal name is never
-/// read as containing a placeholder. The per-launch instance number is appended
-/// as the server's `{machine-ordinal}` placeholder, whose value the app supplies
-/// with `--machine-ordinal`; the server renders it "#2" and trims the whitespace
-/// so a single machine shows no trailing number-space clutter
-/// (docs/discussion/machine-name-templates.md section 8).
-enum MachineLaunchName {
-    /// The placeholder the server renders to the launch instance number ("#2"),
-    /// fed by `--machine-ordinal`.
-    static let ordinalPlaceholder = "{machine-ordinal}"
-
-    /// Escape `{` and `}` as `{{` and `}}` so a plain name containing a brace
-    /// renders verbatim rather than being parsed as a placeholder.
-    static func escapingBraces(_ text: String) -> String {
-        text.replacingOccurrences(of: "{", with: "{{")
-            .replacingOccurrences(of: "}", with: "}}")
-    }
-
-    /// The template to launch with: the preset's `machine_name` if non-empty,
-    /// otherwise its display name with braces escaped; then the ordinal
-    /// placeholder. The ordinal's value travels separately as `--machine-ordinal`.
-    static func template(presetMachineName: String?,
-                         presetDisplayName: String) -> String {
-        let base: String
-        if let machineName = presetMachineName, !machineName.isEmpty {
-            base = machineName
-        } else {
-            base = escapingBraces(presetDisplayName)
-        }
-        return "\(base) \(ordinalPlaceholder)"
     }
 }

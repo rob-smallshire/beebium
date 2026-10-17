@@ -22,7 +22,6 @@ final class PresetManagerDraftLaunchTests: XCTestCase {
     func testPresetLaunchArgumentsAreServerPlumbingOnly() {
         let args = PresetManager.presetLaunchArguments(
             presetFilepath: "/tmp/x.beebium-preset",
-            machineName: "Model B {machine-ordinal}",
             ordinal: 2,
             provenanceUUID: "UUID-1",
             romDirpath: nil)
@@ -33,11 +32,16 @@ final class PresetManagerDraftLaunchTests: XCTestCase {
             "--port", "0",
             "--advertise",
             "--wait=api",
-            "--machine-name", "Model B {machine-ordinal}",
             "--machine-ordinal", "2",
             "--provenance-type", "macos-gui",
             "--provenance-uuid", "UUID-1",
         ])
+
+        // The name is the server's to compose from the preset's own name plus
+        // this ordinal, so no --machine-name is passed; the preset carries any
+        // machine_description, so no --machine-description either.
+        XCTAssertFalse(args.contains("--machine-name"))
+        XCTAssertFalse(args.contains("--machine-description"))
 
         // The whole point of the rework: no per-setting CLI overrides -- the
         // preset document carries storage and sideways configuration.
@@ -49,7 +53,6 @@ final class PresetManagerDraftLaunchTests: XCTestCase {
     func testPresetLaunchArgumentsAppendRomDirWhenBundled() {
         let args = PresetManager.presetLaunchArguments(
             presetFilepath: "/tmp/x.beebium-preset",
-            machineName: "M {machine-ordinal}",
             ordinal: 1,
             provenanceUUID: "U",
             romDirpath: "/Applications/Beebium.app/roms")

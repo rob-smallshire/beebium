@@ -74,6 +74,7 @@ struct NewMachineDialog: View {
             VStack(alignment: .leading, spacing: 16) {
                 presetPickerSection
                 descriptionSection
+                machineDescriptionSection
                 configurationSection
                 saveAsPresetSection
                 PresetDiagnosticsView(diagnostics: diagnostics)
@@ -213,6 +214,43 @@ struct NewMachineDialog: View {
             }
         }
         .frame(height: 40, alignment: .top)
+    }
+
+    // MARK: - Machine Description
+
+    /// Help explaining what the description is for and how its template works.
+    static let machineDescriptionHelp =
+        "Shown beneath the machine's name as the window subtitle. You can use "
+        + "placeholders in braces, like {econet-station}, which are filled in "
+        + "while the machine runs. Leave it blank for no subtitle."
+
+    /// A String view of the optional draft description: an empty field clears it
+    /// back to absent, so a blank description is never written as "".
+    private var machineDescriptionBinding: Binding<String> {
+        Binding(
+            get: { draft.machineDescription ?? "" },
+            set: { draft.machineDescription = $0.isEmpty ? nil : $0 })
+    }
+
+    /// The machine's description template, edited before launch and carried into
+    /// the machine (via the temporary preset) so its subtitle is set from the
+    /// start. A plain text field with help rather than a live preview: there is
+    /// no running machine to render it against until launch.
+    @ViewBuilder
+    private var machineDescriptionSection: some View {
+        if selectedPreset != nil {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Machine description")
+                    .font(.subheadline.weight(.semibold))
+                TextField("e.g. Station {econet-station} (AUN, Model B)",
+                          text: machineDescriptionBinding)
+                    .textFieldStyle(.roundedBorder)
+                    .help(Self.machineDescriptionHelp)
+                Text("Appears as the window subtitle. Leave blank for none.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
     }
 
     // MARK: - Configuration Section
@@ -393,7 +431,7 @@ struct NewMachineDialog: View {
 
                 // Fill the metadata the launch needs if it was omitted.
                 if loaded.name == nil { loaded.name = preset.name }
-                if loaded.machineName == nil { loaded.machineName = preset.machineName }
+                if loaded.machineDescription == nil { loaded.machineDescription = preset.machineDescription }
 
                 // Ensure a drive row per drive the model offers (resolve-preset
                 // already lists both; this also covers the raw-file fallback).

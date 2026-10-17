@@ -24,17 +24,20 @@ final class SystemClient: ObservableObject, Disconnectable {
     /// Machine UUID (RFC 4122 v4), stable for machine lifetime
     @Published private(set) var machineUUID: String = ""
 
-    /// The machine's rendered name: the template with its placeholders replaced
-    /// by their current values. This is what titles, the Window menu and the
-    /// connection registry show; the server re-renders it as state changes and
-    /// pushes each change on the status stream, so it must never be cached.
+    /// The machine's name: plain text, never a template. This is what titles,
+    /// the Window menu and the connection registry show. A saved machine's name
+    /// is its document's; a transient machine's is the one it was launched with
+    /// (or its preset's, plus an instance number) until it is renamed. The
+    /// server pushes each change on the status stream, so it must never be
+    /// cached.
     @Published private(set) var machineName: String = ""
 
-    /// The machine's name template: the text the user edits, with `{key}`
-    /// placeholders the server renders into `machineName`. A plain name is a
-    /// template with no placeholders. Empty only before the server has reported
-    /// an identity, or from a server too old to carry the field.
-    @Published private(set) var machineNameTemplate: String = ""
+    /// The machine's description template as the user edits it: ordinary text in
+    /// which `{key}` stands for a placeholder's current value, which the server
+    /// renders into `machineDescription`. Empty when the machine has no
+    /// description. Seeds a description editor; the rendered result is
+    /// `machineDescription`.
+    @Published private(set) var machineDescriptionTemplate: String = ""
 
     /// The machine's rendered description: the templated identity string the
     /// server composes (for example "Station 254 (AUN, Model B)"), shown as the
@@ -174,7 +177,7 @@ final class SystemClient: ObservableObject, Disconnectable {
         isServerLocal = false
         machineUUID = ""
         machineName = ""
-        machineNameTemplate = ""
+        machineDescriptionTemplate = ""
         machineDescription = ""
         machineType = ""
         machineDisplayName = ""
@@ -198,17 +201,20 @@ final class SystemClient: ObservableObject, Disconnectable {
         }
     }
 
-    /// Set the machine's name template. A plain name is a template with no
-    /// placeholders; an empty one is refused by the server. On success the
-    /// response's identity (with the new rendered name) is applied at once so the
-    /// window title updates without waiting for the next status event, and the
-    /// server also emits an IDENTITY_CHANGED event that reaches updateIdentity by
-    /// the same path. Returns the outcome so the caller can stay open on failure.
-    func setMachineName(_ template: String) async -> Result<Void, MachineNameError> {
+    /// Set the machine's name: plain text, never a template; an empty one is
+    /// refused (INVALID_ARGUMENT). Only a machine not yet saved can be renamed
+    /// this way -- a saved machine is named by its document, so the server
+    /// refuses with FAILED_PRECONDITION -- but the message is surfaced either
+    /// way. On success the response's identity (with the new name) is applied at
+    /// once so the window title updates without waiting for the next status
+    /// event, and the server also emits an IDENTITY_CHANGED event that reaches
+    /// updateIdentity by the same path. Returns the outcome so the caller can
+    /// stay open on failure.
+    func setMachineName(_ name: String) async -> Result<Void, MachineNameError> {
         guard let client = client else { return .failure(.notConnected) }
         do {
             var request = Beebium_SetMachineNameRequest()
-            request.nameTemplate = template
+            request.name = name
             let response = try await client.setMachineName(request).response.get()
             updateIdentity(response.identity)
             return .success(())
@@ -251,59 +257,6 @@ final class SystemClient: ObservableObject, Disconnectable {
             return .success(response.resetUnits)
         } catch {
             return .failure(SaveClient.saveError(from: error))
-        }
-    }
-
-    /// Whether an RPC failed because the server does not implement it -- an
-    /// older server missing an RPC this app's protocol carries. Such a call
-    /// degrades to a simpler UI rather than surfacing an error.
-    private static func isUnimplemented(_ error: Error) -> Bool {
-        (error as? GRPCStatus)?.code == .unimplemented
-    }
-
-    /// The machine's name placeholders, as the server reports them with current
-    /// values. Returns nil when the server is too old to offer the RPC (or the
-    /// call fails): the caller then degrades to a plain name field with no
-    /// placeholder picker.
-    func listNamePlaceholders() async -> [Beebium_NamePlaceholder]? {
-        guard let client = client else { return nil }
-        do {
-            let response = try await client.listNamePlaceholders(
-                Beebium_ListNamePlaceholdersRequest()).response.get()
-            return response.placeholders
-        } catch {
-            if Self.isUnimplemented(error) {
-                NSLog("[SystemClient] ListNamePlaceholders unimplemented; "
-                      + "degrading to a plain name field")
-            } else {
-                NSLog("[SystemClient] ListNamePlaceholders failed: %@",
-                      error.localizedDescription)
-            }
-            return nil
-        }
-    }
-
-    /// Render `template` against this machine without changing its name, for a
-    /// live preview. Returns the rendered name and the report of unknown,
-    /// inapplicable and malformed parts. Returns nil when the server is too old
-    /// to offer the RPC (or the call fails): the caller then shows no preview.
-    func previewMachineName(_ template: String)
-        async -> (rendered: String, report: Beebium_NameTemplateReport)? {
-        guard let client = client else { return nil }
-        do {
-            var request = Beebium_PreviewMachineNameRequest()
-            request.nameTemplate = template
-            let response = try await client.previewMachineName(request).response.get()
-            return (response.name, response.report)
-        } catch {
-            if Self.isUnimplemented(error) {
-                NSLog("[SystemClient] PreviewMachineName unimplemented; "
-                      + "no live preview")
-            } else {
-                NSLog("[SystemClient] PreviewMachineName failed: %@",
-                      error.localizedDescription)
-            }
-            return nil
         }
     }
 
@@ -531,7 +484,8 @@ final class SystemClient: ObservableObject, Disconnectable {
     func updateIdentity(_ identity: Beebium_MachineIdentity) {
         machineUUID = identity.uuid
         machineName = identity.name
-        machineNameTemplate = identity.nameTemplate
+        machineDescription = identity.description_p
+        machineDescriptionTemplate = identity.descriptionTemplate
         machineType = identity.modelType
         machineDisplayName = identity.modelName
     }

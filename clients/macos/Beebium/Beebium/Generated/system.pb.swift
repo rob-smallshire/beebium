@@ -305,10 +305,14 @@ struct Beebium_MachineIdentity: Sendable {
   /// RFC 4122 v4 UUID, stable for machine lifetime
   var uuid: String = String()
 
-  /// The name to show: name_template rendered against the current values of
-  /// its placeholders. Titles, the _beebium._tcp announcement and every
-  /// consumer that displays the machine use this. Re-rendered about once a
-  /// second; a change arrives as SERVER_STATUS_IDENTITY_CHANGED.
+  /// The machine's name, plain text and never a template: what titles, the
+  /// _beebium._tcp announcement and every consumer that names the machine
+  /// show. A saved machine's is its document's name (its directory's name
+  /// without .beebium-machine, as it was when the machine was opened or
+  /// last saved); a machine not yet saved has the name it was launched with
+  /// (--machine-name), else its preset's name (else its model's) and its
+  /// launcher's instance number ("Model B (Disc) #2"), until SetMachineName
+  /// gives it another. A change arrives as SERVER_STATUS_IDENTITY_CHANGED.
   var name: String = String()
 
   /// Machine model type identifier (e.g., "ModelB", "ModelBPlus")
@@ -319,14 +323,21 @@ struct Beebium_MachineIdentity: Sendable {
   /// Immutable, set at creation
   var modelName: String = String()
 
-  /// The name as the user edits it, mutable via SetMachineName: ordinary
-  /// text in which {key} stands for a placeholder's current value, e.g.
-  /// "Station {econet-station} (AUN, Model B)". {{ and }} are literal
-  /// braces; an unknown key renders verbatim; a placeholder that does not
-  /// apply to this machine renders empty; ':' '|' '?' '!' inside braces are
-  /// reserved. A template without braces is a plain name. See
-  /// docs/discussion/machine-name-templates.md.
-  var nameTemplate: String = String()
+  /// The machine's description, shown beside its name (a window subtitle):
+  /// description_template rendered against the current values of its
+  /// placeholders, re-rendered about once a second. Empty when there is no
+  /// template. A change arrives as SERVER_STATUS_IDENTITY_CHANGED.
+  var description_p: String = String()
+
+  /// The description as the user edits it, mutable via
+  /// SetMachineDescription; empty for none: ordinary text in which {key}
+  /// stands for a placeholder's current value, e.g. "Station
+  /// {econet-station} (AUN)". {{ and }} are literal braces; an unknown key
+  /// renders verbatim; a placeholder that does not apply to this machine
+  /// renders empty; ':' '|' '?' '!' inside braces are reserved. From a
+  /// preset's machine_description, --machine-description, or a saved
+  /// machine's machine.json. See docs/discussion/machine-name-templates.md.
+  var descriptionTemplate: String = String()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -348,48 +359,54 @@ struct Beebium_ConnectionInfo: Sendable {
   init() {}
 }
 
-struct Beebium_SystemInfo: Sendable {
+struct Beebium_SystemInfo: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// Launch provenance (who started this core and when)
   var provenance: Beebium_LaunchProvenance {
-    get {return _provenance ?? Beebium_LaunchProvenance()}
-    set {_provenance = newValue}
+    get {return _storage._provenance ?? Beebium_LaunchProvenance()}
+    set {_uniqueStorage()._provenance = newValue}
   }
   /// Returns true if `provenance` has been explicitly set.
-  var hasProvenance: Bool {return self._provenance != nil}
+  var hasProvenance: Bool {return _storage._provenance != nil}
   /// Clears the value of `provenance`. Subsequent reads from it will return its default value.
-  mutating func clearProvenance() {self._provenance = nil}
+  mutating func clearProvenance() {_uniqueStorage()._provenance = nil}
 
   /// Machine identity (UUID and name)
   var identity: Beebium_MachineIdentity {
-    get {return _identity ?? Beebium_MachineIdentity()}
-    set {_identity = newValue}
+    get {return _storage._identity ?? Beebium_MachineIdentity()}
+    set {_uniqueStorage()._identity = newValue}
   }
   /// Returns true if `identity` has been explicitly set.
-  var hasIdentity: Bool {return self._identity != nil}
+  var hasIdentity: Bool {return _storage._identity != nil}
   /// Clears the value of `identity`. Subsequent reads from it will return its default value.
-  mutating func clearIdentity() {self._identity = nil}
+  mutating func clearIdentity() {_uniqueStorage()._identity = nil}
 
   /// Connection tracking (active client count)
   var connections: Beebium_ConnectionInfo {
-    get {return _connections ?? Beebium_ConnectionInfo()}
-    set {_connections = newValue}
+    get {return _storage._connections ?? Beebium_ConnectionInfo()}
+    set {_uniqueStorage()._connections = newValue}
   }
   /// Returns true if `connections` has been explicitly set.
-  var hasConnections: Bool {return self._connections != nil}
+  var hasConnections: Bool {return _storage._connections != nil}
   /// Clears the value of `connections`. Subsequent reads from it will return its default value.
-  mutating func clearConnections() {self._connections = nil}
+  mutating func clearConnections() {_uniqueStorage()._connections = nil}
 
   /// Nominal CPU clock frequency in Hz (e.g. 2000000 for 2 MHz).
-  var clockSpeedHz: UInt32 = 0
+  var clockSpeedHz: UInt32 {
+    get {return _storage._clockSpeedHz}
+    set {_uniqueStorage()._clockSpeedHz = newValue}
+  }
 
   /// Fingerprint of the wire protocol the server was built against (a hash of
   /// the normalised proto contract). Clients compare this to their own
   /// compiled-in fingerprint at connect and refuse to proceed on a mismatch.
-  var protocolFingerprint: String = String()
+  var protocolFingerprint: String {
+    get {return _storage._protocolFingerprint}
+    set {_uniqueStorage()._protocolFingerprint = newValue}
+  }
 
   /// Filesystem path of the running server executable, as resolved from the
   /// OS rather than argv[0], so a PATH symlink reports its real target.
@@ -402,7 +419,10 @@ struct Beebium_SystemInfo: Sendable {
   /// identical from the client. The path answers it directly.
   ///
   /// Empty if the path cannot be determined.
-  var executablePath: String = String()
+  var executablePath: String {
+    get {return _storage._executablePath}
+    set {_uniqueStorage()._executablePath = newValue}
+  }
 
   /// An opaque token identifying the host the server is running on, for
   /// comparison against the client's own. Equal tokens mean the two
@@ -423,24 +443,31 @@ struct Beebium_SystemInfo: Sendable {
   ///
   /// Empty if the host will not identify itself, which a client must read as
   /// "not the same host" rather than as matching another empty value.
-  var hostFingerprint: String = String()
+  var hostFingerprint: String {
+    get {return _storage._hostFingerprint}
+    set {_uniqueStorage()._hostFingerprint = newValue}
+  }
 
   /// The machine's directory: a saved machine's, or the transient one a
   /// machine not yet saved runs in. Empty when the server has none.
-  var machineDirpath: String = String()
+  var machineDirpath: String {
+    get {return _storage._machineDirpath}
+    set {_uniqueStorage()._machineDirpath = newValue}
+  }
 
   /// True for a saved machine, whose directory outlives the server; false
   /// for one not yet saved. A front-end offers Save for the one and Save
   /// As for the other.
-  var machineSaved: Bool = false
+  var machineSaved: Bool {
+    get {return _storage._machineSaved}
+    set {_uniqueStorage()._machineSaved = newValue}
+  }
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 
-  fileprivate var _provenance: Beebium_LaunchProvenance? = nil
-  fileprivate var _identity: Beebium_MachineIdentity? = nil
-  fileprivate var _connections: Beebium_ConnectionInfo? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 struct Beebium_SetMachineNameRequest: Sendable {
@@ -448,8 +475,8 @@ struct Beebium_SetMachineNameRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// The new name template (must not be empty).
-  var nameTemplate: String = String()
+  /// The new name, plain text (must not be empty).
+  var name: String = String()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -457,6 +484,41 @@ struct Beebium_SetMachineNameRequest: Sendable {
 }
 
 struct Beebium_SetMachineNameResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The updated identity.
+  var identity: Beebium_MachineIdentity {
+    get {return _identity ?? Beebium_MachineIdentity()}
+    set {_identity = newValue}
+  }
+  /// Returns true if `identity` has been explicitly set.
+  var hasIdentity: Bool {return self._identity != nil}
+  /// Clears the value of `identity`. Subsequent reads from it will return its default value.
+  mutating func clearIdentity() {self._identity = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _identity: Beebium_MachineIdentity? = nil
+}
+
+struct Beebium_SetMachineDescriptionRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The new description template; empty for no description.
+  var descriptionTemplate: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_SetMachineDescriptionResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -473,9 +535,9 @@ struct Beebium_SetMachineNameResponse: Sendable {
 
   /// What the rendering could not substitute, so a client can warn without
   /// parsing the template. Only the caller gets this; a client watching the
-  /// status stream that wants it calls PreviewMachineName.
-  var report: Beebium_NameTemplateReport {
-    get {return _report ?? Beebium_NameTemplateReport()}
+  /// status stream that wants it calls PreviewMachineDescription.
+  var report: Beebium_DescriptionTemplateReport {
+    get {return _report ?? Beebium_DescriptionTemplateReport()}
     set {_report = newValue}
   }
   /// Returns true if `report` has been explicitly set.
@@ -488,11 +550,11 @@ struct Beebium_SetMachineNameResponse: Sendable {
   init() {}
 
   fileprivate var _identity: Beebium_MachineIdentity? = nil
-  fileprivate var _report: Beebium_NameTemplateReport? = nil
+  fileprivate var _report: Beebium_DescriptionTemplateReport? = nil
 }
 
-/// What a template's rendering could not substitute.
-struct Beebium_NameTemplateReport: Sendable {
+/// What a description template's rendering could not substitute.
+struct Beebium_DescriptionTemplateReport: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -513,7 +575,7 @@ struct Beebium_NameTemplateReport: Sendable {
   init() {}
 }
 
-struct Beebium_ListNamePlaceholdersRequest: Sendable {
+struct Beebium_ListDescriptionPlaceholdersRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -523,8 +585,9 @@ struct Beebium_ListNamePlaceholdersRequest: Sendable {
   init() {}
 }
 
-/// A placeholder a name template can use, and its value on this machine.
-struct Beebium_NamePlaceholder: Sendable {
+/// A placeholder a description template can use, and its value on this
+/// machine.
+struct Beebium_DescriptionPlaceholder: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -558,42 +621,43 @@ struct Beebium_NamePlaceholder: Sendable {
   init() {}
 }
 
-struct Beebium_ListNamePlaceholdersResponse: Sendable {
+struct Beebium_ListDescriptionPlaceholdersResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// Every placeholder on this server, in a stable order.
-  var placeholders: [Beebium_NamePlaceholder] = []
+  var placeholders: [Beebium_DescriptionPlaceholder] = []
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 }
 
-struct Beebium_PreviewMachineNameRequest: Sendable {
+struct Beebium_PreviewMachineDescriptionRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var nameTemplate: String = String()
+  var descriptionTemplate: String = String()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 }
 
-struct Beebium_PreviewMachineNameResponse: Sendable {
+struct Beebium_PreviewMachineDescriptionResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// The rendering, as MachineIdentity.name would be with this template.
-  var name: String = String()
+  /// The rendering, as MachineIdentity.description would be with this
+  /// template.
+  var description_p: String = String()
 
   /// What the rendering could not substitute.
-  var report: Beebium_NameTemplateReport {
-    get {return _report ?? Beebium_NameTemplateReport()}
+  var report: Beebium_DescriptionTemplateReport {
+    get {return _report ?? Beebium_DescriptionTemplateReport()}
     set {_report = newValue}
   }
   /// Returns true if `report` has been explicitly set.
@@ -605,7 +669,7 @@ struct Beebium_PreviewMachineNameResponse: Sendable {
 
   init() {}
 
-  fileprivate var _report: Beebium_NameTemplateReport? = nil
+  fileprivate var _report: Beebium_DescriptionTemplateReport? = nil
 }
 
 struct Beebium_ShutdownRequest: Sendable {
@@ -694,7 +758,8 @@ struct Beebium_ServerStatusEvent: Sendable {
   /// Clients should disconnect within this time
   var shutdownGraceMs: UInt32 = 0
 
-  /// For IDENTITY_CHANGED: the updated identity
+  /// For IDENTITY_CHANGED: the updated identity, sent when its uuid, name or
+  /// description changes
   var identity: Beebium_MachineIdentity {
     get {return _identity ?? Beebium_MachineIdentity()}
     set {_identity = newValue}
@@ -1117,7 +1182,7 @@ extension Beebium_LaunchProvenance: SwiftProtobuf.Message, SwiftProtobuf._Messag
 
 extension Beebium_MachineIdentity: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".MachineIdentity"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}uuid\0\u{1}name\0\u{3}model_type\0\u{3}model_name\0\u{3}name_template\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}uuid\0\u{1}name\0\u{3}model_type\0\u{3}model_name\0\u{2}\u{2}description\0\u{3}description_template\0\u{b}name_template\0\u{c}\u{5}\u{1}")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1129,7 +1194,8 @@ extension Beebium_MachineIdentity: SwiftProtobuf.Message, SwiftProtobuf._Message
       case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.modelType) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.modelName) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.nameTemplate) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.descriptionTemplate) }()
       default: break
       }
     }
@@ -1148,8 +1214,11 @@ extension Beebium_MachineIdentity: SwiftProtobuf.Message, SwiftProtobuf._Message
     if !self.modelName.isEmpty {
       try visitor.visitSingularStringField(value: self.modelName, fieldNumber: 4)
     }
-    if !self.nameTemplate.isEmpty {
-      try visitor.visitSingularStringField(value: self.nameTemplate, fieldNumber: 5)
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 6)
+    }
+    if !self.descriptionTemplate.isEmpty {
+      try visitor.visitSingularStringField(value: self.descriptionTemplate, fieldNumber: 7)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1159,7 +1228,8 @@ extension Beebium_MachineIdentity: SwiftProtobuf.Message, SwiftProtobuf._Message
     if lhs.name != rhs.name {return false}
     if lhs.modelType != rhs.modelType {return false}
     if lhs.modelName != rhs.modelName {return false}
-    if lhs.nameTemplate != rhs.nameTemplate {return false}
+    if lhs.description_p != rhs.description_p {return false}
+    if lhs.descriptionTemplate != rhs.descriptionTemplate {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1199,21 +1269,169 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   static let protoMessageName: String = _protobuf_package + ".SystemInfo"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{3}provenance\0\u{1}identity\0\u{1}connections\0\u{3}clock_speed_hz\0\u{3}protocol_fingerprint\0\u{3}executable_path\0\u{3}host_fingerprint\0\u{3}machine_dirpath\0\u{3}machine_saved\0\u{b}machine_type\0\u{b}machine_display_name\0\u{c}\u{1}\u{1}\u{c}\u{2}\u{1}")
 
+  fileprivate class _StorageClass {
+    var _provenance: Beebium_LaunchProvenance? = nil
+    var _identity: Beebium_MachineIdentity? = nil
+    var _connections: Beebium_ConnectionInfo? = nil
+    var _clockSpeedHz: UInt32 = 0
+    var _protocolFingerprint: String = String()
+    var _executablePath: String = String()
+    var _hostFingerprint: String = String()
+    var _machineDirpath: String = String()
+    var _machineSaved: Bool = false
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _provenance = source._provenance
+      _identity = source._identity
+      _connections = source._connections
+      _clockSpeedHz = source._clockSpeedHz
+      _protocolFingerprint = source._protocolFingerprint
+      _executablePath = source._executablePath
+      _hostFingerprint = source._hostFingerprint
+      _machineDirpath = source._machineDirpath
+      _machineSaved = source._machineSaved
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 3: try { try decoder.decodeSingularMessageField(value: &_storage._provenance) }()
+        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._identity) }()
+        case 5: try { try decoder.decodeSingularMessageField(value: &_storage._connections) }()
+        case 6: try { try decoder.decodeSingularUInt32Field(value: &_storage._clockSpeedHz) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._protocolFingerprint) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._executablePath) }()
+        case 9: try { try decoder.decodeSingularStringField(value: &_storage._hostFingerprint) }()
+        case 10: try { try decoder.decodeSingularStringField(value: &_storage._machineDirpath) }()
+        case 11: try { try decoder.decodeSingularBoolField(value: &_storage._machineSaved) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      try { if let v = _storage._provenance {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+      } }()
+      try { if let v = _storage._identity {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      } }()
+      try { if let v = _storage._connections {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+      } }()
+      if _storage._clockSpeedHz != 0 {
+        try visitor.visitSingularUInt32Field(value: _storage._clockSpeedHz, fieldNumber: 6)
+      }
+      if !_storage._protocolFingerprint.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._protocolFingerprint, fieldNumber: 7)
+      }
+      if !_storage._executablePath.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._executablePath, fieldNumber: 8)
+      }
+      if !_storage._hostFingerprint.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._hostFingerprint, fieldNumber: 9)
+      }
+      if !_storage._machineDirpath.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._machineDirpath, fieldNumber: 10)
+      }
+      if _storage._machineSaved != false {
+        try visitor.visitSingularBoolField(value: _storage._machineSaved, fieldNumber: 11)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_SystemInfo, rhs: Beebium_SystemInfo) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._provenance != rhs_storage._provenance {return false}
+        if _storage._identity != rhs_storage._identity {return false}
+        if _storage._connections != rhs_storage._connections {return false}
+        if _storage._clockSpeedHz != rhs_storage._clockSpeedHz {return false}
+        if _storage._protocolFingerprint != rhs_storage._protocolFingerprint {return false}
+        if _storage._executablePath != rhs_storage._executablePath {return false}
+        if _storage._hostFingerprint != rhs_storage._hostFingerprint {return false}
+        if _storage._machineDirpath != rhs_storage._machineDirpath {return false}
+        if _storage._machineSaved != rhs_storage._machineSaved {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_SetMachineNameRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".SetMachineNameRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0")
+
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       // The use of inline closures is to circumvent an issue where the compiler
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 3: try { try decoder.decodeSingularMessageField(value: &self._provenance) }()
-      case 4: try { try decoder.decodeSingularMessageField(value: &self._identity) }()
-      case 5: try { try decoder.decodeSingularMessageField(value: &self._connections) }()
-      case 6: try { try decoder.decodeSingularUInt32Field(value: &self.clockSpeedHz) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self.protocolFingerprint) }()
-      case 8: try { try decoder.decodeSingularStringField(value: &self.executablePath) }()
-      case 9: try { try decoder.decodeSingularStringField(value: &self.hostFingerprint) }()
-      case 10: try { try decoder.decodeSingularStringField(value: &self.machineDirpath) }()
-      case 11: try { try decoder.decodeSingularBoolField(value: &self.machineSaved) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_SetMachineNameRequest, rhs: Beebium_SetMachineNameRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_SetMachineNameResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".SetMachineNameResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}identity\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._identity) }()
       default: break
       }
     }
@@ -1224,54 +1442,22 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._provenance {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
-    } }()
     try { if let v = self._identity {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
     } }()
-    try { if let v = self._connections {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
-    } }()
-    if self.clockSpeedHz != 0 {
-      try visitor.visitSingularUInt32Field(value: self.clockSpeedHz, fieldNumber: 6)
-    }
-    if !self.protocolFingerprint.isEmpty {
-      try visitor.visitSingularStringField(value: self.protocolFingerprint, fieldNumber: 7)
-    }
-    if !self.executablePath.isEmpty {
-      try visitor.visitSingularStringField(value: self.executablePath, fieldNumber: 8)
-    }
-    if !self.hostFingerprint.isEmpty {
-      try visitor.visitSingularStringField(value: self.hostFingerprint, fieldNumber: 9)
-    }
-    if !self.machineDirpath.isEmpty {
-      try visitor.visitSingularStringField(value: self.machineDirpath, fieldNumber: 10)
-    }
-    if self.machineSaved != false {
-      try visitor.visitSingularBoolField(value: self.machineSaved, fieldNumber: 11)
-    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_SystemInfo, rhs: Beebium_SystemInfo) -> Bool {
-    if lhs._provenance != rhs._provenance {return false}
+  static func ==(lhs: Beebium_SetMachineNameResponse, rhs: Beebium_SetMachineNameResponse) -> Bool {
     if lhs._identity != rhs._identity {return false}
-    if lhs._connections != rhs._connections {return false}
-    if lhs.clockSpeedHz != rhs.clockSpeedHz {return false}
-    if lhs.protocolFingerprint != rhs.protocolFingerprint {return false}
-    if lhs.executablePath != rhs.executablePath {return false}
-    if lhs.hostFingerprint != rhs.hostFingerprint {return false}
-    if lhs.machineDirpath != rhs.machineDirpath {return false}
-    if lhs.machineSaved != rhs.machineSaved {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension Beebium_SetMachineNameRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".SetMachineNameRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}name_template\0")
+extension Beebium_SetMachineDescriptionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".SetMachineDescriptionRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}description_template\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1279,28 +1465,28 @@ extension Beebium_SetMachineNameRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.nameTemplate) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.descriptionTemplate) }()
       default: break
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.nameTemplate.isEmpty {
-      try visitor.visitSingularStringField(value: self.nameTemplate, fieldNumber: 1)
+    if !self.descriptionTemplate.isEmpty {
+      try visitor.visitSingularStringField(value: self.descriptionTemplate, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_SetMachineNameRequest, rhs: Beebium_SetMachineNameRequest) -> Bool {
-    if lhs.nameTemplate != rhs.nameTemplate {return false}
+  static func ==(lhs: Beebium_SetMachineDescriptionRequest, rhs: Beebium_SetMachineDescriptionRequest) -> Bool {
+    if lhs.descriptionTemplate != rhs.descriptionTemplate {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension Beebium_SetMachineNameResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".SetMachineNameResponse"
+extension Beebium_SetMachineDescriptionResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".SetMachineDescriptionResponse"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}identity\0\u{1}report\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1330,7 +1516,7 @@ extension Beebium_SetMachineNameResponse: SwiftProtobuf.Message, SwiftProtobuf._
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_SetMachineNameResponse, rhs: Beebium_SetMachineNameResponse) -> Bool {
+  static func ==(lhs: Beebium_SetMachineDescriptionResponse, rhs: Beebium_SetMachineDescriptionResponse) -> Bool {
     if lhs._identity != rhs._identity {return false}
     if lhs._report != rhs._report {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -1338,8 +1524,8 @@ extension Beebium_SetMachineNameResponse: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Beebium_NameTemplateReport: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".NameTemplateReport"
+extension Beebium_DescriptionTemplateReport: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".DescriptionTemplateReport"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}unknown_keys\0\u{3}inapplicable_keys\0\u{1}malformed\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1369,7 +1555,7 @@ extension Beebium_NameTemplateReport: SwiftProtobuf.Message, SwiftProtobuf._Mess
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_NameTemplateReport, rhs: Beebium_NameTemplateReport) -> Bool {
+  static func ==(lhs: Beebium_DescriptionTemplateReport, rhs: Beebium_DescriptionTemplateReport) -> Bool {
     if lhs.unknownKeys != rhs.unknownKeys {return false}
     if lhs.inapplicableKeys != rhs.inapplicableKeys {return false}
     if lhs.malformed != rhs.malformed {return false}
@@ -1378,8 +1564,8 @@ extension Beebium_NameTemplateReport: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Beebium_ListNamePlaceholdersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".ListNamePlaceholdersRequest"
+extension Beebium_ListDescriptionPlaceholdersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ListDescriptionPlaceholdersRequest"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1391,14 +1577,14 @@ extension Beebium_ListNamePlaceholdersRequest: SwiftProtobuf.Message, SwiftProto
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_ListNamePlaceholdersRequest, rhs: Beebium_ListNamePlaceholdersRequest) -> Bool {
+  static func ==(lhs: Beebium_ListDescriptionPlaceholdersRequest, rhs: Beebium_ListDescriptionPlaceholdersRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension Beebium_NamePlaceholder: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".NamePlaceholder"
+extension Beebium_DescriptionPlaceholder: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".DescriptionPlaceholder"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}label\0\u{1}description\0\u{1}group\0\u{1}insertion\0\u{1}value\0\u{1}applicable\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1444,7 +1630,7 @@ extension Beebium_NamePlaceholder: SwiftProtobuf.Message, SwiftProtobuf._Message
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_NamePlaceholder, rhs: Beebium_NamePlaceholder) -> Bool {
+  static func ==(lhs: Beebium_DescriptionPlaceholder, rhs: Beebium_DescriptionPlaceholder) -> Bool {
     if lhs.key != rhs.key {return false}
     if lhs.label != rhs.label {return false}
     if lhs.description_p != rhs.description_p {return false}
@@ -1457,8 +1643,8 @@ extension Beebium_NamePlaceholder: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension Beebium_ListNamePlaceholdersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".ListNamePlaceholdersResponse"
+extension Beebium_ListDescriptionPlaceholdersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ListDescriptionPlaceholdersResponse"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}placeholders\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1480,16 +1666,16 @@ extension Beebium_ListNamePlaceholdersResponse: SwiftProtobuf.Message, SwiftProt
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_ListNamePlaceholdersResponse, rhs: Beebium_ListNamePlaceholdersResponse) -> Bool {
+  static func ==(lhs: Beebium_ListDescriptionPlaceholdersResponse, rhs: Beebium_ListDescriptionPlaceholdersResponse) -> Bool {
     if lhs.placeholders != rhs.placeholders {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension Beebium_PreviewMachineNameRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".PreviewMachineNameRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}name_template\0")
+extension Beebium_PreviewMachineDescriptionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PreviewMachineDescriptionRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}description_template\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1497,29 +1683,29 @@ extension Beebium_PreviewMachineNameRequest: SwiftProtobuf.Message, SwiftProtobu
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.nameTemplate) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.descriptionTemplate) }()
       default: break
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.nameTemplate.isEmpty {
-      try visitor.visitSingularStringField(value: self.nameTemplate, fieldNumber: 1)
+    if !self.descriptionTemplate.isEmpty {
+      try visitor.visitSingularStringField(value: self.descriptionTemplate, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_PreviewMachineNameRequest, rhs: Beebium_PreviewMachineNameRequest) -> Bool {
-    if lhs.nameTemplate != rhs.nameTemplate {return false}
+  static func ==(lhs: Beebium_PreviewMachineDescriptionRequest, rhs: Beebium_PreviewMachineDescriptionRequest) -> Bool {
+    if lhs.descriptionTemplate != rhs.descriptionTemplate {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension Beebium_PreviewMachineNameResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".PreviewMachineNameResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}report\0")
+extension Beebium_PreviewMachineDescriptionResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PreviewMachineDescriptionResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}description\0\u{1}report\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1527,7 +1713,7 @@ extension Beebium_PreviewMachineNameResponse: SwiftProtobuf.Message, SwiftProtob
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
       case 2: try { try decoder.decodeSingularMessageField(value: &self._report) }()
       default: break
       }
@@ -1539,8 +1725,8 @@ extension Beebium_PreviewMachineNameResponse: SwiftProtobuf.Message, SwiftProtob
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.name.isEmpty {
-      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 1)
     }
     try { if let v = self._report {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
@@ -1548,8 +1734,8 @@ extension Beebium_PreviewMachineNameResponse: SwiftProtobuf.Message, SwiftProtob
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_PreviewMachineNameResponse, rhs: Beebium_PreviewMachineNameResponse) -> Bool {
-    if lhs.name != rhs.name {return false}
+  static func ==(lhs: Beebium_PreviewMachineDescriptionResponse, rhs: Beebium_PreviewMachineDescriptionResponse) -> Bool {
+    if lhs.description_p != rhs.description_p {return false}
     if lhs._report != rhs._report {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

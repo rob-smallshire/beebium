@@ -36,8 +36,11 @@ struct MachineDraft: Equatable {
     var model: String?
     /// Display name shown in the preset picker.
     var name: String?
-    /// Window-title template, e.g. "Station {econet-station} (AUN, Model B)".
-    var machineName: String?
+    /// The machine's description template (the preset key `machine_description`),
+    /// shown as the window subtitle once the server renders its placeholders,
+    /// e.g. "Station {econet-station} (AUN, Model B)". Distinct from
+    /// `description`, the preset's picker text.
+    var machineDescription: String?
     var description: String?
     /// Release date for sorting: YYYY, YYYY-MM or YYYY-MM-DD.
     var releaseDate: String?
@@ -57,7 +60,7 @@ struct MachineDraft: Equatable {
 
     init(model: String? = nil,
          name: String? = nil,
-         machineName: String? = nil,
+         machineDescription: String? = nil,
          description: String? = nil,
          releaseDate: String? = nil,
          autoBoot: Bool? = nil,
@@ -70,7 +73,7 @@ struct MachineDraft: Equatable {
          extra: [String: JSONValue] = [:]) {
         self.model = model
         self.name = name
-        self.machineName = machineName
+        self.machineDescription = machineDescription
         self.description = description
         self.releaseDate = releaseDate
         self.autoBoot = autoBoot
@@ -225,7 +228,7 @@ struct MachineDraft: Equatable {
 
 extension MachineDraft: Codable {
     private static let knownKeys: Set<String> = [
-        "model", "name", "machine_name", "description", "release_date",
+        "model", "name", "machine_description", "description", "release_date",
         "auto_boot", "speed", "startup", "storage", "sideways_bank", "econet", "extensions",
     ]
 
@@ -233,7 +236,7 @@ extension MachineDraft: Codable {
         let c = try decoder.container(keyedBy: JSONCodingKey.self)
         model = try c.decodeIfPresent(String.self, forKey: "model")
         name = try c.decodeIfPresent(String.self, forKey: "name")
-        machineName = try c.decodeIfPresent(String.self, forKey: "machine_name")
+        machineDescription = try c.decodeIfPresent(String.self, forKey: "machine_description")
         description = try c.decodeIfPresent(String.self, forKey: "description")
         releaseDate = try c.decodeIfPresent(String.self, forKey: "release_date")
         autoBoot = try c.decodeIfPresent(Bool.self, forKey: "auto_boot")
@@ -250,7 +253,7 @@ extension MachineDraft: Codable {
         var c = encoder.container(keyedBy: JSONCodingKey.self)
         try c.encodeIfPresent(model, forKey: "model")
         try c.encodeIfPresent(name, forKey: "name")
-        try c.encodeIfPresent(machineName, forKey: "machine_name")
+        try c.encodeIfPresent(machineDescription, forKey: "machine_description")
         try c.encodeIfPresent(description, forKey: "description")
         try c.encodeIfPresent(releaseDate, forKey: "release_date")
         try c.encodeIfPresent(autoBoot, forKey: "auto_boot")

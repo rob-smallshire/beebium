@@ -53,7 +53,7 @@ enum PresetCatalog {
                 coreExecutablePath: executablePath,
                 presetFilepath: row.filepath,
                 source: row.source == "user" ? .userPreset : .systemPreset,
-                machineName: row.machineName,
+                machineDescription: row.machineDescription,
                 modelName: modelDisplayName(row),
                 modelDescription: row.description,
                 releaseDate: row.releaseDate,

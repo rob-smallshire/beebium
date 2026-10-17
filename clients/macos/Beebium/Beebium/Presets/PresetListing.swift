@@ -20,17 +20,19 @@ import Foundation
 /// `id`, `name` and `source` are always present. `name` is the display name,
 /// with the server substituting the model's own display name when a preset
 /// declares none, so the client needs no fallback of its own. `model`,
-/// `machineName`, `description` and `releaseDate` appear only when the preset
-/// gives them, never as null. `filepath` is the stored preset's path, to hand
-/// back to `start --preset`, `resolve-preset` and reveal-in-Finder.
-/// `thumbnail` says whether `show-preset --thumbnail` has one to write.
+/// `machineDescription`, `description` and `releaseDate` appear only when the
+/// preset gives them, never as null. `machineDescription` is the preset's
+/// description template (the window subtitle), distinct from `description`, the
+/// picker text. `filepath` is the stored preset's path, to hand back to `start
+/// --preset`, `resolve-preset` and reveal-in-Finder. `thumbnail` says whether
+/// `show-preset --thumbnail` has one to write.
 struct PresetListing: Decodable, Equatable {
     let id: String
     let name: String
     /// "system" or "user".
     let source: String
     let model: String?
-    let machineName: String?
+    let machineDescription: String?
     let description: String?
     let releaseDate: String?
     let filepath: String
@@ -41,7 +43,7 @@ struct PresetListing: Decodable, Equatable {
         case name
         case source
         case model
-        case machineName = "machine_name"
+        case machineDescription = "machine_description"
         case description
         case releaseDate = "release_date"
         case filepath

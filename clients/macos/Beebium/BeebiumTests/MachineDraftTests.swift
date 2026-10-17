@@ -42,7 +42,7 @@ final class MachineDraftTests: XCTestCase {
 
     func testRoundTripsFileServerPreset() throws {
         // A Level 3 File Server preset exercises every modelled area: a
-        // machine_name template, auto_boot, storage with an FDC, sideways ROMs,
+        // machine_description template, auto_boot, storage with an FDC, sideways ROMs,
         // econet with a transport and its string parameters, and an extensions
         // array mixing bare entries with config objects (including an integer
         // value, scsi-id).
@@ -52,7 +52,7 @@ final class MachineDraftTests: XCTestCase {
           "name": "Station 254 (L3 File Server, Model B)",
           "release_date": "1985",
           "description": "Level 3 File Server",
-          "machine_name": "L3 File Server, station {econet-station}",
+          "machine_description": "L3 File Server, station {econet-station}",
           "auto_boot": true,
           "storage": { "fdc_socket": { "id": "acorn-1770" } },
           "sideways_bank": {
@@ -76,7 +76,7 @@ final class MachineDraftTests: XCTestCase {
         let draft = try assertRoundTrips(json, "l3fs")
 
         XCTAssertEqual(draft.model, "model-b")
-        XCTAssertEqual(draft.machineName, "L3 File Server, station {econet-station}")
+        XCTAssertEqual(draft.machineDescription, "L3 File Server, station {econet-station}")
         XCTAssertEqual(draft.autoBoot, true)
         XCTAssertEqual(draft.storage?.fdcSocket?.id, "acorn-1770")
         XCTAssertEqual(draft.sidewaysBank?.slots.count, 2)

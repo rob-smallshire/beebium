@@ -29,15 +29,20 @@ internal protocol Beebium_SystemServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_SetMachineNameRequest, Beebium_SetMachineNameResponse>
 
-  func listNamePlaceholders(
-    _ request: Beebium_ListNamePlaceholdersRequest,
+  func setMachineDescription(
+    _ request: Beebium_SetMachineDescriptionRequest,
     callOptions: CallOptions?
-  ) -> UnaryCall<Beebium_ListNamePlaceholdersRequest, Beebium_ListNamePlaceholdersResponse>
+  ) -> UnaryCall<Beebium_SetMachineDescriptionRequest, Beebium_SetMachineDescriptionResponse>
 
-  func previewMachineName(
-    _ request: Beebium_PreviewMachineNameRequest,
+  func listDescriptionPlaceholders(
+    _ request: Beebium_ListDescriptionPlaceholdersRequest,
     callOptions: CallOptions?
-  ) -> UnaryCall<Beebium_PreviewMachineNameRequest, Beebium_PreviewMachineNameResponse>
+  ) -> UnaryCall<Beebium_ListDescriptionPlaceholdersRequest, Beebium_ListDescriptionPlaceholdersResponse>
+
+  func previewMachineDescription(
+    _ request: Beebium_PreviewMachineDescriptionRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_PreviewMachineDescriptionRequest, Beebium_PreviewMachineDescriptionResponse>
 
   func watchServerStatus(
     _ request: Beebium_WatchServerStatusRequest,
@@ -110,8 +115,10 @@ extension Beebium_SystemServiceClientProtocol {
     )
   }
 
-  /// Set the machine's name template (a plain name is a template with no
-  /// placeholders). See MachineIdentity.name_template.
+  /// Set a machine's name: plain text, never a template. Only for a machine
+  /// not yet saved; a saved machine's name is its document's, so the
+  /// document is renamed instead. Errors: INVALID_ARGUMENT for an empty
+  /// name; FAILED_PRECONDITION for a saved machine.
   ///
   /// - Parameters:
   ///   - request: Request to send to SetMachineName.
@@ -129,41 +136,60 @@ extension Beebium_SystemServiceClientProtocol {
     )
   }
 
-  /// List the placeholders a name template can use on this server, with
-  /// their current values. Clients carry no list of keys; they ask.
+  /// Set the machine's description template (empty: no description). See
+  /// MachineIdentity.description_template.
   ///
   /// - Parameters:
-  ///   - request: Request to send to ListNamePlaceholders.
+  ///   - request: Request to send to SetMachineDescription.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func listNamePlaceholders(
-    _ request: Beebium_ListNamePlaceholdersRequest,
+  internal func setMachineDescription(
+    _ request: Beebium_SetMachineDescriptionRequest,
     callOptions: CallOptions? = nil
-  ) -> UnaryCall<Beebium_ListNamePlaceholdersRequest, Beebium_ListNamePlaceholdersResponse> {
+  ) -> UnaryCall<Beebium_SetMachineDescriptionRequest, Beebium_SetMachineDescriptionResponse> {
     return self.makeUnaryCall(
-      path: Beebium_SystemServiceClientMetadata.Methods.listNamePlaceholders.path,
+      path: Beebium_SystemServiceClientMetadata.Methods.setMachineDescription.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makeListNamePlaceholdersInterceptors() ?? []
+      interceptors: self.interceptors?.makeSetMachineDescriptionInterceptors() ?? []
     )
   }
 
-  /// Render a name template against the current values without changing
-  /// anything, for a live preview while the user edits.
+  /// List the placeholders a description template can use on this server,
+  /// with their current values. Clients carry no list of keys; they ask.
   ///
   /// - Parameters:
-  ///   - request: Request to send to PreviewMachineName.
+  ///   - request: Request to send to ListDescriptionPlaceholders.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func previewMachineName(
-    _ request: Beebium_PreviewMachineNameRequest,
+  internal func listDescriptionPlaceholders(
+    _ request: Beebium_ListDescriptionPlaceholdersRequest,
     callOptions: CallOptions? = nil
-  ) -> UnaryCall<Beebium_PreviewMachineNameRequest, Beebium_PreviewMachineNameResponse> {
+  ) -> UnaryCall<Beebium_ListDescriptionPlaceholdersRequest, Beebium_ListDescriptionPlaceholdersResponse> {
     return self.makeUnaryCall(
-      path: Beebium_SystemServiceClientMetadata.Methods.previewMachineName.path,
+      path: Beebium_SystemServiceClientMetadata.Methods.listDescriptionPlaceholders.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makePreviewMachineNameInterceptors() ?? []
+      interceptors: self.interceptors?.makeListDescriptionPlaceholdersInterceptors() ?? []
+    )
+  }
+
+  /// Render a description template against the current values without
+  /// changing anything, for a live preview while the user edits.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to PreviewMachineDescription.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func previewMachineDescription(
+    _ request: Beebium_PreviewMachineDescriptionRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_PreviewMachineDescriptionRequest, Beebium_PreviewMachineDescriptionResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.previewMachineDescription.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makePreviewMachineDescriptionInterceptors() ?? []
     )
   }
 
@@ -425,15 +451,20 @@ internal protocol Beebium_SystemServiceAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_SetMachineNameRequest, Beebium_SetMachineNameResponse>
 
-  func makeListNamePlaceholdersCall(
-    _ request: Beebium_ListNamePlaceholdersRequest,
+  func makeSetMachineDescriptionCall(
+    _ request: Beebium_SetMachineDescriptionRequest,
     callOptions: CallOptions?
-  ) -> GRPCAsyncUnaryCall<Beebium_ListNamePlaceholdersRequest, Beebium_ListNamePlaceholdersResponse>
+  ) -> GRPCAsyncUnaryCall<Beebium_SetMachineDescriptionRequest, Beebium_SetMachineDescriptionResponse>
 
-  func makePreviewMachineNameCall(
-    _ request: Beebium_PreviewMachineNameRequest,
+  func makeListDescriptionPlaceholdersCall(
+    _ request: Beebium_ListDescriptionPlaceholdersRequest,
     callOptions: CallOptions?
-  ) -> GRPCAsyncUnaryCall<Beebium_PreviewMachineNameRequest, Beebium_PreviewMachineNameResponse>
+  ) -> GRPCAsyncUnaryCall<Beebium_ListDescriptionPlaceholdersRequest, Beebium_ListDescriptionPlaceholdersResponse>
+
+  func makePreviewMachineDescriptionCall(
+    _ request: Beebium_PreviewMachineDescriptionRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_PreviewMachineDescriptionRequest, Beebium_PreviewMachineDescriptionResponse>
 
   func makeWatchServerStatusCall(
     _ request: Beebium_WatchServerStatusRequest,
@@ -515,27 +546,39 @@ extension Beebium_SystemServiceAsyncClientProtocol {
     )
   }
 
-  internal func makeListNamePlaceholdersCall(
-    _ request: Beebium_ListNamePlaceholdersRequest,
+  internal func makeSetMachineDescriptionCall(
+    _ request: Beebium_SetMachineDescriptionRequest,
     callOptions: CallOptions? = nil
-  ) -> GRPCAsyncUnaryCall<Beebium_ListNamePlaceholdersRequest, Beebium_ListNamePlaceholdersResponse> {
+  ) -> GRPCAsyncUnaryCall<Beebium_SetMachineDescriptionRequest, Beebium_SetMachineDescriptionResponse> {
     return self.makeAsyncUnaryCall(
-      path: Beebium_SystemServiceClientMetadata.Methods.listNamePlaceholders.path,
+      path: Beebium_SystemServiceClientMetadata.Methods.setMachineDescription.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makeListNamePlaceholdersInterceptors() ?? []
+      interceptors: self.interceptors?.makeSetMachineDescriptionInterceptors() ?? []
     )
   }
 
-  internal func makePreviewMachineNameCall(
-    _ request: Beebium_PreviewMachineNameRequest,
+  internal func makeListDescriptionPlaceholdersCall(
+    _ request: Beebium_ListDescriptionPlaceholdersRequest,
     callOptions: CallOptions? = nil
-  ) -> GRPCAsyncUnaryCall<Beebium_PreviewMachineNameRequest, Beebium_PreviewMachineNameResponse> {
+  ) -> GRPCAsyncUnaryCall<Beebium_ListDescriptionPlaceholdersRequest, Beebium_ListDescriptionPlaceholdersResponse> {
     return self.makeAsyncUnaryCall(
-      path: Beebium_SystemServiceClientMetadata.Methods.previewMachineName.path,
+      path: Beebium_SystemServiceClientMetadata.Methods.listDescriptionPlaceholders.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makePreviewMachineNameInterceptors() ?? []
+      interceptors: self.interceptors?.makeListDescriptionPlaceholdersInterceptors() ?? []
+    )
+  }
+
+  internal func makePreviewMachineDescriptionCall(
+    _ request: Beebium_PreviewMachineDescriptionRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_PreviewMachineDescriptionRequest, Beebium_PreviewMachineDescriptionResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.previewMachineDescription.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makePreviewMachineDescriptionInterceptors() ?? []
     )
   }
 
@@ -674,27 +717,39 @@ extension Beebium_SystemServiceAsyncClientProtocol {
     )
   }
 
-  internal func listNamePlaceholders(
-    _ request: Beebium_ListNamePlaceholdersRequest,
+  internal func setMachineDescription(
+    _ request: Beebium_SetMachineDescriptionRequest,
     callOptions: CallOptions? = nil
-  ) async throws -> Beebium_ListNamePlaceholdersResponse {
+  ) async throws -> Beebium_SetMachineDescriptionResponse {
     return try await self.performAsyncUnaryCall(
-      path: Beebium_SystemServiceClientMetadata.Methods.listNamePlaceholders.path,
+      path: Beebium_SystemServiceClientMetadata.Methods.setMachineDescription.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makeListNamePlaceholdersInterceptors() ?? []
+      interceptors: self.interceptors?.makeSetMachineDescriptionInterceptors() ?? []
     )
   }
 
-  internal func previewMachineName(
-    _ request: Beebium_PreviewMachineNameRequest,
+  internal func listDescriptionPlaceholders(
+    _ request: Beebium_ListDescriptionPlaceholdersRequest,
     callOptions: CallOptions? = nil
-  ) async throws -> Beebium_PreviewMachineNameResponse {
+  ) async throws -> Beebium_ListDescriptionPlaceholdersResponse {
     return try await self.performAsyncUnaryCall(
-      path: Beebium_SystemServiceClientMetadata.Methods.previewMachineName.path,
+      path: Beebium_SystemServiceClientMetadata.Methods.listDescriptionPlaceholders.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makePreviewMachineNameInterceptors() ?? []
+      interceptors: self.interceptors?.makeListDescriptionPlaceholdersInterceptors() ?? []
+    )
+  }
+
+  internal func previewMachineDescription(
+    _ request: Beebium_PreviewMachineDescriptionRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_PreviewMachineDescriptionResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.previewMachineDescription.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makePreviewMachineDescriptionInterceptors() ?? []
     )
   }
 
@@ -832,11 +887,14 @@ internal protocol Beebium_SystemServiceClientInterceptorFactoryProtocol: Sendabl
   /// - Returns: Interceptors to use when invoking 'setMachineName'.
   func makeSetMachineNameInterceptors() -> [ClientInterceptor<Beebium_SetMachineNameRequest, Beebium_SetMachineNameResponse>]
 
-  /// - Returns: Interceptors to use when invoking 'listNamePlaceholders'.
-  func makeListNamePlaceholdersInterceptors() -> [ClientInterceptor<Beebium_ListNamePlaceholdersRequest, Beebium_ListNamePlaceholdersResponse>]
+  /// - Returns: Interceptors to use when invoking 'setMachineDescription'.
+  func makeSetMachineDescriptionInterceptors() -> [ClientInterceptor<Beebium_SetMachineDescriptionRequest, Beebium_SetMachineDescriptionResponse>]
 
-  /// - Returns: Interceptors to use when invoking 'previewMachineName'.
-  func makePreviewMachineNameInterceptors() -> [ClientInterceptor<Beebium_PreviewMachineNameRequest, Beebium_PreviewMachineNameResponse>]
+  /// - Returns: Interceptors to use when invoking 'listDescriptionPlaceholders'.
+  func makeListDescriptionPlaceholdersInterceptors() -> [ClientInterceptor<Beebium_ListDescriptionPlaceholdersRequest, Beebium_ListDescriptionPlaceholdersResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'previewMachineDescription'.
+  func makePreviewMachineDescriptionInterceptors() -> [ClientInterceptor<Beebium_PreviewMachineDescriptionRequest, Beebium_PreviewMachineDescriptionResponse>]
 
   /// - Returns: Interceptors to use when invoking 'watchServerStatus'.
   func makeWatchServerStatusInterceptors() -> [ClientInterceptor<Beebium_WatchServerStatusRequest, Beebium_ServerStatusEvent>]
@@ -873,8 +931,9 @@ internal enum Beebium_SystemServiceClientMetadata {
     methods: [
       Beebium_SystemServiceClientMetadata.Methods.getSystemInfo,
       Beebium_SystemServiceClientMetadata.Methods.setMachineName,
-      Beebium_SystemServiceClientMetadata.Methods.listNamePlaceholders,
-      Beebium_SystemServiceClientMetadata.Methods.previewMachineName,
+      Beebium_SystemServiceClientMetadata.Methods.setMachineDescription,
+      Beebium_SystemServiceClientMetadata.Methods.listDescriptionPlaceholders,
+      Beebium_SystemServiceClientMetadata.Methods.previewMachineDescription,
       Beebium_SystemServiceClientMetadata.Methods.watchServerStatus,
       Beebium_SystemServiceClientMetadata.Methods.requestShutdown,
       Beebium_SystemServiceClientMetadata.Methods.getAdvertisementState,
@@ -900,15 +959,21 @@ internal enum Beebium_SystemServiceClientMetadata {
       type: GRPCCallType.unary
     )
 
-    internal static let listNamePlaceholders = GRPCMethodDescriptor(
-      name: "ListNamePlaceholders",
-      path: "/beebium.SystemService/ListNamePlaceholders",
+    internal static let setMachineDescription = GRPCMethodDescriptor(
+      name: "SetMachineDescription",
+      path: "/beebium.SystemService/SetMachineDescription",
       type: GRPCCallType.unary
     )
 
-    internal static let previewMachineName = GRPCMethodDescriptor(
-      name: "PreviewMachineName",
-      path: "/beebium.SystemService/PreviewMachineName",
+    internal static let listDescriptionPlaceholders = GRPCMethodDescriptor(
+      name: "ListDescriptionPlaceholders",
+      path: "/beebium.SystemService/ListDescriptionPlaceholders",
+      type: GRPCCallType.unary
+    )
+
+    internal static let previewMachineDescription = GRPCMethodDescriptor(
+      name: "PreviewMachineDescription",
+      path: "/beebium.SystemService/PreviewMachineDescription",
       type: GRPCCallType.unary
     )
 
@@ -978,17 +1043,23 @@ internal protocol Beebium_SystemServiceProvider: CallHandlerProvider {
   /// Get current system/machine information
   func getSystemInfo(request: Beebium_GetSystemInfoRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SystemInfo>
 
-  /// Set the machine's name template (a plain name is a template with no
-  /// placeholders). See MachineIdentity.name_template.
+  /// Set a machine's name: plain text, never a template. Only for a machine
+  /// not yet saved; a saved machine's name is its document's, so the
+  /// document is renamed instead. Errors: INVALID_ARGUMENT for an empty
+  /// name; FAILED_PRECONDITION for a saved machine.
   func setMachineName(request: Beebium_SetMachineNameRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SetMachineNameResponse>
 
-  /// List the placeholders a name template can use on this server, with
-  /// their current values. Clients carry no list of keys; they ask.
-  func listNamePlaceholders(request: Beebium_ListNamePlaceholdersRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListNamePlaceholdersResponse>
+  /// Set the machine's description template (empty: no description). See
+  /// MachineIdentity.description_template.
+  func setMachineDescription(request: Beebium_SetMachineDescriptionRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SetMachineDescriptionResponse>
 
-  /// Render a name template against the current values without changing
-  /// anything, for a live preview while the user edits.
-  func previewMachineName(request: Beebium_PreviewMachineNameRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_PreviewMachineNameResponse>
+  /// List the placeholders a description template can use on this server,
+  /// with their current values. Clients carry no list of keys; they ask.
+  func listDescriptionPlaceholders(request: Beebium_ListDescriptionPlaceholdersRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListDescriptionPlaceholdersResponse>
+
+  /// Render a description template against the current values without
+  /// changing anything, for a live preview while the user edits.
+  func previewMachineDescription(request: Beebium_PreviewMachineDescriptionRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_PreviewMachineDescriptionResponse>
 
   /// Subscribe to server status events (shutdown notifications, identity changes, etc.)
   /// Server sends READY immediately upon subscription, then status changes.
@@ -1063,22 +1134,31 @@ extension Beebium_SystemServiceProvider {
         userFunction: self.setMachineName(request:context:)
       )
 
-    case "ListNamePlaceholders":
+    case "SetMachineDescription":
       return UnaryServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_ListNamePlaceholdersRequest>(),
-        responseSerializer: ProtobufSerializer<Beebium_ListNamePlaceholdersResponse>(),
-        interceptors: self.interceptors?.makeListNamePlaceholdersInterceptors() ?? [],
-        userFunction: self.listNamePlaceholders(request:context:)
+        requestDeserializer: ProtobufDeserializer<Beebium_SetMachineDescriptionRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SetMachineDescriptionResponse>(),
+        interceptors: self.interceptors?.makeSetMachineDescriptionInterceptors() ?? [],
+        userFunction: self.setMachineDescription(request:context:)
       )
 
-    case "PreviewMachineName":
+    case "ListDescriptionPlaceholders":
       return UnaryServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_PreviewMachineNameRequest>(),
-        responseSerializer: ProtobufSerializer<Beebium_PreviewMachineNameResponse>(),
-        interceptors: self.interceptors?.makePreviewMachineNameInterceptors() ?? [],
-        userFunction: self.previewMachineName(request:context:)
+        requestDeserializer: ProtobufDeserializer<Beebium_ListDescriptionPlaceholdersRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListDescriptionPlaceholdersResponse>(),
+        interceptors: self.interceptors?.makeListDescriptionPlaceholdersInterceptors() ?? [],
+        userFunction: self.listDescriptionPlaceholders(request:context:)
+      )
+
+    case "PreviewMachineDescription":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_PreviewMachineDescriptionRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_PreviewMachineDescriptionResponse>(),
+        interceptors: self.interceptors?.makePreviewMachineDescriptionInterceptors() ?? [],
+        userFunction: self.previewMachineDescription(request:context:)
       )
 
     case "WatchServerStatus":
@@ -1183,26 +1263,35 @@ internal protocol Beebium_SystemServiceAsyncProvider: CallHandlerProvider, Senda
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_SystemInfo
 
-  /// Set the machine's name template (a plain name is a template with no
-  /// placeholders). See MachineIdentity.name_template.
+  /// Set a machine's name: plain text, never a template. Only for a machine
+  /// not yet saved; a saved machine's name is its document's, so the
+  /// document is renamed instead. Errors: INVALID_ARGUMENT for an empty
+  /// name; FAILED_PRECONDITION for a saved machine.
   func setMachineName(
     request: Beebium_SetMachineNameRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_SetMachineNameResponse
 
-  /// List the placeholders a name template can use on this server, with
-  /// their current values. Clients carry no list of keys; they ask.
-  func listNamePlaceholders(
-    request: Beebium_ListNamePlaceholdersRequest,
+  /// Set the machine's description template (empty: no description). See
+  /// MachineIdentity.description_template.
+  func setMachineDescription(
+    request: Beebium_SetMachineDescriptionRequest,
     context: GRPCAsyncServerCallContext
-  ) async throws -> Beebium_ListNamePlaceholdersResponse
+  ) async throws -> Beebium_SetMachineDescriptionResponse
 
-  /// Render a name template against the current values without changing
-  /// anything, for a live preview while the user edits.
-  func previewMachineName(
-    request: Beebium_PreviewMachineNameRequest,
+  /// List the placeholders a description template can use on this server,
+  /// with their current values. Clients carry no list of keys; they ask.
+  func listDescriptionPlaceholders(
+    request: Beebium_ListDescriptionPlaceholdersRequest,
     context: GRPCAsyncServerCallContext
-  ) async throws -> Beebium_PreviewMachineNameResponse
+  ) async throws -> Beebium_ListDescriptionPlaceholdersResponse
+
+  /// Render a description template against the current values without
+  /// changing anything, for a live preview while the user edits.
+  func previewMachineDescription(
+    request: Beebium_PreviewMachineDescriptionRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_PreviewMachineDescriptionResponse
 
   /// Subscribe to server status events (shutdown notifications, identity changes, etc.)
   /// Server sends READY immediately upon subscription, then status changes.
@@ -1313,22 +1402,31 @@ extension Beebium_SystemServiceAsyncProvider {
         wrapping: { try await self.setMachineName(request: $0, context: $1) }
       )
 
-    case "ListNamePlaceholders":
+    case "SetMachineDescription":
       return GRPCAsyncServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_ListNamePlaceholdersRequest>(),
-        responseSerializer: ProtobufSerializer<Beebium_ListNamePlaceholdersResponse>(),
-        interceptors: self.interceptors?.makeListNamePlaceholdersInterceptors() ?? [],
-        wrapping: { try await self.listNamePlaceholders(request: $0, context: $1) }
+        requestDeserializer: ProtobufDeserializer<Beebium_SetMachineDescriptionRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SetMachineDescriptionResponse>(),
+        interceptors: self.interceptors?.makeSetMachineDescriptionInterceptors() ?? [],
+        wrapping: { try await self.setMachineDescription(request: $0, context: $1) }
       )
 
-    case "PreviewMachineName":
+    case "ListDescriptionPlaceholders":
       return GRPCAsyncServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_PreviewMachineNameRequest>(),
-        responseSerializer: ProtobufSerializer<Beebium_PreviewMachineNameResponse>(),
-        interceptors: self.interceptors?.makePreviewMachineNameInterceptors() ?? [],
-        wrapping: { try await self.previewMachineName(request: $0, context: $1) }
+        requestDeserializer: ProtobufDeserializer<Beebium_ListDescriptionPlaceholdersRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListDescriptionPlaceholdersResponse>(),
+        interceptors: self.interceptors?.makeListDescriptionPlaceholdersInterceptors() ?? [],
+        wrapping: { try await self.listDescriptionPlaceholders(request: $0, context: $1) }
+      )
+
+    case "PreviewMachineDescription":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_PreviewMachineDescriptionRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_PreviewMachineDescriptionResponse>(),
+        interceptors: self.interceptors?.makePreviewMachineDescriptionInterceptors() ?? [],
+        wrapping: { try await self.previewMachineDescription(request: $0, context: $1) }
       )
 
     case "WatchServerStatus":
@@ -1428,13 +1526,17 @@ internal protocol Beebium_SystemServiceServerInterceptorFactoryProtocol: Sendabl
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeSetMachineNameInterceptors() -> [ServerInterceptor<Beebium_SetMachineNameRequest, Beebium_SetMachineNameResponse>]
 
-  /// - Returns: Interceptors to use when handling 'listNamePlaceholders'.
+  /// - Returns: Interceptors to use when handling 'setMachineDescription'.
   ///   Defaults to calling `self.makeInterceptors()`.
-  func makeListNamePlaceholdersInterceptors() -> [ServerInterceptor<Beebium_ListNamePlaceholdersRequest, Beebium_ListNamePlaceholdersResponse>]
+  func makeSetMachineDescriptionInterceptors() -> [ServerInterceptor<Beebium_SetMachineDescriptionRequest, Beebium_SetMachineDescriptionResponse>]
 
-  /// - Returns: Interceptors to use when handling 'previewMachineName'.
+  /// - Returns: Interceptors to use when handling 'listDescriptionPlaceholders'.
   ///   Defaults to calling `self.makeInterceptors()`.
-  func makePreviewMachineNameInterceptors() -> [ServerInterceptor<Beebium_PreviewMachineNameRequest, Beebium_PreviewMachineNameResponse>]
+  func makeListDescriptionPlaceholdersInterceptors() -> [ServerInterceptor<Beebium_ListDescriptionPlaceholdersRequest, Beebium_ListDescriptionPlaceholdersResponse>]
+
+  /// - Returns: Interceptors to use when handling 'previewMachineDescription'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makePreviewMachineDescriptionInterceptors() -> [ServerInterceptor<Beebium_PreviewMachineDescriptionRequest, Beebium_PreviewMachineDescriptionResponse>]
 
   /// - Returns: Interceptors to use when handling 'watchServerStatus'.
   ///   Defaults to calling `self.makeInterceptors()`.
@@ -1480,8 +1582,9 @@ internal enum Beebium_SystemServiceServerMetadata {
     methods: [
       Beebium_SystemServiceServerMetadata.Methods.getSystemInfo,
       Beebium_SystemServiceServerMetadata.Methods.setMachineName,
-      Beebium_SystemServiceServerMetadata.Methods.listNamePlaceholders,
-      Beebium_SystemServiceServerMetadata.Methods.previewMachineName,
+      Beebium_SystemServiceServerMetadata.Methods.setMachineDescription,
+      Beebium_SystemServiceServerMetadata.Methods.listDescriptionPlaceholders,
+      Beebium_SystemServiceServerMetadata.Methods.previewMachineDescription,
       Beebium_SystemServiceServerMetadata.Methods.watchServerStatus,
       Beebium_SystemServiceServerMetadata.Methods.requestShutdown,
       Beebium_SystemServiceServerMetadata.Methods.getAdvertisementState,
@@ -1507,15 +1610,21 @@ internal enum Beebium_SystemServiceServerMetadata {
       type: GRPCCallType.unary
     )
 
-    internal static let listNamePlaceholders = GRPCMethodDescriptor(
-      name: "ListNamePlaceholders",
-      path: "/beebium.SystemService/ListNamePlaceholders",
+    internal static let setMachineDescription = GRPCMethodDescriptor(
+      name: "SetMachineDescription",
+      path: "/beebium.SystemService/SetMachineDescription",
       type: GRPCCallType.unary
     )
 
-    internal static let previewMachineName = GRPCMethodDescriptor(
-      name: "PreviewMachineName",
-      path: "/beebium.SystemService/PreviewMachineName",
+    internal static let listDescriptionPlaceholders = GRPCMethodDescriptor(
+      name: "ListDescriptionPlaceholders",
+      path: "/beebium.SystemService/ListDescriptionPlaceholders",
+      type: GRPCCallType.unary
+    )
+
+    internal static let previewMachineDescription = GRPCMethodDescriptor(
+      name: "PreviewMachineDescription",
+      path: "/beebium.SystemService/PreviewMachineDescription",
       type: GRPCCallType.unary
     )
 

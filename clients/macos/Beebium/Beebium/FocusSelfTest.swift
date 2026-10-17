@@ -24,8 +24,8 @@ import SwiftUI
 /// at. Enabled only when BEEBIUM_DEBUG_FOCUS_SELFTEST names an output directory.
 ///
 /// BEEBIUM_DEBUG_FOCUS_SELFTEST_PORT, when set, is a running server's port; the
-/// rename popover is then shown against a real SystemClient so its placeholder
-/// chips and live preview load (the picker needs ListNamePlaceholders).
+/// rename popover is then shown against a real SystemClient so its name field
+/// is exercised against a live machine.
 @MainActor
 final class FocusSelfTest {
     static func startIfRequested() {
@@ -437,7 +437,7 @@ final class FocusSelfTest {
         bringHostToFront()
         let content = MachineRenameEditor(systemClient: systemClient, dismiss: {})
         let popover = present(content, appearance: appearance)
-        await sleep(1.0)                 // let ListNamePlaceholders + preview load
+        await sleep(1.0)                 // let the popover settle and take focus
         clickFirstField(in: popover)
         await sleep(0.1)
         await captureFrames(popover, prefix: "\(name)", count: framesPerOpen)

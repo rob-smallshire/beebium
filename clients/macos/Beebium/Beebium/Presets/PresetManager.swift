@@ -514,28 +514,18 @@ class PresetManager: ObservableObject {
     func launchCore(_ preset: MachinePreset) async -> Result<LaunchedCore, CoreLaunchError> {
         let provenanceUUID = UUID().uuidString
 
-        // Name the machine rather than letting the server fall back to the
-        // model's display name, which would call every Model B the same thing
-        // and leave several windows indistinguishable. The name belongs to
-        // this instance, not to the preset, so it is decided here at launch
-        // and can be changed afterwards.
+        // Give the server this instance's ordinal so the default name it builds
+        // from the preset's name reads "Model B (Disc) #2" rather than every
+        // Model B being called the same thing. The name belongs to this
+        // instance, not the preset, and can be changed afterwards; the server
+        // owns how the default is composed, so no name is passed here.
         //
         // A number that fails to become a running machine is simply skipped;
         // nothing needs handing back, because numbers are never reused.
-        //
-        // The name is a template: the preset's own `machine_name` when it has
-        // one, otherwise its display name with braces escaped, ending in the
-        // {machine-ordinal} placeholder. The server renders the placeholders
-        // (e.g. {econet-station}, {machine-ordinal}) and re-renders them as that
-        // state changes; the ordinal's value is supplied below.
         let ordinal = nameSequence.nextOrdinal(forPreset: preset.name)
-        let machineName = MachineLaunchName.template(
-            presetMachineName: preset.machineName,
-            presetDisplayName: preset.name)
 
         let arguments = Self.presetLaunchArguments(
             presetFilepath: preset.presetFilepath,
-            machineName: machineName,
             ordinal: ordinal,
             provenanceUUID: provenanceUUID,
             romDirpath: bundledRomDirpath())
@@ -608,8 +598,6 @@ class PresetManager: ObservableObject {
         let provenanceUUID = UUID().uuidString
         let displayName = draft.name ?? ""
         let ordinal = nameSequence.nextOrdinal(forPreset: displayName)
-        let machineName = MachineLaunchName.template(
-            presetMachineName: draft.machineName, presetDisplayName: displayName)
 
         let presetURL: URL
         do {
@@ -620,7 +608,6 @@ class PresetManager: ObservableObject {
 
         let arguments = Self.presetLaunchArguments(
             presetFilepath: presetURL.path,
-            machineName: machineName,
             ordinal: ordinal,
             provenanceUUID: provenanceUUID,
             romDirpath: bundledRomDirpath())
@@ -685,10 +672,13 @@ class PresetManager: ObservableObject {
 
     /// The `start` arguments for launching a preset file (a quick-launch of a
     /// stored preset, or an edited draft written to a temporary file): server
-    /// plumbing only, no per-setting overrides. Pure, so the argument shape is
+    /// plumbing only, no per-setting overrides. No `--machine-name`: the server
+    /// composes the default name from the preset's own name, and `--machine-
+    /// ordinal` gives it this instance's number so several windows from one
+    /// preset read "#1", "#2". The preset carries any `machine_description`, so
+    /// the subtitle needs no argument either. Pure, so the argument shape is
     /// testable without a launch.
     nonisolated static func presetLaunchArguments(presetFilepath: String,
-                                                  machineName: String,
                                                   ordinal: Int,
                                                   provenanceUUID: String,
                                                   romDirpath: String?) -> [String] {
@@ -698,7 +688,6 @@ class PresetManager: ObservableObject {
             "--port", "0",
             "--advertise",
             "--wait=api",
-            "--machine-name", machineName,
             "--machine-ordinal", "\(ordinal)",
             "--provenance-type", "macos-gui",
             "--provenance-uuid", provenanceUUID,

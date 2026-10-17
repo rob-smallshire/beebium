@@ -23,7 +23,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/path/to/beebium-model-b",
             presetFilepath: "/path/to/presets/bbc-model-b.beebium-preset",
             source: .systemPreset,
-            machineName: nil,
+            machineDescription: nil,
             modelName: "BBC Model B",
             modelDescription: "The original BBC Micro",
             releaseDate: "1981-12",
@@ -42,7 +42,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/path/to/beebium-model-b",
             presetFilepath: "/path/to/user/presets/my-custom-setup.beebium-preset",
             source: .userPreset,
-            machineName: nil,
+            machineDescription: nil,
             modelName: "BBC Model B",
             modelDescription: nil,
             releaseDate: nil,
@@ -62,7 +62,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/path/to/beebium-model-b",
             presetFilepath: "/path/to/presets/bbc-model-b.beebium-preset",
             source: .systemPreset,
-            machineName: nil,
+            machineDescription: nil,
             modelName: "BBC Model B",
             modelDescription: nil,
             releaseDate: nil,
@@ -75,7 +75,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/different/path",
             presetFilepath: "/different/path/preset.beebium-preset",
             source: .userPreset,
-            machineName: nil,
+            machineDescription: nil,
             modelName: "Different Model",
             modelDescription: nil,
             releaseDate: nil,
@@ -94,7 +94,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/path/to/beebium-model-b",
             presetFilepath: "/path/to/presets/bbc-model-b.beebium-preset",
             source: .systemPreset,
-            machineName: nil,
+            machineDescription: nil,
             modelName: "BBC Model B",
             modelDescription: nil,
             releaseDate: nil,
@@ -116,7 +116,7 @@ final class PresetDiscoveryMetadataTests: XCTestCase {
         let draft = try MachineDraft.decode(from: Data(#"{ "model": "model-b" }"#.utf8))
         XCTAssertEqual(draft.model, "model-b")
         XCTAssertNil(draft.name)
-        XCTAssertNil(draft.machineName)
+        XCTAssertNil(draft.machineDescription)
         XCTAssertNil(draft.description)
         XCTAssertNil(draft.releaseDate)
     }
@@ -126,11 +126,11 @@ final class PresetDiscoveryMetadataTests: XCTestCase {
         {
             "model": "model-b",
             "name": "Station 80 (AUN, Model B)",
-            "machine_name": "Station {econet-station} (AUN, Model B)"
+            "machine_description": "Station {econet-station} (AUN, Model B)"
         }
         """
         let draft = try MachineDraft.decode(from: Data(json.utf8))
-        XCTAssertEqual(draft.machineName, "Station {econet-station} (AUN, Model B)")
+        XCTAssertEqual(draft.machineDescription, "Station {econet-station} (AUN, Model B)")
     }
 
     func testDecodeFullPreset() throws {

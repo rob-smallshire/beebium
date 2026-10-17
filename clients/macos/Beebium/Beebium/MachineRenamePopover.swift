@@ -14,66 +14,46 @@ import AppKit
 import SwiftUI
 
 
-/// The rename editor: the machine's name *template*, a picker of the server's
-/// placeholders, and a live preview of the rendered name (#153).
+/// The rename editor: a plain-text field for the machine's name.
 ///
-/// The field shows the template, not the rendered name, because the template is
-/// what the user is changing. The picker, its groups, labels, values and the
-/// `{key}` insertion text all come from the server, so the app carries no list
-/// of placeholder keys. If the server is too old to offer the placeholder and
-/// preview RPCs, this degrades to a plain name field with neither picker nor
-/// preview.
+/// A machine's name is plain text, never a template (the templated string is
+/// the machine's description, a separate thing shown as the window subtitle and
+/// edited elsewhere). Only a machine not yet saved is renamed here; a saved
+/// machine is named by its document, so the server refuses the rename and the
+/// menu that opens this is disabled for it. The field shows the current name
+/// and commits it with SetMachineName.
 // Not private so a hosted test can open the real editor and observe its field.
 struct MachineRenameEditor: View {
     @ObservedObject var systemClient: SystemClient
     let dismiss: () -> Void
 
     @State private var draft: String
-    @State private var originalTemplate: String
-    @State private var placeholders: [Beebium_NamePlaceholder] = []
-    @State private var pickerAvailable = false
-    @State private var previewAvailable = false
-    @State private var preview: String = ""
-    @State private var note: String = ""
-    @State private var didLoad = false
+    @State private var originalName: String
     @State private var isSaving = false
     @State private var saveError: String?
 
     @StateObject private var fieldController = TemplateFieldController()
-    @State private var previewDebouncer = Debouncer(delay: 0.25)
 
     init(systemClient: SystemClient, dismiss: @escaping () -> Void) {
         self._systemClient = ObservedObject(wrappedValue: systemClient)
         self.dismiss = dismiss
-        // Seed the field BEFORE it is created so it opens showing the template
-        // rather than empty. An empty template means a server too old to carry
-        // one; fall back to the rendered name so the plain field is not blank.
-        let template = systemClient.machineNameTemplate.isEmpty
-            ? systemClient.machineName
-            : systemClient.machineNameTemplate
-        self._draft = State(initialValue: template)
-        self._originalTemplate = State(initialValue: template)
+        // Seed the field BEFORE it is created so it opens showing the current
+        // name rather than empty.
+        let name = systemClient.machineName
+        self._draft = State(initialValue: name)
+        self._originalName = State(initialValue: name)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             PopoverTextField(text: $draft,
-                             placeholder: "Name template",
+                             placeholder: "Name",
                              controller: fieldController,
                              diagnosticsLabel: "rename",
                              onSubmit: { save() },
                              onCancel: { dismiss() })
                 .frame(maxWidth: .infinity)
                 .frame(height: 22)
-
-            if pickerAvailable {
-                placeholderPicker
-            }
-
-            if previewAvailable {
-                Divider()
-                previewSection
-            }
 
             if let saveError {
                 Text(saveError)
@@ -98,145 +78,22 @@ struct MachineRenameEditor: View {
         .frame(width: 440)
         .activatesHostingWindow()
         .focusDiagnostics("rename")
-        .onAppear(perform: load)
-        .onDisappear { previewDebouncer.cancel() }
-        .onChange(of: draft) { _ in
-            saveError = nil
-            previewDebouncer.schedule {
-                Task { await refreshPreview() }
-            }
-        }
+        .onChange(of: draft) { _ in saveError = nil }
     }
 
-    /// Save is offered only for a non-empty template that differs from the one
-    /// the machine already has: an empty template is refused by the server and an
+    /// Save is offered only for a non-empty name that differs from the one the
+    /// machine already has: an empty name is refused by the server and an
     /// unchanged one is a wasted round trip.
     private var isDirty: Bool {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && trimmed != originalTemplate
+        return !trimmed.isEmpty && trimmed != originalName
     }
 
-    // MARK: - Picker
-
-    private struct PlaceholderGroup: Identifiable {
-        let id: String
-        let items: [Beebium_NamePlaceholder]
-    }
-
-    /// Placeholders grouped by their `group`, keeping the server's order both of
-    /// groups (first appearance) and of items within a group.
-    private var groupedPlaceholders: [PlaceholderGroup] {
-        var order: [String] = []
-        var byGroup: [String: [Beebium_NamePlaceholder]] = [:]
-        for placeholder in placeholders {
-            if byGroup[placeholder.group] == nil { order.append(placeholder.group) }
-            byGroup[placeholder.group, default: []].append(placeholder)
-        }
-        return order.map { PlaceholderGroup(id: $0, items: byGroup[$0] ?? []) }
-    }
-
-    private var placeholderPicker: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Insert a field at the caret")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            ForEach(groupedPlaceholders) { group in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(group.id)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    ForEach(group.items, id: \.key) { item in
-                        placeholderRow(item)
-                    }
-                }
-            }
-        }
-    }
-
-    // Each row is a button-like chip whose text is the template insertion string
-    // ("{econet-station}"), so the row shows exactly what it inserts and reads as
-    // clickable; the current value sits beside it and the human label and
-    // description are the tooltip. A placeholder with no value on this machine
-    // (an Econet field with no Econet fitted) is dimmed, not hidden: it is still
-    // a valid template key and may gain a value later, so it stays insertable.
-    private func placeholderRow(_ item: Beebium_NamePlaceholder) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                fieldController.insertAtCaret(item.insertion, text: $draft)
-            } label: {
-                Text(item.insertion)
-                    .font(.caption.monospaced())
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            // Non-activating: a chip must not pull focus out of the template
-            // field (the picker keeps the editing session). insertAtCaret also
-            // re-asserts first responder afterwards as a belt-and-braces.
-            .focusable(false)
-            .help(NameTemplatePlaceholderTooltip.text(label: item.label,
-                                                      description: item.description_p))
-            Text(item.applicable ? item.value : "not applicable")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 0)
-        }
-        .opacity(item.applicable ? 1.0 : 0.5)
-    }
-
-    // MARK: - Preview
-
-    private var previewSection: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Text("Preview:")
-                    .foregroundColor(.secondary)
-                Text(preview.isEmpty ? "(empty)" : preview)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .font(.caption)
-            if !note.isEmpty {
-                Text(note)
-                    .font(.caption2)
-                    .foregroundColor(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    // MARK: - Behaviour
-
-    private func load() {
-        guard !didLoad else { return }
-        didLoad = true
-        // draft and originalTemplate are seeded in init so the field opens filled;
-        // here we only fetch the server-driven picker and the initial preview.
-        Task {
-            if let list = await systemClient.listNamePlaceholders() {
-                placeholders = list
-                pickerAvailable = !list.isEmpty
-            }
-            await refreshPreview()
-        }
-    }
-
-    private func refreshPreview() async {
-        guard let result = await systemClient.previewMachineName(draft) else {
-            previewAvailable = false
-            return
-        }
-        previewAvailable = true
-        preview = result.rendered
-        note = NameTemplateNote.text(unknownKeys: result.report.unknownKeys,
-                                     malformed: result.report.malformed)
-    }
-
-    /// Commit the template. On success the popover closes and the window title
+    /// Commit the name. On success the popover closes and the window title
     /// updates from the applied identity (and again from the status stream's
-    /// IDENTITY_CHANGED). On failure the popover stays open and shows the reason,
-    /// the way the station editor does.
+    /// IDENTITY_CHANGED). On failure the popover stays open and shows the reason
+    /// (a saved machine is refused with the server's explanation), the way the
+    /// station editor does.
     private func save() {
         guard isDirty, !isSaving else { return }
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -305,9 +162,8 @@ final class MachineRenamePopover: NSObject, NSPopoverDelegate {
     ///
     /// Horizontally from the title's own view, so the arrow lands beneath the
     /// words it is about to change. Vertically at the bottom of the bar rather
-    /// than the bottom of the text, so the popover clears the subtitle -- which
-    /// is where the duplicate-name warning lives, and covering that while
-    /// renaming would hide the very reason for renaming.
+    /// than the bottom of the text, so the popover clears the subtitle (the
+    /// machine's description) rather than covering it while renaming.
     ///
     /// The title's view is undocumented and may not always be findable, in which
     /// case the anchor falls back to the middle of the bar: the popover then

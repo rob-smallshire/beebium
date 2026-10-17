@@ -20,7 +20,7 @@ import XCTest
 /// --format jsonl list-presets --all-models`.
 final class PresetListingDecodeTests: XCTestCase {
 
-    /// A system preset naming a model, with a thumbnail and no machine_name.
+    /// A system preset naming a model, with a thumbnail and no machine_description.
     func testDecodesPlainSystemRow() throws {
         let line = #"{"id":"model-b","name":"Model B","source":"system","model":"model-b","description":"32K Model B, no disc","release_date":"1981-12","filepath":"/presets/model-b.beebium-preset","thumbnail":true}"#
         let rows = CoreCLI.decodeListPresets(line)
@@ -30,18 +30,18 @@ final class PresetListingDecodeTests: XCTestCase {
         XCTAssertEqual(row.name, "Model B")
         XCTAssertEqual(row.source, "system")
         XCTAssertEqual(row.model, "model-b")
-        XCTAssertNil(row.machineName)
+        XCTAssertNil(row.machineDescription)
         XCTAssertEqual(row.description, "32K Model B, no disc")
         XCTAssertEqual(row.releaseDate, "1981-12")
         XCTAssertEqual(row.filepath, "/presets/model-b.beebium-preset")
         XCTAssertTrue(row.thumbnail)
     }
 
-    /// machine_name is read from the snake_case key when present.
+    /// machine_description is read from the snake_case key when present.
     func testDecodesMachineNameTemplate() throws {
-        let line = #"{"id":"model-b-disc-aun-80","name":"Station 80 (AUN, Model B)","source":"system","model":"model-b","machine_name":"Station {econet-station} (AUN, Model B)","description":"Econet over AUN (UDP), ANFS + DFS","release_date":"1985","filepath":"/presets/model-b-disc-aun-80.beebium-preset","thumbnail":true}"#
+        let line = #"{"id":"model-b-disc-aun-80","name":"Station 80 (AUN, Model B)","source":"system","model":"model-b","machine_description":"Station {econet-station} (AUN, Model B)","description":"Econet over AUN (UDP), ANFS + DFS","release_date":"1985","filepath":"/presets/model-b-disc-aun-80.beebium-preset","thumbnail":true}"#
         let row = try XCTUnwrap(CoreCLI.decodeListPresets(line).first)
-        XCTAssertEqual(row.machineName, "Station {econet-station} (AUN, Model B)")
+        XCTAssertEqual(row.machineDescription, "Station {econet-station} (AUN, Model B)")
         XCTAssertEqual(row.source, "system")
     }
 
@@ -60,7 +60,7 @@ final class PresetListingDecodeTests: XCTestCase {
         let line = #"{"id":"bare","name":"Bare","source":"system","filepath":"/presets/bare.beebium-preset","thumbnail":false}"#
         let row = try XCTUnwrap(CoreCLI.decodeListPresets(line).first)
         XCTAssertNil(row.model)
-        XCTAssertNil(row.machineName)
+        XCTAssertNil(row.machineDescription)
         XCTAssertNil(row.description)
         XCTAssertNil(row.releaseDate)
     }
@@ -90,7 +90,7 @@ final class PresetCatalogBuildTests: XCTestCase {
                      thumbnail: Bool = true, filepath: String? = nil) -> PresetListing {
         PresetListing(
             id: id, name: id.capitalized, source: source, model: model,
-            machineName: nil, description: "desc of \(id)", releaseDate: "1982",
+            machineDescription: nil, description: "desc of \(id)", releaseDate: "1982",
             filepath: filepath ?? "/presets/\(id).beebium-preset", thumbnail: thumbnail)
     }
 
