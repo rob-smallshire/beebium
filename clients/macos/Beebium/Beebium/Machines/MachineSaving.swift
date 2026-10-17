@@ -22,44 +22,59 @@ import AppKit
 /// apply to the window here.
 enum MachineSaving {
 
-    @MainActor
-    static func save(systemClient: SystemClient) async {
-        if systemClient.machineSaved {
-            await perform(systemClient: systemClient, destinationDirpath: "", replaceExisting: false)
-        } else {
-            await saveToChosenDirectory(systemClient: systemClient)
-        }
+    /// Whether closing a window should first offer to save: the machine has
+    /// written to template media that a shutdown would lose, and this close
+    /// shuts the machine down rather than merely disconnecting from one that
+    /// keeps running. Pure, so the rule is testable. (The server only reports
+    /// template_media_written while a machine is not yet saved, so this does
+    /// not fire for a saved machine whose media are its own.)
+    static func shouldPromptToSaveOnClose(closeAction: WindowCloseAction,
+                                          templateMediaWritten: Bool) -> Bool {
+        templateMediaWritten && closeAction == .shutdownServer
     }
 
-    @MainActor
-    static func saveAs(systemClient: SystemClient) async {
+    /// Returns whether the machine was saved: false if the user cancelled the
+    /// save panel or the save failed, so a caller closing the window can leave
+    /// it open instead.
+    @MainActor @discardableResult
+    static func save(systemClient: SystemClient) async -> Bool {
+        if systemClient.machineSaved {
+            return await perform(systemClient: systemClient, destinationDirpath: "", replaceExisting: false)
+        }
+        return await saveToChosenDirectory(systemClient: systemClient)
+    }
+
+    @MainActor @discardableResult
+    static func saveAs(systemClient: SystemClient) async -> Bool {
         await saveToChosenDirectory(systemClient: systemClient)
     }
 
     @MainActor
-    private static func saveToChosenDirectory(systemClient: SystemClient) async {
-        guard let url = runSavePanel(machineName: systemClient.machineName) else { return }
+    private static func saveToChosenDirectory(systemClient: SystemClient) async -> Bool {
+        guard let url = runSavePanel(machineName: systemClient.machineName) else { return false }
         // The panel's own Replace confirmation is the only way an existing path
         // comes back, so an existing destination means the user chose to
         // replace it; pass that to the server, which does the replacing. The
         // app never deletes anything itself.
         let replaceExisting = FileManager.default.fileExists(atPath: url.path)
-        await perform(systemClient: systemClient,
-                      destinationDirpath: url.path,
-                      replaceExisting: replaceExisting)
+        return await perform(systemClient: systemClient,
+                             destinationDirpath: url.path,
+                             replaceExisting: replaceExisting)
     }
 
     @MainActor
     private static func perform(systemClient: SystemClient,
                                 destinationDirpath: String,
-                                replaceExisting: Bool) async {
+                                replaceExisting: Bool) async -> Bool {
         let result = await systemClient.saveMachine(destinationDirpath: destinationDirpath,
                                                     replaceExisting: replaceExisting)
         switch result {
         case .success(let dirpath):
             MachineRecents().remember(machineDirpath: URL(fileURLWithPath: dirpath))
+            return true
         case .failure(let error):
             presentError(error.localizedDescription)
+            return false
         }
     }
 

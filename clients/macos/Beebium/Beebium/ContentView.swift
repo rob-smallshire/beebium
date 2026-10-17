@@ -1156,6 +1156,37 @@ class WindowCloseCoordinator: NSObject {
 
         let action = machineManager.windowCloseAction(forAddress: address, clientCount: clientCount)
 
+        // Closing a not-yet-saved machine that has written to its discs would
+        // lose that work; offer to save first, the way a document app does.
+        if MachineSaving.shouldPromptToSaveOnClose(
+            closeAction: action, templateMediaWritten: systemClient.templateMediaWritten) {
+            showSaveOnClosePrompt(window: window) { [weak self] decision in
+                guard let self = self else { return }
+                switch decision {
+                case .cancel:
+                    break  // leave the window open
+                case .dontSave:
+                    self.performClose(action, window: window, address: address)
+                case .save:
+                    Task { @MainActor in
+                        // Only close if the save actually happened; a cancelled
+                        // save panel or a failure cancels the close too.
+                        if await MachineSaving.save(systemClient: self.systemClient) {
+                            self.performClose(action, window: window, address: address)
+                        }
+                    }
+                }
+            }
+            return
+        }
+
+        performClose(action, window: window, address: address)
+    }
+
+    /// Carry out the decided close: shut the server down, disconnect, or ask
+    /// about other clients. Split out so the save-on-close prompt can run it
+    /// after the user chooses to save or discard.
+    private func performClose(_ action: WindowCloseAction, window: NSWindow, address: String) {
         switch action {
         case .shutdownServer:
             // Disconnect gRPC clients first — the server's graceful shutdown
@@ -1175,6 +1206,30 @@ class WindowCloseCoordinator: NSObject {
             window.close()
         case .promptUser(let count):
             showMultiClientAlert(window: window, address: address, clientCount: count)
+        }
+    }
+
+    private enum SaveOnCloseDecision { case save, dontSave, cancel }
+
+    @MainActor
+    private func showSaveOnClosePrompt(window: NSWindow,
+                                       proceed: @escaping (SaveOnCloseDecision) -> Void) {
+        let name = systemClient.machineName.isEmpty ? "this machine" : "\"\(systemClient.machineName)\""
+        let alert = NSAlert()
+        alert.messageText = "Do you want to save \(name)?"
+        alert.informativeText = "This machine has written to its discs. If you don't save it, that work is lost when it closes."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Save...")
+        alert.addButton(withTitle: "Cancel")
+        let dontSave = alert.addButton(withTitle: "Don't Save")
+        dontSave.hasDestructiveAction = true
+
+        alert.beginSheetModal(for: window) { response in
+            switch response {
+            case .alertFirstButtonReturn:  proceed(.save)
+            case .alertThirdButtonReturn:  proceed(.dontSave)
+            default:                       proceed(.cancel)
+            }
         }
     }
 
