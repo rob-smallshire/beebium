@@ -186,7 +186,7 @@ User presets (created with `create-preset` / `import-preset`) live in
 A preset id is looked up among the system presets first, then the user
 presets.
 
-## Bundled Discs and Copy-on-Write
+## Bundled Discs and Machine Directories
 
 Some presets ship a hard-disc image -- for example the Level 3 File Server
 preset carries a SCSI image. These **master** images live read-only alongside
@@ -202,24 +202,36 @@ Level 3 File Server 1.26"}`), which `describe-preset-schema` reports. It is
 required: configuration fails naming a missing one, and a master directory's
 `.dat` and `.dsc` without it are not a master. They are
 **immutable**: the emulated filing system writes to disc, so the server never
-opens a master; instead, on first use of a bundled image it copies the master
-to a **per-user working copy** and opens that. This keeps a shipped image (or a
-signed/sealed macOS app bundle) from ever being modified.
+opens a master. This keeps a shipped image (or a signed/sealed macOS app
+bundle) from ever being modified.
 
-A hard disc is named like any other file reference
-([preset-schema.md](preset-schema.md#file-references)): a bare name is looked
-for beside the preset (or in the working directory), then in the per-user
-`discs/`, then among the masters. A disc found beside the preset, in the
-working directory or in the per-user `discs/` is the user's own and is opened
-in place, writable, never copied: to use a downloaded image, drop its `.dat`
-and `.dsc` into the per-user `discs/` (or beside the preset) and name it.
-Only a master's name resolves to a working copy. As working copies are made
-in the per-user `discs/` too, a file there with a master's name is taken to be
-its working copy (until machine directories hold working copies, #103a).
+**Every running machine has a directory of its own**, under `machines/` in
+the per-user directory, which it holds locked while it runs and which is
+removed when it shuts down cleanly (a directory left by a machine that did
+not is removed by the next launch, with one line saying so). Media a template
+names by search or by position within itself is the machine's own copy;
+media the user names by location is the user's own file. So:
 
-Working copies live in the per-user Beebium state directory. That one
-directory holds all of Beebium's per-user state: the user presets in
-`presets/`, the disc working copies in `discs/`, the shared AUN map file
+- a disc found by search -- a bare name beside the preset, in the per-user
+  `discs/`, or among the masters -- is copied into the machine's directory and
+  the copy is opened;
+- a disc named by a path inside the preset's directory (`discs/game.ssd`) is
+  copied in too, at the same relative path;
+- a disc named by an absolute or `~/` path outside the preset's directory,
+  given on the command line, or inserted while the machine runs is opened in
+  place, read/write.
+
+A bare name is looked for as any file reference is
+([preset-schema.md](preset-schema.md#file-references)). To use a downloaded
+image in a preset, drop its `.dat` and `.dsc` into the per-user `discs/` (or
+beside the preset) and name it. The guest's writes to a copied disc last as
+long as the machine: the Level 3 File Server's disc, like a preset's own
+floppy, starts from its shipped image at every launch until machines can be
+saved. ROMs are only read, never copied.
+
+That per-user directory holds all of Beebium's per-user state: the user
+presets in `presets/`, user-supplied disc and ROM images in `discs/` and
+`roms/`, running machines in `machines/`, the shared AUN map file
 `aun-map.json`, and the AUN automatic-station hint `aun-auto-next` (with its
 lock file `aun-auto-next.lock`):
 
@@ -228,12 +240,9 @@ lock file `aun-auto-next.lock`):
 - Linux: `$XDG_CONFIG_HOME/beebium/` (or `~/.config/beebium/`)
 
 `BEEBIUM_USER_DIRPATH` moves the whole directory, and the AUN files can be
-moved separately (see Environment Variables); the working-copy directory is
-replaced by `BEEBIUM_DISC_WORK_DIR`, which also changes the copy policy. `report-aun-map-filepath` prints the map file path in
-effect. For the map file and the hint file, see `docs/networking.md`.
-
-**Reset a disc to its shipped state**: delete its working copy; the next boot
-re-copies the pristine master.
+moved separately (see Environment Variables). `report-aun-map-filepath`
+prints the map file path in effect. For the map file and the hint file, see
+`docs/networking.md`.
 
 **Versioning**: masters are version-named (e.g. `l3fs-v1_26b.dat`). A revised
 image ships under a NEW name -- a master is never mutated in place, so nobody
@@ -256,10 +265,8 @@ and liblzma. That is the maintenance check:
 the two tarballs are identical and their image is identical to the committed
 one.
 
-A preset references a bundled image by its bare filename (resolved to the
-working copy). An explicit path with a directory component, or an absolute
-path, is treated as the user's own image: opened in place, read/write, with no
-copy-on-write.
+A preset references a bundled image by its bare filename, which the machine
+copies.
 
 Note: mDNS **advertisement** (`--advertise`) is a runtime/environment concern,
 not machine configuration, so it is a `start` flag and never part of a preset
@@ -276,7 +283,6 @@ launcher enables it.
 | `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets (overrides auto-detection) |
 | `BEEBIUM_USER_DIRPATH` | The per-user state directory (overrides the platform default); its `presets/`, `discs/`, `aun-map.json` and `aun-auto-next` follow it. For tests and CI, to keep a run away from the real user's files |
 | `BEEBIUM_DISC_DIR` | Path to the bundled disc **master** directory (overrides auto-detection) |
-| `BEEBIUM_DISC_WORK_DIR` | Working-copy directory. When set, selects an ephemeral "scratch" mode that always re-copies the master fresh (used by the build to keep thumbnail capture deterministic and stateless); when unset, working copies persist in the per-user discs directory |
 | `BEEBIUM_AUN_MAP_FILEPATH` | AUN map file path (overrides the per-user `aun-map.json`; `--aun map-file=` overrides this, and `map-file=none` disables the map file) |
 | `BEEBIUM_AUN_AUTO_STATE_FILEPATH` | AUN automatic-station hint file (overrides the per-user `aun-auto-next`; `none` disables the hint) |
 

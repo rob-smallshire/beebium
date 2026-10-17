@@ -31,9 +31,9 @@ and log on from the client with `*I AM SYST` (ANFS's default file server is
 station 254). The bundled disc has users `SYST`, `ChrisC` and `HermannH`; the
 root catalogue holds `Library` and `Passwords`.
 
-The SCSI image is a bundled master (`l3fs-v1_26b.dat`) that the server copies
-to a per-user working copy on first use; delete the working copy to reset the
-file server's disc. See [deployment.md](deployment.md#bundled-discs-and-copy-on-write).
+The SCSI image is a bundled master (`l3fs-v1_26b.dat`) that each launch copies
+into the machine's own directory, so the file server starts from the shipped
+disc every time; what clients write to it lasts until the server shuts down. See [deployment.md](deployment.md#bundled-discs-and-machine-directories).
 mDNS advertisement of the gRPC service (`--advertise`) is a launch flag, not
 part of the preset; the AUN transport's `_aun._udp` announcement is governed
 by `--aun discovery=` (default `on`). To keep a server off the LAN, override
@@ -83,8 +83,8 @@ Microcomputers.
 ### Variant A: AUN/UDP
 
 The bundled preset spelled out as a command line, against your own copy of a
-file-server disc (an image path with a directory component is opened in place,
-read/write, with no copy-on-write):
+file-server disc (an image named by its path on the command line is opened in
+place, read/write, never copied):
 
 ```bash
 beebium-model-b \
@@ -188,7 +188,7 @@ WFSINIT in the emulator:
   binary, an unattended-start program (`StartFS`, chained by `!BOOT`, which
   answers the drive-count and station-count prompts through a soft key), and an
   AFS partition `L3DATA` with users `ChrisC` and `HermannH` and the `Library`
-  and `Library1` trees. See [deployment.md](deployment.md#bundled-discs-and-copy-on-write)
+  and `Library1` trees. See [deployment.md](deployment.md#bundled-discs-and-machine-directories)
   for how it is shipped and regenerated.
 - **The L3FS integration tests** (`integration_tests/l3fs/`) build their image
   on demand the same way (`conftest.py`).
@@ -446,7 +446,7 @@ Boot tests with Econet fitted, verifying NFS ROM loading.
 - `docs/FileServer-RTC-and-Timekeeping.md` — RTC dongle and timekeeping
 - `docs/acorn-user-port-rtc.md` — SAF3019P hardware details
 - `docs/networking.md` — Econet transports, AUN map file and discovery
-- `docs/deployment.md` — bundled discs and per-user working copies
+- `docs/deployment.md`: bundled discs and machine directories
 - AFS0 format: `http://mdfs.net/Docs/Comp/Disk/Format/AFS0`
 - BeebMaster L3 setup: `https://www.beebmaster.co.uk/Econet/Level3.html`
 - BeebMaster disc structure PDF: `https://www.beebmaster.co.uk/Downloads/Understanding%20the%20Acorn%20Level%203%20File%20Server%20Structure.pdf`

@@ -110,7 +110,7 @@ given with `--preset` resolve as if written in the preset.
       and hard-disc images, `roms/` for ROMs, under the per-user Beebium
       directory ([deployment.md](deployment.md#environment-variables));
    3. the system directory for it: the bundled disc masters
-      ([deployment.md](deployment.md#bundled-discs-and-copy-on-write)), the ROM
+      ([deployment.md](deployment.md#bundled-discs-and-machine-directories)), the ROM
       directory ([deployment.md](deployment.md#rom-discovery-algorithm)), or,
       for a coprocessor's ROM, the `roms/` of the plugin that ships it.
 2. **A relative path with a directory component** (`discs/game.ssd`,
@@ -124,13 +124,16 @@ A name found nowhere is an error naming every directory searched, in order.
 When a per-user ROM takes the place of a system or plugin ROM of the same
 name, the server says so on one line, naming both files.
 
-What is done with the file found depends on who owns it. A disc image in the
-container or the per-user `discs/` is the user's own: it is opened in place,
-writable. A bundled disc master is never opened: its name resolves to a
-per-user working copy ([deployment.md](deployment.md#bundled-discs-and-copy-on-write)).
-Because those working copies are made in the per-user `discs/` too, a file
-there with a master's name is taken to be that master's working copy, and no
-notice is given (until machine directories hold working copies, #103a). ROMs
+What is done with a disc image found depends on who owns it. Media a
+template names by search or by position within itself is the machine's own
+copy; media the user names by location is the user's own file. A disc found
+by search (in the container, the per-user `discs/` or among the bundled
+masters), or named by a path inside the preset's directory, is copied into
+the machine's own directory, so the guest's writes change the machine and
+never the preset, the user's `discs/` or a master. A disc named by an
+absolute or `~/` path outside the preset's directory, or on the command line,
+is opened in place, writable
+([deployment.md](deployment.md#bundled-discs-and-machine-directories)). ROMs
 are only read.
 
 A `filepath` parameter its manifest does not declare `bundled` names a
@@ -339,9 +342,9 @@ SCSI ID only on different adapters.
 A manifest may also declare a `filepath` parameter `bundled` with a kind: a
 bare name there refers to one of the images of that kind that ship with
 Beebium. There are two kinds. `hard-disc` (`scsi-hard-disc`'s `image`): a disc
-master in the server's disc directory, used through a per-user copy-on-write
-working copy, never the master
-([deployment.md](deployment.md#bundled-discs-and-copy-on-write)). `rom` (a
+master in the server's disc directory, copied into each machine's directory,
+never opened itself
+([deployment.md](deployment.md#bundled-discs-and-machine-directories)). `rom` (a
 coprocessor's `rom`): one of the ROMs that extension itself ships in its
 `roms/` directory. The manifest decides which bare names may be given, and a
 name it does not ship is an error (write `./name` for a file of your own); the

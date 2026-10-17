@@ -189,7 +189,7 @@ Parameter schema fields:
   Given, the parameter names a **resource** of that kind, and a bare name is
   found on a search path (beside the preset, the per-user directory for the
   kind, then the system's). `hard-disc`: the system's are the disc masters in
-  the server's disc directory, used through a copy-on-write working copy.
+  the server's disc directory, copied into the machine's directory.
   `rom`: one of this extension's own `roms`, from its `roms/` directory, which
   also limits the names that may be given. Absent, the parameter names a
   **location** the extension owns and may create (AUN's `map-file`): it is
