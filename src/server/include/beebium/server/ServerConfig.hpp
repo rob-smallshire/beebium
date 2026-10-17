@@ -159,6 +159,10 @@ struct LaunchSettings {
     // Machine identity
     std::string machine_uuid;
 
+    // Where the machine lives: a saved machine's directory, or none for a
+    // transient one the launch makes under machines/ (MachineDirectory).
+    std::optional<std::filesystem::path> machine_dirpath;
+
     // Shutdown policy
     bool allow_shutdown = false;
 

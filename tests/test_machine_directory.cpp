@@ -193,6 +193,30 @@ TEST_CASE("MachineDirectory: made under machines/, named by the machine, locked,
     CHECK_FALSE(fs::exists(dirpath));
 }
 
+TEST_CASE("MachineDirectory: a saved machine's directory is opened in place, locked, and kept",
+          "[machine_directory]") {
+    beebium::test::ScopedTempDir root("beebium_machine_dir_");
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", (root / "user").string());
+    const auto saved = root / "Elite Server.beebium-machine";
+    fs::create_directories(saved);
+    std::ofstream(saved / "game.ssd") << "disc";
+    {
+        auto machine = MachineDirectory::open(saved);
+        CHECK(machine.dirpath() == saved);
+        CHECK_FALSE(machine.transient());
+        CHECK(read_text(saved / "lock") == current_pid());
+        // Running, it is refused to another, as a transient one is.
+        CHECK_THROWS_WITH(MachineDirectory::open(saved),
+                          Catch::Matchers::ContainsSubstring("in use by process " + current_pid()));
+    }
+    // Shut down, the machine and its files remain.
+    CHECK(read_text(saved / "game.ssd") == "disc");
+    // Nothing was made under machines/.
+    CHECK_FALSE(fs::exists(root / "user" / "machines"));
+    CHECK_THROWS_WITH(MachineDirectory::open(root / "nothing-here"),
+                      Catch::Matchers::ContainsSubstring("is not a machine directory"));
+}
+
 TEST_CASE("MachineDirectory: a directory whose process has gone is swept, one line each",
           "[machine_directory]") {
     beebium::test::ScopedTempDir user("beebium_machine_dir_");

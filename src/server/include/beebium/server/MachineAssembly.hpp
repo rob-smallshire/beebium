@@ -936,9 +936,12 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         config.launch.machine_uuid = generate_uuid_v4();
     }
     try {
-        am->machine_directory.emplace(MachineDirectory::create(config.launch.machine_uuid));
+        am->machine_directory.emplace(
+            config.launch.machine_dirpath
+                ? MachineDirectory::open(*config.launch.machine_dirpath)
+                : MachineDirectory::create(config.launch.machine_uuid));
     } catch (const std::exception& e) {
-        std::cerr << "Error: cannot make the machine directory: " << e.what() << "\n";
+        std::cerr << "Error: cannot make or open the machine directory: " << e.what() << "\n";
         return {nullptr, ExitCode::IOERR};
     }
 

@@ -10,12 +10,15 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// The directory a running machine owns: every launch makes one, under
-// machines/ in the per-user directory, and the media a template names are
-// copied into it (DiscPaths), so the guest's writes change the machine and
-// never the template. It is locked for the life of the process and removed
-// when the machine is shut down cleanly; one left by a process that has gone
-// is removed by the next launch.
+// The directory a running machine owns, locked for the life of the process.
+// The media a template names are copied into it (DiscPaths), so the guest's
+// writes change the machine and never the template.
+//
+// A transient machine's directory is made by its launch, under machines/ in
+// the per-user directory, and removed when the machine is shut down cleanly;
+// one left by a process that has gone is removed by the next launch. A saved
+// machine's directory is wherever the user keeps it: a launch opens it and
+// leaves it in place.
 
 #pragma once
 
@@ -173,6 +176,20 @@ public:
         }
     }
 
+    // The saved machine directory at `dirpath`, locked by this process and
+    // kept when the machine shuts down. Throws when it is not a directory,
+    // or another process runs it.
+    static MachineDirectory open(const std::filesystem::path& dirpath) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(dirpath, ec)) {
+            throw std::runtime_error(dirpath.string() + " is not a machine directory");
+        }
+        MachineDirectoryLock lock(dirpath / "lock");
+        MachineDirectory directory(dirpath, std::move(lock));
+        directory.transient_ = false;
+        return directory;
+    }
+
     // Removes every directory under `machines_dirpath` whose lock can be
     // taken -- one whose process has gone -- with one line for each. Never
     // touches anything that is not such a directory.
@@ -205,17 +222,20 @@ public:
     }
 
     MachineDirectory(MachineDirectory&& other) noexcept
-        : dirpath_(std::exchange(other.dirpath_, {})), lock_(std::move(other.lock_)) {}
+        : dirpath_(std::exchange(other.dirpath_, {})),
+          lock_(std::move(other.lock_)),
+          transient_(other.transient_) {}
     MachineDirectory& operator=(MachineDirectory&&) = delete;
     MachineDirectory(const MachineDirectory&) = delete;
     MachineDirectory& operator=(const MachineDirectory&) = delete;
 
-    // Releases the lock and removes the directory. The machine's media must be
-    // closed first (Windows refuses to remove an open file), so the owner
-    // destroys this after the machine.
+    // Releases the lock and, for a transient machine, removes the directory.
+    // The machine's media must be closed first (Windows refuses to remove an
+    // open file), so the owner destroys this after the machine.
     ~MachineDirectory() {
         if (dirpath_.empty()) return;
         lock_.release();
+        if (!transient_) return;
         std::error_code ec;
         std::filesystem::remove_all(dirpath_, ec);
         if (ec) {
@@ -226,12 +246,16 @@ public:
 
     const std::filesystem::path& dirpath() const { return dirpath_; }
 
+    // True for a directory the launch made and removes at a clean shutdown.
+    bool transient() const { return transient_; }
+
 private:
     MachineDirectory(std::filesystem::path dirpath, MachineDirectoryLock lock)
         : dirpath_(std::move(dirpath)), lock_(std::move(lock)) {}
 
     std::filesystem::path dirpath_;
     MachineDirectoryLock lock_;
+    bool transient_ = true;
 };
 
 }  // namespace beebium::server
