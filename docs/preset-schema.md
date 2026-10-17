@@ -90,7 +90,7 @@ model's default, which `resolve-preset` shows.
 | `name` | string | The preset's display name. Default: the display name of its model (the model it names or, naming none, the one it runs as) |
 | `release_date` | string | `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, for sorting in a picker |
 | `description` | string | One line for a preset picker |
-| `machine_description` | string | The launched machine's name, a template with `{key}` placeholders (see `list-name-placeholders` and [cli.md](cli.md#machine-name)). Default: the model's name |
+| `machine_description` | string | The machine's description, shown beside its name: a template with `{key}` placeholders (see `list-description-placeholders` and [cli.md](cli.md#machine-name-and-description)). Default: none. The machine's name is not in the preset: it is the preset's `name` and the launcher's ordinal, or a saved machine's document name |
 | `speed` | number or `"unlimited"` | [Emulation speed](#speed) |
 | `startup` | object | [Startup keyboard links](#startup) |
 | `mos_image_uri` | string | [The MOS ROM](#mos_image_uri) |

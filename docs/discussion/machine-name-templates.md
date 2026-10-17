@@ -1,5 +1,19 @@
 # Machine names as templates
 
+**Superseded in part (2026-10-17, step 4 of #103):** the template no longer
+names the machine. A machine's **name** is plain text -- a saved machine's is
+its document's name -- and the template described here is its
+**description**, shown beside the name: `machine_description` in a preset,
+`--machine-description` on the command line, `description` in a saved
+machine's `machine.json`, and `MachineIdentity.description` /
+`description_template` with `SetMachineDescription`,
+`PreviewMachineDescription` and `ListDescriptionPlaceholders` on the wire.
+The `{machine-ordinal}` placeholder is gone; the ordinal is part of a new
+machine's default plain name. The template syntax, the placeholders and their
+rendering below are unchanged. The reasons are in
+[presets-and-machine-directories.md](presets-and-machine-directories.md)
+section 4.5; the current reference is [cli.md](../cli.md#machine-name-and-description).
+
 Status: built (issue #153): the server, the client libraries, and the
 macOS rename popover (section 8). Issue #173 added the fdc-controller,
 coprocessor-cpu and coprocessor-clock placeholders. Decisions marked (user)

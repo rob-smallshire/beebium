@@ -303,31 +303,44 @@ returns every unit to its seed. That is question 7.
 ### 4.5 Identity and naming
 
 `machine.json` carries the existing `MachineIdentity` UUID, so a saved
-machine keeps its UUID across opens, and the mutable name. The per-run
-"#N" ordinals the macOS app assigns remain the default name for a transient
-machine; Save proposes that name for the file. A saved machine's display name
-is the name in `machine.json`, not the directory name, so renaming the
-directory in Finder does not rename the machine (question 1).
+machine keeps its UUID across opens.
 
-*Revised at step 4 (2026-10-17), after a hands-on check in which two machines
-forked by Save As showed the same title:* a document's name is its
-directory's name. A saved machine is shown by `{document}`, its directory's
-name without the suffix, read when it is opened, so a Finder rename shows at
-its next open; `machine.json` keeps the name template, which shows only when
-it places `{document}` itself (`"{document} (station {econet-station})"`).
-See [cli.md](../cli.md#machine-name).
+*Decided at step 4 (2026-10-17), revising question 1:* **a document's name is
+its directory's name, and a machine's title is never a template.** A machine
+has a plain **name** and a templated **description**:
+
+- The name is what titles and the mDNS announcement show. A saved machine's
+  is its document name, its directory's name without the suffix, derived when
+  it is opened and after every Save and Save As and never stored, so a Finder
+  rename shows at its next open and two machines forked by Save As show
+  different titles. `SetMachineName` refuses a saved machine ("rename the
+  document"). A transient machine's name is a plain `--machine-name`, else the
+  preset's name and the launcher's ordinal ("Model B (Disc) #2"), and
+  `SetMachineName` renames it; Save proposes it as the document name.
+- The description is the #153 template (`machine_description` in a preset,
+  `description` in `machine.json`), rendered live and shown as a subtitle;
+  absent means no subtitle.
+
+Why: the title was first a template, then a template that gave way to the
+document's name unless it placed `{document}` itself. In use, that left two
+ways to rename a saved machine -- edit the template, or rename the document --
+which interacted in ways too hard to use correctly: a rename in the app did
+not change the title, and a document renamed in the Finder did, or did not,
+depending on the template. One plain name with one way to change it, and the
+live state moved to a description beside it, keeps both features without
+the interaction. See [cli.md](../cli.md#machine-name-and-description).
 
 The `source preset` field records which preset the machine
 was instantiated from, as information only. A later change to the preset
 does not touch the machine (question 2).
 
-**Names as templates (proposal, #153).** A machine name may contain
-placeholders the server expands from machine state: `{station}`, `{net}`,
-`{transport}`, `{model}`, `{preset}`, plus `{n}` substituted by the app.
-`machine.json` stores the template; the rendered name is what is shown
-and advertised, and it follows the hardware (a station change shows at the
-next Break). A preset's `machine_name` is a template too; its picker
-title stays literal. Under discussion; see the issue.
+**Descriptions as templates (#153).** A machine's description may contain
+placeholders the server expands from machine state (`{econet-station}`,
+`{machine-model}`, ...). `machine.json` stores the template; the rendering is
+shown beside the name and follows the hardware (a station change shows at
+the next Break). A preset's `machine_description` is a template too; its
+picker title stays literal. (#153 first made the name itself the template;
+see the decision above.)
 
 ### 4.6 Per-user layout after this design
 

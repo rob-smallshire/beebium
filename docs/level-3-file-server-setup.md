@@ -137,7 +137,7 @@ beebium-model-b \
   --scsi-hdd scsi-id=0:image=path/to/l3fs.dat \
   --station 254 \
   --aun port=10254:map=0.221@127.0.0.1@10221 \
-  --machine-description "L3FS" \
+  --machine-name "L3FS" \
   --acorn-rtc layout=7bit-year-in-r7 \
   --tube-65c02 \
   --advertise
@@ -173,7 +173,7 @@ beebium-model-b \
   --scsi-hdd scsi-id=0:image=path/to/l3fs.dat \
   --station 250 \
   --piconet device_path=/dev/tty.usbmodem101 \
-  --machine-description "L3FS-via-Piconet" \
+  --machine-name "L3FS-via-Piconet" \
   --acorn-rtc layout=7bit-year-in-r7 \
   --tube-65c02 \
   --advertise

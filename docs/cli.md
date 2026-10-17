@@ -255,70 +255,62 @@ Listening on port 54321
 
 Scripts can parse the `Listening on port <N>` line to discover the allocated port.
 
-#### Machine Name
+#### Machine Name and Description
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--machine-description <template>` | the preset's `machine_description`, else the model's name | The machine's name: text in which `{key}` placeholders are filled from the machine's state |
-| `--machine-ordinal <n>` | none | This machine's instance number from its launcher (a positive integer), shown by `{machine-ordinal}` as `#n`. Launch state: a preset cannot set it |
+| `--machine-name <name>` | the preset's name, else the model's, with ` #n` from `--machine-ordinal` | The machine's name: plain text, never a template. Launch state: a preset cannot record it. Not for a saved machine, whose name is its document's |
+| `--machine-ordinal <n>` | none | This machine's instance number from its launcher (a positive integer), added to the default name as ` #n` ("Model B (Disc) #2"). Launch state |
+| `--machine-description <template>` | the preset's `machine_description`, else none | The machine's description: text in which `{key}` placeholders are filled from the machine's state |
 
-The name is a **template** (#153). Ordinary text is a plain name, as before;
-`{key}` stands for a placeholder's current value, and the server keeps the
-rendered name up to date as values change -- re-rendering once a second -- so
-window titles, `SystemInfo` and the mDNS announcement follow the machine:
+A machine has a **name** and a **description**.
+
+The **name** is what window titles and the mDNS announcement show, and it is
+plain text: braces in it are just braces. A saved machine's name is its
+document's: the name of its directory without `.beebium-machine`, read when it
+is opened and after every Save and Save As, and never stored, so a machine
+renamed in the Finder or Explorer shows its new name at its next open, and two
+machines forked by Save As have different names. `SetMachineName` refuses a
+saved machine ("rename the document"). A machine not yet saved has the name
+`--machine-name` gives it, else its preset's name (else the model's) and its
+launcher's ordinal; `SetMachineName` renames it.
+
+The **description**, shown beside the name (a window subtitle), is a
+**template** (#153): `{key}` stands for a placeholder's current value, and the
+server keeps the rendering up to date as values change -- re-rendering once a
+second -- so the subtitle follows the machine. A machine with no template has
+no description.
 
 ```bash
-beebium-model-b --machine-description "Station {econet-station} (AUN, Model B)" \
+beebium-model-b --machine-description "Station {econet-station} (AUN)" \
     --station 80 --aun port=0
-# named "Station 80 (AUN, Model B)"; renumbered to 81, it becomes
-# "Station 81 (AUN, Model B)" at the next Break
+# described as "Station 80 (AUN)"; renumbered to 81, it becomes
+# "Station 81 (AUN)" at the next Break
 ```
 
 - Keys are lowercase words joined by hyphens, each beginning with the domain
-  that owns it: `econet-station`, `machine-model` -- or, for a domain with a
-  single placeholder, the domain itself: `document`.
-  [list-name-placeholders](#list-name-placeholders) lists them; extensions can
-  add their own.
+  that owns it: `econet-station`, `machine-model`.
+  [list-description-placeholders](#list-description-placeholders) lists them;
+  extensions can add their own.
 - `{{` and `}}` are literal braces.
 - An unknown key renders as written, braces included, so a template written
   for a newer server or a plugin that is not loaded degrades visibly.
 - A placeholder that does not apply to this machine (an Econet placeholder with
   no Econet fitted, `{fdc-controller}` with no disc controller,
-  `{coprocessor-cpu}` with no Tube coprocessor, or `{machine-ordinal}` with no
-  `--machine-ordinal`)
-  renders empty. The rendering is trimmed of leading and trailing whitespace,
-  so `"X {machine-ordinal}"` is "X #3" with `--machine-ordinal 3` and "X"
-  without; a name that renders blank falls back to the model's name.
+  `{coprocessor-cpu}` with no Tube coprocessor) renders empty. The rendering
+  is trimmed of leading and trailing whitespace.
 - `:` `|` `?` `!` inside braces are reserved for future formatting and
   fallbacks; today they make the placeholder unknown.
 
-**`{document}` and saved machines.** A saved machine is known by its
-document's name: the name of its directory without `.beebium-machine`, read
-when it is opened, so a machine renamed in the Finder or Explorer shows its new
-name at its next open. Unless its template places `{document}` itself, a saved
-machine's name is `{document}` alone -- its template is kept, and still edited
-by `SetMachineName`, but shows only once it uses `{document}` -- so no preset
-needs editing for a saved machine to show its document's name, and two
-machines forked from one by Save As show different names. A template that
-places it keeps the rest: `"{document} (station {econet-station})"`. The name
-is re-rendered when a machine is first saved and on Save As, and announced to
-`WatchServerStatus` watchers as a rename is; a Save in place changes nothing.
-
-For a machine not yet saved, `{document}` is the name it would otherwise have:
-its preset's name (else the model's) and its `{machine-ordinal}`, as a launcher
-names a new machine ("Model B (Blank disc) #2"). The ordinal belongs to the
-launch, not the machine: a saved machine shows no ordinal unless its template
-places `{machine-ordinal}`, and then only the one its launcher passed for that
-run, which may differ from run to run.
-
 `econet-station` is the number **in force**: the number the guest's filing
 system read from the station links at its last Break, which is the number it
-is using. A renumber from the sidebar or `SetStationId` shows in the name once
-the guest re-reads the links at the next Break.
+is using. A renumber from the sidebar or `SetStationId` shows in the
+description once the guest re-reads the links at the next Break.
 
-A preset's `machine_description` is a template in the same way. A shell needs the
-braces quoted only where it would otherwise expand them (`{a,b}` in bash and
-zsh); the templates above are safe as written in double quotes.
+A preset's `machine_description`, and a saved machine's `description` in its
+`machine.json`, are templates in the same way. A shell needs the braces quoted
+only where it would otherwise expand them (`{a,b}` in bash and zsh); the
+templates above are safe as written in double quotes.
 
 #### Service Advertisement (mDNS)
 
@@ -333,9 +325,9 @@ and `model_name`, the model as a user sees it, e.g. `BBC Model B`; while Econet
 is enabled also `econet_station`, and with AUN `econet_net` and
 `econet_aun_port`); a discovering frontend (the macOS app today) lists it
 without the user typing `host:port`, showing `model_name`. The advertised
-instance name is the machine's rendered name (`--machine-description`), and is
-re-announced when the rendering changes -- at most once every five seconds, so
-a value that changes repeatedly cannot flood the network.
+instance name is the machine's name (see [Machine Name and
+Description](#machine-name-and-description)), re-announced when it changes: a
+rename, or a Save that gives the machine a document.
 
 Platform support: macOS (Bonjour) and Windows (Win32 DNS-SD) are built in; Linux
 uses Avahi, which is loaded at runtime, so a running `avahi-daemon` is required
@@ -659,16 +651,16 @@ Attachment points:
 
 Occupancy is an integer range `[min..max]`: how many extensions must and may attach. A connector is `0..1` (optional, at most one -- so the UI offers "which **one**, if any"); a bus is `0..N` (`N` = no upper bound, shown as `null` in jsonl). The range accommodates hardware that is not simply single-or-many -- e.g. a future twin-Tube machine would be `0..2`. `tsv` and `jsonl` carry `id`, `display_name`, `min_occupancy`, `max_occupancy` (blank/`null` when unbounded), and `description`. Like the other discovery commands, this needs no running emulator.
 
-### list-name-placeholders
+### list-description-placeholders
 
-List the placeholders a machine-name template can use: each one's key (written
-`{key}` in a template), label, group and description, and its value where it is
-known before launch. For people writing presets and launch commands; a running
-server's `ListNamePlaceholders` RPC lists every placeholder, extensions'
-included, with live values.
+List the placeholders a machine description template can use: each one's key
+(written `{key}` in a template), label, group and description, and its value
+where it is known before launch. For people writing presets and launch
+commands; a running server's `ListDescriptionPlaceholders` RPC lists every
+placeholder, extensions' included, with live values.
 
 ```bash
-beebium-model-b --format pretty list-name-placeholders
+beebium-model-b --format pretty list-description-placeholders
 ```
 
 ```
@@ -677,8 +669,6 @@ Machine:
       The machine's model, as the server reports it ("BBC Model B"). Never changes.
   {machine-preset}  Preset
       The name of the preset the machine was launched from; ...
-  {machine-ordinal}  Instance number
-      This machine's instance number among those its launcher started ("#3"), ...
 Econet:
   {econet-station}  Econet station
       The station number in force: ...
@@ -817,7 +807,7 @@ The preset is written as a `.beebium-preset` zip archive holding `preset.json`
 my-elite-setup
 ```
 
-`create-preset` also accepts every machine option `start` does that a preset can record: `--description`, `--release-date`, `--machine-description` (a name template, recorded as written; see [Machine Name](#machine-name)), `--speed`, `--screen-mode`, `--auto-boot`, `--links`, `--mos`, `--language-rom` (recorded as the model's language slot), `--fdc`, `--floppy` (a relative path is taken from the working directory, as for `start`, and recorded absolutely), `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. With `--from`, each flag overrides the source preset as it would on a `start` command line: a `--sideways` or `--floppy` replaces only the slot or drive it names. The file format is described in [preset-schema.md](preset-schema.md). The options are parsed exactly as `start` parses them (`--from` playing `--preset`), and only what was given is recorded: a parameter left to its default, or an instance id the server would generate, is left out, so the preset keeps following the defaults. For example `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "port": "0"}`. A relative path with a directory component (a `--floppy`, `--sideways` image, `--mos` or an extension file parameter) is taken from the working directory and recorded absolutely; a bare name (a ROM, a bundled ROM or a hard disc to be searched for) is kept. Options that configure the launch rather than the machine (`--port`, `--wait`, `--advertise`, ...) and those with no preset form (`--write-protect`, `--hide`, `--motherboard-link`, a board RTC) are refused.
+`create-preset` also accepts every machine option `start` does that a preset can record: `--description`, `--release-date`, `--machine-description` (a description template, recorded as written; see [Machine Name and Description](#machine-name-and-description)), `--speed`, `--screen-mode`, `--auto-boot`, `--links`, `--mos`, `--language-rom` (recorded as the model's language slot), `--fdc`, `--floppy` (a relative path is taken from the working directory, as for `start`, and recorded absolutely), `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. With `--from`, each flag overrides the source preset as it would on a `start` command line: a `--sideways` or `--floppy` replaces only the slot or drive it names. The file format is described in [preset-schema.md](preset-schema.md). The options are parsed exactly as `start` parses them (`--from` playing `--preset`), and only what was given is recorded: a parameter left to its default, or an instance id the server would generate, is left out, so the preset keeps following the defaults. For example `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "port": "0"}`. A relative path with a directory component (a `--floppy`, `--sideways` image, `--mos` or an extension file parameter) is taken from the working directory and recorded absolutely; a bare name (a ROM, a bundled ROM or a hard disc to be searched for) is kept. Options that configure the launch rather than the machine (`--port`, `--wait`, `--advertise`, ...) and those with no preset form (`--write-protect`, `--hide`, `--motherboard-link`, a board RTC) are refused.
 
 If `--from` is omitted, creates a minimal "bare" preset for the model containing just the model ID, name, and release date.
 
@@ -886,9 +876,9 @@ when it does), without running it, and prints its path. The directory holds
 the preset unpacked, with any machine options recorded over it as
 `create-preset` records them (launch options are refused), as `preset.json`
 beside every file the preset holds, its thumbnail included; a `machine.json`
-giving it a new uuid, its name (`--machine-description`, else the preset's machine
-name, else the model's name), its model, the preset it came from and when it
-was made; and the `<name>.beebium-machine` document file and folder metadata.
+giving it a new uuid, its description (`--machine-description`, else the
+preset's `machine_description`, else none), its model, the preset it came from
+and when it was made (its name is its directory's); and the `<name>.beebium-machine` document file and folder metadata.
 Every extension instance's id is recorded in `preset.json`, so the instance
 finds the state it keeps (`extensions/<id>/`) on every run.
 A file an option names by location (an absolute path) stays the user's own and
@@ -905,8 +895,9 @@ beebium-model-b start --machine "File Server.beebium-machine"
 beebium-model-b describe-machine <dirpath|document> [--format pretty|tsv|jsonl]
 ```
 
-Describes a saved machine of any model: `machine_dirpath`, `name` (a name
-template), `uuid`, `model`, `preset` (absent when unknown), `created`,
+Describes a saved machine of any model: `machine_dirpath`, `name` (its
+document's name: the directory's name without `.beebium-machine`),
+`description` (a template; absent when it has none), `uuid`, `model`, `preset` (absent when unknown), `created`,
 `last_used` (absent until it has run), `thumbnail_filepath` (absent until it
 has one) and `locked_by_pid` (absent when no process is running it). Times are
 ISO 8601 UTC. `--format` may also be given before the subcommand. Exits
@@ -915,7 +906,7 @@ its `machine.json` cannot be read.
 
 ```
 $ beebium-model-b describe-machine "File Server.beebium-machine" --format jsonl
-{"machine_dirpath":"/Users/me/File Server.beebium-machine","name":"L3 File Server, station {econet-station}","uuid":"f146a756-...","model":"model-b","preset":"model-b-l3fs-aun","created":"2026-10-17T15:28:56Z","thumbnail_filepath":"/Users/me/File Server.beebium-machine/thumbnail.png"}
+{"machine_dirpath":"/Users/me/File Server.beebium-machine","name":"File Server","description":"L3 File Server, station {econet-station}","uuid":"f146a756-...","model":"model-b","preset":"model-b-l3fs-aun","created":"2026-10-17T15:28:56Z","thumbnail_filepath":"/Users/me/File Server.beebium-machine/thumbnail.png"}
 ```
 
 #### reset-battery

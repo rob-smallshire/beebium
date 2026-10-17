@@ -55,13 +55,17 @@ without it still gets a document file with it.
 
 - `uuid` is the machine's identity, the `MachineIdentity` uuid the server
   reports on every run. A Save As gives the copy a new one.
-- `description` is the name as the user gives it, a template (see
-  [cli.md](cli.md#machine-name)); a rename of a running saved machine
-  (`SetMachineName`) is written here at once. It wins over a `machine_description`
-  in `preset.json`. A saved machine is shown by its **document name**, the
-  directory's name without `.beebium-machine` (`{document}`), unless this
-  template places `{document}` itself, when the template is rendered as
-  written; `describe-machine` reports it as `document_name`.
+- `description` is the machine's description, a template (see
+  [cli.md](cli.md#machine-name-and-description)), shown beside its name;
+  empty for none. A new description for a running saved machine
+  (`SetMachineDescription`) is written here at once. It wins over a
+  `machine_description` in `preset.json`.
+
+The machine's **name** is not stored: a saved machine's name is its document
+name, the directory's name without `.beebium-machine`, read when the machine
+is opened and after every Save and Save As. Renaming the directory renames
+the machine (at its next open); `SetMachineName` refuses a saved machine.
+`describe-machine` reports the name as `name`.
 - `model` is the model id; `start --machine` refuses a machine of another
   model.
 - `created` and `last_used` are ISO 8601 UTC; `last_used` is empty until the

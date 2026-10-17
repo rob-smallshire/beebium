@@ -536,10 +536,11 @@ Response (abridged):
 {
   "identity": {
     "uuid": "6f1c...",
-    "name": "Station 80 (AUN, Model B)",
+    "name": "Station 80 (AUN, Model B) #2",
     "modelType": "ModelB",
     "modelName": "BBC Model B",
-    "nameTemplate": "Station {econet-station} (AUN, Model B)"
+    "description": "Station 80 (AUN)",
+    "descriptionTemplate": "Station {econet-station} (AUN)"
   },
   "clockSpeedHz": 2000000,
   "protocolFingerprint": "...",
@@ -553,46 +554,59 @@ machine's, or the transient one a machine not yet saved runs in;
 `machineSaved` says which, so a front-end offers Save for the one and Save
 As for the other (see [machine-directory.md](machine-directory.md)).
 
-`identity.name` is the name to show; `identity.nameTemplate` is the name as the
-user edits it. The name is a template (#153): text in which `{key}` stands for
-a placeholder's current value, rendered by the server and re-rendered about once
-a second, so a placeholder such as `{econet-station}` keeps the name current. A
-plain name is a template without placeholders. See
-[cli.md](cli.md#machine-name) for the syntax.
+`identity.name` is the machine's name: plain text, never a template, and what
+titles and the mDNS announcement show. A saved machine's is its document's
+name (its directory's name without `.beebium-machine`); a machine not yet saved
+has the name it was launched with, else its preset's name and its launcher's
+ordinal. `identity.description` is shown beside the name: the rendering of
+`identity.descriptionTemplate`, a template (#153) in which `{key}` stands for a
+placeholder's current value, re-rendered about once a second, so a placeholder
+such as `{econet-station}` keeps it current; both are empty when the machine
+has no description. See [cli.md](cli.md#machine-name-and-description).
 
 #### SetMachineName
 
-Sets the name template and returns the identity with its new rendering, plus a
-`report` (a `NameTemplateReport`) of what the rendering could not substitute, so
-a client can warn without parsing the template: `unknownKeys` (each `{...}` that
-is not a known key, rendered as written), `inapplicableKeys` (known keys that do
-not apply to this machine, rendered empty) and `malformed` (an unterminated
-`{...` or a lone `}`, rendered literally). Only the caller gets the report; a
-client watching the status stream that wants one calls `PreviewMachineName`. An empty template is refused with `INVALID_ARGUMENT`. The rename is
-announced to `WatchServerStatus` watchers and re-published over mDNS at once.
+Renames a machine not yet saved, to a plain name, and returns its identity. A
+saved machine is named by its document, which is renamed instead: the request
+is refused with `FAILED_PRECONDITION` ("rename the document"). An empty name is
+refused with `INVALID_ARGUMENT`. The rename is announced to `WatchServerStatus`
+watchers and re-published over mDNS at once.
+
+#### SetMachineDescription
+
+Sets the description template (empty for none) and returns the identity with
+its new rendering, plus a `report` (a `DescriptionTemplateReport`) of what the
+rendering could not substitute, so a client can warn without parsing the
+template: `unknownKeys` (each `{...}` that is not a known key, rendered as
+written), `inapplicableKeys` (known keys that do not apply to this machine,
+rendered empty) and `malformed` (an unterminated `{...` or a lone `}`, rendered
+literally). Only the caller gets the report; a client watching the status
+stream that wants one calls `PreviewMachineDescription`. A saved machine keeps
+it in its `machine.json`. The change is announced to `WatchServerStatus`
+watchers.
 
 ```bash
-grpcurl -plaintext -d '{"nameTemplate": "Station {econet-station} {econet-sttion}"}' \
+grpcurl -plaintext -d '{"descriptionTemplate": "Station {econet-station} {econet-sttion}"}' \
   -import-path src/service/proto -proto system.proto \
-  localhost:48875 beebium.SystemService/SetMachineName
+  localhost:48875 beebium.SystemService/SetMachineDescription
 ```
 
 ```json
 {
-  "identity": {"name": "Station 80 {econet-sttion}",
-               "nameTemplate": "Station {econet-station} {econet-sttion}", "...": "..."},
+  "identity": {"description": "Station 80 {econet-sttion}",
+               "descriptionTemplate": "Station {econet-station} {econet-sttion}", "...": "..."},
   "report": {"unknownKeys": ["econet-sttion"]}
 }
 ```
 
-#### ListNamePlaceholders
+#### ListDescriptionPlaceholders
 
-Lists every placeholder a template can use on this server -- the core's and any
-loaded extension's -- with its `key`, `label`, `description`, `group` (a picker
-heading), `insertion` (the text a picker inserts, `{key}`), current `value`, and
-`applicable` (false when this machine cannot have a value). Clients carry no list
-of keys; they ask. Every key begins with its owner's domain (`machine-`,
-`econet-`, ...).
+Lists every placeholder a description template can use on this server -- the
+core's and any loaded extension's -- with its `key`, `label`, `description`,
+`group` (a picker heading), `insertion` (the text a picker inserts, `{key}`),
+current `value`, and `applicable` (false when this machine cannot have a
+value). Clients carry no list of keys; they ask. Every key begins with its
+owner's domain (`machine-`, `econet-`, ...).
 
 ```json
 {"placeholders": [
@@ -605,11 +619,11 @@ of keys; they ask. Every key begins with its owner's domain (`machine-`,
 ]}
 ```
 
-#### PreviewMachineName
+#### PreviewMachineDescription
 
-Renders a template against the current values without changing anything, for a
-live preview while the user edits. Returns `name` and the same `report` as
-`SetMachineName`.
+Renders a description template against the current values without changing
+anything, for a live preview while the user edits. Returns `description` and
+the same `report` as `SetMachineDescription`.
 
 #### WatchServerStatus (Server Streaming)
 
@@ -626,16 +640,17 @@ Events:
 {"status": "SERVER_STATUS_READY", "message": "Server ready"}
 ```
 ```json
-{"status": "SERVER_STATUS_IDENTITY_CHANGED", "identity": {"name": "Station 81 (AUN, Model B)", "...": "..."}}
+{"status": "SERVER_STATUS_IDENTITY_CHANGED", "identity": {"name": "Lab Beeb", "description": "Station 81 (AUN)", "...": "..."}}
 ```
 ```json
 {"status": "SERVER_STATUS_SHUTTING_DOWN", "message": "Server shutting down", "shutdownGraceMs": 5000}
 ```
 
-`SERVER_STATUS_IDENTITY_CHANGED` carries the new identity whenever the name
-changes: a `SetMachineName`, or a re-rendering in which a placeholder's value
-changed (a renumbered station, at its next Break), or the uuid does (a Save
-As). Every event, heartbeats included, carries `templateMediaWritten`: true
+`SERVER_STATUS_IDENTITY_CHANGED` carries the new identity whenever its uuid,
+name or description changes: a `SetMachineName` or `SetMachineDescription`, a
+re-rendering of the description in which a placeholder's value changed (a
+renumbered station, at its next Break), or a Save that gives the machine a
+document (its name) or a Save As (a new uuid and name). Every event, heartbeats included, carries `templateMediaWritten`: true
 while a machine not yet saved has written to the copies of the media its
 preset named, which are lost unless it is saved, so a front-end can ask
 whether to save it before closing. It is always false for a saved machine, and
@@ -653,7 +668,7 @@ forms, by the machine and `destinationDirpath`:
 | Machine | Destination | Result |
 |---------|-------------|--------|
 | not yet saved | a new directory | saved there with its uuid; its transient directory is removed |
-| saved | empty | its battery-backed state, screen and name written in place |
+| saved | empty | its battery-backed state, screen and description written in place |
 | saved | a new directory | Save As: a copy with a new uuid, from which the machine runs on |
 
 The response gives the machine's directory and identity now. A destination
