@@ -58,6 +58,11 @@ class PresetManager: ObservableObject {
     /// Numbers machines per preset, for this run of the app only.
     private let nameSequence = MachineNameSequence()
 
+    /// The session's preset thumbnails, fetched lazily from the server via
+    /// show-preset and kept in memory. The views ask this rather than reading
+    /// a thumbnail file themselves.
+    let thumbnailCache = PresetThumbnailCache()
+
     /// The typed wrapper over the server executable's command-line interface.
     /// Every run-to-completion subcommand goes through it; the long-lived
     /// `start` launch (which awaits a listening port) stays here, being a

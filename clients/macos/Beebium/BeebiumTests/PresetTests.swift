@@ -26,7 +26,8 @@ final class MachinePresetTests: XCTestCase {
             machineName: nil,
             modelName: "BBC Model B",
             modelDescription: "The original BBC Micro",
-            releaseDate: "1981-12"
+            releaseDate: "1981-12",
+            hasThumbnail: true
         )
 
         XCTAssertTrue(preset.isSystemProvided)
@@ -44,7 +45,8 @@ final class MachinePresetTests: XCTestCase {
             machineName: nil,
             modelName: "BBC Model B",
             modelDescription: nil,
-            releaseDate: nil
+            releaseDate: nil,
+            hasThumbnail: false
         )
 
         XCTAssertFalse(preset.isSystemProvided)
@@ -63,7 +65,8 @@ final class MachinePresetTests: XCTestCase {
             machineName: nil,
             modelName: "BBC Model B",
             modelDescription: nil,
-            releaseDate: nil
+            releaseDate: nil,
+            hasThumbnail: false
         )
         let preset2 = MachinePreset(
             id: id,
@@ -75,7 +78,8 @@ final class MachinePresetTests: XCTestCase {
             machineName: nil,
             modelName: "Different Model",
             modelDescription: nil,
-            releaseDate: nil
+            releaseDate: nil,
+            hasThumbnail: false
         )
 
         XCTAssertEqual(preset1, preset2)
@@ -93,7 +97,8 @@ final class MachinePresetTests: XCTestCase {
             machineName: nil,
             modelName: "BBC Model B",
             modelDescription: nil,
-            releaseDate: nil
+            releaseDate: nil,
+            hasThumbnail: false
         )
 
         var set = Set<MachinePreset>()

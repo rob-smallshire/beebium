@@ -218,6 +218,20 @@ struct CoreCLI {
         return out
     }
 
+    // MARK: - Preset thumbnail
+
+    /// `show-preset <idOrPath> --thumbnail --output <png>`, which writes the
+    /// preset's thumbnail PNG. Returns nil when it was written, or the error
+    /// message otherwise -- including exit 66 when the preset has no thumbnail,
+    /// which callers normally avoid by checking the listing's `thumbnail` flag
+    /// first.
+    func showPresetThumbnail(idOrPath: String, outputPath: String, executablePath: String) async -> String? {
+        let (_, error) = await run(
+            executablePath: executablePath,
+            arguments: ["show-preset", idOrPath, "--thumbnail", "--output", outputPath])
+        return error
+    }
+
     // MARK: - Preset management
 
     /// `create-preset --name <name> --from <presetId>`. Returns (newPresetId,

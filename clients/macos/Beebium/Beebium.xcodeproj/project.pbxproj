@@ -34,6 +34,7 @@
 		10FB81233FBCF7FBD0EE36D5 /* ServerAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2084B8844488BD2A4B9313 /* ServerAvailabilityTests.swift */; };
 		116FC39CBA4CBBA8B1F63FD1 /* VideoSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E54D546E48798EB281A43A0 /* VideoSettings.swift */; };
 		126DBA1313A772F81CD27E02 /* ExtensionInstanceModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F089797F79A7218E079F7DB1 /* ExtensionInstanceModelTests.swift */; };
+		12F8F293AAD228BC164AB68D /* PresetThumbnailCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D7A1533095D918422CCB43 /* PresetThumbnailCacheTests.swift */; };
 		14E16012DD8EC1046039A0FF /* SelectionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC000E57DF01A727A71A82C0 /* SelectionOverlayView.swift */; };
 		14F3A975FA057C10313A9E3E /* SystemPowerMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E24C908F696C80EFC7B016E /* SystemPowerMonitor.swift */; };
 		150640ADACCA6EFA9A60A624 /* VideoSettingsCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADC7C5C44D2AAF8D8920E36 /* VideoSettingsCache.swift */; };
@@ -253,6 +254,7 @@
 		F5336AD96DB468018D7B5AE9 /* ExtensionManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E743CB023485025EA33E39A /* ExtensionManifestTests.swift */; };
 		F61126ACA1A3E0AD40E6FB14 /* sideways.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94057CD054785189D20ACE11 /* sideways.pb.swift */; };
 		F619A0248AEA6D3F17D0EBA9 /* GRPC in Frameworks */ = {isa = PBXBuildFile; productRef = 4C97A19D18727CB09CD95712 /* GRPC */; };
+		F73677780CBB236C138127D8 /* PresetThumbnailCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE37D4B8F29A3A604D731B4 /* PresetThumbnailCache.swift */; };
 		F8DB66D575799986E3C664C3 /* ExtensionViewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D59B36AC9E2A59CA68F4FD3 /* ExtensionViewRenderer.swift */; };
 		F8E43B3F7BBA3554BE190043 /* MacKeyCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8502E9114AB10B2200A2F6F9 /* MacKeyCode.swift */; };
 		F911B573D5974E32CD568A35 /* TitleClickMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA7D0A129BC077F76BE2180 /* TitleClickMonitor.swift */; };
@@ -394,6 +396,7 @@
 		82E3A09BFCE24979EE6EF47F /* SidebarModeToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarModeToolbar.swift; sourceTree = "<group>"; };
 		831E41582E1F4F7358C624E8 /* indicator.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = indicator.pb.swift; sourceTree = "<group>"; };
 		8389EA15AADAB20C859E9702 /* StandardDisplayStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardDisplayStyleTests.swift; sourceTree = "<group>"; };
+		84D7A1533095D918422CCB43 /* PresetThumbnailCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetThumbnailCacheTests.swift; sourceTree = "<group>"; };
 		8502E9114AB10B2200A2F6F9 /* MacKeyCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacKeyCode.swift; sourceTree = "<group>"; };
 		86F2683BAFB4C72B6644F473 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
 		87E7F7F1255B32F8C85FAFDA /* indicator.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = indicator.proto; sourceTree = "<group>"; };
@@ -513,6 +516,7 @@
 		E2FF930B029ECBBAE243C4D0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E5FAFDF7474D253DDBE042E3 /* AudioRingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRingBuffer.swift; sourceTree = "<group>"; };
 		E61C3011B028BF1FDAD579A4 /* keyboard.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = keyboard.pb.swift; sourceTree = "<group>"; };
+		EBE37D4B8F29A3A604D731B4 /* PresetThumbnailCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetThumbnailCache.swift; sourceTree = "<group>"; };
 		EC000E57DF01A727A71A82C0 /* SelectionOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionOverlayView.swift; sourceTree = "<group>"; };
 		EE9DB980150AF613F28EA04D /* ExtensionPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionPanelView.swift; sourceTree = "<group>"; };
 		F0120B84124735271034BFC9 /* serial.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = serial.pb.swift; sourceTree = "<group>"; };
@@ -659,6 +663,7 @@
 				C553A829BF023E2C2B374139 /* PresetCatalog.swift */,
 				BA2BF078F2B01129AF2ABBFB /* PresetListing.swift */,
 				8C2AFB016D3C8A8EF789C4A9 /* PresetManager.swift */,
+				EBE37D4B8F29A3A604D731B4 /* PresetThumbnailCache.swift */,
 				98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */,
 				9483385D371D21EC9020EC06 /* SidewaysSchemaSection.swift */,
 				01E245F485CE5D4FA57FA06E /* StartupSchemaSection.swift */,
@@ -884,6 +889,7 @@
 				AA381491DEE3F058B098A69B /* PresetDiagnosticLocationTests.swift */,
 				DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */,
 				8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */,
+				84D7A1533095D918422CCB43 /* PresetThumbnailCacheTests.swift */,
 				27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */,
 				58D505651495B05B9E0A01F5 /* ScreenSelectionGeometryTests.swift */,
 				7B03CB6D61C32284DED1F50E /* ScsiDiscEditorTests.swift */,
@@ -1078,6 +1084,7 @@
 				F1007C97B24AA67ECDE8C619 /* PresetDiagnosticLocationTests.swift in Sources */,
 				316C036A4CF391595A4DD8CC /* PresetManagerDraftLaunchTests.swift in Sources */,
 				62024A31F9AD52CA2676CCB2 /* PresetTests.swift in Sources */,
+				12F8F293AAD228BC164AB68D /* PresetThumbnailCacheTests.swift in Sources */,
 				4324F1B48C46D8B71A0D31B5 /* ReconnectCoordinatorTests.swift in Sources */,
 				AC8547463BFF17B483A076FA /* ScreenSelectionGeometryTests.swift in Sources */,
 				054AD7E408934C75069853A5 /* ScsiDiscEditorTests.swift in Sources */,
@@ -1207,6 +1214,7 @@
 				42C67AA0AD4A7A00460ADB81 /* PresetDiagnosticsView.swift in Sources */,
 				835FBD895472DEA53A203EC6 /* PresetListing.swift in Sources */,
 				D7BE097905B0FE46BD611CB5 /* PresetManager.swift in Sources */,
+				F73677780CBB236C138127D8 /* PresetThumbnailCache.swift in Sources */,
 				BAF0C8765FE555AA7FE0528A /* ProcessorSectionView.swift in Sources */,
 				EE33BF0A4DE7E404A3288E43 /* ProtocolFingerprint.swift in Sources */,
 				F369818B03931A54C795F6D6 /* RecentConnections.swift in Sources */,

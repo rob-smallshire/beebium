@@ -56,7 +56,8 @@ enum PresetCatalog {
                 machineName: row.machineName,
                 modelName: modelDisplayName(row),
                 modelDescription: row.description,
-                releaseDate: row.releaseDate
+                releaseDate: row.releaseDate,
+                hasThumbnail: row.thumbnail
             )
             if preset.source == .userPreset {
                 result.user.append(preset)

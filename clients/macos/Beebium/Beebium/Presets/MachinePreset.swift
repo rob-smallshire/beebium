@@ -41,6 +41,10 @@ struct MachinePreset: Identifiable, Hashable {
     let modelDescription: String?
     /// Release date for sorting, format: YYYY, YYYY-MM, or YYYY-MM-DD
     let releaseDate: String?
+    /// Whether the server has a thumbnail to write for this preset (the
+    /// listing's `thumbnail` flag). When false the thumbnail cache shows the
+    /// placeholder without asking the server for an image that is not there.
+    let hasThumbnail: Bool
 
     /// Whether this is a system-provided preset (not user-created).
     var isSystemProvided: Bool { source == .systemPreset }

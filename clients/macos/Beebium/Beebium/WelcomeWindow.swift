@@ -65,7 +65,8 @@ struct WelcomeWindowContent: View {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 176, maximum: 176), spacing: 16)], spacing: 16) {
                         ForEach(allPresets) { preset in
-                            PresetCard(preset: preset, isLaunching: isLaunching) {
+                            PresetCard(preset: preset, isLaunching: isLaunching,
+                                       thumbnailCache: presetManager.thumbnailCache) {
                                 Task { await launchPreset(preset) }
                             }
                         }
@@ -166,7 +167,11 @@ private struct GridHeightKey: PreferenceKey {
 struct PresetCard: View {
     let preset: MachinePreset
     let isLaunching: Bool
+    let thumbnailCache: PresetThumbnailCache
     let action: () -> Void
+
+    /// The preset's thumbnail once the cache has it; nil shows the placeholder.
+    @State private var thumbnail: NSImage?
 
     var body: some View {
         Button(action: action) {
@@ -205,15 +210,17 @@ struct PresetCard: View {
         }
         .buttonStyle(.plain)
         .disabled(isLaunching)
+        .task(id: preset.id) {
+            thumbnail = await thumbnailCache.thumbnail(for: preset)
+        }
     }
 
     @ViewBuilder
     private var thumbnailView: some View {
-        if let thumbnailURL = thumbnailURL(for: preset),
-           let nsImage = NSImage(contentsOf: thumbnailURL) {
+        if let thumbnail {
             ZStack {
                 Color.black
-                Image(nsImage: nsImage)
+                Image(nsImage: thumbnail)
                     .resizable()
                     .interpolation(.high)
                     .antialiased(true)
@@ -227,19 +234,5 @@ struct PresetCard: View {
                     .foregroundColor(.gray)
             }
         }
-    }
-
-    /// Look for a sidecar thumbnail PNG alongside the preset file.
-    /// Convention: model-b.preset.beebium -> model-b.thumbnail.png
-    private func thumbnailURL(for preset: MachinePreset) -> URL? {
-        let presetURL = URL(fileURLWithPath: preset.presetFilepath)
-        // Strip .preset.beebium extension to get the base name
-        var basename = presetURL.deletingPathExtension().lastPathComponent  // strips .beebium
-        if basename.hasSuffix(".preset") {
-            basename = String(basename.dropLast(".preset".count))
-        }
-        let thumbnailURL = presetURL.deletingLastPathComponent()
-            .appendingPathComponent("\(basename).thumbnail.png")
-        return FileManager.default.fileExists(atPath: thumbnailURL.path) ? thumbnailURL : nil
     }
 }
