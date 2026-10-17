@@ -238,6 +238,7 @@ public:
         // never with a notice). A consequence of the shared directory, to be
         // deleted when machine directories hold the working copies (#103a).
         if (is_bare_reference(image) && master_dirpath &&
+            std::filesystem::path(image).extension() == kAcornScsiHardDiscFormat.extension &&
             std::filesystem::is_regular_file(*master_dirpath / image, ec) &&
             !std::filesystem::is_regular_file(container_dirpath / image, ec)) {
             return prepare_working_image(image, *master_dirpath, destination.dirpath,

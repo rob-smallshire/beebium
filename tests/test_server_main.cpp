@@ -624,7 +624,7 @@ TEST_CASE("load_disc_images: handles empty floppy paths (no-op)", "[server_main]
     // config.machine.floppy_filepaths are empty
 
     // Should not throw
-    REQUIRE_NOTHROW(load_disc_images(machine, config));
+    REQUIRE_NOTHROW(load_disc_images(machine, config, DiscPaths::launch_copy_destination()));
 }
 
 // ============================================================================
@@ -1138,7 +1138,9 @@ struct ReferenceTree {
 std::optional<std::filesystem::path> floppy_loaded(const std::string& reference,
                                                    const std::filesystem::path& container) {
     beebium::DiscDrive drive;
-    if (load_single_disc(drive, 0, reference, container)) return std::nullopt;
+    if (load_single_disc(drive, 0, reference, container, DiscPaths::launch_copy_destination())) {
+        return std::nullopt;
+    }
     return beebium::DiscUrl::parse(drive.source_url())->to_filepath();
 }
 
@@ -1230,7 +1232,9 @@ TEST_CASE("load_single_disc records a path as the file URL DiscUrl spells",
     }
 
     beebium::DiscDrive drive;
-    REQUIRE_FALSE(load_single_disc(drive, 0, image_filepath.string(), temp_dir.path()).has_value());
+    REQUIRE_FALSE(load_single_disc(drive, 0, image_filepath.string(), temp_dir.path(),
+                                   DiscPaths::launch_copy_destination())
+                      .has_value());
 
     const auto& url = drive.source_url();
     CHECK(url == beebium::DiscUrl::from_filepath(image_filepath).url());
@@ -1253,6 +1257,8 @@ TEST_CASE("load_single_disc records a URL as given", "[server_main][disc]") {
     const auto url = beebium::DiscUrl::from_filepath(image_filepath).url();
 
     beebium::DiscDrive drive;
-    REQUIRE_FALSE(load_single_disc(drive, 0, url, temp_dir.path()).has_value());
+    REQUIRE_FALSE(
+        load_single_disc(drive, 0, url, temp_dir.path(), DiscPaths::launch_copy_destination())
+            .has_value());
     CHECK(drive.source_url() == url);
 }

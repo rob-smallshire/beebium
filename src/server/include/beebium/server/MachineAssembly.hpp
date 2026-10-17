@@ -396,22 +396,23 @@ std::optional<int> install_econet(MachineType& machine,
     return std::nullopt;
 }
 
-// Load a single disc image into a floppy drive: a URL, or a file reference
-// written in `container_dirpath` (see ResourcePaths.hpp).
+// Load a single disc image into a floppy drive: a file URL, or a file
+// reference written in `container_dirpath`, resolved as a hard disc's is
+// (DiscPaths::resolve_disc_image, with `destination` for a copy).
 // Returns an exit code on error, or std::nullopt on success.
 inline std::optional<int> load_single_disc(DiscDrive& drive, int drive_num,
                                             const std::string& filepath_or_url,
-                                            const std::filesystem::path& container_dirpath) {
+                                            const std::filesystem::path& container_dirpath,
+                                            const DiscPaths::CopyDestination& destination) {
     std::filesystem::path filepath(filepath_or_url);
     const bool is_url = filepath_or_url.find("://") != std::string::npos;
-    if (!is_url) {
-        std::vector<std::filesystem::path> system_dirpaths;
-        if (auto master_dirpath = beebium::server::DiscPaths::find_disc_directory()) {
-            system_dirpaths.push_back(*master_dirpath);
-        }
+    // A local file URL names its file by path; any other URL is the loader's.
+    const auto local_url = is_url ? beebium::DiscUrl::parse(filepath_or_url) : std::nullopt;
+    if (!is_url || (local_url && local_url->is_local())) {
         try {
-            filepath = resolve_reference(filepath_or_url, ResourceKind::Disc, container_dirpath,
-                                         system_dirpaths).path;
+            filepath = DiscPaths::resolve_disc_image(
+                local_url ? local_url->to_filepath().string() : filepath_or_url,
+                container_dirpath, destination);
         } catch (const std::runtime_error& e) {
             std::cerr << "Error: " << e.what() << "\n";
             return ExitCode::NOINPUT;
@@ -484,12 +485,13 @@ void tick_disc_drives(MachineType& machine) {
 // Load disc images into floppy drives.
 // Returns an exit code on error, or std::nullopt on success.
 template<typename MachineType>
-std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<MachineType>& config) {
+std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<MachineType>& config,
+                                    const DiscPaths::CopyDestination& destination) {
     if constexpr (requires { machine.state().memory.disc_drive_0; }) {
         if (!config.machine.floppy_filepaths[0].empty()) {
             if (auto exit_code = load_single_disc(
                     machine.state().memory.disc_drive_0, 0, config.machine.floppy_filepaths[0],
-                    config.launch.reference_container_dirpath())) {
+                    config.launch.reference_container_dirpath(), destination)) {
                 return exit_code;
             }
         }
@@ -497,7 +499,7 @@ std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<Mac
         if (!config.machine.floppy_filepaths[1].empty()) {
             if (auto exit_code = load_single_disc(
                     machine.state().memory.disc_drive_1, 1, config.machine.floppy_filepaths[1],
-                    config.launch.reference_container_dirpath())) {
+                    config.launch.reference_container_dirpath(), destination)) {
                 return exit_code;
             }
         }
@@ -1018,8 +1020,12 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         }
     }
 
+    // Where a master's working copy is made, decided once for every disc this
+    // launch loads.
+    const auto disc_destination = DiscPaths::launch_copy_destination();
+
     // Load disc images
-    if (auto exit_code = load_disc_images(machine, config)) {
+    if (auto exit_code = load_disc_images(machine, config, disc_destination)) {
         return {nullptr, *exit_code};
     }
 
@@ -1077,7 +1083,6 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         // the plugin that ships it. Any other names a location the extension
         // owns, which is never searched.
         const auto container_dirpath = config.launch.reference_container_dirpath();
-        const auto disc_destination = beebium::server::DiscPaths::launch_copy_destination();
         for (const auto& p : manifest->parameters) {
             if (p.type != "filepath") continue;
             auto it = inst.config.find(p.key);
