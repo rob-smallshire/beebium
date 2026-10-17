@@ -80,7 +80,8 @@ public:
     explicit SystemTestFixture(
         beebium::service::Provenance provenance = {},
         beebium::service::MachineIdentity identity = {},
-        bool wire_pacing_clock = true)
+        bool wire_pacing_clock = true,
+        beebium::service::MachineStore* machine_store = nullptr)
         : provenance_(std::move(provenance))
         , identity_(std::move(identity))
         , wire_pacing_clock_(wire_pacing_clock) {
@@ -110,6 +111,7 @@ public:
 
         // Start server on a dynamically allocated port
         server_ = std::make_unique<beebium::service::Server<beebium::ModelB>>(machine_, "127.0.0.1", 0);
+        server_->set_machine_store(machine_store);
         server_->start(provenance_, identity_);
 
         // Wiring the clock is optional: leaving it unwired models the brief
@@ -596,4 +598,138 @@ TEST_CASE("A machine's advertisement names its model as well as its type",
     CHECK(txt.at("model_name") == "BBC Model B");
     CHECK(txt.at("provenance") == "cli");
     CHECK_FALSE(txt.contains("econet_station"));
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Saving the machine (SaveMachine, ResetBattery, SystemInfo, status)
+//////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+// A store that records what it is asked and answers as told.
+class FakeMachineStore final : public beebium::service::MachineStore {
+public:
+    std::string machine_dirpath() const override { return dirpath; }
+    bool machine_saved() const override { return saved; }
+    bool template_media_written() const override { return written; }
+    SaveOutcome save(const std::string& destination, bool replace_existing,
+                     const std::string& uuid, const std::string& name_template) override {
+        asked_destination = destination;
+        asked_replace = replace_existing;
+        asked_uuid = uuid;
+        asked_name_template = name_template;
+        return outcome;
+    }
+    std::vector<std::string> reset_battery() override { return {"integra-b-rtc", "clock/saf3019p"}; }
+    void renamed(const std::string& name_template) override { renamed_to = name_template; }
+
+    std::string dirpath = "/machines/transient";
+    bool saved = false;
+    bool written = true;
+    SaveOutcome outcome;
+    std::string asked_destination, asked_uuid, asked_name_template, renamed_to;
+    bool asked_replace = false;
+};
+
+}  // namespace
+
+TEST_CASE("SystemService without a machine store cannot save", "[grpc][system][save]") {
+    SystemTestFixture fixture;
+    {
+        grpc::ClientContext context;
+        beebium::SystemInfo info;
+        REQUIRE(fixture.system().GetSystemInfo(&context, {}, &info).ok());
+        CHECK(info.machine_dirpath().empty());
+        CHECK_FALSE(info.machine_saved());
+    }
+    grpc::ClientContext save_context;
+    beebium::SaveMachineResponse saved;
+    CHECK(fixture.system().SaveMachine(&save_context, {}, &saved).error_code() ==
+          grpc::StatusCode::FAILED_PRECONDITION);
+    grpc::ClientContext reset_context;
+    beebium::ResetBatteryResponse reset;
+    CHECK(fixture.system().ResetBattery(&reset_context, {}, &reset).error_code() ==
+          grpc::StatusCode::FAILED_PRECONDITION);
+}
+
+TEST_CASE("SystemService reports and saves the machine through its store", "[grpc][system][save]") {
+    FakeMachineStore store;
+    beebium::service::MachineIdentity identity;
+    identity.uuid = "11111111-1111-4111-8111-111111111111";
+    identity.name_template = "Elite {model}";
+    SystemTestFixture fixture({}, identity, true, &store);
+
+    {
+        grpc::ClientContext context;
+        beebium::SystemInfo info;
+        REQUIRE(fixture.system().GetSystemInfo(&context, {}, &info).ok());
+        CHECK(info.machine_dirpath() == "/machines/transient");
+        CHECK_FALSE(info.machine_saved());
+    }
+
+    SECTION("each refusal is its status") {
+        using Error = beebium::service::MachineStore::SaveOutcome::Error;
+        for (auto [error, code] : {std::pair{Error::InvalidArgument, grpc::StatusCode::INVALID_ARGUMENT},
+                                   std::pair{Error::AlreadyExists, grpc::StatusCode::ALREADY_EXISTS},
+                                   std::pair{Error::FailedPrecondition, grpc::StatusCode::FAILED_PRECONDITION},
+                                   std::pair{Error::Internal, grpc::StatusCode::INTERNAL}}) {
+            store.outcome = {error, "why", {}, {}};
+            grpc::ClientContext context;
+            beebium::SaveMachineResponse response;
+            const auto status = fixture.system().SaveMachine(&context, {}, &response);
+            CHECK(status.error_code() == code);
+            CHECK(status.error_message() == "why");
+        }
+    }
+
+    SECTION("a save is asked with the identity now, and a new uuid is adopted") {
+        store.outcome = {{}, {}, "/home/me/Elite.beebium-machine",
+                         "22222222-2222-4222-8222-222222222222"};
+        grpc::ClientContext context;
+        beebium::SaveMachineRequest request;
+        request.set_destination_dirpath("/home/me/Elite.beebium-machine");
+        request.set_replace_existing(true);
+        beebium::SaveMachineResponse response;
+        REQUIRE(fixture.system().SaveMachine(&context, request, &response).ok());
+        CHECK(store.asked_destination == "/home/me/Elite.beebium-machine");
+        CHECK(store.asked_replace);
+        CHECK(store.asked_uuid == "11111111-1111-4111-8111-111111111111");
+        CHECK(store.asked_name_template == "Elite {model}");
+        CHECK(response.machine_dirpath() == "/home/me/Elite.beebium-machine");
+        CHECK(response.identity().uuid() == "22222222-2222-4222-8222-222222222222");
+
+        grpc::ClientContext info_context;
+        beebium::SystemInfo info;
+        REQUIRE(fixture.system().GetSystemInfo(&info_context, {}, &info).ok());
+        CHECK(info.identity().uuid() == "22222222-2222-4222-8222-222222222222");
+    }
+
+    SECTION("a rename is recorded by the store") {
+        grpc::ClientContext context;
+        beebium::SetMachineNameRequest request;
+        request.set_name_template("Renamed");
+        beebium::SetMachineNameResponse response;
+        REQUIRE(fixture.system().SetMachineName(&context, request, &response).ok());
+        CHECK(store.renamed_to == "Renamed");
+    }
+
+    SECTION("a battery reset names the units forgotten") {
+        grpc::ClientContext context;
+        beebium::ResetBatteryResponse response;
+        REQUIRE(fixture.system().ResetBattery(&context, {}, &response).ok());
+        REQUIRE(response.reset_units_size() == 2);
+        CHECK(response.reset_units(1) == "clock/saf3019p");
+    }
+
+    SECTION("every status event says whether template media were written") {
+        grpc::ClientContext context;
+        auto reader = fixture.system().WatchServerStatus(&context, {});
+        beebium::ServerStatusEvent event;
+        REQUIRE(reader->Read(&event));
+        CHECK(event.status() == beebium::SERVER_STATUS_READY);
+        CHECK(event.template_media_written());
+        context.TryCancel();
+        while (reader->Read(&event)) {}
+        reader->Finish();
+    }
 }

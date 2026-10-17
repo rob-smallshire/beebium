@@ -38,9 +38,18 @@ public:
     // host (describe-extension's effective_default). Unset: the default.
     using EffectiveDefault = std::function<std::string(const ParameterSchema&)>;
 
+    // Runs a function with emulation paused, serialised with every other
+    // caller that pauses it (Machine::with_emulation_paused).
+    using Quiescer = std::function<void(const std::function<void()>&)>;
+
     explicit PeripheralExtensionServiceImpl(const ExtensionRegistry& registry,
                                             EffectiveDefault effective_default = {})
         : registry_(registry), effective_default_(std::move(effective_default)) {}
+
+    // Read storage devices with emulation paused, so a device the server
+    // re-points (a Save moving the machine's media) is never read half
+    // changed. Unset: read as they are.
+    void set_quiescer(Quiescer quiescer) { quiescer_ = std::move(quiescer); }
 
     grpc::Status ListExtensions(
             grpc::ServerContext*,
@@ -61,7 +70,14 @@ public:
             // ExtensionStorage and overriding Extension::storage()
             // to return `this`. Empty for the typical extension.
             if (auto* storage = ext->storage()) {
-                for (const auto& dev : storage->devices()) {
+                std::vector<StorageDeviceInfo> devices;
+                const auto read_devices = [&] { devices = storage->devices(); };
+                if (quiescer_) {
+                    quiescer_(read_devices);
+                } else {
+                    read_devices();
+                }
+                for (const auto& dev : devices) {
                     auto* proto_dev = info->add_storage_devices();
                     proto_dev->set_id(dev.id);
                     proto_dev->set_name(dev.name);
@@ -218,6 +234,7 @@ private:
 
     const ExtensionRegistry& registry_;
     EffectiveDefault effective_default_;
+    Quiescer quiescer_;
 };
 
 }  // namespace beebium::service

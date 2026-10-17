@@ -20,6 +20,7 @@
 #include "beebium/NameTemplate.hpp"
 #include "beebium/service/ConnectionTracker.hpp"
 #include "beebium/service/HostFingerprint.hpp"
+#include "beebium/service/MachineStore.hpp"
 #include "beebium/service/ProtocolFingerprint.hpp"
 #include "beebium/service/ReannounceLimiter.hpp"
 #include "beebium/service/ShutdownPolicy.hpp"
@@ -200,6 +201,21 @@ public:
         const SetSpeedMultiplierRequest* request,
         SetSpeedMultiplierResponse* response) override;
 
+    grpc::Status SaveMachine(
+        grpc::ServerContext* context,
+        const SaveMachineRequest* request,
+        SaveMachineResponse* response) override;
+
+    grpc::Status ResetBattery(
+        grpc::ServerContext* context,
+        const ResetBatteryRequest* request,
+        ResetBatteryResponse* response) override;
+
+    /// Where the machine is kept on disk, or nullptr for nowhere (SaveMachine
+    /// and ResetBattery then fail). Call before the server accepts
+    /// connections; the store must outlive the service.
+    void set_machine_store(MachineStore* store) { machine_store_ = store; }
+
     /// Notify all watchers that shutdown is imminent.
     /// Called from signal handler or shutdown path.
     /// Thread-safe: can be called from any thread.
@@ -259,6 +275,15 @@ private:
 
     /// Execute shutdown sequence in background thread.
     void execute_shutdown(ShutdownMode mode, uint32_t grace_ms);
+
+    /// Write `event`, stamped with what is true on every event.
+    bool write_event(grpc::ServerWriter<ServerStatusEvent>* writer, ServerStatusEvent& event) {
+        event.set_template_media_written(machine_store_ &&
+                                         machine_store_->template_media_written());
+        return writer->Write(event);
+    }
+
+    MachineStore* machine_store_ = nullptr;
 
     MachineType& machine_;
     Provenance provenance_;
@@ -383,6 +408,80 @@ grpc::Status SystemServiceImpl<MachineType>::GetSystemInfo(
         response->set_executable_path(exe_path->string());
     }
 
+    if (machine_store_) {
+        response->set_machine_dirpath(machine_store_->machine_dirpath());
+        response->set_machine_saved(machine_store_->machine_saved());
+    }
+
+    return grpc::Status::OK;
+}
+
+template<typename MachineType>
+grpc::Status SystemServiceImpl<MachineType>::SaveMachine(
+    grpc::ServerContext* /*context*/,
+    const SaveMachineRequest* request,
+    SaveMachineResponse* response) {
+    if (!machine_store_) {
+        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                            "this server keeps its machine nowhere");
+    }
+    std::string uuid;
+    std::string name_template;
+    {
+        std::lock_guard<std::mutex> lock(watchers_mutex_);
+        uuid = identity_.uuid;
+        name_template = identity_.name_template;
+    }
+    const auto outcome =
+        machine_store_->save(request->destination_dirpath(), request->replace_existing(), uuid,
+                             name_template);
+    using Error = MachineStore::SaveOutcome::Error;
+    switch (outcome.error) {
+        case Error::None:
+            break;
+        case Error::InvalidArgument:
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, outcome.message);
+        case Error::AlreadyExists:
+            return grpc::Status(grpc::StatusCode::ALREADY_EXISTS, outcome.message);
+        case Error::FailedPrecondition:
+            return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, outcome.message);
+        case Error::Internal:
+            return grpc::Status(grpc::StatusCode::INTERNAL, outcome.message);
+    }
+
+    // A Save As makes another machine, with an identity of its own.
+    bool identity_changed = false;
+    {
+        std::lock_guard<std::mutex> lock(watchers_mutex_);
+        if (identity_.uuid != outcome.machine_uuid) {
+            identity_.uuid = outcome.machine_uuid;
+            identity_changed = true;
+        }
+        populate_identity_proto(response->mutable_identity());
+    }
+    response->set_machine_dirpath(outcome.machine_dirpath);
+    if (identity_changed) {
+        {
+            std::lock_guard<std::mutex> lock(advertisement_mutex_);
+            republish_advertisement_locked();
+        }
+        notify_identity_changed();
+    }
+    return grpc::Status::OK;
+}
+
+template<typename MachineType>
+grpc::Status SystemServiceImpl<MachineType>::ResetBattery(
+    grpc::ServerContext* /*context*/,
+    const ResetBatteryRequest* /*request*/,
+    ResetBatteryResponse* response) {
+    if (!machine_store_) {
+        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                            "this server keeps its machine nowhere");
+    }
+    for (const auto& unit : machine_store_->reset_battery()) {
+        response->add_reset_units(unit);
+    }
     return grpc::Status::OK;
 }
 
@@ -553,6 +652,7 @@ grpc::Status SystemServiceImpl<MachineType>::SetMachineName(
         populate_identity_proto(response->mutable_identity());
     }
     detail::populate_report(rendering, response->mutable_report());
+    if (machine_store_) machine_store_->renamed(name_template);
 
     // The name on the network is the name in the title bar of anyone looking
     // at this machine, so it has to follow the rename rather than wait for a
@@ -618,7 +718,7 @@ grpc::Status SystemServiceImpl<MachineType>::WatchServerStatus(
     ServerStatusEvent ready_event;
     ready_event.set_status(SERVER_STATUS_READY);
     ready_event.set_message("Server ready");
-    if (!writer->Write(ready_event)) {
+    if (!write_event(writer, ready_event)) {
         // Client disconnected before we could send READY
         return grpc::Status::OK;
     }
@@ -661,7 +761,7 @@ grpc::Status SystemServiceImpl<MachineType>::WatchServerStatus(
             event.set_status(SERVER_STATUS_MACHINE_RESET);
             event.set_reset_kind(last_reset_hard_.load() ? RESET_KIND_HARD
                                                          : RESET_KIND_SOFT);
-            if (!writer->Write(event)) {
+            if (!write_event(writer, event)) {
                 break;
             }
         }
@@ -672,7 +772,7 @@ grpc::Status SystemServiceImpl<MachineType>::WatchServerStatus(
             last_heartbeat = now;
             ServerStatusEvent heartbeat;
             heartbeat.set_status(SERVER_STATUS_HEARTBEAT);
-            if (!writer->Write(heartbeat)) {
+            if (!write_event(writer, heartbeat)) {
                 break;
             }
         }
@@ -683,7 +783,7 @@ grpc::Status SystemServiceImpl<MachineType>::WatchServerStatus(
             event.set_status(SERVER_STATUS_IDENTITY_CHANGED);
             event.set_message("Machine identity changed");
             populate_identity_proto(event.mutable_identity());
-            if (!writer->Write(event)) {
+            if (!write_event(writer, event)) {
                 break;
             }
         }
@@ -694,7 +794,7 @@ grpc::Status SystemServiceImpl<MachineType>::WatchServerStatus(
             event.set_status(SERVER_STATUS_SHUTTING_DOWN);
             event.set_message("Server shutting down");
             event.set_shutdown_grace_ms(shutdown_grace_ms_.load());
-            writer->Write(event);
+            write_event(writer, event);
             break;
         }
     }

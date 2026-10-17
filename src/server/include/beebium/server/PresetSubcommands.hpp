@@ -742,41 +742,62 @@ PresetDocumentHeader recorded_preset_header(const ServerConfig<MachineType>& con
             source ? source->thumbnail_capture_delay_seconds : std::nullopt};
 }
 
+// The document of a preset recording `machine`, read through `config`'s
+// extensions and from the preset `config` was read from, under `header`:
+// what was given, and no more, with references to files that preset holds
+// named as within it. nullopt, with `error`, when it cannot be made.
+template<typename MachineType>
+std::optional<nlohmann::ordered_json> recorded_preset_document(
+    const ServerConfig<MachineType>& config, const MachineDescription& machine,
+    const PresetDocumentHeader& header, std::string& error) {
+    auto document = preset_document<MachineType>(machine, config.launch.extension_resolver,
+                                                 header, DocumentKeys::Given, error);
+    if (!document) return std::nullopt;
+    nlohmann::ordered_json document_out = *document;
+    if (config.launch.preset && config.launch.preset->form() != PresetSource::Form::File) {
+        make_references_relative(document_out, config.launch.preset->container());
+    }
+    return document_out;
+}
+
+// Every file the preset `config` was read from holds beside its document,
+// named as it names them (its thumbnail too when `with_thumbnail`); none for
+// a lone file or no preset. Throws when one cannot be read.
+template<typename MachineType>
+std::vector<zip::ZipMember> carried_preset_members(const ServerConfig<MachineType>& config,
+                                                   bool with_thumbnail) {
+    std::vector<zip::ZipMember> members;
+    if (!config.launch.preset || config.launch.preset->form() == PresetSource::Form::File) {
+        return members;
+    }
+    for (auto& member : preset_members(*config.launch.preset)) {
+        if (member.name == PresetSource::DOCUMENT_FILENAME ||
+            (!with_thumbnail && member.name == PresetSource::THUMBNAIL_FILENAME)) {
+            continue;
+        }
+        members.push_back(std::move(member));
+    }
+    return members;
+}
+
 // The files of a preset recording the machine `config` describes, under
-// `header`: its document, holding only what was given, and every file the
-// preset it was read from holds beside its own document, named as that
-// preset names them within itself (its thumbnail too when
-// `with_thumbnail`). nullopt, with `error` and `exit_code`, when the
-// document cannot be made or the source cannot be read.
+// `header`: its document (recorded_preset_document) and the files the preset
+// it was read from carries (carried_preset_members). nullopt, with `error`
+// and `exit_code`, when the document cannot be made or the source cannot be
+// read.
 template<typename MachineType>
 std::optional<std::vector<zip::ZipMember>> recorded_preset_members(
-    const ServerConfig<MachineType>& config, const PresetDocumentHeader& header,
+    const ServerConfig<MachineType>& config, const nlohmann::ordered_json& document,
     bool with_thumbnail, std::string& error, int& exit_code) {
-    auto document = preset_document<MachineType>(config.machine, config.launch.extension_resolver,
-                                                 header, DocumentKeys::Given, error);
-    if (!document) {
-        exit_code = ExitCode::USAGE;
-        return std::nullopt;
-    }
-    nlohmann::ordered_json document_out = *document;
-    const bool carries_files =
-        config.launch.preset && config.launch.preset->form() != PresetSource::Form::File;
-    if (carries_files) make_references_relative(document_out, config.launch.preset->container());
-    auto members = preset_members(document_out.dump(2) + "\n");
-    if (carries_files) {
-        try {
-            for (auto& member : preset_members(*config.launch.preset)) {
-                if (member.name == PresetSource::DOCUMENT_FILENAME ||
-                    (!with_thumbnail && member.name == PresetSource::THUMBNAIL_FILENAME)) {
-                    continue;
-                }
-                members.push_back(std::move(member));
-            }
-        } catch (const std::exception& e) {
-            error = std::string("cannot read the source preset: ") + e.what();
-            exit_code = ExitCode::IOERR;
-            return std::nullopt;
+    auto members = preset_members(document.dump(2) + "\n");
+    try {
+        for (auto& member : carried_preset_members(config, with_thumbnail)) {
+            members.push_back(std::move(member));
         }
+    } catch (const std::exception& e) {
+        error = std::string("cannot read the source preset: ") + e.what();
+        exit_code = ExitCode::IOERR;
+        return std::nullopt;
     }
     return members;
 }
@@ -918,10 +939,16 @@ public:
         // descriptive fields are the copy's baseline).
         std::string members_error;
         int members_exit_code = ExitCode::OK;
-        auto members = recorded_preset_members(
-            config,
+        const auto document = recorded_preset_document(
+            config, config.machine,
             recorded_preset_header(config, preset_name, preset_description, release_date),
-            /*with_thumbnail=*/false, members_error, members_exit_code);
+            members_error);
+        if (!document) {
+            std::cerr << "Error: " << members_error << "\n";
+            return ExitCode::USAGE;
+        }
+        auto members = recorded_preset_members(config, *document, /*with_thumbnail=*/false,
+                                               members_error, members_exit_code);
         if (!members) {
             std::cerr << "Error: " << members_error << "\n";
             return members_exit_code;

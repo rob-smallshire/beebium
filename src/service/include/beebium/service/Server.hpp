@@ -110,6 +110,13 @@ public:
         impl_->coprocessor_name_placeholders.set_coprocessor(coprocessor);
     }
 
+    /// Where the machine is kept on disk, for SaveMachine, ResetBattery and
+    /// SystemInfo. Call before start(); it must outlive the server.
+    void set_machine_store(MachineStore* store) { impl_->machine_store = store; }
+
+    /// The frame the machine last presented, as clients are sent it.
+    const FrameBuffer& frame_buffer() const { return impl_->frame_buffer; }
+
     /// The launcher's instance number for this machine, for the
     /// machine-ordinal placeholder ("#3"). Call before start().
     void set_launch_ordinal(unsigned ordinal) {
@@ -198,6 +205,7 @@ private:
         std::unique_ptr<DiscServiceImpl<MachineType>> disc_service;
         std::unique_ptr<IndicatorServiceImpl<MachineType>> indicator_service;
         std::unique_ptr<SystemServiceImpl<MachineType>> system_service;
+        MachineStore* machine_store = nullptr;
         std::unique_ptr<AudioServiceImpl<MachineType>> audio_service;
         std::unique_ptr<SidewaysServiceImpl<MachineType>> sideways_service;
         // Motherboard link state captured before start(), applied to
@@ -330,6 +338,8 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         &impl_->connection_tracker, impl_->advertiser.get(), 0,
         static_cast<uint32_t>(MachineType::Memory::default_pacing_config().base_clock_hz),
         policy_config, nullptr, std::move(shutdown_callback));
+
+    impl_->system_service->set_machine_store(impl_->machine_store);
 
     // Render the name template before anyone can ask for the name.
     impl_->econet_name_placeholders.set_transport_registry(transport_registry);

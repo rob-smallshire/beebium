@@ -103,6 +103,16 @@ class SystemServiceStub(object):
                 request_serializer=system__pb2.SetSpeedMultiplierRequest.SerializeToString,
                 response_deserializer=system__pb2.SetSpeedMultiplierResponse.FromString,
                 _registered_method=True)
+        self.SaveMachine = channel.unary_unary(
+                '/beebium.SystemService/SaveMachine',
+                request_serializer=system__pb2.SaveMachineRequest.SerializeToString,
+                response_deserializer=system__pb2.SaveMachineResponse.FromString,
+                _registered_method=True)
+        self.ResetBattery = channel.unary_unary(
+                '/beebium.SystemService/ResetBattery',
+                request_serializer=system__pb2.ResetBatteryRequest.SerializeToString,
+                response_deserializer=system__pb2.ResetBatteryResponse.FromString,
+                _registered_method=True)
 
 
 class SystemServiceServicer(object):
@@ -195,6 +205,30 @@ class SystemServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SaveMachine(self, request, context):
+        """Save the machine, without stopping it: its battery-backed state, last
+        screen and identity are written to its directory, which from then on
+        outlives the server. See SaveMachineRequest for the three forms.
+        Errors: INVALID_ARGUMENT for a machine not yet saved and no
+        destination; ALREADY_EXISTS for a destination that exists, unless
+        replace_existing; FAILED_PRECONDITION, with a message, for one that
+        cannot be replaced; INTERNAL, with a message, when the directory cannot
+        be written.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResetBattery(self, request, context):
+        """Forget the machine's battery-backed state, as taking out the battery
+        does. It takes effect when the machine is next started: until then the
+        machine runs on, and nothing it holds now is kept by a shutdown or a
+        Save.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_SystemServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -252,6 +286,16 @@ def add_SystemServiceServicer_to_server(servicer, server):
                     servicer.SetSpeedMultiplier,
                     request_deserializer=system__pb2.SetSpeedMultiplierRequest.FromString,
                     response_serializer=system__pb2.SetSpeedMultiplierResponse.SerializeToString,
+            ),
+            'SaveMachine': grpc.unary_unary_rpc_method_handler(
+                    servicer.SaveMachine,
+                    request_deserializer=system__pb2.SaveMachineRequest.FromString,
+                    response_serializer=system__pb2.SaveMachineResponse.SerializeToString,
+            ),
+            'ResetBattery': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResetBattery,
+                    request_deserializer=system__pb2.ResetBatteryRequest.FromString,
+                    response_serializer=system__pb2.ResetBatteryResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -553,6 +597,60 @@ class SystemService(object):
             '/beebium.SystemService/SetSpeedMultiplier',
             system__pb2.SetSpeedMultiplierRequest.SerializeToString,
             system__pb2.SetSpeedMultiplierResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SaveMachine(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.SystemService/SaveMachine',
+            system__pb2.SaveMachineRequest.SerializeToString,
+            system__pb2.SaveMachineResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResetBattery(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.SystemService/ResetBattery',
+            system__pb2.ResetBatteryRequest.SerializeToString,
+            system__pb2.ResetBatteryResponse.FromString,
             options,
             channel_credentials,
             insecure,

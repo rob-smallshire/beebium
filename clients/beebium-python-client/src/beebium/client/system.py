@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
@@ -302,6 +303,17 @@ class ServerStatusEvent:
     identity: MachineIdentity | None = None  # For IDENTITY_CHANGED events
     shutdown_conditions: tuple[ShutdownConditionStatus, ...] = ()  # For SHUTDOWN_PROGRESS
     reset_kind: ResetKind = ResetKind.UNSPECIFIED  # For MACHINE_RESET events
+    # On every event: a machine not yet saved has written to the copies of the
+    # media its template named, which are lost unless it is saved.
+    template_media_written: bool = False
+
+
+@dataclass(frozen=True)
+class SavedMachine:
+    """Where a machine is after a Save, and its identity there."""
+
+    machine_dirpath: str  # The machine's directory now
+    identity: MachineIdentity  # A Save As gives the machine a new uuid
 
 
 @dataclass(frozen=True)
@@ -541,7 +553,57 @@ class System:
                 identity=identity,
                 shutdown_conditions=conditions,
                 reset_kind=reset_kind,
+                template_media_written=response.template_media_written,
             )
+
+    @property
+    def machine_dirpath(self) -> str:
+        """The machine's directory on the server's host: a saved machine's, or
+        the transient one a machine not yet saved runs in. Empty if none."""
+        request = system_pb2.GetSystemInfoRequest()
+        return self._stub.GetSystemInfo(request).machine_dirpath
+
+    @property
+    def machine_saved(self) -> bool:
+        """True for a saved machine, whose directory outlives the server."""
+        request = system_pb2.GetSystemInfoRequest()
+        return self._stub.GetSystemInfo(request).machine_saved
+
+    def save_machine(
+        self, destination_dirpath: str | os.PathLike[str] = "", *, replace_existing: bool = False
+    ) -> SavedMachine:
+        """Save the machine without stopping it.
+
+        A machine not yet saved is saved into ``destination_dirpath``, keeping
+        its uuid. A saved machine with no destination writes its state in
+        place; with one, it is copied there with a new uuid and runs on from
+        the copy (Save As). The destination must not exist, unless
+        ``replace_existing``, when it may be a saved machine no process is
+        running (not this one), which the new one replaces once it is whole.
+        Paths are on the server's host.
+
+        Raises:
+            grpc.RpcError: INVALID_ARGUMENT for a machine not yet saved and no
+                destination, ALREADY_EXISTS for a destination that exists,
+                FAILED_PRECONDITION for one that cannot be replaced, INTERNAL
+                when the directory cannot be written.
+        """
+        request = system_pb2.SaveMachineRequest(
+            destination_dirpath=os.fspath(destination_dirpath), replace_existing=replace_existing
+        )
+        response = self._stub.SaveMachine(request)
+        return SavedMachine(
+            machine_dirpath=response.machine_dirpath,
+            identity=MachineIdentity._from_proto(response.identity, self),
+        )
+
+    def reset_battery(self) -> tuple[str, ...]:
+        """Forget the machine's battery-backed state, as taking out the battery
+        does, from the next start. Returns the units forgotten, e.g.
+        ``("integra-b-board-ram", "integra-b-rtc")`` or ``("clock/saf3019p",)``
+        for an extension's."""
+        response = self._stub.ResetBattery(system_pb2.ResetBatteryRequest())
+        return tuple(response.reset_units)
 
     @property
     def clock_speed_hz(self) -> int:

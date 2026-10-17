@@ -27,6 +27,7 @@ import socket
 import subprocess
 from pathlib import Path
 
+import grpc
 import pytest
 
 from beebium.client import Beebium
@@ -179,6 +180,143 @@ def test_a_saved_machine_keeps_its_own_identity(run, tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
+# Saving a running machine (SystemService.SaveMachine)
+# ---------------------------------------------------------------------------
+
+
+def _run_for(bbc: Beebium, emulated_seconds: float) -> None:
+    """Run long enough for the machine to have shown a screen."""
+    bbc.run_until_or_timeout(lambda: False, emulated_seconds, chunk_seconds=emulated_seconds)
+    bbc.debugger.ensure_running()
+
+
+def _template_media_written(bbc: Beebium) -> bool:
+    events = bbc.system.watch_status()
+    try:
+        return next(events).template_media_written
+    finally:
+        events.close()
+
+
+def test_a_machine_not_yet_saved_is_saved_where_it_is_told(installation, run, describe,
+                                                            tmp_path: Path):
+    machine = tmp_path / "First.beebium-machine"
+    with Beebium.launch(server=installation) as bbc:
+        assert not bbc.system.machine_saved
+        transient = Path(bbc.system.machine_dirpath)
+        assert transient.is_dir()
+        uuid = bbc.system.identity.uuid
+        _run_for(bbc, 0.5)
+
+        with pytest.raises(grpc.RpcError) as no_destination:
+            bbc.system.save_machine()
+        assert no_destination.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        with pytest.raises(grpc.RpcError) as existing:
+            bbc.system.save_machine(tmp_path)
+        assert existing.value.code() == grpc.StatusCode.ALREADY_EXISTS
+
+        saved = bbc.system.save_machine(machine)
+        assert saved.machine_dirpath == str(machine)
+        assert saved.identity.uuid == uuid  # the same machine, now saved
+        assert bbc.system.machine_saved
+        assert bbc.system.machine_dirpath == str(machine)
+        assert not transient.exists()
+
+        description = describe(machine)
+        assert description["uuid"] == uuid
+        assert isinstance(description["locked_by_pid"], int)
+        assert Path(description["thumbnail_filepath"]).is_file()
+        assert (machine / "preset.json").is_file()
+        assert (machine / "First.beebium-machine").is_file()
+
+    assert "locked_by_pid" not in describe(machine)
+    with _launch(installation, machine) as bbc:
+        assert bbc.system.identity.uuid == uuid
+        assert bbc.system.machine_saved
+
+
+def test_save_as_makes_another_machine_and_runs_on_from_it(installation, run, describe,
+                                                           tmp_path: Path):
+    original = tmp_path / "Original.beebium-machine"
+    copy = tmp_path / "Copy.beebium-machine"
+    assert run("create-machine", "--output", original).returncode == 0
+    original_uuid = describe(original)["uuid"]
+
+    with _launch(installation, original) as bbc:
+        _run_for(bbc, 0.5)
+        saved = bbc.system.save_machine(copy)
+        assert saved.machine_dirpath == str(copy)
+        assert saved.identity.uuid != original_uuid
+        assert bbc.system.identity.uuid == saved.identity.uuid
+        assert bbc.system.machine_dirpath == str(copy)
+
+        # The original is left as it was, and free.
+        assert describe(original)["uuid"] == original_uuid
+        assert "locked_by_pid" not in describe(original)
+        assert describe(copy)["uuid"] == saved.identity.uuid
+        assert isinstance(describe(copy)["locked_by_pid"], int)
+
+        # Saved in place from now on.
+        assert bbc.system.save_machine().machine_dirpath == str(copy)
+
+
+def test_a_save_replaces_a_saved_machine_only_when_asked_and_only_one_it_may(
+        installation, run, describe, tmp_path: Path):
+    running = tmp_path / "Running.beebium-machine"
+    old = tmp_path / "Old.beebium-machine"
+    busy = tmp_path / "Busy.beebium-machine"
+    not_a_machine = tmp_path / "Folder"
+    not_a_machine.mkdir()
+    for machine in (running, old, busy):
+        assert run("create-machine", "--output", machine).returncode == 0
+    (old / "notes.txt").write_text("the old machine's")
+    old_uuid = describe(old)["uuid"]
+
+    with _launch(installation, busy), _launch(installation, running) as bbc:
+        _run_for(bbc, 0.5)
+
+        def refused(destination: Path, **kwargs) -> grpc.RpcError:
+            with pytest.raises(grpc.RpcError) as caught:
+                bbc.system.save_machine(destination, **kwargs)
+            return caught.value
+
+        assert refused(old).code() == grpc.StatusCode.ALREADY_EXISTS
+        for destination, why in ((not_a_machine, "is not a saved machine"),
+                                 (running, "is this machine's own directory"),
+                                 (busy, "is in use by process")):
+            error = refused(destination, replace_existing=True)
+            assert error.code() == grpc.StatusCode.FAILED_PRECONDITION
+            assert why in error.details()
+        assert describe(old)["uuid"] == old_uuid  # nothing touched
+
+        saved = bbc.system.save_machine(old, replace_existing=True)
+        assert saved.machine_dirpath == str(old)
+        uuid = saved.identity.uuid
+        assert uuid != old_uuid
+        assert describe(old)["uuid"] == uuid
+        assert not (old / "notes.txt").exists()  # the old machine is gone, whole
+        assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
+            ["Running.beebium-machine", "Old.beebium-machine", "Busy.beebium-machine",
+             "Folder"])
+
+    with _launch(installation, old) as bbc:
+        assert bbc.system.identity.uuid == uuid
+
+
+def test_a_saved_machine_keeps_its_new_name_and_its_last_screen(installation, run, describe,
+                                                                tmp_path: Path):
+    machine = tmp_path / "Named.beebium-machine"
+    assert run("create-machine", "--output", machine).returncode == 0
+    assert "thumbnail_filepath" not in describe(machine)
+    with _launch(installation, machine) as bbc:
+        bbc.system.set_machine_name("Renamed {model}")
+        _run_for(bbc, 0.5)
+    description = describe(machine)
+    assert description["name"] == "Renamed {model}"
+    assert Path(description["thumbnail_filepath"]).is_file()  # kept at shutdown
+
+
+# ---------------------------------------------------------------------------
 # An extension's battery-backed state
 # ---------------------------------------------------------------------------
 
@@ -320,3 +458,53 @@ def test_a_saved_file_server_keeps_a_file_across_runs(installation, run, tmp_pat
     other = tmp_path / "Other.beebium-machine"
     assert run("create-machine", "--preset", "model-b-l3fs-aun", "--output", other).returncode == 0
     _with_file_server(installation, other, mos_filepath, basic_filepath, miss_the_file)
+
+
+def test_a_running_file_server_saved_keeps_what_it_wrote_before_and_after(
+        installation, tmp_path: Path, mos_filepath: Path, basic_filepath: Path | None):
+    """A file server started from its preset, not yet saved: its writes to its
+    disc are its template's copy, lost unless it is saved; saved while it runs,
+    it carries on writing to the saved disc."""
+    if not NFS_ROM_FILEPATH.is_file():
+        pytest.skip(f"{NFS_ROM_FILEPATH.name} not available")
+    machine = tmp_path / "Live.beebium-machine"
+    ports = {FILE_SERVER_STATION: _free_udp_port(), CLIENT_STATION: _free_udp_port()}
+    with Beebium.launch(
+        server=installation,
+        extra_args=["--preset", "model-b-l3fs-aun", "--aun",
+                    _aun_args(ports[FILE_SERVER_STATION], CLIENT_STATION, ports[CLIENT_STATION])],
+        startup_timeout=30.0,
+    ) as file_server:
+        assert _run_until(file_server, lambda: "Ready" in _screen(file_server),
+                          FILE_SERVER_BOOT_SECONDS, chunk_seconds=1.0), _screen(file_server)
+        assert not _template_media_written(file_server)
+        with Beebium.launch(
+            mos_filepath=mos_filepath,
+            basic_filepath=basic_filepath,
+            server=installation,
+            extra_args=[
+                "--sideways", f"slot=14:type=rom:image={NFS_ROM_FILEPATH}",
+                "--station", str(CLIENT_STATION),
+                "--aun", _aun_args(ports[CLIENT_STATION], FILE_SERVER_STATION,
+                                   ports[FILE_SERVER_STATION]),
+            ],
+            startup_timeout=30.0,
+        ) as client:
+            assert _run_until(client, lambda: _at_prompt(client), CLIENT_BOOT_SECONDS)
+            assert "No reply" not in _command(client, f"*I AM 0.{FILE_SERVER_STATION} SYST")
+            _command(client, "*SAVE BEFORE 3000 +100")
+            assert _template_media_written(file_server)
+
+            file_server.system.save_machine(machine)
+            assert not _template_media_written(file_server)
+
+            _command(client, "*SAVE AFTER 3000 +100")
+            catalogue = _command(client, "*.")
+            assert "BEFORE" in catalogue and "AFTER" in catalogue, catalogue
+            _command(client, "*BYE")
+
+    def find_both(client: Beebium) -> None:
+        catalogue = _command(client, "*.")
+        assert "BEFORE" in catalogue and "AFTER" in catalogue, catalogue
+
+    _with_file_server(installation, machine, mos_filepath, basic_filepath, find_both)

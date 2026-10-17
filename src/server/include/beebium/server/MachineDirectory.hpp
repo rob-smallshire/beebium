@@ -243,6 +243,7 @@ public:
                 // directory can still lose it to a sweep before it locks it;
                 // create() checks for that and makes another, so the race is
                 // closed by both together.
+                clear_directory_readonly(entry.path());
                 std::filesystem::remove_all(entry.path(), ec);
                 if (!ec) {
                     std::cerr << "Removed the machine directory " << entry.path().string()
@@ -270,6 +271,7 @@ public:
         lock_.release();
         if (!transient_) return;
         std::error_code ec;
+        clear_directory_readonly(dirpath_);
         std::filesystem::remove_all(dirpath_, ec);
         if (ec) {
             std::cerr << "Warning: cannot remove the machine directory " << dirpath_.string()

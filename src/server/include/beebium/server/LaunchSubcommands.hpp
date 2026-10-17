@@ -15,10 +15,9 @@
 
 #pragma once
 
+#include "beebium/server/FramePng.hpp"
 #include "beebium/server/MachineAssembly.hpp"
-#include "beebium/server/ImageResample.hpp"
-#include "beebium/server/ScreenshotCrop.hpp"
-#include "stb_image_write.h"
+#include "beebium/server/MachineStoreImpl.hpp"
 
 #include <algorithm>
 #include <array>
@@ -102,6 +101,18 @@ public:
             // Assemble the machine. This is the single shared assembly every
             // subcommand uses, so `start` and `capture-screenshot` cannot diverge
             // in how the machine is built (see assemble_machine).
+            // What a Save of a machine not yet saved records as its
+            // preset.json, taken now: assembly changes the configuration.
+            std::optional<nlohmann::ordered_json> recorded_document;
+            if (!config.launch.machine_dirpath) {
+                std::string record_error;
+                recorded_document = machine_preset_document(config, record_error);
+                if (!recorded_document) {
+                    std::cerr << "Warning: this machine cannot be saved: " << record_error
+                              << "\n";
+                }
+            }
+
             auto assembly = assemble_machine<MachineType>(
                 config, /*with_audio=*/true, /*defer_auto_station=*/true);
             if (!assembly.assembled) {
@@ -128,6 +139,10 @@ public:
             // SubscribeView call can target a peripheral or a transport.
             beebium::service::PeripheralExtensionServiceImpl peripheral_extension_service(
                 extension_registry, effective_default);
+            // Storage devices are read with emulation paused, as a Save
+            // re-points them.
+            peripheral_extension_service.set_quiescer(
+                [&machine](const std::function<void()>& fn) { machine.with_emulation_paused(fn); });
             beebium::service::EconetTransportServiceImpl econet_transport_service(
                 transport_registry);
             beebium::service::ExtensionUiServiceImpl extension_ui_service(
@@ -181,6 +196,12 @@ public:
             // reports the actual topology to clients -- e.g. Model B+
             // with --motherboard-link s13=north shows IC71 at slots 0/1.
             server.set_motherboard_links(config.board.motherboard_links);
+
+            // Where the machine is kept on disk: Save, ResetBattery, and what
+            // a graceful shutdown keeps.
+            ServedMachineStore<MachineType> machine_store(am, config, server.frame_buffer(),
+                                                          std::move(recorded_document));
+            server.set_machine_store(&machine_store);
 
             beebium::service::Provenance provenance{
                 config.launch.provenance_type,
@@ -339,15 +360,10 @@ public:
             flush_disc_drives(machine);
 
             // A saved machine keeps what its battery-backed units hold, its
-            // extensions' as well as its own.
-            if (!am.machine_directory->transient()) {
+            // extensions' as well as its own, and its last screen.
+            {
                 try {
-                    save_battery_units(machine.battery_units(),
-                                       am.machine_directory->dirpath() /
-                                           machine_layout::NVRAM_DIRNAME);
-                    for_each_extension_battery(am, [](const auto& units, const auto& dirpath) {
-                        save_battery_units(units, dirpath);
-                    });
+                    machine_store.keep_at_shutdown();
                 } catch (const std::exception& e) {
                     std::cerr << "Error: cannot keep the machine's battery-backed state: "
                               << e.what() << "\n";
@@ -574,86 +590,16 @@ public:
             // still alive, as `start` does after its serving loop.
             am.extension_registry.shutdown();
 
-            if (frame_buffer.version() == 0) {
-                std::cerr << "Error: no frames produced during emulation\n";
-                return ExitCode::SOFTWARE;
-            }
-
-            // Extract frame data: the metadata and pixels of one frame
-            FrameMetadata metadata;
-            std::vector<uint32_t> frame_copy(frame_buffer.capacity_pixels());
-            frame_buffer.read_frame(metadata, frame_copy);
-            uint32_t frame_width = metadata.width;
-            uint32_t frame_height = metadata.height;
-            size_t stride_pixels = frame_buffer.stride_pixels();
-
-            // Scale from logical frame to display dimensions (nearest-neighbour)
-            // with black border around the image
-            uint32_t display_width = metadata.display_width;
-            uint32_t display_height = metadata.display_height;
-            uint32_t border = static_cast<uint32_t>(border_pixels);
-            uint32_t output_width = display_width + 2 * border;
-            uint32_t output_height = display_height + 2 * border;
-
-            // Zero-initialised = black with alpha 0, then we set alpha for all pixels
-            std::vector<uint8_t> rgba(output_width * output_height * 4, 0);
-
-            // Set alpha to 0xFF for all pixels (border stays black RGB)
-            for (size_t i = 3; i < rgba.size(); i += 4) {
-                rgba[i] = 0xFF;
-            }
-
-            // Write one display-sized content pixel (BGRA32) into the bordered
-            // region.
-            auto put_pixel = [&](uint32_t x, uint32_t y, uint32_t bgra) {
-                size_t dst_idx = ((y + border) * output_width + (x + border)) * 4;
-                rgba[dst_idx + 0] = static_cast<uint8_t>((bgra >> 16) & 0xFF);  // R
-                rgba[dst_idx + 1] = static_cast<uint8_t>((bgra >> 8) & 0xFF);   // G
-                rgba[dst_idx + 2] = static_cast<uint8_t>(bgra & 0xFF);           // B
-                rgba[dst_idx + 3] = static_cast<uint8_t>((bgra >> 24) & 0xFF);   // A
-            };
-
-            if (crop_auto) {
-                // Find the content and resample that logical sub-rectangle up to
-                // the SAME display size and border a full thumbnail has, with a
-                // filtered (Lanczos-3) per-axis scale -- so the banner is enlarged
-                // legibly, not pixel-replicated, and a thumbnail set stays uniform
-                // in aspect and pixel size. See ScreenshotCrop.hpp / ImageResample.hpp.
-                CropRect src_rect = compute_auto_crop(frame_copy.data(), frame_width,
-                                                      frame_height, stride_pixels);
-                std::vector<uint32_t> content = resample_bgra_lanczos3(
-                    frame_copy.data(), stride_pixels, src_rect.x, src_rect.y,
-                    src_rect.width, src_rect.height, display_width, display_height);
-                for (uint32_t y = 0; y < display_height; ++y) {
-                    for (uint32_t x = 0; x < display_width; ++x) {
-                        put_pixel(x, y, content[static_cast<size_t>(y) * display_width + x]);
-                    }
+            // The one capture path, shared with a saved machine's thumbnail.
+            try {
+                if (!write_frame_png(frame_buffer, output_filepath,
+                                     static_cast<uint32_t>(border_pixels), crop_auto)) {
+                    std::cerr << "Error: no frames produced during emulation\n";
+                    return ExitCode::SOFTWARE;
                 }
-            } else {
-                // --crop none: the whole logical frame scaled nearest-neighbour to
-                // the display -- byte-for-byte the original behaviour.
-                for (uint32_t y = 0; y < display_height; ++y) {
-                    uint32_t src_y = y * frame_height / display_height;
-                    if (src_y >= frame_height) src_y = frame_height - 1;
-                    for (uint32_t x = 0; x < display_width; ++x) {
-                        uint32_t src_x = x * frame_width / display_width;
-                        if (src_x >= frame_width) src_x = frame_width - 1;
-                        put_pixel(x, y, frame_copy[src_y * stride_pixels + src_x]);
-                    }
-                }
-            }
-
-            int write_result = stbi_write_png(
-                output_filepath.c_str(),
-                static_cast<int>(output_width),
-                static_cast<int>(output_height),
-                4,
-                rgba.data(),
-                static_cast<int>(output_width * 4)
-            );
-
-            if (!write_result) {
-                std::cerr << "Error: failed to write PNG: " << output_filepath << "\n";
+            } catch (const std::exception& e) {
+                std::cerr << "Error: failed to write PNG: " << output_filepath << " ("
+                          << e.what() << ")\n";
                 return ExitCode::IOERR;
             }
 

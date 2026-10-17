@@ -195,6 +195,19 @@ inline void clear_file_attributes([[maybe_unused]] const std::filesystem::path& 
 
 }  // namespace machine_document_detail
 
+// Clears the read-only attribute Windows needs on a machine directory before
+// Explorer honours its desktop.ini (write_machine_document_files sets it),
+// which would otherwise stop the directory being removed or renamed. Nothing
+// elsewhere.
+inline void clear_directory_readonly([[maybe_unused]] const std::filesystem::path& dirpath) {
+#ifdef _WIN32
+    const DWORD attributes = ::GetFileAttributesW(dirpath.c_str());
+    if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_READONLY)) {
+        ::SetFileAttributesW(dirpath.c_str(), attributes & ~FILE_ATTRIBUTE_READONLY);
+    }
+#endif
+}
+
 // `record` as machine.json holds it.
 inline std::string machine_record_text(const MachineRecord& record) {
     nlohmann::ordered_json json{{"format", machine_layout::FORMAT},

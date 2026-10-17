@@ -600,3 +600,39 @@ def test_a_saved_machine_keeps_its_configuration_until_its_battery_is_reset(
 
     server_command("reset-battery")
     assert run_machine(configured_mode) == seeded
+
+
+def test_a_battery_reset_while_running_takes_effect_at_the_next_start(
+        beebium_server_filepath: Path | None, tmp_path: Path):
+    """ResetBattery on a running machine leaves it running as it is, keeps
+    nothing it holds at shutdown, and the next start is the seed."""
+    try:
+        installation = (ServerInstallation.default() if beebium_server_filepath is None
+                        else ServerInstallation.coerce(beebium_server_filepath))
+        executable_filepath = installation.executable_filepath(VARIANT)
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+    machine = tmp_path / "Integra.beebium-machine"
+    created = subprocess.run([str(executable_filepath), "create-machine", *DISC_ARGS,
+                              "--output", str(machine)],
+                             capture_output=True, text=True, timeout=60)
+    assert created.returncode == 0, created.stderr
+
+    def launch():
+        return Beebium.launch(server=installation, variant=VARIANT,
+                              extra_args=EMULATED_CLOCK + ["--machine", str(machine)])
+
+    with launch() as bbc:
+        integra = _booted(bbc)
+        seeded = _configured_mode(integra.command("*STATUS MODE"))
+        assert seeded != "3"
+        integra.type("*CONFIGURE MODE 3")
+    with launch() as bbc:
+        integra = _booted(bbc)
+        assert _configured_mode(integra.command("*STATUS MODE")) == "3"
+        units = bbc.system.reset_battery()
+        assert set(units) == {"integra-b-board-ram", "integra-b-rtc"}
+        # The machine runs on as it was.
+        assert _configured_mode(integra.command("*STATUS MODE")) == "3"
+    with launch() as bbc:
+        assert _configured_mode(_booted(bbc).command("*STATUS MODE")) == seeded

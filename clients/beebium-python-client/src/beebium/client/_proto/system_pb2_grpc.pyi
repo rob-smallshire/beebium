@@ -82,6 +82,22 @@ class SystemServiceStub:
     """Stream pacing statistics at a configurable interval."""
     SetSpeedMultiplier: _grpc.UnaryUnaryMultiCallable[_system_pb2.SetSpeedMultiplierRequest, _system_pb2.SetSpeedMultiplierResponse]
     """Set the runtime pacing speed multiplier."""
+    SaveMachine: _grpc.UnaryUnaryMultiCallable[_system_pb2.SaveMachineRequest, _system_pb2.SaveMachineResponse]
+    """Save the machine, without stopping it: its battery-backed state, last
+    screen and identity are written to its directory, which from then on
+    outlives the server. See SaveMachineRequest for the three forms.
+    Errors: INVALID_ARGUMENT for a machine not yet saved and no
+    destination; ALREADY_EXISTS for a destination that exists, unless
+    replace_existing; FAILED_PRECONDITION, with a message, for one that
+    cannot be replaced; INTERNAL, with a message, when the directory cannot
+    be written.
+    """
+    ResetBattery: _grpc.UnaryUnaryMultiCallable[_system_pb2.ResetBatteryRequest, _system_pb2.ResetBatteryResponse]
+    """Forget the machine's battery-backed state, as taking out the battery
+    does. It takes effect when the machine is next started: until then the
+    machine runs on, and nothing it holds now is kept by a shutdown or a
+    Save.
+    """
 
 @_typing.type_check_only
 class SystemServiceAsyncStub(SystemServiceStub):
@@ -125,6 +141,22 @@ class SystemServiceAsyncStub(SystemServiceStub):
     """Stream pacing statistics at a configurable interval."""
     SetSpeedMultiplier: _aio.UnaryUnaryMultiCallable[_system_pb2.SetSpeedMultiplierRequest, _system_pb2.SetSpeedMultiplierResponse]  # type: ignore[assignment]
     """Set the runtime pacing speed multiplier."""
+    SaveMachine: _aio.UnaryUnaryMultiCallable[_system_pb2.SaveMachineRequest, _system_pb2.SaveMachineResponse]  # type: ignore[assignment]
+    """Save the machine, without stopping it: its battery-backed state, last
+    screen and identity are written to its directory, which from then on
+    outlives the server. See SaveMachineRequest for the three forms.
+    Errors: INVALID_ARGUMENT for a machine not yet saved and no
+    destination; ALREADY_EXISTS for a destination that exists, unless
+    replace_existing; FAILED_PRECONDITION, with a message, for one that
+    cannot be replaced; INTERNAL, with a message, when the directory cannot
+    be written.
+    """
+    ResetBattery: _aio.UnaryUnaryMultiCallable[_system_pb2.ResetBatteryRequest, _system_pb2.ResetBatteryResponse]  # type: ignore[assignment]
+    """Forget the machine's battery-backed state, as taking out the battery
+    does. It takes effect when the machine is next started: until then the
+    machine runs on, and nothing it holds now is kept by a shutdown or a
+    Save.
+    """
 
 class SystemServiceServicer(metaclass=_abc_1.ABCMeta):
     """System information service
@@ -231,5 +263,33 @@ class SystemServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_system_pb2.SetSpeedMultiplierResponse, _abc.Awaitable[_system_pb2.SetSpeedMultiplierResponse]]:
         """Set the runtime pacing speed multiplier."""
+
+    @_abc_1.abstractmethod
+    def SaveMachine(
+        self,
+        request: _system_pb2.SaveMachineRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_system_pb2.SaveMachineResponse, _abc.Awaitable[_system_pb2.SaveMachineResponse]]:
+        """Save the machine, without stopping it: its battery-backed state, last
+        screen and identity are written to its directory, which from then on
+        outlives the server. See SaveMachineRequest for the three forms.
+        Errors: INVALID_ARGUMENT for a machine not yet saved and no
+        destination; ALREADY_EXISTS for a destination that exists, unless
+        replace_existing; FAILED_PRECONDITION, with a message, for one that
+        cannot be replaced; INTERNAL, with a message, when the directory cannot
+        be written.
+        """
+
+    @_abc_1.abstractmethod
+    def ResetBattery(
+        self,
+        request: _system_pb2.ResetBatteryRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_system_pb2.ResetBatteryResponse, _abc.Awaitable[_system_pb2.ResetBatteryResponse]]:
+        """Forget the machine's battery-backed state, as taking out the battery
+        does. It takes effect when the machine is next started: until then the
+        machine runs on, and nothing it holds now is kept by a shutdown or a
+        Save.
+        """
 
 def add_SystemServiceServicer_to_server(servicer: SystemServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

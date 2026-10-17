@@ -45,6 +45,59 @@ service SystemService {
 
     // Set the runtime pacing speed multiplier.
     rpc SetSpeedMultiplier(SetSpeedMultiplierRequest) returns (SetSpeedMultiplierResponse);
+
+    // Save the machine, without stopping it: its battery-backed state, last
+    // screen and identity are written to its directory, which from then on
+    // outlives the server. See SaveMachineRequest for the three forms.
+    // Errors: INVALID_ARGUMENT for a machine not yet saved and no
+    // destination; ALREADY_EXISTS for a destination that exists, unless
+    // replace_existing; FAILED_PRECONDITION, with a message, for one that
+    // cannot be replaced; INTERNAL, with a message, when the directory cannot
+    // be written.
+    rpc SaveMachine(SaveMachineRequest) returns (SaveMachineResponse);
+
+    // Forget the machine's battery-backed state, as taking out the battery
+    // does. It takes effect when the machine is next started: until then the
+    // machine runs on, and nothing it holds now is kept by a shutdown or a
+    // Save.
+    rpc ResetBattery(ResetBatteryRequest) returns (ResetBatteryResponse);
+}
+
+// Three forms, by the machine and the destination:
+// - a machine not yet saved, and a destination: the machine is saved there,
+//   keeping its uuid, and runs on from there;
+// - a saved machine, and no destination: its state is written in place;
+// - a saved machine, and a destination: a copy is saved there, with a new
+//   uuid, and the machine runs on from the copy (Save As). The directory it
+//   leaves keeps what it had, and is no longer in use.
+message SaveMachineRequest {
+    // The directory to save into, which must not exist unless
+    // replace_existing; empty to save a saved machine in place.
+    string destination_dirpath = 1;
+
+    // Replace a saved machine at the destination: accepted only for a
+    // machine directory (it holds machine.json) that no process is running
+    // and that is not this machine's own. The new machine is made whole
+    // first, then put in the old one's place, which is removed; on a failure
+    // the old one is left as it was. The client need not remove anything
+    // before a Save it cannot yet know will succeed.
+    bool replace_existing = 2;
+}
+
+message SaveMachineResponse {
+    // The machine's directory now, in every form.
+    string machine_dirpath = 1;
+
+    // The machine's identity now: a Save As gives it a new uuid.
+    MachineIdentity identity = 2;
+}
+
+message ResetBatteryRequest {}
+
+message ResetBatteryResponse {
+    // The battery-backed units forgotten: the machine's own ("integra-b-rtc")
+    // and its extensions' ("<instance id>/<unit>", e.g. "clock/saf3019p").
+    repeated string reset_units = 1;
 }
 
 message GetSystemInfoRequest {
@@ -160,6 +213,15 @@ message SystemInfo {
     // Empty if the host will not identify itself, which a client must read as
     // "not the same host" rather than as matching another empty value.
     string host_fingerprint = 9;
+
+    // The machine's directory: a saved machine's, or the transient one a
+    // machine not yet saved runs in. Empty when the server has none.
+    string machine_dirpath = 10;
+
+    // True for a saved machine, whose directory outlives the server; false
+    // for one not yet saved. A front-end offers Save for the one and Save
+    // As for the other.
+    bool machine_saved = 11;
 
     // Future expansion:
     // string cpu_type = 8;          // Primary CPU (e.g., "6502", "65C02")
@@ -310,6 +372,13 @@ message ServerStatusEvent {
     // For MACHINE_RESET: whether the reset was hard (power-on / Ctrl-Break /
     // Reset RPC) or soft (the Break key). See ResetKind.
     ResetKind reset_kind = 6;
+
+    // On every event: true when a machine not yet saved has written to media
+    // its template named (its own copies, which are lost unless it is
+    // saved), so a front-end can ask whether to save it before closing.
+    // Always false for a saved machine, whose media are its own; a Save
+    // clears it.
+    bool template_media_written = 7;
 }
 
 // How a machine reset was performed. A reset re-initialises the machine (the MOS

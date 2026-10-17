@@ -155,6 +155,112 @@ re-initialised state should let it settle.
 Global___ServerStatusType: _TypeAlias = ServerStatusType  # noqa: Y015
 
 @_typing.final
+class SaveMachineRequest(_message.Message):
+    """Three forms, by the machine and the destination:
+    - a machine not yet saved, and a destination: the machine is saved there,
+      keeping its uuid, and runs on from there;
+    - a saved machine, and no destination: its state is written in place;
+    - a saved machine, and a destination: a copy is saved there, with a new
+      uuid, and the machine runs on from the copy (Save As). The directory it
+      leaves keeps what it had, and is no longer in use.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    DESTINATION_DIRPATH_FIELD_NUMBER: _builtins.int
+    REPLACE_EXISTING_FIELD_NUMBER: _builtins.int
+    destination_dirpath: _builtins.str
+    """The directory to save into, which must not exist unless
+    replace_existing; empty to save a saved machine in place.
+    """
+    replace_existing: _builtins.bool
+    """Replace a saved machine at the destination: accepted only for a
+    machine directory (it holds machine.json) that no process is running
+    and that is not this machine's own. The new machine is made whole
+    first, then put in the old one's place, which is removed; on a failure
+    the old one is left as it was. The client need not remove anything
+    before a Save it cannot yet know will succeed.
+    """
+    def __init__(
+        self,
+        *,
+        destination_dirpath: _builtins.str = ...,
+        replace_existing: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["destination_dirpath", b"destination_dirpath", "replace_existing", b"replace_existing"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SaveMachineRequest: _TypeAlias = SaveMachineRequest  # noqa: Y015
+
+@_typing.final
+class SaveMachineResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    MACHINE_DIRPATH_FIELD_NUMBER: _builtins.int
+    IDENTITY_FIELD_NUMBER: _builtins.int
+    machine_dirpath: _builtins.str
+    """The machine's directory now, in every form."""
+    @_builtins.property
+    def identity(self) -> Global___MachineIdentity:
+        """The machine's identity now: a Save As gives it a new uuid."""
+
+    def __init__(
+        self,
+        *,
+        machine_dirpath: _builtins.str = ...,
+        identity: Global___MachineIdentity | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "machine_dirpath", b"machine_dirpath"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SaveMachineResponse: _TypeAlias = SaveMachineResponse  # noqa: Y015
+
+@_typing.final
+class ResetBatteryRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ResetBatteryRequest: _TypeAlias = ResetBatteryRequest  # noqa: Y015
+
+@_typing.final
+class ResetBatteryResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RESET_UNITS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def reset_units(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """The battery-backed units forgotten: the machine's own ("integra-b-rtc")
+        and its extensions' ("<instance id>/<unit>", e.g. "clock/saf3019p").
+        """
+
+    def __init__(
+        self,
+        *,
+        reset_units: _abc.Iterable[_builtins.str] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["reset_units", b"reset_units"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ResetBatteryResponse: _TypeAlias = ResetBatteryResponse  # noqa: Y015
+
+@_typing.final
 class GetSystemInfoRequest(_message.Message):
     """Future: request specific fields, version info, etc."""
 
@@ -299,6 +405,8 @@ class SystemInfo(_message.Message):
     PROTOCOL_FINGERPRINT_FIELD_NUMBER: _builtins.int
     EXECUTABLE_PATH_FIELD_NUMBER: _builtins.int
     HOST_FINGERPRINT_FIELD_NUMBER: _builtins.int
+    MACHINE_DIRPATH_FIELD_NUMBER: _builtins.int
+    MACHINE_SAVED_FIELD_NUMBER: _builtins.int
     clock_speed_hz: _builtins.int
     """Nominal CPU clock frequency in Hz (e.g. 2000000 for 2 MHz)."""
     protocol_fingerprint: _builtins.str
@@ -340,6 +448,15 @@ class SystemInfo(_message.Message):
     Empty if the host will not identify itself, which a client must read as
     "not the same host" rather than as matching another empty value.
     """
+    machine_dirpath: _builtins.str
+    """The machine's directory: a saved machine's, or the transient one a
+    machine not yet saved runs in. Empty when the server has none.
+    """
+    machine_saved: _builtins.bool
+    """True for a saved machine, whose directory outlives the server; false
+    for one not yet saved. A front-end offers Save for the one and Save
+    As for the other.
+    """
     @_builtins.property
     def provenance(self) -> Global___LaunchProvenance:
         """Launch provenance (who started this core and when)"""
@@ -362,10 +479,12 @@ class SystemInfo(_message.Message):
         protocol_fingerprint: _builtins.str = ...,
         executable_path: _builtins.str = ...,
         host_fingerprint: _builtins.str = ...,
+        machine_dirpath: _builtins.str = ...,
+        machine_saved: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["connections", b"connections", "identity", b"identity", "provenance", b"provenance"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["clock_speed_hz", b"clock_speed_hz", "connections", b"connections", "executable_path", b"executable_path", "host_fingerprint", b"host_fingerprint", "identity", b"identity", "protocol_fingerprint", b"protocol_fingerprint", "provenance", b"provenance"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["clock_speed_hz", b"clock_speed_hz", "connections", b"connections", "executable_path", b"executable_path", "host_fingerprint", b"host_fingerprint", "identity", b"identity", "machine_dirpath", b"machine_dirpath", "machine_saved", b"machine_saved", "protocol_fingerprint", b"protocol_fingerprint", "provenance", b"provenance"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -720,6 +839,7 @@ class ServerStatusEvent(_message.Message):
     IDENTITY_FIELD_NUMBER: _builtins.int
     SHUTDOWN_CONDITIONS_FIELD_NUMBER: _builtins.int
     RESET_KIND_FIELD_NUMBER: _builtins.int
+    TEMPLATE_MEDIA_WRITTEN_FIELD_NUMBER: _builtins.int
     status: Global___ServerStatusType.ValueType
     """Type of status event"""
     message: _builtins.str
@@ -731,6 +851,13 @@ class ServerStatusEvent(_message.Message):
     reset_kind: Global___ResetKind.ValueType
     """For MACHINE_RESET: whether the reset was hard (power-on / Ctrl-Break /
     Reset RPC) or soft (the Break key). See ResetKind.
+    """
+    template_media_written: _builtins.bool
+    """On every event: true when a machine not yet saved has written to media
+    its template named (its own copies, which are lost unless it is
+    saved), so a front-end can ask whether to save it before closing.
+    Always false for a saved machine, whose media are its own; a Save
+    clears it.
     """
     @_builtins.property
     def identity(self) -> Global___MachineIdentity:
@@ -749,10 +876,11 @@ class ServerStatusEvent(_message.Message):
         identity: Global___MachineIdentity | None = ...,
         shutdown_conditions: _abc.Iterable[Global___ShutdownConditionStatus] | None = ...,
         reset_kind: Global___ResetKind.ValueType = ...,
+        template_media_written: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "message", b"message", "reset_kind", b"reset_kind", "shutdown_conditions", b"shutdown_conditions", "shutdown_grace_ms", b"shutdown_grace_ms", "status", b"status"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "message", b"message", "reset_kind", b"reset_kind", "shutdown_conditions", b"shutdown_conditions", "shutdown_grace_ms", b"shutdown_grace_ms", "status", b"status", "template_media_written", b"template_media_written"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

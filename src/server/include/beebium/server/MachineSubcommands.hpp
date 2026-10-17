@@ -19,6 +19,7 @@
 
 #include "beebium/server/MachineDirectory.hpp"
 #include "beebium/server/MachineDocument.hpp"
+#include "beebium/server/MachineInstantiation.hpp"
 #include "beebium/server/NvramStore.hpp"
 #include "beebium/server/PresetSubcommands.hpp"
 #include "beebium/server/PresetWriter.hpp"
@@ -77,15 +78,6 @@ inline std::optional<std::filesystem::path> named_machine(int argc, char* argv[]
     return std::filesystem::absolute(*dirpath);
 }
 
-// The id of the preset `source` was read from, as the user presets
-// directory names it (<id>.beebium-preset), or a file's or directory's
-// own name.
-inline std::string preset_id_of(const PresetSource& source) {
-    auto path = source.path().lexically_normal();
-    if (path.filename().empty()) path = path.parent_path();
-    return path.stem().string();
-}
-
 }  // namespace machine_subcommand_detail
 
 template<typename MachineType>
@@ -127,7 +119,6 @@ public:
     void help(const char* program_name) const override { usage(program_name); }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
-        using Memory = typename MachineType::Memory;
         if (global.help_requested) {
             usage(argv[0]);
             return ExitCode::OK;
@@ -176,23 +167,17 @@ public:
             return ExitCode::CANTCREAT;
         }
 
-        // Every extension instance's id is pinned, the one it was given or
-        // the one generated now, so it finds the same extensions/<id>/ on
-        // every run, whatever is added to the machine later.
-        for (auto& inst : config.machine.extension_instances) {
-            const auto* manifest = config.launch.extension_resolver.find_by_name(inst.name);
-            const bool transport = manifest && manifest->extension_kind == "econet-transport";
-            if (!transport && inst.config.count("id") != 0) inst.explicit_keys.insert("id");
-        }
-
         // The machine's preset: what the configuration records, and the
         // files of the preset it was read from, thumbnail included (the
         // machine's first screen until it has one of its own).
-        auto header = recorded_preset_header(config, "", "", "");
-        if (header.name.empty()) header.name = std::string(Memory::MACHINE_DISPLAY_NAME);
         std::string error;
+        const auto document = machine_preset_document(config, error);
+        if (!document) {
+            std::cerr << "Error: " << error << "\n";
+            return ExitCode::USAGE;
+        }
         int exit_code = ExitCode::OK;
-        auto members = recorded_preset_members(config, header, /*with_thumbnail=*/true, error,
+        auto members = recorded_preset_members(config, *document, /*with_thumbnail=*/true, error,
                                                exit_code);
         if (!members) {
             std::cerr << "Error: " << error << "\n";
@@ -201,16 +186,7 @@ public:
 
         // Its identity, written with the rest, so the directory is a machine
         // whole or does not appear at all.
-        MachineRecord record;
-        record.uuid = generate_uuid_v4();
-        record.name = config.machine.machine_name.empty()
-                          ? std::string(Memory::MACHINE_DISPLAY_NAME)
-                          : config.machine.machine_name;
-        record.model = std::string(Memory::MACHINE_TYPE);
-        record.created = iso8601_utc_now();
-        if (config.launch.preset) {
-            record.source_preset = machine_subcommand_detail::preset_id_of(*config.launch.preset);
-        }
+        const auto record = new_machine_record(config, generate_uuid_v4(), "");
         const auto record_text = machine_record_text(record);
         members->push_back({std::string(machine_layout::RECORD_FILENAME),
                             std::vector<std::uint8_t>(record_text.begin(), record_text.end())});
@@ -222,11 +198,8 @@ public:
 
         // How it is shown: never read back, so a failure costs only its icon
         // and display name.
-        const bool literal_name = record.name.find('{') == std::string::npos;
-        const auto display_name = literal_name ? record.name
-                                               : dirpath.stem().string();
         try {
-            write_machine_document_files(dirpath, record, display_name);
+            write_machine_document_files(dirpath, record, machine_display_name(record, dirpath));
         } catch (const std::exception& e) {
             std::cerr << "Warning: cannot write the machine's document file and folder "
                          "metadata: "
