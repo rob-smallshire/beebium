@@ -291,6 +291,7 @@ parse_startup_section(const nlohmann::json& startup_json) {
 // - Relative paths are resolved relative to base_dirpath, then converted
 // - Path components like ".." are resolved to produce clean URIs
 // - Unix-style absolute paths (starting with /) are treated as absolute on all platforms
+// - The URI is encoded as DiscUrl decodes it (file_url_from_filepath)
 //
 // This allows presets to use relative paths (resolved from preset file location)
 // or absolute paths, while storing everything as URIs internally.
@@ -315,14 +316,7 @@ inline std::string normalize_image_uri(const std::string& uri_or_path,
     // Use lexically_normal for textual normalization (no filesystem access)
     path = path.lexically_normal();
 
-    // Convert to file:// URI
-    // Use generic_string() to ensure forward slashes in the URI on all platforms
-    std::string path_str = path.generic_string();
-    if (path_str.empty() || path_str[0] != '/') {
-        // Ensure path starts with / for proper file:// URI format
-        return "file:///" + path_str;
-    }
-    return "file://" + path_str;
+    return beebium::file_url_from_filepath(path);
 }
 
 // Parse the storage section from JSON

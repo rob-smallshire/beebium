@@ -106,6 +106,13 @@ TEST_CASE("DiscUrl::from_filepath encodes a literal percent as %25", "[disc][url
     CHECK(url.url().find("%25") != std::string::npos);
 }
 
+TEST_CASE("file_url_from_filepath spells the path as given, encoded", "[disc][url]") {
+    CHECK(beebium::file_url_from_filepath("/x/My Disc.ssd") == "file:///x/My%20Disc.ssd");
+    CHECK(beebium::file_url_from_filepath("/x/50%.ssd") == "file:///x/50%25.ssd");
+    // A drive path takes the third slash, on every platform.
+    CHECK(beebium::file_url_from_filepath("C:/Beeb/My Disc.ssd") == "file:///C:/Beeb/My%20Disc.ssd");
+}
+
 TEST_CASE("DiscUrl round-trips parse(from_filepath(p)) == p", "[disc][url]") {
     auto cwd = std::filesystem::current_path();
     const char* names[] = {

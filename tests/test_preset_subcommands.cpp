@@ -1523,6 +1523,32 @@ TEST_CASE("resolve-preset: every key of a minimal preset is filled",
     CHECK(p.at("extensions").empty());
 }
 
+TEST_CASE("resolve-preset: a floppy named with a space or a percent sign opens that file",
+          "[integration][preset][resolve-preset]") {
+    // The image_uri resolve-preset reports is the one `start` opens, through
+    // DiscUrl, which decodes: it must be encoded, or "a%41.ssd" opens "aA.ssd".
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "floppies.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "name": "Floppies",
+        "storage": {"fdc_socket": {"id": "acorn-1770"}, "floppy_drives": [
+            {"drive": 0, "image_uri": "a%41.ssd"},
+            {"drive": 1, "image_uri": "My Disc.ssd"}]}})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    const auto& drives = out.at("preset").at("storage").at("floppy_drives");
+    REQUIRE(drives.size() == 2);
+    const std::pair<int, const char*> expected[] = {{0, "a%41.ssd"}, {1, "My Disc.ssd"}};
+    for (const auto& [drive, name] : expected) {
+        const auto uri = drives[drive].at("image_uri").get<std::string>();
+        INFO(uri);
+        const auto url = beebium::DiscUrl::parse(uri);
+        REQUIRE(url.has_value());
+        CHECK(url->to_filepath() ==
+              (std::filesystem::absolute(temp_dir.path()) / name).lexically_normal());
+    }
+}
+
 TEST_CASE("resolve-preset: extensions carry every parameter, typed, and their attachment",
           "[integration][preset][resolve-preset]") {
     TempDirectory temp_dir;

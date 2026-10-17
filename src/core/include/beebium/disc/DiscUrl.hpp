@@ -73,6 +73,12 @@ private:
     std::filesystem::path filepath_;  // Only valid for file: URLs
 };
 
+// The file: URL for a filesystem path, spelled as given (not made absolute):
+// '/' separators, every other reserved byte percent-encoded, which parse()
+// decodes, and a drive path given the third slash (file:///C:/...). The one
+// place a path becomes a file: URL.
+std::string file_url_from_filepath(const std::filesystem::path& filepath);
+
 // Implementation
 
 namespace detail {
@@ -187,16 +193,15 @@ inline std::optional<DiscUrl> DiscUrl::parse(std::string_view url) {
     return std::nullopt;
 }
 
+inline std::string file_url_from_filepath(const std::filesystem::path& filepath) {
+    const std::string path = filepath.generic_string();
+    const bool rooted = !path.empty() && path.front() == '/';
+    return (rooted ? "file://" : "file:///") + detail::percent_encode(path);
+}
+
 inline DiscUrl DiscUrl::from_filepath(const std::filesystem::path& filepath) {
     std::filesystem::path abs_path = std::filesystem::absolute(filepath);
-#ifdef _WIN32
-    // On Windows, construct proper file:///C:/path/to/file URL
-    // Use generic_string() to get forward slashes
-    std::string url = "file:///" + detail::percent_encode(abs_path.generic_string());
-#else
-    std::string url = "file://" + detail::percent_encode(abs_path.string());
-#endif
-    return DiscUrl(DiscUrlScheme::File, std::move(url), abs_path);
+    return DiscUrl(DiscUrlScheme::File, file_url_from_filepath(abs_path), abs_path);
 }
 
 inline std::filesystem::path DiscUrl::to_filepath() const {

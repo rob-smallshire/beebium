@@ -66,6 +66,25 @@ TEST_CASE("normalize_image_uri: relative path with subdirectory", "[preset][norm
     REQUIRE(result == "file:///home/user/presets/discs/game.ssd");
 }
 
+TEST_CASE("normalize_image_uri: a space or a percent sign is encoded",
+          "[preset][normalize_image_uri]") {
+    CHECK(normalize_image_uri("My Disc.ssd", "/home/user/presets") ==
+          "file:///home/user/presets/My%20Disc.ssd");
+    CHECK(normalize_image_uri("/x/50%.ssd", "/home/user/presets") == "file:///x/50%25.ssd");
+}
+
+TEST_CASE("normalize_image_uri: a path round-trips through DiscUrl",
+          "[preset][normalize_image_uri]") {
+    // DiscUrl decodes when it opens the image, so what a preset records must be
+    // encoded the same way, or a name with a '%' opens a different file.
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    for (const char* name : {"game.ssd", "My Disc.ssd", "a%41.ssd", "100% full #2.ssd"}) {
+        const auto url = beebium::DiscUrl::parse(normalize_image_uri(name, temp_dir.path()));
+        REQUIRE(url.has_value());
+        CHECK(url->to_filepath() == (temp_dir.path() / name).lexically_normal());
+    }
+}
+
 TEST_CASE("normalize_image_uri: relative path with parent directory", "[preset][normalize_image_uri]") {
     auto result = normalize_image_uri("../discs/game.ssd", "/home/user/presets");
     // The filesystem path resolution should normalize the ..
