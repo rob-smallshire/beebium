@@ -17,8 +17,10 @@ import SwiftUI
 struct WelcomeWindowContent: View {
     var onDismiss: (() -> Void)?
     @StateObject private var presetManager = PresetManager.shared
+    @StateObject private var savedMachines = SavedMachinesModel()
     @ObservedObject private var connectWindowState = ConnectWindowState.shared
     @Environment(\.openWindow) private var openWindow
+    @State private var page: WelcomePage = .presets
     @State private var launchError: String?
     @State private var launchErrorPresetName: String?
     @State private var isLaunching = false
@@ -52,62 +54,31 @@ struct WelcomeWindowContent: View {
             }
             .padding(.top, 16)
 
-            // Preset grid (scrollable for many presets)
-            if presetManager.isDiscovering {
-                ProgressView("Discovering presets...")
-                    .padding()
-            } else if presetManager.systemPresets.isEmpty && presetManager.userPresets.isEmpty {
-                Text("No presets found")
-                    .foregroundColor(.secondary)
-                    .padding()
+            // Saved machines to reopen, or the presets and the custom builder.
+            Picker("", selection: $page) {
+                Text("Machines").tag(WelcomePage.machines)
+                Text("Presets").tag(WelcomePage.presets)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+
+            if page == .machines {
+                MachinesPage(model: savedMachines)
+                    .frame(minHeight: 100, idealHeight: gridHeight, maxHeight: gridHeight)
             } else {
-                let allPresets = presetManager.systemPresets + presetManager.userPresets
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 176, maximum: 176), spacing: 16)], spacing: 16) {
-                        ForEach(allPresets) { preset in
-                            PresetCard(preset: preset, isLaunching: isLaunching,
-                                       thumbnailCache: presetManager.thumbnailCache) {
-                                Task { await launchPreset(preset) }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                    .background(GeometryReader { geo in
-                        Color.clear.preference(key: GridHeightKey.self, value: geo.size.height)
-                    })
-                }
-                .frame(minHeight: 100, idealHeight: gridHeight, maxHeight: gridHeight)
-                .onPreferenceChange(GridHeightKey.self) { gridHeight = $0 }
-
-                // Error display
-                if let error = launchError {
-                    ServerErrorView(
-                        message: error,
-                        title: launchErrorPresetName.map { "Couldn't start \"\($0)\"" }
-                    ) {
-                        launchError = nil
-                        launchErrorPresetName = nil
-                    }
-                    .padding(.horizontal, 24)
-                }
+                presetsContent
             }
-
-            // New Machine button
-            HStack {
-                Spacer()
-                Button("New Machine...") {
-                    connectWindowState.pendingTarget = nil
-                    connectWindowState.pendingNeedsRun = false
-                    connectWindowState.pendingProvenanceUUID = nil
-                    openWindow(id: "new-machine")
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 16)
         }
         .frame(minWidth: 420, idealWidth: 600, maxWidth: .infinity)
         .onReceive(NotificationCenter.default.publisher(for: .didOpenEmulatorWindow)) { _ in
             onDismiss?()
+        }
+        .onAppear {
+            // Returning user with saved machines lands on Machines; a new user
+            // on Presets. Set here (not as the @State default) so reading the
+            // recents list stays on the main actor.
+            page = WelcomePage.initial(hasRecentMachines: savedMachines.hasRecentMachines)
         }
         .task {
             // Capture openWindow into shared AppActions for FileCommands
@@ -123,6 +94,64 @@ struct WelcomeWindowContent: View {
                 await presetManager.discoverPresets()
             }
         }
+    }
+
+    /// The presets page: the grid of system and user presets plus the custom
+    /// builder. This is what the Welcome window showed before it gained the
+    /// Machines page.
+    @ViewBuilder
+    private var presetsContent: some View {
+        if presetManager.isDiscovering {
+            ProgressView("Discovering presets...")
+                .padding()
+        } else if presetManager.systemPresets.isEmpty && presetManager.userPresets.isEmpty {
+            Text("No presets found")
+                .foregroundColor(.secondary)
+                .padding()
+        } else {
+            let allPresets = presetManager.systemPresets + presetManager.userPresets
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 176, maximum: 176), spacing: 16)], spacing: 16) {
+                    ForEach(allPresets) { preset in
+                        PresetCard(preset: preset, isLaunching: isLaunching,
+                                   thumbnailCache: presetManager.thumbnailCache) {
+                            Task { await launchPreset(preset) }
+                        }
+                    }
+                }
+                .padding(.horizontal, 24)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: GridHeightKey.self, value: geo.size.height)
+                })
+            }
+            .frame(minHeight: 100, idealHeight: gridHeight, maxHeight: gridHeight)
+            .onPreferenceChange(GridHeightKey.self) { gridHeight = $0 }
+
+            // Error display
+            if let error = launchError {
+                ServerErrorView(
+                    message: error,
+                    title: launchErrorPresetName.map { "Couldn't start \"\($0)\"" }
+                ) {
+                    launchError = nil
+                    launchErrorPresetName = nil
+                }
+                .padding(.horizontal, 24)
+            }
+        }
+
+        // New Machine button
+        HStack {
+            Spacer()
+            Button("New Machine...") {
+                connectWindowState.pendingTarget = nil
+                connectWindowState.pendingNeedsRun = false
+                connectWindowState.pendingProvenanceUUID = nil
+                openWindow(id: "new-machine")
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
     }
 
     private func launchPreset(_ preset: MachinePreset) async {
