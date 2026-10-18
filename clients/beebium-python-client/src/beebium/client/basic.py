@@ -23,7 +23,7 @@ import time
 from typing import TYPE_CHECKING
 
 from beebium.client.exceptions import TimeoutError
-from beebium.client.screen import read_mode7_screen
+from beebium.client.screen import _displayed_rows, read_mode7_screen
 
 if TYPE_CHECKING:
     from beebium.client import Beebium
@@ -92,8 +92,9 @@ class Basic:
         deadline = time.monotonic() + timeout
 
         while time.monotonic() < deadline:
-            # The prompt appears at the start of a line in the MODE 7 display.
-            rows = read_mode7_screen(self._client)
+            # The prompt appears at the start of a line in the MODE 7 display;
+            # until there is one (None), there is no prompt yet.
+            rows = _displayed_rows(self._client) or []
             if any(row.startswith(PROMPT) for row in rows):
                 return True
 
@@ -142,7 +143,7 @@ class Basic:
         end_row: int | None = None,
         mode: int = 7,
     ) -> str:
-        """Read text from screen memory.
+        """Read text from the displayed screen.
 
         Args:
             start_row: First row to read (0-based).
@@ -151,6 +152,9 @@ class Basic:
 
         Returns:
             The screen text as a string with newlines between rows.
+
+        Raises:
+            BeebiumError: If ``mode`` is 7 and the display is not MODE 7.
         """
         if mode not in SCREEN_MODES:
             raise ValueError(f"Unsupported mode: {mode}")
@@ -164,7 +168,7 @@ class Basic:
         end_row = max(start_row + 1, min(end_row, lines))
 
         if mode == 7:
-            # Teletext: read what is actually displayed, corrected for scroll.
+            # Teletext: read what is actually displayed.
             rows = read_mode7_screen(self._client)
         else:
             # Graphics modes: pixel decoding to characters is not implemented.

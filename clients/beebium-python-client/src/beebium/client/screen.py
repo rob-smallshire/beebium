@@ -12,23 +12,19 @@
 
 """MODE 7 screen-reading helpers for the beebium client.
 
-The BBC scrolls MODE 7 in hardware: the 6845 moves the display start address
-(R12/R13) and the 1 KB screen RAM behaves as a circular buffer. A fixed read
-from 0x7C00 therefore returns a grid rotated relative to what is on screen once
-any scrolling has occurred. These helpers anchor the read at the CRTC
-screen-start so they return what is actually displayed.
+These read the screen as it is displayed: the cells come from the server's
+teletext grid (``video.teletext_screen()``), which the SAA5050 fills from the
+bytes the video circuitry fetches. So they follow hardware scrolling, and in a
+shadow mode they read the RAM on screen -- the B+'s shadow RAM, or the
+Integra-B's main RAM while the CPU sees its extra RAM at 0x3000 -- not what
+the CPU sees at 0x7C00.
 
 The functions form a small composable library:
 
-* ``cells_from_region`` / ``cells_to_text`` / ``linearise`` are pure transforms
-  (no emulator required) over the raw region, the 25x40 grid, and a flattened
-  view respectively.
+* ``cells_to_text`` / ``linearise`` are pure transforms (no emulator required)
+  over the 25x40 grid and a flattened view respectively.
 * ``read_mode7_cells`` / ``read_mode7_screen`` / ``screen_contains`` / ``find``
   / ``dump_screen`` compose those transforms onto a running client.
-
-The MODE 7 address mapping mirrors the emulator's own renderer
-(``VideoRenderer::translate_screen_address``): displayed position ``p`` reads
-``mem[0x7C00 + ((screen_start + p) & 0x3FF)]``.
 """
 
 from __future__ import annotations
@@ -36,14 +32,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 
-if TYPE_CHECKING:
-    from beebium.client.crtc import Crtc
-    from beebium.client.memory import Memory
+from beebium.client.exceptions import BeebiumError
 
-MODE7_BASE = 0x7C00
-MODE7_REGION_SIZE = 0x400  # 1 KB MODE 7 screen RAM, addressed as a circular buffer
-MODE7_COLS = 40
-MODE7_ROWS = 25
+if TYPE_CHECKING:
+    from beebium.client.video import Video
 
 # A row is 40 raw screen bytes; rows compose into the 25-row display grid.
 Row = bytes | str
@@ -68,40 +60,12 @@ class _ScreenClient(Protocol):
     """
 
     @property
-    def memory(self) -> Memory: ...
-    @property
-    def crtc(self) -> Crtc: ...
+    def video(self) -> Video: ...
 
 
 # ---------------------------------------------------------------------------
 # Pure transforms
 # ---------------------------------------------------------------------------
-
-
-def cells_from_region(region: bytes, screen_start: int) -> list[bytes]:
-    """Map the raw 1 KB MODE 7 region to the displayed 25x40 grid.
-
-    Corrects for hardware scroll: ``region`` is treated as a circular buffer
-    anchored at ``screen_start`` (the CRTC R12/R13 value). Only the low 10 bits
-    of ``screen_start`` are significant.
-
-    Args:
-        region: The full ``MODE7_REGION_SIZE`` (1 KB) MODE 7 region, as read
-            from 0x7C00.
-        screen_start: The CRTC display start address (``bbc.crtc.state.screen_start``).
-
-    Returns:
-        25 rows of 40 raw bytes each, in display order (top-left first).
-    """
-    if len(region) < MODE7_REGION_SIZE:
-        raise ValueError(f"region must be at least {MODE7_REGION_SIZE} bytes, got {len(region)}")
-    mask = MODE7_REGION_SIZE - 1
-    offset = screen_start & mask
-    rows: list[bytes] = []
-    for row in range(MODE7_ROWS):
-        base = offset + row * MODE7_COLS
-        rows.append(bytes(region[(base + col) & mask] for col in range(MODE7_COLS)))
-    return rows
 
 
 def cells_to_text(cells: list[bytes]) -> list[str]:
@@ -219,31 +183,59 @@ def linearise(rows: list[RowT], separator: Callable[[RowT, RowT], RowT] = spaced
 # ---------------------------------------------------------------------------
 
 
-def read_mode7_cells(bbc: _ScreenClient) -> list[bytes]:
-    """Read the MODE 7 display as a scroll-corrected 25x40 grid of raw bytes.
+def _displayed_cells(bbc: _ScreenClient) -> list[bytes] | None:
+    """The displayed MODE 7 grid as rows of character codes, or None when the
+    display is not MODE 7 (or has shown no MODE 7 frame yet)."""
+    screen = bbc.video.teletext_screen()
+    if not screen.active:
+        return None
+    return [
+        bytes(screen.cell(row, column).character for column in range(screen.columns))
+        for row in range(screen.rows)
+    ]
 
-    Reads the full 1 KB region and the CRTC screen-start, then maps them
-    through the circular buffer. These are two separate reads; call this while
-    the machine is paused (or otherwise settled) so they describe one frame.
+
+def _displayed_rows(bbc: _ScreenClient) -> list[str] | None:
+    """The displayed MODE 7 grid as text rows, or None when the display is
+    not MODE 7."""
+    cells = _displayed_cells(bbc)
+    return None if cells is None else cells_to_text(cells)
+
+
+def read_mode7_cells(bbc: _ScreenClient) -> list[bytes]:
+    """Read the displayed MODE 7 screen as a 25x40 grid of character codes.
+
+    The grid is the one the SAA5050 displayed in the last complete frame, so
+    it is read in one piece, follows hardware scrolling, and in a shadow mode
+    is the RAM on screen. Each code is the 7 bits the SAA5050 uses; bit 7 of
+    the screen byte is not kept.
 
     Args:
         bbc: A Beebium client.
 
     Returns:
-        25 rows of 40 raw bytes each, in display order.
+        25 rows of 40 character codes each, in display order.
+
+    Raises:
+        BeebiumError: If the display is not MODE 7.
     """
-    region = bbc.memory.address.peek.read(MODE7_BASE, MODE7_REGION_SIZE)
-    return cells_from_region(region, bbc.crtc.state.screen_start)
+    cells = _displayed_cells(bbc)
+    if cells is None:
+        raise BeebiumError("the display is not MODE 7, so there is no MODE 7 screen to read")
+    return cells
 
 
 def read_mode7_screen(bbc: _ScreenClient) -> list[str]:
-    """Read the MODE 7 display as 25 scroll-corrected rows of 40 characters.
+    """Read the displayed MODE 7 screen as 25 rows of 40 characters.
 
     Args:
         bbc: A Beebium client.
 
     Returns:
         A list of 25 strings, each 40 characters long.
+
+    Raises:
+        BeebiumError: If the display is not MODE 7.
     """
     return cells_to_text(read_mode7_cells(bbc))
 
@@ -252,7 +244,9 @@ def screen_contains(bbc: _ScreenClient, text: str) -> bool:
     """Return whether ``text`` appears anywhere on the MODE 7 display.
 
     The display is flattened with the ``dewrapped`` strategy, so text is found
-    whether or not it has been wrapped across a line boundary.
+    whether or not it has been wrapped across a line boundary. A display that
+    is not MODE 7 contains nothing, so this can poll a machine that is still
+    changing mode.
 
     Args:
         bbc: A Beebium client.
@@ -261,7 +255,8 @@ def screen_contains(bbc: _ScreenClient, text: str) -> bool:
     Returns:
         True if the text is present on screen.
     """
-    return text in linearise(read_mode7_screen(bbc), dewrapped)
+    rows = _displayed_rows(bbc)
+    return rows is not None and text in linearise(rows, dewrapped)
 
 
 def find(bbc: _ScreenClient, text: str) -> tuple[int, int] | None:
@@ -269,7 +264,8 @@ def find(bbc: _ScreenClient, text: str) -> tuple[int, int] | None:
 
     Searches each row independently and returns the first match. Text that
     spans a row boundary is not located here; use ``screen_contains`` to test
-    for presence anywhere on screen.
+    for presence anywhere on screen. A display that is not MODE 7 holds no
+    match.
 
     Args:
         bbc: A Beebium client.
@@ -278,7 +274,7 @@ def find(bbc: _ScreenClient, text: str) -> tuple[int, int] | None:
     Returns:
         ``(row, column)`` of the first occurrence, or ``None`` if not found.
     """
-    for row, line in enumerate(read_mode7_screen(bbc)):
+    for row, line in enumerate(_displayed_rows(bbc) or []):
         column = line.find(text)
         if column != -1:
             return (row, column)
@@ -292,12 +288,13 @@ def dump_screen(bbc: _ScreenClient) -> str:
         bbc: A Beebium client.
 
     Returns:
-        A multi-line string with the screen-start address, row numbers, and
-        scroll-corrected screen content.
+        A multi-line string with row numbers and the screen content, or a
+        line saying the display is not MODE 7.
     """
-    screen_start = bbc.crtc.state.screen_start
-    rows = read_mode7_screen(bbc)
-    lines = [f"MODE 7 screen (screen_start={screen_start:04X}):"]
+    rows = _displayed_rows(bbc)
+    if rows is None:
+        return "MODE 7 screen: the display is not MODE 7"
+    lines = ["MODE 7 screen:"]
     for index, row in enumerate(rows):
         lines.append(f"Row {index:2d}: [{row}]")
     return "\n".join(lines)

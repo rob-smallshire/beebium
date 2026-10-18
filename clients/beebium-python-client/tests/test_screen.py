@@ -15,19 +15,18 @@
 These exercise the pure transforms (no emulator required) and the small
 composition layer that wires them onto a Beebium client. A lightweight fake
 stands in for the client so the composition logic can be tested offline; the
-real end-to-end behaviour is covered by test_sphinx_adventure.py.
+real end-to-end behaviour, shadow modes included, is covered by
+test_screen_shadow_modes.py.
 """
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
+from beebium.client.exceptions import BeebiumError
 from beebium.client.screen import (
-    MODE7_BASE,
-    MODE7_COLS,
-    MODE7_REGION_SIZE,
-    MODE7_ROWS,
-    cells_from_region,
     cells_to_text,
     dewrapped,
     dump_screen,
@@ -40,10 +39,10 @@ from beebium.client.screen import (
     screen_contains,
     spaced,
 )
+from beebium.client.video import TeletextScreen
 
-# A representative unscrolled MODE 7 CRTC start address (bit 13 set, low
-# 10 bits zero, so the displayed grid begins at 0x7C00).
-UNSCROLLED_START = 0x3C00
+ROWS = 25
+COLUMNS = 40
 
 
 # ---------------------------------------------------------------------------
@@ -51,102 +50,36 @@ UNSCROLLED_START = 0x3C00
 # ---------------------------------------------------------------------------
 
 
-class _Peek:
-    def __init__(self, region: bytes) -> None:
-        self._region = region
+class _Video:
+    def __init__(self, screen: TeletextScreen) -> None:
+        self._screen = screen
 
-    def read(self, address: int, length: int) -> bytes:
-        assert address == MODE7_BASE, f"unexpected read address {address:#06x}"
-        return self._region[:length]
-
-
-class _Address:
-    def __init__(self, region: bytes) -> None:
-        self.peek = _Peek(region)
-
-
-class _Memory:
-    def __init__(self, region: bytes) -> None:
-        self.address = _Address(region)
-
-
-class _CrtcState:
-    def __init__(self, screen_start: int) -> None:
-        self.screen_start = screen_start
-
-
-class _Crtc:
-    def __init__(self, screen_start: int) -> None:
-        self.state = _CrtcState(screen_start)
+    def teletext_screen(self) -> TeletextScreen:
+        return self._screen
 
 
 class _FakeBbc:
-    def __init__(self, region: bytes, screen_start: int) -> None:
-        self.memory = _Memory(region)
-        self.crtc = _Crtc(screen_start)
+    def __init__(self, screen: TeletextScreen) -> None:
+        self.video = _Video(screen)
 
 
-def _bbc_showing(lines: list[str], screen_start: int = UNSCROLLED_START) -> _FakeBbc:
-    """Build a fake client whose displayed grid renders ``lines``.
-
-    The 1 KB region is filled with the bytes that, read back through the
-    circular-buffer mapping at ``screen_start``, reproduce ``lines`` at the
-    top of the screen. This exercises the scroll correction as a round trip.
-    """
-    region = bytearray(b" " * MODE7_REGION_SIZE)
-    off = screen_start & (MODE7_REGION_SIZE - 1)
+def _bbc_showing(lines: list[str], *, active: bool = True) -> _FakeBbc:
+    """Build a fake client whose displayed teletext grid renders ``lines``
+    at the top of the screen."""
+    codes = [ord(" ")] * (ROWS * COLUMNS)
     for row, line in enumerate(lines):
-        for col, ch in enumerate(line):
-            p = row * MODE7_COLS + col
-            region[(off + p) & (MODE7_REGION_SIZE - 1)] = ord(ch)
-    return _FakeBbc(bytes(region), screen_start)
-
-
-# ---------------------------------------------------------------------------
-# cells_from_region: the scroll-correcting circular-buffer mapping
-# ---------------------------------------------------------------------------
-
-
-class TestCellsFromRegion:
-    def test_shape_is_25_rows_of_40_bytes(self) -> None:
-        region = bytes(i & 0xFF for i in range(MODE7_REGION_SIZE))
-        cells = cells_from_region(region, UNSCROLLED_START)
-        assert len(cells) == MODE7_ROWS
-        assert all(len(row) == MODE7_COLS for row in cells)
-
-    def test_unscrolled_is_linear_from_base(self) -> None:
-        region = bytes(i & 0xFF for i in range(MODE7_REGION_SIZE))
-        cells = cells_from_region(region, UNSCROLLED_START)
-        assert cells[0][0] == region[0]
-        assert cells[0][39] == region[39]
-        assert cells[1][0] == region[40]
-        assert cells[24][39] == region[999]
-
-    def test_scroll_offset_rotates_origin(self) -> None:
-        region = bytes(i & 0xFF for i in range(MODE7_REGION_SIZE))
-        off = MODE7_COLS  # scrolled by exactly one row
-        cells = cells_from_region(region, UNSCROLLED_START + off)
-        assert cells[0][0] == region[off]
-        assert cells[1][0] == region[off + MODE7_COLS]
-
-    def test_high_positions_wrap_within_1kb(self) -> None:
-        region = bytes(i & 0xFF for i in range(MODE7_REGION_SIZE))
-        off = MODE7_COLS
-        cells = cells_from_region(region, UNSCROLLED_START + off)
-        # Last displayed cell is position 999; (40 + 999) & 0x3FF == 15.
-        assert (off + 999) & (MODE7_REGION_SIZE - 1) == 15
-        assert cells[24][39] == region[15]
-
-    def test_only_low_10_bits_of_screen_start_matter(self) -> None:
-        region = bytes(i & 0xFF for i in range(MODE7_REGION_SIZE))
-        # 0x3C28 and 0x2828 share the same low 10 bits (0x028).
-        a = cells_from_region(region, 0x3C28)
-        b = cells_from_region(region, 0x2828)
-        assert a == b
-
-    def test_short_region_is_rejected(self) -> None:
-        with pytest.raises(ValueError):
-            cells_from_region(b"\x00" * (MODE7_REGION_SIZE - 1), UNSCROLLED_START)
+        for column, ch in enumerate(line):
+            codes[row * COLUMNS + column] = ord(ch)
+    return _FakeBbc(
+        TeletextScreen(
+            active=active,
+            rows=ROWS,
+            columns=COLUMNS,
+            text="",
+            frame_number=1,
+            cells=[SimpleNamespace(character=code) for code in codes],
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -258,29 +191,32 @@ class TestComposition:
     def test_read_mode7_cells_returns_grid(self) -> None:
         bbc = _bbc_showing(["HELLO"])
         cells = read_mode7_cells(bbc)
-        assert len(cells) == MODE7_ROWS
+        assert len(cells) == ROWS
         assert cells[0][:5] == b"HELLO"
 
-    def test_read_mode7_screen_unscrolled(self) -> None:
+    def test_read_mode7_screen(self) -> None:
         bbc = _bbc_showing(["HELLO", "WORLD"])
         rows = read_mode7_screen(bbc)
         assert rows[0].startswith("HELLO")
         assert rows[1].startswith("WORLD")
-        assert len(rows) == MODE7_ROWS
-        assert all(len(row) == MODE7_COLS for row in rows)
+        assert len(rows) == ROWS
+        assert all(len(row) == COLUMNS for row in rows)
 
-    def test_read_mode7_screen_is_scroll_corrected(self) -> None:
-        # Heavy scroll (the offset from the issue's worked example).
-        bbc = _bbc_showing(["HELLO", "WORLD"], screen_start=UNSCROLLED_START + 968)
-        rows = read_mode7_screen(bbc)
-        assert rows[0].startswith("HELLO")
-        assert rows[1].startswith("WORLD")
+    def test_reading_a_display_that_is_not_mode_7_raises(self) -> None:
+        bbc = _bbc_showing(["STALE"], active=False)
+        with pytest.raises(BeebiumError, match="not MODE 7"):
+            read_mode7_cells(bbc)
+        with pytest.raises(BeebiumError, match="not MODE 7"):
+            read_mode7_screen(bbc)
+
+    def test_a_display_that_is_not_mode_7_contains_nothing(self) -> None:
+        bbc = _bbc_showing(["STALE"], active=False)
+        assert not screen_contains(bbc, "STALE")
+        assert find(bbc, "STALE") is None
+        assert "not MODE 7" in dump_screen(bbc)
 
     def test_screen_contains_finds_text(self) -> None:
-        bbc = _bbc_showing(
-            ["You are on the top of a mountain."],
-            screen_start=UNSCROLLED_START + 200,
-        )
+        bbc = _bbc_showing(["You are on the top of a mountain."])
         assert screen_contains(bbc, "top of a mountain")
         assert not screen_contains(bbc, "dungeon")
 
@@ -296,9 +232,8 @@ class TestComposition:
         bbc = _bbc_showing(["HELLO"])
         assert find(bbc, "GOODBYE") is None
 
-    def test_dump_screen_includes_screen_start_and_rows(self) -> None:
-        bbc = _bbc_showing(["HELLO"], screen_start=0x3C28)
+    def test_dump_screen_includes_rows(self) -> None:
+        bbc = _bbc_showing(["HELLO"])
         dump = dump_screen(bbc)
-        assert "3C28" in dump
         assert "HELLO" in dump
-        assert dump.count("Row ") == MODE7_ROWS
+        assert dump.count("Row ") == ROWS

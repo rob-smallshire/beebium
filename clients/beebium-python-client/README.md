@@ -127,7 +127,8 @@ bbc.keyboard.key_up("A")
 
 `bbc.video.screen_text()` reads the displayed text in any mode. For MODE 7
 (teletext) work, `beebium.client.screen` adds helpers -- `read_mode7_screen`,
-`screen_contains`, `find`, `dump_screen` -- that correct for hardware scrolling.
+`screen_contains`, `find`, `dump_screen` -- that read the screen as displayed,
+following hardware scrolling and shadow modes.
 
 ```python
 # Read the text the machine is displaying, whatever the screen mode.
