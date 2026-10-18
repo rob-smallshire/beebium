@@ -155,6 +155,54 @@ enum Beebium_RegisterRole: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+enum Beebium_ConditionVariableScope: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+
+  /// On every target: the CPU's registers and flags, cycles and hits.
+  case conditionVariableBuiltIn // = 0
+
+  /// This machine's own, read from its latches (bank, romsel, and on some
+  /// models acccon, vdusel, shen, ...), in breakpoint and watchpoint
+  /// conditions alike.
+  case conditionVariableMachine // = 1
+
+  /// About the access a watchpoint judges -- addr, value, write and, on a
+  /// machine with shadow RAM, shadow_access -- so in watchpoint conditions
+  /// only.
+  case conditionVariableWatchpoint // = 2
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .conditionVariableBuiltIn
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .conditionVariableBuiltIn
+    case 1: self = .conditionVariableMachine
+    case 2: self = .conditionVariableWatchpoint
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .conditionVariableBuiltIn: return 0
+    case .conditionVariableMachine: return 1
+    case .conditionVariableWatchpoint: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_ConditionVariableScope] = [
+    .conditionVariableBuiltIn,
+    .conditionVariableMachine,
+    .conditionVariableWatchpoint,
+  ]
+
+}
+
 struct Beebium_Empty: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -809,6 +857,29 @@ struct Beebium_CpuDescriptor: Sendable {
 
   /// interrupt line names, e.g. "IRQ", "NMI"
   var signals: [String] = []
+
+  /// Every name a breakpoint or watchpoint condition can use on this target,
+  /// exactly what the condition compiler accepts; anything else is refused
+  /// with INVALID_ARGUMENT naming it. Clients list these rather than carry
+  /// their own.
+  var conditionVariables: [Beebium_ConditionVariable] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ConditionVariable: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var name: String = String()
+
+  /// one line
+  var description_p: String = String()
+
+  var scope: Beebium_ConditionVariableScope = .conditionVariableBuiltIn
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1757,6 +1828,10 @@ extension Beebium_WatchpointType: SwiftProtobuf._ProtoNameProviding {
 
 extension Beebium_RegisterRole: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0REGISTER_ROLE_NONE\0\u{1}PROGRAM_COUNTER\0\u{1}STACK_POINTER\0\u{1}FLAGS\0")
+}
+
+extension Beebium_ConditionVariableScope: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CONDITION_VARIABLE_BUILT_IN\0\u{1}CONDITION_VARIABLE_MACHINE\0\u{1}CONDITION_VARIABLE_WATCHPOINT\0")
 }
 
 extension Beebium_Empty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -3106,7 +3181,7 @@ extension Beebium_RegisterDescriptor: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
 extension Beebium_CpuDescriptor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".CpuDescriptor"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}family\0\u{3}address_bits\0\u{3}little_endian\0\u{1}registers\0\u{1}signals\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}family\0\u{3}address_bits\0\u{3}little_endian\0\u{1}registers\0\u{1}signals\0\u{3}condition_variables\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3119,6 +3194,7 @@ extension Beebium_CpuDescriptor: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       case 3: try { try decoder.decodeSingularBoolField(value: &self.littleEndian) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.registers) }()
       case 5: try { try decoder.decodeRepeatedStringField(value: &self.signals) }()
+      case 6: try { try decoder.decodeRepeatedMessageField(value: &self.conditionVariables) }()
       default: break
       }
     }
@@ -3140,6 +3216,9 @@ extension Beebium_CpuDescriptor: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if !self.signals.isEmpty {
       try visitor.visitRepeatedStringField(value: self.signals, fieldNumber: 5)
     }
+    if !self.conditionVariables.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.conditionVariables, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3149,6 +3228,47 @@ extension Beebium_CpuDescriptor: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if lhs.littleEndian != rhs.littleEndian {return false}
     if lhs.registers != rhs.registers {return false}
     if lhs.signals != rhs.signals {return false}
+    if lhs.conditionVariables != rhs.conditionVariables {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ConditionVariable: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ConditionVariable"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{1}scope\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.scope) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 2)
+    }
+    if self.scope != .conditionVariableBuiltIn {
+      try visitor.visitSingularEnumField(value: self.scope, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ConditionVariable, rhs: Beebium_ConditionVariable) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.description_p != rhs.description_p {return false}
+    if lhs.scope != rhs.scope {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
