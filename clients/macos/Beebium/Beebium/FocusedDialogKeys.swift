@@ -23,12 +23,20 @@ class AppActions: ObservableObject {
     var openConnect: (() -> Void)? {
         willSet { objectWillChange.send() }
     }
-    /// Show the Welcome window (the preset picker): focus the existing one if
-    /// open, otherwise open one. Backs File > New (Cmd-N). It focus-or-opens so
-    /// there is never more than one Welcome window.
-    var showWelcome: (() -> Void)? {
+    /// Show the Welcome window on a given page (nil follows the launch default):
+    /// focus the existing one if open, otherwise open one, switching its page
+    /// either way. Backs File > New (Cmd-N, presets) and File > Open Recent
+    /// (machines). It focus-or-opens so there is never more than one Welcome
+    /// window.
+    var showWelcome: ((WelcomePage?) -> Void)? {
         willSet { objectWillChange.send() }
     }
+
+    /// The page a pending show-Welcome wants a freshly opened Welcome window to
+    /// land on, read once in its `onAppear`; nil follows `WelcomePage.initial`.
+    /// An already-open window is switched by the `.welcomePageRequested`
+    /// notification instead, so this is only the cold-open channel.
+    var pendingWelcomePage: WelcomePage?
 
     /// Open a saved machine from a directory or document URL -- File > Open...,
     /// a double-clicked .beebium-machine package, or the Machines page. Set by
@@ -127,6 +135,10 @@ final class WelcomeWindowRegistry {
 /// the new window (preset card, New Machine dialog, Connect dialog, etc.).
 extension Notification.Name {
     static let didOpenEmulatorWindow = Notification.Name("BeebiumDidOpenEmulatorWindow")
+    /// Posted to switch an already-open Welcome window to a page (the object is a
+    /// WelcomePage), so File > New and File > Open Recent reach the right page
+    /// even when the window is already up.
+    static let welcomePageRequested = Notification.Name("BeebiumWelcomePageRequested")
     /// Posted when the saved-machines recents change out from under an open
     /// Machines page (a rename moves an entry), so the page can reload.
     static let savedMachinesDidChange = Notification.Name("BeebiumSavedMachinesDidChange")

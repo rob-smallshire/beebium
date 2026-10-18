@@ -27,12 +27,14 @@ struct FileCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            // Cmd-N opens the Welcome window (the preset picker). It focuses the
-            // existing Welcome window if one is open rather than spawning a
-            // second. The custom machine builder is reached from the Welcome
-            // window's own "New Machine..." button.
+            // Cmd-N opens the Welcome window on its Presets page -- the presets
+            // and the custom builder -- always, never the saved-machines list
+            // (section 4.8). It focuses the existing Welcome window if one is open
+            // rather than spawning a second, switching it to Presets. The custom
+            // machine builder is reached from the Welcome window's own "New
+            // Machine..." button.
             Button("New...") {
-                appActions.showWelcome?()
+                appActions.showWelcome?(WelcomePage.page(for: .new))
             }
             .keyboardShortcut("n", modifiers: .command)
             .disabled(appActions.showWelcome == nil)
@@ -48,7 +50,7 @@ struct FileCommands: Commands {
             // better recents list than a menu of names (section 4.8). The
             // standard recents submenu is not used; the Machines page is the
             // recents view, and Clear is a button there.
-            Button("Open Recent") { appActions.showWelcome?() }
+            Button("Open Recent") { appActions.showWelcome?(WelcomePage.page(for: .openRecent)) }
             .disabled(appActions.showWelcome == nil || !hasRecentMachines)
 
             Divider()

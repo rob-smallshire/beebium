@@ -504,13 +504,20 @@ struct ContentView: View {
         .onAppear {
             // Capture openWindow into shared AppActions for FileCommands
             AppActions.shared.openConnect = { [openWindow] in openWindow(id: "connect") }
-            AppActions.shared.showWelcome = { [openWindow] in
+            AppActions.shared.showWelcome = { [openWindow] page in
                 // Focus the existing Welcome window if one is open; only open a
                 // new one when none exists, so there is never a second Welcome.
-                if WelcomeWindowRegistry.shared.focusExisting() { return }
+                // Either way it lands on (or switches to) the requested page.
+                if WelcomeWindowRegistry.shared.focusExisting() {
+                    if let page {
+                        NotificationCenter.default.post(name: .welcomePageRequested, object: page)
+                    }
+                    return
+                }
                 ConnectWindowState.shared.pendingTarget = nil
                 ConnectWindowState.shared.pendingNeedsRun = false
                 ConnectWindowState.shared.pendingProvenanceUUID = nil
+                AppActions.shared.pendingWelcomePage = page
                 openWindow(id: "main")
             }
 

@@ -21,6 +21,14 @@ final class WelcomePageTests: XCTestCase {
     func testInitialPageIsPresetsForANewUser() {
         XCTAssertEqual(WelcomePage.initial(hasRecentMachines: false), .presets)
     }
+
+    func testNewAlwaysOpensThePresetsPage() {
+        XCTAssertEqual(WelcomePage.page(for: .new), .presets)
+    }
+
+    func testOpenRecentOpensTheMachinesPage() {
+        XCTAssertEqual(WelcomePage.page(for: .openRecent), .machines)
+    }
 }
 
 @MainActor

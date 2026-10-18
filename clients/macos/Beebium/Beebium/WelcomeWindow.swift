@@ -73,20 +73,35 @@ struct WelcomeWindowContent: View {
         .onReceive(NotificationCenter.default.publisher(for: .didOpenEmulatorWindow)) { _ in
             onDismiss?()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .welcomePageRequested)) { note in
+            // A File menu command (New -> presets, Open Recent -> machines) asking
+            // an already-open Welcome window to switch pages.
+            if let requested = note.object as? WelcomePage { page = requested }
+        }
         .onAppear {
-            // Returning user with saved machines lands on Machines; a new user
-            // on Presets. Set here (not as the @State default) so reading the
-            // recents list stays on the main actor.
-            page = WelcomePage.initial(hasRecentMachines: savedMachines.hasRecentMachines)
+            // A pending page from the command that opened this window (New or Open
+            // Recent); otherwise the launch default -- a returning user with saved
+            // machines lands on Machines, a new user on Presets. Set here (not as
+            // the @State default) so reading the recents list stays on the main
+            // actor.
+            page = AppActions.shared.pendingWelcomePage
+                ?? WelcomePage.initial(hasRecentMachines: savedMachines.hasRecentMachines)
+            AppActions.shared.pendingWelcomePage = nil
         }
         .task {
             // Capture openWindow into shared AppActions for FileCommands
             AppActions.shared.openConnect = { [openWindow] in openWindow(id: "connect") }
-            AppActions.shared.showWelcome = { [openWindow] in
-                if WelcomeWindowRegistry.shared.focusExisting() { return }
+            AppActions.shared.showWelcome = { [openWindow] page in
+                if WelcomeWindowRegistry.shared.focusExisting() {
+                    if let page {
+                        NotificationCenter.default.post(name: .welcomePageRequested, object: page)
+                    }
+                    return
+                }
                 ConnectWindowState.shared.pendingTarget = nil
                 ConnectWindowState.shared.pendingNeedsRun = false
                 ConnectWindowState.shared.pendingProvenanceUUID = nil
+                AppActions.shared.pendingWelcomePage = page
                 openWindow(id: "main")
             }
             if presetManager.systemPresets.isEmpty && !presetManager.isDiscovering {

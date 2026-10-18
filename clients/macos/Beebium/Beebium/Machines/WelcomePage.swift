@@ -25,4 +25,22 @@ enum WelcomePage: Hashable, CaseIterable, Identifiable {
     static func initial(hasRecentMachines: Bool) -> WelcomePage {
         hasRecentMachines ? .machines : .presets
     }
+
+    /// The page a File-menu command opens the Welcome window on (section 4.8):
+    /// New... is always the presets (and the custom builder); Open Recent... is
+    /// the saved machines. This is fixed, unlike `initial`, which chooses the
+    /// launch page from whether there are recents. Pure.
+    static func page(for command: WelcomeCommand) -> WelcomePage {
+        switch command {
+        case .new:        return .presets
+        case .openRecent: return .machines
+        }
+    }
+}
+
+/// A File-menu command that opens the Welcome window, to map to the page it
+/// should show.
+enum WelcomeCommand {
+    case new
+    case openRecent
 }
