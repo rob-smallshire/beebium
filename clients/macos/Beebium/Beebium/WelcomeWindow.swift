@@ -64,8 +64,7 @@ struct WelcomeWindowContent: View {
             .fixedSize()
 
             if page == .machines {
-                MachinesPage(model: savedMachines)
-                    .frame(minHeight: 100, idealHeight: gridHeight, maxHeight: gridHeight)
+                MachinesPage(model: savedMachines, gridHeight: gridHeight)
             } else {
                 presetsContent
             }
@@ -140,18 +139,10 @@ struct WelcomeWindowContent: View {
             }
         }
 
-        // New Machine button
-        HStack {
+        WelcomeBottomBar {
             Spacer()
-            Button("New Machine...") {
-                connectWindowState.pendingTarget = nil
-                connectWindowState.pendingNeedsRun = false
-                connectWindowState.pendingProvenanceUUID = nil
-                openWindow(id: "new-machine")
-            }
+            NewMachineButton()
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 16)
     }
 
     private func launchPreset(_ preset: MachinePreset) async {
@@ -181,6 +172,40 @@ struct WelcomeWindowContent: View {
             launchErrorPresetName = preset.name
             isLaunching = false
         }
+    }
+}
+
+/// The "New Machine..." button shared by the Welcome window's Presets and
+/// Machines pages: opens the custom machine builder, clearing any pending
+/// connection target first so it starts fresh. Shared so both pages' buttons do
+/// exactly the same thing.
+struct NewMachineButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("New Machine...") {
+            let state = ConnectWindowState.shared
+            state.pendingTarget = nil
+            state.pendingNeedsRun = false
+            state.pendingProvenanceUUID = nil
+            openWindow(id: "new-machine")
+        }
+    }
+}
+
+/// The Welcome window's bottom action bar: the horizontal and bottom padding the
+/// Presets and Machines pages share, so their buttons sit the same distance from
+/// the window's edges rather than one hugging the bottom. Lay the buttons out
+/// inside it with Spacers.
+struct WelcomeBottomBar<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        HStack {
+            content
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
     }
 }
 

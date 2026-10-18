@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 import XCTest
+import Combine
 @testable import Beebium
 
 final class WelcomePageTests: XCTestCase {
@@ -45,6 +46,34 @@ final class SavedMachinesModelTests: XCTestCase {
         await model.reload()
 
         XCTAssertEqual(model.machines.map(\.name), ["a", "c"])
+    }
+
+    func testAMachineLifecycleChangeTriggersAReload() async {
+        // A machine window opening or closing flips a saved machine's lock, so
+        // the page re-describes off-view, without a SwiftUI callback. The
+        // injected publisher stands in for MachineManager's machine set changing.
+        let store = InMemoryRecentDocumentsStore(seed: [URL(fileURLWithPath: "/m/a.beebium-machine")])
+        let changes = PassthroughSubject<Void, Never>()
+        let reloaded = expectation(description: "reload after a machine lifecycle change")
+        reloaded.assertForOverFulfill = false
+        var describeCount = 0
+        let model = SavedMachinesModel(
+            recents: MachineRecents(store: store),
+            describe: { url in
+                describeCount += 1
+                reloaded.fulfill()
+                return self.description(url.deletingPathExtension().lastPathComponent, dirpath: url.path)
+            },
+            machineChanges: changes.eraseToAnyPublisher())
+
+        // Nothing has described yet: a unit test runs no .task initial load.
+        XCTAssertEqual(describeCount, 0)
+
+        changes.send(())
+        await fulfillment(of: [reloaded], timeout: 2)
+
+        XCTAssertGreaterThanOrEqual(describeCount, 1)
+        XCTAssertEqual(model.machines.map(\.name), ["a"])
     }
 
     func testClearEmptiesBothTheListAndRecents() async {

@@ -19,36 +19,66 @@ import AppKit
 /// is brought forward rather than launched twice.
 struct MachinesPage: View {
     @ObservedObject var model: SavedMachinesModel
+    let gridHeight: CGFloat
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Group {
-            if model.machines.isEmpty {
-                emptyState
-            } else {
-                VStack(spacing: 12) {
-                    ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 176, maximum: 176), spacing: 16)],
-                                  spacing: 16) {
-                            ForEach(model.machines) { machine in
-                                MachineCard(machine: machine,
-                                            onOpen: { open(machine) },
-                                            onReveal: { reveal(machine) })
-                            }
-                        }
-                        .padding(.horizontal, 24)
-                    }
-                    HStack {
-                        Spacer()
-                        Button("Clear") { model.clear() }
-                    }
-                    .padding(.horizontal, 24)
+        VStack(spacing: 16) {
+            Group {
+                if model.machines.isEmpty {
+                    emptyState
+                } else {
+                    machinesGrid
                 }
             }
+            .frame(minHeight: 100, idealHeight: gridHeight, maxHeight: gridHeight)
+
+            // Clear well away from New Machine... (destructive-ish, so it sits
+            // left); New Machine... bottom right as on the Presets page. The
+            // shared bar gives both the same padding from the window's edges.
+            WelcomeBottomBar {
+                Button("Clear") { model.clear() }
+                    .disabled(model.machines.isEmpty)
+                Spacer()
+                NewMachineButton()
+            }
         }
-        .task { await model.reload() }
+        .task {
+            // The badge is a machine's lock, so it is only as fresh as the last
+            // reload. Load when the page appears, then reload on a modest timer
+            // while it stays visible -- a backstop for machines started outside
+            // the app (the CLI) or a stale lock the server's sweep has not yet
+            // cleared. The task is cancelled when the page goes away, which stops
+            // the timer. Machine windows opening and closing are caught off-view
+            // by the model; these are coalesced with those.
+            await model.reload()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if Task.isCancelled { break }
+                await model.reload()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .savedMachinesDidChange)) { _ in
             Task { await model.reload() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            // The Welcome window coming forward while this page is up is a cue the
+            // badges may be stale (a machine was started or stopped elsewhere).
+            Task { await model.reload() }
+        }
+    }
+
+    private var machinesGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 176, maximum: 176), spacing: 16)],
+                      spacing: 16) {
+                ForEach(model.machines) { machine in
+                    MachineCard(machine: machine,
+                                onOpen: { open(machine) },
+                                onReveal: { reveal(machine) })
+                }
+            }
+            .padding(.horizontal, 24)
         }
     }
 
