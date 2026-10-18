@@ -726,9 +726,15 @@ public:
     void set_x(uint8_t value) { state_.cpu.x = value; ++sequence_; }
     void set_y(uint8_t value) { state_.cpu.y = value; ++sequence_; }
     void set_sp(uint8_t value) { state_.cpu.s.b.l = value; ++sequence_; }
+    // Setting the PC stands for the opcode fetch at it: the opcode is loaded
+    // here, so a policy that latches state at opcode fetches (the B+'s shadow
+    // RAM) is told, as CpuBinding tells it of a fetch the CPU makes.
     void set_pc(uint16_t value) {
         state_.cpu.opcode_pc.w = value;
         state_.cpu.pc.w = value + 1;
+        if constexpr (HasOpcodeFetchLatch<MemoryPolicy>) {
+            state_.memory.note_opcode_fetch(value);
+        }
         state_.cpu.dbus = state_.memory.peek(value);
         ++sequence_;
     }

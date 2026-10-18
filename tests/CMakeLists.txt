@@ -368,6 +368,11 @@ add_executable(test_model_b_integra_b_hardware test_model_b_integra_b_hardware.c
 target_link_libraries(test_model_b_integra_b_hardware PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_model_b_integra_b_hardware)
 
+# The B+ shadow RAM decision, latched at each opcode fetch
+add_executable(test_bplus_vdu_latch test_bplus_vdu_latch.cpp)
+target_link_libraries(test_bplus_vdu_latch PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_bplus_vdu_latch)
+
 # Every machine's memory region listing against a probe of its banks
 add_executable(test_memory_region_listing test_memory_region_listing.cpp)
 target_link_libraries(test_memory_region_listing PRIVATE beebium_core Catch2::Catch2WithMain)

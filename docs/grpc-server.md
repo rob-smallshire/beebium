@@ -515,7 +515,7 @@ Three access modes for the 16-bit address space:
 | `PeekMemory` | No | Inspect memory without disturbing hardware state |
 | `WriteMemory` | Yes | Write data to memory-mapped hardware or RAM |
 
-All three accept an optional `simulated_pc` field for Model B+ shadow RAM routing. When set, memory access is routed as if code at that PC were executing (VDU driver code at $C000-$DFFF sees shadow RAM at $3000-$7FFF).
+All three accept an optional `simulated_pc` field for Model B+ shadow RAM routing. When set, memory access is routed as if the instruction at that PC had made it (VDU driver code at $C000-$DFFF, or at $A000-$AFFF while ANDY's paged RAM is in, sees shadow RAM at $3000-$7FFF in a shadow mode). The CPU itself is routed as the B+ PAL (IC36) routes it: by a flag latched at each opcode fetch from the fetch address, which holds for every operand and data access of that instruction.
 
 #### Memory Regions
 

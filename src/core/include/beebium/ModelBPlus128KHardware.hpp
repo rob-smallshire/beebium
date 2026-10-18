@@ -336,6 +336,7 @@ private:
     // B+ specific paging registers
     uint8_t romsel_ = 0;    // Bits 0-3: bank, Bit 7: ANDY enable
     uint8_t acccon_ = 0;    // Bit 7: shadow enable
+    bool vdu_latch_ = false;  // the PAL's VDU driver flag; see note_opcode_fetch()
 
     // Disc control register state
     // Bit 0: Drive select (0=drive 0, 1=drive 1)
@@ -519,38 +520,32 @@ public:
         memory_map_.write(addr, value);
     }
 
-    // PC-aware read for VDU driver code shadow RAM routing.
-    // Per B+ Service Manual Section 5.4.3:
-    // When shadow is enabled (ACCCON bit 7 = 1) and address is 0x3000-0x7FFF,
-    // VDU driver code (MOS 0xC000-0xDFFF, or paged RAM 0xA000-0xAFFF) reads shadow RAM,
-    // while all other code reads main RAM.
-    uint8_t read_with_pc(uint16_t addr, uint16_t pc) {
-        // Shadow RAM routing for VDU driver code
-        if (shadow_enabled() && addr >= 0x3000 && addr < 0x8000) {
-            if (is_vdu_driver_code(pc)) {
-                return shadow_ram.read(addr - 0x3000);
-            }
-            // Non-VDU code sees main RAM
-            return main_ram.read(addr);
-        }
-        // All other addresses use normal handling
-        return read(addr);
-    }
+    // The PAL's VDU driver flag (B+ Service Manual Section 2, PAL IC36): "the
+    // PAL checks the address of each CPU opcode fetch. If the opcode address
+    // is in the VDU driver code space then a temporary 1-bit flag is set ...
+    // The flag remains set until an opcode outside the VDU driver code space
+    // is read. While the flag is set, all CPU access to memory between &3000
+    // and &7FFF is redirected to the shadow RAM" (when ACCCON bit 7 shows the
+    // shadow screen). So the decision is made once an instruction, at its
+    // opcode fetch, and holds for every operand and data access it makes; an
+    // interrupt's entry sequence fetches no opcode and runs under the flag
+    // before it. CpuBinding reports each opcode fetch here.
+    void note_opcode_fetch(uint16_t addr) { vdu_latch_ = is_vdu_driver_code(addr); }
 
-    // PC-aware write for VDU driver code shadow RAM routing.
+    // The PAL's VDU driver flag as last latched.
+    bool vdu() const { return vdu_latch_; }
+
+    // A CPU access, routed by the latched flag.
+    uint8_t cpu_read(uint16_t addr) { return routed_read(addr, vdu_latch_); }
+    void cpu_write(uint16_t addr, uint8_t value) { routed_write(addr, value, vdu_latch_); }
+
+    // An access as code at `pc` would make it, for the debugger: routed as if
+    // the instruction at `pc` had set the flag.
+    uint8_t read_with_pc(uint16_t addr, uint16_t pc) {
+        return routed_read(addr, is_vdu_driver_code(pc));
+    }
     void write_with_pc(uint16_t addr, uint8_t value, uint16_t pc) {
-        // Shadow RAM routing for VDU driver code
-        if (shadow_enabled() && addr >= 0x3000 && addr < 0x8000) {
-            if (is_vdu_driver_code(pc)) {
-                shadow_ram.write(addr - 0x3000, value);
-                return;
-            }
-            // Non-VDU code writes to main RAM
-            main_ram.write(addr, value);
-            return;
-        }
-        // All other addresses use normal handling
-        write(addr, value);
+        routed_write(addr, value, is_vdu_driver_code(pc));
     }
 
     // Side-effect-free read for debugger inspection.
@@ -624,6 +619,7 @@ public:
         sideways.select_bank(15);  // Default to BASIC ROM at slot 15
         romsel_ = 0x0F;  // ROMSEL bits 0-3 = 15 (BASIC), bit 7 = 0 (ANDY disabled)
         acccon_ = 0;
+        vdu_latch_ = false;
         disc_controller.reset();
         disc_control_ = 0;
         nmi_enabled_ = false;
@@ -750,6 +746,26 @@ public:
 
         // Code at 0x0000-0x9FFF or 0xE000-0xFFFF never has VDU driver status
         return false;
+    }
+
+    // While ACCCON bit 7 shows the shadow screen, &3000-&7FFF is shadow RAM to
+    // an access made with the VDU driver flag set, and main RAM otherwise.
+    uint8_t routed_read(uint16_t addr, bool vdu) {
+        if (shadow_enabled() && addr >= 0x3000 && addr < 0x8000) {
+            return vdu ? shadow_ram.read(addr - 0x3000) : main_ram.read(addr);
+        }
+        return read(addr);
+    }
+    void routed_write(uint16_t addr, uint8_t value, bool vdu) {
+        if (shadow_enabled() && addr >= 0x3000 && addr < 0x8000) {
+            if (vdu) {
+                shadow_ram.write(addr - 0x3000, value);
+            } else {
+                main_ram.write(addr, value);
+            }
+            return;
+        }
+        write(addr, value);
     }
 
     // =========================================================================

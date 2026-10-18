@@ -22,13 +22,15 @@
 
 namespace beebium {
 
-// Concept to detect if a memory policy has PC-aware read/write methods.
-// These are required for BBC Model B+ VDU driver code shadow RAM routing,
-// where the hardware routes memory access based on the program counter.
+// A memory policy whose routing depends on the instruction being executed, as
+// the B+'s shadow RAM does: it latches state at each opcode fetch
+// (note_opcode_fetch) and routes the CPU's accesses by it (cpu_read and
+// cpu_write).
 template<typename T>
-concept HasPcAwareMemory = requires(T& m, uint16_t addr, uint16_t pc, uint8_t val) {
-    { m.read_with_pc(addr, pc) } -> std::same_as<uint8_t>;
-    { m.write_with_pc(addr, val, pc) } -> std::same_as<void>;
+concept HasOpcodeFetchLatch = requires(T& m, uint16_t addr, uint8_t val) {
+    { m.note_opcode_fetch(addr) } -> std::same_as<void>;
+    { m.cpu_read(addr) } -> std::same_as<uint8_t>;
+    { m.cpu_write(addr, val) } -> std::same_as<void>;
 };
 
 
@@ -204,17 +206,20 @@ private:
             }
         }
 
-        // Memory access - use PC-aware methods if available (for B+ shadow RAM routing)
+        // Memory access. A policy that latches state at each opcode fetch (the
+        // B+'s shadow RAM) is told of the fetch before it is made; an
+        // interrupt's dummy fetch is not an opcode fetch.
         uint8_t value;
-        if constexpr (HasPcAwareMemory<MemoryPolicy>) {
-            // B+ and other machines with PC-dependent memory routing
-            const uint16_t pc = cpu.pc.w;
+        if constexpr (HasOpcodeFetchLatch<MemoryPolicy>) {
+            if (cpu.read == M6502ReadType_Opcode) {
+                memory.note_opcode_fetch(addr);
+            }
             if (cpu.read) {
-                value = memory.read_with_pc(addr, pc);
+                value = memory.cpu_read(addr);
                 cpu.dbus = value;
             } else {
                 value = cpu.dbus;
-                memory.write_with_pc(addr, value, pc);
+                memory.cpu_write(addr, value);
             }
         } else {
             // Model B and other machines with simple memory mapping
