@@ -123,6 +123,12 @@ bbc.keyboard.key_down("A")         # or drive individual keys
 bbc.keyboard.key_up("A")
 ```
 
+Typing needs no wait for boot: the server presses nothing until the guest has
+finished resetting and asked the MOS for typed input, so text typed straight
+after a launch or a Break is not lost in the reset. A test that wants boot
+finished before doing something other than typing calls `bbc.wait_until_ready()`.
+Game control, by `key_down()` and `key_up()`, is never held.
+
 ### Read the screen
 
 `bbc.video.screen_text()` reads the displayed text in any mode. For MODE 7

@@ -447,6 +447,11 @@ message ServerStatusEvent {
     // Always false for a saved machine, whose media are its own; a Save
     // clears it.
     bool template_media_written = 7;
+
+    // On every event: whether the guest has asked for typed input since its
+    // last reset (see TypingStatus.guest_ready). GUEST_READY reports it
+    // becoming true; MACHINE_RESET is when it becomes false.
+    bool guest_ready = 8;
 }
 
 // How a machine reset was performed. A reset re-initialises the machine (the MOS
@@ -491,6 +496,12 @@ enum ServerStatusType {
     // before the MOS finishes re-initialising, so a consumer that needs the
     // re-initialised state should let it settle.
     SERVER_STATUS_MACHINE_RESET = 5;
+
+    // The guest has asked for typed input for the first time since the last
+    // reset, so the MOS has finished resetting and type-ahead has begun (see
+    // TypingStatus.guest_ready). Follows each MACHINE_RESET once the guest
+    // reaches that point.
+    SERVER_STATUS_GUEST_READY = 6;
 }
 
 // === Advertisement RPC ===

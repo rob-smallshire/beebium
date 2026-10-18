@@ -348,6 +348,10 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         [system_service = impl_->system_service.get()](bool hard) {
             system_service->notify_machine_reset(hard);
         });
+    impl_->machine.set_guest_ready_callback(
+        [system_service = impl_->system_service.get()] {
+            system_service->notify_guest_ready();
+        });
 
     impl_->audio_service = std::make_unique<AudioServiceImpl<MachineType>>(
         impl_->machine);

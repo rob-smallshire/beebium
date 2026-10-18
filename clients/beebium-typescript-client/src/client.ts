@@ -15,7 +15,7 @@ import { Memory } from "./memory.js";
 import { Keyboard } from "./keyboard.js";
 import { Video } from "./video.js";
 import { System } from "./system.js";
-import { ProtocolMismatchError } from "./exceptions.js";
+import { DebuggerError, ProtocolMismatchError } from "./exceptions.js";
 import { PROTOCOL_FINGERPRINT } from "./protocol_fingerprint.js";
 import { Disc } from "./disc.js";
 import { Econet } from "./econet.js";
@@ -492,6 +492,31 @@ export class Beebium {
     // =========================================================================
     // Emulated time helpers
     // =========================================================================
+
+    /**
+     * Wait until the guest has finished resetting and asked for typed input.
+     *
+     * The server reports the moment, after power-on or a Break, that the guest
+     * first asks the MOS for typed input; until then the MOS and its ROMs are
+     * still resetting. Typing needs no wait, since the server holds type-ahead
+     * until then; this is for a caller that wants boot finished before doing
+     * something else. Resolves at once if the guest is already ready.
+     *
+     * @throws DebuggerError If the machine is stopped before the guest is ready.
+     */
+    async waitUntilReady(): Promise<void> {
+        for await (const status of this.keyboard.watchTypingStatus()) {
+            if (status.guestReady) {
+                return;
+            }
+            if (!status.machineRunning) {
+                throw new DebuggerError(
+                    "machine is stopped before the guest is ready; nothing will finish " +
+                    "its reset -- call debugger.run() first",
+                );
+            }
+        }
+    }
 
     /**
      * Run the emulator for the specified number of emulated seconds.

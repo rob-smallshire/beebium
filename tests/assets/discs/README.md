@@ -53,6 +53,20 @@ Not third-party: the BASIC source is `tube_speed70.bas` in this directory, and
 the disc is `oaknut-basic tokenise` of it written to a DFS SSD with
 `oaknut-disc`. Regenerate with those tools if the program changes.
 
+## print_booted.ssd
+
+A synthetic disc for issue #125 (type-ahead held until the guest is ready).
+`$.!BOOT` is 23 bytes of machine code, loaded and run at &2000, that prints
+"BOOTED" through OSWRCH and returns:
+
+    A2 00 BD 0E 20 F0 06 20 EE FF E8 D0 F5 60  42 4F 4F 54 45 44 0D 0A 00
+
+so `*RUN !BOOT` either prints BOOTED or fails with a message naming what went
+wrong (a lost leading character, an unselected filing system). Used by
+test_guest_ready.py. Not third-party: built with
+`oaknut-disc create print_booted.ssd` and
+`oaknut-disc put 'print_booted.ssd:$.!BOOT' <the bytes above> --load 0x2000 --exec 0x2000`.
+
 ## TakBasicAsm.ssd
 
 acheton1984's "Tak on 6502" benchmark disc, the end-to-end fidelity check for

@@ -110,13 +110,16 @@ class TypingStatus(NamedTuple):
     """State of the server's type-ahead queue.
 
     ``machine_running`` is the server's word on whether the emulator is
-    running: only a running machine drains the queue.
+    running: only a running machine drains the queue. ``guest_ready`` is its
+    word on whether the guest has asked for typed input since its last reset;
+    nothing is typed until it has.
     """
 
     idle: bool
     pending_characters: int
     strings_queued: int
     machine_running: bool
+    guest_ready: bool
 
 
 def _typing_status(response: keyboard_pb2.TypingStatus) -> TypingStatus:
@@ -125,6 +128,7 @@ def _typing_status(response: keyboard_pb2.TypingStatus) -> TypingStatus:
         pending_characters=response.pending_characters,
         strings_queued=response.strings_queued,
         machine_running=response.machine_running,
+        guest_ready=response.guest_ready,
     )
 
 
@@ -590,8 +594,8 @@ class Keyboard:
         Yields an initial snapshot immediately, then a fresh one whenever the
         queue changes -- a character consumed, a string started or finished,
         text enqueued, or the queue cleared -- and whenever the machine stops
-        or starts. The stream stays open until the iterator is closed or the
-        connection drops.
+        or starts, or the guest becomes ready or is reset. The stream stays
+        open until the iterator is closed or the connection drops.
 
         Prefer this over polling :meth:`typing_status`. The server is the only
         party that knows when the queue drains; polling forces the caller to
@@ -618,7 +622,18 @@ class Keyboard:
         Only a running machine drains the queue, and the server says whether
         the machine is running, so the wait needs no timeout: it raises at
         once if the machine is stopped with characters pending, on entry or
-        part way through. :meth:`Beebium.run_for_emulated_seconds`,
+        part way through.
+
+        The server types nothing until the guest has asked for typed input
+        after its last reset (``guest_ready``; see
+        :meth:`Beebium.wait_until_ready`), so text typed straight after a
+        launch or a Break waits for the MOS to finish resetting rather than
+        being lost in it. This wait waits through that too. A guest that never
+        asks the MOS for input -- a program scanning the keyboard itself, an
+        OSBYTE 129 scan with a negative number, a machine stopped at
+        "Language?" -- holds the queue, and a status with ``guest_ready``
+        false and characters pending says so; game control belongs to
+        :meth:`key_down` and :meth:`key_up`, which are never held. :meth:`Beebium.run_for_emulated_seconds`,
         :meth:`Beebium.run_until_or_timeout` and the debugger's run-to methods
         all leave the machine stopped; call ``debugger.run()`` before waiting.
         Use :meth:`clear_typing` from another thread to stop waiting early.

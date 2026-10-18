@@ -114,3 +114,16 @@ describe("waitForTyping", () => {
         expect((await bbc.keyboard.typingStatus()).pendingCharacters).toBeGreaterThan(0);
     });
 });
+
+describe("guest readiness", () => {
+    it("is not ready after a reset and ready once the guest asks for input", async () => {
+        const bbc = await launchHost();
+        await bbc.debugger.reset();
+        expect((await bbc.keyboard.typingStatus()).guestReady).toBe(false);
+        await expect(bbc.waitUntilReady()).rejects.toThrow(DebuggerError);
+
+        await bbc.debugger.run();
+        await bbc.waitUntilReady();
+        expect((await bbc.keyboard.typingStatus()).guestReady).toBe(true);
+    });
+});

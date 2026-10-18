@@ -616,6 +616,7 @@ class TypingStatus(_message.Message):
     PENDING_CHARACTERS_FIELD_NUMBER: _builtins.int
     STRINGS_QUEUED_FIELD_NUMBER: _builtins.int
     MACHINE_RUNNING_FIELD_NUMBER: _builtins.int
+    GUEST_READY_FIELD_NUMBER: _builtins.int
     idle: _builtins.bool
     """True if queue is empty (all typing complete)"""
     pending_characters: _builtins.int
@@ -628,6 +629,18 @@ class TypingStatus(_message.Message):
     changes, so a client waiting for the queue to drain learns at once that
     a stopped machine never will.
     """
+    guest_ready: _builtins.bool
+    """True once the guest has asked for typed input since its last reset:
+    the first removal of a character from the MOS keyboard buffer (an
+    opcode fetch at the address in the REMV vector, &022C, with X = 0),
+    which every MOS text-input path makes, whatever the language and with
+    or without a Tube. Type-ahead presses nothing until then: keys pressed
+    during the MOS's reset and its ROMs' reset service calls are lost or
+    read as reset options. A reset clears it. A guest that never asks the
+    MOS for input (one scanning the keyboard itself, a machine stopped at
+    "Language?") holds the queue; game control is KeyDown/KeyUp, which are
+    never held. WatchTypingStatus pushes when this changes.
+    """
     def __init__(
         self,
         *,
@@ -635,10 +648,11 @@ class TypingStatus(_message.Message):
         pending_characters: _builtins.int = ...,
         strings_queued: _builtins.int = ...,
         machine_running: _builtins.bool = ...,
+        guest_ready: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["idle", b"idle", "machine_running", b"machine_running", "pending_characters", b"pending_characters", "strings_queued", b"strings_queued"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["guest_ready", b"guest_ready", "idle", b"idle", "machine_running", b"machine_running", "pending_characters", b"pending_characters", "strings_queued", b"strings_queued"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

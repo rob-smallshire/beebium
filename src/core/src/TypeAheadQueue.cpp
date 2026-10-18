@@ -13,6 +13,8 @@
 #include <beebium/TypeAheadQueue.hpp>
 #include <beebium/KeyboardMapping.hpp>
 
+#include <utility>
+
 namespace beebium {
 
 TypeAheadQueue::TypeAheadQueue(KeyboardMatrix& keyboard)
@@ -42,8 +44,9 @@ void TypeAheadQueue::tick_active() {
     switch (state_) {
         case State::Idle: {
             // Nothing queued after all: the cancel above was the work, or
-            // clear() emptied the queue since tick() looked.
-            if (queued_strings_.load(std::memory_order_acquire) == 0) {
+            // clear() emptied the queue since tick() looked. Or the guest is
+            // not ready for input, and the string waits.
+            if (queued_strings_.load(std::memory_order_acquire) == 0 || !guest_ready()) {
                 return;
             }
             {
@@ -67,6 +70,14 @@ void TypeAheadQueue::tick_active() {
         }
 
         case State::KeyDown: {
+            if (!guest_ready()) {
+                // A reset: let the key go, and press it again once ready.
+                release_current_key();
+                cycle_count_ = 0;
+                state_ = State::KeyUp;
+                repress_current_ = true;
+                break;
+            }
             cycle_count_++;
             if (cycle_count_ >= current_hold_cycles_) {
                 // Release key after the key-down hold time
@@ -80,8 +91,12 @@ void TypeAheadQueue::tick_active() {
         case State::KeyUp: {
             cycle_count_++;
             if (cycle_count_ >= current_gap_cycles_) {
+                if (!guest_ready()) {
+                    cycle_count_ = current_gap_cycles_;  // wait, gap served
+                    break;
+                }
                 // Move to next character after the key-up gap time
-                current_index_++;
+                if (!std::exchange(repress_current_, false)) current_index_++;
                 cycle_count_ = 0;
 
                 if (current_index_ < current_text_.size()) {
@@ -170,6 +185,7 @@ void TypeAheadQueue::finish_current_string() {
     current_text_.clear();
     current_index_ = 0;
     cycle_count_ = 0;
+    repress_current_ = false;
     publish_current_remaining();
 }
 

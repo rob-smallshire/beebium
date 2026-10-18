@@ -666,3 +666,35 @@ TEST_CASE("KeyboardService WatchTypingStatus pushes when the machine stops",
     }
     (void)reader->Finish();
 }
+
+TEST_CASE("KeyboardService typing status says when the guest is ready for input",
+          "[grpc][keyboard][typing]") {
+#ifndef BEEBIUM_ROM_DIR
+    SKIP("needs the MOS and BASIC ROMs");
+#else
+    KeyboardTestFixture fixture;
+    auto guest_ready = [&] {
+        grpc::ClientContext context;
+        beebium::TypingStatus status;
+        REQUIRE(fixture.stub()
+                    .GetTypingStatus(&context, beebium::GetTypingStatusRequest{}, &status)
+                    .ok());
+        return status.guest_ready();
+    };
+    constexpr uint64_t half_a_second = 1'000'000;
+
+    // Power-on: not ready while the MOS resets, ready once BASIC asks for a line.
+    CHECK_FALSE(guest_ready());
+    fixture.machine().run(half_a_second);
+    CHECK(guest_ready());
+
+    // Break: not ready while held, nor during the MOS's reset after it.
+    fixture.machine().break_down();
+    CHECK_FALSE(guest_ready());
+    fixture.machine().run(1000);
+    fixture.machine().break_up();
+    CHECK_FALSE(guest_ready());
+    fixture.machine().run(half_a_second);
+    CHECK(guest_ready());
+#endif
+}

@@ -325,6 +325,31 @@ Response:
 
 Each element is a bitmask of pressed columns for that row.
 
+#### Type-ahead and guest readiness
+
+`TypeQuickly` queues text, which the server types by pressing keys in the
+matrix, paced in emulated time. It presses nothing until the guest is ready for
+input: `TypingStatus.guest_ready`, also on every `WatchServerStatus` event, with
+a `SERVER_STATUS_GUEST_READY` event when it is set. That is the first time,
+after a reset, that the guest removes a character from the MOS keyboard buffer:
+an opcode fetch at the address held in the REMV vector (&022C) with X = 0. Every
+MOS text-input path (OSRDCH, OSWORD 0, INKEY) makes that call, whatever the
+language and with or without a Tube, and the vector is read rather than a MOS
+address assumed (IBOS moves it). A reset clears it; a key down at that moment is
+let go and pressed again once the guest is ready.
+
+Earlier is too early. Keys pressed while the MOS resets are lost (with
+`*RUN !BOOT` typed 0.0, 0.1 and 0.3 emulated seconds after power-on a Model B
+said "No such variable", "File not found" and "Syntax error"), and, while the
+ROMs take their reset service calls, read as reset options (an Integra-B started
+without its filing system). The MOS enabling the keyboard interrupt is not
+enough either: it scans once straight afterwards and ignores a key already down.
+
+A guest that never asks the MOS for typed input -- a program scanning the
+keyboard itself, a machine stopped at "Language?" -- holds the queue, and a
+`TypingStatus` with `guest_ready` false and characters pending says so.
+`KeyDown`/`KeyUp`, for game control, are never held.
+
 ### DebuggerControl
 
 Execution control, breakpoints, watchpoints, memory access, and CPU state for 6502-based machines. Available on both host and parasite processors.

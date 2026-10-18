@@ -252,6 +252,7 @@ void KeyboardServiceImpl::snapshot_typing_status(TypingStatus& status) const {
     status.set_pending_characters(static_cast<uint32_t>(type_ahead.pending_characters()));
     status.set_strings_queued(static_cast<uint32_t>(type_ahead.strings_queued()));
     status.set_machine_running(machine_running_());
+    status.set_guest_ready(type_ahead.guest_ready());
 }
 
 grpc::Status KeyboardServiceImpl::WatchTypingStatus(

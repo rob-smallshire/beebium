@@ -598,6 +598,28 @@ class Beebium:
                     f"{list(texts)!r}. Last screen:\n{screen}")
             time.sleep(sample_interval_seconds)
 
+    def wait_until_ready(self) -> None:
+        """Block until the guest has finished resetting and asked for input.
+
+        The server reports the moment, after power-on or a Break, that the
+        guest first asks the MOS for typed input (``guest_ready``): until then
+        the MOS and its ROMs are still resetting. Typing needs no wait, since
+        the server holds type-ahead until that moment; this is for a test that
+        wants boot finished before doing something else. Returns at once if the
+        guest is already ready. The machine must be running to get there.
+
+        Raises:
+            DebuggerError: If the machine is stopped before the guest is ready.
+        """
+        for status in self.keyboard.watch_typing_status():
+            if status.guest_ready:
+                return
+            if not status.machine_running:
+                raise DebuggerError(
+                    "machine is stopped before the guest is ready; nothing will finish "
+                    "its reset -- call debugger.run() first"
+                )
+
     def run_for_emulated_seconds(self, seconds: float) -> None:
         """Run the emulator for the specified number of emulated seconds.
 

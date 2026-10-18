@@ -117,6 +117,12 @@ class _ServerStatusTypeEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Serv
     before the MOS finishes re-initialising, so a consumer that needs the
     re-initialised state should let it settle.
     """
+    SERVER_STATUS_GUEST_READY: _ServerStatusType.ValueType  # 6
+    """The guest has asked for typed input for the first time since the last
+    reset, so the MOS has finished resetting and type-ahead has begun (see
+    TypingStatus.guest_ready). Follows each MACHINE_RESET once the guest
+    reaches that point.
+    """
 
 class ServerStatusType(_ServerStatusType, metaclass=_ServerStatusTypeEnumTypeWrapper):
     """Server status types"""
@@ -151,6 +157,12 @@ A client that mirrors machine state (e.g. keyboard lock state) resyncs on
 this, the same way it does at boot. Fires when the reset is applied,
 before the MOS finishes re-initialising, so a consumer that needs the
 re-initialised state should let it settle.
+"""
+SERVER_STATUS_GUEST_READY: ServerStatusType.ValueType  # 6
+"""The guest has asked for typed input for the first time since the last
+reset, so the MOS has finished resetting and type-ahead has begun (see
+TypingStatus.guest_ready). Follows each MACHINE_RESET once the guest
+reaches that point.
 """
 Global___ServerStatusType: _TypeAlias = ServerStatusType  # noqa: Y015
 
@@ -949,6 +961,7 @@ class ServerStatusEvent(_message.Message):
     SHUTDOWN_CONDITIONS_FIELD_NUMBER: _builtins.int
     RESET_KIND_FIELD_NUMBER: _builtins.int
     TEMPLATE_MEDIA_WRITTEN_FIELD_NUMBER: _builtins.int
+    GUEST_READY_FIELD_NUMBER: _builtins.int
     status: Global___ServerStatusType.ValueType
     """Type of status event"""
     message: _builtins.str
@@ -967,6 +980,11 @@ class ServerStatusEvent(_message.Message):
     saved), so a front-end can ask whether to save it before closing.
     Always false for a saved machine, whose media are its own; a Save
     clears it.
+    """
+    guest_ready: _builtins.bool
+    """On every event: whether the guest has asked for typed input since its
+    last reset (see TypingStatus.guest_ready). GUEST_READY reports it
+    becoming true; MACHINE_RESET is when it becomes false.
     """
     @_builtins.property
     def identity(self) -> Global___MachineIdentity:
@@ -988,10 +1006,11 @@ class ServerStatusEvent(_message.Message):
         shutdown_conditions: _abc.Iterable[Global___ShutdownConditionStatus] | None = ...,
         reset_kind: Global___ResetKind.ValueType = ...,
         template_media_written: _builtins.bool = ...,
+        guest_ready: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "message", b"message", "reset_kind", b"reset_kind", "shutdown_conditions", b"shutdown_conditions", "shutdown_grace_ms", b"shutdown_grace_ms", "status", b"status", "template_media_written", b"template_media_written"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["guest_ready", b"guest_ready", "identity", b"identity", "message", b"message", "reset_kind", b"reset_kind", "shutdown_conditions", b"shutdown_conditions", "shutdown_grace_ms", b"shutdown_grace_ms", "status", b"status", "template_media_written", b"template_media_written"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

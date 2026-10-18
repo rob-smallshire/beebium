@@ -36,6 +36,7 @@ class ServerStatus(Enum):
     SHUTDOWN_PROGRESS = "shutdown_progress"
     HEARTBEAT = "heartbeat"
     MACHINE_RESET = "machine_reset"
+    GUEST_READY = "guest_ready"  # the guest asked for typed input after a reset
 
 
 class ResetKind(Enum):
@@ -316,6 +317,9 @@ class ServerStatusEvent:
     # On every event: a machine not yet saved has written to the copies of the
     # media its template named, which are lost unless it is saved.
     template_media_written: bool = False
+    # On every event: the guest has asked for typed input since its last reset
+    # (see Keyboard.typing_status()); GUEST_READY reports it becoming true.
+    guest_ready: bool = False
 
 
 @dataclass(frozen=True)
@@ -549,6 +553,8 @@ class System:
                     reset_kind = ResetKind.SOFT
                 elif response.reset_kind == system_pb2.RESET_KIND_HARD:
                     reset_kind = ResetKind.HARD
+            elif response.status == system_pb2.SERVER_STATUS_GUEST_READY:
+                status = ServerStatus.GUEST_READY
             elif response.status == system_pb2.SERVER_STATUS_SHUTDOWN_PROGRESS:
                 status = ServerStatus.SHUTDOWN_PROGRESS
                 # Parse shutdown condition status
@@ -573,6 +579,7 @@ class System:
                 shutdown_conditions=conditions,
                 reset_kind=reset_kind,
                 template_media_written=response.template_media_written,
+                guest_ready=response.guest_ready,
             )
 
     @property

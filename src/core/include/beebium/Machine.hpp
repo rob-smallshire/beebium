@@ -67,6 +67,10 @@ using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint
 // settle (as the boot-time resync already does).
 using MachineResetCallback = std::function<void(bool hard)>;
 
+// Called on the emulation thread when the guest first asks for typed input
+// after a reset (see Machine::note_guest_ready()).
+using GuestReadyCallback = std::function<void()>;
+
 // Watchpoint hit callback: same type as CpuBinding's inline check callback
 using WatchpointHitCallback = CpuWatchpointHitCallback;
 
@@ -150,6 +154,7 @@ public:
         in_reset_ = false;
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
+        state_.memory.system_via_peripheral.type_ahead().set_guest_ready(false);
         ++sequence_;
         if (on_reset_) on_reset_(/*hard=*/true);
     }
@@ -173,6 +178,7 @@ public:
         in_reset_ = false;
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
+        state_.memory.system_via_peripheral.type_ahead().set_guest_ready(false);
         ++sequence_;
         if (on_reset_) on_reset_(/*hard=*/false);
     }
@@ -192,6 +198,8 @@ public:
         with_emulation_paused([this] {
             in_reset_ = true;
             M6502_Halt(&state_.cpu);
+            // A key down when Break is released is a reset option, not input.
+            state_.memory.system_via_peripheral.type_ahead().set_guest_ready(false);
             ++sequence_;
         });
     }
@@ -297,6 +305,7 @@ public:
         }
 
         // Tick the type-ahead queue to process queued keystrokes
+        note_guest_ready();
         state_.memory.system_via_peripheral.tick_type_ahead();
 
         // Tick Econet ADLC at 2MHz (no-op when socket is empty).
@@ -745,6 +754,10 @@ public:
     // soft_reset()). Set by the server bootstrap to surface a machine-reset
     // event to clients. Not set during construction, so the power-on reset() in
     // the constructor does not fire it.
+    void set_guest_ready_callback(GuestReadyCallback cb) {
+        on_guest_ready_ = std::move(cb);
+    }
+
     void set_reset_callback(MachineResetCallback cb) {
         on_reset_ = std::move(cb);
     }
@@ -891,6 +904,27 @@ private:
     bool step_over_breakpoints_ = false;
     uint64_t step_over_cycle_ = 0;
     MachineResetCallback on_reset_;                     // fired on reset()/soft_reset()
+    GuestReadyCallback on_guest_ready_;                 // fired by note_guest_ready()
+
+    // The guest is ready for typed input from the first time, after a reset,
+    // that it removes a character from the MOS keyboard buffer: an opcode
+    // fetch at the address in the REMV vector (&022C) with X = 0 (the
+    // keyboard buffer). Every MOS text-input path -- OSRDCH, OSWORD 0, INKEY
+    // -- goes through it, whatever the language, and with a Tube the host
+    // makes the call for the parasite's language. Reading the vector rather
+    // than a fixed address follows a MOS or ROM that moves it (IBOS does).
+    // Earlier, during the MOS's reset and its ROMs' reset service calls, a
+    // key down is lost or read as a reset option. Costs a check of each
+    // instruction boundary only until set, then one atomic load a cycle.
+    void note_guest_ready() {
+        auto& type_ahead = state_.memory.system_via_peripheral.type_ahead();
+        if (type_ahead.guest_ready() || !M6502_IsAboutToExecute(&state_.cpu)) return;
+        const uint16_t remv = static_cast<uint16_t>(
+            state_.memory.peek(0x022C) | (state_.memory.peek(0x022D) << 8));
+        if (state_.cpu.opcode_pc.w != remv || state_.cpu.x != 0) return;
+        type_ahead.set_guest_ready(true);
+        if (on_guest_ready_) on_guest_ready_();
+    }
     std::vector<WatchpointEntry> watchpoint_entries_;   // sorted by start, modified only while stopped
     WatchpointHitCallback on_watchpoint_hit_;           // rare-path callback
     ProgramCounterHistogram* pc_histogram_ = nullptr;

@@ -115,6 +115,22 @@ public:
         return status_sequence_.load(std::memory_order_acquire);
     }
 
+    // Whether the guest has asked for typed input since its last reset: the
+    // first removal of a character from the MOS keyboard buffer (a fetch at
+    // the address in the REMV vector with X = 0), which the machine detects
+    // and reports here. Keys pressed earlier land in the MOS's reset, where
+    // they are lost or read as reset options, so nothing is pressed until it
+    // is set. A reset clears it; a string in progress then pauses, releasing
+    // its key, and that character is pressed again once the guest is ready.
+    // True until a machine first clears it, so a queue on its own types at
+    // once.
+    bool guest_ready() const { return guest_ready_.load(std::memory_order_acquire); }
+    void set_guest_ready(bool ready) {
+        if (guest_ready_.exchange(ready, std::memory_order_acq_rel) != ready) {
+            note_status_change();
+        }
+    }
+
     // The mutex guarding the queue of pending strings. Exposed so a test can
     // hold it while ticking an idle queue and so prove the idle path is
     // lock-free. Not for use outside tests.
@@ -170,6 +186,9 @@ private:
     // progress; consumed by tick().
     std::atomic<bool> cancel_requested_{false};
 
+    // See guest_ready().
+    std::atomic<bool> guest_ready_{true};
+
     // Bytes of the current string not yet consumed, zero when idle. Written
     // by the emulator thread, read by status queries on other threads.
     std::atomic<size_t> current_remaining_{0};
@@ -181,6 +200,9 @@ private:
     size_t current_hold_cycles_ = DEFAULT_HOLD_CYCLES;
     size_t current_gap_cycles_ = DEFAULT_GAP_CYCLES;
     size_t cycle_count_ = 0;
+    // Set when a reset cut the current character short, so it is pressed
+    // again rather than skipped (emulator thread).
+    bool repress_current_ = false;
 
     // Bumped on every observable change; see status_sequence(). Atomic rather
     // than mutex-protected so a watcher can check for changes without

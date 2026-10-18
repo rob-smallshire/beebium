@@ -283,3 +283,47 @@ TEST_CASE("TypeAheadQueue: enqueue from another thread is picked up by tick", "[
     queue.tick();
     CHECK(pressed(keyboard, a));
 }
+
+TEST_CASE("TypeAheadQueue: nothing is pressed until the guest is ready", "[keyboard][typeahead]") {
+    KeyboardMatrix keyboard;
+    TypeAheadQueue queue(keyboard);
+    queue.set_guest_ready(false);
+    const auto a = mapping_for(U'A');
+
+    REQUIRE(queue.enqueue("A", HOLD, GAP));
+    tick_n(queue, 1000);
+    CHECK_FALSE(pressed(keyboard, a));
+    CHECK(queue.pending_characters() == 1);
+
+    const auto sequence_before = queue.status_sequence();
+    queue.set_guest_ready(true);
+    CHECK(queue.status_sequence() != sequence_before);  // a watcher is told
+    tick_n(queue, 1);
+    CHECK(pressed(keyboard, a));
+}
+
+TEST_CASE("TypeAheadQueue: a reset part-way through a key presses it again once ready",
+          "[keyboard][typeahead]") {
+    KeyboardMatrix keyboard;
+    TypeAheadQueue queue(keyboard);
+    const auto a = mapping_for(U'A');
+    const auto b = mapping_for(U'B');
+
+    REQUIRE(queue.enqueue("AB", HOLD, GAP));
+    tick_n(queue, 3);
+    REQUIRE(pressed(keyboard, a));
+
+    queue.set_guest_ready(false);  // Break
+    tick_n(queue, 1);
+    CHECK_FALSE(pressed(keyboard, a));  // a key down at reset is a reset option
+    tick_n(queue, 1000);
+    CHECK_FALSE(pressed(keyboard, a));
+    CHECK_FALSE(pressed(keyboard, b));
+    CHECK(queue.pending_characters() == 2);
+
+    queue.set_guest_ready(true);
+    tick_n(queue, 1);
+    CHECK(pressed(keyboard, a));  // A again, not B
+    tick_n(queue, HOLD + GAP);
+    CHECK(pressed(keyboard, b));
+}

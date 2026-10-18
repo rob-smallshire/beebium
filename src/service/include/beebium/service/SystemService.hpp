@@ -233,6 +233,10 @@ public:
     /// an atomic generation and notifies the watchers' condition variable).
     void notify_machine_reset(bool hard);
 
+    /// The guest has asked for typed input since its last reset; emits
+    /// GUEST_READY to every watcher. Safe on the emulation thread.
+    void notify_guest_ready();
+
     /// Set the server port after it's determined.
     /// Must be called before advertisement can work correctly.
     void set_server_port(uint16_t port);
@@ -293,6 +297,8 @@ private:
     bool write_event(grpc::ServerWriter<ServerStatusEvent>* writer, ServerStatusEvent& event) {
         event.set_template_media_written(machine_store_ &&
                                          machine_store_->template_media_written());
+        event.set_guest_ready(
+            machine_.state().memory.system_via_peripheral.type_ahead().guest_ready());
         return writer->Write(event);
     }
 
@@ -327,6 +333,7 @@ private:
     // so every watcher sees every reset (coalescing bursts to the latest).
     std::atomic<uint64_t> reset_generation_{0};
     std::atomic<bool> last_reset_hard_{false};
+    std::atomic<uint64_t> guest_ready_generation_{0};
 
     // Description templates (#153).
     const NamePlaceholderRegistry* description_placeholders_ = nullptr;
@@ -786,6 +793,7 @@ grpc::Status SystemServiceImpl<MachineType>::WatchServerStatus(
     // reset that happened before this subscription is not replayed (the client
     // resyncs on the READY event above), and every later reset is delivered.
     uint64_t last_reset_gen = reset_generation_.load(std::memory_order_acquire);
+    uint64_t last_ready_gen = guest_ready_generation_.load(std::memory_order_acquire);
 
     // Wait for events in a loop
     // Use wait_for with timeout to periodically check for client cancellation,
@@ -793,10 +801,11 @@ grpc::Status SystemServiceImpl<MachineType>::WatchServerStatus(
     while (!context->IsCancelled()) {
         std::unique_lock<std::mutex> lock(watchers_mutex_);
         watchers_cv_.wait_for(lock, std::chrono::milliseconds(100),
-                              [this, context, last_reset_gen] {
+                              [this, context, last_reset_gen, last_ready_gen] {
             return shutdown_signaled_.load() ||
                    identity_changed_.load() ||
                    reset_generation_.load(std::memory_order_acquire) != last_reset_gen ||
+                   guest_ready_generation_.load(std::memory_order_acquire) != last_ready_gen ||
                    context->IsCancelled();
         });
 
@@ -814,6 +823,18 @@ grpc::Status SystemServiceImpl<MachineType>::WatchServerStatus(
             event.set_status(SERVER_STATUS_MACHINE_RESET);
             event.set_reset_kind(last_reset_hard_.load() ? RESET_KIND_HARD
                                                          : RESET_KIND_SOFT);
+            if (!write_event(writer, event)) {
+                break;
+            }
+        }
+
+        // The guest asking for input after a reset: one event per generation,
+        // after the reset it follows.
+        uint64_t ready_gen = guest_ready_generation_.load(std::memory_order_acquire);
+        if (ready_gen != last_ready_gen) {
+            last_ready_gen = ready_gen;
+            ServerStatusEvent event;
+            event.set_status(SERVER_STATUS_GUEST_READY);
             if (!write_event(writer, event)) {
                 break;
             }
@@ -872,6 +893,12 @@ template<typename MachineType>
 void SystemServiceImpl<MachineType>::notify_machine_reset(bool hard) {
     last_reset_hard_.store(hard);
     reset_generation_.fetch_add(1, std::memory_order_release);
+    watchers_cv_.notify_all();
+}
+
+template<typename MachineType>
+void SystemServiceImpl<MachineType>::notify_guest_ready() {
+    guest_ready_generation_.fetch_add(1, std::memory_order_release);
     watchers_cv_.notify_all();
 }
 

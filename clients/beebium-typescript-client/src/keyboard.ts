@@ -39,13 +39,15 @@ import type { Beebium } from "./client.js";
 /**
  * State of the server's type-ahead queue. `machineRunning` is the server's
  * word on whether the emulator is running: only a running machine drains
- * the queue.
+ * the queue. `guestReady` is its word on whether the guest has asked for
+ * typed input since its last reset; nothing is typed until it has.
  */
 export interface TypingQueueStatus {
     idle: boolean;
     pendingCharacters: number;
     stringsQueued: number;
     machineRunning: boolean;
+    guestReady: boolean;
 }
 
 function typingQueueStatus(proto: TypingStatus): TypingQueueStatus {
@@ -54,6 +56,7 @@ function typingQueueStatus(proto: TypingStatus): TypingQueueStatus {
         pendingCharacters: proto.pendingCharacters,
         stringsQueued: proto.stringsQueued,
         machineRunning: proto.machineRunning,
+        guestReady: proto.guestReady,
     };
 }
 
@@ -662,6 +665,13 @@ export class Keyboard {
      * once if the machine is stopped with characters pending, on entry or
      * part way through. Call `debugger.run()` before waiting. Use
      * `clearTyping()` to stop waiting early.
+     *
+     * The server types nothing until the guest has asked for typed input
+     * after its last reset (`guestReady`; see `Beebium.waitUntilReady()`), and
+     * this waits through that too. A guest that never asks the MOS for input
+     * (one scanning the keyboard itself, a machine stopped at "Language?")
+     * holds the queue; game control belongs to `keyDown`/`keyUp`, which are
+     * never held.
      *
      * @throws DebuggerError If the machine is stopped with characters pending.
      */
