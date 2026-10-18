@@ -14,6 +14,7 @@
 
 #include "Export.hpp"
 #include "CpuDescriptor.hpp"
+#include "beebium/DebugVariable.hpp"
 #include "beebium/MemoryRegion.hpp"
 #include "beebium/Types.hpp"
 
@@ -139,6 +140,11 @@ public:
     virtual const std::vector<WatchpointEntry>& watchpoint_entries() const = 0;
     virtual void set_watchpoint_entries(std::vector<WatchpointEntry> entries) = 0;
     virtual void set_watchpoint_hit_callback(WatchpointHitCallback cb) = 0;
+
+    // The values, beyond the CPU's registers, that a breakpoint or watchpoint
+    // condition can name on this target: its paging latches and the like (see
+    // DebugVariable). Empty for a target with none, as a coprocessor has.
+    virtual std::vector<DebugVariable> debug_variables() const { return {}; }
 };
 
 }  // namespace beebium

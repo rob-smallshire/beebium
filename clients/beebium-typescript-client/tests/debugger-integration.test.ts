@@ -568,3 +568,28 @@ describe("Debugger: CPU State", () => {
         });
     });
 });
+
+// =========================================================================
+// Condition variables (#186)
+// =========================================================================
+
+describe("Debugger: condition variables", () => {
+    it("lists the machine's names and refuses an unknown one by name", async () => {
+        await withServer(async (conn) => {
+            const dbg = new Debugger(conn.debuggerStub);
+            const variables = await dbg.conditionVariables();
+            const names = (scope: string) =>
+                variables.filter((v) => v.scope === scope).map((v) => v.name).sort();
+            expect(names("machine")).toEqual(["bank", "romsel"]);
+            expect(names("watchpoint")).toEqual(["addr", "value", "write"]);
+            expect(names("built_in")).toEqual(expect.arrayContaining(["A", "PC", "cycles", "hits"]));
+            expect(variables.every((v) => v.description.length > 0)).toBe(true);
+
+            const id = await dbg.addBreakpoint(0x0400, { condition: "bank == 15" });
+            await dbg.removeBreakpoint(id);
+            await expect(dbg.addBreakpoint(0x0400, { condition: "vdusel" })).rejects.toThrow(
+                /no variable 'vdusel' on model-b/,
+            );
+        });
+    });
+});

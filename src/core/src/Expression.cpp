@@ -26,7 +26,8 @@ namespace beebium {
 
 uint64_t evaluate(const CompiledExpression& expr,
                   const ExprCpuState& cpu,
-                  PeekFunction peek, void* peek_context) {
+                  PeekFunction peek, void* peek_context,
+                  VariableReader read_variable, void* variable_context) {
     // Small fixed-size stack (expressions are shallow)
     std::array<uint64_t, 32> stack{};
     int sp = 0;
@@ -79,6 +80,11 @@ uint64_t evaluate(const CompiledExpression& expr,
         case ExprOp::LogAnd: { auto b = pop(); auto a = pop(); push((a && b) ? 1ULL : 0ULL); break; }
         case ExprOp::LogOr:  { auto b = pop(); auto a = pop(); push((a || b) ? 1ULL : 0ULL); break; }
         case ExprOp::LogNot: { auto a = pop(); push(a ? 0u : 1u); break; }
+        case ExprOp::PushVar: {
+            const auto slot = static_cast<uint32_t>(expr.constants[static_cast<size_t>(const_idx++)]);
+            push(read_variable ? read_variable(variable_context, slot) : 0);
+            break;
+        }
         }
     }
 
@@ -91,8 +97,32 @@ uint64_t evaluate(const CompiledExpression& expr,
 
 namespace {
 
+struct BuiltIn {
+    std::string_view name;
+    ExprOp op;
+    std::string_view description;
+};
+
+constexpr BuiltIn BUILT_INS[] = {
+    {"A", ExprOp::PushA, "The accumulator."},
+    {"X", ExprOp::PushX, "The X index register."},
+    {"Y", ExprOp::PushY, "The Y index register."},
+    {"SP", ExprOp::PushSP, "The stack pointer."},
+    {"PC", ExprOp::PushPC, "The program counter."},
+    {"P", ExprOp::PushP, "The processor status register."},
+    {"C", ExprOp::PushC, "The carry flag, 0 or 1."},
+    {"Z", ExprOp::PushZ, "The zero flag, 0 or 1."},
+    {"I", ExprOp::PushI, "The interrupt-disable flag, 0 or 1."},
+    {"D", ExprOp::PushD, "The decimal flag, 0 or 1."},
+    {"V", ExprOp::PushV, "The overflow flag, 0 or 1."},
+    {"N", ExprOp::PushN, "The negative flag, 0 or 1."},
+    {"cycles", ExprOp::PushCycles, "The CPU cycle count."},
+    {"hits", ExprOp::PushHits, "How many times this breakpoint or watchpoint has matched."},
+};
+
 struct Parser {
     std::string_view src;
+    const ExprScope* scope = nullptr;
     size_t pos = 0;
     CompiledExpression result;
     std::string error;
@@ -240,35 +270,13 @@ struct Parser {
             return;
         }
 
-        // Boolean literals
-        if (match("true"))  { emit_const(1); return; }
-        if (match("false")) { emit_const(0); return; }
-
-        // Memory dereference: mem[expr]
-        if (match("mem")) {
-            if (!match('[')) { set_error("expected '[' after 'mem'"); return; }
-            parse_expr();
-            if (!match(']')) { set_error("expected ']'"); return; }
-            emit(ExprOp::MemPeek);
+        // A name, read whole: a built-in (the CPU's registers and flags, which
+        // are upper case, then cycles, hits, true, false and mem[...]), or
+        // else a variable the scope names.
+        if (std::isalpha(static_cast<unsigned char>(src[pos])) || src[pos] == '_') {
+            parse_name();
             return;
         }
-
-        // Registers (check multi-char names before single-char to avoid
-        // matching 'S' prefix of 'SP', 'P' prefix of 'PC')
-        if (match("SP"))     { emit(ExprOp::PushSP); return; }
-        if (match("PC"))     { emit(ExprOp::PushPC); return; }
-        if (match("cycles")) { emit(ExprOp::PushCycles); return; }
-        if (match("hits"))   { emit(ExprOp::PushHits); return; }
-        if (match("A"))  { emit(ExprOp::PushA); return; }
-        if (match("X"))  { emit(ExprOp::PushX); return; }
-        if (match("Y"))  { emit(ExprOp::PushY); return; }
-        if (match("P"))  { emit(ExprOp::PushP); return; }
-        if (match("C"))  { emit(ExprOp::PushC); return; }
-        if (match("Z"))  { emit(ExprOp::PushZ); return; }
-        if (match("I"))  { emit(ExprOp::PushI); return; }
-        if (match("D"))  { emit(ExprOp::PushD); return; }
-        if (match("V"))  { emit(ExprOp::PushV); return; }
-        if (match("N"))  { emit(ExprOp::PushN); return; }
 
         // Number literals: 0x hex, 0b binary, decimal
         if (std::isdigit(static_cast<unsigned char>(src[pos]))) {
@@ -277,6 +285,43 @@ struct Parser {
         }
 
         set_error(std::string("unexpected character '") + src[pos] + "'");
+    }
+
+    void parse_name() {
+        const size_t start = pos;
+        while (pos < src.size() &&
+               (std::isalnum(static_cast<unsigned char>(src[pos])) || src[pos] == '_')) {
+            ++pos;
+        }
+        const std::string_view name = src.substr(start, pos - start);
+
+        for (const auto& built_in : BUILT_INS) {
+            if (name == built_in.name) { emit(built_in.op); return; }
+        }
+        if (name == "true")  { emit_const(1); return; }
+        if (name == "false") { emit_const(0); return; }
+        if (name == "mem") {
+            if (!match('[')) { set_error("expected '[' after 'mem'"); return; }
+            parse_expr();
+            if (!match(']')) { set_error("expected ']'"); return; }
+            emit(ExprOp::MemPeek);
+            return;
+        }
+        if (scope) {
+            for (const auto& [variable, slot] : scope->variables) {
+                if (name == variable) {
+                    emit(ExprOp::PushVar);
+                    result.constants.push_back(slot);
+                    return;
+                }
+            }
+        }
+        pos = start;
+        if (scope && scope->unknown_name) {
+            if (error.empty()) error = scope->unknown_name(name);
+        } else {
+            set_error("unknown name '" + std::string(name) + "'");
+        }
     }
 
     void parse_number() {
@@ -317,13 +362,26 @@ struct Parser {
 
 } // anonymous namespace
 
-std::variant<CompiledExpression, std::string> compile(std::string_view source) {
+const std::vector<ExprBuiltIn>& expression_built_ins() {
+    static const std::vector<ExprBuiltIn> built_ins = [] {
+        std::vector<ExprBuiltIn> names;
+        for (const auto& built_in : BUILT_INS) {
+            names.push_back({built_in.name, built_in.description});
+        }
+        return names;
+    }();
+    return built_ins;
+}
+
+std::variant<CompiledExpression, std::string> compile(std::string_view source,
+                                                      const ExprScope& scope) {
     if (source.empty()) {
         return std::string("empty expression");
     }
 
     Parser parser;
     parser.src = source;
+    parser.scope = &scope;
     parser.result.source = std::string(source);
     parser.parse_expr();
 

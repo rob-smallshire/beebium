@@ -10,8 +10,9 @@ import type {
     ExecutionStateEvent as ProtoExecutionStateEvent,
     StepResponse as ProtoStepResponse,
     Breakpoint as ProtoBreakpoint,
+    CpuDescriptor as ProtoCpuDescriptor,
 } from "./generated/debugger.js";
-import { StopReason } from "./generated/debugger.js";
+import { ConditionVariableScope, StopReason } from "./generated/debugger.js";
 import { promisify } from "./call-utils.js";
 import { toAsyncIterable } from "./stream-utils.js";
 import { DebuggerError, InvalidConditionError } from "./exceptions.js";
@@ -114,6 +115,19 @@ function toExecutionStateEvent(proto: ProtoExecutionStateEvent): ExecutionStateE
 }
 
 /**
+ * A name a breakpoint or watchpoint condition can use on this machine, as the
+ * server lists it (see `Debugger.conditionVariables()`). `scope` is
+ * "built_in" (on every target: registers, flags, cycles, hits), "machine"
+ * (this machine's latches, in any condition) or "watchpoint" (about the
+ * access a watchpoint judges, so in watchpoint conditions only).
+ */
+export interface ConditionVariable {
+    name: string;
+    description: string;
+    scope: "built_in" | "machine" | "watchpoint";
+}
+
+/**
  * Debugger control interface.
  *
  * Provides execution control, stepping, and breakpoint management.
@@ -133,6 +147,31 @@ export class Debugger {
             {},
         );
         return toExecutionState(response);
+    }
+
+    /**
+     * Every name a breakpoint or watchpoint condition can use on this machine,
+     * with what it means, as the server lists it: exactly what its condition
+     * compiler accepts. A watchpoint's conditions can also name the access it
+     * judges (`addr`, `value`, `write` and, with shadow RAM, `shadow_access`),
+     * listed with scope "watchpoint".
+     */
+    async conditionVariables(): Promise<ConditionVariable[]> {
+        const descriptor = await promisify<{}, ProtoCpuDescriptor>(
+            this.stub as unknown as Record<string, Function>,
+            "getCpuDescriptor",
+            {},
+        );
+        const scopes: Record<number, ConditionVariable["scope"]> = {
+            [ConditionVariableScope.CONDITION_VARIABLE_BUILT_IN]: "built_in",
+            [ConditionVariableScope.CONDITION_VARIABLE_MACHINE]: "machine",
+            [ConditionVariableScope.CONDITION_VARIABLE_WATCHPOINT]: "watchpoint",
+        };
+        return descriptor.conditionVariables.map((variable) => ({
+            name: variable.name,
+            description: variable.description,
+            scope: scopes[variable.scope]!,
+        }));
     }
 
     /**
@@ -253,6 +292,10 @@ export class Debugger {
      * @param options.endAddress - End address (exclusive). 0 = address+1 (single address).
      *   Use 0x10000 for a full-range breakpoint that fires at every instruction boundary.
      * @param options.condition - Expression evaluated on hit. Empty = unconditional.
+     *   Besides the registers it can name the machine's own latches (`bank` and
+     *   `romsel` on every model; `acccon`, `vdusel`, `shen` and the like on some);
+     *   `conditionVariables()` lists exactly what this machine accepts, and any
+     *   other name is refused, naming it.
      *   A `cycles` condition is evaluated at instruction boundaries, so on a running CPU it
      *   stops at the first boundary at or after the target (never mid-instruction). While the
      *   CPU is halted (Break/reset held, or jammed on a KIL opcode) there are no boundaries,
@@ -354,6 +397,8 @@ export class Debugger {
      * @param endAddress - End address (exclusive).
      * @param type - Access type to watch.
      * @param options.condition - Expression evaluated on hit. Empty = unconditional.
+     *   As for a breakpoint, plus the access it judges: `addr`, `value`, `write`
+     *   (1 for a write) and, on a machine with shadow RAM, `shadow_access`.
      * @param options.stopCounterpart - Signal the other processor to stop.
      */
     async addWatchpoint(

@@ -13,8 +13,10 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -54,6 +56,10 @@ enum class ExprOp : uint8_t {
 
     // Unary (pop one, push result)
     LogNot,
+
+    // Push a variable the compiling scope named: the next constant is its
+    // slot, which the evaluator's VariableReader resolves.
+    PushVar,
 };
 
 // Compiled expression bytecode.
@@ -78,15 +84,41 @@ struct ExprCpuState {
 // Function type for side-effect-free memory read.
 using PeekFunction = uint8_t(*)(void* context, uint16_t addr);
 
-// Evaluate a compiled expression against CPU state.
+// Function type reading the variable in a slot a scope assigned.
+using VariableReader = uint64_t(*)(void* context, uint32_t slot);
+
+// The names a condition may use beyond the built-ins (the CPU registers and
+// flags, cycles, hits, mem[], true and false), each with the slot the
+// evaluator reads it from, and what to say about a name that is not one of
+// them.
+struct ExprScope {
+    std::vector<std::pair<std::string, uint32_t>> variables;
+    std::function<std::string(std::string_view name)> unknown_name;
+};
+
+// Evaluate a compiled expression against CPU state, reading any variables
+// through `read_variable`.
 // Returns the top-of-stack value (truthy if non-zero).
 uint64_t evaluate(const CompiledExpression& expr,
                   const ExprCpuState& cpu,
-                  PeekFunction peek, void* peek_context);
+                  PeekFunction peek, void* peek_context,
+                  VariableReader read_variable = nullptr, void* variable_context = nullptr);
 
-// Parse and compile an expression string.
-// Returns the compiled expression on success, or a string error message.
-std::variant<CompiledExpression, std::string> compile(std::string_view source);
+// A name every condition can use, whatever the machine: the CPU's registers
+// and flags, cycles and hits.
+struct ExprBuiltIn {
+    std::string_view name;
+    std::string_view description;  // one line
+};
+
+// The built-in names, in display order (mem[], true and false aside).
+const std::vector<ExprBuiltIn>& expression_built_ins();
+
+// Parse and compile an expression string, resolving names beyond the built-ins
+// against `scope`. Returns the compiled expression on success, or a string
+// error message.
+std::variant<CompiledExpression, std::string> compile(std::string_view source,
+                                                      const ExprScope& scope = {});
 
 
 } // namespace beebium

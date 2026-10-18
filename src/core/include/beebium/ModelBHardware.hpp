@@ -22,6 +22,7 @@
 #include "IrqAggregator.hpp"
 #include "PacingConfig.hpp"
 #include "MemoryMap.hpp"
+#include "DebugVariable.hpp"
 #include "MemoryRegion.hpp"
 #include "MotherboardLinks.hpp"
 #include "OutputQueue.hpp"
@@ -739,6 +740,11 @@ public:
         }
 
         return regions;
+    }
+
+    // The values a debugger condition can name on this machine (DebugVariable).
+    std::vector<DebugVariable> debug_variables() const {
+        return romsel_variables([this] { return uint64_t{sideways.selected_bank()}; });
     }
 
     /// Where the region `name` lies, which a by-name access is checked

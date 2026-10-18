@@ -693,6 +693,20 @@ Coprocessor:
 same plus `insertion` (`{key}`), with `value` `null` where it is only known at
 launch. Like the other discovery commands, this needs no running emulator.
 
+### describe-conditions
+
+List every name a debugger breakpoint or watchpoint condition can use on this
+model, with what it means and where it applies: `built_in` (the CPU's
+registers and flags, `cycles`, `hits`), `machine` (this model's latches, such
+as `bank` and `romsel`, and on a B+ `acccon` and `vdusel`) and `watchpoint`
+(the access a watchpoint judges: `addr`, `value`, `write`, and `shadow_access`
+on a model with shadow RAM). The same list `GetCpuDescriptor` gives for a
+running machine. Honours `--format`.
+
+```bash
+beebium-model-b-plus --format tsv describe-conditions
+```
+
 ### describe-preset-schema
 
 Output what a preset for this model may contain, as JSON: one section per

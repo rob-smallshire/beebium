@@ -99,6 +99,41 @@ STACK_POINTER: RegisterRole.ValueType  # 2
 FLAGS: RegisterRole.ValueType  # 3
 Global___RegisterRole: _TypeAlias = RegisterRole  # noqa: Y015
 
+class _ConditionVariableScope:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _ConditionVariableScopeEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_ConditionVariableScope.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    CONDITION_VARIABLE_BUILT_IN: _ConditionVariableScope.ValueType  # 0
+    """On every target: the CPU's registers and flags, cycles and hits."""
+    CONDITION_VARIABLE_MACHINE: _ConditionVariableScope.ValueType  # 1
+    """This machine's own, read from its latches (bank, romsel, and on some
+    models acccon, vdusel, shen, ...), in breakpoint and watchpoint
+    conditions alike.
+    """
+    CONDITION_VARIABLE_WATCHPOINT: _ConditionVariableScope.ValueType  # 2
+    """About the access a watchpoint judges -- addr, value, write and, on a
+    machine with shadow RAM, shadow_access -- so in watchpoint conditions
+    only.
+    """
+
+class ConditionVariableScope(_ConditionVariableScope, metaclass=_ConditionVariableScopeEnumTypeWrapper): ...
+
+CONDITION_VARIABLE_BUILT_IN: ConditionVariableScope.ValueType  # 0
+"""On every target: the CPU's registers and flags, cycles and hits."""
+CONDITION_VARIABLE_MACHINE: ConditionVariableScope.ValueType  # 1
+"""This machine's own, read from its latches (bank, romsel, and on some
+models acccon, vdusel, shen, ...), in breakpoint and watchpoint
+conditions alike.
+"""
+CONDITION_VARIABLE_WATCHPOINT: ConditionVariableScope.ValueType  # 2
+"""About the access a watchpoint judges -- addr, value, write and, on a
+machine with shadow RAM, shadow_access -- so in watchpoint conditions
+only.
+"""
+Global___ConditionVariableScope: _TypeAlias = ConditionVariableScope  # noqa: Y015
+
 @_typing.final
 class Empty(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
@@ -986,6 +1021,7 @@ class CpuDescriptor(_message.Message):
     LITTLE_ENDIAN_FIELD_NUMBER: _builtins.int
     REGISTERS_FIELD_NUMBER: _builtins.int
     SIGNALS_FIELD_NUMBER: _builtins.int
+    CONDITION_VARIABLES_FIELD_NUMBER: _builtins.int
     family: _builtins.str
     """"6502", "z80", "6809", "ns32016", "80186" """
     address_bits: _builtins.int
@@ -999,6 +1035,14 @@ class CpuDescriptor(_message.Message):
     def signals(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """interrupt line names, e.g. "IRQ", "NMI" """
 
+    @_builtins.property
+    def condition_variables(self) -> _containers.RepeatedCompositeFieldContainer[Global___ConditionVariable]:
+        """Every name a breakpoint or watchpoint condition can use on this target,
+        exactly what the condition compiler accepts; anything else is refused
+        with INVALID_ARGUMENT naming it. Clients list these rather than carry
+        their own.
+        """
+
     def __init__(
         self,
         *,
@@ -1007,14 +1051,41 @@ class CpuDescriptor(_message.Message):
         little_endian: _builtins.bool = ...,
         registers: _abc.Iterable[Global___RegisterDescriptor] | None = ...,
         signals: _abc.Iterable[_builtins.str] | None = ...,
+        condition_variables: _abc.Iterable[Global___ConditionVariable] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["address_bits", b"address_bits", "family", b"family", "little_endian", b"little_endian", "registers", b"registers", "signals", b"signals"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["address_bits", b"address_bits", "condition_variables", b"condition_variables", "family", b"family", "little_endian", b"little_endian", "registers", b"registers", "signals", b"signals"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___CpuDescriptor: _TypeAlias = CpuDescriptor  # noqa: Y015
+
+@_typing.final
+class ConditionVariable(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    SCOPE_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    description: _builtins.str
+    """one line"""
+    scope: Global___ConditionVariableScope.ValueType
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        description: _builtins.str = ...,
+        scope: Global___ConditionVariableScope.ValueType = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "name", b"name", "scope", b"scope"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ConditionVariable: _TypeAlias = ConditionVariable  # noqa: Y015
 
 @_typing.final
 class RegisterValue(_message.Message):

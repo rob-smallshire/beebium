@@ -343,6 +343,31 @@ message CpuDescriptor {
     bool little_endian = 3;
     repeated RegisterDescriptor registers = 4;  // display order
     repeated string signals = 5;     // interrupt line names, e.g. "IRQ", "NMI"
+
+    // Every name a breakpoint or watchpoint condition can use on this target,
+    // exactly what the condition compiler accepts; anything else is refused
+    // with INVALID_ARGUMENT naming it. Clients list these rather than carry
+    // their own.
+    repeated ConditionVariable condition_variables = 6;
+}
+
+message ConditionVariable {
+    string name = 1;
+    string description = 2;  // one line
+    ConditionVariableScope scope = 3;
+}
+
+enum ConditionVariableScope {
+    // On every target: the CPU's registers and flags, cycles and hits.
+    CONDITION_VARIABLE_BUILT_IN = 0;
+    // This machine's own, read from its latches (bank, romsel, and on some
+    // models acccon, vdusel, shen, ...), in breakpoint and watchpoint
+    // conditions alike.
+    CONDITION_VARIABLE_MACHINE = 1;
+    // About the access a watchpoint judges -- addr, value, write and, on a
+    // machine with shadow RAM, shadow_access -- so in watchpoint conditions
+    // only.
+    CONDITION_VARIABLE_WATCHPOINT = 2;
 }
 
 message RegisterValue {

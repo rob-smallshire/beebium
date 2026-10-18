@@ -226,6 +226,27 @@ class Measurement:
 
 
 @dataclass(frozen=True)
+class ConditionVariable:
+    """A name a breakpoint or watchpoint condition can use on this machine,
+    as the server lists it (see :meth:`Debugger.condition_variables`)."""
+
+    name: str
+    description: str
+    scope: str
+    """``"built_in"`` (on every target: registers, flags, cycles, hits),
+    ``"machine"`` (this machine's latches, in any condition) or
+    ``"watchpoint"`` (about the access a watchpoint judges, so in watchpoint
+    conditions only)."""
+
+
+_CONDITION_VARIABLE_SCOPES = {
+    debugger_pb2.CONDITION_VARIABLE_BUILT_IN: "built_in",
+    debugger_pb2.CONDITION_VARIABLE_MACHINE: "machine",
+    debugger_pb2.CONDITION_VARIABLE_WATCHPOINT: "watchpoint",
+}
+
+
+@dataclass(frozen=True)
 class ExecutionStateEvent:
     """An execution state change event from the server."""
 
@@ -467,6 +488,23 @@ class Debugger:
 
     # Breakpoints
 
+    def condition_variables(self) -> list[ConditionVariable]:
+        """Every name a breakpoint or watchpoint condition can use on this
+        machine, with what it means, as the server lists it: exactly what its
+        condition compiler accepts. A watchpoint's conditions can also name
+        the access it judges (``addr``, ``value``, ``write`` and, with shadow
+        RAM, ``shadow_access``), listed with scope ``"watchpoint"``.
+        """
+        descriptor = self._stub.GetCpuDescriptor(debugger_pb2.Empty())
+        return [
+            ConditionVariable(
+                name=variable.name,
+                description=variable.description,
+                scope=_CONDITION_VARIABLE_SCOPES[variable.scope],
+            )
+            for variable in descriptor.condition_variables
+        ]
+
     def add_breakpoint(
         self,
         address: int,
@@ -501,6 +539,11 @@ class Debugger:
                   counting the current hit.
                 - ``mem[expr]`` -- a side-effect-free byte read of memory (e.g.
                   ``mem[0x0070]``).
+                - The machine's own latches, read as the hardware holds them
+                  (write-only ones included): ``bank`` and ``romsel`` on every
+                  model, and on some ``acccon``, ``vdusel``, ``shen`` and the
+                  like. :meth:`condition_variables` lists exactly what this
+                  machine accepts; any other name is refused, naming it.
                 - Literals: decimal, ``0x`` hex, ``0b`` binary, ``true``,
                   ``false``.
                 - Operators: arithmetic ``+ - * / %``, bitwise ``& | ^``,
@@ -693,8 +736,12 @@ class Debugger:
             type: ``"read"``, ``"write"`` or ``"both"``.
             condition: An expression evaluated on each hit; the machine only stops
                 when it is non-zero. Empty means unconditional. See
-                :meth:`add_breakpoint` for the full expression grammar. Use
-                ``"false"`` for a recording-only watchpoint that never stops.
+                :meth:`add_breakpoint` for the full expression grammar. A
+                watchpoint's condition can also name the access it judges:
+                ``addr``, ``value``, ``write`` (1 for a write) and, on a machine
+                with shadow RAM, ``shadow_access`` (1 if it went there), e.g.
+                ``"write && value == 0"``. Use ``"false"`` for a recording-only
+                watchpoint that never stops.
             stop_counterpart: Also signal the counterpart processor to stop.
             enabled: Whether the watchpoint is active immediately; pass ``False``
                 to add it disabled.

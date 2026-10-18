@@ -24,6 +24,7 @@
 #include "NmiAggregator.hpp"
 #include "PacingConfig.hpp"
 #include "MemoryMap.hpp"
+#include "DebugVariable.hpp"
 #include "MemoryRegion.hpp"
 #include "MotherboardLinks.hpp"
 #include "OutputQueue.hpp"
@@ -337,6 +338,7 @@ private:
     uint8_t romsel_ = 0;    // Bits 0-3: bank, Bit 7: ANDY enable
     uint8_t acccon_ = 0;    // Bit 7: shadow enable
     bool vdu_latch_ = false;  // the PAL's VDU driver flag; see note_opcode_fetch()
+    bool last_access_shadow_ = false;  // where the last access went (shadow_access)
 
     // Disc control register state
     // Bit 0: Drive select (0=drive 0, 1=drive 1)
@@ -751,12 +753,14 @@ public:
     // While ACCCON bit 7 shows the shadow screen, &3000-&7FFF is shadow RAM to
     // an access made with the VDU driver flag set, and main RAM otherwise.
     uint8_t routed_read(uint16_t addr, bool vdu) {
+        last_access_shadow_ = vdu && shadow_enabled() && addr >= 0x3000 && addr < 0x8000;
         if (shadow_enabled() && addr >= 0x3000 && addr < 0x8000) {
             return vdu ? shadow_ram.read(addr - 0x3000) : main_ram.read(addr);
         }
         return read(addr);
     }
     void routed_write(uint16_t addr, uint8_t value, bool vdu) {
+        last_access_shadow_ = vdu && shadow_enabled() && addr >= 0x3000 && addr < 0x8000;
         if (shadow_enabled() && addr >= 0x3000 && addr < 0x8000) {
             if (vdu) {
                 shadow_ram.write(addr - 0x3000, value);
@@ -1231,6 +1235,28 @@ public:
         }
 
         return regions;
+    }
+
+    // The values a debugger condition can name on this machine (DebugVariable):
+    // the latches by their hardware names, and whether the access a watchpoint
+    // judges went to shadow RAM.
+    std::vector<DebugVariable> debug_variables() const {
+        auto variables = romsel_variables([this] { return uint64_t{romsel_}; });
+        variables.insert(variables.end(), {
+            {"acccon", "The ACCCON latch (&FE34) as last written; bit 7 is VDUSEL.",
+             [this] { return uint64_t{acccon_}; }},
+            {"andy", "1 while ROMSEL bit 7 pages ANDY's RAM in at &8000-&AFFF.",
+             [this] { return uint64_t{(romsel_ >> 7) & 1u}; }},
+            {"vdusel", "1 while ACCCON bit 7 (VDUSEL) shows the display, and VDU driver code, "
+                       "shadow RAM at &3000-&7FFF.",
+             [this] { return uint64_t{(acccon_ >> 7) & 1u}; }},
+            {"vdu", "The PAL's VDU driver flag, latched at the last opcode fetch: 1 when that "
+                    "fetch was in VDU driver code.",
+             [this] { return uint64_t{vdu_latch_}; }},
+            {"shadow_access", "1 if the access went to shadow RAM, 0 if to main RAM.",
+             [this] { return uint64_t{last_access_shadow_}; }, /*watchpoint_only=*/true},
+        });
+        return variables;
     }
 
     /// Where the region `name` lies, which a by-name access is checked

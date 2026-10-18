@@ -1590,6 +1590,14 @@ if(BEEBIUM_BUILD_SERVICE)
     catch_discover_tests(test_tube_inspection)
 
     # Debugger driven through the abstract CpuDebugTarget interface
+    # Breakpoint and watchpoint conditions over the machines' latches (#186)
+    add_executable(test_condition_variables test_condition_variables.cpp)
+    target_link_libraries(test_condition_variables PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_condition_variables)
+
     add_executable(test_coprocessor_debug_target test_coprocessor_debug_target.cpp)
     target_link_libraries(test_coprocessor_debug_target PRIVATE
         beebium_service

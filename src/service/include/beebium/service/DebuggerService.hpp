@@ -270,6 +270,28 @@ private:
     // returns 0 for a name the CPU does not have.
     cpu::CpuDescriptor descriptor_;
     std::unordered_map<std::string, size_t> register_index_;
+
+    // The target's condition variables (DebugVariable), read once, and the
+    // scopes conditions compile in: a breakpoint names the machine's; a
+    // watchpoint those, the machine's watchpoint-only ones (shadow_access)
+    // and the access it judges (addr, value, write).
+    std::vector<DebugVariable> variables_;
+    beebium::ExprScope breakpoint_scope_;
+    beebium::ExprScope watchpoint_scope_;
+    static constexpr uint32_t SLOT_ADDR = 0xFFFF0000u;
+    static constexpr uint32_t SLOT_VALUE = 0xFFFF0001u;
+    static constexpr uint32_t SLOT_WRITE = 0xFFFF0002u;
+
+    // What a condition's variables read: the target's, and the access a
+    // watchpoint is judging.
+    struct ConditionContext {
+        const std::vector<DebugVariable>* variables;
+        uint32_t addr = 0;
+        uint8_t value = 0;
+        bool write = false;
+    };
+    static uint64_t read_condition_variable(void* context, uint32_t slot);
+    void build_condition_scopes();
     uint64_t reg_value_by_name(std::string_view name) const;
     // The highest addressable byte for this CPU, from the descriptor's
     // address_bits (0xFFFF for a 16-bit CPU, wider for a 24- or 32-bit one).
@@ -434,10 +456,12 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 
 DebuggerControlServiceImpl::DebuggerControlServiceImpl(CpuDebugTarget& machine)
-    : machine_(machine), descriptor_(machine.cpu_descriptor()) {
+    : machine_(machine), descriptor_(machine.cpu_descriptor()),
+      variables_(machine.debug_variables()) {
     for (size_t i = 0; i < descriptor_.registers.size(); ++i) {
         register_index_[descriptor_.registers[i].name] = i;
     }
+    build_condition_scopes();
     machine_.set_breakpoint_hit_callback([this](const beebium::BreakpointEntry& bp, uint32_t pc) {
         // Increment hit counter
         auto& mutable_bp = const_cast<beebium::BreakpointEntry&>(bp);
@@ -459,8 +483,10 @@ DebuggerControlServiceImpl::DebuggerControlServiceImpl(CpuDebugTarget& machine)
             auto peek_fn = [](void* ctx, uint16_t a) -> uint8_t {
                 return static_cast<CpuDebugTarget*>(ctx)->peek(a);
             };
+            ConditionContext variables{&variables_};
             should_stop = beebium::evaluate(
-                *bp.condition, cpu_state, peek_fn, &machine_) != 0;
+                *bp.condition, cpu_state, peek_fn, &machine_,
+                read_condition_variable, &variables) != 0;
         }
 
         if (!should_stop) return;
@@ -501,8 +527,10 @@ DebuggerControlServiceImpl::DebuggerControlServiceImpl(CpuDebugTarget& machine)
                 auto peek_fn = [](void* ctx, uint16_t a) -> uint8_t {
                     return static_cast<CpuDebugTarget*>(ctx)->peek(a);
                 };
+                ConditionContext variables{&variables_, addr, value, is_write};
                 should_stop = beebium::evaluate(
-                    *wp.condition, cpu_state, peek_fn, &machine_) != 0;
+                    *wp.condition, cpu_state, peek_fn, &machine_,
+                    read_condition_variable, &variables) != 0;
             }
 
             if (!should_stop) return;
@@ -980,7 +1008,7 @@ grpc::Status DebuggerControlServiceImpl::AddBreakpoint(
     // Parse optional condition expression
     std::optional<beebium::CompiledExpression> condition;
     if (!request->condition().empty()) {
-        auto result = beebium::compile(request->condition());
+        auto result = beebium::compile(request->condition(), breakpoint_scope_);
         if (std::holds_alternative<std::string>(result)) {
             response->set_success(false);
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
@@ -1182,7 +1210,7 @@ grpc::Status DebuggerControlServiceImpl::AddWatchpoint(
     // Parse optional condition expression
     std::optional<beebium::CompiledExpression> condition;
     if (!request->condition().empty()) {
-        auto result = beebium::compile(request->condition());
+        auto result = beebium::compile(request->condition(), watchpoint_scope_);
         if (std::holds_alternative<std::string>(result)) {
             response->set_success(false);
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
@@ -1413,7 +1441,77 @@ grpc::Status DebuggerControlServiceImpl::GetCpuDescriptor(
     for (const auto& signal : descriptor_.signals) {
         response->add_signals(signal);
     }
+    auto add_variable = [&](std::string_view name, std::string_view description,
+                            ConditionVariableScope scope) {
+        auto* variable = response->add_condition_variables();
+        variable->set_name(std::string(name));
+        variable->set_description(std::string(description));
+        variable->set_scope(scope);
+    };
+    for (const auto& built_in : beebium::expression_built_ins()) {
+        add_variable(built_in.name, built_in.description, CONDITION_VARIABLE_BUILT_IN);
+    }
+    for (const auto& variable : variables_) {
+        add_variable(variable.name, variable.description,
+                     variable.watchpoint_only ? CONDITION_VARIABLE_WATCHPOINT
+                                              : CONDITION_VARIABLE_MACHINE);
+    }
+    for (const auto& access : WATCHPOINT_ACCESS_VARIABLES) {
+        add_variable(access.name, access.description, CONDITION_VARIABLE_WATCHPOINT);
+    }
     return grpc::Status::OK;
+}
+
+uint64_t DebuggerControlServiceImpl::read_condition_variable(void* context, uint32_t slot) {
+    const auto& condition = *static_cast<const ConditionContext*>(context);
+    switch (slot) {
+        case SLOT_ADDR: return condition.addr;
+        case SLOT_VALUE: return condition.value;
+        case SLOT_WRITE: return condition.write ? 1 : 0;
+        default: return (*condition.variables)[slot].read();
+    }
+}
+
+void DebuggerControlServiceImpl::build_condition_scopes() {
+    const std::string machine(machine_.machine_type());
+    std::vector<std::string> machine_names, watchpoint_names;
+    for (uint32_t slot = 0; slot < variables_.size(); ++slot) {
+        const std::string name(variables_[slot].name);
+        if (!variables_[slot].watchpoint_only) {
+            breakpoint_scope_.variables.emplace_back(name, slot);
+            machine_names.push_back(name);
+        }
+        watchpoint_scope_.variables.emplace_back(name, slot);
+        watchpoint_names.push_back(name);
+    }
+    // In WATCHPOINT_ACCESS_VARIABLES order: addr, value, write.
+    uint32_t access_slot = SLOT_ADDR;
+    for (const auto& access : WATCHPOINT_ACCESS_VARIABLES) {
+        watchpoint_scope_.variables.emplace_back(std::string(access.name), access_slot++);
+        watchpoint_names.emplace_back(access.name);
+    }
+    auto listed = [](const std::vector<std::string>& names) {
+        std::string list;
+        for (const auto& name : names) list += (list.empty() ? "" : ", ") + name;
+        return list.empty() ? std::string("none") : list;
+    };
+    breakpoint_scope_.unknown_name =
+        [machine, available = listed(machine_names), watchpoint_scope = watchpoint_scope_.variables](
+            std::string_view name) {
+            for (const auto& [watch_name, slot] : watchpoint_scope) {
+                if (name == watch_name) {
+                    return "no variable '" + std::string(name) + "' in a breakpoint condition on " +
+                           machine + ": it is for watchpoint conditions only";
+                }
+            }
+            return "no variable '" + std::string(name) + "' on " + machine +
+                   "; available: " + available;
+        };
+    watchpoint_scope_.unknown_name = [machine, available = listed(watchpoint_names)](
+                                         std::string_view name) {
+        return "no variable '" + std::string(name) + "' on " + machine +
+               "; available: " + available;
+    };
 }
 
 grpc::Status DebuggerControlServiceImpl::GetCpuState(

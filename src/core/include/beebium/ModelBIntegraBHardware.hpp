@@ -24,6 +24,7 @@
 #include "IrqAggregator.hpp"
 #include "PacingConfig.hpp"
 #include "MemoryMap.hpp"
+#include "DebugVariable.hpp"
 #include "MemoryRegion.hpp"
 #include "MotherboardLinks.hpp"
 #include "OutputQueue.hpp"
@@ -364,6 +365,7 @@ public:
 
     // MemoryMappedDevice interface
     uint8_t read(uint16_t addr) {
+        last_access_shadow_ = shadow_selected_for(addr);
         if (shadow_selected_for(addr)) {
             return shadow_and_private_ram.read(addr);
         }
@@ -376,6 +378,7 @@ public:
     void write(uint16_t addr, uint8_t value) {
         // Writes to shadow or private RAM do not reach the motherboard: the
         // board holds the motherboard R/W line high for them.
+        last_access_shadow_ = shadow_selected_for(addr);
         if (shadow_selected_for(addr)) {
             shadow_and_private_ram.write(addr, value);
             return;
@@ -791,6 +794,34 @@ public:
         return regions;
     }
 
+    // The values a debugger condition can name on this machine (DebugVariable):
+    // the latches and their bits by the board's names, and whether the access
+    // a watchpoint judges went to shadow RAM.
+    std::vector<DebugVariable> debug_variables() const {
+        auto variables = romsel_variables([this] { return uint64_t{romsel_}; });
+        auto bit = [](const uint8_t& latch, uint8_t mask) {
+            return [&latch, mask] { return uint64_t{(latch & mask) != 0}; };
+        };
+        variables.insert(variables.end(), {
+            {"ramsel", "The RAMSEL latch (&FE34) as last written; write-only.",
+             [this] { return uint64_t{ramsel_}; }},
+            {"shen", "RAMSEL bit 7 (SHEN): shadow RAM is enabled.", bit(ramsel_, RAMSEL_SHEN)},
+            {"prven", "ROMSEL bit 6 (PRVEN): private RAM is enabled.", bit(romsel_, ROMSEL_PRVEN)},
+            {"memsel", "ROMSEL bit 7 (MEMSEL): the CPU sees main memory at &3000-&7FFF "
+                       "while shadow RAM is enabled.",
+             bit(romsel_, ROMSEL_MEMSEL)},
+            {"prvs1", "RAMSEL bit 6 (PRVS1): private RAM at &8000-&83FF.",
+             bit(ramsel_, RAMSEL_PRVS1)},
+            {"prvs4", "RAMSEL bit 5 (PRVS4): private RAM at &8000-&8FFF.",
+             bit(ramsel_, RAMSEL_PRVS4)},
+            {"prvs8", "RAMSEL bit 4 (PRVS8): private RAM at &9000-&AFFF.",
+             bit(ramsel_, RAMSEL_PRVS8)},
+            {"shadow_access", "1 if the access went to shadow RAM, 0 if to main RAM.",
+             [this] { return uint64_t{last_access_shadow_}; }, /*watchpoint_only=*/true},
+        });
+        return variables;
+    }
+
     /// Where the region `name` lies, which a by-name access is checked
     /// against; nullopt for no such region. What it can do is in
     /// get_memory_regions() alone.
@@ -848,6 +879,7 @@ public:
 private:
     uint8_t romsel_ = 0;
     uint8_t ramsel_ = 0;
+    bool last_access_shadow_ = false;  // where the last access went (shadow_access)
 
     static constexpr std::string_view bank_names_[16] = {
         "bank_0", "bank_1", "bank_2", "bank_3",

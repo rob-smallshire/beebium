@@ -449,6 +449,11 @@ Breakpoints fire at instruction boundaries when PC falls within a specified addr
 | `hits` | Number of times this breakpoint has been reached |
 | `mem[addr]` | Peek memory at address (side-effect-free) |
 | `true`, `false` | Boolean literals |
+| the machine's latches | Read as the hardware holds them, write-only ones included: `bank` and `romsel` on every model; `acccon`, `andy`, `vdusel` and `vdu` on the B+ and B+ 128K; `ramsel`, `shen`, `prven`, `memsel`, `prvs1`, `prvs4` and `prvs8` on the Integra-B |
+| `addr`, `value`, `write` | Watchpoint conditions only: the access being judged (`write` is 1 for a write) |
+| `shadow_access` | Watchpoint conditions only, on the B+, B+ 128K and Integra-B: 1 if the access went to shadow RAM |
+
+The server is the source for this vocabulary: `GetCpuDescriptor` lists every name a condition accepts on the machine, with a one-line description and its scope (`CONDITION_VARIABLE_BUILT_IN`, `_MACHINE` or `_WATCHPOINT`), and `describe-conditions` prints the same list. A name the machine lacks is refused with `INVALID_ARGUMENT` naming it and the names available ("no variable 'acccon' on model-b-integra-b; available: bank, romsel, ramsel, ..."), and a watchpoint-only name in a breakpoint condition is refused the same way. `romsel & 0x80` reads ROMSEL bit 7 on every model; what it means is the model's, so there is no neutral alias. The design is [discussion/paging-qualified-breakpoints.md](discussion/paging-qualified-breakpoints.md).
 
 Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `+`, `-`, `*`, `/`, `%`, `&&`, `||`, `!`, `(`, `)`. Integer literals: decimal, `0x` hex, `0b` binary.
 

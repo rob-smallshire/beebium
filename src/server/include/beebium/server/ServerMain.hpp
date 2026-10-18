@@ -17,6 +17,7 @@
 // and dispatches to a subcommand. Each family of subcommands lives in its own
 // header; this one only gathers them.
 
+#include "beebium/server/ConditionSubcommands.hpp"
 #include "beebium/server/AunMapSubcommands.hpp"
 #include "beebium/server/ExtensionSubcommands.hpp"
 #include "beebium/server/LaunchSubcommands.hpp"
@@ -66,6 +67,7 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<ListSerialPortsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListDescriptionPlaceholdersSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribePresetSchemaSubcommand<MachineType>>());
+        v.push_back(std::make_unique<DescribeConditionsSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeRomSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeDiscImageSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListPresetsSubcommand<MachineType>>());

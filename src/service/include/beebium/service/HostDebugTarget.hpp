@@ -126,6 +126,9 @@ public:
         machine_.memory().write_region(name, address, value);
     }
     std::string_view machine_type() const override { return machine_.memory().machine_type(); }
+    std::vector<DebugVariable> debug_variables() const override {
+        return machine_.memory().debug_variables();
+    }
 
     // --- Breakpoints ---
     const std::vector<BreakpointEntry>& breakpoint_entries() const override {
