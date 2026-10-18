@@ -107,6 +107,58 @@ with the same `INVALID_ARGUMENT` shape. The watchpoint hit callback already
 receives address, value and direction; they go into the evaluation context
 alongside the CPU registers.
 
+### Beam variables (#196)
+
+The CRTC is common to every variant, so the machine, not the hardware
+policy, supplies a second table, usable in breakpoint and watchpoint
+conditions alike. The names follow the fields of `CrtcState`
+(GetCrtcState), which clients already know:
+
+| Name | Meaning |
+|------|---------|
+| `crtc_row` | Character row being scanned (0 to R4). |
+| `crtc_column` | Character column being scanned (0 to R0). |
+| `raster` | Scanline within the character row (0 to R9). |
+| `cycles_since_vsync` | CPU cycles since the field started. |
+| `display_enabled` | DISPEN, 0 or 1. |
+| `in_vsync` | 0 or 1. |
+| `odd_field` | 1 during the odd (first) field of an interlaced frame. |
+| `field` | Machine-wide count of vsyncs since power-on. Not reset by Break. |
+
+The values are those in effect for the cycle of the access being judged,
+not those of the last CRTC tick before some later point; the implementation
+must establish the order of CRTC tick and CPU access in CpuBinding and test
+it against a known mode's timing. `field` is the counter #190 will use to
+run for N fields and that a captured frame should carry, so the three agree.
+
+A `row_of(addr)` function is out of scope: the address-to-row mapping
+depends on R12/R13, R1, the mode and wraparound, and #195 will report the
+screen's region and range so a test can compute its own bounds.
+
+Example, Stratagem's beam-race assertion for a game that draws newly exposed
+columns just after vsync, as a watchpoint over its column buffer:
+
+```
+write && shadow_access && addr >= 0x5800 && addr < 0x5A80 && crtc_row > 4
+```
+
+### Names reserved for the Master 128 (#189)
+
+So that conditions stay portable when the Master lands, its ACCCON bits take
+the register's own bit names with the `acc` prefix, 0 or 1 each: `accd`,
+`acce`, `accx`, `accy`, `accitu`, `accifj`, `acctst`, `accirr`. The raw
+`acccon` latch is present as on the B+. `shadow_access` covers the Master
+with its own rule (LYNNE via E and Y, the &C000-&DFFF code window). These
+are not implemented until #189; a condition using them on another machine
+is rejected like any unknown name.
+
+### ROMSEL bit 7
+
+`andy` on the B+ and `memsel` on the Integra-B are both "ROMSEL bit 7 is
+set", with different meanings. There is no neutral alias: `romsel & 0x80`
+reads the real latch on every variant, and the documentation says so. The
+meaning of the bit belongs to the machine, so the name does too.
+
 ### Discoverability
 
 The server is the single source of truth for the vocabulary. `CpuDescriptor`
@@ -147,6 +199,8 @@ instruction, which is why #185 lands first.
   write-only and `mem[]` stays faithful.
 - Coprocessor debuggers: the Tube coprocessors have no paging latches today;
   their `debug_variables()` is empty and the mechanism applies unchanged.
+  The beam table is a host-machine table and does not apply to them.
+- `row_of(addr)` and any other function over the beam variables.
 
 ## Testing
 
@@ -163,3 +217,12 @@ read from a write to the same address; an unknown name and `value` in a
 breakpoint condition both return `INVALID_ARGUMENT` naming the variable.
 GetCpuDescriptor lists exactly the variables the condition compiler accepts
 (a test compiles each listed name and rejects a made-up one).
+
+Beam variables: a whole-address-space breakpoint with `in_vsync` stops at
+the first instruction boundary in the next vsync; `field` advances by one
+per vsync and by about 50 per emulated second in a 50 Hz mode; a watchpoint
+on a screen address with `crtc_row == N` fires for a write made while the
+CRTC is on that row, checked against the known timing of MODE 7 (a write
+timed by cycles_since_vsync to land on a chosen row); `display_enabled` is 0
+during the write made in the vertical blank. Each value is checked against
+GetCrtcState read at the same stop.
