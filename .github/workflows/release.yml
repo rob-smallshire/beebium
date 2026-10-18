@@ -92,6 +92,25 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
+          # stapler validate re-checks the ticket with a CloudKit lookup
+          # (api.apple-cloudkit.com .../ticket-delivery/...), which drops
+          # transiently the same way notarytool submit does: in v0.10.0 the
+          # x86_64 lane failed on validate with NSURLError -1005 ("network
+          # connection was lost") right after a successful staple. Here it would
+          # strand a whole release after every artifact built, so retry the
+          # lookup on the same 3-attempt, 30 s cadence as the submit. This does
+          # not make validate optional: a DMG whose ticket cannot be looked up
+          # three times running still fails the gate.
+          validate_with_retry() {
+            local target="$1"
+            for attempt in 1 2 3; do
+              echo "== stapler validate ${target} (attempt ${attempt}/3) =="
+              if xcrun stapler validate "${target}"; then return 0; fi
+              [ "${attempt}" = 3 ] && { echo "::error::stapler validate ${target} failed after 3 attempts"; return 1; }
+              echo "::warning::transient stapler validate failure on attempt ${attempt}; retrying in 30s"
+              sleep 30
+            done
+          }
           dmgs=(_dmgs/Beebium-*.dmg)
           if [ "${#dmgs[@]}" -ne 2 ]; then
             echo "::error::expected 2 DMGs, found ${#dmgs[@]}: ${dmgs[*]:-none}"; exit 1
@@ -103,7 +122,7 @@ jobs:
               echo "::error::${dmg} is not Developer ID signed (TeamIdentifier='${team:-<none>}')"; exit 1
             fi
             echo "TeamIdentifier=${team}"
-            xcrun stapler validate "${dmg}"
+            validate_with_retry "${dmg}"
             spctl -a -t open --context context:primary-signature -vv "${dmg}"
           done
           echo "All DMGs are Developer ID signed, notarized and stapled."
