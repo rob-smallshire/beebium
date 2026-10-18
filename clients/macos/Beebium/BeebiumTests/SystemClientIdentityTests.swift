@@ -115,3 +115,50 @@ final class SystemClientRenameErrorTests: XCTestCase {
             .failed("nope"))
     }
 }
+
+/// Mapping a MoveMachine failure to a move error: ALREADY_EXISTS names the
+/// attempted name, NOT_FOUND is a missing parent, INVALID_ARGUMENT keeps the
+/// server's message, anything else is a plain failure. Pure.
+final class SystemClientMoveErrorTests: XCTestCase {
+
+    func testAlreadyExistsNamesTheAttemptedName() {
+        let error = SystemClient.moveError(
+            from: GRPCStatus(code: .alreadyExists, message: "exists"),
+            attemptedName: "Elite Server")
+        XCTAssertEqual(error, .destinationExists(attemptedName: "Elite Server"))
+        XCTAssertEqual(error.errorDescription,
+                       "A machine named \"Elite Server\" already exists in that folder.")
+    }
+
+    func testNotFoundIsAMissingParent() {
+        XCTAssertEqual(
+            SystemClient.moveError(
+                from: GRPCStatus(code: .notFound, message: "no such folder"),
+                attemptedName: "x"),
+            .parentNotFound)
+    }
+
+    func testInvalidArgumentKeepsTheServerMessage() {
+        XCTAssertEqual(
+            SystemClient.moveError(
+                from: GRPCStatus(code: .invalidArgument, message: "destination is inside the machine"),
+                attemptedName: "x"),
+            .invalidDestination("destination is inside the machine"))
+    }
+
+    func testInvalidArgumentFallsBackWhenTheServerIsSilent() {
+        XCTAssertEqual(
+            SystemClient.moveError(
+                from: GRPCStatus(code: .invalidArgument, message: nil),
+                attemptedName: "x"),
+            .invalidDestination("That location can't be used."))
+    }
+
+    func testOtherStatusesAreAPlainFailure() {
+        XCTAssertEqual(
+            SystemClient.moveError(
+                from: GRPCStatus(code: .internalError, message: "boom"),
+                attemptedName: "x"),
+            .failed("boom"))
+    }
+}

@@ -105,11 +105,10 @@ struct ContentView: View {
     /// Watched so the duplicate-name warning appears and clears as machines
     /// come and go on the network.
     @ObservedObject private var discoveryClient = DiscoveryClient.shared
-    /// Shows the rename field in a popover pointing at the window's title.
-    @State private var renamePopover = MachineRenamePopover()
-    /// Offers renaming from a context menu on the window's title. Held by
-    /// the view so it lives as long as the window it watches.
-    @State private var titleMenu = TitleClickMonitor()
+    /// The AppKit document behind this window, giving the title bar its standard
+    /// document popover (Rename, Move To, Tags, Locked). Created when the window
+    /// appears and kept for its lifetime; it follows the server's identity.
+    @State private var machineDocument: MachineDocument?
     @StateObject private var videoClient = VideoClient()
     @StateObject private var keyboardClient = KeyboardClient()
     @StateObject private var systemClient = SystemClient()
@@ -240,25 +239,44 @@ struct ContentView: View {
         systemClient.machineDescription
     }
 
-    /// Open the rename popover on the window showing this machine. Both kinds of
-    /// machine rename this way: a transient machine is renamed directly, and a
-    /// saved machine's document is renamed in place by the server.
-    private func beginRenamingMachine() {
-        guard let window = currentWindow else { return }
-        renamePopover.show(in: window, systemClient: systemClient)
+    /// Rename a not-yet-saved machine. A saved machine renames through the title
+    /// bar's own document popover (the standard way); a transient machine has no
+    /// document popover yet, so File > Rename Machine... gives it a modest sheet
+    /// that sets the plain name on the server.
+    private func renameTransientMachine() {
+        guard let window = currentWindow, !systemClient.machineSaved else { return }
+        let alert = NSAlert()
+        alert.messageText = "Rename Machine"
+        alert.informativeText = "Enter a new name for this machine."
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.stringValue = systemClient.machineName
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return }
+            Task { @MainActor in
+                if case .failure(let error) = await systemClient.setMachineName(name) {
+                    let failure = NSAlert()
+                    failure.messageText = "Couldn't Rename Machine"
+                    failure.informativeText = error.localizedDescription
+                    failure.alertStyle = .warning
+                    failure.addButton(withTitle: "OK")
+                    failure.beginSheetModal(for: window) { _ in }
+                }
+            }
+        }
     }
 
-    /// Reflect the machine's document state on the window: the proxy icon (its
-    /// saved directory, or none while transient) and the unsaved-changes dot
-    /// (the server's template-media-written signal). Driven by changes to the
-    /// SystemClient fields and by the window appearing.
-    private func applyMachineDocumentChrome() {
-        guard let window = currentWindow else { return }
-        let state = MachineDocumentState(
-            savedDirpath: systemClient.machineSaved
-                ? URL(fileURLWithPath: systemClient.machineDirpath) : nil,
-            hasUnsavedChanges: systemClient.templateMediaWritten)
-        MachineWindowChrome.apply(state, to: window)
+    /// Follow the server's identity on the window's document: the proxy icon and
+    /// popover (its saved directory, or none while transient), the title (the
+    /// plain name) and the unsaved-changes dot (the template-media signal).
+    /// Driven by changes to the SystemClient fields and by the window appearing.
+    private func syncMachineDocument() {
+        machineDocument?.syncFromServer()
     }
 
     private var emulatorView: some View {
@@ -362,14 +380,15 @@ struct ContentView: View {
         // Beneath the name: the machine's rendered description, or empty when it
         // has none, so an ordinary window carries the name alone.
         .navigationSubtitle(windowSubtitle)
-        .focusedValue(\.renameMachine, { beginRenamingMachine() })
+        .focusedValue(\.renameMachine, { renameTransientMachine() })
         .focusedValue(\.machineSaveActions, MachineSaveActions(
             isSaved: systemClient.machineSaved,
             save: { Task { await MachineSaving.save(systemClient: systemClient) } },
             saveAs: { Task { await MachineSaving.saveAs(systemClient: systemClient) } }))
-        .onChange(of: systemClient.machineSaved) { _ in applyMachineDocumentChrome() }
-        .onChange(of: systemClient.machineDirpath) { _ in applyMachineDocumentChrome() }
-        .onChange(of: systemClient.templateMediaWritten) { _ in applyMachineDocumentChrome() }
+        .onChange(of: systemClient.machineSaved) { _ in syncMachineDocument() }
+        .onChange(of: systemClient.machineDirpath) { _ in syncMachineDocument() }
+        .onChange(of: systemClient.machineName) { _ in syncMachineDocument() }
+        .onChange(of: systemClient.templateMediaWritten) { _ in syncMachineDocument() }
         .alert(
             "Server / app version mismatch",
             isPresented: Binding(
@@ -555,18 +574,19 @@ struct ContentView: View {
             // Welcome slot so the registry does not treat a machine as Welcome.
             window.isRestorable = false
             WelcomeWindowRegistry.shared.unregister(window)
-            // The name is in the title, so that is where a user reaches to
-            // change it. A right-click, because every left-click on a title
-            // bar already means something; see TitleClickMonitor.
-            titleMenu.install(on: window, menuTitle: "Rename Machine...") {
-                beginRenamingMachine()
-            }
         }))
         .onChange(of: currentWindow) { window in
             guard let window = window else { return }
-            // The proxy icon and edited dot, now that there is a window to carry
-            // them (the SystemClient fields may have arrived first).
-            applyMachineDocumentChrome()
+            // Back the window with an NSDocument so the title bar shows the
+            // standard document popover (Rename, Move To, Tags, Locked). Created
+            // once, then kept in sync with the server's identity; the document
+            // carries the proxy icon, the title and the edited dot from here on.
+            if machineDocument == nil {
+                let document = MachineDocument()
+                document.attach(to: window, systemClient: systemClient)
+                machineDocument = document
+            }
+            syncMachineDocument()
             // Capture the NSWindow once; never update it. Used by Immersive Mode to
             // sidestep the transient-nil currentWindow during fullscreen transitions.
             if stableWindow == nil {

@@ -16,8 +16,9 @@ import UniformTypeIdentifiers
 
 struct FileCommands: Commands {
     /// Renaming needs a machine, so this is nil unless an emulator window has
-    /// focus, and the menu item is disabled accordingly. It puts the cursor in
-    /// the title bar's name field rather than opening a dialog of its own.
+    /// focus, and the menu item is disabled accordingly. It renames a not-yet-
+    /// saved machine through a modest sheet; a saved machine is renamed from the
+    /// title bar's own document popover instead.
     @FocusedValue(\.renameMachine) private var renameMachine
     @FocusedValue(\.machineSaveActions) private var machineSaveActions
     @ObservedObject private var appActions = AppActions.shared
@@ -56,7 +57,9 @@ struct FileCommands: Commands {
                 renameMachine?()
             }
             .keyboardShortcut("r", modifiers: .command)
-            .disabled(!Self.renameEnabled(hasFocusedMachineWindow: renameMachine != nil))
+            .disabled(!Self.renameEnabled(
+                hasFocusedMachineWindow: renameMachine != nil,
+                isSaved: machineSaveActions?.isSaved ?? false))
 
             Divider()
 
@@ -110,12 +113,12 @@ struct FileCommands: Commands {
         hasFocusedMachineWindow && isSaved
     }
 
-    /// Whether File > Rename Machine... should be enabled: a machine window is
-    /// focused. Both transient and saved machines rename in place (a saved
-    /// machine's document is renamed), so there is one rule for both. Pure, so
-    /// it is testable.
-    static func renameEnabled(hasFocusedMachineWindow: Bool) -> Bool {
-        hasFocusedMachineWindow
+    /// Whether File > Rename Machine... should be enabled: a not-yet-saved
+    /// machine window is focused. A saved machine renames through the title bar's
+    /// own document popover (the standard way), so the menu item is only for the
+    /// transient machine that has no popover yet. Pure, so it is testable.
+    static func renameEnabled(hasFocusedMachineWindow: Bool, isSaved: Bool) -> Bool {
+        hasFocusedMachineWindow && !isSaved
     }
 
     /// Whether there are saved machines to revisit, gating File > Open Recent.

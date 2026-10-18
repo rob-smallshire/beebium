@@ -66,18 +66,6 @@ final class PopoverFocusHostingTests: XCTestCase {
                        "station editor must open showing the configured number")
     }
 
-    func testRenameEditorOpensPrefilledWithTheName() {
-        let systemClient = SystemClient()
-        var identity = Beebium_MachineIdentity()
-        identity.name = "Model B (Disc) #1"
-        systemClient.updateIdentity(identity)
-
-        let (_, textView) = host(
-            MachineRenameEditor(systemClient: systemClient, dismiss: {}))
-        XCTAssertEqual(textView?.string, "Model B (Disc) #1",
-                       "rename editor must open showing the current name")
-    }
-
     func testExtensionEditorFormOpensPrefilled() {
         var textInput = Beebium_TextInput()
         textInput.label = "Map file"

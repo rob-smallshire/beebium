@@ -11,9 +11,6 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 import AppKit
-import GRPC
-import NIOCore
-import NIOPosix
 import SwiftUI
 
 /// A self-driving visual check for the popover caret and the restyled field
@@ -22,10 +19,6 @@ import SwiftUI
 /// activated app, synthesises a real click into each field, photographs each
 /// popover's own window several times across the blink, and writes PNGs to look
 /// at. Enabled only when BEEBIUM_DEBUG_FOCUS_SELFTEST names an output directory.
-///
-/// BEEBIUM_DEBUG_FOCUS_SELFTEST_PORT, when set, is a running server's port; the
-/// rename popover is then shown against a real SystemClient so its name field
-/// is exercised against a live machine.
 @MainActor
 final class FocusSelfTest {
     static func startIfRequested() {
@@ -39,9 +32,6 @@ final class FocusSelfTest {
     private let outputDirpath: String
     private var hostWindow: NSWindow?
     private let econetClient = EconetClient()
-    private let localSystemClient = SystemClient()
-    private var serverSystemClient: SystemClient?
-    private var eventLoopGroup: EventLoopGroup?
     private let framesPerOpen = 8
     private let frameInterval: TimeInterval = 0.1
 
@@ -118,15 +108,6 @@ final class FocusSelfTest {
             for open in 1...3 {
                 await captureCommittingField(name: "cfg_field_open\(open)")
             }
-        }
-
-        // With a server port, also capture the rename popover's chips and preview.
-        if only == nil,
-           let port = ProcessInfo.processInfo.environment["BEEBIUM_DEBUG_FOCUS_SELFTEST_PORT"],
-           let portNumber = Int(port) {
-            await connectServer(port: portNumber)
-            await sleep(1.8)
-            await captureRename(name: "rename_dark", appearance: .darkAqua, clickChip: true)
         }
     }
 
@@ -393,25 +374,6 @@ final class FocusSelfTest {
         hostWindow?.makeKeyAndOrderFront(nil)
     }
 
-    // MARK: - Server connection (for the rename picker + preview)
-
-    private func connectServer(port: Int) async {
-        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        eventLoopGroup = group
-        do {
-            let channel = try GRPCChannelPool.with(
-                target: .host("127.0.0.1", port: port),
-                transportSecurity: .plaintext,
-                eventLoopGroup: group)
-            let client = SystemClient()
-            client.connect(channel: channel)
-            serverSystemClient = client
-            NSLog("[SELFTEST] connected to server on port %d", port)
-        } catch {
-            NSLog("[SELFTEST] server connect failed: %@", error.localizedDescription)
-        }
-    }
-
     // MARK: - Captures
 
     private func captureStation(name: String, appearance: NSAppearance.Name) async {
@@ -431,24 +393,6 @@ final class FocusSelfTest {
         await sleep(0.4)
     }
 
-    private func captureRename(name: String, appearance: NSAppearance.Name,
-                               clickChip: Bool) async {
-        guard let systemClient = serverSystemClient else { return }
-        bringHostToFront()
-        let content = MachineRenameEditor(systemClient: systemClient, dismiss: {})
-        let popover = present(content, appearance: appearance)
-        await sleep(1.0)                 // let the popover settle and take focus
-        clickFirstField(in: popover)
-        await sleep(0.1)
-        await captureFrames(popover, prefix: "\(name)", count: framesPerOpen)
-        if clickChip, let chip = firstChipButton(in: popover) {
-            postClick(on: chip)
-            await sleep(0.3)
-            await captureFrames(popover, prefix: "\(name)_afterchip", count: framesPerOpen)
-        }
-        popover.performClose(nil)
-        await sleep(0.4)
-    }
 
     // MARK: - Popover plumbing
 
@@ -572,28 +516,6 @@ final class FocusSelfTest {
                 NSApp.postEvent(event, atStart: false)
             }
         }
-    }
-
-    /// The first placeholder chip -- a button whose title is an insertion string
-    /// like "{econet-station}" -- skipping Cancel/Save.
-    private func firstChipButton(in popover: NSPopover) -> NSButton? {
-        guard let root = popover.contentViewController?.view else { return nil }
-        // SwiftUI buttons expose no usable title, so a chip can't be matched by
-        // text. The chips come before Cancel/Save in the tree, so the first button
-        // that is not Cancel or Save is the first chip.
-        return Self.firstButton(in: root) { button in
-            let title = button.title
-            return title != "Cancel" && title != "Save"
-        }
-    }
-
-    private static func firstButton(in view: NSView,
-                                    where match: (NSButton) -> Bool) -> NSButton? {
-        if let button = view as? NSButton, match(button) { return button }
-        for subview in view.subviews {
-            if let found = firstButton(in: subview, where: match) { return found }
-        }
-        return nil
     }
 
     private func sleep(_ seconds: TimeInterval) async {

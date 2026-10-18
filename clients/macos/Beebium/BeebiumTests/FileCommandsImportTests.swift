@@ -53,10 +53,11 @@ final class FileCommandsImportTests: XCTestCase {
 
     // MARK: - Rename enable rule
 
-    func testRenameEnabledWheneverAMachineWindowIsFocused() {
-        // Both transient and saved machines rename in place, so the only
-        // condition is a focused machine window.
-        XCTAssertTrue(FileCommands.renameEnabled(hasFocusedMachineWindow: true))
-        XCTAssertFalse(FileCommands.renameEnabled(hasFocusedMachineWindow: false))
+    func testRenameEnabledOnlyForATransientFocusedMachine() {
+        // A saved machine renames through the title bar's document popover, so
+        // File > Rename Machine... is only for a focused, not-yet-saved machine.
+        XCTAssertTrue(FileCommands.renameEnabled(hasFocusedMachineWindow: true, isSaved: false))
+        XCTAssertFalse(FileCommands.renameEnabled(hasFocusedMachineWindow: true, isSaved: true))
+        XCTAssertFalse(FileCommands.renameEnabled(hasFocusedMachineWindow: false, isSaved: false))
     }
 }

@@ -283,6 +283,81 @@ final class SystemClient: ObservableObject, Disconnectable {
         }
     }
 
+    /// A failure to move (or rename) a saved machine, mapped from the server's
+    /// gRPC status so AppKit's document machinery can present it. The move
+    /// statuses are fixed (system.proto, MoveMachine): a destination that
+    /// already exists, a parent folder that does not, a bad leaf or a
+    /// destination inside the machine's own directory, a transient machine, and
+    /// an internal failure (the machine stays put).
+    enum MachineMoveError: Error, LocalizedError, Equatable {
+        case notConnected
+        /// A machine already sits at the destination.
+        case destinationExists(attemptedName: String)
+        /// The destination's parent folder does not exist.
+        case parentNotFound
+        /// A bad leaf, or a destination inside the machine itself; carries the
+        /// server's own message.
+        case invalidDestination(String)
+        case failed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .notConnected:
+                return "Not connected to the server."
+            case .destinationExists(let name):
+                return "A machine named \"\(name)\" already exists in that folder."
+            case .parentNotFound:
+                return "The destination folder could not be found."
+            case .invalidDestination(let m):
+                return m
+            case .failed(let m):
+                return m
+            }
+        }
+    }
+
+    /// Map a MoveMachine failure to a move error. ALREADY_EXISTS names the
+    /// attempted name; NOT_FOUND is a missing parent folder; INVALID_ARGUMENT
+    /// carries the server's message (a bad leaf, or a destination inside the
+    /// machine's own directory); anything else is a plain failure. Pure.
+    nonisolated static func moveError(from error: Error, attemptedName: String) -> MachineMoveError {
+        guard let status = error as? GRPCStatus else { return .failed(error.localizedDescription) }
+        switch status.code {
+        case .alreadyExists:
+            return .destinationExists(attemptedName: attemptedName)
+        case .notFound:
+            return .parentNotFound
+        case .invalidArgument:
+            return .invalidDestination(Self.message(status, or: "That location can't be used."))
+        default:
+            return .failed(Self.message(status, or: "Couldn't move the machine."))
+        }
+    }
+
+    /// Move a saved machine's directory, in full, to `destinationDirpath` (its
+    /// last component is `<name>.beebium-machine`, and the machine's name becomes
+    /// `<name>`): both the title bar's inline rename and its Move To / Where,
+    /// which are one operation server-side. The machine runs on from the new
+    /// directory; the response carries the new directory and identity, applied at
+    /// once so the window follows. Moving to the machine's own path is a
+    /// successful no-op. Returns the new directory, or a mapped error.
+    func moveMachine(toDirpath destinationDirpath: String) async -> Result<String, MachineMoveError> {
+        guard let client = client else { return .failure(.notConnected) }
+        let attemptedName = URL(fileURLWithPath: destinationDirpath)
+            .deletingPathExtension().lastPathComponent
+        do {
+            var request = Beebium_MoveMachineRequest()
+            request.destinationDirpath = destinationDirpath
+            let response = try await client.moveMachine(request).response.get()
+            updateIdentity(response.identity)
+            machineDirpath = response.machineDirpath
+            machineSaved = true
+            return .success(response.machineDirpath)
+        } catch {
+            return .failure(Self.moveError(from: error, attemptedName: attemptedName))
+        }
+    }
+
     /// Forget the machine's battery-backed state, taking effect at its next
     /// start (the running machine is unchanged). Returns the units forgotten.
     func resetBattery() async -> Result<[String], MachineSaveError> {
