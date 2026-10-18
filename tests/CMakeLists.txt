@@ -368,6 +368,11 @@ add_executable(test_model_b_integra_b_hardware test_model_b_integra_b_hardware.c
 target_link_libraries(test_model_b_integra_b_hardware PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_model_b_integra_b_hardware)
 
+# Every machine's memory region listing against a probe of its banks
+add_executable(test_memory_region_listing test_memory_region_listing.cpp)
+target_link_libraries(test_memory_region_listing PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_memory_region_listing)
+
 # A machine's battery-backed units (BatteryBackedUnit)
 add_executable(test_battery_units test_battery_units.cpp)
 target_link_libraries(test_battery_units PRIVATE beebium_core Catch2::Catch2WithMain)

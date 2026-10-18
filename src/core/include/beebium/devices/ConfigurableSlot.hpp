@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include "../MemoryRegion.hpp"
+
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -48,6 +50,19 @@ struct SlotInfo {
     std::string image_name;
     bool write_protected = false;
 };
+
+// A sideways bank's region, from what its slot holds, on every machine
+// alike: readable always; writable when it is RAM; populated when a ROM or
+// RAM is fitted there; active when it is the selected bank.
+inline MemoryRegionDescriptor sideways_bank_region(std::string_view name, const SlotInfo& slot,
+                                                   bool selected) {
+    RegionFlags flags = RegionFlags::Readable;
+    if (slot.type == SlotType::Ram) flags = flags | RegionFlags::Writable;
+    if (slot.populated) flags = flags | RegionFlags::Populated;
+    if (selected) flags = flags | RegionFlags::Active;
+    const auto extent = sideways_bank_extent(name);
+    return {extent.name, extent.base_address, extent.size, flags};
+}
 
 // Runtime-configurable 16KB memory slot.
 // Can be configured as Empty, Rom, or Ram at runtime.

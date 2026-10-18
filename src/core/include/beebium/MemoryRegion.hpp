@@ -12,13 +12,11 @@
 
 #pragma once
 
-#include <array>
 #include <cstdint>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <utility>
 
 namespace beebium {
 
@@ -55,9 +53,17 @@ struct MemoryRegionDescriptor {
     RegionFlags flags;      // Capability flags
 };
 
+// Where a named region lies: what a by-name access checks its address
+// against. What the region can do is in the region listing alone.
+struct RegionExtent {
+    std::string_view name;
+    uint32_t base_address;
+    uint32_t size;
+};
+
 // Validate address against region bounds.
 // @throws std::invalid_argument with descriptive message if out of bounds.
-inline void validate_region_address(const MemoryRegionDescriptor& region, uint32_t address) {
+inline void validate_region_address(const RegionExtent& region, uint32_t address) {
     uint32_t end = region.base_address + region.size - 1;
     if (address < region.base_address || address > end) {
         std::ostringstream oss;
@@ -68,30 +74,9 @@ inline void validate_region_address(const MemoryRegionDescriptor& region, uint32
     }
 }
 
-// Generate a standard bank region descriptor.
-// All sideways banks use the same address range (0x8000-0xBFFF).
-constexpr MemoryRegionDescriptor make_bank_descriptor(
-    std::string_view name,
-    RegionFlags flags = RegionFlags::Readable
-) {
-    return {name, 0x8000, 0x4000, flags};
-}
-
-// Generate an array of bank descriptors from an array of bank names.
-// Uses C++20 index_sequence to generate at compile time.
-template<size_t N, size_t... Is>
-constexpr std::array<MemoryRegionDescriptor, N> make_bank_descriptors_impl(
-    const std::string_view (&names)[N],
-    std::index_sequence<Is...>
-) {
-    return {{ make_bank_descriptor(names[Is])... }};
-}
-
-template<size_t N>
-constexpr std::array<MemoryRegionDescriptor, N> make_bank_descriptors(
-    const std::string_view (&names)[N]
-) {
-    return make_bank_descriptors_impl(names, std::make_index_sequence<N>{});
+// Where a sideways bank lies: every bank is paged in at 0x8000-0xBFFF.
+constexpr RegionExtent sideways_bank_extent(std::string_view name) {
+    return {name, 0x8000, 0x4000};
 }
 
 } // namespace beebium

@@ -734,65 +734,35 @@ public:
         // Note: Due to aliasing, banks 0/4/8/12, 1/5/9/13, 2/6/10/14, 3/7/11/15
         // each share the same physical socket.
         for (uint8_t bank = 0; bank < 16; ++bank) {
-            RegionFlags flags = RegionFlags::Readable;
-
-            // Check if slot is RAM (writable)
-            if (sideways.bank_type(bank) == SlotType::Ram) {
-                flags = flags | RegionFlags::Writable;
-            }
-
-            if (sideways.is_bank_populated(bank)) {
-                flags = flags | RegionFlags::Populated;
-            }
-            if (bank == sideways.selected_bank()) {
-                flags = flags | RegionFlags::Active;
-            }
-            // Bank names are generated as "bank_0", "bank_1", etc.
-            // We use a static array for the string_views
-            regions.push_back({
-                bank_names_[bank],
-                0x8000,  // base_address (all banks share same address range)
-                16384,
-                flags
-            });
+            regions.push_back(sideways_bank_region(bank_names_[bank], slot_info(bank),
+                                                   bank == sideways.selected_bank()));
         }
 
         return regions;
     }
 
-    /// Find a region descriptor by name.
-    /// @returns pointer to descriptor, or nullptr if not found.
-    const MemoryRegionDescriptor* find_region(std::string_view name) const {
-        if (name == REGION_MAIN_RAM) {
-            static const MemoryRegionDescriptor main_ram_desc{
-                REGION_MAIN_RAM, 0x0000, 0x8000, RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated
-            };
-            return &main_ram_desc;
-        }
-        if (name == REGION_MOS_ROM) {
-            static const MemoryRegionDescriptor mos_rom_desc{
-                REGION_MOS_ROM, 0xC000, 0x4000, RegionFlags::Readable | RegionFlags::Populated
-            };
-            return &mos_rom_desc;
-        }
+    /// Where the region `name` lies, which a by-name access is checked
+    /// against; nullopt for no such region. What it can do is in
+    /// get_memory_regions() alone.
+    std::optional<RegionExtent> region_extent(std::string_view name) const {
+        if (name == REGION_MAIN_RAM) return RegionExtent{REGION_MAIN_RAM, 0x0000, 0x8000};
+        if (name == REGION_MOS_ROM) return RegionExtent{REGION_MOS_ROM, 0xC000, 0x4000};
         if (name.size() >= 6 && name.substr(0, 5) == "bank_") {
             uint8_t bank = parse_bank_number(name);
-            if (bank < 16) {
-                return &bank_descriptors_[bank];
-            }
+            if (bank < 16) return sideways_bank_extent(bank_names_[bank]);
         }
-        return nullptr;
+        return std::nullopt;
     }
 
     /// Check if a region name is valid for this machine type.
     bool has_region(std::string_view name) const {
-        return find_region(name) != nullptr;
+        return region_extent(name).has_value();
     }
 
     /// Read from a named memory region without side effects.
     /// @throws std::invalid_argument for unknown region name or out-of-bounds address.
     uint8_t peek_region(std::string_view name, uint32_t address) const {
-        const auto* region = find_region(name);
+        const auto region = region_extent(name);
         if (!region) {
             throw std::invalid_argument("unknown region: '" + std::string(name) + "'");
         }
@@ -803,7 +773,7 @@ public:
     /// Read from a named memory region (may have side effects).
     /// @throws std::invalid_argument for unknown region name or out-of-bounds address.
     uint8_t read_region(std::string_view name, uint32_t address) {
-        const auto* region = find_region(name);
+        const auto region = region_extent(name);
         if (!region) {
             throw std::invalid_argument("unknown region: '" + std::string(name) + "'");
         }
@@ -814,7 +784,7 @@ public:
     /// Write to a named memory region.
     /// @throws std::invalid_argument for unknown region name or out-of-bounds address.
     void write_region(std::string_view name, uint32_t address, uint8_t value) {
-        const auto* region = find_region(name);
+        const auto region = region_extent(name);
         if (!region) {
             throw std::invalid_argument("unknown region: '" + std::string(name) + "'");
         }
@@ -847,9 +817,6 @@ private:
         }
         return 255;  // Invalid
     }
-
-    // Static descriptors for bank regions (all have same base/size)
-    static constexpr auto bank_descriptors_ = make_bank_descriptors(bank_names_);
 
     // Unchecked accessors - caller must validate region and address first
     uint8_t peek_region_unchecked(std::string_view name, uint32_t address) const {
