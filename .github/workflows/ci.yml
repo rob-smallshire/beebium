@@ -320,6 +320,13 @@ jobs:
       # ubuntu-latest runner has plenty of cores but a modest RAM ceiling for a
       # gRPC/protobuf C++ build, so cap at 2 concurrent compiles.
       CMAKE_BUILD_PARALLEL_LEVEL: "2"
+      # GCC 12, the compiler floor: the Linux bundles are built with it, in the
+      # Debian bookworm image of docker/linux-bundle (ARG BASE=debian:bookworm),
+      # and it rejects code newer GCCs accept (v0.10.0's bundle builds failed so,
+      # unseen here). The arm64 Pi lane covers the newest GCC. A move of the
+      # floor changes both places; see docs/packaging.md, "The glibc floor".
+      CC: gcc-12
+      CXX: g++-12
 
     steps:
       - name: Checkout
@@ -328,10 +335,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
+          # gcc-12/g++-12: the compiler floor (CC/CXX above).
           # libavahi-client-dev: build the Avahi advertiser (BEEBIUM_HAS_AVAHI).
           # avahi-daemon/avahi-utils/dbus: run a real mDNS daemon so the Linux
           # advertiser test exercises the advertise path rather than skipping.
-          sudo apt-get install -y cmake pkg-config libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc uuid-dev \
+          sudo apt-get install -y gcc-12 g++-12 cmake pkg-config libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc uuid-dev \
             libavahi-client-dev avahi-daemon avahi-utils dbus
 
       # Retry configure: FetchContent pulls Catch2 and nlohmann_json from

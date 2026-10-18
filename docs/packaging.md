@@ -179,6 +179,9 @@ glibc runs on any *newer*-glibc system, so the bundle is built in a
 **`debian:bookworm`** container (glibc 2.36). That floor covers Ubuntu 22.04+,
 Raspberry Pi OS (Bookworm), and Arch (glibc 2.43+). Building natively on the
 target distro would invert this and break portability, so we never do that.
+The image's compiler, GCC 12, is the compiler floor too, and CI builds and tests
+its "Build and Test Server (Linux)" lane with it (`CC`/`CXX` in `ci.yml`), so a
+move of the floor changes the Dockerfile's `BASE` and that lane together.
 
 ### mDNS advertisement without a runtime dependency
 
