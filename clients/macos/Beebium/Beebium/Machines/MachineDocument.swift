@@ -94,11 +94,13 @@ final class MachineDocument: NSDocument {
         syncFromServer()
     }
 
-    /// Reflect the server's current identity on the document and its window: the
-    /// file URL (the saved directory; see `savedFileURL`), the title (the plain
-    /// name), and the unsaved-changes dot (the server's template-media signal).
-    /// The document is only attached to a saved machine, but a Save As to a new
-    /// directory still moves the file URL here.
+    /// Reflect the server's current identity on the document: the file URL (the
+    /// saved directory; see `savedFileURL`) and the title (the plain name). The
+    /// document is only attached to a saved machine, but a Save As to a new
+    /// directory still moves the file URL here. The unsaved-changes dot is not
+    /// set here -- it lives on the window (ContentView), with or without a
+    /// document -- and the document always reports not edited (below) so AppKit
+    /// never prompts or autosaves.
     func syncFromServer() {
         guard let systemClient else { return }
         let url = Self.savedFileURL(machineSaved: systemClient.machineSaved,
@@ -106,7 +108,6 @@ final class MachineDocument: NSDocument {
         if fileURL != url { fileURL = url }
         for controller in windowControllers {
             controller.synchronizeWindowTitleWithDocumentName()
-            controller.window?.isDocumentEdited = systemClient.templateMediaWritten
         }
     }
 

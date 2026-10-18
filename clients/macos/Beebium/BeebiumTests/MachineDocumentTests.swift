@@ -41,6 +41,14 @@ final class MachineDocumentTests: XCTestCase {
         XCTAssertFalse((makeDocument(SystemClient()).displayName ?? "").isEmpty)
     }
 
+    func testDocumentNeverReportsItselfEditedToAppKit() {
+        // The unsaved-changes dot is driven on the window, not through the
+        // document's change count, precisely so AppKit never prompts or
+        // autosaves. If this ever returned the template-media signal instead,
+        // that guarantee would break -- so it must stay false.
+        XCTAssertFalse(makeDocument(SystemClient()).isDocumentEdited)
+    }
+
     func testFileURLIsTheDirectoryOnlyWhenSaved() {
         // A transient machine's directory is deleted on shutdown, so it must
         // never become a document file URL (proxy icon / breadcrumb).

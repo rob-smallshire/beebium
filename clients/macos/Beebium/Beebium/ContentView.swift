@@ -289,11 +289,21 @@ struct ContentView: View {
     }
 
     /// Follow the server's identity on the window's document, once it has one:
-    /// the proxy icon and popover (its saved directory), the title (the plain
-    /// name) and the unsaved-changes dot (the template-media signal). A no-op
-    /// while the machine is transient and has no document.
+    /// the proxy icon and popover (its saved directory) and the title (the plain
+    /// name). A no-op while the machine is transient and has no document.
     private func syncMachineDocument() {
         machineDocument?.syncFromServer()
+    }
+
+    /// Show or clear the window's unsaved-changes dot (the black dot in the close
+    /// button) from the server's template-media-written signal. Applied straight
+    /// to the NSWindow so it works with or without a document: a transient window
+    /// has no document (and so no window controller for the document to reach),
+    /// and a saved machine reads false from the server, so the one rule serves
+    /// both. The document itself always reports not edited, so AppKit never
+    /// prompts or autosaves off this.
+    private func applyUnsavedChangesDot() {
+        currentWindow?.isDocumentEdited = systemClient.templateMediaWritten
     }
 
     private var emulatorView: some View {
@@ -410,7 +420,7 @@ struct ContentView: View {
         }
         .onChange(of: systemClient.machineDirpath) { _ in syncMachineDocument() }
         .onChange(of: systemClient.machineName) { _ in syncMachineDocument() }
-        .onChange(of: systemClient.templateMediaWritten) { _ in syncMachineDocument() }
+        .onChange(of: systemClient.templateMediaWritten) { _ in applyUnsavedChangesDot() }
         .alert(
             "Server / app version mismatch",
             isPresented: Binding(
@@ -603,6 +613,9 @@ struct ContentView: View {
             // now; a transient one gets none until it is saved.
             attachMachineDocumentIfSaved()
             syncMachineDocument()
+            // The unsaved-changes dot lives on the window, with or without a
+            // document, so a transient machine's disc write still shows it.
+            applyUnsavedChangesDot()
             // Capture the NSWindow once; never update it. Used by Immersive Mode to
             // sidestep the transient-nil currentWindow during fullscreen transitions.
             if stableWindow == nil {
