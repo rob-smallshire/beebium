@@ -405,6 +405,12 @@ struct Beebium_TypingStatus: Sendable {
   /// Number of strings in queue
   var stringsQueued: UInt32 = 0
 
+  /// True while the emulator runs (DebuggerControl's is_running): only a
+  /// running machine drains the queue. WatchTypingStatus pushes when this
+  /// changes, so a client waiting for the queue to drain learns at once that
+  /// a stopped machine never will.
+  var machineRunning: Bool = false
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -1283,7 +1289,7 @@ extension Beebium_WatchTypingStatusRequest: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".TypingStatus"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}idle\0\u{3}pending_characters\0\u{3}strings_queued\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}idle\0\u{3}pending_characters\0\u{3}strings_queued\0\u{3}machine_running\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1294,6 +1300,7 @@ extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 1: try { try decoder.decodeSingularBoolField(value: &self.idle) }()
       case 2: try { try decoder.decodeSingularUInt32Field(value: &self.pendingCharacters) }()
       case 3: try { try decoder.decodeSingularUInt32Field(value: &self.stringsQueued) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.machineRunning) }()
       default: break
       }
     }
@@ -1309,6 +1316,9 @@ extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if self.stringsQueued != 0 {
       try visitor.visitSingularUInt32Field(value: self.stringsQueued, fieldNumber: 3)
     }
+    if self.machineRunning != false {
+      try visitor.visitSingularBoolField(value: self.machineRunning, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1316,6 +1326,7 @@ extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.idle != rhs.idle {return false}
     if lhs.pendingCharacters != rhs.pendingCharacters {return false}
     if lhs.stringsQueued != rhs.stringsQueued {return false}
+    if lhs.machineRunning != rhs.machineRunning {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
