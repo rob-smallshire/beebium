@@ -89,6 +89,14 @@ final class MachineRecents {
         store.noteRecent(newURL.standardizedFileURL)
     }
 
+    /// Drop one machine from the recents list (a card's Remove from List). The
+    /// machine on disk is untouched, so opening it again -- File > Open, Finder,
+    /// a drop -- puts it back; a running machine can be dropped too, since this
+    /// is only a list entry.
+    func forget(machineDirpath url: URL) {
+        store.removeRecent(url.standardizedFileURL)
+    }
+
     func clear() {
         store.clearRecents()
     }

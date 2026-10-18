@@ -76,6 +76,25 @@ final class SavedMachinesModelTests: XCTestCase {
         XCTAssertEqual(model.machines.map(\.name), ["a"])
     }
 
+    func testForgetDropsOneMachineFromTheListAndRecentsKeepingTheRest() async {
+        let a = URL(fileURLWithPath: "/m/a.beebium-machine")
+        let b = URL(fileURLWithPath: "/m/b.beebium-machine")
+        let c = URL(fileURLWithPath: "/m/c.beebium-machine")
+        let store = InMemoryRecentDocumentsStore(seed: [a, b, c])
+        let model = SavedMachinesModel(recents: MachineRecents(store: store)) { url in
+            self.description(url.deletingPathExtension().lastPathComponent, dirpath: url.path)
+        }
+        await model.reload()
+        XCTAssertEqual(model.machines.map(\.name), ["a", "b", "c"])
+
+        model.forget(model.machines[1])   // b
+
+        // Gone from the shown list and from recents; a and c keep their order.
+        XCTAssertEqual(model.machines.map(\.name), ["a", "c"])
+        XCTAssertEqual(store.recentURLs.map(\.path),
+                       ["/m/a.beebium-machine", "/m/c.beebium-machine"])
+    }
+
     func testClearEmptiesBothTheListAndRecents() async {
         let store = InMemoryRecentDocumentsStore(seed: [URL(fileURLWithPath: "/m/a.beebium-machine")])
         let model = SavedMachinesModel(recents: MachineRecents(store: store)) { _ in nil }

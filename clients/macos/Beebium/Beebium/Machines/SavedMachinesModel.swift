@@ -86,6 +86,16 @@ final class SavedMachinesModel: ObservableObject {
         } while reloadQueued
     }
 
+    /// Drop one machine from the page (a card's Remove from List): forget it from
+    /// recents and take it out of the shown list at once. The machine on disk is
+    /// untouched -- opening it again restores it -- and a running machine can be
+    /// dropped too, since this is only a list entry. No full re-describe: the
+    /// other cards are unchanged.
+    func forget(_ machine: MachineDescription) {
+        recents.forget(machineDirpath: URL(fileURLWithPath: machine.machineDirpath))
+        machines.removeAll { $0.machineDirpath == machine.machineDirpath }
+    }
+
     /// Forget every recent machine (the Clear button on the page). The machines
     /// on disk are untouched; only the recents list is emptied.
     func clear() {

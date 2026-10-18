@@ -75,7 +75,8 @@ struct MachinesPage: View {
                 ForEach(model.machines) { machine in
                     MachineCard(machine: machine,
                                 onOpen: { open(machine) },
-                                onReveal: { reveal(machine) })
+                                onReveal: { reveal(machine) },
+                                onRemove: { model.forget(machine) })
                 }
             }
             .padding(.horizontal, 24)
@@ -115,6 +116,7 @@ struct MachineCard: View {
     let machine: MachineDescription
     let onOpen: () -> Void
     let onReveal: () -> Void
+    let onRemove: () -> Void
 
     @State private var thumbnail: NSImage?
 
@@ -160,6 +162,10 @@ struct MachineCard: View {
         .contextMenu {
             Button("Open") { onOpen() }
             Button("Reveal in Finder") { onReveal() }
+            Divider()
+            // Drops the machine from this list only; the machine on disk is
+            // untouched and opening it again brings it back, so no confirmation.
+            Button("Remove from List") { onRemove() }
         }
         .task(id: machine.id) {
             thumbnail = Self.loadThumbnail(machine.thumbnailFilepath)
