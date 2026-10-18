@@ -365,10 +365,14 @@ more. So:
   document declines to lock or unlock with a message, and lock semantics
   for a closed machine are a separate issue.
 - The app's own title-click monitor and rename popover are removed. A
-  transient machine, which has no file, is an untitled document named by
-  the server; File > Rename Machine... remains for it (the server's plain
-  name) until it is saved, after which the title bar's own popover is the
-  one way to rename.
+  transient machine has no document behind its window at all (ruled
+  2026-10-18 on trial: an untitled `NSDocument` still gets the popover, with
+  a Where field naming a folder the machine is not in, and naming it would
+  have saved it): no proxy icon, no path menu, no popover. Its rename is
+  File > Rename Machine..., the server's plain name, and never saves. The
+  document is attached when the machine is saved, by Save, Save As or
+  opening a saved machine, and from then the title bar's popover is the one
+  way to rename or move it.
 
 The `source preset` field records which preset the machine
 was instantiated from, as information only. A later change to the preset
