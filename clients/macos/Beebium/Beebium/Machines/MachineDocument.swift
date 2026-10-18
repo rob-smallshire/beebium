@@ -111,16 +111,34 @@ final class MachineDocument: NSDocument {
 
     // MARK: - Rename and Move (the popover's inline rename and Where)
 
-    /// Inline rename and Move To are one operation server-side: both end here,
-    /// with `url` the chosen destination directory (its leaf is
-    /// `<name>.beebium-machine`). MoveMachine moves the running machine's
-    /// directory; on success the window follows and the recents entry moves with
-    /// it, and on failure the server's message is handed back for AppKit to
-    /// present.
+    /// Where the title bar's inline rename and Move To both land, with `url` the
+    /// chosen destination directory (its leaf is `<name>.beebium-machine`), the
+    /// Where popup choosing the folder.
+    ///
+    /// An untitled document -- a machine not yet saved -- has no directory to
+    /// move, so naming it saves it, as macOS does for any untitled document: a
+    /// first Save to the chosen URL, the same as File > Save... with the popover's
+    /// name and folder. A saved machine moves (and so renames) in place with
+    /// MoveMachine. On success the window follows and the recents entry is
+    /// recorded or moved; on failure the server's message is handed back for
+    /// AppKit to present.
     override func move(to url: URL, completionHandler: ((Error?) -> Void)? = nil) {
         guard let systemClient else { completionHandler?(nil); return }
         let previousDirpath = fileURL
         Task { @MainActor in
+            if previousDirpath == nil {
+                switch await systemClient.saveMachine(destinationDirpath: url.path,
+                                                      replaceExisting: false) {
+                case .success(let newDirpath):
+                    syncFromServer()
+                    recents.remember(machineDirpath: URL(fileURLWithPath: newDirpath))
+                    NotificationCenter.default.post(name: .savedMachinesDidChange, object: nil)
+                    completionHandler?(nil)
+                case .failure(let error):
+                    completionHandler?(error)
+                }
+                return
+            }
             switch await systemClient.moveMachine(toDirpath: url.path) {
             case .success(let newDirpath):
                 syncFromServer()
