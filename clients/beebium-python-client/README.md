@@ -144,6 +144,13 @@ text = bbc.video.screen_text().text
 bbc.expect("BASIC")
 ```
 
+To compare the display with memory, `bbc.video.screen_region()` says where the
+displayed screen is, as the server computes it from the live 6845, latch and
+paging: the region the video reads (`main_ram`; `shadow_ram` on a B+ or B+ 128K
+in a shadow mode; always `main_ram` on an Integra-B, whose shadow RAM is the
+CPU's), and the address ranges in display order, wrapping as the hardware
+does. `bbc.memory.region(r.region).peek[start:end]` then reads each range.
+
 ### Read and write memory
 
 ```python

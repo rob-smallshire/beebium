@@ -66,6 +66,39 @@ class TeletextScreen:
 
 
 @dataclass(frozen=True)
+class ScreenRegion:
+    """Where the screen the video shows lies in memory, as the server computes
+    it from how the 6845, the System VIA latch and the paging are programmed
+    now (not from a screen mode).
+
+    ``region`` names the memory region the video fetches from -- ``main_ram``,
+    or ``shadow_ram`` on a B+ or B+ 128K showing its shadow RAM; an Integra-B's
+    video always reads ``main_ram`` -- and its addresses are CPU addresses, so
+    ``bbc.memory.region(r.region).peek[start:end]`` reads the screen for each
+    ``(start, end)`` in :meth:`ranges`.
+    """
+
+    region: str
+    start_address: int
+    """The CPU address of the first displayed byte (the 6845 start address)."""
+    length: int
+    """The bytes one frame displays."""
+    wrap_address: int
+    """Where the screen continues once it passes &7FFF: &7C00 in teletext, else
+    &8000 less the screen size the latch selects."""
+    teletext: bool
+
+    def ranges(self) -> list[tuple[int, int]]:
+        """The screen's bytes as one or two ``(start, end)`` CPU address ranges,
+        end exclusive, in display order: two when it wraps past &7FFF."""
+        end = self.start_address + self.length
+        if end <= 0x8000:
+            return [(self.start_address, end)]
+        return [(self.start_address, 0x8000),
+                (self.wrap_address, self.wrap_address + end - 0x8000)]
+
+
+@dataclass(frozen=True)
 class PixelRegion:
     """A rectangle in frame pixel coordinates.
 
@@ -387,6 +420,23 @@ class Video:
         if self._config is None:
             self._config = self._get_config()
         return self._config
+
+    def screen_region(self) -> ScreenRegion:
+        """Where the screen the video shows lies in memory now.
+
+        Computed by the server from the live 6845 start address and geometry,
+        the System VIA latch's screen size and the machine's paging, so it
+        follows a hardware scroll, a shadow mode and a screen programmed
+        without the MOS.
+        """
+        response = self._stub.GetScreenSource(video_pb2.GetScreenSourceRequest())
+        return ScreenRegion(
+            region=response.region,
+            start_address=response.start_address,
+            length=response.length,
+            wrap_address=response.wrap_address,
+            teletext=response.teletext,
+        )
 
     def teletext_screen(
         self,

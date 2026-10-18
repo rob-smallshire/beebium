@@ -246,6 +246,22 @@ capture feeds the teletext strategy behind `GetScreenText`. The `text` field is
 provided for a caller already holding the cells, and is the same conversion
 `GetScreenText` returns for a MODE 7 band.
 
+#### GetScreenSource
+
+Where the screen the video shows lies in memory: the memory region it fetches
+from (`main_ram`, or `shadow_ram` on a B+ or B+ 128K while ACCCON bit 7 shows
+it; never `shadow_ram` on an Integra-B), the CPU address of the first displayed
+byte, the bytes a frame displays, and where a read continues past &7FFF. All are
+computed from the live 6845 start address and geometry, the System VIA latch's
+screen size and the paging, not from a screen mode; see
+[video-subsystem.md](video-subsystem.md#which-memory-the-video-reads).
+
+```bash
+grpcurl -plaintext \
+  -import-path src/service/proto -proto video.proto \
+  localhost:48875 beebium.VideoService/GetScreenSource
+```
+
 #### HoldScreen and ReleaseScreen
 
 Holds the screen as it stands, so a selection reads the still it was drawn on

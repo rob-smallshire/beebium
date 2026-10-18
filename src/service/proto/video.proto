@@ -32,6 +32,12 @@ service VideoService {
     // same capture; see docs/discussion/teletext-cell-capture.md.
     rpc GetTeletextScreen(GetTeletextScreenRequest) returns (TeletextScreen);
 
+    // Where the screen the video shows lies in memory, from how the 6845, the
+    // System VIA latch and the machine's paging are programmed now -- not from
+    // a screen mode -- so a client can read the screen's bytes from the named
+    // region: GetMemoryRegions lists it, and its addresses are CPU addresses.
+    rpc GetScreenSource(GetScreenSourceRequest) returns (ScreenSource);
+
     // Read text from the display, whatever mode is producing it.
     //
     // The caller selects in pixels and gets back text plus where it was found.
@@ -161,6 +167,32 @@ message TeletextScreenRegion {
     uint32 column = 2;
     uint32 rows = 3;
     uint32 columns = 4;
+}
+
+message GetScreenSourceRequest {}
+
+message ScreenSource {
+    // The memory region the video fetches from: "main_ram", or "shadow_ram"
+    // on a B+ or B+ 128K while ACCCON bit 7 shows its shadow RAM. Never
+    // "shadow_ram" on an Integra-B, whose video always reads main RAM.
+    string region = 1;
+
+    // The CPU address of the first displayed byte: the 6845 start address
+    // (R12/R13) as the video fetch translates it.
+    uint32 start_address = 2;
+
+    // The bytes one frame displays: characters per row (R1) times rows (R6),
+    // times eight bytes a character cell in a bitmap screen.
+    uint32 length = 3;
+
+    // Where the screen continues once a read passes &7FFF, as the board's
+    // wiring wraps it: &7C00 in teletext, else &8000 less the screen size
+    // the System VIA latch (outputs B4 and B5) selects. A screen that ends
+    // below &8000 never reaches it.
+    uint32 wrap_address = 4;
+
+    // True when the 6845 is addressing teletext memory (MA13 set).
+    bool teletext = 5;
 }
 
 message GetTeletextScreenRequest {

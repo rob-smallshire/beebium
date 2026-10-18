@@ -586,6 +586,13 @@ public:
         return main_ram.read(addr);
     }
 
+    // The region the video shows: shadow RAM while ACCCON bit 7 selects it
+    // for the display (the screen lies within &3000-&7FFF, all of which it
+    // replaces), else main RAM.
+    std::string_view video_region() const {
+        return (acccon_ & 0x80) ? REGION_SHADOW_RAM : REGION_MAIN_RAM;
+    }
+
     // Direct shadow RAM access for testing/debugging
     uint8_t peek_shadow(uint16_t addr) const {
         if (addr >= 0x3000 && addr < 0x8000) {

@@ -71,6 +71,12 @@ class VideoServiceStub:
     with the pixels it replaces, and that is a separate transport from the
     same capture; see docs/discussion/teletext-cell-capture.md.
     """
+    GetScreenSource: _grpc.UnaryUnaryMultiCallable[_video_pb2.GetScreenSourceRequest, _video_pb2.ScreenSource]
+    """Where the screen the video shows lies in memory, from how the 6845, the
+    System VIA latch and the machine's paging are programmed now -- not from
+    a screen mode -- so a client can read the screen's bytes from the named
+    region: GetMemoryRegions lists it, and its addresses are CPU addresses.
+    """
     GetScreenText: _grpc.UnaryUnaryMultiCallable[_video_pb2.GetScreenTextRequest, _video_pb2.ScreenText]
     """Read text from the display, whatever mode is producing it.
 
@@ -134,6 +140,12 @@ class VideoServiceAsyncStub(VideoServiceStub):
     copy would be absurd. A future vector renderer needs every frame aligned
     with the pixels it replaces, and that is a separate transport from the
     same capture; see docs/discussion/teletext-cell-capture.md.
+    """
+    GetScreenSource: _aio.UnaryUnaryMultiCallable[_video_pb2.GetScreenSourceRequest, _video_pb2.ScreenSource]  # type: ignore[assignment]
+    """Where the screen the video shows lies in memory, from how the 6845, the
+    System VIA latch and the machine's paging are programmed now -- not from
+    a screen mode -- so a client can read the screen's bytes from the named
+    region: GetMemoryRegions lists it, and its addresses are CPU addresses.
     """
     GetScreenText: _aio.UnaryUnaryMultiCallable[_video_pb2.GetScreenTextRequest, _video_pb2.ScreenText]  # type: ignore[assignment]
     """Read text from the display, whatever mode is producing it.
@@ -219,6 +231,18 @@ class VideoServiceServicer(metaclass=_abc_1.ABCMeta):
         copy would be absurd. A future vector renderer needs every frame aligned
         with the pixels it replaces, and that is a separate transport from the
         same capture; see docs/discussion/teletext-cell-capture.md.
+        """
+
+    @_abc_1.abstractmethod
+    def GetScreenSource(
+        self,
+        request: _video_pb2.GetScreenSourceRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_video_pb2.ScreenSource, _abc.Awaitable[_video_pb2.ScreenSource]]:
+        """Where the screen the video shows lies in memory, from how the 6845, the
+        System VIA latch and the machine's paging are programmed now -- not from
+        a screen mode -- so a client can read the screen's bytes from the named
+        region: GetMemoryRegions lists it, and its addresses are CPU addresses.
         """
 
     @_abc_1.abstractmethod

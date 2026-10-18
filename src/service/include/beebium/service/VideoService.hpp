@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_SERVICE_VIDEO_SERVICE_HPP
 #define BEEBIUM_SERVICE_VIDEO_SERVICE_HPP
 
+#include "beebium/ScreenMemory.hpp"
 #include "video.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 #include <atomic>
@@ -48,6 +49,10 @@ public:
     // a unit test), which is safe single-threaded.
     using RunPaused = std::function<void(const std::function<void()>&)>;
 
+    // Where the screen the video shows lies in memory, computed by the
+    // server from the machine's state (see GetScreenSource).
+    using ScreenMemorySource = std::function<ScreenMemory()>;
+
     VideoServiceImpl(FrameBuffer& frame_buffer, TeletextGrid& teletext_grid,
                      PeekByte peek_byte = {}, RunPaused with_paused = {});
     ~VideoServiceImpl() override;
@@ -75,6 +80,16 @@ public:
         grpc::ServerContext* context,
         const GetTeletextScreenRequest* request,
         TeletextScreen* response) override;
+
+    // FAILED_PRECONDITION when no machine supplies its screen memory.
+    grpc::Status GetScreenSource(
+        grpc::ServerContext* context,
+        const GetScreenSourceRequest* request,
+        ScreenSource* response) override;
+
+    void set_screen_memory_source(ScreenMemorySource source) {
+        screen_memory_ = std::move(source);
+    }
 
     grpc::Status GetScreenText(
         grpc::ServerContext* context,
@@ -124,6 +139,7 @@ private:
     TeletextGrid& teletext_grid_;
     PeekByte peek_byte_;
     RunPaused with_paused_;
+    ScreenMemorySource screen_memory_;
 
     mutable std::mutex holds_mutex_;
     std::map<uint64_t, std::shared_ptr<const ScreenCapture>> holds_;

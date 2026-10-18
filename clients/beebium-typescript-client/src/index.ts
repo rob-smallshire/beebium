@@ -18,6 +18,7 @@ export {
     type VideoConfig,
     type Frame,
     type TeletextScreen,
+    type ScreenRegion,
     type PixelRegion,
     type ScreenText,
     type ScreenTextRun,

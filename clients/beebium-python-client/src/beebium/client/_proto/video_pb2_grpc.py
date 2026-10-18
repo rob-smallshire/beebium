@@ -67,6 +67,11 @@ class VideoServiceStub(object):
                 request_serializer=video__pb2.GetTeletextScreenRequest.SerializeToString,
                 response_deserializer=video__pb2.TeletextScreen.FromString,
                 _registered_method=True)
+        self.GetScreenSource = channel.unary_unary(
+                '/beebium.VideoService/GetScreenSource',
+                request_serializer=video__pb2.GetScreenSourceRequest.SerializeToString,
+                response_deserializer=video__pb2.ScreenSource.FromString,
+                _registered_method=True)
         self.GetScreenText = channel.unary_unary(
                 '/beebium.VideoService/GetScreenText',
                 request_serializer=video__pb2.GetScreenTextRequest.SerializeToString,
@@ -132,6 +137,16 @@ class VideoServiceServicer(object):
         copy would be absurd. A future vector renderer needs every frame aligned
         with the pixels it replaces, and that is a separate transport from the
         same capture; see docs/discussion/teletext-cell-capture.md.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetScreenSource(self, request, context):
+        """Where the screen the video shows lies in memory, from how the 6845, the
+        System VIA latch and the machine's paging are programmed now -- not from
+        a screen mode -- so a client can read the screen's bytes from the named
+        region: GetMemoryRegions lists it, and its addresses are CPU addresses.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -207,6 +222,11 @@ def add_VideoServiceServicer_to_server(servicer, server):
                     servicer.GetTeletextScreen,
                     request_deserializer=video__pb2.GetTeletextScreenRequest.FromString,
                     response_serializer=video__pb2.TeletextScreen.SerializeToString,
+            ),
+            'GetScreenSource': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetScreenSource,
+                    request_deserializer=video__pb2.GetScreenSourceRequest.FromString,
+                    response_serializer=video__pb2.ScreenSource.SerializeToString,
             ),
             'GetScreenText': grpc.unary_unary_rpc_method_handler(
                     servicer.GetScreenText,
@@ -338,6 +358,33 @@ class VideoService(object):
             '/beebium.VideoService/GetTeletextScreen',
             video__pb2.GetTeletextScreenRequest.SerializeToString,
             video__pb2.TeletextScreen.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetScreenSource(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.VideoService/GetScreenSource',
+            video__pb2.GetScreenSourceRequest.SerializeToString,
+            video__pb2.ScreenSource.FromString,
             options,
             channel_credentials,
             insecure,

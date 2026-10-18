@@ -373,6 +373,23 @@ grpc::Status VideoServiceImpl::GetScreenGeometry(
     return grpc::Status::OK;
 }
 
+grpc::Status VideoServiceImpl::GetScreenSource(
+    grpc::ServerContext* /*context*/,
+    const GetScreenSourceRequest* /*request*/,
+    ScreenSource* response) {
+    if (!screen_memory_) {
+        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                            "no machine supplies its screen memory");
+    }
+    const ScreenMemory screen = screen_memory_();
+    response->set_region(std::string(screen.region));
+    response->set_start_address(screen.start_address);
+    response->set_length(screen.length);
+    response->set_wrap_address(screen.wrap_address);
+    response->set_teletext(screen.teletext);
+    return grpc::Status::OK;
+}
+
 grpc::Status VideoServiceImpl::GetTeletextScreen(
     grpc::ServerContext* /*context*/,
     const GetTeletextScreenRequest* request,

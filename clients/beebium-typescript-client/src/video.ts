@@ -14,6 +14,7 @@ import type {
     ScreenText as ProtoScreenText,
     ScreenGeometry as ProtoScreenGeometry,
     ScreenHold as ProtoScreenHold,
+    ScreenSource as ProtoScreenSource,
 } from "./generated/video.js";
 import {
     TeletextTextLayout,
@@ -44,6 +45,33 @@ export const TELETEXT_COLUMNS = 40;
  * unlike a fixed 40x25, which would truncate a custom-shaped display.
  */
 const TELETEXT_TO_EDGE = 0xffffffff;
+
+/**
+ * Where the screen the video shows lies in memory, as the server computes it
+ * from how the 6845, the System VIA latch and the paging are programmed now
+ * (not from a screen mode). `region` names the memory region the video fetches
+ * from -- `main_ram`, or `shadow_ram` on a B+ or B+ 128K showing its shadow
+ * RAM; an Integra-B's video always reads `main_ram` -- and the addresses are
+ * CPU addresses within it.
+ */
+export interface ScreenRegion {
+    region: string;
+    /** The CPU address of the first displayed byte (the 6845 start address). */
+    startAddress: number;
+    /** The bytes one frame displays. */
+    length: number;
+    /**
+     * Where the screen continues once it passes &7FFF: &7C00 in teletext, else
+     * &8000 less the screen size the latch selects.
+     */
+    wrapAddress: number;
+    teletext: boolean;
+    /**
+     * The screen's bytes as one or two [start, end) CPU address ranges in
+     * display order: two when it wraps past &7FFF.
+     */
+    ranges: Array<[number, number]>;
+}
 
 /** A MODE 7 screen, or a region of one, read as characters. */
 export interface TeletextScreen {
@@ -410,6 +438,33 @@ export class Video {
             request,
         );
         return toTeletextScreen(response);
+    }
+
+    /**
+     * Where the screen the video shows lies in memory now: computed by the
+     * server from the live 6845 start address and geometry, the System VIA
+     * latch's screen size and the machine's paging, so it follows a hardware
+     * scroll, a shadow mode and a screen programmed without the MOS.
+     */
+    async screenRegion(): Promise<ScreenRegion> {
+        const response = await promisify<Record<string, never>, ProtoScreenSource>(
+            this.stub as unknown as Record<string, Function>,
+            "getScreenSource",
+            {},
+        );
+        const end = response.startAddress + response.length;
+        const ranges: Array<[number, number]> = end <= 0x8000
+            ? [[response.startAddress, end]]
+            : [[response.startAddress, 0x8000],
+               [response.wrapAddress, response.wrapAddress + end - 0x8000]];
+        return {
+            region: response.region,
+            startAddress: response.startAddress,
+            length: response.length,
+            wrapAddress: response.wrapAddress,
+            teletext: response.teletext,
+            ranges,
+        };
     }
 
     /**

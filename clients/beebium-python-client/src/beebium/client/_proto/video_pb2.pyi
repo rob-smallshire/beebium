@@ -452,6 +452,68 @@ class TeletextScreenRegion(_message.Message):
 Global___TeletextScreenRegion: _TypeAlias = TeletextScreenRegion  # noqa: Y015
 
 @_typing.final
+class GetScreenSourceRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___GetScreenSourceRequest: _TypeAlias = GetScreenSourceRequest  # noqa: Y015
+
+@_typing.final
+class ScreenSource(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    REGION_FIELD_NUMBER: _builtins.int
+    START_ADDRESS_FIELD_NUMBER: _builtins.int
+    LENGTH_FIELD_NUMBER: _builtins.int
+    WRAP_ADDRESS_FIELD_NUMBER: _builtins.int
+    TELETEXT_FIELD_NUMBER: _builtins.int
+    region: _builtins.str
+    """The memory region the video fetches from: "main_ram", or "shadow_ram"
+    on a B+ or B+ 128K while ACCCON bit 7 shows its shadow RAM. Never
+    "shadow_ram" on an Integra-B, whose video always reads main RAM.
+    """
+    start_address: _builtins.int
+    """The CPU address of the first displayed byte: the 6845 start address
+    (R12/R13) as the video fetch translates it.
+    """
+    length: _builtins.int
+    """The bytes one frame displays: characters per row (R1) times rows (R6),
+    times eight bytes a character cell in a bitmap screen.
+    """
+    wrap_address: _builtins.int
+    """Where the screen continues once a read passes &7FFF, as the board's
+    wiring wraps it: &7C00 in teletext, else &8000 less the screen size
+    the System VIA latch (outputs B4 and B5) selects. A screen that ends
+    below &8000 never reaches it.
+    """
+    teletext: _builtins.bool
+    """True when the 6845 is addressing teletext memory (MA13 set)."""
+    def __init__(
+        self,
+        *,
+        region: _builtins.str = ...,
+        start_address: _builtins.int = ...,
+        length: _builtins.int = ...,
+        wrap_address: _builtins.int = ...,
+        teletext: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["length", b"length", "region", b"region", "start_address", b"start_address", "teletext", b"teletext", "wrap_address", b"wrap_address"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ScreenSource: _TypeAlias = ScreenSource  # noqa: Y015
+
+@_typing.final
 class GetTeletextScreenRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

@@ -19,6 +19,7 @@
 #include <beebium/devices/Crtc6845.hpp>
 #include <beebium/devices/VideoUla.hpp>
 #include <beebium/Machines.hpp>
+#include <beebium/ScreenMemory.hpp>
 #include <filesystem>
 #include <fstream>
 
@@ -690,3 +691,18 @@ TEST_CASE("Teletext rendering produces blended pixels", "[video][boot][teletext]
 }
 
 #endif // BEEBIUM_ROM_DIR
+
+TEST_CASE("Screen addresses wrap past &7FFF by the latch's screen size", "[video][screen_memory]") {
+    // A character address at &1000 is CPU address &8000, one past the top of
+    // memory; the board's adder wraps it to the start of a screen of the size
+    // the latch selects (screen_base = B4 + 2 * B5).
+    CHECK(beebium::screen_address(0x1000, 0, 0) == 0x4000);  // 16K
+    CHECK(beebium::screen_address(0x1000, 0, 1) == 0x6000);  // 8K
+    CHECK(beebium::screen_address(0x1000, 0, 2) == 0x3000);  // 20K
+    CHECK(beebium::screen_address(0x1000, 0, 3) == 0x5800);  // 10K
+    // Below &8000 nothing is added; the raster line selects the byte in a cell.
+    CHECK(beebium::screen_address(0x0600, 5, 2) == 0x3005);
+    // Teletext: MA13 set, 1K at &7C00 addressed by MA0-MA9, raster ignored.
+    CHECK(beebium::screen_address(0x2000 | 0x03FF, 7, 0) == 0x7FFF);
+    CHECK(beebium::screen_address(0x2400, 0, 0) == 0x7C00);
+}

@@ -216,8 +216,9 @@ void tick_video() {
     auto crtc_output = crtc.tick();
 
     // 2. Translate CRTC address to BBC memory address
-    uint16_t screen_addr = translate_screen_address(crtc_output.address);
-    uint8_t screen_byte = crtc_output.display ? main_ram.read(screen_addr) : 0;
+    uint16_t screen_addr = screen_address(crtc_output.address, crtc_output.raster,
+                                          addressable_latch.screen_base());
+    uint8_t screen_byte = crtc_output.display ? peek_video(screen_addr) : 0;
 
     // 3. Generate pixels (mode-dependent)
     PixelBatch batch;
@@ -240,11 +241,49 @@ void tick_video() {
 
 ### Screen Address Translation
 
-The CRTC outputs a 14-bit address. Translation depends on mode:
+The CRTC outputs a 14-bit character address (MA0-MA13) and a raster line
+(RA0-RA4). `screen_address()` (`ScreenMemory.hpp`) turns them into the CPU
+address the video fetches, as the board's wiring does, whatever the program
+that set the 6845 up:
 
-- **Mode 7**: Screen at 0x7C00-0x7FFF (1KB). Address = `0x7C00 | (crtc_addr & 0x3FF)`
-- **Bitmap modes**: Screen base from addressable latch (IC32) bits 4-5:
-  - 00: 0x3000, 01: 0x4000, 10: 0x5800, 11: 0x6000
+- **Teletext** (MA13 set): 1K at &7C00, `0x7C00 | (crtc_addr & 0x3FF)`; the
+  SAA5050 takes the raster line.
+- **Bitmap**: eight bytes a character cell, `(crtc_addr << 3) | (raster & 7)`.
+  A character address past &7FFF (MA12 set) is wrapped by an adder whose amount
+  the System VIA addressable latch outputs B4 and B5 select
+  (`screen_base()` = B4 + 2 * B5):
+
+  | B5 B4 | screen size | a read past &7FFF continues at |
+  |-------|-------------|--------------------------------|
+  | 0 0   | 16K         | &4000                          |
+  | 0 1   | 8K          | &6000                          |
+  | 1 0   | 20K         | &3000                          |
+  | 1 1   | 10K         | &5800                          |
+
+  MOS 1.20 writes B5=1 B4=0 for its 20K modes (0-2) and B5=1 B4=1 for its 10K
+  ones (4, 5), and those scroll correctly with this table, as in B2 and B-Em.
+  The Advanced User Guide's latch table (section 23.2) has those two rows
+  swapped.
+
+### Which memory the video reads
+
+`peek_video()` in each hardware policy is the video's view of memory, and
+`video_region()` names it for clients:
+
+- **Model B and the ROM/RAM boards** (notional, ATPL Sidewise, Watford):
+  `main_ram`.
+- **B+ and B+ 128K**: `shadow_ram` while ACCCON (&FE34) bit 7 selects it for
+  the display -- the screen lies in &3000-&7FFF, all of which it replaces --
+  else `main_ram`.
+- **Integra-B**: always `main_ram`; the board's shadow RAM is the CPU's, never
+  the display's. In a shadow mode the CPU sees `shadow_ram` at &3000-&7FFF
+  instead (unless IBOS has MEMSEL set, as it does in the OS).
+
+`VideoService.GetScreenSource` (`video.screen_region()` in the Python client,
+`video.screenRegion()` in TypeScript) reports the region, the start address,
+the length and the wrap address, computed from the live 6845 start address
+(R12/R13), its geometry (R1, R6), the latch and the paging -- not from a screen
+mode -- so a test can read the displayed bytes from the named region.
 
 ### Mode 7 Screen Memory Layout
 

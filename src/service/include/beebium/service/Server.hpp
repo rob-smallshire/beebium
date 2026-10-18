@@ -302,6 +302,14 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         [this](const std::function<void()>& fn) {
             impl_->machine.with_emulation_paused(fn);
         });
+    // Read with the emulation thread halted, so the 6845 start address, the
+    // latch and the paging describe one moment.
+    impl_->video_service->set_screen_memory_source([this] {
+        ScreenMemory screen;
+        impl_->machine.with_emulation_paused(
+            [&] { screen = screen_memory(impl_->machine.state().memory); });
+        return screen;
+    });
 
     // Create break callbacks that call Machine methods
     BreakCallbacks break_callbacks{

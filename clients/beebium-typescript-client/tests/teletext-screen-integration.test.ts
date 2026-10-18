@@ -224,3 +224,23 @@ describe("teletextScreen cell attributes", () => {
         expect(cell.flashing).toBe(true);
     }, 60000);
 });
+
+describe("screenRegion", () => {
+    it("names the memory the displayed MODE 7 screen is fetched from", async () => {
+        const bbc = await launchAtPrompt();
+        await bbc.debugger.stop();
+        const r = await bbc.video.screenRegion();
+        expect(r.region).toBe("main_ram");
+        expect(r.teletext).toBe(true);
+        expect(r.length).toBe(1000);
+        expect(r.wrapAddress).toBe(0x7c00);
+
+        // Its bytes, in display order, are the characters the video drew.
+        const parts = await Promise.all(r.ranges.map(([start, end]) =>
+            bbc.memory.region(r.region).peek.read(start, end - start)));
+        const bytes = Buffer.concat(parts);
+        const screen = await bbc.video.teletextScreen();
+        expect([...bytes].map((b) => b & 0x7f))
+            .toEqual(screen.cells.map((cell: TeletextScreenCell) => cell.character));
+    }, 60000);
+});
