@@ -30,8 +30,8 @@ enum MachineSaveError: Error, LocalizedError, Equatable {
         case .notConnected:            return "Not connected to the machine."
         case .noDestination:           return "Choose where to save this machine."
         case .destinationExists:       return "An item already exists at that location."
-        case .notReplaceable(let why): return why.isEmpty ? "That item cannot be replaced." : why
-        case .failed(let message):     return message
+        case .notReplaceable(let why): return SaveClient.sentence("That item cannot be replaced.", detail: why)
+        case .failed(let message):     return SaveClient.sentence("The machine could not be saved.", detail: message)
         }
     }
 }
@@ -51,8 +51,21 @@ enum SaveClient {
         case .invalidArgument:    return .noDestination
         case .alreadyExists:      return .destinationExists
         case .failedPrecondition: return .notReplaceable(status.message ?? "")
-        default:                  return .failed(status.message ?? "The machine could not be saved.")
+        default:                  return .failed(status.message ?? "")
         }
+    }
+
+    /// Compose a user-facing sentence from a fixed lead and the server's own
+    /// message. Server messages are lower-case fragments by convention -- right
+    /// for logs and the CLI -- but anything an alert shows must lead with a
+    /// capital and end with a full stop, so the lead carries that and the
+    /// fragment, if any, completes it after a colon. Pure.
+    static func sentence(_ lead: String, detail serverMessage: String) -> String {
+        let detail = serverMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !detail.isEmpty else { return lead }
+        let base = lead.hasSuffix(".") ? String(lead.dropLast()) : lead
+        let tail = detail.hasSuffix(".") ? String(detail.dropLast()) : detail
+        return "\(base): \(tail)."
     }
 
     /// The first-save panel's starting folder and filename: the user's Documents

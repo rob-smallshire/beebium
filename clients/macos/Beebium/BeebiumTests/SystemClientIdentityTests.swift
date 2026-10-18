@@ -84,28 +84,29 @@ final class SystemClientRenameErrorTests: XCTestCase {
                        "A machine named \"Elite Server\" already exists in this folder.")
     }
 
-    func testInvalidArgumentKeepsTheServerMessage() {
-        XCTAssertEqual(
-            SystemClient.renameError(
-                from: GRPCStatus(code: .invalidArgument, message: "a name cannot contain '/'"),
-                attemptedName: "a/b"),
-            .invalidName("a name cannot contain '/'"))
+    func testInvalidArgumentLeadsWithASentenceAndKeepsTheServerDetail() {
+        let error = SystemClient.renameError(
+            from: GRPCStatus(code: .invalidArgument, message: "a name cannot contain '/'"),
+            attemptedName: "a/b")
+        XCTAssertEqual(error, .invalidName("a name cannot contain '/'"))
+        XCTAssertEqual(error.errorDescription,
+                       "That name can't be used: a name cannot contain '/'.")
     }
 
-    func testInvalidArgumentFallsBackWhenTheServerIsSilent() {
-        XCTAssertEqual(
-            SystemClient.renameError(
-                from: GRPCStatus(code: .invalidArgument, message: nil),
-                attemptedName: ""),
-            .invalidName("That name can't be used."))
+    func testInvalidArgumentIsAWholeSentenceWhenTheServerIsSilent() {
+        let error = SystemClient.renameError(
+            from: GRPCStatus(code: .invalidArgument, message: nil),
+            attemptedName: "")
+        XCTAssertEqual(error, .invalidName(""))
+        XCTAssertEqual(error.errorDescription, "That name can't be used.")
     }
 
     func testOtherStatusesAreAPlainFailure() {
-        XCTAssertEqual(
-            SystemClient.renameError(
-                from: GRPCStatus(code: .internalError, message: "boom"),
-                attemptedName: "x"),
-            .failed("boom"))
+        let error = SystemClient.renameError(
+            from: GRPCStatus(code: .internalError, message: "boom"),
+            attemptedName: "x")
+        XCTAssertEqual(error, .failed("boom"))
+        XCTAssertEqual(error.errorDescription, "Couldn't rename the machine: boom.")
     }
 
     func testANonGRPCErrorIsAPlainFailure() {
@@ -138,27 +139,28 @@ final class SystemClientMoveErrorTests: XCTestCase {
             .parentNotFound)
     }
 
-    func testInvalidArgumentKeepsTheServerMessage() {
-        XCTAssertEqual(
-            SystemClient.moveError(
-                from: GRPCStatus(code: .invalidArgument, message: "destination is inside the machine"),
-                attemptedName: "x"),
-            .invalidDestination("destination is inside the machine"))
+    func testInvalidArgumentLeadsWithASentenceAndKeepsTheServerDetail() {
+        let error = SystemClient.moveError(
+            from: GRPCStatus(code: .invalidArgument, message: "destination is inside the machine"),
+            attemptedName: "x")
+        XCTAssertEqual(error, .invalidDestination("destination is inside the machine"))
+        XCTAssertEqual(error.errorDescription,
+                       "That location can't be used: destination is inside the machine.")
     }
 
-    func testInvalidArgumentFallsBackWhenTheServerIsSilent() {
-        XCTAssertEqual(
-            SystemClient.moveError(
-                from: GRPCStatus(code: .invalidArgument, message: nil),
-                attemptedName: "x"),
-            .invalidDestination("That location can't be used."))
+    func testInvalidArgumentIsAWholeSentenceWhenTheServerIsSilent() {
+        let error = SystemClient.moveError(
+            from: GRPCStatus(code: .invalidArgument, message: nil),
+            attemptedName: "x")
+        XCTAssertEqual(error, .invalidDestination(""))
+        XCTAssertEqual(error.errorDescription, "That location can't be used.")
     }
 
     func testOtherStatusesAreAPlainFailure() {
-        XCTAssertEqual(
-            SystemClient.moveError(
-                from: GRPCStatus(code: .internalError, message: "boom"),
-                attemptedName: "x"),
-            .failed("boom"))
+        let error = SystemClient.moveError(
+            from: GRPCStatus(code: .internalError, message: "boom"),
+            attemptedName: "x")
+        XCTAssertEqual(error, .failed("boom"))
+        XCTAssertEqual(error.errorDescription, "Couldn't move the machine: boom.")
     }
 }

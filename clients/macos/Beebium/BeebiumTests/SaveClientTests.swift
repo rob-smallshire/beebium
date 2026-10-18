@@ -29,20 +29,40 @@ final class SaveClientTests: XCTestCase {
     }
 
     func testMapsFailedPreconditionToNotReplaceableKeepingTheReason() {
-        XCTAssertEqual(
-            SaveClient.saveError(from: GRPCStatus(code: .failedPrecondition,
-                                                  message: "a machine is running there")),
-            .notReplaceable("a machine is running there"))
+        let error = SaveClient.saveError(from: GRPCStatus(code: .failedPrecondition,
+                                                          message: "a machine is running there"))
+        XCTAssertEqual(error, .notReplaceable("a machine is running there"))
+        XCTAssertEqual(error.errorDescription,
+                       "That item cannot be replaced: a machine is running there.")
     }
 
     func testMapsInternalToFailed() {
-        XCTAssertEqual(SaveClient.saveError(from: GRPCStatus(code: .internalError, message: "disk full")),
-                       .failed("disk full"))
+        let error = SaveClient.saveError(from: GRPCStatus(code: .internalError, message: "disk full"))
+        XCTAssertEqual(error, .failed("disk full"))
+        XCTAssertEqual(error.errorDescription, "The machine could not be saved: disk full.")
     }
 
     func testMapsANonGRPCErrorToFailed() {
         struct SomeError: Error, LocalizedError { var errorDescription: String? { "boom" } }
         XCTAssertEqual(SaveClient.saveError(from: SomeError()), .failed("boom"))
+    }
+
+    // MARK: - Sentence composition
+
+    func testSentenceReturnsTheLeadAloneWhenThereIsNoServerDetail() {
+        XCTAssertEqual(SaveClient.sentence("That name can't be used.", detail: "   "),
+                       "That name can't be used.")
+    }
+
+    func testSentenceJoinsLeadAndDetailAfterAColonWithOneFullStop() {
+        // A lower-case server fragment, with or without its own full stop, must
+        // not add a second one or lead the sentence.
+        XCTAssertEqual(
+            SaveClient.sentence("That location can't be used.", detail: "destination is inside the machine"),
+            "That location can't be used: destination is inside the machine.")
+        XCTAssertEqual(
+            SaveClient.sentence("That location can't be used.", detail: "no such folder."),
+            "That location can't be used: no such folder.")
     }
 
     func testFirstSaveDefaultsUseDocumentsAndTheMachineName() {

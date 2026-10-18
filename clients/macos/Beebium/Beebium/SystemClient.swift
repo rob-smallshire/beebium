@@ -204,9 +204,9 @@ final class SystemClient: ObservableObject, Disconnectable {
             case .nameInUse(let name):
                 return "A machine named \"\(name)\" already exists in this folder."
             case .invalidName(let m):
-                return m
+                return SaveClient.sentence("That name can't be used.", detail: m)
             case .failed(let m):
-                return m
+                return SaveClient.sentence("Couldn't rename the machine.", detail: m)
             }
         }
     }
@@ -223,15 +223,10 @@ final class SystemClient: ObservableObject, Disconnectable {
         case .alreadyExists:
             return .nameInUse(attempted: attemptedName)
         case .invalidArgument:
-            return .invalidName(Self.message(status, or: "That name can't be used."))
+            return .invalidName(status.message ?? "")
         default:
-            return .failed(Self.message(status, or: "Couldn't rename the machine."))
+            return .failed(status.message ?? "")
         }
-    }
-
-    private nonisolated static func message(_ status: GRPCStatus, or fallback: String) -> String {
-        let message = status.message ?? ""
-        return message.isEmpty ? fallback : message
     }
 
     /// Set the machine's name: plain text, never a template; an empty or
@@ -309,9 +304,9 @@ final class SystemClient: ObservableObject, Disconnectable {
             case .parentNotFound:
                 return "The destination folder could not be found."
             case .invalidDestination(let m):
-                return m
+                return SaveClient.sentence("That location can't be used.", detail: m)
             case .failed(let m):
-                return m
+                return SaveClient.sentence("Couldn't move the machine.", detail: m)
             }
         }
     }
@@ -328,9 +323,9 @@ final class SystemClient: ObservableObject, Disconnectable {
         case .notFound:
             return .parentNotFound
         case .invalidArgument:
-            return .invalidDestination(Self.message(status, or: "That location can't be used."))
+            return .invalidDestination(status.message ?? "")
         default:
-            return .failed(Self.message(status, or: "Couldn't move the machine."))
+            return .failed(status.message ?? "")
         }
     }
 
