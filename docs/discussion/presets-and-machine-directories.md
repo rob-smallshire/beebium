@@ -332,6 +332,44 @@ depending on the template. One plain name with one way to change it, and the
 live state moved to a description beside it, keeps both features without
 the interaction. See [cli.md](../cli.md#machine-name-and-description).
 
+*Decided 2026-10-18, on trial of the in-place rename:* **the macOS app uses
+the standard document title bar, not a rename menu of its own.** In trial the
+app's right-click Rename Machine... menu collided with the path menu macOS
+gives any window with a represented file, and the user asked for the
+standard title-bar popover (Name, Tags, Where, Locked) that Preview and
+TextEdit show behind the chevron beside the document name. That popover is
+AppKit's and is offered only to a window whose window controller's document
+is an `NSDocument` that autosaves in place and has a file URL; a bare window
+with a represented URL gets the proxy icon and the path menu and nothing
+more. So:
+
+- The macOS machine window is backed by an `NSDocument` subclass whose file
+  URL is the machine directory and whose type is the machine package. The
+  server still owns every byte; the document object is the AppKit face of
+  the running machine: Save, Save As and Move call the server, Read opens
+  (starts) the machine, and the edited state follows the server's status
+  stream. The earlier reasoning against `NSDocument` (section 4.8, "the app
+  need not be NSDocument-based") held while the window only needed recents
+  and a proxy icon; it does not hold once the window must rename, move and
+  tag its document the way every macOS document does.
+- Rename and Where are one operation, a move: the server gains
+  `MoveMachine{destination_dirpath}`, a saved machine's directory moving
+  while it runs (the mechanism `SetMachineName` already built: a rename on
+  the same volume, else a copy under the same uuid, as Windows does).
+  `SetMachineName` on a saved machine remains as the move to a sibling path,
+  so the CLI and other clients keep one call for "rename".
+- Tags are Finder metadata on the directory; AppKit writes them and the
+  server never sees them.
+- Locked has no meaning yet for a running machine (the immutable flag on
+  the directory would break the server's atomic writes inside it), so the
+  document declines to lock or unlock with a message, and lock semantics
+  for a closed machine are a separate issue.
+- The app's own title-click monitor and rename popover are removed. A
+  transient machine, which has no file, is an untitled document named by
+  the server; File > Rename Machine... remains for it (the server's plain
+  name) until it is saved, after which the title bar's own popover is the
+  one way to rename.
+
 The `source preset` field records which preset the machine
 was instantiated from, as information only. A later change to the preset
 does not touch the machine (question 2).
