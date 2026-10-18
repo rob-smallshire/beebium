@@ -15,9 +15,9 @@ import UniformTypeIdentifiers
 @testable import Beebium
 
 /// Resolving an opened path down to the machine directory to launch, and the
-/// saved-machine document type. The resolver is a pure seam, pinned here
+/// saved-machine package type. The resolver is a pure seam, pinned here
 /// without touching the filesystem.
-final class MachineDocumentTests: XCTestCase {
+final class MachinePackageTests: XCTestCase {
 
     // The resolved directory is compared by `.path`: it is handed to
     // `start --machine <dir>` as a path, and deletingLastPathComponent() yields
@@ -26,7 +26,7 @@ final class MachineDocumentTests: XCTestCase {
     func testDirectoryPathResolvesToItself() {
         let dir = URL(fileURLWithPath: "/Users/me/Documents/Elite Server.beebium-machine")
         XCTAssertEqual(
-            MachineDocument.machineDirectory(forOpenedPath: dir, isDirectory: true).path,
+            MachinePackage.machineDirectory(forOpenedPath: dir, isDirectory: true).path,
             "/Users/me/Documents/Elite Server.beebium-machine")
     }
 
@@ -35,7 +35,7 @@ final class MachineDocumentTests: XCTestCase {
         let file = URL(fileURLWithPath:
             "/Users/me/Documents/Elite Server.beebium-machine/Elite Server.beebium-machine")
         XCTAssertEqual(
-            MachineDocument.machineDirectory(forOpenedPath: file, isDirectory: false).path,
+            MachinePackage.machineDirectory(forOpenedPath: file, isDirectory: false).path,
             "/Users/me/Documents/Elite Server.beebium-machine")
     }
 
@@ -44,12 +44,12 @@ final class MachineDocumentTests: XCTestCase {
         // so a directory renamed in Finder still opens.
         let dir = URL(fileURLWithPath: "/tmp/my machine")
         XCTAssertEqual(
-            MachineDocument.machineDirectory(forOpenedPath: dir, isDirectory: true).path,
+            MachinePackage.machineDirectory(forOpenedPath: dir, isDirectory: true).path,
             "/tmp/my machine")
     }
 
     func testFileExtensionConstant() {
-        XCTAssertEqual(MachineDocument.fileExtension, "beebium-machine")
+        XCTAssertEqual(MachinePackage.fileExtension, "beebium-machine")
     }
 
     func testExportedUTTypeIdentifier() {

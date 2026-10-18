@@ -27,7 +27,7 @@ enum SavedMachineOpening {
 
     @MainActor
     static func open(openedURL: URL, openMainWindow: @escaping () -> Void) async {
-        let machineDirpath = MachineDocument.machineDirectory(forOpenedPath: openedURL)
+        let machineDirpath = MachinePackage.machineDirectory(forOpenedPath: openedURL)
 
         guard let description = await PresetManager.shared.describeMachine(path: machineDirpath.path) else {
             presentError("Beebium could not read a saved machine at \"\(machineDirpath.lastPathComponent)\".")

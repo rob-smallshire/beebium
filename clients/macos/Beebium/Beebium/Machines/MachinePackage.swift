@@ -13,13 +13,16 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// What a saved machine is to the app: a `.beebium-machine` document. On macOS
-/// it is a document package -- a directory Finder shows as one item and opens
-/// in Beebium -- and on every platform the directory also carries a small
-/// openable document file of the same name inside it. The server runs the
-/// directory; the app only has to resolve whatever the user opened down to that
-/// directory and hand it to `start --machine`.
-enum MachineDocument {
+/// What a saved machine is on disk: a `.beebium-machine` package. On macOS it is
+/// a document package -- a directory Finder shows as one item and opens in
+/// Beebium -- and on every platform the directory also carries a small openable
+/// document file of the same name inside it. The server runs the directory; the
+/// app only has to resolve whatever the user opened down to that directory and
+/// hand it to `start --machine`.
+///
+/// This is the package format, not the AppKit document object: the window's
+/// `NSDocument` is `MachineDocument`.
+enum MachinePackage {
 
     /// The filename extension shared by the machine directory and its inner
     /// document file (both named `<name>.beebium-machine`). The server never
