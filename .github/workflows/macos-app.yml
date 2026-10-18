@@ -327,7 +327,21 @@ jobs:
           [ "${status}" = "Accepted" ] || { echo "::error::app notarization did not reach Accepted after retries (last id ${id}, status ${status:-<none>})"; exit 1; }
           echo "APP_NOTARIZE_ID=${id}" >> "${GITHUB_ENV}"
           xcrun stapler staple "${APP_PATH}"
-          xcrun stapler validate "${APP_PATH}"
+          # stapler validate re-checks the ticket with a CloudKit lookup
+          # (api.apple-cloudkit.com .../ticket-delivery/...), which drops
+          # transiently the same way notarytool submit does: in v0.10.0 the
+          # x86_64 lane failed here with NSURLError -1005 ("network connection
+          # was lost") right after a successful staple. Retry the lookup on the
+          # same 3-attempt, 30 s cadence as the submit. This does not make
+          # validate optional: an app whose ticket cannot be looked up three
+          # times running still fails the job.
+          for attempt in 1 2 3; do
+            echo "== stapler validate app (attempt ${attempt}/3) =="
+            if xcrun stapler validate "${APP_PATH}"; then break; fi
+            [ "${attempt}" = 3 ] && { echo "::error::app stapler validate failed after 3 attempts"; exit 1; }
+            echo "::warning::transient stapler validate failure on attempt ${attempt}; retrying in 30s"
+            sleep 30
+          done
 
       # dmgbuild (run by make-dmg.sh via uvx) needs uv on the runner.
       - name: Install uv
@@ -401,8 +415,27 @@ jobs:
           echo "== spctl DMG (open, primary signature) =="
           spctl -a -t open --context context:primary-signature -vv "${DMG_PATH}"
           echo "== stapler validate =="
-          xcrun stapler validate "${APP_PATH}"
-          xcrun stapler validate "${DMG_PATH}"
+          # stapler validate re-checks the ticket with a CloudKit lookup
+          # (api.apple-cloudkit.com .../ticket-delivery/...), which drops
+          # transiently the same way notarytool submit does: in v0.10.0 the
+          # x86_64 lane failed on this validate with NSURLError -1005 ("network
+          # connection was lost") right after a successful staple. Retry the
+          # lookup on the same 3-attempt, 30 s cadence as the submit, for both
+          # the app and the DMG. This does not make validate optional: a target
+          # whose ticket cannot be looked up three times running still fails the
+          # job.
+          validate_with_retry() {
+            local target="$1"
+            for attempt in 1 2 3; do
+              echo "== stapler validate ${target} (attempt ${attempt}/3) =="
+              if xcrun stapler validate "${target}"; then return 0; fi
+              [ "${attempt}" = 3 ] && { echo "::error::stapler validate ${target} failed after 3 attempts"; return 1; }
+              echo "::warning::transient stapler validate failure on attempt ${attempt}; retrying in 30s"
+              sleep 30
+            done
+          }
+          validate_with_retry "${APP_PATH}"
+          validate_with_retry "${DMG_PATH}"
 
       # Mount the DMG, copy the app out, and prove it is intact and runnable:
       # signature verifies, and one embedded server boots (ROM discovery via the
