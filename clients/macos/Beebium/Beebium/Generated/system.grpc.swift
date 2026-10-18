@@ -86,6 +86,11 @@ internal protocol Beebium_SystemServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse>
 
+  func moveMachine(
+    _ request: Beebium_MoveMachineRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_MoveMachineRequest, Beebium_MoveMachineResponse>
+
   func resetBattery(
     _ request: Beebium_ResetBatteryRequest,
     callOptions: CallOptions?
@@ -115,10 +120,13 @@ extension Beebium_SystemServiceClientProtocol {
     )
   }
 
-  /// Set a machine's name: plain text, never a template. Only for a machine
-  /// not yet saved; a saved machine's name is its document's, so the
-  /// document is renamed instead. Errors: INVALID_ARGUMENT for an empty
-  /// name; FAILED_PRECONDITION for a saved machine.
+  /// Set a machine's name: plain text, never a template. A saved machine's
+  /// name is its document's, so its document is renamed: MoveMachine to
+  /// <parent>/<name>.beebium-machine, without the machine stopping.
+  /// Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
+  /// that cannot name a file (the message says why); ALREADY_EXISTS for a
+  /// saved machine whose new directory exists. The same name changes
+  /// nothing.
   ///
   /// - Parameters:
   ///   - request: Request to send to SetMachineName.
@@ -355,6 +363,38 @@ extension Beebium_SystemServiceClientProtocol {
     )
   }
 
+  /// Move a saved machine's directory, without stopping it: the machine
+  /// keeps its uuid and runs on from the new directory, its media, lock and
+  /// document file following, and the old directory is gone. On one volume
+  /// the directory is renamed; across volumes, or where open files forbid
+  /// a rename (Windows), it is copied, as by Save As but keeping its uuid,
+  /// and the old one removed. The name becomes the new document name, and
+  /// a change arrives as SERVER_STATUS_IDENTITY_CHANGED. Moving to the
+  /// machine's own directory changes nothing. Errors: FAILED_PRECONDITION
+  /// for a machine not yet saved; INVALID_ARGUMENT for a destination whose
+  /// last component is not <name>.beebium-machine with a name that can
+  /// name a file on every host (the message says why), or that lies inside
+  /// the machine's directory; NOT_FOUND when the destination's parent does
+  /// not exist (it is not made); ALREADY_EXISTS when the destination
+  /// exists; INTERNAL, with a message, when the move fails, leaving the
+  /// machine running where it was.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to MoveMachine.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func moveMachine(
+    _ request: Beebium_MoveMachineRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_MoveMachineRequest, Beebium_MoveMachineResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.moveMachine.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeMoveMachineInterceptors() ?? []
+    )
+  }
+
   /// Forget the machine's battery-backed state, as taking out the battery
   /// does. It takes effect when the machine is next started: until then the
   /// machine runs on, and nothing it holds now is kept by a shutdown or a
@@ -505,6 +545,11 @@ internal protocol Beebium_SystemServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_SaveMachineRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse>
+
+  func makeMoveMachineCall(
+    _ request: Beebium_MoveMachineRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_MoveMachineRequest, Beebium_MoveMachineResponse>
 
   func makeResetBatteryCall(
     _ request: Beebium_ResetBatteryRequest,
@@ -675,6 +720,18 @@ extension Beebium_SystemServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeSaveMachineInterceptors() ?? []
+    )
+  }
+
+  internal func makeMoveMachineCall(
+    _ request: Beebium_MoveMachineRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_MoveMachineRequest, Beebium_MoveMachineResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.moveMachine.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeMoveMachineInterceptors() ?? []
     )
   }
 
@@ -849,6 +906,18 @@ extension Beebium_SystemServiceAsyncClientProtocol {
     )
   }
 
+  internal func moveMachine(
+    _ request: Beebium_MoveMachineRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_MoveMachineResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.moveMachine.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeMoveMachineInterceptors() ?? []
+    )
+  }
+
   internal func resetBattery(
     _ request: Beebium_ResetBatteryRequest,
     callOptions: CallOptions? = nil
@@ -920,6 +989,9 @@ internal protocol Beebium_SystemServiceClientInterceptorFactoryProtocol: Sendabl
   /// - Returns: Interceptors to use when invoking 'saveMachine'.
   func makeSaveMachineInterceptors() -> [ClientInterceptor<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse>]
 
+  /// - Returns: Interceptors to use when invoking 'moveMachine'.
+  func makeMoveMachineInterceptors() -> [ClientInterceptor<Beebium_MoveMachineRequest, Beebium_MoveMachineResponse>]
+
   /// - Returns: Interceptors to use when invoking 'resetBattery'.
   func makeResetBatteryInterceptors() -> [ClientInterceptor<Beebium_ResetBatteryRequest, Beebium_ResetBatteryResponse>]
 }
@@ -942,6 +1014,7 @@ internal enum Beebium_SystemServiceClientMetadata {
       Beebium_SystemServiceClientMetadata.Methods.watchPacingStats,
       Beebium_SystemServiceClientMetadata.Methods.setSpeedMultiplier,
       Beebium_SystemServiceClientMetadata.Methods.saveMachine,
+      Beebium_SystemServiceClientMetadata.Methods.moveMachine,
       Beebium_SystemServiceClientMetadata.Methods.resetBattery,
     ]
   )
@@ -1025,6 +1098,12 @@ internal enum Beebium_SystemServiceClientMetadata {
       type: GRPCCallType.unary
     )
 
+    internal static let moveMachine = GRPCMethodDescriptor(
+      name: "MoveMachine",
+      path: "/beebium.SystemService/MoveMachine",
+      type: GRPCCallType.unary
+    )
+
     internal static let resetBattery = GRPCMethodDescriptor(
       name: "ResetBattery",
       path: "/beebium.SystemService/ResetBattery",
@@ -1043,10 +1122,13 @@ internal protocol Beebium_SystemServiceProvider: CallHandlerProvider {
   /// Get current system/machine information
   func getSystemInfo(request: Beebium_GetSystemInfoRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SystemInfo>
 
-  /// Set a machine's name: plain text, never a template. Only for a machine
-  /// not yet saved; a saved machine's name is its document's, so the
-  /// document is renamed instead. Errors: INVALID_ARGUMENT for an empty
-  /// name; FAILED_PRECONDITION for a saved machine.
+  /// Set a machine's name: plain text, never a template. A saved machine's
+  /// name is its document's, so its document is renamed: MoveMachine to
+  /// <parent>/<name>.beebium-machine, without the machine stopping.
+  /// Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
+  /// that cannot name a file (the message says why); ALREADY_EXISTS for a
+  /// saved machine whose new directory exists. The same name changes
+  /// nothing.
   func setMachineName(request: Beebium_SetMachineNameRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SetMachineNameResponse>
 
   /// Set the machine's description template (empty: no description). See
@@ -1096,6 +1178,23 @@ internal protocol Beebium_SystemServiceProvider: CallHandlerProvider {
   /// cannot be replaced; INTERNAL, with a message, when the directory cannot
   /// be written.
   func saveMachine(request: Beebium_SaveMachineRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SaveMachineResponse>
+
+  /// Move a saved machine's directory, without stopping it: the machine
+  /// keeps its uuid and runs on from the new directory, its media, lock and
+  /// document file following, and the old directory is gone. On one volume
+  /// the directory is renamed; across volumes, or where open files forbid
+  /// a rename (Windows), it is copied, as by Save As but keeping its uuid,
+  /// and the old one removed. The name becomes the new document name, and
+  /// a change arrives as SERVER_STATUS_IDENTITY_CHANGED. Moving to the
+  /// machine's own directory changes nothing. Errors: FAILED_PRECONDITION
+  /// for a machine not yet saved; INVALID_ARGUMENT for a destination whose
+  /// last component is not <name>.beebium-machine with a name that can
+  /// name a file on every host (the message says why), or that lies inside
+  /// the machine's directory; NOT_FOUND when the destination's parent does
+  /// not exist (it is not made); ALREADY_EXISTS when the destination
+  /// exists; INTERNAL, with a message, when the move fails, leaving the
+  /// machine running where it was.
+  func moveMachine(request: Beebium_MoveMachineRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_MoveMachineResponse>
 
   /// Forget the machine's battery-backed state, as taking out the battery
   /// does. It takes effect when the machine is next started: until then the
@@ -1233,6 +1332,15 @@ extension Beebium_SystemServiceProvider {
         userFunction: self.saveMachine(request:context:)
       )
 
+    case "MoveMachine":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_MoveMachineRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_MoveMachineResponse>(),
+        interceptors: self.interceptors?.makeMoveMachineInterceptors() ?? [],
+        userFunction: self.moveMachine(request:context:)
+      )
+
     case "ResetBattery":
       return UnaryServerHandler(
         context: context,
@@ -1263,10 +1371,13 @@ internal protocol Beebium_SystemServiceAsyncProvider: CallHandlerProvider, Senda
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_SystemInfo
 
-  /// Set a machine's name: plain text, never a template. Only for a machine
-  /// not yet saved; a saved machine's name is its document's, so the
-  /// document is renamed instead. Errors: INVALID_ARGUMENT for an empty
-  /// name; FAILED_PRECONDITION for a saved machine.
+  /// Set a machine's name: plain text, never a template. A saved machine's
+  /// name is its document's, so its document is renamed: MoveMachine to
+  /// <parent>/<name>.beebium-machine, without the machine stopping.
+  /// Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
+  /// that cannot name a file (the message says why); ALREADY_EXISTS for a
+  /// saved machine whose new directory exists. The same name changes
+  /// nothing.
   func setMachineName(
     request: Beebium_SetMachineNameRequest,
     context: GRPCAsyncServerCallContext
@@ -1354,6 +1465,26 @@ internal protocol Beebium_SystemServiceAsyncProvider: CallHandlerProvider, Senda
     request: Beebium_SaveMachineRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_SaveMachineResponse
+
+  /// Move a saved machine's directory, without stopping it: the machine
+  /// keeps its uuid and runs on from the new directory, its media, lock and
+  /// document file following, and the old directory is gone. On one volume
+  /// the directory is renamed; across volumes, or where open files forbid
+  /// a rename (Windows), it is copied, as by Save As but keeping its uuid,
+  /// and the old one removed. The name becomes the new document name, and
+  /// a change arrives as SERVER_STATUS_IDENTITY_CHANGED. Moving to the
+  /// machine's own directory changes nothing. Errors: FAILED_PRECONDITION
+  /// for a machine not yet saved; INVALID_ARGUMENT for a destination whose
+  /// last component is not <name>.beebium-machine with a name that can
+  /// name a file on every host (the message says why), or that lies inside
+  /// the machine's directory; NOT_FOUND when the destination's parent does
+  /// not exist (it is not made); ALREADY_EXISTS when the destination
+  /// exists; INTERNAL, with a message, when the move fails, leaving the
+  /// machine running where it was.
+  func moveMachine(
+    request: Beebium_MoveMachineRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_MoveMachineResponse
 
   /// Forget the machine's battery-backed state, as taking out the battery
   /// does. It takes effect when the machine is next started: until then the
@@ -1501,6 +1632,15 @@ extension Beebium_SystemServiceAsyncProvider {
         wrapping: { try await self.saveMachine(request: $0, context: $1) }
       )
 
+    case "MoveMachine":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_MoveMachineRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_MoveMachineResponse>(),
+        interceptors: self.interceptors?.makeMoveMachineInterceptors() ?? [],
+        wrapping: { try await self.moveMachine(request: $0, context: $1) }
+      )
+
     case "ResetBattery":
       return GRPCAsyncServerHandler(
         context: context,
@@ -1570,6 +1710,10 @@ internal protocol Beebium_SystemServiceServerInterceptorFactoryProtocol: Sendabl
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeSaveMachineInterceptors() -> [ServerInterceptor<Beebium_SaveMachineRequest, Beebium_SaveMachineResponse>]
 
+  /// - Returns: Interceptors to use when handling 'moveMachine'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeMoveMachineInterceptors() -> [ServerInterceptor<Beebium_MoveMachineRequest, Beebium_MoveMachineResponse>]
+
   /// - Returns: Interceptors to use when handling 'resetBattery'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeResetBatteryInterceptors() -> [ServerInterceptor<Beebium_ResetBatteryRequest, Beebium_ResetBatteryResponse>]
@@ -1593,6 +1737,7 @@ internal enum Beebium_SystemServiceServerMetadata {
       Beebium_SystemServiceServerMetadata.Methods.watchPacingStats,
       Beebium_SystemServiceServerMetadata.Methods.setSpeedMultiplier,
       Beebium_SystemServiceServerMetadata.Methods.saveMachine,
+      Beebium_SystemServiceServerMetadata.Methods.moveMachine,
       Beebium_SystemServiceServerMetadata.Methods.resetBattery,
     ]
   )
@@ -1673,6 +1818,12 @@ internal enum Beebium_SystemServiceServerMetadata {
     internal static let saveMachine = GRPCMethodDescriptor(
       name: "SaveMachine",
       path: "/beebium.SystemService/SaveMachine",
+      type: GRPCCallType.unary
+    )
+
+    internal static let moveMachine = GRPCMethodDescriptor(
+      name: "MoveMachine",
+      path: "/beebium.SystemService/MoveMachine",
       type: GRPCCallType.unary
     )
 

@@ -235,6 +235,46 @@ struct Beebium_SaveMachineResponse: Sendable {
   fileprivate var _identity: Beebium_MachineIdentity? = nil
 }
 
+struct Beebium_MoveMachineRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The machine's new directory, in full: its last component is
+  /// <name>.beebium-machine, and the machine's name becomes <name>.
+  var destinationDirpath: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_MoveMachineResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The machine's directory now, in every form.
+  var machineDirpath: String = String()
+
+  /// The machine's identity now: its uuid unchanged, its name the new
+  /// document name.
+  var identity: Beebium_MachineIdentity {
+    get {return _identity ?? Beebium_MachineIdentity()}
+    set {_identity = newValue}
+  }
+  /// Returns true if `identity` has been explicitly set.
+  var hasIdentity: Bool {return self._identity != nil}
+  /// Clears the value of `identity`. Subsequent reads from it will return its default value.
+  mutating func clearIdentity() {self._identity = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _identity: Beebium_MachineIdentity? = nil
+}
+
 struct Beebium_ResetBatteryRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1060,6 +1100,75 @@ extension Beebium_SaveMachineResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 
   static func ==(lhs: Beebium_SaveMachineResponse, rhs: Beebium_SaveMachineResponse) -> Bool {
+    if lhs.machineDirpath != rhs.machineDirpath {return false}
+    if lhs._identity != rhs._identity {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_MoveMachineRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".MoveMachineRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}destination_dirpath\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.destinationDirpath) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.destinationDirpath.isEmpty {
+      try visitor.visitSingularStringField(value: self.destinationDirpath, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_MoveMachineRequest, rhs: Beebium_MoveMachineRequest) -> Bool {
+    if lhs.destinationDirpath != rhs.destinationDirpath {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_MoveMachineResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".MoveMachineResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}machine_dirpath\0\u{1}identity\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.machineDirpath) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._identity) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.machineDirpath.isEmpty {
+      try visitor.visitSingularStringField(value: self.machineDirpath, fieldNumber: 1)
+    }
+    try { if let v = self._identity {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_MoveMachineResponse, rhs: Beebium_MoveMachineResponse) -> Bool {
     if lhs.machineDirpath != rhs.machineDirpath {return false}
     if lhs._identity != rhs._identity {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
