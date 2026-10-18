@@ -616,6 +616,29 @@ class System:
             identity=MachineIdentity._from_proto(response.identity, self),
         )
 
+    def move_machine(self, destination_dirpath: str | os.PathLike[str]) -> SavedMachine:
+        """Move a saved machine's directory without stopping it.
+
+        ``destination_dirpath`` is the new directory in full, ending in
+        ``<name>.beebium-machine``; its parent must exist. The machine keeps
+        its uuid, runs on from there, and is named ``<name>``; the old
+        directory is gone. Moving to its own directory changes nothing. The
+        path is on the server's host.
+
+        Raises:
+            grpc.RpcError: FAILED_PRECONDITION for a machine not yet saved,
+                INVALID_ARGUMENT for a destination that cannot be a machine
+                document or lies inside the machine's directory, NOT_FOUND
+                when its parent does not exist, ALREADY_EXISTS when it exists,
+                INTERNAL when the move fails (the machine stays where it was).
+        """
+        request = system_pb2.MoveMachineRequest(destination_dirpath=os.fspath(destination_dirpath))
+        response = self._stub.MoveMachine(request)
+        return SavedMachine(
+            machine_dirpath=response.machine_dirpath,
+            identity=MachineIdentity._from_proto(response.identity, self),
+        )
+
     def reset_battery(self) -> tuple[str, ...]:
         """Forget the machine's battery-backed state, as taking out the battery
         does, from the next start. Returns the units forgotten, e.g.

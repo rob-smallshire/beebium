@@ -27,7 +27,10 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
+from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import quote
 
 import grpc
 import pytest
@@ -35,7 +38,7 @@ import pytest
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.installation import ServerInstallation
-from beebium.client.system import ServerStatus
+from beebium.client.system import MachineIdentity, ServerStatus
 from beebium.ext.peripheral.acorn_rtc import AcornRtc
 
 EX_CANTCREAT = 73
@@ -346,15 +349,18 @@ def test_a_saved_machine_keeps_its_new_description_and_its_last_screen(
         assert bbc.system.identity.description == "Described BBC Model B"
 
 
+SUFFIX = ".beebium-machine"
 REPO_ASSETS_DIRPATH = Path(__file__).parent.parent.parent.parent / "tests" / "assets"
 
 
-def test_a_running_saved_machine_is_renamed_with_its_document(installation, run, describe,
-                                                             tmp_path: Path):
-    """Renaming a saved machine renames its document: the directory moves to
-    <name>.beebium-machine with its lock and document file, its open media are
-    re-pointed and keep taking writes, and it reopens under the new name with
-    the same uuid."""
+def _move_a_running_machine(installation, run, describe, old: Path, new: Path,
+                            move: Callable[[Beebium], MachineIdentity], *,
+                            by_copy: bool = sys.platform == "win32") -> None:
+    """Moves a running saved machine from `old` to `new` with `move`, and
+    checks it there: the directory moved with its lock and document file, its
+    open media are re-pointed and keep taking writes, and it reopens there
+    with the same uuid. `by_copy` says whether the directory is copied rather
+    than renamed, which Windows always does: a rename keeps its inode."""
     disc = REPO_ASSETS_DIRPATH / "discs" / "6502timing.ssd"
     hard_disc = REPO_ASSETS_DIRPATH / "scsi" / "scsi0.dat"
     if not disc.is_file() or not hard_disc.is_file():
@@ -366,13 +372,13 @@ def test_a_running_saved_machine_is_renamed_with_its_document(installation, run,
     shutil.copyfile(hard_disc, user_discs / "rename-test.dat")
     shutil.copyfile(hard_disc.with_suffix(".dsc"), user_discs / "rename-test.dsc")
 
-    old = tmp_path / "Before.beebium-machine"
-    new = tmp_path / "After It.beebium-machine"
     created = run("create-machine", "--preset", "model-b-disc", "--floppy", "0:rename-test.ssd",
                   "--acorn-scsi", "--scsi-hdd", "scsi-id=0:image=rename-test.dat",
                   "--output", old)
     assert created.returncode == 0, created.stderr
     uuid = describe(old)["uuid"]
+    inode = old.stat().st_ino
+    old_name, new_name = old.name.removesuffix(SUFFIX), new.name.removesuffix(SUFFIX)
 
     def basic(bbc: Beebium, line: str) -> None:
         bbc.keyboard.type(line + "\r")
@@ -381,39 +387,67 @@ def test_a_running_saved_machine_is_renamed_with_its_document(installation, run,
 
     with _launch(installation, old) as bbc:
         assert _run_until(bbc, lambda: _at_prompt(bbc), CLIENT_BOOT_SECONDS), _screen(bbc)
-        assert bbc.system.identity.name == "Before"
+        assert bbc.system.identity.name == old_name
         events = bbc.system.watch_status()
         assert next(events).status == ServerStatus.READY
 
-        renamed = bbc.system.set_machine_name("After It")
-        assert renamed.name == "After It"
-        assert renamed.uuid == uuid
+        moved = move(bbc)
+        assert moved.name == new_name
+        assert moved.uuid == uuid
         changed = next(e for e in events if e.status == ServerStatus.IDENTITY_CHANGED)
         events.close()
-        assert changed.identity.name == "After It"
+        assert changed.identity.name == new_name
 
         # The directory moved, with its lock and its document file.
         assert not old.exists()
         assert bbc.system.machine_dirpath == str(new)
-        assert (new / "After It.beebium-machine").is_file()
-        assert not (new / "Before.beebium-machine").exists()
-        assert "After It" in (new / "desktop.ini").read_bytes().decode("utf-16")
+        assert (new.stat().st_ino != inode) == by_copy
+        assert (new / new.name).is_file()
+        assert not (new / old.name).exists()
+        assert new_name in (new / "desktop.ini").read_bytes().decode("utf-16")
         assert describe(new)["locked_by_pid"]
         assert describe(new)["uuid"] == uuid
 
         # Its media follow it, and keep taking writes.
-        assert "After%20It.beebium-machine" in bbc.disc.drive(0).status.disc_url
+        assert quote(new.name) in bbc.disc.drive(0).status.disc_url
         devices = [d for e in bbc.extensions.loaded for d in e.storage_devices]
         assert [Path(d.backing_path).parent for d in devices] == [new]
-        basic(bbc, '10 PRINT "RENAMED"')
+        basic(bbc, '10 PRINT "MOVED"')
         basic(bbc, 'SAVE "AFTER"')
 
     with _launch(installation, new) as bbc:
-        assert bbc.system.identity.name == "After It"
+        assert bbc.system.identity.name == new_name
         assert bbc.system.identity.uuid == uuid
         assert _run_until(bbc, lambda: _at_prompt(bbc), CLIENT_BOOT_SECONDS), _screen(bbc)
         basic(bbc, "*CAT")
         assert "AFTER" in _screen(bbc)
+
+
+def test_a_running_saved_machine_is_renamed_with_its_document(installation, run, describe,
+                                                             tmp_path: Path):
+    """Renaming a saved machine renames its document: a move beside it."""
+    new = tmp_path / "After It.beebium-machine"
+    _move_a_running_machine(installation, run, describe, tmp_path / "Before.beebium-machine",
+                            new, lambda bbc: bbc.system.set_machine_name("After It"))
+
+
+def test_a_running_saved_machine_is_moved_to_another_folder(installation, run, describe,
+                                                           tmp_path: Path):
+    (tmp_path / "Elsewhere").mkdir()
+    new = tmp_path / "Elsewhere" / "Moved On.beebium-machine"
+    _move_a_running_machine(installation, run, describe, tmp_path / "Before.beebium-machine",
+                            new, lambda bbc: bbc.system.move_machine(new).identity)
+
+
+def test_a_running_saved_machine_is_moved_by_copy_where_it_cannot_be_renamed(
+        installation, run, describe, tmp_path: Path, monkeypatch):
+    """Across volumes, or on Windows, the machine is copied under its uuid and
+    the old directory removed; the server's test seam takes that path here."""
+    monkeypatch.setenv("BEEBIUM_MOVE_MACHINE_BY_COPY", "1")
+    (tmp_path / "Elsewhere").mkdir()
+    new = tmp_path / "Elsewhere" / "Copied On.beebium-machine"
+    _move_a_running_machine(installation, run, describe, tmp_path / "Before.beebium-machine",
+                            new, lambda bbc: bbc.system.move_machine(new).identity, by_copy=True)
 
 
 def test_a_saved_machine_refuses_a_name_that_cannot_name_its_document(
@@ -432,6 +466,37 @@ def test_a_saved_machine_refuses_a_name_that_cannot_name_its_document(
             assert why in refused.value.details()
         assert bbc.system.set_machine_name("Named").name == "Named"  # the same name: nothing to do
         assert bbc.system.machine_dirpath == str(machine)
+
+
+def test_a_saved_machine_refuses_a_move_it_cannot_make(installation, run, tmp_path: Path):
+    machine = tmp_path / "Named.beebium-machine"
+    taken = tmp_path / "Taken.beebium-machine"
+    for directory in (machine, taken):
+        assert run("create-machine", "--output", directory).returncode == 0
+    with _launch(installation, machine) as bbc:
+        for destination, code, why in (
+                (tmp_path / "No Suffix", grpc.StatusCode.INVALID_ARGUMENT, "does not end with"),
+                (tmp_path / "Bad?.beebium-machine", grpc.StatusCode.INVALID_ARGUMENT, "'?'"),
+                (machine / "Inner.beebium-machine", grpc.StatusCode.INVALID_ARGUMENT, "inside"),
+                (tmp_path / "Missing" / "X.beebium-machine", grpc.StatusCode.NOT_FOUND,
+                 "does not exist"),
+                (taken, grpc.StatusCode.ALREADY_EXISTS, "already exists")):
+            with pytest.raises(grpc.RpcError) as refused:
+                bbc.system.move_machine(destination)
+            assert refused.value.code() == code, destination
+            assert why in refused.value.details()
+        assert not (tmp_path / "Missing").exists()  # no parent is made
+        assert bbc.system.move_machine(machine).machine_dirpath == str(machine)  # nothing to do
+        assert bbc.system.machine_dirpath == str(machine)
+        assert (machine / machine.name).is_file()
+
+
+def test_a_machine_not_yet_saved_is_saved_before_it_is_moved(installation, tmp_path: Path):
+    with Beebium.launch(server=installation) as bbc:
+        with pytest.raises(grpc.RpcError) as refused:
+            bbc.system.move_machine(tmp_path / "Unsaved.beebium-machine")
+        assert refused.value.code() == grpc.StatusCode.FAILED_PRECONDITION
+        assert "save it first" in refused.value.details()
 
 
 # ---------------------------------------------------------------------------
