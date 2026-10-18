@@ -2,7 +2,7 @@
 
 Status: draft for discussion (2026-09-30). Step 3 (#136): stored presets are
 `.beebium-preset` archives. The one-shot migration of the user store (section
-3.1) ships in the next release and is removed in the release after it. The
+3.1) shipped in v0.10.0 and v0.10.1 and is removed. The
 bundled disc masters are gone: the Level 3 File Server preset carries its disc,
 which `create-preset --from` takes into a copy and `export-preset --unpack`
 writes out. Step 4 (#103b): machines can be saved -- `create-machine`,
@@ -129,7 +129,9 @@ no backward compatibility, so the change is made once: CMake generates
 system presets through `create-preset`, which now writes zips, and on
 first listing of the user presets directory each `<id>.preset.beebium` is
 archived to `<id>.beebium-preset` with its thumbnail inside. The migration
-ships in one release and is then removed.
+shipped in v0.10.0 and v0.10.1 and is removed: a `<id>.preset.beebium` left
+in the store is no longer listed or touched, and `import-preset` makes an
+archive of it.
 
 **Disc images compress.** A hard-disc image is mostly empty: the L3FS
 master is about 20 MB on disc and a few hundred kilobytes zipped, which is

@@ -11,11 +11,10 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 // Writing a preset: the one place a preset is written, by create-preset,
-// import-preset, export-preset and the migration of the user store alike
-// (PresetSource is the one place one is read). A preset is written as a zip
-// archive -- the stored form -- or, for editing, unpacked into a directory
-// laid out as the archive is; either way it is the document as preset.json
-// and the files beside it.
+// import-preset and export-preset alike (PresetSource is the one place one
+// is read). A preset is written as a zip archive -- the stored form -- or,
+// for editing, unpacked into a directory laid out as the archive is; either
+// way it is the document as preset.json and the files beside it.
 
 #pragma once
 

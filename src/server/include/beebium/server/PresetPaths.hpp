@@ -15,17 +15,11 @@
 
 #include "beebium/server/Platform.hpp"
 #include "beebium/server/PresetSource.hpp"
-#include "beebium/server/PresetWriter.hpp"
 
 #include <algorithm>
 #include <cctype>
-#include <cstdint>
-#include <fstream>
-#include <iostream>
-#include <iterator>
 #include <filesystem>
 #include <optional>
-#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -140,75 +134,14 @@ public:
     }
 
     // Every stored preset, in search order: the system presets, then the
-    // user presets, each by id. The user store's presets in the earlier
-    // stored form are first made archives (migrate_user_presets).
+    // user presets, each by id.
     static std::vector<Entry> enumerate() {
         std::vector<Entry> entries;
         if (auto system_dirpath = get_system_presets_dirpath()) {
             append_entries(*system_dirpath, Origin::System, entries);
         }
-        migrate_user_presets(get_user_presets_dirpath());
         append_entries(get_user_presets_dirpath(), Origin::User, entries);
         return entries;
-    }
-
-    // Makes each preset in `dirpath` stored in the earlier form -- a lone
-    // <id>.preset.beebium, with its thumbnail beside it as <id>.thumbnail.png
-    // -- an archive, <id>.beebium-preset, with one line on stderr for each.
-    // When the store cannot be written it is left as it is, with a one-line
-    // notice, and the old files are ignored. Run on the user store only, once
-    // a process for each store. One-shot: removed after the release that
-    // ships it.
-    static void migrate_user_presets(const std::filesystem::path& dirpath) {
-        static std::set<std::filesystem::path> migrated_dirpaths;
-        if (!migrated_dirpaths.insert(dirpath).second) return;
-        std::error_code ec;
-        std::vector<std::filesystem::path> legacy_filepaths;
-        for (const auto& entry : std::filesystem::directory_iterator(dirpath, ec)) {
-            if (entry.is_regular_file(ec) &&
-                without_suffix(entry.path().filename().string(), LEGACY_PRESET_EXTENSION)) {
-                legacy_filepaths.push_back(entry.path());
-            }
-        }
-        std::sort(legacy_filepaths.begin(), legacy_filepaths.end());
-        for (const auto& legacy_filepath : legacy_filepaths) {
-            const auto id =
-                without_suffix(legacy_filepath.filename().string(), LEGACY_PRESET_EXTENSION);
-            const auto target_filepath = dirpath / filename_for(*id);
-            if (std::filesystem::exists(target_filepath, ec)) {
-                std::cerr << "Not migrating the preset " << legacy_filepath.string() << ": "
-                          << target_filepath.string() << " already exists\n";
-                continue;
-            }
-            // Each file is read whole and closed here, before it is removed
-            // below: Windows will not remove a file that is still open.
-            const auto document = read_whole_file(legacy_filepath);
-            auto members = preset_members(std::string(document.begin(), document.end()));
-            const auto thumbnail_filepath = dirpath / (*id + LEGACY_THUMBNAIL_SUFFIX);
-            const bool has_thumbnail = std::filesystem::is_regular_file(thumbnail_filepath, ec);
-            if (has_thumbnail) {
-                members.push_back(
-                    {PresetSource::THUMBNAIL_FILENAME, read_whole_file(thumbnail_filepath)});
-            }
-            if (auto error = write_preset(std::move(members), target_filepath); !error.empty()) {
-                std::cerr << "Cannot migrate the presets in " << dirpath.string() << " to "
-                          << PRESET_EXTENSION << " archives (" << error
-                          << "); those stored as " << LEGACY_PRESET_EXTENSION
-                          << " are ignored\n";
-                return;
-            }
-            std::cerr << "Migrated the preset " << legacy_filepath.string() << " to "
-                      << target_filepath.string() << "\n";
-            // The archive stands; an old file left behind is said, not hidden.
-            for (const auto& old_filepath : {legacy_filepath, thumbnail_filepath}) {
-                if (old_filepath == thumbnail_filepath && !has_thumbnail) continue;
-                if (!std::filesystem::remove(old_filepath, ec) && ec) {
-                    std::cerr << "Cannot remove " << old_filepath.string()
-                              << " after migrating it (" << ec.message()
-                              << "); remove it by hand\n";
-                }
-            }
-        }
     }
 
     // The stored preset with `id`, the first in search order, or only from
@@ -324,16 +257,9 @@ public:
 private:
     // The suffix of a stored preset's file name: the one place it is named.
     static constexpr std::string_view PRESET_EXTENSION = ".beebium-preset";
-    // The earlier stored form, a lone document with its thumbnail beside it,
-    // named for migrate_user_presets and name_of only.
+    // The suffix of the earlier stored form, a lone document, named for
+    // name_of only.
     static constexpr std::string_view LEGACY_PRESET_EXTENSION = ".preset.beebium";
-    static constexpr const char* LEGACY_THUMBNAIL_SUFFIX = ".thumbnail.png";
-
-    // The bytes of the file at `filepath`, read and closed.
-    static std::vector<std::uint8_t> read_whole_file(const std::filesystem::path& filepath) {
-        std::ifstream in(filepath, std::ios::binary);
-        return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(in), {});
-    }
 
     // `name` without `suffix`, or nullopt when it does not end with it or is
     // nothing more.

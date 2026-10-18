@@ -14,25 +14,13 @@
 // Unit tests for PresetPaths utility class
 
 #include <beebium/server/PresetPaths.hpp>
-#include <beebium/zip/ZipArchive.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <algorithm>
 #include <filesystem>
 #include <fstream>  // For creating test files
-#include <iostream>
-#include <iterator>
-#include <sstream>
 #include <string>
 #include <vector>
 #include "test_env.hpp"
 #include "test_temp_paths.hpp"
-
-#ifndef _WIN32
-#include <unistd.h>
-#endif
-#ifdef __APPLE__
-#include <sys/stat.h>
-#endif
 
 using namespace beebium::server;
 
@@ -126,7 +114,7 @@ TEST_CASE("id_from_filename: names that are not stored presets have no id", "[Pr
     CHECK_FALSE(PresetPaths::id_from_filename("config.json").has_value());
     CHECK_FALSE(PresetPaths::id_from_filename("beebium-preset.bak").has_value());
     CHECK_FALSE(PresetPaths::id_from_filename(".beebium-preset").has_value());
-    // The earlier stored form is not a stored preset's name (see migration).
+    // The earlier stored form is not a stored preset's name.
     CHECK_FALSE(PresetPaths::id_from_filename("model-b.preset.beebium").has_value());
 }
 
@@ -268,6 +256,18 @@ TEST_CASE("enumerate: ignores other files and directories", "[PresetPaths][enume
     CHECK(ids_of(PresetPaths::enumerate()) == std::vector<std::string>{"model-b"});
 }
 
+TEST_CASE("enumerate: a preset in the earlier stored form is not listed, and left as it is",
+          "[PresetPaths][enumerate]") {
+    PresetStores stores;
+    std::ofstream(stores.user_dirpath() / "old.preset.beebium") << "{}";
+    std::ofstream(stores.user_dirpath() / "old.thumbnail.png") << "PNG";
+
+    CHECK(PresetPaths::enumerate().empty());
+    CHECK(std::filesystem::exists(stores.user_dirpath() / "old.preset.beebium"));
+    CHECK(std::filesystem::exists(stores.user_dirpath() / "old.thumbnail.png"));
+    CHECK_FALSE(std::filesystem::exists(stores.user_dirpath() / "old.beebium-preset"));
+}
+
 TEST_CASE("find: the first preset with the id in search order, or from one store",
           "[PresetPaths][find]") {
     PresetStores stores;
@@ -357,115 +357,3 @@ TEST_CASE("name_of: the name an imported preset's id is made from", "[PresetPath
     CHECK(PresetPaths::name_of(root / "My Game") == "My Game");
     CHECK(PresetPaths::name_of(root.path() / "My Game" / "") == "My Game");
 }
-
-// ============================================================================
-// Migration of the user store from the earlier stored form
-// ============================================================================
-
-namespace {
-
-std::string read_text(const std::filesystem::path& filepath) {
-    std::ifstream in(filepath, std::ios::binary);
-    return std::string(std::istreambuf_iterator<char>(in), {});
-}
-
-// What `body` writes to std::cerr.
-template <typename F>
-std::string cerr_of(F body) {
-    std::ostringstream captured;
-    auto* previous = std::cerr.rdbuf(captured.rdbuf());
-    body();
-    std::cerr.rdbuf(previous);
-    return captured.str();
-}
-
-}  // namespace
-
-TEST_CASE("enumerate: the user store's earlier presets become archives, one line each",
-          "[PresetPaths][migration]") {
-    PresetStores stores;
-    std::ofstream(stores.user_dirpath() / "old.preset.beebium", std::ios::binary)
-        << R"({"name": "Old"})";
-    std::ofstream(stores.user_dirpath() / "old.thumbnail.png", std::ios::binary) << "PNG";
-    std::ofstream(stores.user_dirpath() / "bare.preset.beebium", std::ios::binary) << "{}";
-    // The system store is never touched.
-    std::ofstream(stores.system_dirpath() / "shipped.preset.beebium") << "{}";
-
-    std::vector<PresetPaths::Entry> entries;
-    const auto said = cerr_of([&] { entries = PresetPaths::enumerate(); });
-
-    CHECK(ids_of(entries) == std::vector<std::string>{"bare", "old"});
-    auto migrated = [&](const std::string& id) {
-        return "Migrated the preset " +
-               (stores.user_dirpath() / (id + ".preset.beebium")).string() + " to " +
-               (stores.user_dirpath() / (id + ".beebium-preset")).string() + "\n";
-    };
-    CHECK(said == migrated("bare") + migrated("old"));
-    beebium::zip::ZipReader old(stores.user_dirpath() / "old.beebium-preset");
-    CHECK(old.member_names() == std::vector<std::string>{"preset.json", "thumbnail.png"});
-    const auto document = old.read("preset.json");
-    CHECK(std::string(document.begin(), document.end()) == R"({"name": "Old"})");
-    CHECK_FALSE(std::filesystem::exists(stores.user_dirpath() / "old.preset.beebium"));
-    CHECK_FALSE(std::filesystem::exists(stores.user_dirpath() / "old.thumbnail.png"));
-    CHECK(read_text(stores.system_dirpath() / "shipped.preset.beebium") == "{}");
-
-    // Once done, nothing more is said.
-    CHECK(cerr_of([] { (void)PresetPaths::enumerate(); }).empty());
-}
-
-#if defined(_WIN32) || defined(__APPLE__)
-TEST_CASE("enumerate: an earlier preset that cannot be removed after migrating is said, not hidden",
-          "[PresetPaths][migration]") {
-    // Provoked where it can be without privilege: on Windows by holding the
-    // old file open (a file open without delete sharing cannot be removed);
-    // on macOS by the user-immutable flag. Linux needs root for its
-    // equivalent, so the case is not run there.
-    PresetStores stores;
-    const auto old_filepath = stores.user_dirpath() / "old.preset.beebium";
-    std::ofstream(old_filepath, std::ios::binary) << R"({"name": "Old"})";
-
-    std::vector<PresetPaths::Entry> entries;
-    std::string said;
-    {
-#ifdef _WIN32
-        std::ifstream held(old_filepath, std::ios::binary);
-        REQUIRE(held.is_open());
-        said = cerr_of([&] { entries = PresetPaths::enumerate(); });
-#else
-        REQUIRE(::chflags(old_filepath.c_str(), UF_IMMUTABLE) == 0);
-        said = cerr_of([&] { entries = PresetPaths::enumerate(); });
-        REQUIRE(::chflags(old_filepath.c_str(), 0) == 0);
-#endif
-    }
-
-    // The archive stands, and the old file left behind is reported.
-    CHECK(ids_of(entries) == std::vector<std::string>{"old"});
-    CHECK(said.find("Migrated the preset " + old_filepath.string()) != std::string::npos);
-    CHECK(said.find("Cannot remove " + old_filepath.string() + " after migrating it (") !=
-          std::string::npos);
-    CHECK(std::filesystem::exists(old_filepath));
-}
-#endif
-
-#ifndef _WIN32
-TEST_CASE("enumerate: a user store that cannot be written is left as it is, with one notice",
-          "[PresetPaths][migration]") {
-    if (::geteuid() == 0) SKIP("permissions do not bind root");
-    PresetStores stores;
-    std::ofstream(stores.user_dirpath() / "old.preset.beebium") << "{}";
-    std::filesystem::permissions(stores.user_dirpath(), std::filesystem::perms::owner_write,
-                                 std::filesystem::perm_options::remove);
-
-    std::vector<PresetPaths::Entry> entries;
-    const auto said = cerr_of([&] { entries = PresetPaths::enumerate(); });
-    std::filesystem::permissions(stores.user_dirpath(), std::filesystem::perms::owner_write,
-                                 std::filesystem::perm_options::add);
-
-    CHECK(entries.empty());
-    CHECK(said.rfind("Cannot migrate the presets in " + stores.user_dirpath().string() +
-                         " to .beebium-preset archives (",
-                     0) == 0);
-    CHECK(std::count(said.begin(), said.end(), '\n') == 1);
-    CHECK(read_text(stores.user_dirpath() / "old.preset.beebium") == "{}");
-}
-#endif
