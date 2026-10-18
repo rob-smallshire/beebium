@@ -22,6 +22,7 @@ X = 0), and reports it as guest_ready.
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -125,3 +126,78 @@ class TestWaitUntilReady:
                 assert event.guest_ready
                 break
         events.close()
+
+
+# ---------------------------------------------------------------------------
+# The budget a wait gives a guest to become ready (#197)
+# ---------------------------------------------------------------------------
+
+DISCS_DIRPATH = DISC_FILEPATH.parent
+
+
+def _booted_from(launch_bbc, disc_filename: str) -> Beebium:
+    """A Model B that has Shift-Break booted the disc's !BOOT."""
+    bbc = launch_bbc(preset="model-b-disc")
+    bbc.system.set_speed_multiplier(0.0)
+    bbc.debugger.ensure_running()
+    bbc.wait_until_ready()
+    bbc.boot_disc(DISCS_DIRPATH / disc_filename)
+    return bbc
+
+
+class TestReadyWithin:
+    def test_a_guest_that_never_reads_the_keyboard_is_refused(self, launch_bbc) -> None:
+        bbc = _booted_from(launch_bbc, "never_reads_keyboard.ssd")
+        bbc.keyboard.type("PRINT 1\r")
+        with pytest.raises(
+            DebuggerError,
+            match=r"guest has not read the keyboard since reset \(5\.0 emulated s\); "
+                  r"type-ahead is held with 8 characters pending -- programs that scan "
+                  r"the matrix directly take key_down/key_up, not type\(\)",
+        ):
+            bbc.keyboard.wait_until_typing_complete()
+        status = bbc.keyboard.typing_status()
+        assert not status.guest_ready
+        assert status.pending_characters == 8
+        assert status.cycles_since_reset > 5.0 * 2_000_000
+
+    def test_no_budget_waits_until_cancelled(self, launch_bbc) -> None:
+        bbc = _booted_from(launch_bbc, "never_reads_keyboard.ssd")
+        bbc.keyboard.type("PRINT 1\r")
+        outcome: list[object] = []
+
+        def wait() -> None:
+            try:
+                bbc.keyboard.wait_until_typing_complete(ready_within=None)
+                outcome.append("returned")
+            except Exception as e:  # noqa: BLE001 -- recorded for the assertion
+                outcome.append(e)
+
+        waiter = threading.Thread(target=wait)
+        waiter.start()
+        waiter.join(timeout=3.0)  # many emulated seconds at unlimited speed
+        assert waiter.is_alive(), f"the wait ended: {outcome}"
+        assert bbc.keyboard.typing_status().cycles_since_reset > 5.0 * 2_000_000
+        bbc.keyboard.clear_typing()  # the only way it ends
+        waiter.join(timeout=10.0)
+        assert outcome == ["returned"]
+
+    def test_a_slow_boot_completes_within_a_larger_budget(self, launch_bbc) -> None:
+        bbc = _booted_from(launch_bbc, "slow_boot.ssd")
+        bbc.keyboard.type("PRINT 6*7\r")
+        bbc.keyboard.wait_until_typing_complete(ready_within=30.0)
+        assert bbc.keyboard.typing_status().guest_ready
+        assert bbc.run_until_or_timeout(lambda: "42" in _screen(bbc), 5.0), _screen(bbc)
+
+    def test_a_slow_boot_outlasts_the_default_budget(self, launch_bbc) -> None:
+        bbc = _booted_from(launch_bbc, "slow_boot.ssd")
+        bbc.keyboard.type("PRINT 6*7\r")
+        with pytest.raises(DebuggerError, match="guest has not read the keyboard"):
+            bbc.keyboard.wait_until_typing_complete()
+
+    def test_wait_until_ready_takes_the_same_budget(self, launch_bbc) -> None:
+        bbc = _booted_from(launch_bbc, "never_reads_keyboard.ssd")
+        with pytest.raises(DebuggerError, match=r"\(1\.0 emulated s\)"):
+            bbc.wait_until_ready(ready_within=1.0)
+        slow = _booted_from(launch_bbc, "slow_boot.ssd")
+        slow.wait_until_ready(ready_within=30.0)

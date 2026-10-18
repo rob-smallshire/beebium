@@ -698,3 +698,55 @@ TEST_CASE("KeyboardService typing status says when the guest is ready for input"
     CHECK(guest_ready());
 #endif
 }
+
+TEST_CASE("KeyboardService typing status counts cycles since the last reset",
+          "[grpc][keyboard][typing]") {
+    KeyboardTestFixture fixture;
+    auto status = [&] {
+        grpc::ClientContext context;
+        beebium::TypingStatus typing;
+        REQUIRE(fixture.stub()
+                    .GetTypingStatus(&context, beebium::GetTypingStatusRequest{}, &typing)
+                    .ok());
+        return typing;
+    };
+
+    const auto at_power_on = status().cycles_since_reset();
+    fixture.machine().run(5000);
+    CHECK(status().cycles_since_reset() >= at_power_on + 5000);
+
+    // Break pressed starts the count again: the guest's wait for readiness
+    // begins there.
+    fixture.machine().break_down();
+    CHECK(status().cycles_since_reset() == 0);
+    fixture.machine().run(1000);
+    CHECK(status().cycles_since_reset() >= 1000);
+    fixture.machine().break_up();
+    CHECK(status().cycles_since_reset() == 0);
+}
+
+TEST_CASE("KeyboardService WatchTypingStatus pushes the count while the guest is not ready",
+          "[grpc][keyboard][typing]") {
+    KeyboardTestFixture fixture;
+    fixture.machine().break_down();  // not ready, and the count runs from here
+    grpc::ClientContext context;
+    beebium::WatchTypingStatusRequest request;
+    request.set_min_interval_ms(5);
+    auto reader = fixture.stub().WatchTypingStatus(&context, request);
+
+    beebium::TypingStatus first;
+    REQUIRE(reader->Read(&first));
+    REQUIRE_FALSE(first.guest_ready());
+
+    // Nothing in the queue changes; time passing alone is pushed.
+    fixture.machine().run(1000);
+    beebium::TypingStatus later;
+    REQUIRE(reader->Read(&later));
+    CHECK(later.cycles_since_reset() > first.cycles_since_reset());
+
+    context.TryCancel();
+    beebium::TypingStatus drained;
+    while (reader->Read(&drained)) {
+    }
+    (void)reader->Finish();
+}

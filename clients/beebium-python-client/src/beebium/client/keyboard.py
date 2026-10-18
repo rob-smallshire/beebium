@@ -112,7 +112,8 @@ class TypingStatus(NamedTuple):
     ``machine_running`` is the server's word on whether the emulator is
     running: only a running machine drains the queue. ``guest_ready`` is its
     word on whether the guest has asked for typed input since its last reset;
-    nothing is typed until it has.
+    nothing is typed until it has. ``cycles_since_reset`` is how long, in
+    emulated CPU cycles, the guest has had to get there.
     """
 
     idle: bool
@@ -120,6 +121,7 @@ class TypingStatus(NamedTuple):
     strings_queued: int
     machine_running: bool
     guest_ready: bool
+    cycles_since_reset: int
 
 
 def _typing_status(response: keyboard_pb2.TypingStatus) -> TypingStatus:
@@ -129,6 +131,7 @@ def _typing_status(response: keyboard_pb2.TypingStatus) -> TypingStatus:
         strings_queued=response.strings_queued,
         machine_running=response.machine_running,
         guest_ready=response.guest_ready,
+        cycles_since_reset=response.cycles_since_reset,
     )
 
 
@@ -611,7 +614,53 @@ class Keyboard:
         for response in self._stub.WatchTypingStatus(request):
             yield _typing_status(response)
 
-    def wait_until_typing_complete(self, *, min_interval_ms: int = 0) -> None:
+    def _clock_hz(self) -> int:
+        """The CPU clock, to turn emulated seconds into cycles."""
+        if self._client is None:
+            return 2_000_000
+        return self._client.system.clock_speed_hz or 2_000_000
+
+    @staticmethod
+    def _refuse_if_not_ready_within(
+        status: TypingStatus, ready_within: float | None, clock_hz: int
+    ) -> None:
+        """Raise if the guest is still not ready `ready_within` emulated seconds
+        after its reset; a budget of None never expires."""
+        if status.guest_ready or ready_within is None:
+            return
+        if status.cycles_since_reset > ready_within * clock_hz:
+            raise DebuggerError(
+                f"guest has not read the keyboard since reset ({ready_within} emulated s); "
+                f"type-ahead is held with {status.pending_characters} characters pending -- "
+                f"programs that scan the matrix directly take key_down/key_up, not type()"
+            )
+
+    def wait_until_ready(self, *, ready_within: float | None = 5.0) -> None:
+        """Block until the guest has finished resetting and asked for input;
+        see :meth:`Beebium.wait_until_ready`, which this serves.
+
+        Args:
+            ready_within: Emulated seconds since the reset for the guest to
+                become ready; ``None`` waits indefinitely.
+
+        Raises:
+            DebuggerError: If the machine is stopped before the guest is ready,
+                or the guest is not ready within `ready_within`.
+        """
+        clock_hz = self._clock_hz()
+        for status in self.watch_typing_status():
+            if status.guest_ready:
+                return
+            if not status.machine_running:
+                raise DebuggerError(
+                    "machine is stopped before the guest is ready; nothing will finish "
+                    "its reset -- call debugger.run() first"
+                )
+            self._refuse_if_not_ready_within(status, ready_within, clock_hz)
+
+    def wait_until_typing_complete(
+        self, *, min_interval_ms: int = 0, ready_within: float | None = 5.0
+    ) -> None:
         """Block until the server reports nothing left to type.
 
         Returns as soon as the queue is empty, including immediately if it
@@ -620,27 +669,37 @@ class Keyboard:
         every case there is nothing further to wait for.
 
         Only a running machine drains the queue, and the server says whether
-        the machine is running, so the wait needs no timeout: it raises at
-        once if the machine is stopped with characters pending, on entry or
-        part way through.
+        the machine is running, so the wait raises at once if the machine is
+        stopped with characters pending, on entry or part way through.
+        :meth:`Beebium.run_for_emulated_seconds`,
+        :meth:`Beebium.run_until_or_timeout` and the debugger's run-to methods
+        all leave the machine stopped; call ``debugger.run()`` before waiting.
+        Use :meth:`clear_typing` from another thread to stop waiting early.
 
         The server types nothing until the guest has asked for typed input
         after its last reset (``guest_ready``; see
         :meth:`Beebium.wait_until_ready`), so text typed straight after a
         launch or a Break waits for the MOS to finish resetting rather than
-        being lost in it. This wait waits through that too. A guest that never
-        asks the MOS for input -- a program scanning the keyboard itself, an
-        OSBYTE 129 scan with a negative number, a machine stopped at
-        "Language?" -- holds the queue, and a status with ``guest_ready``
-        false and characters pending says so; game control belongs to
-        :meth:`key_down` and :meth:`key_up`, which are never held. :meth:`Beebium.run_for_emulated_seconds`,
-        :meth:`Beebium.run_until_or_timeout` and the debugger's run-to methods
-        all leave the machine stopped; call ``debugger.run()`` before waiting.
-        Use :meth:`clear_typing` from another thread to stop waiting early.
+        being lost in it. This wait waits through that for up to
+        `ready_within` emulated seconds since the reset (a normal boot takes
+        well under one), then raises: a guest that never asks the MOS for
+        input -- a program scanning the keyboard itself, an OSBYTE 129 scan
+        with a negative number, a machine stopped at "Language?" -- holds the
+        queue for good. Game control belongs to :meth:`key_down` and
+        :meth:`key_up`, which are never held. Pass ``ready_within=None`` for a
+        boot known to be slow. Once the guest is ready there is no time limit.
+
+        Args:
+            min_interval_ms: Minimum interval between status updates (0 = the
+                server's default).
+            ready_within: Emulated seconds since the reset for the guest to
+                become ready; ``None`` waits indefinitely.
 
         Raises:
-            DebuggerError: If the machine is stopped with characters pending.
+            DebuggerError: If the machine is stopped with characters pending,
+                or the guest is not ready within `ready_within`.
         """
+        clock_hz = self._clock_hz()
         for status in self.watch_typing_status(min_interval_ms=min_interval_ms):
             if status.idle:
                 return
@@ -650,6 +709,7 @@ class Keyboard:
                     f"to type; nothing will drain the type-ahead queue -- call "
                     f"debugger.run() first"
                 )
+            self._refuse_if_not_ready_within(status, ready_within, clock_hz)
 
     def clear_typing(self) -> int:
         """Clear the type-ahead queue.

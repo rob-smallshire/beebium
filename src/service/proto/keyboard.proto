@@ -267,6 +267,13 @@ message TypingStatus {
     // "Language?") holds the queue; game control is KeyDown/KeyUp, which are
     // never held. WatchTypingStatus pushes when this changes.
     bool guest_ready = 5;
+
+    // Emulated CPU cycles since the last reset began (power-on, or Break
+    // pressed). The server gives no verdict on how long a guest may take to
+    // become ready -- a long !BOOT is legitimate -- so a client waiting for it
+    // budgets the wait against this. While guest_ready is false,
+    // WatchTypingStatus pushes as it advances, at the stream's interval.
+    uint64 cycles_since_reset = 6;
 }
 
 // Clear typing queue

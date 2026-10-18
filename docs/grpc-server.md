@@ -366,6 +366,15 @@ keyboard itself, a machine stopped at "Language?" -- holds the queue, and a
 `TypingStatus` with `guest_ready` false and characters pending says so.
 `KeyDown`/`KeyUp`, for game control, are never held.
 
+The server gives no verdict on how long is too long, since a long `!BOOT`
+before the first prompt is legitimate. `TypingStatus.cycles_since_reset` counts
+the emulated cycles since the last reset began (power-on, or Break pressed), and
+`WatchTypingStatus` pushes it as it advances while the guest is not ready, so a
+client budgets its own wait. The clients' waits for typing and for readiness
+take that budget in emulated seconds (`ready_within`, default 5: a normal boot
+takes well under one) and, when it runs out, raise naming the held queue and
+pointing at `KeyDown`/`KeyUp`; no budget waits indefinitely.
+
 ### DebuggerControl
 
 Execution control, breakpoints, watchpoints, memory access, and CPU state for 6502-based machines. Available on both host and parasite processors.

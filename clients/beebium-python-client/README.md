@@ -127,7 +127,11 @@ Typing needs no wait for boot: the server presses nothing until the guest has
 finished resetting and asked the MOS for typed input, so text typed straight
 after a launch or a Break is not lost in the reset. A test that wants boot
 finished before doing something other than typing calls `bbc.wait_until_ready()`.
-Game control, by `key_down()` and `key_up()`, is never held.
+Game control, by `key_down()` and `key_up()`, is never held. A guest that never
+asks the MOS for input (a game scanning the keyboard itself) never becomes
+ready, so `wait_until_typing_complete()` and `wait_until_ready()` give it
+`ready_within=5.0` emulated seconds after its reset and then raise; pass a
+larger budget, or `None`, for a boot known to be slow.
 
 ### Read the screen
 

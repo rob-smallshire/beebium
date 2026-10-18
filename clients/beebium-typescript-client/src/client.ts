@@ -15,7 +15,7 @@ import { Memory } from "./memory.js";
 import { Keyboard } from "./keyboard.js";
 import { Video } from "./video.js";
 import { System } from "./system.js";
-import { DebuggerError, ProtocolMismatchError } from "./exceptions.js";
+import { ProtocolMismatchError } from "./exceptions.js";
 import { PROTOCOL_FINGERPRINT } from "./protocol_fingerprint.js";
 import { Disc } from "./disc.js";
 import { Econet } from "./econet.js";
@@ -502,20 +502,14 @@ export class Beebium {
      * until then; this is for a caller that wants boot finished before doing
      * something else. Resolves at once if the guest is already ready.
      *
-     * @throws DebuggerError If the machine is stopped before the guest is ready.
+     * @param options.readyWithin Emulated seconds since the reset for the guest
+     *     to become ready (default 5; a normal boot takes well under one);
+     *     null waits indefinitely, for a boot known to be slow.
+     * @throws DebuggerError If the machine is stopped before the guest is
+     *     ready, or the guest is not ready within `readyWithin`.
      */
-    async waitUntilReady(): Promise<void> {
-        for await (const status of this.keyboard.watchTypingStatus()) {
-            if (status.guestReady) {
-                return;
-            }
-            if (!status.machineRunning) {
-                throw new DebuggerError(
-                    "machine is stopped before the guest is ready; nothing will finish " +
-                    "its reset -- call debugger.run() first",
-                );
-            }
-        }
+    async waitUntilReady(options?: { readyWithin?: number | null }): Promise<void> {
+        await this.keyboard.waitUntilReady(options);
     }
 
     /**

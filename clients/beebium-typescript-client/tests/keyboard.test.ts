@@ -343,14 +343,20 @@ describe("Keyboard", () => {
                     idle: false,
                     pendingCharacters: 15,
                     stringsQueued: 3,
+                    machineRunning: true,
+                    guestReady: false,
+                    cyclesSinceReset: 1234,
                 }),
             });
             const kb = new Keyboard(stub as any);
             const status = await kb.typingStatus();
-            expect(status).toEqual({
+            expect(status).toStrictEqual({
                 idle: false,
                 pendingCharacters: 15,
                 stringsQueued: 3,
+                machineRunning: true,
+                guestReady: false,
+                cyclesSinceReset: 1234,
             });
         });
 

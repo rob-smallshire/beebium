@@ -598,7 +598,7 @@ class Beebium:
                     f"{list(texts)!r}. Last screen:\n{screen}")
             time.sleep(sample_interval_seconds)
 
-    def wait_until_ready(self) -> None:
+    def wait_until_ready(self, *, ready_within: float | None = 5.0) -> None:
         """Block until the guest has finished resetting and asked for input.
 
         The server reports the moment, after power-on or a Break, that the
@@ -608,17 +608,17 @@ class Beebium:
         wants boot finished before doing something else. Returns at once if the
         guest is already ready. The machine must be running to get there.
 
+        Args:
+            ready_within: Emulated seconds since the reset for the guest to
+                become ready (a normal boot takes well under one); ``None``
+                waits indefinitely, for a boot known to be slow. A guest that
+                never asks the MOS for input never becomes ready.
+
         Raises:
-            DebuggerError: If the machine is stopped before the guest is ready.
+            DebuggerError: If the machine is stopped before the guest is ready,
+                or the guest is not ready within `ready_within`.
         """
-        for status in self.keyboard.watch_typing_status():
-            if status.guest_ready:
-                return
-            if not status.machine_running:
-                raise DebuggerError(
-                    "machine is stopped before the guest is ready; nothing will finish "
-                    "its reset -- call debugger.run() first"
-                )
+        self.keyboard.wait_until_ready(ready_within=ready_within)
 
     def run_for_emulated_seconds(self, seconds: float) -> None:
         """Run the emulator for the specified number of emulated seconds.

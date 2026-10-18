@@ -67,6 +67,22 @@ test_guest_ready.py. Not third-party: built with
 `oaknut-disc create print_booted.ssd` and
 `oaknut-disc put 'print_booted.ssd:$.!BOOT' <the bytes above> --load 0x2000 --exec 0x2000`.
 
+## never_reads_keyboard.ssd and slow_boot.ssd
+
+Synthetic discs for issue #197, the budget a client gives a guest to become
+ready for typed input. Both have boot option 2 (`*RUN`), so a Shift-Break boots
+them, and a `$.!BOOT` loaded and run at &2000:
+
+- never_reads_keyboard.ssd: `4C 00 20` (`JMP &2000`), a program that never asks
+  the MOS for input, as a game scanning the keyboard matrix itself does; the
+  guest never becomes ready.
+- slow_boot.ssd: a delay loop of about 8 emulated seconds, then RTS, so BASIC
+  starts and the guest becomes ready about 10 seconds after the Break:
+  `A0 32 A9 00 85 70 A2 00 CA D0 FD C6 70 D0 F7 88 D0 F0 60`.
+
+Used by test_guest_ready.py. Built as print_booted.ssd is, then
+`oaknut-disc opt <disc> 2`.
+
 ## TakBasicAsm.ssd
 
 acheton1984's "Tak on 6502" benchmark disc, the end-to-end fidelity check for

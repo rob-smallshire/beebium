@@ -24,10 +24,12 @@ namespace beebium::service {
 
 KeyboardServiceImpl::KeyboardServiceImpl(SystemViaPeripheral& keyboard,
                                          BreakCallbacks break_callbacks,
-                                         std::function<bool()> machine_running)
+                                         std::function<bool()> machine_running,
+                                         std::function<uint64_t()> cycles_since_reset)
     : keyboard_(keyboard)
     , break_callbacks_(std::move(break_callbacks))
-    , machine_running_(std::move(machine_running)) {
+    , machine_running_(std::move(machine_running))
+    , cycles_since_reset_(std::move(cycles_since_reset)) {
 }
 
 KeyboardServiceImpl::~KeyboardServiceImpl() = default;
@@ -253,6 +255,7 @@ void KeyboardServiceImpl::snapshot_typing_status(TypingStatus& status) const {
     status.set_strings_queued(static_cast<uint32_t>(type_ahead.strings_queued()));
     status.set_machine_running(machine_running_());
     status.set_guest_ready(type_ahead.guest_ready());
+    status.set_cycles_since_reset(cycles_since_reset_());
 }
 
 grpc::Status KeyboardServiceImpl::WatchTypingStatus(
@@ -278,13 +281,19 @@ grpc::Status KeyboardServiceImpl::WatchTypingStatus(
 
     // Push when the queue changes, and when the machine stops or starts: a
     // stopped machine leaves the queue unchanged, and a client waiting for it
-    // to drain must hear that it never will.
+    // to drain must hear that it never will. While the guest is not ready,
+    // push as time passes too, so a client can budget its wait for it.
+    uint64_t last_cycles = cycles_since_reset_();
     while (!context->IsCancelled()) {
         std::this_thread::sleep_for(interval);
 
         const uint64_t sequence = keyboard_.type_ahead().status_sequence();
         const bool running = machine_running_();
-        if (sequence == last_sequence && running == last_running) {
+        const uint64_t cycles = cycles_since_reset_();
+        const bool waiting_for_guest =
+            !keyboard_.type_ahead().guest_ready() && cycles != last_cycles;
+        last_cycles = cycles;
+        if (sequence == last_sequence && running == last_running && !waiting_for_guest) {
             continue;
         }
         last_sequence = sequence;

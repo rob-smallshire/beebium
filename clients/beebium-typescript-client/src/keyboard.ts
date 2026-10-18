@@ -48,6 +48,25 @@ export interface TypingQueueStatus {
     stringsQueued: number;
     machineRunning: boolean;
     guestReady: boolean;
+    /** Emulated CPU cycles since the last reset began. */
+    cyclesSinceReset: number;
+}
+
+/**
+ * Reject a wait whose guest is still not ready `readyWithin` emulated seconds
+ * after its reset; a budget of null never expires.
+ */
+function refuseIfNotReadyWithin(
+    status: TypingQueueStatus, readyWithin: number | null, clockHz: number,
+): void {
+    if (status.guestReady || readyWithin === null) return;
+    if (status.cyclesSinceReset > readyWithin * clockHz) {
+        throw new DebuggerError(
+            `guest has not read the keyboard since reset (${readyWithin} emulated s); ` +
+            `type-ahead is held with ${status.pendingCharacters} characters pending -- ` +
+            "programs that scan the matrix directly take key_down/key_up, not type()",
+        );
+    }
 }
 
 function typingQueueStatus(proto: TypingStatus): TypingQueueStatus {
@@ -57,6 +76,7 @@ function typingQueueStatus(proto: TypingStatus): TypingQueueStatus {
         stringsQueued: proto.stringsQueued,
         machineRunning: proto.machineRunning,
         guestReady: proto.guestReady,
+        cyclesSinceReset: proto.cyclesSinceReset,
     };
 }
 
@@ -668,14 +688,20 @@ export class Keyboard {
      *
      * The server types nothing until the guest has asked for typed input
      * after its last reset (`guestReady`; see `Beebium.waitUntilReady()`), and
-     * this waits through that too. A guest that never asks the MOS for input
-     * (one scanning the keyboard itself, a machine stopped at "Language?")
-     * holds the queue; game control belongs to `keyDown`/`keyUp`, which are
-     * never held.
+     * this waits through that for up to `readyWithin` emulated seconds since
+     * the reset (default 5; a normal boot takes well under one), then rejects:
+     * a guest that never asks the MOS for input (one scanning the keyboard
+     * itself, a machine stopped at "Language?") holds the queue for good. Game
+     * control belongs to `keyDown`/`keyUp`, which are never held. Pass
+     * `readyWithin: null` for a boot known to be slow. Once the guest is ready
+     * there is no time limit.
      *
-     * @throws DebuggerError If the machine is stopped with characters pending.
+     * @throws DebuggerError If the machine is stopped with characters pending,
+     *     or the guest is not ready within `readyWithin`.
      */
-    async waitForTyping(): Promise<void> {
+    async waitForTyping(options?: { readyWithin?: number | null }): Promise<void> {
+        const readyWithin = options?.readyWithin === undefined ? 5.0 : options.readyWithin;
+        const clockHz = await this._clockHz();
         for await (const status of this.watchTypingStatus()) {
             if (status.idle) {
                 return;
@@ -686,7 +712,38 @@ export class Keyboard {
                     "nothing will drain the type-ahead queue -- call debugger.run() first",
                 );
             }
+            refuseIfNotReadyWithin(status, readyWithin, clockHz);
         }
+    }
+
+    /**
+     * Wait until the guest has finished resetting and asked for typed input;
+     * see `Beebium.waitUntilReady()`, which this serves.
+     *
+     * @throws DebuggerError If the machine is stopped before the guest is
+     *     ready, or the guest is not ready within `readyWithin`.
+     */
+    async waitUntilReady(options?: { readyWithin?: number | null }): Promise<void> {
+        const readyWithin = options?.readyWithin === undefined ? 5.0 : options.readyWithin;
+        const clockHz = await this._clockHz();
+        for await (const status of this.watchTypingStatus()) {
+            if (status.guestReady) {
+                return;
+            }
+            if (!status.machineRunning) {
+                throw new DebuggerError(
+                    "machine is stopped before the guest is ready; nothing will finish " +
+                    "its reset -- call debugger.run() first",
+                );
+            }
+            refuseIfNotReadyWithin(status, readyWithin, clockHz);
+        }
+    }
+
+    /** The CPU clock, to turn emulated seconds into cycles. */
+    private async _clockHz(): Promise<number> {
+        if (this._client === undefined) return 2_000_000;
+        return (await this._client.system.getClockSpeedHz()) || 2_000_000;
     }
 
     // =========================================================================

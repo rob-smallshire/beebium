@@ -35,9 +35,11 @@ struct BreakCallbacks {
 class KeyboardServiceImpl final : public KeyboardService::Service {
 public:
     // `machine_running` reports whether the emulator is running (not paused),
-    // so a typing status can say whether the queue will drain.
+    // so a typing status can say whether the queue will drain;
+    // `cycles_since_reset` how long the guest has had to become ready.
     KeyboardServiceImpl(SystemViaPeripheral& keyboard, BreakCallbacks break_callbacks,
-                        std::function<bool()> machine_running);
+                        std::function<bool()> machine_running,
+                        std::function<uint64_t()> cycles_since_reset);
     ~KeyboardServiceImpl() override;
 
     // Non-copyable
@@ -151,6 +153,7 @@ private:
     SystemViaPeripheral& keyboard_;
     BreakCallbacks break_callbacks_;
     std::function<bool()> machine_running_;
+    std::function<uint64_t()> cycles_since_reset_;
     std::mutex mutex_;
 };
 

@@ -151,6 +151,7 @@ public:
         state_.memory.reset();
         video_binding_.reset();
         state_.cycle_count = 0;
+        reset_cycle_.store(0, std::memory_order_relaxed);
         in_reset_ = false;
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
@@ -175,6 +176,7 @@ public:
         state_.memory.soft_reset();
         video_binding_.reset();
         // Do NOT reset cycle_count - maintains timing continuity
+        reset_cycle_.store(state_.cycle_count, std::memory_order_relaxed);
         in_reset_ = false;
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
@@ -198,6 +200,7 @@ public:
         with_emulation_paused([this] {
             in_reset_ = true;
             M6502_Halt(&state_.cpu);
+            reset_cycle_.store(state_.cycle_count, std::memory_order_relaxed);
             // A key down when Break is released is a reset option, not input.
             state_.memory.system_via_peripheral.type_ahead().set_guest_ready(false);
             ++sequence_;
@@ -218,6 +221,13 @@ public:
         with_emulation_paused([this] {
             soft_reset();
         });
+    }
+
+    // Emulated cycles since the last reset began: power-on, or Break pressed
+    // and then released. A client budgets its wait for the guest to become
+    // ready for input against it.
+    uint64_t cycles_since_reset() const {
+        return state_.cycle_count - reset_cycle_.load(std::memory_order_relaxed);
     }
 
     // Check if Break key is currently held (CPU halted)
@@ -905,6 +915,7 @@ private:
     uint64_t step_over_cycle_ = 0;
     MachineResetCallback on_reset_;                     // fired on reset()/soft_reset()
     GuestReadyCallback on_guest_ready_;                 // fired by note_guest_ready()
+    std::atomic<uint64_t> reset_cycle_{0};              // see cycles_since_reset()
 
     // The guest is ready for typed input from the first time, after a reset,
     // that it removes a character from the MOS keyboard buffer: an opcode

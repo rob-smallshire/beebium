@@ -127,3 +127,25 @@ describe("guest readiness", () => {
         expect((await bbc.keyboard.typingStatus()).guestReady).toBe(true);
     });
 });
+
+describe("readyWithin", () => {
+    it("rejects a wait whose guest is not ready within the budget", async () => {
+        const bbc = await launchHost();
+        await bbc.waitUntilReady();
+        await bbc.system.setSpeedMultiplier(0.0);
+        await bbc.keyboard.breakDown();  // running, but the guest is held in reset
+        await bbc.keyboard.type("PRINT 1\r");
+
+        await expect(bbc.keyboard.waitForTyping({ readyWithin: 1.0 })).rejects.toThrow(
+            /guest has not read the keyboard since reset \(1 emulated s\); type-ahead is held with 8 characters pending/,
+        );
+        await expect(bbc.waitUntilReady({ readyWithin: 1.0 })).rejects.toThrow(DebuggerError);
+        const status = await bbc.keyboard.typingStatus();
+        expect(status.guestReady).toBe(false);
+        expect(status.cyclesSinceReset).toBeGreaterThan(2_000_000);
+
+        await bbc.keyboard.breakUp();
+        await bbc.keyboard.waitForTyping({ readyWithin: 30.0 });
+        expect((await bbc.keyboard.typingStatus()).guestReady).toBe(true);
+    });
+});

@@ -617,6 +617,7 @@ class TypingStatus(_message.Message):
     STRINGS_QUEUED_FIELD_NUMBER: _builtins.int
     MACHINE_RUNNING_FIELD_NUMBER: _builtins.int
     GUEST_READY_FIELD_NUMBER: _builtins.int
+    CYCLES_SINCE_RESET_FIELD_NUMBER: _builtins.int
     idle: _builtins.bool
     """True if queue is empty (all typing complete)"""
     pending_characters: _builtins.int
@@ -641,6 +642,13 @@ class TypingStatus(_message.Message):
     "Language?") holds the queue; game control is KeyDown/KeyUp, which are
     never held. WatchTypingStatus pushes when this changes.
     """
+    cycles_since_reset: _builtins.int
+    """Emulated CPU cycles since the last reset began (power-on, or Break
+    pressed). The server gives no verdict on how long a guest may take to
+    become ready -- a long !BOOT is legitimate -- so a client waiting for it
+    budgets the wait against this. While guest_ready is false,
+    WatchTypingStatus pushes as it advances, at the stream's interval.
+    """
     def __init__(
         self,
         *,
@@ -649,10 +657,11 @@ class TypingStatus(_message.Message):
         strings_queued: _builtins.int = ...,
         machine_running: _builtins.bool = ...,
         guest_ready: _builtins.bool = ...,
+        cycles_since_reset: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["guest_ready", b"guest_ready", "idle", b"idle", "machine_running", b"machine_running", "pending_characters", b"pending_characters", "strings_queued", b"strings_queued"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["cycles_since_reset", b"cycles_since_reset", "guest_ready", b"guest_ready", "idle", b"idle", "machine_running", b"machine_running", "pending_characters", b"pending_characters", "strings_queued", b"strings_queued"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
