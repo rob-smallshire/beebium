@@ -78,8 +78,8 @@ public:
             rows.push_back({std::string(built_in.name), "built_in",
                             std::string(built_in.description)});
         }
-        const auto hardware = std::make_unique<typename MachineType::Memory>();
-        for (const auto& variable : hardware->debug_variables()) {
+        const auto machine = std::make_unique<MachineType>();
+        for (const auto& variable : machine->debug_variables()) {
             rows.push_back({std::string(variable.name),
                             variable.watchpoint_only ? "watchpoint" : "machine",
                             std::string(variable.description)});

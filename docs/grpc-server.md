@@ -450,6 +450,7 @@ Breakpoints fire at instruction boundaries when PC falls within a specified addr
 | `mem[addr]` | Peek memory at address (side-effect-free) |
 | `true`, `false` | Boolean literals |
 | the machine's latches | Read as the hardware holds them, write-only ones included: `bank` and `romsel` on every model; `acccon`, `andy`, `vdusel` and `vdu` on the B+ and B+ 128K; `ramsel`, `shen`, `prven`, `memsel`, `prvs1`, `prvs4` and `prvs8` on the Integra-B |
+| the beam | On every model: `crtc_row`, `crtc_column`, `raster`, `cycles_since_vsync`, `display_enabled`, `in_vsync`, `odd_field` (as `GetCrtcState` names them), and `field`, the vsyncs since the machine started (no reset clears it). A condition is judged after its cycle's CPU access and before that cycle's CRTC tick, so these are the beam's for the access being judged |
 | `addr`, `value`, `write` | Watchpoint conditions only: the access being judged (`write` is 1 for a write) |
 | `shadow_access` | Watchpoint conditions only, on the B+, B+ 128K and Integra-B: 1 if the access went to shadow RAM |
 

@@ -1,7 +1,7 @@
 # Paging-qualified breakpoints and watchpoints (#186)
 
-Status: machine and access variables implemented (#186); beam variables
-(#196) follow. Raised by a downstream game project that keeps code and data in
+Status: implemented: machine and access variables (#186), beam variables
+(#196). Raised by a downstream game project that keeps code and data in
 sideways RAM and switches shadow and private RAM.
 
 ## Problem

@@ -56,7 +56,7 @@ struct Rig {
         for (size_t i = 0; i < code.size(); ++i) machine.write(static_cast<uint16_t>(addr + i), code[i]);
     }
 
-    grpc::Status breakpoint(uint16_t start, uint16_t end, const std::string& condition,
+    grpc::Status breakpoint(uint32_t start, uint32_t end, const std::string& condition,
                             std::string* error = nullptr) {
         grpc::ServerContext context;
         AddBreakpointRequest request;
@@ -273,4 +273,102 @@ TEST_CASE("On an Integra-B, shadow_access follows SHEN and MEMSEL, and each bit 
     CHECK(values["shen"] == 1);
     CHECK(values["prvs1"] + values["prvs4"] + values["prvs8"] + values["prven"] == 0);
     CHECK(values["memsel"] == 1);
+}
+
+// ---------------------------------------------------------------------------
+// Beam variables (#196): the 6845's position and the field, on every model.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Program the 6845 and the Video ULA as MOS 1.20's MODE 7 does: 64 1 MHz
+// characters a scanline (128 CPU cycles), 25 displayed rows of 31, vsync at
+// row 27, interlaced sync and video.
+template <typename Machine>
+void program_mode_7(Machine& machine) {
+    constexpr uint8_t MODE_7[] = {63, 40, 51, 0x24, 30, 2, 25, 27, 0x93, 18, 0x72, 0x13, 0x28, 0x00};
+    for (uint8_t r = 0; r < sizeof(MODE_7); ++r) {
+        machine.write(0xFE00, r);
+        machine.write(0xFE01, MODE_7[r]);
+    }
+    machine.write(0xFE20, 0x4B);  // Video ULA: teletext
+}
+
+constexpr uint64_t SCANLINE_CYCLES = 128;
+
+template <typename Machine>
+uint64_t variable(Machine& machine, std::string_view name) {
+    for (const auto& v : machine.debug_variables()) {
+        if (v.name == name) return v.read();
+    }
+    FAIL("no variable " << name);
+    return 0;
+}
+
+}  // namespace
+
+TEST_CASE("field counts vsyncs, about 50 an emulated second in MODE 7", "[debugger][conditions][beam]") {
+    Rig<ModelB> rig;
+    program_mode_7(rig.machine);
+    rig.plant(0x0400, {0x4C, 0x00, 0x04});  // JMP &0400
+    rig.machine.set_pc(0x0400);
+    rig.machine.run(200'000);  // settle into the programmed timing
+    const uint64_t before = variable(rig.machine, "field");
+    rig.machine.run(2'000'000);  // one emulated second
+    const uint64_t fields = variable(rig.machine, "field") - before;
+    CHECK(fields >= 49);
+    CHECK(fields <= 51);
+}
+
+TEST_CASE("A breakpoint on the next field stops as its vsync begins", "[debugger][conditions][beam]") {
+    Rig<ModelB> rig;
+    program_mode_7(rig.machine);
+    rig.plant(0x0400, {0x4C, 0x00, 0x04});
+    rig.machine.set_pc(0x0400);
+    rig.machine.run(200'000);
+    const uint64_t field = variable(rig.machine, "field");
+
+    // A whole-address-space breakpoint, evaluated at every instruction boundary.
+    REQUIRE(rig.breakpoint(0x0000, 0x10000, "field == " + std::to_string(field + 1)).ok());
+    rig.machine.resume();
+    rig.machine.run(100'000);
+    REQUIRE(rig.machine.is_paused());
+    CHECK(variable(rig.machine, "field") == field + 1);
+    CHECK(variable(rig.machine, "in_vsync") == 1);
+    CHECK(variable(rig.machine, "cycles_since_vsync") <= 4);  // the first boundary after it
+}
+
+TEST_CASE("crtc_row and display_enabled are the beam's at the access a watchpoint judges",
+          "[debugger][conditions][beam]") {
+    // STA &2000 in a loop: a write every 7 cycles.
+    auto writing = [](const std::string& condition) {
+        auto rig = std::make_unique<Rig<ModelB>>();
+        program_mode_7(rig->machine);
+        rig->plant(0x0400, {0x8D, 0x00, 0x20, 0x4C, 0x00, 0x04});
+        rig->machine.set_pc(0x0400);
+        rig->machine.run(200'000);
+        REQUIRE(rig->watchpoint(0x2000, 0x2001, condition).ok());
+        rig->machine.resume();
+        rig->machine.run(100'000);
+        REQUIRE(rig->machine.is_paused());
+        return rig;
+    };
+
+    // Row 10 begins after the four rows from vsync (27-30), the two adjust
+    // scanlines and rows 0-9: 46 to 50 rows-worth of 9 or 10 scanlines each.
+    {
+        auto rig = writing("crtc_row == 10");
+        const uint64_t since_vsync = variable(rig->machine, "cycles_since_vsync");
+        CHECK(since_vsync >= (4 * 9 + 2 + 10 * 9) * SCANLINE_CYCLES);
+        CHECK(since_vsync <= (4 * 10 + 2 + 10 * 10 + 1) * SCANLINE_CYCLES);
+        CHECK(variable(rig->machine, "crtc_row") == 10);
+        CHECK(variable(rig->machine, "display_enabled") == 1);
+    }
+    // The vertical blank: rows 25-30 are not displayed.
+    {
+        auto rig = writing("!display_enabled && crtc_column < 40");
+        const uint64_t row = variable(rig->machine, "crtc_row");
+        CHECK(row >= 25);
+        CHECK(row <= 30);
+    }
 }

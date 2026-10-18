@@ -61,6 +61,7 @@ struct VideoBinding {
         // Note where the beam is: each vsync rising edge starts a field.
         if (output.vsync && !last_vsync_) {
             last_vsync_cycle_ = cycle_source_ ? *cycle_source_ : 0;
+            ++field_count_;
             // odd_field toggles at the end of the vertical displayed area, so
             // at vsync it already names the field that is starting.
             field_odd_ = output.odd_field != 0;
@@ -91,7 +92,12 @@ struct VideoBinding {
     // interlaced frame. Meaningful only when the CRTC interlaces (R8 bit 0).
     bool field_odd() const { return field_odd_; }
 
+    // Vsync rising edges since the machine was made: no reset, not even
+    // Break, clears it, so it counts fields across them.
+    uint64_t field_count() const { return field_count_; }
+
 private:
+    uint64_t field_count_ = 0;
     const uint64_t* cycle_source_ = nullptr;
     uint64_t last_vsync_cycle_ = 0;
     bool last_vsync_ = false;

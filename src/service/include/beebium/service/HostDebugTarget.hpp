@@ -127,7 +127,7 @@ public:
     }
     std::string_view machine_type() const override { return machine_.memory().machine_type(); }
     std::vector<DebugVariable> debug_variables() const override {
-        return machine_.memory().debug_variables();
+        return machine_.debug_variables();
     }
 
     // --- Breakpoints ---

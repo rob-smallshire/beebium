@@ -18,6 +18,10 @@ import pytest
 
 from beebium.client.exceptions import InvalidConditionError
 
+# On every model: the beam (#196).
+BEAM = {"crtc_row", "crtc_column", "raster", "cycles_since_vsync", "display_enabled",
+        "in_vsync", "odd_field", "field"}
+
 
 @pytest.mark.parametrize(
     ("variant", "machine_names", "watchpoint_names"),
@@ -38,7 +42,7 @@ def test_the_server_lists_each_models_names(launch_bbc, variant, machine_names,
     for variable in variables:
         assert variable.description
         by_scope.setdefault(variable.scope, set()).add(variable.name)
-    assert by_scope["machine"] == machine_names
+    assert by_scope["machine"] == machine_names | BEAM
     assert by_scope["watchpoint"] == watchpoint_names
     assert {"A", "X", "Y", "PC", "cycles", "hits"} <= by_scope["built_in"]
 

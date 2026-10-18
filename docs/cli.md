@@ -698,7 +698,8 @@ launch. Like the other discovery commands, this needs no running emulator.
 List every name a debugger breakpoint or watchpoint condition can use on this
 model, with what it means and where it applies: `built_in` (the CPU's
 registers and flags, `cycles`, `hits`), `machine` (this model's latches, such
-as `bank` and `romsel`, and on a B+ `acccon` and `vdusel`) and `watchpoint`
+as `bank` and `romsel`, the beam -- `crtc_row`, `field` and the like -- and on
+a B+ `acccon` and `vdusel`) and `watchpoint`
 (the access a watchpoint judges: `addr`, `value`, `write`, and `shadow_access`
 on a model with shadow RAM). The same list `GetCpuDescriptor` gives for a
 running machine. Honours `--format`.

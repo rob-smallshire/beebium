@@ -580,7 +580,10 @@ describe("Debugger: condition variables", () => {
             const variables = await dbg.conditionVariables();
             const names = (scope: string) =>
                 variables.filter((v) => v.scope === scope).map((v) => v.name).sort();
-            expect(names("machine")).toEqual(["bank", "romsel"]);
+            expect(names("machine")).toEqual([
+                "bank", "crtc_column", "crtc_row", "cycles_since_vsync", "display_enabled",
+                "field", "in_vsync", "odd_field", "raster", "romsel",
+            ]);
             expect(names("watchpoint")).toEqual(["addr", "value", "write"]);
             expect(names("built_in")).toEqual(expect.arrayContaining(["A", "PC", "cycles", "hits"]));
             expect(variables.every((v) => v.description.length > 0)).toBe(true);

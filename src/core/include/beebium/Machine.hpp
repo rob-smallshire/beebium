@@ -18,6 +18,7 @@
 #include "Clock.hpp"
 #include "ClockBinding.hpp"
 #include "CpuBinding.hpp"
+#include "DebugVariable.hpp"
 #include "ProgramCounterHistogram.hpp"
 #include "Types.hpp"
 #include "Via6522.hpp"
@@ -839,6 +840,36 @@ public:
     // Access to bindings for testing/debugging
     CpuBindingType& cpu_binding() { return cpu_binding_; }
     VideoBindingType& video_binding() { return video_binding_; }
+    const VideoBindingType& video_binding() const { return video_binding_; }
+
+    // The values a debugger condition can name on this machine
+    // (DebugVariable): its hardware's latches, and the beam -- the 6845's
+    // position and the field -- common to every model. A condition is judged
+    // within a cycle, after that cycle's CPU access and before its CRTC tick,
+    // so the beam values are those in effect for the access being judged.
+    std::vector<DebugVariable> debug_variables() const {
+        auto variables = state_.memory.debug_variables();
+        const auto& crtc = state_.memory.crtc;
+        variables.insert(variables.end(), {
+            {"crtc_row", "The character row the 6845 is scanning (0 to R4).",
+             [&crtc] { return uint64_t{crtc.row()}; }},
+            {"crtc_column", "The character column the 6845 is scanning (0 to R0).",
+             [&crtc] { return uint64_t{crtc.column()}; }},
+            {"raster", "The scanline within the character row (0 to R9).",
+             [&crtc] { return uint64_t{crtc.raster()}; }},
+            {"cycles_since_vsync", "CPU cycles since the field started (the last vsync).",
+             [this] { return state_.cycle_count - video_binding_.last_vsync_cycle(); }},
+            {"display_enabled", "1 while the 6845's DISPEN is asserted.",
+             [&crtc] { return uint64_t{crtc.display_enabled()}; }},
+            {"in_vsync", "1 during vertical sync.",
+             [&crtc] { return uint64_t{crtc.in_vsync()}; }},
+            {"odd_field", "1 during the odd (first) field of an interlaced frame.",
+             [this] { return uint64_t{video_binding_.field_odd()}; }},
+            {"field", "Vsyncs since the machine started; no reset, Break included, clears it.",
+             [this] { return video_binding_.field_count(); }},
+        });
+        return variables;
+    }
 
     // RAII scope the emulation thread holds around the per-iteration work it
     // performs outside run() -- ticking disc drives, adjusting emulation speed --
