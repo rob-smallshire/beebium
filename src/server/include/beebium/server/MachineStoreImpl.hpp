@@ -240,7 +240,7 @@ private:
             });
         }
         write_frame_png(frame_buffer_, dirpath / machine_layout::THUMBNAIL_FILENAME,
-                        kThumbnailBorderPixels, /*crop_auto=*/false);
+                        kThumbnailBorderPixels, /*crop_auto=*/true);
     }
 
     SaveOutcome save_paused(const std::string& destination, bool replace_existing,
@@ -610,7 +610,8 @@ private:
         }
     }
 
-    // As preset thumbnails are captured (capture-screenshot's default).
+    // As preset thumbnails are captured (capture-screenshot --crop auto,
+    // with its default border).
     static constexpr std::uint32_t kThumbnailBorderPixels = 20;
 
     AssembledMachine<MachineType>& am_;

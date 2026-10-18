@@ -133,9 +133,10 @@ for an instance.
 ## thumbnail.png
 
 The machine's screen, written on every Save and at a graceful shutdown of a
-saved machine, through the capture path `capture-screenshot` uses (the
-display-sized frame inside a 20-pixel black border). A machine made from a
-preset has the preset's thumbnail until it has one of its own.
+saved machine, as preset thumbnails are captured: cropped to its content
+like `capture-screenshot --crop auto`, enlarged to the display size, inside a
+20-pixel black border. The same frame always gives the same file. A machine
+made from a preset has the preset's thumbnail until it has one of its own.
 
 ## lock
 
