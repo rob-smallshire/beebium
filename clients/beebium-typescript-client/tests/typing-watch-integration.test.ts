@@ -8,6 +8,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import { Beebium } from "../src/client.js";
+import { DebuggerError } from "../src/exceptions.js";
 
 const activeHosts = new Set<Beebium>();
 
@@ -96,5 +97,20 @@ describe("waitForTyping", () => {
 
         expect(clearedCount).toBeGreaterThan(0);
         expect((await bbc.keyboard.typingStatus()).idle).toBe(true);
+    });
+
+    it("rejects at once when the machine is stopped with characters pending", async () => {
+        const bbc = await launchHost();
+        await bbc.keyboard.clearTyping();
+        await bbc.debugger.stop();
+        await bbc.keyboard.type("PRINT 4\r");
+
+        const started = Date.now();
+        await expect(bbc.keyboard.waitForTyping()).rejects.toThrow(DebuggerError);
+        await expect(bbc.keyboard.waitForTyping()).rejects.toThrow(
+            /machine is stopped.*debugger\.run\(\)/,
+        );
+        expect(Date.now() - started).toBeLessThan(5000);
+        expect((await bbc.keyboard.typingStatus()).pendingCharacters).toBeGreaterThan(0);
     });
 });

@@ -12,7 +12,7 @@ export { ServerProcess, type ServerProcessOptions } from "./server-process.js";
 export { Debugger, type ExecutionState, type ExecutionStateEvent, type Breakpoint, type StepResult, StopReason } from "./debugger.js";
 export { CPU, type Registers, carry, zero, interruptDisable, decimal, breakFlag, overflow, negative, formatRegisters } from "./cpu.js";
 export { Memory, AddressSpace, BusAccessor, PeekAccessor, Region, type MemoryRegionInfo } from "./memory.js";
-export { Keyboard, type KeyboardState, type LockState } from "./keyboard.js";
+export { Keyboard, type KeyboardState, type LockState, type TypingQueueStatus } from "./keyboard.js";
 export {
     Video,
     type VideoConfig,

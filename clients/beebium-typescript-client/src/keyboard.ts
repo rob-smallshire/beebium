@@ -3,6 +3,7 @@
  */
 
 import { promisify } from "./call-utils.js";
+import { DebuggerError } from "./exceptions.js";
 import { toAsyncIterable } from "./stream-utils.js";
 import {
     CTRL_KEY,
@@ -34,6 +35,27 @@ import type {
     TypingStatus,
 } from "./generated/keyboard.js";
 import type { Beebium } from "./client.js";
+
+/**
+ * State of the server's type-ahead queue. `machineRunning` is the server's
+ * word on whether the emulator is running: only a running machine drains
+ * the queue.
+ */
+export interface TypingQueueStatus {
+    idle: boolean;
+    pendingCharacters: number;
+    stringsQueued: number;
+    machineRunning: boolean;
+}
+
+function typingQueueStatus(proto: TypingStatus): TypingQueueStatus {
+    return {
+        idle: proto.idle,
+        pendingCharacters: proto.pendingCharacters,
+        stringsQueued: proto.stringsQueued,
+        machineRunning: proto.machineRunning,
+    };
+}
 
 // CAPS LOCK and SHIFT LOCK live on row 4/5 column 0 of the keyboard matrix.
 // These are not modifier keys -- a tap toggles a sticky state held by MOS.
@@ -573,19 +595,15 @@ export class Keyboard {
     /**
      * Get type-ahead queue status.
      *
-     * @returns Object with idle, pendingCharacters, and stringsQueued.
+     * @returns The queue's status and whether the machine is running.
      */
-    async typingStatus(): Promise<{ idle: boolean; pendingCharacters: number; stringsQueued: number }> {
+    async typingStatus(): Promise<TypingQueueStatus> {
         const response = await promisify<Record<string, never>, TypingStatus>(
             this._stub as unknown as Record<string, Function>,
             "getTypingStatus",
             {},
         );
-        return {
-            idle: response.idle,
-            pendingCharacters: response.pendingCharacters,
-            stringsQueued: response.stringsQueued,
-        };
+        return typingQueueStatus(response);
     }
 
     /**
@@ -607,8 +625,9 @@ export class Keyboard {
      *
      * Yields an initial snapshot immediately, then a fresh one whenever the
      * queue changes -- a character consumed, a string started or finished,
-     * text enqueued, or the queue cleared. The stream stays open until the
-     * iteration ends or the connection drops.
+     * text enqueued, or the queue cleared -- and whenever the machine stops
+     * or starts. The stream stays open until the iteration ends or the
+     * connection drops.
      *
      * Prefer this over polling `typingStatus()`. The server is the only party
      * that knows when the queue drains; polling forces the caller to infer it,
@@ -621,16 +640,12 @@ export class Keyboard {
      */
     async *watchTypingStatus(
         options?: { minIntervalMs?: number },
-    ): AsyncIterable<{ idle: boolean; pendingCharacters: number; stringsQueued: number }> {
+    ): AsyncIterable<TypingQueueStatus> {
         const stream = this._stub.watchTypingStatus({
             minIntervalMs: options?.minIntervalMs ?? 0,
         });
         for await (const proto of toAsyncIterable(stream)) {
-            yield {
-                idle: proto.idle,
-                pendingCharacters: proto.pendingCharacters,
-                stringsQueued: proto.stringsQueued,
-            };
+            yield typingQueueStatus(proto);
         }
     }
 
@@ -642,13 +657,24 @@ export class Keyboard {
      * cleared queue, a dropped connection, a stopped server -- because in
      * every case there is nothing further to wait for.
      *
-     * There is deliberately no timeout, and no polling interval: the server
-     * says when it has finished rather than the caller guessing.
+     * Only a running machine drains the queue, and the server says whether
+     * the machine is running, so the wait needs no timeout: it rejects at
+     * once if the machine is stopped with characters pending, on entry or
+     * part way through. Call `debugger.run()` before waiting. Use
+     * `clearTyping()` to stop waiting early.
+     *
+     * @throws DebuggerError If the machine is stopped with characters pending.
      */
     async waitForTyping(): Promise<void> {
         for await (const status of this.watchTypingStatus()) {
             if (status.idle) {
                 return;
+            }
+            if (!status.machineRunning) {
+                throw new DebuggerError(
+                    `machine is stopped with ${status.pendingCharacters} characters to type; ` +
+                    "nothing will drain the type-ahead queue -- call debugger.run() first",
+                );
             }
         }
     }
