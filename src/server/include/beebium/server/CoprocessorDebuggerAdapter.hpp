@@ -48,7 +48,7 @@ public:
     grpc::Status GetState(grpc::ServerContext* ctx, const Empty* req, ExecutionState* resp) override
     { return impl_.GetState(ctx, req, resp); }
 
-    grpc::Status Run(grpc::ServerContext* ctx, const Empty* req, RunResponse* resp) override
+    grpc::Status Run(grpc::ServerContext* ctx, const RunRequest* req, RunResponse* resp) override
     { return impl_.Run(ctx, req, resp); }
 
     grpc::Status Stop(grpc::ServerContext* ctx, const Empty* req, StopResponse* resp) override

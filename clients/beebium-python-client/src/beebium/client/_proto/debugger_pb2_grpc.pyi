@@ -49,7 +49,7 @@ class DebuggerControlStub:
     def __new__(cls, channel: _aio.Channel) -> DebuggerControlAsyncStub: ...
     GetState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ExecutionState]
     """Execution control"""
-    Run: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.RunResponse]
+    Run: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.RunRequest, _debugger_pb2.RunResponse]
     Stop: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.StopResponse]
     Reset: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ResetResponse]
     StepInstruction: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.StepRequest, _debugger_pb2.StepResponse]
@@ -95,7 +95,7 @@ class DebuggerControlAsyncStub(DebuggerControlStub):
     def __init__(self, channel: _aio.Channel) -> None: ...
     GetState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ExecutionState]  # type: ignore[assignment]
     """Execution control"""
-    Run: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.RunResponse]  # type: ignore[assignment]
+    Run: _aio.UnaryUnaryMultiCallable[_debugger_pb2.RunRequest, _debugger_pb2.RunResponse]  # type: ignore[assignment]
     Stop: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.StopResponse]  # type: ignore[assignment]
     Reset: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ResetResponse]  # type: ignore[assignment]
     StepInstruction: _aio.UnaryUnaryMultiCallable[_debugger_pb2.StepRequest, _debugger_pb2.StepResponse]  # type: ignore[assignment]
@@ -148,7 +148,7 @@ class DebuggerControlServicer(metaclass=_abc_1.ABCMeta):
     @_abc_1.abstractmethod
     def Run(
         self,
-        request: _debugger_pb2.Empty,
+        request: _debugger_pb2.RunRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_debugger_pb2.RunResponse, _abc.Awaitable[_debugger_pb2.RunResponse]]: ...
 
@@ -350,7 +350,7 @@ class CoprocessorDebuggerControlStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> CoprocessorDebuggerControlAsyncStub: ...
     GetState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ExecutionState]
-    Run: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.RunResponse]
+    Run: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.RunRequest, _debugger_pb2.RunResponse]
     Stop: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.StopResponse]
     Reset: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ResetResponse]
     StepInstruction: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.StepRequest, _debugger_pb2.StepResponse]
@@ -386,7 +386,7 @@ class CoprocessorDebuggerControlAsyncStub(CoprocessorDebuggerControlStub):
 
     def __init__(self, channel: _aio.Channel) -> None: ...
     GetState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ExecutionState]  # type: ignore[assignment]
-    Run: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.RunResponse]  # type: ignore[assignment]
+    Run: _aio.UnaryUnaryMultiCallable[_debugger_pb2.RunRequest, _debugger_pb2.RunResponse]  # type: ignore[assignment]
     Stop: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.StopResponse]  # type: ignore[assignment]
     Reset: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ResetResponse]  # type: ignore[assignment]
     StepInstruction: _aio.UnaryUnaryMultiCallable[_debugger_pb2.StepRequest, _debugger_pb2.StepResponse]  # type: ignore[assignment]
@@ -429,7 +429,7 @@ class CoprocessorDebuggerControlServicer(metaclass=_abc_1.ABCMeta):
     @_abc_1.abstractmethod
     def Run(
         self,
-        request: _debugger_pb2.Empty,
+        request: _debugger_pb2.RunRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_debugger_pb2.RunResponse, _abc.Awaitable[_debugger_pb2.RunResponse]]: ...
 

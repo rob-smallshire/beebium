@@ -275,21 +275,6 @@ class Debugger:
             stub: The gRPC stub for the DebuggerControl service.
         """
         self._stub = stub
-        self._program_counter_name: str | None = None
-
-    def _program_counter(self) -> int:
-        """The CPU's current program counter, located by its register role."""
-        if self._program_counter_name is None:
-            descriptor = self._stub.GetCpuDescriptor(debugger_pb2.Empty())
-            names = [reg.name for reg in descriptor.registers if reg.role == debugger_pb2.PROGRAM_COUNTER]
-            if not names:
-                raise DebuggerError("CPU descriptor names no program counter register")
-            self._program_counter_name = names[0]
-        state = self._stub.GetCpuState(debugger_pb2.Empty())
-        for reg in state.registers:
-            if reg.name == self._program_counter_name:
-                return reg.value
-        raise DebuggerError(f"CPU state has no {self._program_counter_name} register")
 
     # Execution control
 
@@ -298,13 +283,23 @@ class Debugger:
         response = self._stub.GetState(debugger_pb2.Empty())
         return _to_execution_state(response)
 
-    def run(self) -> None:
+    def run(self, *, stop_at_current: bool = False) -> None:
         """Resume execution.
+
+        Resumes as a debugger's continue does: a breakpoint at the instruction
+        the machine is stopped on is stepped over -- it stays enabled, but is
+        not reported again for that instruction -- so the run stops at its
+        next hit, not where it already is.
+
+        Args:
+            stop_at_current: Evaluate the breakpoints at the current
+                instruction instead, so one there stops the machine again at
+                once without running anything.
 
         Raises:
             DebuggerError: If the operation fails.
         """
-        response = self._stub.Run(debugger_pb2.Empty())
+        response = self._stub.Run(debugger_pb2.RunRequest(stop_at_current=stop_at_current))
         if not response.success:
             raise DebuggerError(f"Failed to start execution: {response.error}")
 
@@ -344,7 +339,8 @@ class Debugger:
     def step(self, count: int = 1) -> StepResult:
         """Step by instruction(s).
 
-        Machine must be stopped first.
+        Machine must be stopped first: stepping a running machine raises
+        rather than stopping it.
 
         Args:
             count: Number of instructions to execute.
@@ -370,7 +366,8 @@ class Debugger:
     def step_cycles(self, count: int = 1) -> StepResult:
         """Step by CPU cycle(s).
 
-        Machine must be stopped first.
+        Machine must be stopped first: stepping a running machine raises
+        rather than stopping it.
 
         Args:
             count: Number of cycles to execute.
@@ -886,6 +883,9 @@ class Debugger:
     ) -> ExecutionStateEvent:
         """Resume execution and wait for the next stop; return the stop event.
 
+        A machine stopped on a breakpoint steps over it (see :meth:`run`), so
+        the wait ends at the next stop, not at once where it already is.
+
         Race-free: it subscribes to the execution-state stream *before* resuming,
         so a breakpoint or watchpoint that fires immediately is never missed.
         Prefer this over ``ensure_running()`` followed by :meth:`wait_for_stop`,
@@ -1020,9 +1020,9 @@ class Debugger:
 
         By default, if the PC is already at ``address`` (or within the range up
         to ``end_address``) the breakpoint fires at once and no cycles run. Pass
-        ``skip_current=True`` to run to the *next* arrival instead: the
-        instruction at the current PC is stepped first, then the breakpoint is
-        armed. This steps a loop one iteration at a time::
+        ``skip_current=True`` to run to the *next* arrival instead: the server
+        steps over the instruction the machine is stopped on (see :meth:`run`).
+        This steps a loop one iteration at a time::
 
             while ...:
                 bbc.debugger.run_to(labels["tick_done"], skip_current=True)
@@ -1038,8 +1038,9 @@ class Debugger:
                 :meth:`add_breakpoint` for the grammar. Empty is unconditional.
             stop_counterpart: Also signal the counterpart processor to stop.
             skip_current: If the machine is stopped with the PC already at the
-                breakpoint, step one instruction before arming it, so the run
-                stops at the next arrival rather than immediately.
+                breakpoint, run to the next arrival rather than stopping at
+                once. :meth:`measure` relies on the default to count an
+                arrival it is already at.
             timeout: Wall-clock deadline in seconds. If the breakpoint is not hit
                 within this time, a :class:`DebuggerError` is raised.
 
@@ -1050,19 +1051,17 @@ class Debugger:
             DebuggerError: If the breakpoint cannot be set, or if the timeout
                 expires before the breakpoint is hit.
         """
-        # A running CPU has no "current" PC to skip; only a stopped one does.
-        if skip_current and not self.get_state().is_running:
-            pc = self._program_counter()
-            at_breakpoint = address <= pc < end_address if end_address else pc == address
-            if at_breakpoint:
-                self.step(1)
+        def resume() -> None:
+            if not self.is_running:
+                self.run(stop_at_current=not skip_current)
+
         with self.breakpoint(
             address,
             end_address=end_address,
             condition=condition,
             stop_counterpart=stop_counterpart,
         ):
-            return self.run_and_wait_for_stop(timeout=timeout).state
+            return self._resume_and_wait_for_stop(resume, timeout).state
 
     def measure(
         self,

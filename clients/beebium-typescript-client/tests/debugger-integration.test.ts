@@ -120,6 +120,51 @@ describe("Debugger: Breakpoints", () => {
 });
 
 // =========================================================================
+// Resuming from a breakpoint (#193)
+// =========================================================================
+
+describe("Debugger: resuming from a breakpoint", () => {
+    it("steps over the breakpoint it is stopped on, once round the loop", async () => {
+        await withServer(async (conn) => {
+            // LDX #0; .loop: INX; JMP loop
+            const code = [0xA2, 0x00, 0xE8, 0x4C, 0x02, 0x04];
+            const { dbg, cpu } = await plantAndRun(conn, code);
+
+            const bpId = await dbg.addBreakpoint(0x0402);
+            let stopPromise = dbg.waitForStop();
+            await dbg.run();
+            await stopPromise;
+            expect(await cpu.getX()).toBe(0);
+
+            for (let expectedX = 1; expectedX <= 3; expectedX++) {
+                const before = (await dbg.getState()).cycleCount;
+                stopPromise = dbg.waitForStop();
+                await dbg.run();
+                await stopPromise;
+                expect(await cpu.getPc()).toBe(0x0402);
+                expect(await cpu.getX()).toBe(expectedX);
+                expect((await dbg.getState()).cycleCount - before).toBe(5);
+            }
+            await dbg.removeBreakpoint(bpId);
+        });
+    });
+
+    it("refuses to step a running machine, saying to stop it first", async () => {
+        await withServer(async (conn) => {
+            const dbg = new Debugger(conn.debuggerStub);
+            if (!(await dbg.isRunning())) await dbg.run();
+            await expect(dbg.step()).rejects.toThrow(
+                /machine is running; call debugger\.stop\(\) before stepping/,
+            );
+            await expect(dbg.stepCycles()).rejects.toThrow(
+                /machine is running; call debugger\.stop\(\) before stepping/,
+            );
+            expect(await dbg.isRunning()).toBe(true);
+        });
+    });
+});
+
+// =========================================================================
 // Conditional Breakpoints
 // =========================================================================
 

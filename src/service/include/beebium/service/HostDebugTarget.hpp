@@ -62,6 +62,7 @@ public:
     bool is_paused() const override { return machine_.is_paused(); }
     void pause() override { machine_.pause(); }
     void resume() override { machine_.resume(); }
+    void step_over_breakpoints_once() override { machine_.step_over_breakpoints_once(); }
     void reset() override { machine_.reset(); }
     void step() override { machine_.step(); }
     uint64_t step_instruction() override { return machine_.step_instruction(); }

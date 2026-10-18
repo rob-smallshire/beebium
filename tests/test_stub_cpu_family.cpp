@@ -64,6 +64,7 @@ public:
     bool is_paused() const override { return paused_; }
     void pause() override { paused_ = true; }
     void resume() override { paused_ = false; }
+    void step_over_breakpoints_once() override {}
     void reset() override { registers_.assign(registers_.size(), 0); ++sequence_; }
     void step() override { ++cycle_count_; ++sequence_; }
     uint64_t step_instruction() override { cycle_count_ += 2; ++sequence_; return 2; }

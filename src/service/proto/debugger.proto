@@ -7,7 +7,7 @@ package beebium;
 service DebuggerControl {
     // Execution control
     rpc GetState(Empty) returns (ExecutionState);
-    rpc Run(Empty) returns (RunResponse);
+    rpc Run(RunRequest) returns (RunResponse);
     rpc Stop(Empty) returns (StopResponse);
     rpc Reset(Empty) returns (ResetResponse);
     rpc StepInstruction(StepRequest) returns (StepResponse);
@@ -56,7 +56,7 @@ service DebuggerControl {
 // so both can coexist on the same gRPC server.
 service CoprocessorDebuggerControl {
     rpc GetState(Empty) returns (ExecutionState);
-    rpc Run(Empty) returns (RunResponse);
+    rpc Run(RunRequest) returns (RunResponse);
     rpc Stop(Empty) returns (StopResponse);
     rpc Reset(Empty) returns (ResetResponse);
     rpc StepInstruction(StepRequest) returns (StepResponse);
@@ -110,6 +110,16 @@ message ExecutionState {
     // stop reached by running lands on a boundary, and a halted CPU has no
     // instruction in flight, so both report true.
     bool at_instruction_boundary = 5;
+}
+
+message RunRequest {
+    // Run resumes as a debugger's continue does: it steps over the
+    // breakpoints at the instruction the CPU is stopped on. They stay
+    // enabled, but are not evaluated, so not reported again, for that one
+    // instruction, and the run stops at their next hit. Set this to evaluate
+    // them instead, so one there stops the CPU again at once: a run to an
+    // address the CPU may already be at, which counts arriving there.
+    bool stop_at_current = 1;
 }
 
 message RunResponse {

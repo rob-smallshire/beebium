@@ -37,6 +37,7 @@
 #include <mutex>
 #include <thread>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace beebium {
@@ -420,10 +421,14 @@ public:
                     // running CPU only ever stops at an instruction boundary, so
                     // a `cycles >= N` condition can be up to one instruction late
                     // and the state is always that of a completed instruction.
+                    // The instruction a resume stepped over is not evaluated.
+                    const bool stepping_over =
+                        std::exchange(step_over_breakpoints_, false) &&
+                        state_.cycle_count == step_over_cycle_;
                     uint16_t pc = state_.cpu.opcode_pc.w;
                     bool hit_stop = false;
                     for (auto& bp : breakpoint_entries_) {
-                        if (bp.start > pc) break;  // sorted by start: early exit
+                        if (stepping_over || bp.start > pc) break;  // sorted by start
                         if (bp.matches(pc)) {
                             if (on_breakpoint_hit_) on_breakpoint_hit_(bp, pc);
                             if (paused_.load()) { hit_stop = true; break; }
@@ -746,6 +751,17 @@ public:
 
     const std::vector<BreakpointEntry>& breakpoint_entries() const { return breakpoint_entries_; }
 
+    // Have the next run step over the breakpoints at the instruction the
+    // machine is stopped on, as a debugger's continue does: they stay
+    // enabled, but are not evaluated, so not reported again, for that one
+    // instruction. Only a machine stopped at that instruction's boundary is
+    // affected; one stopped part-way through an instruction runs on to the
+    // next, whose breakpoints are evaluated. Call while paused, before resume().
+    void step_over_breakpoints_once() {
+        step_over_breakpoints_ = true;
+        step_over_cycle_ = state_.cycle_count;
+    }
+
     // Debugger watchpoint entry management. As with breakpoints, the swap runs
     // with the emulation loop paused (it iterates the vector on every bus
     // access); never call from the emulation thread.
@@ -871,6 +887,9 @@ private:
 
     std::vector<BreakpointEntry> breakpoint_entries_;    // sorted by address, modified only while stopped
     BreakpointHitCallback on_breakpoint_hit_;           // rare-path callback
+    // See step_over_breakpoints_once(); set only while paused, read by run().
+    bool step_over_breakpoints_ = false;
+    uint64_t step_over_cycle_ = 0;
     MachineResetCallback on_reset_;                     // fired on reset()/soft_reset()
     std::vector<WatchpointEntry> watchpoint_entries_;   // sorted by start, modified only while stopped
     WatchpointHitCallback on_watchpoint_hit_;           // rare-path callback

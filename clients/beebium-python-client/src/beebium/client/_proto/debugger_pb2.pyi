@@ -152,6 +152,32 @@ class ExecutionState(_message.Message):
 Global___ExecutionState: _TypeAlias = ExecutionState  # noqa: Y015
 
 @_typing.final
+class RunRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    STOP_AT_CURRENT_FIELD_NUMBER: _builtins.int
+    stop_at_current: _builtins.bool
+    """Run resumes as a debugger's continue does: it steps over the
+    breakpoints at the instruction the CPU is stopped on. They stay
+    enabled, but are not evaluated, so not reported again, for that one
+    instruction, and the run stops at their next hit. Set this to evaluate
+    them instead, so one there stops the CPU again at once: a run to an
+    address the CPU may already be at, which counts arriving there.
+    """
+    def __init__(
+        self,
+        *,
+        stop_at_current: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["stop_at_current", b"stop_at_current"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___RunRequest: _TypeAlias = RunRequest  # noqa: Y015
+
+@_typing.final
 class RunResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

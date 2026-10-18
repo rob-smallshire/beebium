@@ -134,6 +134,38 @@ TEST_CASE("CoprocessorRunner pause stops execution", "[coprocessor][runner][debu
     CHECK(runner.cycle_count() > cycle_before);
 }
 
+TEST_CASE("CoprocessorRunner steps over the breakpoint it is stopped on, once",
+          "[coprocessor][runner][debug]") {
+    TubeUla tube;
+    auto rom = make_nop_rom();
+    CoprocessorRunner runner(tube, rom);
+    runner.reset();
+    runner.step_instruction();  // the reset sequence, to the NOP at &F800
+
+    BreakpointEntry bp{};
+    bp.id = 1;
+    bp.start = 0xF802;
+    bp.end = 0xF803;
+    runner.set_breakpoint_entries({bp});
+    runner.set_breakpoint_hit_callback([&](const BreakpointEntry&, uint32_t) { runner.pause(); });
+
+    runner.run(100);
+    REQUIRE(runner.is_paused());
+    const auto stopped_at = runner.cycle_count();
+
+    // A plain resume stops again at once on the same instruction.
+    runner.resume();
+    runner.run(100);
+    CHECK(runner.cycle_count() == stopped_at);
+
+    // Stepping over it runs on: the NOPs after it carry no breakpoint.
+    runner.step_over_breakpoints_once();
+    runner.resume();
+    runner.run(100);
+    CHECK(runner.cycle_count() > stopped_at);
+    CHECK_FALSE(runner.is_paused());
+}
+
 // ===========================================================================
 // Component access
 // ===========================================================================

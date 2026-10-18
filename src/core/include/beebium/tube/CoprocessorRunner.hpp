@@ -114,6 +114,10 @@ public:
 
     void pause() override;
     void resume() override;
+    void step_over_breakpoints_once() override {
+        step_over_breakpoints_ = true;
+        step_over_cycle_ = cpu_.cycle_count();
+    }
     bool is_paused() const override { return paused_; }
     void prepare_for_step() override {} // Nothing to resync: the coprocessor is never bus-stretched
 
@@ -330,6 +334,10 @@ private:
 
     // Debugger pause state (plain bool, single-threaded)
     bool paused_ = false;
+
+    // See step_over_breakpoints_once(); consumed by check_breakpoints().
+    bool step_over_breakpoints_ = false;
+    uint64_t step_over_cycle_ = 0;
 
     // Set by finish_instruction() so the completing cycles fire no watchpoint.
     bool watchpoints_suppressed_ = false;

@@ -13,6 +13,7 @@
 #include <beebium/tube/CoprocessorRunner.hpp>
 
 #include <algorithm>
+#include <utility>
 
 namespace beebium {
 
@@ -130,6 +131,11 @@ bool CoprocessorRunner::check_breakpoints() {
     // Check breakpoints before tick(), when register updates are complete and
     // the CPU is about to decode the next opcode.
     if (breakpoint_entries_.empty() || !M6502_IsAboutToExecute(&cpu_.cpu())) {
+        return false;
+    }
+    // The instruction a resume stepped over is not evaluated.
+    if (std::exchange(step_over_breakpoints_, false) &&
+        cpu_.cycle_count() == step_over_cycle_) {
         return false;
     }
     const uint16_t pc = cpu_.cpu().opcode_pc.w;

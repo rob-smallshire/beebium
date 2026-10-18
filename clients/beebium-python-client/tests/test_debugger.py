@@ -522,6 +522,35 @@ class TestRunToSkipCurrent:
             assert bbc.cpu.x == expected_x
 
 
+class TestResumingFromABreakpoint:
+    """A resume steps over the breakpoint it is stopped on (#193)."""
+
+    def test_run_and_wait_for_stop_goes_once_round_the_loop(self, bbc):
+        plant_and_run_from(bbc, COUNTING_LOOP)
+        with bbc.debugger.breakpoint(0x0402):
+            bbc.debugger.run_and_wait_for_stop()
+            assert bbc.cpu.x == 0
+            for expected_x in range(1, 4):
+                cycles_before = bbc.debugger.cycle_count
+                event = bbc.debugger.run_and_wait_for_stop()
+                assert bbc.cpu.pc == 0x0402
+                assert bbc.cpu.x == expected_x
+                assert event.state.cycle_count - cycles_before == 5
+            (breakpoint,) = bbc.debugger.list_breakpoints()
+            assert breakpoint.enabled
+            assert breakpoint.hit_count == 4
+
+
+class TestSteppingARunningMachine:
+    def test_step_says_to_stop_first_and_leaves_it_running(self, bbc):
+        bbc.debugger.ensure_running()
+        with pytest.raises(DebuggerError, match=r"machine is running; call debugger\.stop\(\) before stepping"):
+            bbc.debugger.step()
+        with pytest.raises(DebuggerError, match=r"machine is running; call debugger\.stop\(\) before stepping"):
+            bbc.debugger.step_cycles()
+        assert bbc.debugger.is_running
+
+
 # ============================================================================
 # Full-range breakpoints (cycle budgets, predicates)
 # ============================================================================

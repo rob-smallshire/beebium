@@ -142,7 +142,7 @@ TEST_CASE("DebuggerControl Run resumes after Stop", "[grpc][debugger]") {
     // Now resume
     {
         grpc::ClientContext context;
-        beebium::Empty request;
+        beebium::RunRequest request;
         beebium::RunResponse response;
         auto status = fixture.debugger().Run(&context, request, &response);
 
@@ -158,7 +158,7 @@ TEST_CASE("DebuggerControl Run when already running returns error", "[grpc][debu
 
     // Machine is already running (not paused)
     grpc::ClientContext context;
-    beebium::Empty request;
+    beebium::RunRequest request;
     beebium::RunResponse response;
 
     auto status = fixture.debugger().Run(&context, request, &response);
@@ -224,7 +224,8 @@ TEST_CASE("DebuggerControl StepInstruction fails when running", "[grpc][debugger
 
     REQUIRE(status.ok());
     CHECK_FALSE(response.success());
-    CHECK(response.error() == "machine is running");
+    CHECK(response.error() == "machine is running; call debugger.stop() before stepping");
+    CHECK_FALSE(fixture.machine().is_paused());  // refused, not stopped
 }
 
 TEST_CASE("DebuggerControl StepCycle steps one cycle", "[grpc][debugger]") {
@@ -1170,6 +1171,98 @@ TEST_CASE("Breakpoint fires in a loop", "[grpc][debugger][breakpoint][6502]") {
         beebium::RemoveBreakpointResponse resp;
         fixture.debugger().RemoveBreakpoint(&ctx, req, &resp);
     }
+}
+
+namespace {
+
+// A loop at $0400 that counts round in X, with a breakpoint on its INX at
+// $0402, run to the first hit (X still 0).
+void stop_on_loop_breakpoint(DebuggerTestFixture& fixture) {
+    prepare_for_code(fixture.machine());
+    plant_code(fixture.machine(), 0x0400, {
+        0xA2, 0x00,       // LDX #$00
+        0xE8,             // INX          ($0402)
+        0x4C, 0x02, 0x04, // JMP $0402
+    });
+    fixture.machine().set_pc(0x0400);
+    grpc::ClientContext ctx;
+    beebium::AddBreakpointRequest req;
+    req.set_start_address(0x0402);
+    beebium::AddBreakpointResponse resp;
+    REQUIRE(fixture.debugger().AddBreakpoint(&ctx, req, &resp).ok());
+    fixture.machine().resume();
+    fixture.machine().run(100);
+    REQUIRE(fixture.machine().is_paused());
+    REQUIRE(fixture.machine().pc() == 0x0402);
+    REQUIRE(fixture.machine().x() == 0x00);
+}
+
+void run(DebuggerTestFixture& fixture, bool stop_at_current) {
+    grpc::ClientContext ctx;
+    beebium::RunRequest req;
+    req.set_stop_at_current(stop_at_current);
+    beebium::RunResponse resp;
+    REQUIRE(fixture.debugger().Run(&ctx, req, &resp).ok());
+    REQUIRE(resp.success());
+}
+
+}  // namespace
+
+TEST_CASE("Run steps over the breakpoint it is stopped on and stops at its next hit",
+          "[grpc][debugger][breakpoint][6502]") {
+    DebuggerTestFixture fixture;
+    stop_on_loop_breakpoint(fixture);
+    const auto stopped_at = fixture.machine().cycle_count();
+
+    for (uint8_t trip = 1; trip <= 3; ++trip) {
+        run(fixture, /*stop_at_current=*/false);
+        fixture.machine().run(100);
+        CHECK(fixture.machine().is_paused());
+        CHECK(fixture.machine().pc() == 0x0402);
+        CHECK(fixture.machine().x() == trip);  // once round the loop each time
+    }
+    CHECK(fixture.machine().cycle_count() > stopped_at);
+
+    // The breakpoint was never disabled: it counted every hit.
+    grpc::ClientContext ctx;
+    beebium::ListBreakpointsResponse list;
+    REQUIRE(fixture.debugger().ListBreakpoints(&ctx, beebium::Empty{}, &list).ok());
+    REQUIRE(list.breakpoints_size() == 1);
+    CHECK(list.breakpoints(0).enabled());
+    CHECK(list.breakpoints(0).hit_count() == 4);
+}
+
+TEST_CASE("Run with stop_at_current stops again at once on the breakpoint it is on",
+          "[grpc][debugger][breakpoint][6502]") {
+    DebuggerTestFixture fixture;
+    stop_on_loop_breakpoint(fixture);
+    const auto stopped_at = fixture.machine().cycle_count();
+
+    run(fixture, /*stop_at_current=*/true);
+    fixture.machine().run(100);
+    CHECK(fixture.machine().is_paused());
+    CHECK(fixture.machine().pc() == 0x0402);
+    CHECK(fixture.machine().x() == 0x00);
+    CHECK(fixture.machine().cycle_count() == stopped_at);
+}
+
+TEST_CASE("Run after a step part-way through an instruction evaluates the next one",
+          "[grpc][debugger][breakpoint][6502]") {
+    DebuggerTestFixture fixture;
+    stop_on_loop_breakpoint(fixture);
+
+    // One cycle into the INX: the next boundary is the JMP, then the INX again.
+    grpc::ClientContext ctx;
+    beebium::StepRequest step;
+    step.set_count(1);
+    beebium::StepResponse stepped;
+    REQUIRE(fixture.debugger().StepCycle(&ctx, step, &stepped).ok());
+    REQUIRE(stepped.success());
+
+    run(fixture, /*stop_at_current=*/false);
+    fixture.machine().run(100);
+    CHECK(fixture.machine().pc() == 0x0402);
+    CHECK(fixture.machine().x() == 0x01);
 }
 
 TEST_CASE("Multiple breakpoints fire correctly", "[grpc][debugger][breakpoint][6502]") {
@@ -2177,13 +2270,12 @@ TEST_CASE("WatchExecutionState delivers events without waiting for its poll time
         auto start = std::chrono::steady_clock::now();
         {
             grpc::ClientContext context;
-            beebium::Empty request;
             if (run) {
                 beebium::RunResponse response;
-                REQUIRE(fixture.debugger().Run(&context, request, &response).ok());
+                REQUIRE(fixture.debugger().Run(&context, beebium::RunRequest{}, &response).ok());
             } else {
                 beebium::StopResponse response;
-                REQUIRE(fixture.debugger().Stop(&context, request, &response).ok());
+                REQUIRE(fixture.debugger().Stop(&context, beebium::Empty{}, &response).ok());
             }
         }
         REQUIRE(reader->Read(&event));
@@ -2350,7 +2442,7 @@ TEST_CASE("Stop from a running machine always lands on an instruction boundary",
 
     auto rpc_run = [&] {
         grpc::ClientContext ctx;
-        beebium::Empty req;
+        beebium::RunRequest req;
         beebium::RunResponse resp;
         REQUIRE(fixture.debugger().Run(&ctx, req, &resp).ok());
     };

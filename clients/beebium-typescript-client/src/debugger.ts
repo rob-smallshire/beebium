@@ -135,12 +135,20 @@ export class Debugger {
         return toExecutionState(response);
     }
 
-    /** Start execution. Throws DebuggerError if the request is not successful. */
-    async run(): Promise<void> {
-        const response = await promisify<{}, { success: boolean; error: string }>(
+    /**
+     * Start execution. Throws DebuggerError if the request is not successful.
+     *
+     * Resumes as a debugger's continue does: a breakpoint at the instruction
+     * the machine is stopped on is stepped over -- it stays enabled, but is not
+     * reported again for that instruction -- so the run stops at its next hit.
+     * Pass `stopAtCurrent: true` to evaluate it instead, so one there stops the
+     * machine again at once.
+     */
+    async run(options?: { stopAtCurrent?: boolean }): Promise<void> {
+        const response = await promisify<{ stopAtCurrent: boolean }, { success: boolean; error: string }>(
             this.stub as unknown as Record<string, Function>,
             "run",
-            {},
+            { stopAtCurrent: options?.stopAtCurrent ?? false },
         );
         if (!response.success) {
             throw new DebuggerError(`run failed: ${response.error}`);
@@ -175,7 +183,10 @@ export class Debugger {
         }
     }
 
-    /** Step by instruction count. Returns the result of the step operation. */
+    /**
+     * Step by instruction count. Returns the result of the step operation. The machine must be
+     * stopped first: stepping a running machine throws rather than stopping it.
+     */
     async step(count: number = 1): Promise<StepResult> {
         const response = await promisify<{ count: number }, ProtoStepResponse>(
             this.stub as unknown as Record<string, Function>,
@@ -188,7 +199,10 @@ export class Debugger {
         return toStepResult(response);
     }
 
-    /** Step by cycle count. Returns the result of the step operation. */
+    /**
+     * Step by cycle count. Returns the result of the step operation. The machine must be
+     * stopped first: stepping a running machine throws rather than stopping it.
+     */
     async stepCycles(count: number = 1): Promise<StepResult> {
         const response = await promisify<{ count: number }, ProtoStepResponse>(
             this.stub as unknown as Record<string, Function>,

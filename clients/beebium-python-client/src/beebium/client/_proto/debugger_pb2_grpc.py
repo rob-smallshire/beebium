@@ -55,7 +55,7 @@ class DebuggerControlStub(object):
                 _registered_method=True)
         self.Run = channel.unary_unary(
                 '/beebium.DebuggerControl/Run',
-                request_serializer=debugger__pb2.Empty.SerializeToString,
+                request_serializer=debugger__pb2.RunRequest.SerializeToString,
                 response_deserializer=debugger__pb2.RunResponse.FromString,
                 _registered_method=True)
         self.Stop = channel.unary_unary(
@@ -372,7 +372,7 @@ def add_DebuggerControlServicer_to_server(servicer, server):
             ),
             'Run': grpc.unary_unary_rpc_method_handler(
                     servicer.Run,
-                    request_deserializer=debugger__pb2.Empty.FromString,
+                    request_deserializer=debugger__pb2.RunRequest.FromString,
                     response_serializer=debugger__pb2.RunResponse.SerializeToString,
             ),
             'Stop': grpc.unary_unary_rpc_method_handler(
@@ -555,7 +555,7 @@ class DebuggerControl(object):
             request,
             target,
             '/beebium.DebuggerControl/Run',
-            debugger__pb2.Empty.SerializeToString,
+            debugger__pb2.RunRequest.SerializeToString,
             debugger__pb2.RunResponse.FromString,
             options,
             channel_credentials,
@@ -1262,7 +1262,7 @@ class CoprocessorDebuggerControlStub(object):
                 _registered_method=True)
         self.Run = channel.unary_unary(
                 '/beebium.CoprocessorDebuggerControl/Run',
-                request_serializer=debugger__pb2.Empty.SerializeToString,
+                request_serializer=debugger__pb2.RunRequest.SerializeToString,
                 response_deserializer=debugger__pb2.RunResponse.FromString,
                 _registered_method=True)
         self.Stop = channel.unary_unary(
@@ -1570,7 +1570,7 @@ def add_CoprocessorDebuggerControlServicer_to_server(servicer, server):
             ),
             'Run': grpc.unary_unary_rpc_method_handler(
                     servicer.Run,
-                    request_deserializer=debugger__pb2.Empty.FromString,
+                    request_deserializer=debugger__pb2.RunRequest.FromString,
                     response_serializer=debugger__pb2.RunResponse.SerializeToString,
             ),
             'Stop': grpc.unary_unary_rpc_method_handler(
@@ -1754,7 +1754,7 @@ class CoprocessorDebuggerControl(object):
             request,
             target,
             '/beebium.CoprocessorDebuggerControl/Run',
-            debugger__pb2.Empty.SerializeToString,
+            debugger__pb2.RunRequest.SerializeToString,
             debugger__pb2.RunResponse.FromString,
             options,
             channel_credentials,

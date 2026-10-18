@@ -336,10 +336,10 @@ Execution control, breakpoints, watchpoints, memory access, and CPU state for 65
 | RPC | Description |
 |-----|-------------|
 | `GetState` | Returns `ExecutionState` (is_running, cycle_count, halt_reason, sequence) |
-| `Run` | Start execution. Returns `RunResponse` with success/error. |
+| `Run` | Start execution. Returns `RunResponse` with success/error. Resumes as a debugger's continue does: the breakpoints at the instruction the CPU is stopped on are stepped over (not disabled, just not reported again for that instruction), so the run stops at their next hit. `RunRequest.stop_at_current` evaluates them instead, so one there stops the CPU again at once. |
 | `Stop` | Stop execution. Returns `StopResponse` with the state at stop. |
 | `Reset` | Reset the machine (leaves it stopped at cycle 7). |
-| `StepInstruction` | Execute N instructions (count in `StepRequest`). Returns cycles/instructions executed. |
+| `StepInstruction` | Execute N instructions (count in `StepRequest`). Returns cycles/instructions executed. Refused on a running CPU, which it never stops itself: "machine is running; call debugger.stop() before stepping" (`StepCycle` alike). |
 | `StepCycle` | Execute N cycles (count in `StepRequest`). Returns cycles/instructions executed. May stop part-way through an instruction. |
 
 **Register writes need an instruction boundary.** `StepCycle` can leave the CPU between the cycles of an instruction. A register write there would corrupt the in-flight instruction (it would fetch its remaining operands from a new PC, or overwrite the written value with its own result), so `SetCpuState` refuses it with `FAILED_PRECONDITION`: "CPU is mid-instruction after StepCycle; call StepInstruction(1) to reach the next instruction boundary before writing registers". `StepInstruction(1)` from that state completes only the in-flight instruction. A freshly reset CPU is in its reset sequence and is refused the same way; `Reset` itself leaves the machine at a boundary. A halted CPU has no instruction in flight and accepts writes. The rule applies to `CoprocessorDebuggerControl` too.

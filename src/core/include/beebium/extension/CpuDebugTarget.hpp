@@ -63,6 +63,12 @@ public:
     virtual bool is_paused() const = 0;
     virtual void pause() = 0;
     virtual void resume() = 0;
+    // Have the next resume step over the breakpoints at the instruction the
+    // CPU is stopped on, as a debugger's continue does: they stay enabled but
+    // are not evaluated, so not reported again, for that one instruction. A
+    // CPU stopped part-way through an instruction is unaffected: the next
+    // instruction's breakpoints are evaluated. Called while paused.
+    virtual void step_over_breakpoints_once() = 0;
     virtual void reset() = 0;
     virtual void step() = 0;
     virtual uint64_t step_instruction() = 0;

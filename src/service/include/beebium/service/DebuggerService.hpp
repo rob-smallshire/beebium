@@ -56,6 +56,11 @@ inline void write_with_optional_pc(CpuDebugTarget& target, uint32_t addr, uint8_
     }
 }
 
+// Why a step is refused on a running CPU, and what to do about it. A step
+// never stops the CPU itself: whether to is the caller's decision.
+inline constexpr const char* kStepWhileRunning =
+    "machine is running; call debugger.stop() before stepping";
+
 /// Internal breakpoint record (service-layer, holds parsed condition)
 struct BreakpointRecord {
     uint32_t id;
@@ -85,7 +90,7 @@ public:
 
     grpc::Status Run(
         grpc::ServerContext* context,
-        const Empty* request,
+        const RunRequest* request,
         RunResponse* response) override;
 
     grpc::Status Stop(
@@ -599,7 +604,7 @@ grpc::Status DebuggerControlServiceImpl::GetState(
 
 grpc::Status DebuggerControlServiceImpl::Run(
     grpc::ServerContext* /*context*/,
-    const Empty* /*request*/,
+    const RunRequest* request,
     RunResponse* response) {
 
     // A --station auto selection may still be running on the launch thread
@@ -639,6 +644,7 @@ grpc::Status DebuggerControlServiceImpl::Run(
         event_queue_.enqueue(std::move(evt));
         notify_subscribers();
     }
+    if (!request->stop_at_current()) machine_.step_over_breakpoints_once();
     machine_.resume();
     response->set_success(true);
     return grpc::Status::OK;
@@ -706,7 +712,7 @@ grpc::Status DebuggerControlServiceImpl::StepInstruction(
 
     if (!machine_.is_paused()) {
         response->set_success(false);
-        response->set_error("machine is running");
+        response->set_error(kStepWhileRunning);
         return grpc::Status::OK;
     }
 
@@ -746,7 +752,7 @@ grpc::Status DebuggerControlServiceImpl::StepCycle(
 
     if (!machine_.is_paused()) {
         response->set_success(false);
-        response->set_error("machine is running");
+        response->set_error(kStepWhileRunning);
         return grpc::Status::OK;
     }
 
