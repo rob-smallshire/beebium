@@ -271,10 +271,27 @@ struct ContentView: View {
         }
     }
 
-    /// Follow the server's identity on the window's document: the proxy icon and
-    /// popover (its saved directory, or none while transient), the title (the
-    /// plain name) and the unsaved-changes dot (the template-media signal).
-    /// Driven by changes to the SystemClient fields and by the window appearing.
+    /// Back the window with an NSDocument the first time the machine is saved (a
+    /// first Save, Save As, or opening a window straight onto a saved machine),
+    /// giving the title bar the standard document popover (Rename, Move To, Tags,
+    /// Locked). A transient machine gets no document, and so no chevron, proxy
+    /// icon or breadcrumbs: its title is the server's plain name (the SwiftUI
+    /// navigationTitle) and File > Rename Machine... renames it without saving. A
+    /// transient machine's directory is `machines/<uuid>`, deleted on shutdown,
+    /// so it must never show as a document on disk.
+    private func attachMachineDocumentIfSaved() {
+        guard machineDocument == nil,
+              systemClient.machineSaved,
+              let window = currentWindow else { return }
+        let document = MachineDocument()
+        document.attach(to: window, systemClient: systemClient)
+        machineDocument = document
+    }
+
+    /// Follow the server's identity on the window's document, once it has one:
+    /// the proxy icon and popover (its saved directory), the title (the plain
+    /// name) and the unsaved-changes dot (the template-media signal). A no-op
+    /// while the machine is transient and has no document.
     private func syncMachineDocument() {
         machineDocument?.syncFromServer()
     }
@@ -385,7 +402,12 @@ struct ContentView: View {
             isSaved: systemClient.machineSaved,
             save: { Task { await MachineSaving.save(systemClient: systemClient) } },
             saveAs: { Task { await MachineSaving.saveAs(systemClient: systemClient) } }))
-        .onChange(of: systemClient.machineSaved) { _ in syncMachineDocument() }
+        .onChange(of: systemClient.machineSaved) { _ in
+            // Becoming saved (a first Save or Save As) is when the window gains
+            // its document, and so its popover.
+            attachMachineDocumentIfSaved()
+            syncMachineDocument()
+        }
         .onChange(of: systemClient.machineDirpath) { _ in syncMachineDocument() }
         .onChange(of: systemClient.machineName) { _ in syncMachineDocument() }
         .onChange(of: systemClient.templateMediaWritten) { _ in syncMachineDocument() }
@@ -577,15 +599,9 @@ struct ContentView: View {
         }))
         .onChange(of: currentWindow) { window in
             guard let window = window else { return }
-            // Back the window with an NSDocument so the title bar shows the
-            // standard document popover (Rename, Move To, Tags, Locked). Created
-            // once, then kept in sync with the server's identity; the document
-            // carries the proxy icon, the title and the edited dot from here on.
-            if machineDocument == nil {
-                let document = MachineDocument()
-                document.attach(to: window, systemClient: systemClient)
-                machineDocument = document
-            }
+            // A window opened straight onto a saved machine gets its document
+            // now; a transient one gets none until it is saved.
+            attachMachineDocumentIfSaved()
             syncMachineDocument()
             // Capture the NSWindow once; never update it. Used by Immersive Mode to
             // sidestep the transient-nil currentWindow during fullscreen transitions.

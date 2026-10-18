@@ -14,9 +14,10 @@ import XCTest
 @testable import Beebium
 
 /// The AppKit document behind a machine window. Its window-side behaviour (the
-/// popover, move, lock) needs a real window and is checked by hand; the one pure
-/// seam is its display name, which titles a not-yet-saved window with the
-/// server's plain name rather than "Untitled".
+/// popover, move, lock) needs a real window and is checked by hand; the pure
+/// seams are the title (the server's plain name) and the file URL, which is the
+/// saved directory only -- a transient machine never has one, which is why the
+/// document is not attached to a window until the machine is saved.
 @MainActor
 final class MachineDocumentTests: XCTestCase {
 
@@ -25,7 +26,7 @@ final class MachineDocumentTests: XCTestCase {
                         recents: MachineRecents(store: InMemoryRecentDocumentsStore()))
     }
 
-    func testDisplayNameUsesTheServerPlainNameWhileTransient() {
+    func testDisplayNameUsesTheServerPlainName() {
         let client = SystemClient()
         var identity = Beebium_MachineIdentity()
         identity.name = "Model B (Disc) #2"
@@ -38,5 +39,18 @@ final class MachineDocumentTests: XCTestCase {
         // No server name: AppKit's own untitled name, which is never empty, so
         // the window is not briefly nameless.
         XCTAssertFalse((makeDocument(SystemClient()).displayName ?? "").isEmpty)
+    }
+
+    func testFileURLIsTheDirectoryOnlyWhenSaved() {
+        // A transient machine's directory is deleted on shutdown, so it must
+        // never become a document file URL (proxy icon / breadcrumb).
+        XCTAssertNil(MachineDocument.savedFileURL(
+            machineSaved: false, machineDirpath: "/m/x.beebium-machine"))
+        XCTAssertNil(MachineDocument.savedFileURL(
+            machineSaved: true, machineDirpath: ""))
+        XCTAssertEqual(
+            MachineDocument.savedFileURL(
+                machineSaved: true, machineDirpath: "/m/Elite Server.beebium-machine")?.path,
+            "/m/Elite Server.beebium-machine")
     }
 }

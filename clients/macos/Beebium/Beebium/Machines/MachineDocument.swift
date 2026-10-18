@@ -67,9 +67,10 @@ final class MachineDocument: NSDocument {
         completionHandler(nil)
     }
 
-    /// The window's title while the machine is not yet saved: the server's plain
-    /// name ("Model B (Disc) #2"), so an untitled document is not merely
-    /// "Untitled". A saved machine falls through to its document (directory) name.
+    /// The window's title: the server's plain name, which for a saved machine is
+    /// its document (directory) name but follows a server-pushed rename at once,
+    /// before the file URL is re-synced. Falls back to AppKit's own name if the
+    /// server has not said one yet.
     override var displayName: String! {
         get {
             let name = systemClient?.machineName ?? ""
@@ -94,14 +95,14 @@ final class MachineDocument: NSDocument {
     }
 
     /// Reflect the server's current identity on the document and its window: the
-    /// file URL (the saved directory, or none while transient, which drives the
-    /// proxy icon and the popover's availability), the title (the plain name),
-    /// and the unsaved-changes dot (the server's template-media signal).
+    /// file URL (the saved directory; see `savedFileURL`), the title (the plain
+    /// name), and the unsaved-changes dot (the server's template-media signal).
+    /// The document is only attached to a saved machine, but a Save As to a new
+    /// directory still moves the file URL here.
     func syncFromServer() {
         guard let systemClient else { return }
-        let url: URL? = (systemClient.machineSaved && !systemClient.machineDirpath.isEmpty)
-            ? URL(fileURLWithPath: systemClient.machineDirpath)
-            : nil
+        let url = Self.savedFileURL(machineSaved: systemClient.machineSaved,
+                                    machineDirpath: systemClient.machineDirpath)
         if fileURL != url { fileURL = url }
         for controller in windowControllers {
             controller.synchronizeWindowTitleWithDocumentName()
@@ -109,36 +110,33 @@ final class MachineDocument: NSDocument {
         }
     }
 
+    /// The document's file URL for a server state: the saved directory, or none.
+    /// A transient machine never has one -- its working directory is
+    /// `machines/<uuid>`, deleted on shutdown, so it must never show as a proxy
+    /// icon or breadcrumb (which is also why the document is not attached until
+    /// the machine is saved). Pure.
+    nonisolated static func savedFileURL(machineSaved: Bool, machineDirpath: String) -> URL? {
+        (machineSaved && !machineDirpath.isEmpty) ? URL(fileURLWithPath: machineDirpath) : nil
+    }
+
     // MARK: - Rename and Move (the popover's inline rename and Where)
 
     /// Where the title bar's inline rename and Move To both land, with `url` the
     /// chosen destination directory (its leaf is `<name>.beebium-machine`), the
-    /// Where popup choosing the folder.
-    ///
-    /// An untitled document -- a machine not yet saved -- has no directory to
-    /// move, so naming it saves it, as macOS does for any untitled document: a
-    /// first Save to the chosen URL, the same as File > Save... with the popover's
-    /// name and folder. A saved machine moves (and so renames) in place with
-    /// MoveMachine. On success the window follows and the recents entry is
-    /// recorded or moved; on failure the server's message is handed back for
-    /// AppKit to present.
+    /// Where popup choosing the folder. The document is only attached to a saved
+    /// machine, so it always has a directory to move: MoveMachine moves (and so
+    /// renames) it in place, the window follows, and the recents entry moves with
+    /// it; on failure the server's message is handed back for AppKit to present.
+    /// Renaming a transient machine is a different act entirely (File > Rename
+    /// Machine..., which does not save), so a move while unsaved is declined, not
+    /// turned into a save.
     override func move(to url: URL, completionHandler: ((Error?) -> Void)? = nil) {
-        guard let systemClient else { completionHandler?(nil); return }
+        guard let systemClient, fileURL != nil else {
+            completionHandler?(fileURL == nil ? SystemClient.MachineMoveError.failed("") : nil)
+            return
+        }
         let previousDirpath = fileURL
         Task { @MainActor in
-            if previousDirpath == nil {
-                switch await systemClient.saveMachine(destinationDirpath: url.path,
-                                                      replaceExisting: false) {
-                case .success(let newDirpath):
-                    syncFromServer()
-                    recents.remember(machineDirpath: URL(fileURLWithPath: newDirpath))
-                    NotificationCenter.default.post(name: .savedMachinesDidChange, object: nil)
-                    completionHandler?(nil)
-                case .failure(let error):
-                    completionHandler?(error)
-                }
-                return
-            }
             switch await systemClient.moveMachine(toDirpath: url.path) {
             case .success(let newDirpath):
                 syncFromServer()
