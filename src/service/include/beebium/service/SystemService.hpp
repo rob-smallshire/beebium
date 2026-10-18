@@ -206,6 +206,11 @@ public:
         const SaveMachineRequest* request,
         SaveMachineResponse* response) override;
 
+    grpc::Status MoveMachine(
+        grpc::ServerContext* context,
+        const MoveMachineRequest* request,
+        MoveMachineResponse* response) override;
+
     grpc::Status ResetBattery(
         grpc::ServerContext* context,
         const ResetBatteryRequest* request,
@@ -263,6 +268,16 @@ private:
 
     /// Notify watchers that identity has changed.
     void notify_identity_changed();
+
+    /// The status for a store's outcome: OK when it succeeded.
+    static grpc::Status status_of(const MachineStore::SaveOutcome& outcome);
+
+    /// Takes on the identity the store gives the machine after a save, a move
+    /// or a rename: the uuid, and the document's name once there is a
+    /// document. Fills `identity`, and tells watchers and the network of a
+    /// change.
+    void adopt_stored_identity(const MachineStore::SaveOutcome& outcome,
+                               ::beebium::MachineIdentity* identity);
 
     /// Populate a protobuf MachineIdentity message from the current identity.
     /// Caller must hold identity_mutex_ (unless called from construction).
@@ -428,46 +443,77 @@ grpc::Status SystemServiceImpl<MachineType>::SaveMachine(
     const auto outcome =
         machine_store_->save(request->destination_dirpath(), request->replace_existing(), uuid,
                              description_template);
+    if (auto status = status_of(outcome); !status.ok()) return status;
+    // A Save As makes another machine, with an identity of its own; and a
+    // first save or a Save As gives the machine a document, whose name it is
+    // known by from now on.
+    adopt_stored_identity(outcome, response->mutable_identity());
+    response->set_machine_dirpath(outcome.machine_dirpath);
+    return grpc::Status::OK;
+}
+
+template<typename MachineType>
+grpc::Status SystemServiceImpl<MachineType>::MoveMachine(
+    grpc::ServerContext* /*context*/,
+    const MoveMachineRequest* request,
+    MoveMachineResponse* response) {
+    if (!machine_store_) {
+        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                            "this server keeps its machine nowhere");
+    }
+    const auto outcome = machine_store_->move(request->destination_dirpath());
+    if (auto status = status_of(outcome); !status.ok()) return status;
+    adopt_stored_identity(outcome, response->mutable_identity());
+    response->set_machine_dirpath(outcome.machine_dirpath);
+    return grpc::Status::OK;
+}
+
+template<typename MachineType>
+grpc::Status SystemServiceImpl<MachineType>::status_of(const MachineStore::SaveOutcome& outcome) {
     using Error = MachineStore::SaveOutcome::Error;
     switch (outcome.error) {
         case Error::None:
-            break;
+            return grpc::Status::OK;
         case Error::InvalidArgument:
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, outcome.message);
+        case Error::NotFound:
+            return grpc::Status(grpc::StatusCode::NOT_FOUND, outcome.message);
         case Error::AlreadyExists:
             return grpc::Status(grpc::StatusCode::ALREADY_EXISTS, outcome.message);
         case Error::FailedPrecondition:
             return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, outcome.message);
         case Error::Internal:
-            return grpc::Status(grpc::StatusCode::INTERNAL, outcome.message);
+            break;
     }
+    return grpc::Status(grpc::StatusCode::INTERNAL, outcome.message);
+}
 
-    // A Save As makes another machine, with an identity of its own; and a
-    // first save or a Save As gives the machine a document, whose name it is
-    // known by from now on.
+template<typename MachineType>
+void SystemServiceImpl<MachineType>::adopt_stored_identity(
+    const MachineStore::SaveOutcome& outcome, ::beebium::MachineIdentity* identity) {
     const auto name = machine_store_->document_name();
-    bool identity_changed = false;
+    bool changed = false;
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
         if (identity_.uuid != outcome.machine_uuid) {
             identity_.uuid = outcome.machine_uuid;
-            identity_changed = true;
+            changed = true;
         }
         if (!name.empty() && identity_.name != name) {
             identity_.name = name;
-            identity_changed = true;
+            changed = true;
         }
-        populate_identity_proto(response->mutable_identity());
+        populate_identity_proto(identity);
     }
-    response->set_machine_dirpath(outcome.machine_dirpath);
-    if (identity_changed) {
-        {
-            std::lock_guard<std::mutex> lock(advertisement_mutex_);
-            republish_advertisement_locked();
-        }
-        notify_identity_changed();
+    if (!changed) return;
+    // The name on the network is the name in the title bar of anyone looking
+    // at this machine, so it has to follow the change rather than wait for a
+    // restart.
+    {
+        std::lock_guard<std::mutex> lock(advertisement_mutex_);
+        republish_advertisement_locked();
     }
-    return grpc::Status::OK;
+    notify_identity_changed();
 }
 
 template<typename MachineType>
@@ -632,29 +678,17 @@ grpc::Status SystemServiceImpl<MachineType>::SetMachineName(
     }
     // A saved machine's name is its document's, so renaming it renames the
     // document, its directory moving with it.
-    std::string new_name = name;
     if (machine_store_ && machine_store_->machine_saved()) {
         const auto outcome = machine_store_->rename(name);
-        using Error = MachineStore::SaveOutcome::Error;
-        switch (outcome.error) {
-            case Error::None:
-                break;
-            case Error::InvalidArgument:
-                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, outcome.message);
-            case Error::AlreadyExists:
-                return grpc::Status(grpc::StatusCode::ALREADY_EXISTS, outcome.message);
-            case Error::FailedPrecondition:
-                return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, outcome.message);
-            case Error::Internal:
-                return grpc::Status(grpc::StatusCode::INTERNAL, outcome.message);
-        }
-        new_name = machine_store_->document_name();
+        if (auto status = status_of(outcome); !status.ok()) return status;
+        adopt_stored_identity(outcome, response->mutable_identity());
+        return grpc::Status::OK;
     }
     bool changed = false;
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
-        changed = identity_.name != new_name;
-        identity_.name = new_name;
+        changed = identity_.name != name;
+        identity_.name = name;
         populate_identity_proto(response->mutable_identity());
     }
     if (!changed) return grpc::Status::OK;

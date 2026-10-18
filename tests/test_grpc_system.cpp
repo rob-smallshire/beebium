@@ -622,10 +622,19 @@ public:
         asked_description_template = description_template;
         return outcome;
     }
+    SaveOutcome move(const std::string& destination) override {
+        asked_move = destination;
+        return moved(move_outcome);
+    }
     SaveOutcome rename(const std::string& name) override {
         asked_rename = name;
         if (rename_outcome.error == SaveOutcome::Error::None) document = name;
-        return rename_outcome;
+        return moved(rename_outcome);
+    }
+    // A move keeps the machine's uuid, which the store reports.
+    SaveOutcome moved(SaveOutcome outcome) const {
+        if (outcome.error == SaveOutcome::Error::None) outcome.machine_uuid = uuid;
+        return outcome;
     }
     std::vector<std::string> reset_battery() override { return {"integra-b-rtc", "clock/saf3019p"}; }
     void described(const std::string& description_template) override {
@@ -641,6 +650,9 @@ public:
     bool asked_replace = false;
     std::string asked_rename;
     SaveOutcome rename_outcome;
+    std::string asked_move;
+    SaveOutcome move_outcome;
+    std::string uuid = "11111111-1111-4111-8111-111111111111";
 };
 
 }  // namespace
@@ -657,6 +669,10 @@ TEST_CASE("SystemService without a machine store cannot save", "[grpc][system][s
     grpc::ClientContext save_context;
     beebium::SaveMachineResponse saved;
     CHECK(fixture.system().SaveMachine(&save_context, {}, &saved).error_code() ==
+          grpc::StatusCode::FAILED_PRECONDITION);
+    grpc::ClientContext move_context;
+    beebium::MoveMachineResponse moved;
+    CHECK(fixture.system().MoveMachine(&move_context, {}, &moved).error_code() ==
           grpc::StatusCode::FAILED_PRECONDITION);
     grpc::ClientContext reset_context;
     beebium::ResetBatteryResponse reset;
@@ -860,5 +876,72 @@ TEST_CASE("SystemService names a saved machine by its document", "[grpc][system]
         watch_context.TryCancel();
         while (reader->Read(&event)) {}
         reader->Finish();
+    }
+}
+
+TEST_CASE("SystemService moves a saved machine", "[grpc][system][save][move]") {
+    beebium::service::MachineIdentity identity;
+    identity.uuid = "11111111-1111-4111-8111-111111111111";
+    identity.name = "Elite";
+    auto move_to = [](SystemTestFixture& fixture, std::string destination,
+                      beebium::MoveMachineResponse& response) {
+        grpc::ClientContext context;
+        beebium::MoveMachineRequest request;
+        request.set_destination_dirpath(std::move(destination));
+        return fixture.system().MoveMachine(&context, request, &response);
+    };
+
+    SECTION("the machine takes the new document's name and keeps its uuid, announced") {
+        FakeMachineStore store;
+        store.saved = true;
+        store.move_outcome = {{}, {}, "/elsewhere/Elite II.beebium-machine", {}};
+        SystemTestFixture fixture({}, identity, true, &store);
+
+        grpc::ClientContext watch_context;
+        auto reader = fixture.system().WatchServerStatus(&watch_context, {});
+        beebium::ServerStatusEvent event;
+        REQUIRE(reader->Read(&event));  // READY
+
+        store.document = "Elite II";
+        beebium::MoveMachineResponse response;
+        REQUIRE(move_to(fixture, "/elsewhere/Elite II.beebium-machine", response).ok());
+        CHECK(store.asked_move == "/elsewhere/Elite II.beebium-machine");
+        CHECK(response.machine_dirpath() == "/elsewhere/Elite II.beebium-machine");
+        CHECK(response.identity().name() == "Elite II");
+        CHECK(response.identity().uuid() == "11111111-1111-4111-8111-111111111111");
+        bool announced = false;
+        while (!announced && reader->Read(&event)) {
+            if (event.status() == beebium::SERVER_STATUS_IDENTITY_CHANGED) {
+                CHECK(event.identity().name() == "Elite II");
+                announced = true;
+            }
+        }
+        CHECK(announced);
+        watch_context.TryCancel();
+        while (reader->Read(&event)) {}
+        reader->Finish();
+    }
+    SECTION("a refused move changes nothing, with the store's reason") {
+        using Error = beebium::service::MachineStore::SaveOutcome::Error;
+        for (auto [error, code] :
+             {std::pair{Error::FailedPrecondition, grpc::StatusCode::FAILED_PRECONDITION},
+              std::pair{Error::InvalidArgument, grpc::StatusCode::INVALID_ARGUMENT},
+              std::pair{Error::NotFound, grpc::StatusCode::NOT_FOUND},
+              std::pair{Error::AlreadyExists, grpc::StatusCode::ALREADY_EXISTS},
+              std::pair{Error::Internal, grpc::StatusCode::INTERNAL}}) {
+            FakeMachineStore store;
+            store.saved = true;
+            store.move_outcome = {error, "why", {}, {}};
+            SystemTestFixture fixture({}, identity, true, &store);
+            beebium::MoveMachineResponse response;
+            const auto status = move_to(fixture, "/nowhere/X.beebium-machine", response);
+            CHECK(status.error_code() == code);
+            CHECK(status.error_message() == "why");
+            grpc::ClientContext context;
+            beebium::SystemInfo info;
+            REQUIRE(fixture.system().GetSystemInfo(&context, {}, &info).ok());
+            CHECK(info.identity().name() == "Elite");
+            CHECK(info.identity().uuid() == "11111111-1111-4111-8111-111111111111");
+        }
     }
 }

@@ -568,12 +568,11 @@ has no description. See [cli.md](cli.md#machine-name-and-description).
 
 Renames the machine, to a plain name, and returns its identity. A machine not
 yet saved simply takes the name. A saved machine is named by its document, so
-its document is renamed: without the machine stopping, its directory moves to
-`<parent>/<name>.beebium-machine`, its open media and lock follow, its document
-file is rewritten for the new name, and `SystemInfo.machineDirpath` reports the
-new directory; its uuid is unchanged. A name that cannot name a file on every
-host is refused with `INVALID_ARGUMENT`, saying why, and one whose directory
-already exists with `ALREADY_EXISTS`; nothing changes then. An empty name is
+its document is renamed: a [MoveMachine](#movemachine) to
+`<parent>/<name>.beebium-machine`, after which `SystemInfo.machineDirpath`
+reports the new directory. A name that cannot name a file on every host is
+refused with `INVALID_ARGUMENT`, saying why, and one whose directory already
+exists with `ALREADY_EXISTS`; nothing changes then. An empty name is
 refused with `INVALID_ARGUMENT`; the same name succeeds and changes nothing. A
 rename is announced to `WatchServerStatus` watchers and re-published over mDNS
 at once.
@@ -653,7 +652,7 @@ Events:
 ```
 
 `SERVER_STATUS_IDENTITY_CHANGED` carries the new identity whenever its uuid,
-name or description changes: a `SetMachineName` or `SetMachineDescription`, a
+name or description changes: a `SetMachineName`, `MoveMachine` or `SetMachineDescription`, a
 re-rendering of the description in which a placeholder's value changed (a
 renumbered station, at its next Break), or a Save that gives the machine a
 document (its name) or a Save As (a new uuid and name). Every event, heartbeats included, carries `templateMediaWritten`: true
@@ -697,6 +696,34 @@ network) until the next start. The directory the machine leaves keeps its
 media as they were written up to the moment of the Save -- media are written
 continuously -- while its battery-backed state and screen are as at its last
 Save.
+
+#### MoveMachine
+
+Moves a saved machine's directory to `destinationDirpath`, the new directory
+in full, without stopping the machine, and returns its directory and identity
+now, as `SaveMachine` does. This is what the macOS title bar's Name and Where
+do. The machine keeps its uuid and runs on from the new directory: its open
+media are re-pointed, its lock and document file follow, its name becomes the
+new document name (announced as `SERVER_STATUS_IDENTITY_CHANGED` and
+re-published over mDNS), and the old directory is gone. On one volume the
+directory is renamed; across volumes, and always on Windows, which will not
+rename a directory holding open files, it is copied as by Save As but keeping
+its uuid and creation time, and the old one removed.
+
+Moving to the machine's own directory succeeds and changes nothing. Refusals,
+each leaving the machine where it was: `FAILED_PRECONDITION` for a machine not
+yet saved (save it first); `INVALID_ARGUMENT` for a destination whose last
+component is not `<name>.beebium-machine` with a name that can name a file on
+every host, or that lies inside the machine's own directory; `NOT_FOUND` when
+the destination's parent does not exist (it is not made); `ALREADY_EXISTS`
+when the destination exists; `INTERNAL`, with a message, when the move fails.
+A closed machine is moved with the file manager or `mv`.
+
+```bash
+grpcurl -plaintext -d '{"destinationDirpath": "/Users/me/Archive/Elite.beebium-machine"}' \
+  -import-path src/service/proto -proto system.proto \
+  localhost:48875 beebium.SystemService/MoveMachine
+```
 
 #### ResetBattery
 

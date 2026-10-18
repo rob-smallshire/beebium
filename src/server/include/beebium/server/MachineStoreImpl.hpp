@@ -30,6 +30,7 @@
 #include <nlohmann/json.hpp>
 
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <map>
@@ -148,32 +149,29 @@ public:
 
     SaveOutcome save(const std::string& destination_dirpath, bool replace_existing,
                      const std::string& machine_uuid, const std::string& description_template) override {
-        std::lock_guard lock(mutex_);
-        SaveOutcome outcome;
-        am_.machine.with_emulation_paused([&] {
-            try {
-                outcome = save_paused(destination_dirpath, replace_existing, machine_uuid,
-                                      description_template);
-            } catch (const std::exception& e) {
-                outcome.error = SaveOutcome::Error::Internal;
-                outcome.message = e.what();
-            }
+        return paused([&] {
+            return save_paused(destination_dirpath, replace_existing, machine_uuid,
+                               description_template);
         });
-        return outcome;
+    }
+
+    SaveOutcome move(const std::string& destination_dirpath) override {
+        return paused([&] {
+            return move_paused(std::filesystem::absolute(path_from_utf8(destination_dirpath)));
+        });
     }
 
     SaveOutcome rename(const std::string& name) override {
-        std::lock_guard lock(mutex_);
-        SaveOutcome outcome;
-        am_.machine.with_emulation_paused([&] {
-            try {
-                outcome = rename_paused(name);
-            } catch (const std::exception& e) {
-                outcome.error = SaveOutcome::Error::Internal;
-                outcome.message = e.what();
+        return paused([&]() -> SaveOutcome {
+            // Checked before it is joined to a path, which a separator in it
+            // would otherwise extend.
+            if (auto why = why_not_document_name(name)) {
+                return {Error::InvalidArgument, *why, {}, {}};
             }
+            auto target = am_.machine_directory->dirpath().parent_path() / path_from_utf8(name);
+            target += machine_layout::DOCUMENT_SUFFIX;
+            return move_paused(target);
         });
-        return outcome;
     }
 
     std::vector<std::string> reset_battery() override {
@@ -281,44 +279,117 @@ private:
         return {Error::None, {}, utf8_of(target), uuid};
     }
 
-    SaveOutcome rename_paused(const std::string& name) {
+    // Runs `operation` under the store's lock with emulation paused; an
+    // exception it throws is an Internal error.
+    template<typename Operation>
+    SaveOutcome paused(Operation operation) {
+        std::lock_guard lock(mutex_);
+        SaveOutcome outcome;
+        am_.machine.with_emulation_paused([&] {
+            try {
+                outcome = operation();
+            } catch (const std::exception& e) {
+                outcome.error = Error::Internal;
+                outcome.message = e.what();
+            }
+        });
+        return outcome;
+    }
+
+    SaveOutcome move_paused(std::filesystem::path target) {
+        if (am_.machine_directory->transient()) {
+            return {Error::FailedPrecondition,
+                    "a machine not yet saved has no directory to move: save it first", {}, {}};
+        }
+        target = target.lexically_normal();
+        if (target.filename().empty()) target = target.parent_path();  // a trailing separator
         const auto home = am_.machine_directory->dirpath();
         std::string error;
         auto record = read_machine_record(home, error);
         if (!record) throw std::runtime_error(error);
-        if (auto why = why_not_document_name(name)) return {Error::InvalidArgument, *why, {}, {}};
-        if (name == machine_document_name(home)) {
+
+        const auto leaf = utf8_of(target.filename());
+        const std::string_view suffix = machine_layout::DOCUMENT_SUFFIX;
+        if (leaf.size() < suffix.size() || !leaf.ends_with(suffix)) {
+            return {Error::InvalidArgument,
+                    utf8_of(target) + " does not end with " + std::string(suffix), {}, {}};
+        }
+        if (auto why = why_not_document_name(leaf.substr(0, leaf.size() - suffix.size()))) {
+            return {Error::InvalidArgument, *why, {}, {}};
+        }
+        std::error_code ec;
+        // A respelling of the directory's own name (only its case, on a
+        // volume that ignores case) is a rename; the same spelling, nothing.
+        const bool respelled = std::filesystem::equivalent(target, home, ec);
+        if (respelled && target == home) {
             return {Error::None, {}, utf8_of(home), record->uuid};
         }
-        auto target = home.parent_path() / path_from_utf8(name);
-        target += machine_layout::DOCUMENT_SUFFIX;
-        std::error_code ec;
-        if (std::filesystem::exists(target, ec)) {
-            return {Error::AlreadyExists,
-                    utf8_of(target) + " already exists; choose another name", {}, {}};
+        if (!respelled && machine_store_detail::relative_within(target, home)) {
+            return {Error::InvalidArgument,
+                    utf8_of(target) + " is inside the machine's own directory", {}, {}};
         }
+        if (!std::filesystem::is_directory(target.parent_path(), ec)) {
+            return {Error::NotFound, utf8_of(target.parent_path()) + " does not exist", {}, {}};
+        }
+        if (!respelled && std::filesystem::exists(target, ec)) {
+            return {Error::AlreadyExists, utf8_of(target) + " already exists", {}, {}};
+        }
+
         flush_disc_drives(am_.machine);
-#ifdef _WIN32
-        // Windows will not rename a directory holding open files (the lock,
-        // a hard disc image), so the machine is copied beside it, as by
-        // Save As but keeping its uuid, and the old directory removed.
-        save_as(home, target, /*saved=*/true, record->uuid, record->description,
-                /*replacing=*/false);
-        clear_directory_readonly(home);
-        std::filesystem::remove_all(home, ec);
-        if (ec) {
-            std::cerr << "Warning: cannot remove " << utf8_of(home) << " after renaming the "
-                      << "machine: " << ec.message() << "\n";
+        if (rename_directory(home, target)) {
+            moved_in_place(home, target, *record);
+        } else if (respelled) {
+            throw std::runtime_error("cannot rename " + utf8_of(home) + " to " +
+                                     utf8_of(target));
+        } else {
+            // Across volumes, or on Windows, which will not rename a
+            // directory holding open files (the lock, a hard disc image):
+            // the machine is copied, as by Save As but keeping its uuid, and
+            // the old directory removed.
+            save_as(home, target, /*saved=*/true, record->uuid, record->description,
+                    /*replacing=*/false);
+            clear_directory_readonly(home);
+            std::filesystem::remove_all(home, ec);
+            if (ec) {
+                std::cerr << "Warning: cannot remove " << utf8_of(home) << " after moving the "
+                          << "machine: " << ec.message() << "\n";
+            }
         }
+        return {Error::None, {}, utf8_of(target), record->uuid};
+    }
+
+    // Renames the directory `home` to `target`, true when it was renamed;
+    // false when it must be copied instead: across volumes, or on Windows
+    // while it holds open files. Other failures throw.
+    static bool rename_directory(const std::filesystem::path& home,
+                                 const std::filesystem::path& target) {
+        // A seam for the tests, which have one volume: the copy, everywhere.
+        if (const char* by_copy = std::getenv("BEEBIUM_MOVE_MACHINE_BY_COPY");
+            by_copy && *by_copy) {
+            return false;
+        }
+        std::error_code ec;
+        std::filesystem::rename(home, target, ec);
+        if (!ec) return true;
+#ifdef _WIN32
+        return false;
 #else
-        // A directory renamed with files open in it keeps them open: the
-        // lock and a hard disc image stay held, and the media are re-pointed
-        // so that their paths, and the next open of a floppy image, are the
-        // new ones.
-        std::filesystem::rename(home, target);
+        if (ec == std::errc::cross_device_link) return false;
+        throw std::filesystem::filesystem_error("cannot rename the machine's directory", home,
+                                                target, ec);
+#endif
+    }
+
+    // Follows the machine's directory, renamed from `home` to `target`. A
+    // directory renamed with files open in it keeps them open: the lock and
+    // a hard disc image stay held, and the media are re-pointed so that their
+    // paths, and the next open of a floppy image, are the new ones.
+    void moved_in_place(const std::filesystem::path& home, const std::filesystem::path& target,
+                        const MachineRecord& record) {
         try {
             repoint_media(home, target);
         } catch (...) {
+            std::error_code ec;
             std::filesystem::rename(target, home, ec);
             try {
                 repoint_media(target, home);
@@ -330,14 +401,12 @@ private:
         am_.machine_directory->relocate(target);
         config_.launch.machine_dirpath = target;
         try {
-            write_machine_document_files(target, *record, machine_document_name(target));
+            write_machine_document_files(target, record, machine_document_name(target));
         } catch (const std::exception& e) {
             std::cerr << "Warning: cannot write the machine's document file and folder "
                          "metadata: "
                       << e.what() << "\n";
         }
-#endif
-        return {Error::None, {}, utf8_of(target), record->uuid};
     }
 
     void save_in_place(const std::filesystem::path& home, const std::string& description_template) {

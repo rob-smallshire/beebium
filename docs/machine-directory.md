@@ -8,7 +8,8 @@ from the last. This document is the reference for what a machine directory
 holds and in what formats. The design and its rulings are in
 [discussion/presets-and-machine-directories.md](discussion/presets-and-machine-directories.md)
 (section 4); the commands are in [cli.md](cli.md#saved-machine-subcommands)
-and the RPCs in [grpc-server.md](grpc-server.md#savemachine).
+and the RPCs in [grpc-server.md](grpc-server.md#savemachine) (`SaveMachine`,
+`MoveMachine`, `ResetBattery`).
 
 ## Layout
 
@@ -63,13 +64,10 @@ without it still gets a document file with it.
 
 The machine's **name** is not stored: a saved machine's name is its document
 name, the directory's name without `.beebium-machine`, read when the machine
-is opened and after every Save, Save As and rename. Renaming the directory
-renames the machine (at its next open); renaming a running saved machine
-(`SetMachineName`) renames the directory, which moves to
-`<name>.beebium-machine` beside it with its media, lock and document file
-following and its uuid kept: on POSIX by renaming the directory in place, on
-Windows -- which will not rename a directory holding open files -- by
-copying it beside, as Save As does, and removing the old one.
+is opened and after every Save, Save As, move and rename. Renaming the
+directory renames the machine (at its next open); renaming a running saved
+machine (`SetMachineName`) moves the directory to `<name>.beebium-machine`
+beside it (see [Moving a running machine](#moving-a-running-machine)).
 `describe-machine` reports the name as `name`.
 - `model` is the model id; `start --machine` refuses a machine of another
   model.
@@ -205,6 +203,27 @@ machine started (the AUN transport's identity on the network) until the next
 start. The directory the machine leaves holds its media as they were written
 up to the moment of the Save, because media are written as the guest writes
 them, while its battery-backed state and screen are as at its last Save.
+
+## Moving a running machine
+
+`SystemService.MoveMachine` (the Name and Where of the macOS title bar) moves
+a saved machine's directory to a new path, `<name>.beebium-machine` in a
+folder that exists, without stopping it; `SetMachineName` is the move to a
+sibling. With emulation paused, the server flushes the drives, then:
+
+- on the same volume, renames the directory: files open in it stay open (the
+  lock, a hard disc image), and every medium is re-pointed so that its path,
+  and the next open of a floppy image, are the new ones;
+- across volumes, and always on Windows, which will not rename a directory
+  holding open files, makes the destination as Save As does but keeping the
+  uuid and `created`, moves the machine onto it, and removes the old
+  directory.
+
+Either way the machine keeps its uuid, its lock, document file and folder
+metadata are in the new directory, and its name is the new document name.
+A move that fails leaves the machine running where it was. A closed machine
+is moved with the file manager or `mv`, which needs nothing more: a machine
+directory is found by its `machine.json`.
 
 While a machine not yet saved runs, the server reports on every status event
 whether it has written to the copies of its preset's media

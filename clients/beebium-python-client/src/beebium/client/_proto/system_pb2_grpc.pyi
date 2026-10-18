@@ -51,8 +51,8 @@ class SystemServiceStub:
     """Get current system/machine information"""
     SetMachineName: _grpc.UnaryUnaryMultiCallable[_system_pb2.SetMachineNameRequest, _system_pb2.SetMachineNameResponse]
     """Set a machine's name: plain text, never a template. A saved machine's
-    name is its document's, so its document is renamed, its directory
-    becoming <parent>/<name>.beebium-machine without the machine stopping.
+    name is its document's, so its document is renamed: MoveMachine to
+    <parent>/<name>.beebium-machine, without the machine stopping.
     Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
     that cannot name a file (the message says why); ALREADY_EXISTS for a
     saved machine whose new directory exists. The same name changes
@@ -101,6 +101,23 @@ class SystemServiceStub:
     cannot be replaced; INTERNAL, with a message, when the directory cannot
     be written.
     """
+    MoveMachine: _grpc.UnaryUnaryMultiCallable[_system_pb2.MoveMachineRequest, _system_pb2.MoveMachineResponse]
+    """Move a saved machine's directory, without stopping it: the machine
+    keeps its uuid and runs on from the new directory, its media, lock and
+    document file following, and the old directory is gone. On one volume
+    the directory is renamed; across volumes, or where open files forbid
+    a rename (Windows), it is copied, as by Save As but keeping its uuid,
+    and the old one removed. The name becomes the new document name, and
+    a change arrives as SERVER_STATUS_IDENTITY_CHANGED. Moving to the
+    machine's own directory changes nothing. Errors: FAILED_PRECONDITION
+    for a machine not yet saved; INVALID_ARGUMENT for a destination whose
+    last component is not <name>.beebium-machine with a name that can
+    name a file on every host (the message says why), or that lies inside
+    the machine's directory; NOT_FOUND when the destination's parent does
+    not exist (it is not made); ALREADY_EXISTS when the destination
+    exists; INTERNAL, with a message, when the move fails, leaving the
+    machine running where it was.
+    """
     ResetBattery: _grpc.UnaryUnaryMultiCallable[_system_pb2.ResetBatteryRequest, _system_pb2.ResetBatteryResponse]
     """Forget the machine's battery-backed state, as taking out the battery
     does. It takes effect when the machine is next started: until then the
@@ -119,8 +136,8 @@ class SystemServiceAsyncStub(SystemServiceStub):
     """Get current system/machine information"""
     SetMachineName: _aio.UnaryUnaryMultiCallable[_system_pb2.SetMachineNameRequest, _system_pb2.SetMachineNameResponse]  # type: ignore[assignment]
     """Set a machine's name: plain text, never a template. A saved machine's
-    name is its document's, so its document is renamed, its directory
-    becoming <parent>/<name>.beebium-machine without the machine stopping.
+    name is its document's, so its document is renamed: MoveMachine to
+    <parent>/<name>.beebium-machine, without the machine stopping.
     Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
     that cannot name a file (the message says why); ALREADY_EXISTS for a
     saved machine whose new directory exists. The same name changes
@@ -169,6 +186,23 @@ class SystemServiceAsyncStub(SystemServiceStub):
     cannot be replaced; INTERNAL, with a message, when the directory cannot
     be written.
     """
+    MoveMachine: _aio.UnaryUnaryMultiCallable[_system_pb2.MoveMachineRequest, _system_pb2.MoveMachineResponse]  # type: ignore[assignment]
+    """Move a saved machine's directory, without stopping it: the machine
+    keeps its uuid and runs on from the new directory, its media, lock and
+    document file following, and the old directory is gone. On one volume
+    the directory is renamed; across volumes, or where open files forbid
+    a rename (Windows), it is copied, as by Save As but keeping its uuid,
+    and the old one removed. The name becomes the new document name, and
+    a change arrives as SERVER_STATUS_IDENTITY_CHANGED. Moving to the
+    machine's own directory changes nothing. Errors: FAILED_PRECONDITION
+    for a machine not yet saved; INVALID_ARGUMENT for a destination whose
+    last component is not <name>.beebium-machine with a name that can
+    name a file on every host (the message says why), or that lies inside
+    the machine's directory; NOT_FOUND when the destination's parent does
+    not exist (it is not made); ALREADY_EXISTS when the destination
+    exists; INTERNAL, with a message, when the move fails, leaving the
+    machine running where it was.
+    """
     ResetBattery: _aio.UnaryUnaryMultiCallable[_system_pb2.ResetBatteryRequest, _system_pb2.ResetBatteryResponse]  # type: ignore[assignment]
     """Forget the machine's battery-backed state, as taking out the battery
     does. It takes effect when the machine is next started: until then the
@@ -196,8 +230,8 @@ class SystemServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_system_pb2.SetMachineNameResponse, _abc.Awaitable[_system_pb2.SetMachineNameResponse]]:
         """Set a machine's name: plain text, never a template. A saved machine's
-        name is its document's, so its document is renamed, its directory
-        becoming <parent>/<name>.beebium-machine without the machine stopping.
+        name is its document's, so its document is renamed: MoveMachine to
+        <parent>/<name>.beebium-machine, without the machine stopping.
         Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
         that cannot name a file (the message says why); ALREADY_EXISTS for a
         saved machine whose new directory exists. The same name changes
@@ -311,6 +345,29 @@ class SystemServiceServicer(metaclass=_abc_1.ABCMeta):
         replace_existing; FAILED_PRECONDITION, with a message, for one that
         cannot be replaced; INTERNAL, with a message, when the directory cannot
         be written.
+        """
+
+    @_abc_1.abstractmethod
+    def MoveMachine(
+        self,
+        request: _system_pb2.MoveMachineRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_system_pb2.MoveMachineResponse, _abc.Awaitable[_system_pb2.MoveMachineResponse]]:
+        """Move a saved machine's directory, without stopping it: the machine
+        keeps its uuid and runs on from the new directory, its media, lock and
+        document file following, and the old directory is gone. On one volume
+        the directory is renamed; across volumes, or where open files forbid
+        a rename (Windows), it is copied, as by Save As but keeping its uuid,
+        and the old one removed. The name becomes the new document name, and
+        a change arrives as SERVER_STATUS_IDENTITY_CHANGED. Moving to the
+        machine's own directory changes nothing. Errors: FAILED_PRECONDITION
+        for a machine not yet saved; INVALID_ARGUMENT for a destination whose
+        last component is not <name>.beebium-machine with a name that can
+        name a file on every host (the message says why), or that lies inside
+        the machine's directory; NOT_FOUND when the destination's parent does
+        not exist (it is not made); ALREADY_EXISTS when the destination
+        exists; INTERNAL, with a message, when the move fails, leaving the
+        machine running where it was.
         """
 
     @_abc_1.abstractmethod

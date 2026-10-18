@@ -273,7 +273,7 @@ renamed in the Finder or Explorer shows its new name at its next open, and two
 machines forked by Save As have different names. Renaming a saved machine
 (`SetMachineName`, the app's rename) renames its document: the directory moves
 to `<name>.beebium-machine` beside it while the machine runs, its media and
-lock following. A name that cannot name a file on every host (a path
+lock following (`MoveMachine` moves it to any folder). A name that cannot name a file on every host (a path
 separator, `.` or `..`, a character Windows refuses, a trailing space or `.`,
 a Windows device name such as `CON`) is refused, as is one whose directory
 already exists. A machine not yet saved has the name `--machine-name` gives

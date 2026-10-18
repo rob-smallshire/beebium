@@ -9,8 +9,8 @@ service SystemService {
     rpc GetSystemInfo(GetSystemInfoRequest) returns (SystemInfo);
 
     // Set a machine's name: plain text, never a template. A saved machine's
-    // name is its document's, so its document is renamed, its directory
-    // becoming <parent>/<name>.beebium-machine without the machine stopping.
+    // name is its document's, so its document is renamed: MoveMachine to
+    // <parent>/<name>.beebium-machine, without the machine stopping.
     // Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
     // that cannot name a file (the message says why); ALREADY_EXISTS for a
     // saved machine whose new directory exists. The same name changes
@@ -65,6 +65,23 @@ service SystemService {
     // be written.
     rpc SaveMachine(SaveMachineRequest) returns (SaveMachineResponse);
 
+    // Move a saved machine's directory, without stopping it: the machine
+    // keeps its uuid and runs on from the new directory, its media, lock and
+    // document file following, and the old directory is gone. On one volume
+    // the directory is renamed; across volumes, or where open files forbid
+    // a rename (Windows), it is copied, as by Save As but keeping its uuid,
+    // and the old one removed. The name becomes the new document name, and
+    // a change arrives as SERVER_STATUS_IDENTITY_CHANGED. Moving to the
+    // machine's own directory changes nothing. Errors: FAILED_PRECONDITION
+    // for a machine not yet saved; INVALID_ARGUMENT for a destination whose
+    // last component is not <name>.beebium-machine with a name that can
+    // name a file on every host (the message says why), or that lies inside
+    // the machine's directory; NOT_FOUND when the destination's parent does
+    // not exist (it is not made); ALREADY_EXISTS when the destination
+    // exists; INTERNAL, with a message, when the move fails, leaving the
+    // machine running where it was.
+    rpc MoveMachine(MoveMachineRequest) returns (MoveMachineResponse);
+
     // Forget the machine's battery-backed state, as taking out the battery
     // does. It takes effect when the machine is next started: until then the
     // machine runs on, and nothing it holds now is kept by a shutdown or a
@@ -98,6 +115,21 @@ message SaveMachineResponse {
     string machine_dirpath = 1;
 
     // The machine's identity now: a Save As gives it a new uuid.
+    MachineIdentity identity = 2;
+}
+
+message MoveMachineRequest {
+    // The machine's new directory, in full: its last component is
+    // <name>.beebium-machine, and the machine's name becomes <name>.
+    string destination_dirpath = 1;
+}
+
+message MoveMachineResponse {
+    // The machine's directory now, in every form.
+    string machine_dirpath = 1;
+
+    // The machine's identity now: its uuid unchanged, its name the new
+    // document name.
     MachineIdentity identity = 2;
 }
 

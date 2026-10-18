@@ -113,6 +113,11 @@ class SystemServiceStub(object):
                 request_serializer=system__pb2.SaveMachineRequest.SerializeToString,
                 response_deserializer=system__pb2.SaveMachineResponse.FromString,
                 _registered_method=True)
+        self.MoveMachine = channel.unary_unary(
+                '/beebium.SystemService/MoveMachine',
+                request_serializer=system__pb2.MoveMachineRequest.SerializeToString,
+                response_deserializer=system__pb2.MoveMachineResponse.FromString,
+                _registered_method=True)
         self.ResetBattery = channel.unary_unary(
                 '/beebium.SystemService/ResetBattery',
                 request_serializer=system__pb2.ResetBatteryRequest.SerializeToString,
@@ -134,8 +139,8 @@ class SystemServiceServicer(object):
 
     def SetMachineName(self, request, context):
         """Set a machine's name: plain text, never a template. A saved machine's
-        name is its document's, so its document is renamed, its directory
-        becoming <parent>/<name>.beebium-machine without the machine stopping.
+        name is its document's, so its document is renamed: MoveMachine to
+        <parent>/<name>.beebium-machine, without the machine stopping.
         Errors: INVALID_ARGUMENT for an empty name, or for a saved machine one
         that cannot name a file (the message says why); ALREADY_EXISTS for a
         saved machine whose new directory exists. The same name changes
@@ -237,6 +242,27 @@ class SystemServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def MoveMachine(self, request, context):
+        """Move a saved machine's directory, without stopping it: the machine
+        keeps its uuid and runs on from the new directory, its media, lock and
+        document file following, and the old directory is gone. On one volume
+        the directory is renamed; across volumes, or where open files forbid
+        a rename (Windows), it is copied, as by Save As but keeping its uuid,
+        and the old one removed. The name becomes the new document name, and
+        a change arrives as SERVER_STATUS_IDENTITY_CHANGED. Moving to the
+        machine's own directory changes nothing. Errors: FAILED_PRECONDITION
+        for a machine not yet saved; INVALID_ARGUMENT for a destination whose
+        last component is not <name>.beebium-machine with a name that can
+        name a file on every host (the message says why), or that lies inside
+        the machine's directory; NOT_FOUND when the destination's parent does
+        not exist (it is not made); ALREADY_EXISTS when the destination
+        exists; INTERNAL, with a message, when the move fails, leaving the
+        machine running where it was.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ResetBattery(self, request, context):
         """Forget the machine's battery-backed state, as taking out the battery
         does. It takes effect when the machine is next started: until then the
@@ -314,6 +340,11 @@ def add_SystemServiceServicer_to_server(servicer, server):
                     servicer.SaveMachine,
                     request_deserializer=system__pb2.SaveMachineRequest.FromString,
                     response_serializer=system__pb2.SaveMachineResponse.SerializeToString,
+            ),
+            'MoveMachine': grpc.unary_unary_rpc_method_handler(
+                    servicer.MoveMachine,
+                    request_deserializer=system__pb2.MoveMachineRequest.FromString,
+                    response_serializer=system__pb2.MoveMachineResponse.SerializeToString,
             ),
             'ResetBattery': grpc.unary_unary_rpc_method_handler(
                     servicer.ResetBattery,
@@ -674,6 +705,33 @@ class SystemService(object):
             '/beebium.SystemService/SaveMachine',
             system__pb2.SaveMachineRequest.SerializeToString,
             system__pb2.SaveMachineResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def MoveMachine(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.SystemService/MoveMachine',
+            system__pb2.MoveMachineRequest.SerializeToString,
+            system__pb2.MoveMachineResponse.FromString,
             options,
             channel_credentials,
             insecure,

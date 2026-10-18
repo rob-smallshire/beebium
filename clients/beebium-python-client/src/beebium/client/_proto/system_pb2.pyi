@@ -222,6 +222,56 @@ class SaveMachineResponse(_message.Message):
 Global___SaveMachineResponse: _TypeAlias = SaveMachineResponse  # noqa: Y015
 
 @_typing.final
+class MoveMachineRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    DESTINATION_DIRPATH_FIELD_NUMBER: _builtins.int
+    destination_dirpath: _builtins.str
+    """The machine's new directory, in full: its last component is
+    <name>.beebium-machine, and the machine's name becomes <name>.
+    """
+    def __init__(
+        self,
+        *,
+        destination_dirpath: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["destination_dirpath", b"destination_dirpath"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___MoveMachineRequest: _TypeAlias = MoveMachineRequest  # noqa: Y015
+
+@_typing.final
+class MoveMachineResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    MACHINE_DIRPATH_FIELD_NUMBER: _builtins.int
+    IDENTITY_FIELD_NUMBER: _builtins.int
+    machine_dirpath: _builtins.str
+    """The machine's directory now, in every form."""
+    @_builtins.property
+    def identity(self) -> Global___MachineIdentity:
+        """The machine's identity now: its uuid unchanged, its name the new
+        document name.
+        """
+
+    def __init__(
+        self,
+        *,
+        machine_dirpath: _builtins.str = ...,
+        identity: Global___MachineIdentity | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "machine_dirpath", b"machine_dirpath"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___MoveMachineResponse: _TypeAlias = MoveMachineResponse  # noqa: Y015
+
+@_typing.final
 class ResetBatteryRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

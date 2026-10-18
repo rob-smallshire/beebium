@@ -43,7 +43,9 @@ public:
     virtual bool template_media_written() const = 0;
 
     struct SaveOutcome {
-        enum class Error { None, InvalidArgument, AlreadyExists, FailedPrecondition, Internal };
+        enum class Error {
+            None, InvalidArgument, NotFound, AlreadyExists, FailedPrecondition, Internal
+        };
         Error error = Error::None;
         std::string message;          // why, when error is not None
         std::string machine_dirpath;  // the machine's directory now
@@ -58,14 +60,20 @@ public:
                              const std::string& machine_uuid,
                              const std::string& description_template) = 0;
 
-    // Renames a saved machine's document to `name`: its directory becomes
-    // <parent>/<name>.beebium-machine, and every medium open in it, its lock
-    // and its document file follow, without the machine stopping. The same
-    // name is a success that changes nothing. Errors: InvalidArgument for a
-    // name that cannot name a file (the message says why), AlreadyExists
-    // for a sibling of that name, Internal when the move fails (the machine
-    // is left where it was). machine_dirpath and machine_uuid in the outcome
-    // are the machine's afterwards.
+    // Moves a saved machine's directory to `destination_dirpath`, as
+    // SystemService.MoveMachine describes, without the machine stopping: it
+    // keeps its uuid, and every medium open in it, its lock and its document
+    // file follow. Its own directory is a success that changes nothing.
+    // Errors: FailedPrecondition for a machine not yet saved,
+    // InvalidArgument for a destination that cannot be a machine document
+    // (the message says why), NotFound for a parent that does not exist,
+    // AlreadyExists for a destination that does, Internal when the move
+    // fails (the machine is left where it was). machine_dirpath and
+    // machine_uuid in the outcome are the machine's afterwards.
+    virtual SaveOutcome move(const std::string& destination_dirpath) = 0;
+
+    // Renames a saved machine's document to `name`: a move to
+    // <parent>/<name>.beebium-machine, with the errors of move.
     virtual SaveOutcome rename(const std::string& name) = 0;
 
     // Forgets the battery-backed state, from the next start; returns the
