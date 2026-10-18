@@ -190,6 +190,24 @@ struct Beebium_ExecutionState: Sendable {
   init() {}
 }
 
+struct Beebium_RunRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Run resumes as a debugger's continue does: it steps over the
+  /// breakpoints at the instruction the CPU is stopped on. They stay
+  /// enabled, but are not evaluated, so not reported again, for that one
+  /// instruction, and the run stops at their next hit. Set this to evaluate
+  /// them instead, so one there stops the CPU again at once: a run to an
+  /// address the CPU may already be at, which counts arriving there.
+  var stopAtCurrent: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 struct Beebium_RunResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1805,6 +1823,36 @@ extension Beebium_ExecutionState: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     if lhs.haltReason != rhs.haltReason {return false}
     if lhs.sequence != rhs.sequence {return false}
     if lhs.atInstructionBoundary != rhs.atInstructionBoundary {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_RunRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".RunRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}stop_at_current\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.stopAtCurrent) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.stopAtCurrent != false {
+      try visitor.visitSingularBoolField(value: self.stopAtCurrent, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_RunRequest, rhs: Beebium_RunRequest) -> Bool {
+    if lhs.stopAtCurrent != rhs.stopAtCurrent {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -25,9 +25,9 @@ internal protocol Beebium_DebuggerControlClientProtocol: GRPCClient {
   ) -> UnaryCall<Beebium_Empty, Beebium_ExecutionState>
 
   func run(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions?
-  ) -> UnaryCall<Beebium_Empty, Beebium_RunResponse>
+  ) -> UnaryCall<Beebium_RunRequest, Beebium_RunResponse>
 
   func stop(
     _ request: Beebium_Empty,
@@ -186,9 +186,9 @@ extension Beebium_DebuggerControlClientProtocol {
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
   internal func run(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions? = nil
-  ) -> UnaryCall<Beebium_Empty, Beebium_RunResponse> {
+  ) -> UnaryCall<Beebium_RunRequest, Beebium_RunResponse> {
     return self.makeUnaryCall(
       path: Beebium_DebuggerControlClientMetadata.Methods.run.path,
       request: request,
@@ -724,9 +724,9 @@ internal protocol Beebium_DebuggerControlAsyncClientProtocol: GRPCClient {
   ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ExecutionState>
 
   func makeRunCall(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions?
-  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_RunResponse>
+  ) -> GRPCAsyncUnaryCall<Beebium_RunRequest, Beebium_RunResponse>
 
   func makeStopCall(
     _ request: Beebium_Empty,
@@ -877,9 +877,9 @@ extension Beebium_DebuggerControlAsyncClientProtocol {
   }
 
   internal func makeRunCall(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions? = nil
-  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_RunResponse> {
+  ) -> GRPCAsyncUnaryCall<Beebium_RunRequest, Beebium_RunResponse> {
     return self.makeAsyncUnaryCall(
       path: Beebium_DebuggerControlClientMetadata.Methods.run.path,
       request: request,
@@ -1204,7 +1204,7 @@ extension Beebium_DebuggerControlAsyncClientProtocol {
   }
 
   internal func run(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions? = nil
   ) async throws -> Beebium_RunResponse {
     return try await self.performAsyncUnaryCall(
@@ -1539,7 +1539,7 @@ internal protocol Beebium_DebuggerControlClientInterceptorFactoryProtocol: Senda
   func makeGetStateInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ExecutionState>]
 
   /// - Returns: Interceptors to use when invoking 'run'.
-  func makeRunInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_RunResponse>]
+  func makeRunInterceptors() -> [ClientInterceptor<Beebium_RunRequest, Beebium_RunResponse>]
 
   /// - Returns: Interceptors to use when invoking 'stop'.
   func makeStopInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_StopResponse>]
@@ -1832,9 +1832,9 @@ internal protocol Beebium_CoprocessorDebuggerControlClientProtocol: GRPCClient {
   ) -> UnaryCall<Beebium_Empty, Beebium_ExecutionState>
 
   func run(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions?
-  ) -> UnaryCall<Beebium_Empty, Beebium_RunResponse>
+  ) -> UnaryCall<Beebium_RunRequest, Beebium_RunResponse>
 
   func stop(
     _ request: Beebium_Empty,
@@ -1993,9 +1993,9 @@ extension Beebium_CoprocessorDebuggerControlClientProtocol {
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
   internal func run(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions? = nil
-  ) -> UnaryCall<Beebium_Empty, Beebium_RunResponse> {
+  ) -> UnaryCall<Beebium_RunRequest, Beebium_RunResponse> {
     return self.makeUnaryCall(
       path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.run.path,
       request: request,
@@ -2529,9 +2529,9 @@ internal protocol Beebium_CoprocessorDebuggerControlAsyncClientProtocol: GRPCCli
   ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ExecutionState>
 
   func makeRunCall(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions?
-  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_RunResponse>
+  ) -> GRPCAsyncUnaryCall<Beebium_RunRequest, Beebium_RunResponse>
 
   func makeStopCall(
     _ request: Beebium_Empty,
@@ -2682,9 +2682,9 @@ extension Beebium_CoprocessorDebuggerControlAsyncClientProtocol {
   }
 
   internal func makeRunCall(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions? = nil
-  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_RunResponse> {
+  ) -> GRPCAsyncUnaryCall<Beebium_RunRequest, Beebium_RunResponse> {
     return self.makeAsyncUnaryCall(
       path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.run.path,
       request: request,
@@ -3009,7 +3009,7 @@ extension Beebium_CoprocessorDebuggerControlAsyncClientProtocol {
   }
 
   internal func run(
-    _ request: Beebium_Empty,
+    _ request: Beebium_RunRequest,
     callOptions: CallOptions? = nil
   ) async throws -> Beebium_RunResponse {
     return try await self.performAsyncUnaryCall(
@@ -3344,7 +3344,7 @@ internal protocol Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProt
   func makeGetStateInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ExecutionState>]
 
   /// - Returns: Interceptors to use when invoking 'run'.
-  func makeRunInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_RunResponse>]
+  func makeRunInterceptors() -> [ClientInterceptor<Beebium_RunRequest, Beebium_RunResponse>]
 
   /// - Returns: Interceptors to use when invoking 'stop'.
   func makeStopInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_StopResponse>]
@@ -4191,7 +4191,7 @@ internal protocol Beebium_DebuggerControlProvider: CallHandlerProvider {
   /// Execution control
   func getState(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ExecutionState>
 
-  func run(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RunResponse>
+  func run(request: Beebium_RunRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RunResponse>
 
   func stop(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_StopResponse>
 
@@ -4277,7 +4277,7 @@ extension Beebium_DebuggerControlProvider {
     case "Run":
       return UnaryServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        requestDeserializer: ProtobufDeserializer<Beebium_RunRequest>(),
         responseSerializer: ProtobufSerializer<Beebium_RunResponse>(),
         interceptors: self.interceptors?.makeRunInterceptors() ?? [],
         userFunction: self.run(request:context:)
@@ -4530,7 +4530,7 @@ internal protocol Beebium_DebuggerControlAsyncProvider: CallHandlerProvider, Sen
   ) async throws -> Beebium_ExecutionState
 
   func run(
-    request: Beebium_Empty,
+    request: Beebium_RunRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_RunResponse
 
@@ -4701,7 +4701,7 @@ extension Beebium_DebuggerControlAsyncProvider {
     case "Run":
       return GRPCAsyncServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        requestDeserializer: ProtobufDeserializer<Beebium_RunRequest>(),
         responseSerializer: ProtobufSerializer<Beebium_RunResponse>(),
         interceptors: self.interceptors?.makeRunInterceptors() ?? [],
         wrapping: { try await self.run(request: $0, context: $1) }
@@ -4946,7 +4946,7 @@ internal protocol Beebium_DebuggerControlServerInterceptorFactoryProtocol: Senda
 
   /// - Returns: Interceptors to use when handling 'run'.
   ///   Defaults to calling `self.makeInterceptors()`.
-  func makeRunInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_RunResponse>]
+  func makeRunInterceptors() -> [ServerInterceptor<Beebium_RunRequest, Beebium_RunResponse>]
 
   /// - Returns: Interceptors to use when handling 'stop'.
   ///   Defaults to calling `self.makeInterceptors()`.
@@ -5258,7 +5258,7 @@ internal protocol Beebium_CoprocessorDebuggerControlProvider: CallHandlerProvide
 
   func getState(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ExecutionState>
 
-  func run(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RunResponse>
+  func run(request: Beebium_RunRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RunResponse>
 
   func stop(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_StopResponse>
 
@@ -5335,7 +5335,7 @@ extension Beebium_CoprocessorDebuggerControlProvider {
     case "Run":
       return UnaryServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        requestDeserializer: ProtobufDeserializer<Beebium_RunRequest>(),
         responseSerializer: ProtobufSerializer<Beebium_RunResponse>(),
         interceptors: self.interceptors?.makeRunInterceptors() ?? [],
         userFunction: self.run(request:context:)
@@ -5588,7 +5588,7 @@ internal protocol Beebium_CoprocessorDebuggerControlAsyncProvider: CallHandlerPr
   ) async throws -> Beebium_ExecutionState
 
   func run(
-    request: Beebium_Empty,
+    request: Beebium_RunRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_RunResponse
 
@@ -5750,7 +5750,7 @@ extension Beebium_CoprocessorDebuggerControlAsyncProvider {
     case "Run":
       return GRPCAsyncServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        requestDeserializer: ProtobufDeserializer<Beebium_RunRequest>(),
         responseSerializer: ProtobufSerializer<Beebium_RunResponse>(),
         interceptors: self.interceptors?.makeRunInterceptors() ?? [],
         wrapping: { try await self.run(request: $0, context: $1) }
@@ -5995,7 +5995,7 @@ internal protocol Beebium_CoprocessorDebuggerControlServerInterceptorFactoryProt
 
   /// - Returns: Interceptors to use when handling 'run'.
   ///   Defaults to calling `self.makeInterceptors()`.
-  func makeRunInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_RunResponse>]
+  func makeRunInterceptors() -> [ServerInterceptor<Beebium_RunRequest, Beebium_RunResponse>]
 
   /// - Returns: Interceptors to use when handling 'stop'.
   ///   Defaults to calling `self.makeInterceptors()`.

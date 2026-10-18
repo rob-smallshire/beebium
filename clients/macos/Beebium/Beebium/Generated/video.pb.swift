@@ -445,6 +445,48 @@ struct Beebium_TeletextScreenRegion: Sendable {
   init() {}
 }
 
+struct Beebium_GetScreenSourceRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ScreenSource: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The memory region the video fetches from: "main_ram", or "shadow_ram"
+  /// on a B+ or B+ 128K while ACCCON bit 7 shows its shadow RAM. Never
+  /// "shadow_ram" on an Integra-B, whose video always reads main RAM.
+  var region: String = String()
+
+  /// The CPU address of the first displayed byte: the 6845 start address
+  /// (R12/R13) as the video fetch translates it.
+  var startAddress: UInt32 = 0
+
+  /// The bytes one frame displays: characters per row (R1) times rows (R6),
+  /// times eight bytes a character cell in a bitmap screen.
+  var length: UInt32 = 0
+
+  /// Where the screen continues once a read passes &7FFF, as the board's
+  /// wiring wraps it: &7C00 in teletext, else &8000 less the screen size
+  /// the System VIA latch (outputs B4 and B5) selects. A screen that ends
+  /// below &8000 never reaches it.
+  var wrapAddress: UInt32 = 0
+
+  /// True when the 6845 is addressing teletext memory (MA13 set).
+  var teletext: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 struct Beebium_GetTeletextScreenRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1174,6 +1216,75 @@ extension Beebium_TeletextScreenRegion: SwiftProtobuf.Message, SwiftProtobuf._Me
     if lhs.column != rhs.column {return false}
     if lhs.rows != rhs.rows {return false}
     if lhs.columns != rhs.columns {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_GetScreenSourceRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".GetScreenSourceRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_GetScreenSourceRequest, rhs: Beebium_GetScreenSourceRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ScreenSource: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ScreenSource"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}region\0\u{3}start_address\0\u{1}length\0\u{3}wrap_address\0\u{1}teletext\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.region) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.startAddress) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.length) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.wrapAddress) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.teletext) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.region.isEmpty {
+      try visitor.visitSingularStringField(value: self.region, fieldNumber: 1)
+    }
+    if self.startAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.startAddress, fieldNumber: 2)
+    }
+    if self.length != 0 {
+      try visitor.visitSingularUInt32Field(value: self.length, fieldNumber: 3)
+    }
+    if self.wrapAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.wrapAddress, fieldNumber: 4)
+    }
+    if self.teletext != false {
+      try visitor.visitSingularBoolField(value: self.teletext, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ScreenSource, rhs: Beebium_ScreenSource) -> Bool {
+    if lhs.region != rhs.region {return false}
+    if lhs.startAddress != rhs.startAddress {return false}
+    if lhs.length != rhs.length {return false}
+    if lhs.wrapAddress != rhs.wrapAddress {return false}
+    if lhs.teletext != rhs.teletext {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

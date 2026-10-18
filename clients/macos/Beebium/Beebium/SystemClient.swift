@@ -521,6 +521,11 @@ final class SystemClient: ObservableObject, Disconnectable {
             // caps (host->guest) and re-reads the guest shift latch (issue #73).
             lastResetKind = event.resetKind
             machineResetToken &+= 1
+        case .serverStatusGuestReady:
+            // The guest finished a reset and is ready to accept input (the
+            // scripting clients wait on this to pace typing); the app resyncs on
+            // MACHINE_RESET above and has no further action here.
+            break
         case .UNRECOGNIZED:
             break
         }

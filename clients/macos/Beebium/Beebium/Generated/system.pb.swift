@@ -139,6 +139,12 @@ enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// before the MOS finishes re-initialising, so a consumer that needs the
   /// re-initialised state should let it settle.
   case serverStatusMachineReset // = 5
+
+  /// The guest has asked for typed input for the first time since the last
+  /// reset, so the MOS has finished resetting and type-ahead has begun (see
+  /// TypingStatus.guest_ready). Follows each MACHINE_RESET once the guest
+  /// reaches that point.
+  case serverStatusGuestReady // = 6
   case UNRECOGNIZED(Int)
 
   init() {
@@ -153,6 +159,7 @@ enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 3: self = .serverStatusShutdownProgress
     case 4: self = .serverStatusHeartbeat
     case 5: self = .serverStatusMachineReset
+    case 6: self = .serverStatusGuestReady
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -165,6 +172,7 @@ enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .serverStatusShutdownProgress: return 3
     case .serverStatusHeartbeat: return 4
     case .serverStatusMachineReset: return 5
+    case .serverStatusGuestReady: return 6
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -177,6 +185,7 @@ enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
     .serverStatusShutdownProgress,
     .serverStatusHeartbeat,
     .serverStatusMachineReset,
+    .serverStatusGuestReady,
   ]
 
 }
@@ -823,6 +832,11 @@ struct Beebium_ServerStatusEvent: Sendable {
   /// clears it.
   var templateMediaWritten: Bool = false
 
+  /// On every event: whether the guest has asked for typed input since its
+  /// last reset (see TypingStatus.guest_ready). GUEST_READY reports it
+  /// becoming true; MACHINE_RESET is when it becomes false.
+  var guestReady: Bool = false
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -1030,7 +1044,7 @@ extension Beebium_ResetKind: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Beebium_ServerStatusType: SwiftProtobuf._ProtoNameProviding {
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVER_STATUS_READY\0\u{1}SERVER_STATUS_SHUTTING_DOWN\0\u{1}SERVER_STATUS_IDENTITY_CHANGED\0\u{1}SERVER_STATUS_SHUTDOWN_PROGRESS\0\u{1}SERVER_STATUS_HEARTBEAT\0\u{1}SERVER_STATUS_MACHINE_RESET\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVER_STATUS_READY\0\u{1}SERVER_STATUS_SHUTTING_DOWN\0\u{1}SERVER_STATUS_IDENTITY_CHANGED\0\u{1}SERVER_STATUS_SHUTDOWN_PROGRESS\0\u{1}SERVER_STATUS_HEARTBEAT\0\u{1}SERVER_STATUS_MACHINE_RESET\0\u{1}SERVER_STATUS_GUEST_READY\0")
 }
 
 extension Beebium_SaveMachineRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -1987,7 +2001,7 @@ extension Beebium_WatchServerStatusRequest: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ServerStatusEvent"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}status\0\u{1}message\0\u{3}shutdown_grace_ms\0\u{1}identity\0\u{3}shutdown_conditions\0\u{3}reset_kind\0\u{3}template_media_written\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}status\0\u{1}message\0\u{3}shutdown_grace_ms\0\u{1}identity\0\u{3}shutdown_conditions\0\u{3}reset_kind\0\u{3}template_media_written\0\u{3}guest_ready\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2002,6 +2016,7 @@ extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._Messa
       case 5: try { try decoder.decodeRepeatedMessageField(value: &self.shutdownConditions) }()
       case 6: try { try decoder.decodeSingularEnumField(value: &self.resetKind) }()
       case 7: try { try decoder.decodeSingularBoolField(value: &self.templateMediaWritten) }()
+      case 8: try { try decoder.decodeSingularBoolField(value: &self.guestReady) }()
       default: break
       }
     }
@@ -2033,6 +2048,9 @@ extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if self.templateMediaWritten != false {
       try visitor.visitSingularBoolField(value: self.templateMediaWritten, fieldNumber: 7)
     }
+    if self.guestReady != false {
+      try visitor.visitSingularBoolField(value: self.guestReady, fieldNumber: 8)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2044,6 +2062,7 @@ extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if lhs.shutdownConditions != rhs.shutdownConditions {return false}
     if lhs.resetKind != rhs.resetKind {return false}
     if lhs.templateMediaWritten != rhs.templateMediaWritten {return false}
+    if lhs.guestReady != rhs.guestReady {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

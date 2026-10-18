@@ -24,6 +24,11 @@ internal protocol Beebium_VideoServiceClientProtocol: GRPCClient {
     handler: @escaping (Beebium_Frame) -> Void
   ) -> ServerStreamingCall<Beebium_SubscribeFramesRequest, Beebium_Frame>
 
+  func captureFrame(
+    _ request: Beebium_CaptureFrameRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_CaptureFrameRequest, Beebium_Frame>
+
   func getConfig(
     _ request: Beebium_GetConfigRequest,
     callOptions: CallOptions?
@@ -33,6 +38,11 @@ internal protocol Beebium_VideoServiceClientProtocol: GRPCClient {
     _ request: Beebium_GetTeletextScreenRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>
+
+  func getScreenSource(
+    _ request: Beebium_GetScreenSourceRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_GetScreenSourceRequest, Beebium_ScreenSource>
 
   func getScreenText(
     _ request: Beebium_GetScreenTextRequest,
@@ -81,6 +91,33 @@ extension Beebium_VideoServiceClientProtocol {
     )
   }
 
+  /// The frame the machine completed at or after an emulated cycle: for a
+  /// client that has run to a known cycle and wants the field the guest was
+  /// drawing into then, not whichever frame happens to be current.
+  ///
+  /// Returns the earliest frame the server sees whose cycle_count is at least
+  /// after_cycle: the current frame if it already qualifies (only the latest
+  /// frame is held, so one that qualified before it cannot be returned),
+  /// otherwise the next to complete; never one stamped before after_cycle.
+  /// The machine must run for a later frame to complete. Fails with
+  /// DEADLINE_EXCEEDED if none arrives within timeout_ms.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to CaptureFrame.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func captureFrame(
+    _ request: Beebium_CaptureFrameRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_CaptureFrameRequest, Beebium_Frame> {
+    return self.makeUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.captureFrame.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCaptureFrameInterceptors() ?? []
+    )
+  }
+
   /// Get current video configuration
   ///
   /// - Parameters:
@@ -121,6 +158,27 @@ extension Beebium_VideoServiceClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? []
+    )
+  }
+
+  /// Where the screen the video shows lies in memory, from how the 6845, the
+  /// System VIA latch and the machine's paging are programmed now -- not from
+  /// a screen mode -- so a client can read the screen's bytes from the named
+  /// region: GetMemoryRegions lists it, and its addresses are CPU addresses.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetScreenSource.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getScreenSource(
+    _ request: Beebium_GetScreenSourceRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_GetScreenSourceRequest, Beebium_ScreenSource> {
+    return self.makeUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getScreenSource.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetScreenSourceInterceptors() ?? []
     )
   }
 
@@ -285,6 +343,11 @@ internal protocol Beebium_VideoServiceAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncServerStreamingCall<Beebium_SubscribeFramesRequest, Beebium_Frame>
 
+  func makeCaptureFrameCall(
+    _ request: Beebium_CaptureFrameRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_CaptureFrameRequest, Beebium_Frame>
+
   func makeGetConfigCall(
     _ request: Beebium_GetConfigRequest,
     callOptions: CallOptions?
@@ -294,6 +357,11 @@ internal protocol Beebium_VideoServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_GetTeletextScreenRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>
+
+  func makeGetScreenSourceCall(
+    _ request: Beebium_GetScreenSourceRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_GetScreenSourceRequest, Beebium_ScreenSource>
 
   func makeGetScreenTextCall(
     _ request: Beebium_GetScreenTextRequest,
@@ -338,6 +406,18 @@ extension Beebium_VideoServiceAsyncClientProtocol {
     )
   }
 
+  internal func makeCaptureFrameCall(
+    _ request: Beebium_CaptureFrameRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_CaptureFrameRequest, Beebium_Frame> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.captureFrame.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCaptureFrameInterceptors() ?? []
+    )
+  }
+
   internal func makeGetConfigCall(
     _ request: Beebium_GetConfigRequest,
     callOptions: CallOptions? = nil
@@ -359,6 +439,18 @@ extension Beebium_VideoServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? []
+    )
+  }
+
+  internal func makeGetScreenSourceCall(
+    _ request: Beebium_GetScreenSourceRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_GetScreenSourceRequest, Beebium_ScreenSource> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getScreenSource.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetScreenSourceInterceptors() ?? []
     )
   }
 
@@ -425,6 +517,18 @@ extension Beebium_VideoServiceAsyncClientProtocol {
     )
   }
 
+  internal func captureFrame(
+    _ request: Beebium_CaptureFrameRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_Frame {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.captureFrame.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCaptureFrameInterceptors() ?? []
+    )
+  }
+
   internal func getConfig(
     _ request: Beebium_GetConfigRequest,
     callOptions: CallOptions? = nil
@@ -446,6 +550,18 @@ extension Beebium_VideoServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? []
+    )
+  }
+
+  internal func getScreenSource(
+    _ request: Beebium_GetScreenSourceRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ScreenSource {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getScreenSource.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetScreenSourceInterceptors() ?? []
     )
   }
 
@@ -520,11 +636,17 @@ internal protocol Beebium_VideoServiceClientInterceptorFactoryProtocol: Sendable
   /// - Returns: Interceptors to use when invoking 'subscribeFrames'.
   func makeSubscribeFramesInterceptors() -> [ClientInterceptor<Beebium_SubscribeFramesRequest, Beebium_Frame>]
 
+  /// - Returns: Interceptors to use when invoking 'captureFrame'.
+  func makeCaptureFrameInterceptors() -> [ClientInterceptor<Beebium_CaptureFrameRequest, Beebium_Frame>]
+
   /// - Returns: Interceptors to use when invoking 'getConfig'.
   func makeGetConfigInterceptors() -> [ClientInterceptor<Beebium_GetConfigRequest, Beebium_VideoConfig>]
 
   /// - Returns: Interceptors to use when invoking 'getTeletextScreen'.
   func makeGetTeletextScreenInterceptors() -> [ClientInterceptor<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>]
+
+  /// - Returns: Interceptors to use when invoking 'getScreenSource'.
+  func makeGetScreenSourceInterceptors() -> [ClientInterceptor<Beebium_GetScreenSourceRequest, Beebium_ScreenSource>]
 
   /// - Returns: Interceptors to use when invoking 'getScreenText'.
   func makeGetScreenTextInterceptors() -> [ClientInterceptor<Beebium_GetScreenTextRequest, Beebium_ScreenText>]
@@ -545,8 +667,10 @@ internal enum Beebium_VideoServiceClientMetadata {
     fullName: "beebium.VideoService",
     methods: [
       Beebium_VideoServiceClientMetadata.Methods.subscribeFrames,
+      Beebium_VideoServiceClientMetadata.Methods.captureFrame,
       Beebium_VideoServiceClientMetadata.Methods.getConfig,
       Beebium_VideoServiceClientMetadata.Methods.getTeletextScreen,
+      Beebium_VideoServiceClientMetadata.Methods.getScreenSource,
       Beebium_VideoServiceClientMetadata.Methods.getScreenText,
       Beebium_VideoServiceClientMetadata.Methods.getScreenGeometry,
       Beebium_VideoServiceClientMetadata.Methods.holdScreen,
@@ -561,6 +685,12 @@ internal enum Beebium_VideoServiceClientMetadata {
       type: GRPCCallType.serverStreaming
     )
 
+    internal static let captureFrame = GRPCMethodDescriptor(
+      name: "CaptureFrame",
+      path: "/beebium.VideoService/CaptureFrame",
+      type: GRPCCallType.unary
+    )
+
     internal static let getConfig = GRPCMethodDescriptor(
       name: "GetConfig",
       path: "/beebium.VideoService/GetConfig",
@@ -570,6 +700,12 @@ internal enum Beebium_VideoServiceClientMetadata {
     internal static let getTeletextScreen = GRPCMethodDescriptor(
       name: "GetTeletextScreen",
       path: "/beebium.VideoService/GetTeletextScreen",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getScreenSource = GRPCMethodDescriptor(
+      name: "GetScreenSource",
+      path: "/beebium.VideoService/GetScreenSource",
       type: GRPCCallType.unary
     )
 
@@ -608,6 +744,18 @@ internal protocol Beebium_VideoServiceProvider: CallHandlerProvider {
   /// Stream frames as they complete (at VSYNC)
   func subscribeFrames(request: Beebium_SubscribeFramesRequest, context: StreamingResponseCallContext<Beebium_Frame>) -> EventLoopFuture<GRPCStatus>
 
+  /// The frame the machine completed at or after an emulated cycle: for a
+  /// client that has run to a known cycle and wants the field the guest was
+  /// drawing into then, not whichever frame happens to be current.
+  ///
+  /// Returns the earliest frame the server sees whose cycle_count is at least
+  /// after_cycle: the current frame if it already qualifies (only the latest
+  /// frame is held, so one that qualified before it cannot be returned),
+  /// otherwise the next to complete; never one stamped before after_cycle.
+  /// The machine must run for a later frame to complete. Fails with
+  /// DEADLINE_EXCEEDED if none arrives within timeout_ms.
+  func captureFrame(request: Beebium_CaptureFrameRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_Frame>
+
   /// Get current video configuration
   func getConfig(request: Beebium_GetConfigRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_VideoConfig>
 
@@ -620,6 +768,12 @@ internal protocol Beebium_VideoServiceProvider: CallHandlerProvider {
   /// with the pixels it replaces, and that is a separate transport from the
   /// same capture; see docs/discussion/teletext-cell-capture.md.
   func getTeletextScreen(request: Beebium_GetTeletextScreenRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_TeletextScreen>
+
+  /// Where the screen the video shows lies in memory, from how the 6845, the
+  /// System VIA latch and the machine's paging are programmed now -- not from
+  /// a screen mode -- so a client can read the screen's bytes from the named
+  /// region: GetMemoryRegions lists it, and its addresses are CPU addresses.
+  func getScreenSource(request: Beebium_GetScreenSourceRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ScreenSource>
 
   /// Read text from the display, whatever mode is producing it.
   ///
@@ -675,6 +829,15 @@ extension Beebium_VideoServiceProvider {
         userFunction: self.subscribeFrames(request:context:)
       )
 
+    case "CaptureFrame":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CaptureFrameRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_Frame>(),
+        interceptors: self.interceptors?.makeCaptureFrameInterceptors() ?? [],
+        userFunction: self.captureFrame(request:context:)
+      )
+
     case "GetConfig":
       return UnaryServerHandler(
         context: context,
@@ -691,6 +854,15 @@ extension Beebium_VideoServiceProvider {
         responseSerializer: ProtobufSerializer<Beebium_TeletextScreen>(),
         interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? [],
         userFunction: self.getTeletextScreen(request:context:)
+      )
+
+    case "GetScreenSource":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetScreenSourceRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ScreenSource>(),
+        interceptors: self.interceptors?.makeGetScreenSourceInterceptors() ?? [],
+        userFunction: self.getScreenSource(request:context:)
       )
 
     case "GetScreenText":
@@ -750,6 +922,21 @@ internal protocol Beebium_VideoServiceAsyncProvider: CallHandlerProvider, Sendab
     context: GRPCAsyncServerCallContext
   ) async throws
 
+  /// The frame the machine completed at or after an emulated cycle: for a
+  /// client that has run to a known cycle and wants the field the guest was
+  /// drawing into then, not whichever frame happens to be current.
+  ///
+  /// Returns the earliest frame the server sees whose cycle_count is at least
+  /// after_cycle: the current frame if it already qualifies (only the latest
+  /// frame is held, so one that qualified before it cannot be returned),
+  /// otherwise the next to complete; never one stamped before after_cycle.
+  /// The machine must run for a later frame to complete. Fails with
+  /// DEADLINE_EXCEEDED if none arrives within timeout_ms.
+  func captureFrame(
+    request: Beebium_CaptureFrameRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_Frame
+
   /// Get current video configuration
   func getConfig(
     request: Beebium_GetConfigRequest,
@@ -768,6 +955,15 @@ internal protocol Beebium_VideoServiceAsyncProvider: CallHandlerProvider, Sendab
     request: Beebium_GetTeletextScreenRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_TeletextScreen
+
+  /// Where the screen the video shows lies in memory, from how the 6845, the
+  /// System VIA latch and the machine's paging are programmed now -- not from
+  /// a screen mode -- so a client can read the screen's bytes from the named
+  /// region: GetMemoryRegions lists it, and its addresses are CPU addresses.
+  func getScreenSource(
+    request: Beebium_GetScreenSourceRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ScreenSource
 
   /// Read text from the display, whatever mode is producing it.
   ///
@@ -842,6 +1038,15 @@ extension Beebium_VideoServiceAsyncProvider {
         wrapping: { try await self.subscribeFrames(request: $0, responseStream: $1, context: $2) }
       )
 
+    case "CaptureFrame":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CaptureFrameRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_Frame>(),
+        interceptors: self.interceptors?.makeCaptureFrameInterceptors() ?? [],
+        wrapping: { try await self.captureFrame(request: $0, context: $1) }
+      )
+
     case "GetConfig":
       return GRPCAsyncServerHandler(
         context: context,
@@ -858,6 +1063,15 @@ extension Beebium_VideoServiceAsyncProvider {
         responseSerializer: ProtobufSerializer<Beebium_TeletextScreen>(),
         interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? [],
         wrapping: { try await self.getTeletextScreen(request: $0, context: $1) }
+      )
+
+    case "GetScreenSource":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetScreenSourceRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ScreenSource>(),
+        interceptors: self.interceptors?.makeGetScreenSourceInterceptors() ?? [],
+        wrapping: { try await self.getScreenSource(request: $0, context: $1) }
       )
 
     case "GetScreenText":
@@ -908,6 +1122,10 @@ internal protocol Beebium_VideoServiceServerInterceptorFactoryProtocol: Sendable
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeSubscribeFramesInterceptors() -> [ServerInterceptor<Beebium_SubscribeFramesRequest, Beebium_Frame>]
 
+  /// - Returns: Interceptors to use when handling 'captureFrame'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeCaptureFrameInterceptors() -> [ServerInterceptor<Beebium_CaptureFrameRequest, Beebium_Frame>]
+
   /// - Returns: Interceptors to use when handling 'getConfig'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetConfigInterceptors() -> [ServerInterceptor<Beebium_GetConfigRequest, Beebium_VideoConfig>]
@@ -915,6 +1133,10 @@ internal protocol Beebium_VideoServiceServerInterceptorFactoryProtocol: Sendable
   /// - Returns: Interceptors to use when handling 'getTeletextScreen'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetTeletextScreenInterceptors() -> [ServerInterceptor<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>]
+
+  /// - Returns: Interceptors to use when handling 'getScreenSource'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetScreenSourceInterceptors() -> [ServerInterceptor<Beebium_GetScreenSourceRequest, Beebium_ScreenSource>]
 
   /// - Returns: Interceptors to use when handling 'getScreenText'.
   ///   Defaults to calling `self.makeInterceptors()`.
@@ -939,8 +1161,10 @@ internal enum Beebium_VideoServiceServerMetadata {
     fullName: "beebium.VideoService",
     methods: [
       Beebium_VideoServiceServerMetadata.Methods.subscribeFrames,
+      Beebium_VideoServiceServerMetadata.Methods.captureFrame,
       Beebium_VideoServiceServerMetadata.Methods.getConfig,
       Beebium_VideoServiceServerMetadata.Methods.getTeletextScreen,
+      Beebium_VideoServiceServerMetadata.Methods.getScreenSource,
       Beebium_VideoServiceServerMetadata.Methods.getScreenText,
       Beebium_VideoServiceServerMetadata.Methods.getScreenGeometry,
       Beebium_VideoServiceServerMetadata.Methods.holdScreen,
@@ -955,6 +1179,12 @@ internal enum Beebium_VideoServiceServerMetadata {
       type: GRPCCallType.serverStreaming
     )
 
+    internal static let captureFrame = GRPCMethodDescriptor(
+      name: "CaptureFrame",
+      path: "/beebium.VideoService/CaptureFrame",
+      type: GRPCCallType.unary
+    )
+
     internal static let getConfig = GRPCMethodDescriptor(
       name: "GetConfig",
       path: "/beebium.VideoService/GetConfig",
@@ -964,6 +1194,12 @@ internal enum Beebium_VideoServiceServerMetadata {
     internal static let getTeletextScreen = GRPCMethodDescriptor(
       name: "GetTeletextScreen",
       path: "/beebium.VideoService/GetTeletextScreen",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getScreenSource = GRPCMethodDescriptor(
+      name: "GetScreenSource",
+      path: "/beebium.VideoService/GetScreenSource",
       type: GRPCCallType.unary
     )
 

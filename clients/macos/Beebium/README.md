@@ -95,22 +95,62 @@ The status bar displays information about the connected emulator at the bottom o
 
 ## Regenerating gRPC Stubs
 
-If the proto files change:
+If the proto files change, regenerate only the protos that changed, and pass
+only the outputs you need:
+
+- A change that only adds or edits **message** fields or enums (no new RPC,
+  no changed RPC signature) touches only `<name>.pb.swift`. Run `--swift_out`
+  **only**, for that proto only. The `<name>.grpc.swift` service stub refers to
+  message *types*, not fields, so it stays byte-for-byte identical — do not pass
+  `--grpc-swift_out` for it.
+- A **service-shape** change (a new RPC, or a changed request/response type)
+  also rewrites `<name>.grpc.swift`, so pass both `--swift_out` and
+  `--grpc-swift_out` for that proto.
 
 ```bash
+# Message-only change (e.g. a new field):
 protoc \
+  --swift_out=Beebium/Generated \
+  -I ../../../src/service/proto \
+  ../../../src/service/proto/keyboard.proto
+
+# Service-shape change (new/changed RPC) — note the explicit --plugin:
+protoc \
+  --plugin=protoc-gen-grpc-swift="$PINNED_GRPC_SWIFT_PLUGIN" \
   --swift_out=Beebium/Generated \
   --grpc-swift_out=Beebium/Generated \
   -I ../../../src/service/proto \
-  ../../../src/service/proto/video.proto \
-  ../../../src/service/proto/keyboard.proto \
-  ../../../src/service/proto/system.proto
+  ../../../src/service/proto/video.proto
 ```
 
-Requires `protoc` and `protoc-gen-grpc-swift`:
-```bash
-brew install swift-protobuf grpc-swift
-```
+### Use the pinned plugins, not Homebrew's
+
+The committed stubs must be reproducible, so the generators have to match the
+Swift package pins in
+`Beebium.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`:
+
+- **`protoc-gen-swift`** (for `--swift_out`): Homebrew's tracks swift-protobuf,
+  which currently equals the pin (1.33.3), so `brew install swift-protobuf` is
+  fine for message stubs.
+- **`protoc-gen-grpc-swift`** (for `--grpc-swift_out`): Homebrew's version
+  (1.23.1 at the time of writing) does **not** match the pinned grpc-swift
+  (1.26.1), and regenerating a `.grpc.swift` with the wrong plugin rewrites the
+  whole file in a different codegen style — thousands of lines of churn that
+  bury the real change. Build the plugin from the pinned tag and point `protoc`
+  at it explicitly:
+
+  ```bash
+  git clone --depth 1 --branch 1.26.1 https://github.com/grpc/grpc-swift \
+    ~/tools/grpc-swift-1.26.1          # match Package.resolved's grpc-swift version
+  swift build -c release --product protoc-gen-grpc-swift \
+    --package-path ~/tools/grpc-swift-1.26.1
+  export PINNED_GRPC_SWIFT_PLUGIN=~/tools/grpc-swift-1.26.1/.build/release/protoc-gen-grpc-swift
+  ```
+
+  Verify the plugin before trusting it: regenerate an **unchanged** `.grpc.swift`
+  and confirm `git diff` shows no change. Only then regenerate the changed ones.
+  After regenerating, run `python ../../../scripts/sync_protocol_fingerprint.py`
+  (from the repo) so `ProtocolFingerprint.swift` matches the other clients.
 
 ## Build System
 

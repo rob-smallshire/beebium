@@ -47,6 +47,9 @@ final class DebuggerClient: ObservableObject, Disconnectable {
         guard let client = client else {
             throw DebuggerClientError.notConnected
         }
-        _ = try await client.run(Beebium_Empty()).response.get()
+        // A default RunRequest (stop_at_current = false) resumes execution the
+        // way the old parameterless Run did: step over any breakpoint at the
+        // current instruction rather than stopping on it again.
+        _ = try await client.run(Beebium_RunRequest()).response.get()
     }
 }

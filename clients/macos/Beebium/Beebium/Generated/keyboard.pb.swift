@@ -411,6 +411,25 @@ struct Beebium_TypingStatus: Sendable {
   /// a stopped machine never will.
   var machineRunning: Bool = false
 
+  /// True once the guest has asked for typed input since its last reset:
+  /// the first removal of a character from the MOS keyboard buffer (an
+  /// opcode fetch at the address in the REMV vector, &022C, with X = 0),
+  /// which every MOS text-input path makes, whatever the language and with
+  /// or without a Tube. Type-ahead presses nothing until then: keys pressed
+  /// during the MOS's reset and its ROMs' reset service calls are lost or
+  /// read as reset options. A reset clears it. A guest that never asks the
+  /// MOS for input (one scanning the keyboard itself, a machine stopped at
+  /// "Language?") holds the queue; game control is KeyDown/KeyUp, which are
+  /// never held. WatchTypingStatus pushes when this changes.
+  var guestReady: Bool = false
+
+  /// Emulated CPU cycles since the last reset began (power-on, or Break
+  /// pressed). The server gives no verdict on how long a guest may take to
+  /// become ready -- a long !BOOT is legitimate -- so a client waiting for it
+  /// budgets the wait against this. While guest_ready is false,
+  /// WatchTypingStatus pushes as it advances, at the stream's interval.
+  var cyclesSinceReset: UInt64 = 0
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -1289,7 +1308,7 @@ extension Beebium_WatchTypingStatusRequest: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".TypingStatus"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}idle\0\u{3}pending_characters\0\u{3}strings_queued\0\u{3}machine_running\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}idle\0\u{3}pending_characters\0\u{3}strings_queued\0\u{3}machine_running\0\u{3}guest_ready\0\u{3}cycles_since_reset\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1301,6 +1320,8 @@ extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 2: try { try decoder.decodeSingularUInt32Field(value: &self.pendingCharacters) }()
       case 3: try { try decoder.decodeSingularUInt32Field(value: &self.stringsQueued) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.machineRunning) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.guestReady) }()
+      case 6: try { try decoder.decodeSingularUInt64Field(value: &self.cyclesSinceReset) }()
       default: break
       }
     }
@@ -1319,6 +1340,12 @@ extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if self.machineRunning != false {
       try visitor.visitSingularBoolField(value: self.machineRunning, fieldNumber: 4)
     }
+    if self.guestReady != false {
+      try visitor.visitSingularBoolField(value: self.guestReady, fieldNumber: 5)
+    }
+    if self.cyclesSinceReset != 0 {
+      try visitor.visitSingularUInt64Field(value: self.cyclesSinceReset, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1327,6 +1354,8 @@ extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.pendingCharacters != rhs.pendingCharacters {return false}
     if lhs.stringsQueued != rhs.stringsQueued {return false}
     if lhs.machineRunning != rhs.machineRunning {return false}
+    if lhs.guestReady != rhs.guestReady {return false}
+    if lhs.cyclesSinceReset != rhs.cyclesSinceReset {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
