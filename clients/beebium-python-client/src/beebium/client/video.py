@@ -695,6 +695,9 @@ class Video:
             bbc.debugger.ensure_running()
             frame = bbc.video.capture_frame(after_cycle=reached)
 
+        Requires: any run state; with after_cycle, a running machine.
+        Leaves the machine: unchanged.
+
         Args:
             timeout: Maximum time to wait for a frame (seconds).
             after_cycle: The emulated cycle the frame must have completed at

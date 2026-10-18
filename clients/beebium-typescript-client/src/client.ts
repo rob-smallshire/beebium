@@ -124,6 +124,9 @@ export class Beebium {
     /**
      * Connect to an already-running beebium-server.
      *
+     * Requires: nothing.
+     * Leaves the machine: unchanged.
+     *
      * @param target - The gRPC target string (e.g. "localhost:48875").
      *     Defaults to localhost on DEFAULT_GRPC_PORT (0xBEEB = 48875).
      * @param timeoutMs - Connection timeout in milliseconds (default 5000).
@@ -172,6 +175,9 @@ export class Beebium {
      *
      * The server is managed by this client instance. Calling close()
      * will stop the server process.
+     *
+     * Requires: nothing.
+     * Leaves the machine: STOPPED.
      *
      * @param options - Server process options (model, args, etc.) plus
      *     an optional timeoutMs for the connection (default 5000).
@@ -502,6 +508,9 @@ export class Beebium {
      * until then; this is for a caller that wants boot finished before doing
      * something else. Resolves at once if the guest is already ready.
      *
+     * Requires: a running machine.
+     * Leaves the machine: unchanged.
+     *
      * @param options.readyWithin Emulated seconds since the reset for the guest
      *     to become ready (default 5; a normal boot takes well under one);
      *     null waits indefinitely, for a boot known to be slow.
@@ -516,8 +525,10 @@ export class Beebium {
      * Run the emulator for the specified number of emulated seconds.
      *
      * Computes the cycle count from the clock speed and steps that many
-     * cycles synchronously. The emulator must be stopped on entry and
-     * is left stopped on return.
+     * cycles synchronously, stopping the emulator first if it is running.
+     *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
      *
      * @param seconds - Number of emulated BBC-time seconds to run.
      */
@@ -538,6 +549,9 @@ export class Beebium {
      * chunk, the machine stops (via a server-side cycle-budget breakpoint),
      * the predicate is evaluated, and if false, the next chunk starts.
      * No wall-clock polling -- all timing is in emulated time.
+     *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
      *
      * @param predicate - Async function returning true when the condition is met.
      * @param emulatedSeconds - Maximum emulated time to run.

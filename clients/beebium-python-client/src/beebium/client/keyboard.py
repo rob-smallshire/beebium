@@ -196,6 +196,9 @@ class Keyboard:
         that ``\\r\\n`` then presses RETURN twice, because both CR and LF
         are the RETURN key.
 
+        Requires: any run state.
+        Leaves the machine: unchanged.
+
         Args:
             text: The text to type.
             translate: Whether the server should translate host text
@@ -323,6 +326,9 @@ class Keyboard:
         is interrupt-driven and only progresses while CPU cycles are
         being executed.
 
+        Requires: a running machine.
+        Leaves the machine: RUNNING.
+
         Args:
             timeout_cycles: Maximum emulator cycles to wait for the latch
                 to flip. Default 1,000,000 cycles (500ms emulated).
@@ -342,6 +348,9 @@ class Keyboard:
 
         See :meth:`tap_caps_lock` for the polling, running-mode
         precondition, and timeout semantics.
+
+        Requires: a running machine.
+        Leaves the machine: RUNNING.
         """
         self._tap_lock_key(
             *SHIFT_LOCK_KEY,
@@ -478,6 +487,9 @@ class Keyboard:
             with bbc.keyboard.text_input():
                 bbc.keyboard.type("Hello, World!\\r")
                 bbc.run_until_or_timeout(predicate, emulated_seconds=2.0)
+
+        Requires: a running machine.
+        Leaves the machine: unchanged.
 
         Raises:
             RuntimeError: If the emulator is not running on entry.
@@ -639,6 +651,9 @@ class Keyboard:
         """Block until the guest has finished resetting and asked for input;
         see :meth:`Beebium.wait_until_ready`, which this serves.
 
+        Requires: a running machine.
+        Leaves the machine: unchanged.
+
         Args:
             ready_within: Emulated seconds since the reset for the guest to
                 become ready; ``None`` waits indefinitely.
@@ -688,6 +703,9 @@ class Keyboard:
         queue for good. Game control belongs to :meth:`key_down` and
         :meth:`key_up`, which are never held. Pass ``ready_within=None`` for a
         boot known to be slow. Once the guest is ready there is no time limit.
+
+        Requires: a running machine, unless nothing is queued.
+        Leaves the machine: unchanged.
 
         Args:
             min_interval_ms: Minimum interval between status updates (0 = the
@@ -822,6 +840,9 @@ class Keyboard:
         emulated time, so the machine sees the same press on a slow host as on
         a fast one; the machine must be running.
 
+        Requires: a running machine.
+        Leaves the machine: RUNNING.
+
         Args:
             hold_time: How long to hold Break, in emulated seconds.
 
@@ -852,6 +873,9 @@ class Keyboard:
 
         Holds are in emulated time, so the machine sees the same press on a
         slow host as on a fast one; the machine must be running.
+
+        Requires: a running machine.
+        Leaves the machine: RUNNING.
 
         Args:
             hold_time: How long to hold Break, in emulated seconds.
@@ -890,6 +914,9 @@ class Keyboard:
 
         Holds are in emulated time, so DFS sees the same press on a slow host as
         on a fast one; the machine must be running.
+
+        Requires: a running machine.
+        Leaves the machine: RUNNING.
 
         Args:
             hold_time: How long to hold Break, in emulated seconds.

@@ -291,6 +291,9 @@ class Debugger:
         not reported again for that instruction -- so the run stops at its
         next hit, not where it already is.
 
+        Requires: a stopped machine.
+        Leaves the machine: RUNNING.
+
         Args:
             stop_at_current: Evaluate the breakpoints at the current
                 instruction instead, so one there stops the machine again at
@@ -305,6 +308,9 @@ class Debugger:
 
     def stop(self) -> ExecutionState:
         """Pause execution.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
 
         Returns:
             The execution state after stopping.
@@ -329,6 +335,9 @@ class Debugger:
         ``keyboard.ctrl_break`` (BREAK with Ctrl held, which MOS treats as a hard
         reset in software but which does not clear RAM here).
 
+        Requires: any run state.
+        Leaves the machine: STOPPED.
+
         Raises:
             DebuggerError: If the reset fails.
         """
@@ -341,6 +350,9 @@ class Debugger:
 
         Machine must be stopped first: stepping a running machine raises
         rather than stopping it.
+
+        Requires: a stopped machine.
+        Leaves the machine: STOPPED.
 
         Args:
             count: Number of instructions to execute.
@@ -368,6 +380,9 @@ class Debugger:
 
         Machine must be stopped first: stepping a running machine raises
         rather than stopping it.
+
+        Requires: a stopped machine.
+        Leaves the machine: STOPPED.
 
         Args:
             count: Number of cycles to execute.
@@ -408,12 +423,20 @@ class Debugger:
         return self.get_state().cycle_count
 
     def ensure_running(self) -> None:
-        """Resume execution if not already running."""
+        """Resume execution if not already running.
+
+        Requires: any run state.
+        Leaves the machine: RUNNING.
+        """
         if not self.is_running:
             self.run()
 
     def ensure_stopped(self) -> None:
-        """Pause execution if not already stopped."""
+        """Pause execution if not already stopped.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
+        """
         if self.is_running:
             self.stop()
 
@@ -428,6 +451,9 @@ class Debugger:
                 # emulator is executing
                 ...
             # emulator restored to whatever state it was in before
+
+        Requires: any run state.
+        Leaves the machine: as it was on entry.
         """
         was_running = self.is_running
         self.ensure_running()
@@ -857,6 +883,9 @@ class Debugger:
         :meth:`run_and_wait_for_stop`: pairing ``ensure_running()`` with this
         method races a breakpoint that fires before this call subscribes.
 
+        Requires: any run state.
+        Leaves the machine: STOPPED.
+
         Args:
             timeout: Wall-clock deadline in seconds for the entire wait.
 
@@ -890,6 +919,9 @@ class Debugger:
         so a breakpoint or watchpoint that fires immediately is never missed.
         Prefer this over ``ensure_running()`` followed by :meth:`wait_for_stop`,
         which can miss a stop that happens before ``wait_for_stop`` subscribes.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
 
         Args:
             timeout: Wall-clock deadline in seconds for the wait.
@@ -944,6 +976,9 @@ class Debugger:
         (throughput W x)") or the machine made no progress at all ("no emulated
         progress in Z s: machine stuck"). The machine is left as it was at the
         deadline; callers stop it in their own cleanup.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
 
         Args:
             target_cycles: The cycle count to run to.
@@ -1031,6 +1066,9 @@ class Debugger:
         Contrast :meth:`Beebium.run_until_or_timeout`, which fast-forwards
         emulated time until an arbitrary *predicate* (checked via peek) holds.
 
+        Requires: any run state.
+        Leaves the machine: STOPPED.
+
         Args:
             address: Start address to break at.
             end_address: End of the range (exclusive); 0 means a single address.
@@ -1081,6 +1119,9 @@ class Debugger:
         one at ``end_pc``. With ``start_pc == end_pc`` a pass is one trip round
         a loop, and repeated passes are consecutive trips. The machine is left
         stopped at ``end_pc``.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
 
         Args:
             start_pc: Address of the first instruction measured.

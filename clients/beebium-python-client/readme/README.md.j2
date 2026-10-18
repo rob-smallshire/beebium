@@ -133,6 +133,52 @@ does. `bbc.memory.region(r.region).peek[start:end]` then reads each range.
 {{ snippet("debugger") }}
 ```
 
+### Run state
+
+Whether a call needs the machine running, and whether it leaves it running or
+stopped, is in each method's docstring as two lines, `Requires: ...` and
+`Leaves the machine: ...`; this table collects them (a test keeps the two in
+step). The calls that run to a point -- `run_for_emulated_seconds`,
+`run_until_or_timeout` and the debugger's run-to methods -- leave the machine
+STOPPED; call `bbc.debugger.run()` before anything that needs it running.
+
+| Call | Requires | Leaves the machine |
+|---|---|---|
+| `Beebium.launch` | nothing | RUNNING |
+| `Beebium.connect` | nothing | unchanged |
+| `Beebium.expect` | a running machine, unless the text is already on the screen | unchanged |
+| `Beebium.boot_disc` | any run state | RUNNING |
+| `Beebium.wait_until_ready` | a running machine | unchanged |
+| `Beebium.run_for_emulated_seconds` | any run state | STOPPED |
+| `Beebium.run_until_or_timeout` | any run state | STOPPED |
+| `Debugger.run` | a stopped machine | RUNNING |
+| `Debugger.stop` | any run state | STOPPED |
+| `Debugger.reset` | any run state | STOPPED |
+| `Debugger.step` | a stopped machine | STOPPED |
+| `Debugger.step_cycles` | a stopped machine | STOPPED |
+| `Debugger.ensure_running` | any run state | RUNNING |
+| `Debugger.ensure_stopped` | any run state | STOPPED |
+| `Debugger.running` | any run state | as it was on entry |
+| `Debugger.wait_for_stop` | any run state | STOPPED |
+| `Debugger.run_and_wait_for_stop` | any run state | STOPPED |
+| `Debugger.run_to_cycle` | any run state | STOPPED |
+| `Debugger.run_to` | any run state | STOPPED |
+| `Debugger.measure` | any run state | STOPPED |
+| `Keyboard.type` | any run state | unchanged |
+| `Keyboard.wait_until_typing_complete` | a running machine, unless nothing is queued | unchanged |
+| `Keyboard.wait_until_ready` | a running machine | unchanged |
+| `Keyboard.press_break` | a running machine | RUNNING |
+| `Keyboard.ctrl_break` | a running machine | RUNNING |
+| `Keyboard.shift_break` | a running machine | RUNNING |
+| `Keyboard.tap_caps_lock` | a running machine | RUNNING |
+| `Keyboard.tap_shift_lock` | a running machine | RUNNING |
+| `Keyboard.text_input` | a running machine | unchanged |
+| `Video.capture_frame` | any run state; with after_cycle, a running machine | unchanged |
+| `TubeSystem.run` | any run state | RUNNING |
+| `TubeSystem.stop` | any run state | STOPPED |
+| `TubeSystem.run_until_or_timeout` | any run state | STOPPED |
+| `TubeSystem.run_for` | any run state | STOPPED |
+
 ### Testing with pytest
 
 Installing `beebium` registers the pytest plugin, so the `bbc` fixture is

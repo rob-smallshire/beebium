@@ -142,6 +142,9 @@ class Beebium:
     def connect(cls, target: str | None = None, timeout: float = 5.0) -> Beebium:
         """Connect to an already-running beebium-server.
 
+        Requires: nothing.
+        Leaves the machine: unchanged.
+
         Args:
             target: The gRPC target string (e.g., "localhost:48875").
                    Defaults to localhost on DEFAULT_GRPC_PORT (48875).
@@ -186,6 +189,9 @@ class Beebium:
         """Start a beebium-server process and connect to it.
 
         The server is automatically stopped when the context manager exits.
+
+        Requires: nothing.
+        Leaves the machine: RUNNING.
 
         Args:
             mos_filepath: Path to the MOS ROM file. When None (the default), the
@@ -528,6 +534,9 @@ class Beebium:
         (``*EXEC``/``*RUN``/``*LOAD``) -- no need to know or type the right
         command. The emulator is left running.
 
+        Requires: any run state.
+        Leaves the machine: RUNNING.
+
         Args:
             disc_filepath: Path to the disc image to boot.
             drive: Drive number to mount into (default 0).
@@ -562,6 +571,9 @@ class Beebium:
         stopped, so call ``debugger.run()`` first. A machine found stopped,
         when the wait starts or at any sample, raises at once rather than
         running out the timeout.
+
+        Requires: a running machine, unless the text is already on the screen.
+        Leaves the machine: unchanged.
 
         Args:
             texts: One or more substrings to wait for; the first found wins.
@@ -608,6 +620,9 @@ class Beebium:
         wants boot finished before doing something else. Returns at once if the
         guest is already ready. The machine must be running to get there.
 
+        Requires: a running machine.
+        Leaves the machine: unchanged.
+
         Args:
             ready_within: Emulated seconds since the reset for the guest to
                 become ready (a normal boot takes well under one); ``None``
@@ -639,6 +654,9 @@ class Beebium:
         (see :func:`~beebium.client.debugger.wall_timeout_for`); if it expires
         the error says whether the host was slow or the machine made no
         progress.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
 
         Args:
             seconds: Number of emulated BBC-time seconds to run.
@@ -678,6 +696,9 @@ class Beebium:
         so at the first instruction boundary at or after the chunk's target),
         the predicate is evaluated via peek, and if false, the next chunk
         starts. No wall-clock polling -- all timing is in emulated time.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
 
         Args:
             predicate: Callable returning True when the condition is met.

@@ -143,6 +143,9 @@ export class Debugger {
      * reported again for that instruction -- so the run stops at its next hit.
      * Pass `stopAtCurrent: true` to evaluate it instead, so one there stops the
      * machine again at once.
+     *
+     * Requires: a stopped machine.
+     * Leaves the machine: RUNNING.
      */
     async run(options?: { stopAtCurrent?: boolean }): Promise<void> {
         const response = await promisify<{ stopAtCurrent: boolean }, { success: boolean; error: string }>(
@@ -155,7 +158,12 @@ export class Debugger {
         }
     }
 
-    /** Stop execution. Returns the execution state after stopping. */
+    /**
+     * Stop execution. Returns the execution state after stopping.
+     *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
+     */
     async stop(): Promise<ExecutionState> {
         const response = await promisify<{}, { success: boolean; state?: ProtoExecutionState }>(
             this.stub as unknown as Record<string, Function>,
@@ -171,7 +179,12 @@ export class Debugger {
         return toExecutionState(response.state);
     }
 
-    /** Reset the machine. */
+    /**
+     * Reset the machine.
+     *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
+     */
     async reset(): Promise<void> {
         const response = await promisify<{}, { success: boolean }>(
             this.stub as unknown as Record<string, Function>,
@@ -186,6 +199,9 @@ export class Debugger {
     /**
      * Step by instruction count. Returns the result of the step operation. The machine must be
      * stopped first: stepping a running machine throws rather than stopping it.
+     *
+     * Requires: a stopped machine.
+     * Leaves the machine: STOPPED.
      */
     async step(count: number = 1): Promise<StepResult> {
         const response = await promisify<{ count: number }, ProtoStepResponse>(
@@ -202,6 +218,9 @@ export class Debugger {
     /**
      * Step by cycle count. Returns the result of the step operation. The machine must be
      * stopped first: stepping a running machine throws rather than stopping it.
+     *
+     * Requires: a stopped machine.
+     * Leaves the machine: STOPPED.
      */
     async stepCycles(count: number = 1): Promise<StepResult> {
         const response = await promisify<{ count: number }, ProtoStepResponse>(
@@ -462,6 +481,9 @@ export class Debugger {
      * to the stopped state. If the machine is already stopped when this is
      * called, it waits until the machine runs and then stops again.
      *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
+     *
      * @param timeoutMs - Maximum time to wait in milliseconds. Default 30000.
      */
     async waitForStop(timeoutMs = 30000): Promise<ExecutionStateEvent> {
@@ -511,6 +533,9 @@ export class Debugger {
      *
      * Sets a temporary breakpoint, subscribes to execution state events,
      * starts execution, and waits for the machine to stop.
+     *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
      *
      * @param address - Address to break at.
      * @param timeoutMs - Maximum time to wait in milliseconds. Default 30000.

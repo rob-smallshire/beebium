@@ -611,6 +611,9 @@ export class Video {
      *
      * Starts a frame stream, waits for the first frame, then cancels.
      * Throws TimeoutError if no frame arrives within the timeout.
+     *
+     * Requires: any run state.
+     * Leaves the machine: unchanged.
      */
     async captureFrame(timeoutMs: number = 1000): Promise<Frame> {
         const stream = this.stub.subscribeFrames({});

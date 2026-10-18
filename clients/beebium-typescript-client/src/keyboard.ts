@@ -214,6 +214,9 @@ export class Keyboard {
      * Pass `translate: false` to type the text exactly as given. Note that
      * `\r\n` then presses RETURN twice, because both CR and LF are RETURN.
      *
+     * Requires: any run state.
+     * Leaves the machine: unchanged.
+     *
      * @param text - The text to type.
      * @param options - Optional settings.
      * @param options.translate - Whether the server should translate host text
@@ -369,6 +372,9 @@ export class Keyboard {
      * is interrupt-driven and only progresses while CPU cycles are
      * being executed.
      *
+     * Requires: a running machine.
+     * Leaves the machine: RUNNING.
+     *
      * @param timeoutCycles - Maximum emulator cycles to wait for the latch to
      *   flip. Default 1,000,000 cycles (500ms emulated).
      * @throws Error if the emulator is not running, or if the latch fails to
@@ -388,6 +394,9 @@ export class Keyboard {
      *
      * See `tapCapsLock` for the polling, running-mode precondition, and
      * timeout semantics.
+     *
+     * Requires: a running machine.
+     * Leaves the machine: RUNNING.
      */
     async tapShiftLock(timeoutCycles: number = LOCK_TAP_TIMEOUT_CYCLES): Promise<void> {
         await this._tapLockKey(
@@ -413,6 +422,9 @@ export class Keyboard {
      * Pending typing is drained via `waitForTyping()` before the locks
      * are restored, so any in-flight characters are typed under the
      * same lock state that produced them.
+     *
+     * Requires: a running machine.
+     * Leaves the machine: unchanged.
      *
      * @throws Error if the emulator is not running on entry.
      *
@@ -696,6 +708,9 @@ export class Keyboard {
      * `readyWithin: null` for a boot known to be slow. Once the guest is ready
      * there is no time limit.
      *
+     * Requires: a running machine, unless nothing is queued.
+     * Leaves the machine: unchanged.
+     *
      * @throws DebuggerError If the machine is stopped with characters pending,
      *     or the guest is not ready within `readyWithin`.
      */
@@ -719,6 +734,9 @@ export class Keyboard {
     /**
      * Wait until the guest has finished resetting and asked for typed input;
      * see `Beebium.waitUntilReady()`, which this serves.
+     *
+     * Requires: a running machine.
+     * Leaves the machine: unchanged.
      *
      * @throws DebuggerError If the machine is stopped before the guest is
      *     ready, or the guest is not ready within `readyWithin`.
@@ -880,6 +898,9 @@ export class Keyboard {
      * This is a convenience method that calls breakDown(), waits
      * briefly, then calls breakUp().
      *
+     * Requires: any run state.
+     * Leaves the machine: unchanged.
+     *
      * @param holdTimeMs - How long to hold Break in milliseconds (default 20).
      * @returns True if both operations succeeded.
      */
@@ -899,6 +920,9 @@ export class Keyboard {
      * Note: The hardware always performs a soft reset. MOS checks
      * the keyboard matrix during its reset routine and clears the
      * VIA configuration if Ctrl is held, simulating a hard reset.
+     *
+     * Requires: any run state.
+     * Leaves the machine: unchanged.
      *
      * @param holdTimeMs - How long to hold Break in milliseconds (default 20).
      * @returns True if all operations succeeded.

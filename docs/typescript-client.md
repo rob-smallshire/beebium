@@ -219,6 +219,40 @@ await using bbc = await Beebium.launch({ model: "B" });
 // bbc.close() is called automatically when the block exits
 ```
 
+## Run state
+
+Whether a call needs the machine running, and whether it leaves it running or
+stopped, is in each method's JSDoc as two lines, `Requires: ...` and
+`Leaves the machine: ...`; this table collects them, and
+`tests/run-state-docs.test.ts` keeps the two in step. Unlike the Python client,
+`Beebium.launch` returns the machine stopped (the server starts with
+`--wait=api`), so call `bbc.debugger.run()` before anything that needs it
+running.
+
+| Call | Requires | Leaves the machine |
+|---|---|---|
+| `Beebium.launch` | nothing | STOPPED |
+| `Beebium.connect` | nothing | unchanged |
+| `Beebium.waitUntilReady` | a running machine | unchanged |
+| `Beebium.runForEmulatedSeconds` | any run state | STOPPED |
+| `Beebium.runUntilOrTimeout` | any run state | STOPPED |
+| `Debugger.run` | a stopped machine | RUNNING |
+| `Debugger.stop` | any run state | STOPPED |
+| `Debugger.reset` | any run state | STOPPED |
+| `Debugger.step` | a stopped machine | STOPPED |
+| `Debugger.stepCycles` | a stopped machine | STOPPED |
+| `Debugger.waitForStop` | any run state | STOPPED |
+| `Debugger.runUntil` | any run state | STOPPED |
+| `Keyboard.type` | any run state | unchanged |
+| `Keyboard.waitForTyping` | a running machine, unless nothing is queued | unchanged |
+| `Keyboard.waitUntilReady` | a running machine | unchanged |
+| `Keyboard.tapCapsLock` | a running machine | RUNNING |
+| `Keyboard.tapShiftLock` | a running machine | RUNNING |
+| `Keyboard.pressBreak` | any run state | unchanged |
+| `Keyboard.ctrlBreak` | any run state | unchanged |
+| `Keyboard.withTextInput` | a running machine | unchanged |
+| `Video.captureFrame` | any run state | unchanged |
+
 ## Debugger control
 
 The server starts with the machine paused when `--wait=api` is used (the

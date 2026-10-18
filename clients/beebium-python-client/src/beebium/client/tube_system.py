@@ -79,12 +79,20 @@ class TubeSystem:
         return self._coprocessor
 
     def run(self) -> None:
-        """Run both processors."""
+        """Run both processors.
+
+        Requires: any run state.
+        Leaves the machine: RUNNING.
+        """
         self._host.debugger.ensure_running()
         self._coprocessor.debugger.ensure_running()
 
     def stop(self) -> None:
-        """Stop both processors."""
+        """Stop both processors.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
+        """
         self._host.debugger.ensure_stopped()
         self._coprocessor.debugger.ensure_stopped()
 
@@ -105,6 +113,9 @@ class TubeSystem:
         breakpoint on the host with ``stop_counterpart=True``), the
         predicate is evaluated via peek, and if false, both resume for
         the next chunk. No wall-clock polling.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
 
         Args:
             predicate: Callable returning True when the condition is met.
@@ -163,6 +174,9 @@ class TubeSystem:
 
         Uses a full-range breakpoint with a cycle condition on the host,
         with stop_counterpart to stop the coprocessor too. No polling.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
 
         Args:
             emulated_seconds: BBC-time seconds to run.
