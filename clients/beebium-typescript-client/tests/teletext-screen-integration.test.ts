@@ -10,6 +10,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { Beebium } from "../src/client.js";
 import type { TeletextScreenCell } from "../src/generated/video.js";
+import { readMode7Screen, screenContains } from "../src/screen.js";
 
 const activeHosts = new Set<Beebium>();
 
@@ -242,5 +243,39 @@ describe("screenRegion", () => {
         const screen = await bbc.video.teletextScreen();
         expect([...bytes].map((b) => b & 0x7f))
             .toEqual(screen.cells.map((cell: TeletextScreenCell) => cell.character));
+    }, 60000);
+});
+
+describe("the MODE 7 screen helpers in a shadow mode", () => {
+    it("read the displayed screen on a B+ in MODE 135, not the CPU's &7C00", async () => {
+        const bbc = await Beebium.launch({ model: "B+", timeoutMs: 20000 });
+        activeHosts.add(bbc);
+        await bbc.system.setSpeedMultiplier(0.0);
+        await bbc.debugger.run();
+        await bbc.waitUntilReady();
+        // Printed by a command whose own text does not contain it.
+        await bbc.keyboard.type('MODE 135:PRINT "SHADOWED"+" SCREEN"\r');
+        await bbc.keyboard.waitForTyping();
+
+        const deadline = Date.now() + 20000;
+        while (!(await screenContains(bbc.video, "SHADOWED SCREEN")) && Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 50));
+        }
+        expect(await screenContains(bbc.video, "SHADOWED SCREEN")).toBe(true);
+        expect(await readMode7Screen(bbc.video)).toContain("SHADOWED SCREEN");
+
+        // The screen is in shadow RAM: the CPU's &7C00 does not hold it.
+        expect((await bbc.video.screenRegion()).region).toBe("shadow_ram");
+        const cpuView = await bbc.memory.address.peek.read(0x7c00, 0x400);
+        expect(cpuView.toString("latin1")).not.toContain("SHADOWED SCREEN");
+    }, 60000);
+});
+
+describe("basic", () => {
+    it("waits for the prompt and reads the displayed screen", async () => {
+        const bbc = await launchAtPrompt();
+        expect(await bbc.basic.waitForPrompt()).toBe(true);
+        expect(await bbc.basic.waitForText("BASIC")).toBe(true);
+        expect(await bbc.basic.readScreenText(0, 5)).toContain("BBC Computer");
     }, 60000);
 });

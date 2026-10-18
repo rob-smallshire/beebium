@@ -83,7 +83,7 @@ export { TubeUlaInspection, type TubeUlaState } from "./tube-ula.js";
 export { Basic } from "./basic.js";
 export { TubeSystem } from "./tube-system.js";
 export { cStr, parseCStr, pascalStr, parsePascalStr, paddedStr, parsePaddedStr } from "./strings.js";
-export { readMode7Screen, screenContains, SCREEN_MODES, MODE7_BASE, MODE7_BYTES_PER_LINE, MODE7_LINES, type ReadFn, type ScreenModeInfo } from "./screen.js";
+export { readMode7Screen, screenContains, rowStartsWith, SCREEN_MODES, type TeletextSource, type ScreenModeInfo } from "./screen.js";
 
 export {
     BeebiumError,

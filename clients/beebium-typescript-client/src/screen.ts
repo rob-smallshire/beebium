@@ -1,10 +1,12 @@
 /**
  * Screen reading utilities for the Beebium TypeScript client.
  *
- * Provides Mode 7 screen memory reading and text search functions.
- * Functions accept a generic read function so they can work with any
- * memory accessor without a direct dependency on the Memory class.
+ * The MODE 7 helpers read the screen as displayed, from the server's teletext
+ * grid, so they follow hardware scrolling and shadow modes.
  */
+
+import { BeebiumError } from "./exceptions.js";
+import type { TeletextScreen } from "./video.js";
 
 /** Screen mode definition. */
 export interface ScreenModeInfo {
@@ -30,83 +32,88 @@ export const SCREEN_MODES: Record<number, ScreenModeInfo> = {
     7: { base: 0x7C00, bytesPerLine: 40,  lines: 25, charsPerLine: 40 },  // Teletext mode, 40 chars
 };
 
-/** Mode 7 (teletext) screen base address. */
-export const MODE7_BASE = 0x7C00;
-
-/** Mode 7 bytes per line (one byte per character). */
-export const MODE7_BYTES_PER_LINE = 40;
-
-/** Mode 7 number of display lines. */
-export const MODE7_LINES = 25;
-
-/**
- * A function that reads memory from the emulator.
- *
- * This abstraction allows screen reading to work with any memory accessor
- * (bus, peek, region) without coupling to a specific class.
- */
-export type ReadFn = (address: number, length: number) => Promise<Buffer>;
-
-/**
- * Read Mode 7 screen memory as text.
- *
- * Bytes in the range 0x20-0x7E are returned as ASCII characters.
- * All other bytes (including teletext control codes 0x00-0x1F
- * and 0x7F) are replaced with spaces.
- *
- * @param readFn - A function that reads memory (e.g., peek.read).
- * @param startRow - First row to read (0-based, default 0).
- * @param endRow - Last row to read (exclusive, default 25).
- * @returns The screen text with newlines between rows, trailing spaces stripped.
- */
-export async function readMode7Screen(
-    readFn: ReadFn,
-    startRow = 0,
-    endRow = 25,
-): Promise<string> {
-    startRow = Math.max(0, Math.min(startRow, MODE7_LINES - 1));
-    endRow = Math.max(startRow + 1, Math.min(endRow, MODE7_LINES));
-
-    const totalBytes = (endRow - startRow) * MODE7_BYTES_PER_LINE;
-    const startAddr = MODE7_BASE + startRow * MODE7_BYTES_PER_LINE;
-    const data = await readFn(startAddr, totalBytes);
-
-    const rows: string[] = [];
-    for (let row = 0; row < endRow - startRow; row++) {
-        const offset = row * MODE7_BYTES_PER_LINE;
-        const chars: string[] = [];
-        for (let col = 0; col < MODE7_BYTES_PER_LINE; col++) {
-            const b = data[offset + col]!;
-            if (b >= 0x20 && b <= 0x7E) {
-                chars.push(String.fromCharCode(b));
-            } else {
-                chars.push(" ");
-            }
-        }
-        rows.push(chars.join("").trimEnd());
-    }
-
-    return rows.join("\n");
+/** What the MODE 7 helpers need: a video service that reads the teletext grid. */
+export interface TeletextSource {
+    teletextScreen(): Promise<TeletextScreen>;
 }
 
 /**
- * Search Mode 7 screen memory for an ASCII string.
+ * The displayed MODE 7 screen as text rows, or null when the display is not
+ * MODE 7 (or has shown no MODE 7 frame yet).
  *
- * Searches the raw byte values in screen memory for the given text.
+ * The cells come from the server's teletext grid, which the SAA5050 fills from
+ * the bytes the video fetches, so they follow hardware scrolling and, in a
+ * shadow mode, read the RAM on screen (the B+'s shadow RAM; the Integra-B's
+ * main RAM while the CPU sees its shadow RAM at &3000) rather than what the
+ * CPU sees at &7C00.
+ */
+async function displayedRows(video: TeletextSource): Promise<string[] | null> {
+    const screen = await video.teletextScreen();
+    if (!screen.active) return null;
+    const rows: string[] = [];
+    for (let row = 0; row < screen.rows; row++) {
+        const chars: string[] = [];
+        for (let column = 0; column < screen.columns; column++) {
+            const code = screen.cells[row * screen.columns + column]!.character & 0x7f;
+            chars.push(code >= 0x20 && code <= 0x7e ? String.fromCharCode(code) : " ");
+        }
+        rows.push(chars.join(""));
+    }
+    return rows;
+}
+
+/**
+ * Read the displayed MODE 7 screen as text.
  *
- * @param readFn - A function that reads memory (e.g., peek.read).
+ * Characters 0x20-0x7E are returned as ASCII; teletext control codes and 0x7F
+ * become spaces. Read in one piece from the last complete frame.
+ *
+ * @param video - The machine's video service (`bbc.video`).
+ * @param startRow - First row to read (0-based, default 0).
+ * @param endRow - Last row to read (exclusive, default 25).
+ * @returns The screen text with newlines between rows, trailing spaces stripped.
+ * @throws BeebiumError If the display is not MODE 7.
+ */
+export async function readMode7Screen(
+    video: TeletextSource,
+    startRow = 0,
+    endRow = 25,
+): Promise<string> {
+    const rows = await displayedRows(video);
+    if (rows === null) {
+        throw new BeebiumError("the display is not MODE 7, so there is no MODE 7 screen to read");
+    }
+    startRow = Math.max(0, Math.min(startRow, rows.length - 1));
+    endRow = Math.max(startRow + 1, Math.min(endRow, rows.length));
+    return rows.slice(startRow, endRow).map((row) => row.trimEnd()).join("\n");
+}
+
+/**
+ * Whether `text` appears on the displayed MODE 7 screen. A display that is not
+ * MODE 7 contains nothing, so this can poll a machine that is changing mode.
+ *
+ * @param video - The machine's video service (`bbc.video`).
  * @param text - The text to search for.
  * @param caseSensitive - Whether the search is case-sensitive (default true).
- * @returns True if the text is found in screen memory.
  */
 export async function screenContains(
-    readFn: ReadFn,
+    video: TeletextSource,
     text: string,
     caseSensitive = true,
 ): Promise<boolean> {
-    const screenText = await readMode7Screen(readFn);
-    if (caseSensitive) {
-        return screenText.includes(text);
-    }
-    return screenText.toUpperCase().includes(text.toUpperCase());
+    const rows = await displayedRows(video);
+    if (rows === null) return false;
+    const screenText = rows.map((row) => row.trimEnd()).join("\n");
+    return caseSensitive
+        ? screenText.includes(text)
+        : screenText.toUpperCase().includes(text.toUpperCase());
+}
+
+/**
+ * Whether any displayed MODE 7 row starts with `prefix`; false when the
+ * display is not MODE 7.
+ */
+export async function rowStartsWith(video: TeletextSource, prefix: string): Promise<boolean> {
+    const rows = await displayedRows(video);
+    return rows !== null && rows.some((row) => row.startsWith(prefix));
 }

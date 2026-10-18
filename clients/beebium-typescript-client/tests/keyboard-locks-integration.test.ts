@@ -9,7 +9,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import { Beebium } from "../src/client.js";
-import { screenContains, type ReadFn } from "../src/screen.js";
+import { screenContains } from "../src/screen.js";
 
 const HOST_CLOCK_HZ = 2_000_000;
 
@@ -29,10 +29,6 @@ async function launchHost(): Promise<Beebium> {
     return host;
 }
 
-function readFn(bbc: Beebium): ReadFn {
-    return async (addr: number, len: number) =>
-        bbc.memory.address.peek.read(addr, len);
-}
 
 async function runForEmulatedSeconds(bbc: Beebium, seconds: number): Promise<void> {
     const targetCycles = Math.floor(seconds * HOST_CLOCK_HZ);
@@ -78,8 +74,8 @@ describe("Integration: Keyboard lock keys (issue #5)", () => {
         await bbc.keyboard.type("abc");
         await runForEmulatedSeconds(bbc, 1.0);
 
-        const found = await screenContains(readFn(bbc), "ABC");
-        const lower = await screenContains(readFn(bbc), "abc");
+        const found = await screenContains(bbc.video, "ABC");
+        const lower = await screenContains(bbc.video, "abc");
         expect(found).toBe(true);
         expect(lower).toBe(false);
     });
@@ -94,8 +90,8 @@ describe("Integration: Keyboard lock keys (issue #5)", () => {
             await bbc.keyboard.type("abc");
             await runForEmulatedSeconds(bbc, 1.0);
 
-            const lower = await screenContains(readFn(bbc), "abc");
-            const upper = await screenContains(readFn(bbc), "ABC");
+            const lower = await screenContains(bbc.video, "abc");
+            const upper = await screenContains(bbc.video, "ABC");
             expect(lower).toBe(true);
             expect(upper).toBe(false);
         });
@@ -169,8 +165,8 @@ describe("Integration: Keyboard lock keys at unlimited speed", () => {
             expect((await bbc.keyboard.getLockState()).capsLock).toBe(false);
             await bbc.keyboard.type("hello");
             await runForEmulatedSeconds(bbc, 1.0);
-            expect(await screenContains(readFn(bbc), "hello")).toBe(true);
-            expect(await screenContains(readFn(bbc), "HELLO")).toBe(false);
+            expect(await screenContains(bbc.video, "hello")).toBe(true);
+            expect(await screenContains(bbc.video, "HELLO")).toBe(false);
         });
 
         expect((await bbc.keyboard.getLockState()).capsLock).toBe(true);
@@ -186,7 +182,7 @@ describe("Integration: Keyboard lock keys at unlimited speed", () => {
         await bbc.keyboard.withTextInput(async () => {
             await bbc.keyboard.type("MixedCase");
             await runForEmulatedSeconds(bbc, 1.0);
-            expect(await screenContains(readFn(bbc), "MixedCase")).toBe(true);
+            expect(await screenContains(bbc.video, "MixedCase")).toBe(true);
         });
     });
 

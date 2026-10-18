@@ -10,7 +10,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { Beebium } from "../src/client.js";
 import { TubeSystem } from "../src/tube-system.js";
-import { screenContains, type ReadFn } from "../src/screen.js";
+import { screenContains } from "../src/screen.js";
 import { ServerProcess } from "../src/server-process.js";
 
 const ROM_DIRPATH = process.env.BEEBIUM_ROM_DIR || "/Users/rjs/Code/beebium/roms";
@@ -42,10 +42,6 @@ async function launchTubeServer(): Promise<Beebium> {
 }
 
 /** ReadFn adapter for screenContains. */
-function readFn(bbc: Beebium): ReadFn {
-    return async (addr: number, len: number) =>
-        bbc.memory.address.peek.read(addr, len);
-}
 
 // =========================================================================
 // TubeSystem
@@ -57,7 +53,7 @@ describe("TubeSystem", () => {
         try {
             // Boot to Tube banner so coprocessor is connected
             const found = await host.runUntilOrTimeout(
-                () => screenContains(readFn(host), "Acorn TUBE"),
+                () => screenContains(host.video, "Acorn TUBE"),
                 10,
             );
             expect(found).toBe(true);
@@ -80,7 +76,7 @@ describe("TubeSystem", () => {
         try {
             // Boot to Tube banner
             await host.runUntilOrTimeout(
-                () => screenContains(readFn(host), "Acorn TUBE"),
+                () => screenContains(host.video, "Acorn TUBE"),
                 10,
             );
 
@@ -89,7 +85,7 @@ describe("TubeSystem", () => {
             // Run coupled until we see "BASIC" on screen (it should
             // already be there from the Tube banner screen).
             const result = await coupled.runUntil(
-                () => screenContains(readFn(host), "BASIC"),
+                () => screenContains(host.video, "BASIC"),
                 5,
             );
             expect(result).toBe(true);
@@ -104,7 +100,7 @@ describe("TubeSystem", () => {
         const host = await launchTubeServer();
         try {
             await host.runUntilOrTimeout(
-                () => screenContains(readFn(host), "Acorn TUBE"),
+                () => screenContains(host.video, "Acorn TUBE"),
                 10,
             );
 
@@ -127,7 +123,7 @@ describe("TubeSystem", () => {
         const host = await launchTubeServer();
         try {
             await host.runUntilOrTimeout(
-                () => screenContains(readFn(host), "Acorn TUBE"),
+                () => screenContains(host.video, "Acorn TUBE"),
                 10,
             );
 
@@ -149,7 +145,7 @@ describe("TubeSystem", () => {
         const host = await launchTubeServer();
         try {
             await host.runUntilOrTimeout(
-                () => screenContains(readFn(host), "Acorn TUBE"),
+                () => screenContains(host.video, "Acorn TUBE"),
                 10,
             );
 
@@ -179,7 +175,7 @@ describe("TubeSystem", () => {
         const host = await launchTubeServer();
         try {
             await host.runUntilOrTimeout(
-                () => screenContains(readFn(host), "Acorn TUBE"),
+                () => screenContains(host.video, "Acorn TUBE"),
                 10,
             );
 
@@ -217,7 +213,7 @@ describe("TubeSystem", () => {
         const host = await launchTubeServer();
         try {
             await host.runUntilOrTimeout(
-                () => screenContains(readFn(host), "Acorn TUBE"),
+                () => screenContains(host.video, "Acorn TUBE"),
                 10,
             );
             const coprocessor = await host.connectCoprocessor();
@@ -247,7 +243,7 @@ describe("TubeSystem", () => {
         const host = await launchTubeServer();
         try {
             await host.runUntilOrTimeout(
-                () => screenContains(readFn(host), "Acorn TUBE"),
+                () => screenContains(host.video, "Acorn TUBE"),
                 10,
             );
 
@@ -278,7 +274,7 @@ describe("TubeSystem", () => {
         const host = await launchTubeServer();
         try {
             await host.runUntilOrTimeout(
-                () => screenContains(readFn(host), "Acorn TUBE"),
+                () => screenContains(host.video, "Acorn TUBE"),
                 10,
             );
 

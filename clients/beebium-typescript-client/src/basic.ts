@@ -6,11 +6,11 @@
  */
 
 import type { Beebium } from "./client.js";
-import { SCREEN_MODES, MODE7_BASE, MODE7_BYTES_PER_LINE, MODE7_LINES, readMode7Screen } from "./screen.js";
+import { SCREEN_MODES, readMode7Screen, rowStartsWith, screenContains } from "./screen.js";
 import { TimeoutError } from "./exceptions.js";
 
-/** BBC BASIC character code for the ">" prompt. */
-const PROMPT_CHAR = 0x3E;
+/** The BBC BASIC prompt. */
+const PROMPT = ">";
 
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -35,10 +35,10 @@ export class Basic {
     }
 
     /**
-     * Wait for the BASIC ">" prompt to appear in Mode 7 screen memory.
+     * Wait for the BASIC ">" prompt to appear on the MODE 7 display.
      *
-     * Polls Mode 7 screen memory checking for the ">" character (0x3E)
-     * at the start of any line.
+     * Polls the displayed MODE 7 screen for a line starting with ">"; a
+     * display that is not MODE 7 has none yet.
      *
      * @param timeoutMs - Maximum time to wait in milliseconds (default 5000).
      * @param pollIntervalMs - How often to check in milliseconds (default 10).
@@ -47,17 +47,10 @@ export class Basic {
      */
     async waitForPrompt(timeoutMs = 5000, pollIntervalMs = 10): Promise<boolean> {
         const deadline = Date.now() + timeoutMs;
-        const readFn = this.client.memory.address.peek.read.bind(
-            this.client.memory.address.peek,
-        );
 
         while (Date.now() < deadline) {
-            for (let line = 0; line < MODE7_LINES; line++) {
-                const addr = MODE7_BASE + line * MODE7_BYTES_PER_LINE;
-                const byte = await this.client.memory.address.peek.readByte(addr);
-                if (byte === PROMPT_CHAR) {
-                    return true;
-                }
+            if (await rowStartsWith(this.client.video, PROMPT)) {
+                return true;
             }
             await delay(pollIntervalMs);
         }
@@ -84,19 +77,11 @@ export class Basic {
         caseSensitive = true,
     ): Promise<boolean> {
         const deadline = Date.now() + timeoutMs;
-        const searchText = caseSensitive ? text : text.toUpperCase();
-        const readFn = this.client.memory.address.peek.read.bind(
-            this.client.memory.address.peek,
-        );
 
         while (Date.now() < deadline) {
-            const screen = await readMode7Screen(readFn);
-            const screenText = caseSensitive ? screen : screen.toUpperCase();
-
-            if (screenText.includes(searchText)) {
+            if (await screenContains(this.client.video, text, caseSensitive)) {
                 return true;
             }
-
             await delay(pollIntervalMs);
         }
 
@@ -106,12 +91,13 @@ export class Basic {
     }
 
     /**
-     * Read text from screen memory.
+     * Read text from the displayed screen.
      *
      * @param startRow - First row to read (0-based, default 0).
      * @param endRow - Last row to read (exclusive). Undefined means all rows for the mode.
      * @param mode - Screen mode (default 7 for teletext).
      * @returns The screen text as a string with newlines between rows.
+     * @throws BeebiumError If `mode` is 7 and the display is not MODE 7.
      */
     async readScreenText(startRow = 0, endRow?: number, mode = 7): Promise<string> {
         const modeInfo = SCREEN_MODES[mode];
@@ -119,41 +105,20 @@ export class Basic {
             throw new Error(`Unsupported mode: ${mode}`);
         }
 
-        const { base, bytesPerLine, lines, charsPerLine } = modeInfo;
+        const { lines } = modeInfo;
         const effectiveEndRow = endRow ?? lines;
 
         const clampedStart = Math.max(0, Math.min(startRow, lines - 1));
         const clampedEnd = Math.max(clampedStart + 1, Math.min(effectiveEndRow, lines));
 
-        const readFn = this.client.memory.address.peek.read.bind(
-            this.client.memory.address.peek,
-        );
-
         if (mode === 7) {
-            return readMode7Screen(readFn, clampedStart, clampedEnd);
+            return readMode7Screen(this.client.video, clampedStart, clampedEnd);
         }
 
-        // For non-teletext modes, read raw bytes
+        // Graphics modes: decoding pixels to characters is not implemented.
         const rows: string[] = [];
         for (let row = clampedStart; row < clampedEnd; row++) {
-            const addr = base + row * bytesPerLine;
-
-            if (mode === 7) {
-                const data = await readFn(addr, charsPerLine);
-                const chars: string[] = [];
-                for (let i = 0; i < charsPerLine; i++) {
-                    const b = data[i]!;
-                    if (b >= 0x20 && (b & 0x7F) < 0x7F) {
-                        chars.push(String.fromCharCode(b & 0x7F));
-                    } else {
-                        chars.push(" ");
-                    }
-                }
-                rows.push(chars.join("").trimEnd());
-            } else {
-                // Graphics modes: not yet implemented for character extraction
-                rows.push("[graphics mode - not implemented]");
-            }
+            rows.push("[graphics mode - not implemented]");
         }
 
         return rows.join("\n");
