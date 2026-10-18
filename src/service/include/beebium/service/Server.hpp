@@ -312,7 +312,8 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
 
     impl_->keyboard_service = std::make_unique<KeyboardServiceImpl>(
         impl_->machine.state().memory.system_via_peripheral,
-        std::move(break_callbacks));
+        std::move(break_callbacks),
+        [this]() { return !impl_->machine.is_paused(); });
 
     impl_->host_debug_target = std::make_unique<HostDebugTarget<MachineType>>(impl_->machine);
     impl_->debugger_control_service = std::make_unique<DebuggerControlServiceImpl>(

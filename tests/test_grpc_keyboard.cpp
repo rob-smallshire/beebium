@@ -619,3 +619,50 @@ TEST_CASE("KeyboardService raw links to semantic options roundtrip", "[grpc][key
         }
     }
 }
+
+TEST_CASE("KeyboardService typing status says whether the machine is running",
+          "[grpc][keyboard][typing]") {
+    KeyboardTestFixture fixture;
+    auto machine_running = [&] {
+        grpc::ClientContext context;
+        beebium::TypingStatus status;
+        REQUIRE(fixture.stub()
+                    .GetTypingStatus(&context, beebium::GetTypingStatusRequest{}, &status)
+                    .ok());
+        return status.machine_running();
+    };
+
+    CHECK(machine_running());
+    fixture.machine().pause();
+    CHECK_FALSE(machine_running());
+    fixture.machine().resume();
+    CHECK(machine_running());
+}
+
+TEST_CASE("KeyboardService WatchTypingStatus pushes when the machine stops",
+          "[grpc][keyboard][typing]") {
+    KeyboardTestFixture fixture;
+    grpc::ClientContext context;
+    beebium::WatchTypingStatusRequest request;
+    request.set_min_interval_ms(5);
+    auto reader = fixture.stub().WatchTypingStatus(&context, request);
+
+    beebium::TypingStatus status;
+    REQUIRE(reader->Read(&status));
+    CHECK(status.machine_running());
+
+    // The queue does not change; the stop alone is pushed.
+    fixture.machine().pause();
+    REQUIRE(reader->Read(&status));
+    CHECK_FALSE(status.machine_running());
+    CHECK(status.idle());
+
+    fixture.machine().resume();
+    REQUIRE(reader->Read(&status));
+    CHECK(status.machine_running());
+
+    context.TryCancel();
+    while (reader->Read(&status)) {
+    }
+    (void)reader->Finish();
+}

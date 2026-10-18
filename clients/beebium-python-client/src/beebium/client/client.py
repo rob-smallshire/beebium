@@ -35,6 +35,7 @@ from beebium.client.econet import Econet
 from beebium.client.econet_transport import EconetTransport
 from beebium.client.exceptions import (
     BeebiumError,
+    DebuggerError,
     ProtocolMismatchError,
     ScreenExpectTimeout,
 )
@@ -554,8 +555,13 @@ class Beebium:
         sending keys, instead of blind-timing key presses (games take a while to
         load before they respond to the first keypress).
 
-        The machine must be running (call ``debugger.ensure_running`` first if
-        it was left stopped, e.g. by ``run_until_or_timeout``).
+        Text already on the screen matches whether or not the machine runs.
+        Otherwise the machine must be running, since a stopped machine never
+        changes the screen: ``run_for_emulated_seconds``,
+        ``run_until_or_timeout`` and the debugger's run-to methods all leave it
+        stopped, so call ``debugger.run()`` first. A machine found stopped,
+        when the wait starts or at any sample, raises at once rather than
+        running out the timeout.
 
         Args:
             texts: One or more substrings to wait for; the first found wins.
@@ -569,6 +575,8 @@ class Beebium:
 
         Raises:
             ScreenExpectTimeout: if none of `texts` appears within `timeout`.
+            DebuggerError: if the machine is stopped with none of `texts` on
+                the screen.
         """
         if not texts:
             raise ValueError("expect requires at least one text to wait for")
@@ -579,6 +587,11 @@ class Beebium:
             for text in texts:
                 if text in screen:
                     return text
+            if not self.debugger.is_running:
+                raise DebuggerError(
+                    f"machine is stopped; nothing will change the screen while "
+                    f"expect waits for {list(texts)!r} -- call debugger.run() "
+                    f"first. Screen:\n{screen}")
             if time.monotonic() >= deadline:
                 raise ScreenExpectTimeout(
                     f"expect timed out after {timeout:g}s waiting for "

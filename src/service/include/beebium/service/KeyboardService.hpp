@@ -34,8 +34,10 @@ struct BreakCallbacks {
 /// gRPC service implementation for keyboard input
 class KeyboardServiceImpl final : public KeyboardService::Service {
 public:
-    explicit KeyboardServiceImpl(SystemViaPeripheral& keyboard);
-    KeyboardServiceImpl(SystemViaPeripheral& keyboard, BreakCallbacks break_callbacks);
+    // `machine_running` reports whether the emulator is running (not paused),
+    // so a typing status can say whether the queue will drain.
+    KeyboardServiceImpl(SystemViaPeripheral& keyboard, BreakCallbacks break_callbacks,
+                        std::function<bool()> machine_running);
     ~KeyboardServiceImpl() override;
 
     // Non-copyable
@@ -143,8 +145,12 @@ public:
         LockKeyState* response) override;
 
 private:
+    // The type-ahead queue's status now, and whether the machine is running.
+    void snapshot_typing_status(TypingStatus& status) const;
+
     SystemViaPeripheral& keyboard_;
     BreakCallbacks break_callbacks_;
+    std::function<bool()> machine_running_;
     std::mutex mutex_;
 };
 

@@ -615,22 +615,30 @@ class TypingStatus(_message.Message):
     IDLE_FIELD_NUMBER: _builtins.int
     PENDING_CHARACTERS_FIELD_NUMBER: _builtins.int
     STRINGS_QUEUED_FIELD_NUMBER: _builtins.int
+    MACHINE_RUNNING_FIELD_NUMBER: _builtins.int
     idle: _builtins.bool
     """True if queue is empty (all typing complete)"""
     pending_characters: _builtins.int
     """Characters remaining to type"""
     strings_queued: _builtins.int
     """Number of strings in queue"""
+    machine_running: _builtins.bool
+    """True while the emulator runs (DebuggerControl's is_running): only a
+    running machine drains the queue. WatchTypingStatus pushes when this
+    changes, so a client waiting for the queue to drain learns at once that
+    a stopped machine never will.
+    """
     def __init__(
         self,
         *,
         idle: _builtins.bool = ...,
         pending_characters: _builtins.int = ...,
         strings_queued: _builtins.int = ...,
+        machine_running: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["idle", b"idle", "pending_characters", b"pending_characters", "strings_queued", b"strings_queued"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["idle", b"idle", "machine_running", b"machine_running", "pending_characters", b"pending_characters", "strings_queued", b"strings_queued"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

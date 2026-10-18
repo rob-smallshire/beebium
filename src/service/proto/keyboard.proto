@@ -249,6 +249,12 @@ message TypingStatus {
     bool idle = 1;                // True if queue is empty (all typing complete)
     uint32 pending_characters = 2; // Characters remaining to type
     uint32 strings_queued = 3;    // Number of strings in queue
+
+    // True while the emulator runs (DebuggerControl's is_running): only a
+    // running machine drains the queue. WatchTypingStatus pushes when this
+    // changes, so a client waiting for the queue to drain learns at once that
+    // a stopped machine never will.
+    bool machine_running = 4;
 }
 
 // Clear typing queue

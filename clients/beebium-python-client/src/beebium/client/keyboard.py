@@ -109,12 +109,23 @@ class LockState(NamedTuple):
 class TypingStatus(NamedTuple):
     """State of the server's type-ahead queue.
 
-    A NamedTuple so it still unpacks as ``(idle, pending, queued)``.
+    ``machine_running`` is the server's word on whether the emulator is
+    running: only a running machine drains the queue.
     """
 
     idle: bool
     pending_characters: int
     strings_queued: int
+    machine_running: bool
+
+
+def _typing_status(response: keyboard_pb2.TypingStatus) -> TypingStatus:
+    return TypingStatus(
+        idle=response.idle,
+        pending_characters=response.pending_characters,
+        strings_queued=response.strings_queued,
+        machine_running=response.machine_running,
+    )
 
 
 class Keyboard:
@@ -449,9 +460,10 @@ class Keyboard:
 
         The emulator must be running on entry, both so the entry tap
         registers and so any queued typing inside the block can drain.
-        On exit the queue is drained via :meth:`wait_for_typing` before
-        the locks are restored, so any pending characters are typed under
-        the same lock state that produced them.
+        On exit the queue is drained via :meth:`wait_until_typing_complete`
+        before the locks are restored, so any pending characters are typed
+        under the same lock state that produced them; a machine left stopped
+        with characters pending raises there rather than hanging.
 
         Usage::
 
@@ -462,6 +474,7 @@ class Keyboard:
 
         Raises:
             RuntimeError: If the emulator is not running on entry.
+            DebuggerError: If it is stopped on exit with characters pending.
         """
         client = self._require_client("text_input()")
         if not client.debugger.is_running:
@@ -482,7 +495,7 @@ class Keyboard:
         finally:
             # Drain pending typing under the disabled-locks state so the
             # restoring tap doesn't change the case of in-flight characters.
-            self.wait_for_typing()
+            self.wait_until_typing_complete()
 
             current = self.get_lock_state()
             if current.caps_lock != initial.caps_lock:
@@ -566,24 +579,19 @@ class Keyboard:
         which the server drives, over polling this.
 
         Returns:
-            TypingStatus, which still unpacks as
-            (idle, pending_characters, strings_queued).
+            TypingStatus.
         """
         request = keyboard_pb2.GetTypingStatusRequest()
-        response = self._stub.GetTypingStatus(request)
-        return TypingStatus(
-            idle=response.idle,
-            pending_characters=response.pending_characters,
-            strings_queued=response.strings_queued,
-        )
+        return _typing_status(self._stub.GetTypingStatus(request))
 
     def watch_typing_status(self, *, min_interval_ms: int = 0) -> Iterator[TypingStatus]:
         """Stream type-ahead status, pushed by the server on change.
 
         Yields an initial snapshot immediately, then a fresh one whenever the
         queue changes -- a character consumed, a string started or finished,
-        text enqueued, or the queue cleared. The stream stays open until the
-        iterator is closed or the connection drops.
+        text enqueued, or the queue cleared -- and whenever the machine stops
+        or starts. The stream stays open until the iterator is closed or the
+        connection drops.
 
         Prefer this over polling :meth:`typing_status`. The server is the only
         party that knows when the queue drains; polling forces the caller to
@@ -597,11 +605,7 @@ class Keyboard:
         """
         request = keyboard_pb2.WatchTypingStatusRequest(min_interval_ms=min_interval_ms)
         for response in self._stub.WatchTypingStatus(request):
-            yield TypingStatus(
-                idle=response.idle,
-                pending_characters=response.pending_characters,
-                strings_queued=response.strings_queued,
-            )
+            yield _typing_status(response)
 
     def wait_until_typing_complete(self, *, min_interval_ms: int = 0) -> None:
         """Block until the server reports nothing left to type.
@@ -611,19 +615,26 @@ class Keyboard:
         cleared queue, a dropped connection, a stopped server -- because in
         every case there is nothing further to wait for.
 
-        There is deliberately no timeout: the server reports completion, so
-        there is nothing for the caller to infer. Use the underlying channel's
-        cancellation, or :meth:`clear_typing` from another thread, to stop
-        waiting early.
+        Only a running machine drains the queue, and the server says whether
+        the machine is running, so the wait needs no timeout: it raises at
+        once if the machine is stopped with characters pending, on entry or
+        part way through. :meth:`Beebium.run_for_emulated_seconds`,
+        :meth:`Beebium.run_until_or_timeout` and the debugger's run-to methods
+        all leave the machine stopped; call ``debugger.run()`` before waiting.
+        Use :meth:`clear_typing` from another thread to stop waiting early.
 
-        Note this blocks for as long as the machine is stopped, because a
-        stopped machine never drains the queue. Tests that step the emulator in
-        chunks -- :meth:`Beebium.run_until_or_timeout` leaves it stopped
-        between them -- should wait on what they expect to appear instead.
+        Raises:
+            DebuggerError: If the machine is stopped with characters pending.
         """
         for status in self.watch_typing_status(min_interval_ms=min_interval_ms):
             if status.idle:
                 return
+            if not status.machine_running:
+                raise DebuggerError(
+                    f"machine is stopped with {status.pending_characters} characters "
+                    f"to type; nothing will drain the type-ahead queue -- call "
+                    f"debugger.run() first"
+                )
 
     def clear_typing(self) -> int:
         """Clear the type-ahead queue.
@@ -634,18 +645,6 @@ class Keyboard:
         request = keyboard_pb2.ClearTypingRequest()
         response = self._stub.ClearTyping(request)
         return response.characters_cleared
-
-    def wait_for_typing(self, poll_interval: float = 0.01) -> None:
-        """Block until type-ahead queue is empty.
-
-        Args:
-            poll_interval: Seconds between status checks.
-        """
-        while True:
-            idle, _, _ = self.typing_status()
-            if idle:
-                return
-            time.sleep(poll_interval)
 
     # Character-to-key mapping (server-side canonical mapping)
 

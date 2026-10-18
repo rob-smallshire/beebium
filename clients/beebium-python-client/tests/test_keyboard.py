@@ -225,16 +225,15 @@ class TestTypingStatus:
 
     def test_typing_status_idle_initially(self, bbc: Beebium) -> None:
         """Queue starts idle."""
-        idle, pending, queued = bbc.keyboard.typing_status()
-        assert idle
-        assert pending == 0
+        status = bbc.keyboard.typing_status()
+        assert status.idle
+        assert status.pending_characters == 0
 
     def test_typing_status_after_enqueue(self, bbc: Beebium) -> None:
         """Queue shows pending after type()."""
         bbc.debugger.stop()
         bbc.keyboard.type("HELLO")
-        idle, pending, queued = bbc.keyboard.typing_status()
-        assert pending >= 5
+        assert bbc.keyboard.typing_status().pending_characters >= 5
 
     def test_clear_typing(self, bbc: Beebium) -> None:
         """clear_typing() empties the queue."""
@@ -242,8 +241,7 @@ class TestTypingStatus:
         bbc.keyboard.type("HELLO WORLD")
         cleared = bbc.keyboard.clear_typing()
         assert cleared > 0
-        idle, pending, queued = bbc.keyboard.typing_status()
-        assert pending == 0
+        assert bbc.keyboard.typing_status().pending_characters == 0
 
     def test_queue_drains_when_running(self, bbc: Beebium) -> None:
         """Queue eventually empties when the emulator runs."""
@@ -253,6 +251,6 @@ class TestTypingStatus:
         bbc.debugger.run()
         # Wait for queue to drain (5 chars at 100000 cycles each = 0.25s emulated)
         _run_for_emulated_seconds(bbc, 1.0)
-        idle, pending, queued = bbc.keyboard.typing_status()
-        assert idle
-        assert pending == 0
+        status = bbc.keyboard.typing_status()
+        assert status.idle
+        assert status.pending_characters == 0

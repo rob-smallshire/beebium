@@ -49,7 +49,7 @@ class TestTeletextScreen:
         # Advance the machine while waiting rather than calling
         # wait_until_typing_complete(): run_until_or_timeout leaves the machine
         # stopped between chunks, and a stopped machine never drains the
-        # type-ahead queue, so that wait would never return.
+        # type-ahead queue, so that wait would refuse.
         found = bbc.run_until_or_timeout(
             lambda: "TELETEXT" in bbc.video.teletext_screen().text,
             emulated_seconds=10.0,

@@ -22,14 +22,12 @@
 
 namespace beebium::service {
 
-KeyboardServiceImpl::KeyboardServiceImpl(SystemViaPeripheral& keyboard)
+KeyboardServiceImpl::KeyboardServiceImpl(SystemViaPeripheral& keyboard,
+                                         BreakCallbacks break_callbacks,
+                                         std::function<bool()> machine_running)
     : keyboard_(keyboard)
-    , break_callbacks_{} {
-}
-
-KeyboardServiceImpl::KeyboardServiceImpl(SystemViaPeripheral& keyboard, BreakCallbacks break_callbacks)
-    : keyboard_(keyboard)
-    , break_callbacks_(std::move(break_callbacks)) {
+    , break_callbacks_(std::move(break_callbacks))
+    , machine_running_(std::move(machine_running)) {
 }
 
 KeyboardServiceImpl::~KeyboardServiceImpl() = default;
@@ -244,12 +242,16 @@ grpc::Status KeyboardServiceImpl::GetTypingStatus(
     const GetTypingStatusRequest* /*request*/,
     TypingStatus* response) {
 
-    response->set_idle(keyboard_.type_ahead().empty());
-    response->set_pending_characters(
-        static_cast<uint32_t>(keyboard_.type_ahead().pending_characters()));
-    response->set_strings_queued(
-        static_cast<uint32_t>(keyboard_.type_ahead().strings_queued()));
+    snapshot_typing_status(*response);
     return grpc::Status::OK;
+}
+
+void KeyboardServiceImpl::snapshot_typing_status(TypingStatus& status) const {
+    auto& type_ahead = keyboard_.type_ahead();
+    status.set_idle(type_ahead.empty());
+    status.set_pending_characters(static_cast<uint32_t>(type_ahead.pending_characters()));
+    status.set_strings_queued(static_cast<uint32_t>(type_ahead.strings_queued()));
+    status.set_machine_running(machine_running_());
 }
 
 grpc::Status KeyboardServiceImpl::WatchTypingStatus(
@@ -260,38 +262,35 @@ grpc::Status KeyboardServiceImpl::WatchTypingStatus(
     const auto interval = std::chrono::milliseconds(
         request->min_interval_ms() > 0 ? request->min_interval_ms() : 20);
 
-    auto snapshot = [this](TypingStatus& status) {
-        auto& type_ahead = keyboard_.type_ahead();
-        status.set_idle(type_ahead.empty());
-        status.set_pending_characters(
-            static_cast<uint32_t>(type_ahead.pending_characters()));
-        status.set_strings_queued(
-            static_cast<uint32_t>(type_ahead.strings_queued()));
-    };
-
     // Send a snapshot immediately, so a client that subscribes after the queue
     // has already drained is told so rather than waiting for a change that
     // will never come.
     uint64_t last_sequence = keyboard_.type_ahead().status_sequence();
+    bool last_running = machine_running_();
     {
         TypingStatus status;
-        snapshot(status);
+        snapshot_typing_status(status);
         if (!writer->Write(status)) {
             return grpc::Status::OK;  // Client went away during the first push.
         }
     }
 
+    // Push when the queue changes, and when the machine stops or starts: a
+    // stopped machine leaves the queue unchanged, and a client waiting for it
+    // to drain must hear that it never will.
     while (!context->IsCancelled()) {
         std::this_thread::sleep_for(interval);
 
         const uint64_t sequence = keyboard_.type_ahead().status_sequence();
-        if (sequence == last_sequence) {
+        const bool running = machine_running_();
+        if (sequence == last_sequence && running == last_running) {
             continue;
         }
         last_sequence = sequence;
+        last_running = running;
 
         TypingStatus status;
-        snapshot(status);
+        snapshot_typing_status(status);
         if (!writer->Write(status)) {
             break;  // Client disconnected.
         }
