@@ -78,6 +78,12 @@ inline std::optional<std::filesystem::path> named_machine(int argc, char* argv[]
     return std::filesystem::absolute(*dirpath);
 }
 
+// A describe-machine field as text and TSV show it: a string as it is,
+// anything else as JSON.
+inline std::string field_text(const nlohmann::ordered_json& value) {
+    return value.is_string() ? value.get<std::string>() : value.dump();
+}
+
 }  // namespace machine_subcommand_detail
 
 template<typename MachineType>
@@ -325,14 +331,14 @@ public:
             case OutputFormat::Tsv:
                 for (const auto& [key, value] : out.items()) {
                     std::cout << key << "\t"
-                              << (value.is_string() ? value.get<std::string>() : value.dump())
+                              << machine_subcommand_detail::field_text(value)
                               << "\n";
                 }
                 break;
             default:
                 for (const auto& [key, value] : out.items()) {
                     std::cout << key << ": "
-                              << (value.is_string() ? value.get<std::string>() : value.dump())
+                              << machine_subcommand_detail::field_text(value)
                               << "\n";
                 }
                 break;
