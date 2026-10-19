@@ -549,6 +549,8 @@ void enter_api_wait_state(MachineType& machine) {
 
 // Handle wait mode for controlled startup.
 // Must be called after machine.reset() and before the main emulation loop.
+// The Api wait state is entered earlier, by enter_api_wait_state before the
+// server announces its port, so here it only remains waiting.
 // Returns false if a shutdown signal arrived while waiting, in which case the
 // caller must not start the emulation loop.
 template<typename MachineType>
@@ -567,7 +569,7 @@ bool handle_wait_mode(MachineType& machine, WaitMode wait_mode) {
             break;
 
         case WaitMode::Api:
-            enter_api_wait_state(machine);
+            // Paused at the reset vector already; the Run() RPC resumes it.
             break;
 
         case WaitMode::None:

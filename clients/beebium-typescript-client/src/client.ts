@@ -213,15 +213,8 @@ export class Beebium {
             const bbc = new Beebium(connection, server, server.provenanceUuid);
             await bbc.verifyProtocol();
 
-            // Wait for WaitMode startup to complete (the server runs 7 cycles
-            // then pauses). Without this, the first debugger operation may race
-            // with the WaitMode setup.
-            const deadline = Date.now() + timeoutMs;
-            while ((await bbc.debugger.getState()).cycleCount < 7) {
-                if (Date.now() > deadline) break;
-                await new Promise(r => setTimeout(r, 10));
-            }
-
+            // The server stops the machine at the reset vector before it
+            // announces its port, so nothing here can race that.
             if (!startStopped) {
                 await bbc.debugger.run();
             }

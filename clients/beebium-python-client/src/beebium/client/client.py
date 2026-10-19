@@ -61,10 +61,6 @@ from beebium.client.via import Via, ViaId
 from beebium.client.video import Video
 from beebium.client.video_ula import VideoUla
 
-# The 6502 reset sequence, which a server started with --wait=api runs before
-# it stops to wait for its client.
-_RESET_SEQUENCE_CYCLES = 7
-
 
 class Beebium:
     """Main client for interacting with a beebium emulator instance.
@@ -257,7 +253,8 @@ class Beebium:
                 instance_uuid=process.provenance_instance_uuid,
             )
             client._verify_protocol(installation_description=process.installation.describe())
-            client._await_wait_mode(connection_timeout)
+            # The server stops the machine at the reset vector before it
+            # announces its port, so nothing here can race that.
             if not start_stopped:
                 client.debugger.run()
             yield client
@@ -270,13 +267,6 @@ class Beebium:
                 client.close()
             else:
                 process.stop()
-
-    def _await_wait_mode(self, timeout: float) -> None:
-        """Wait until a server started with --wait=api has run the reset
-        sequence and stopped, so the first debugger call does not race it."""
-        deadline = time.monotonic() + timeout
-        while self.debugger.cycle_count < _RESET_SEQUENCE_CYCLES and time.monotonic() < deadline:
-            time.sleep(0.01)
 
     def _verify_protocol(self, installation_description: str | None = None) -> None:
         """Assert the server's wire protocol matches this client's.

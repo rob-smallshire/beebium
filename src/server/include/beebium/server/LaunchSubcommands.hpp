@@ -268,6 +268,14 @@ public:
             server.set_launch_preset_name(config.launch.preset_name);
             server.set_launch_coprocessor(am.coprocessor);
 
+            // Under --wait=api the machine is stopped at the reset vector
+            // before the server announces its port, so a client that connects
+            // the moment the port appears finds it there, and its first call
+            // cannot race the wait state being entered.
+            if (config.launch.wait_mode == WaitMode::Api) {
+                enter_api_wait_state(machine);
+            }
+
             server.start(std::move(provenance), std::move(identity),
                         config.launch.advertise, shutdown_policy_config, std::move(shutdown_callback),
                         extension_services, &am.transport_registry);
@@ -285,15 +293,12 @@ public:
             // machine is told to run (handle_wait_mode / the first Run RPC
             // below waits for this to finish).
             if (am.pending_auto_station.has_value()) {
-                // Enter the --wait=api paused state BEFORE selecting, so a
-                // client that connects the moment the port appears and calls
-                // Run() finds the machine paused; Run() then waits (via
-                // begin/end_startup_selection below) for the selection to
-                // finish before resuming, rather than being rejected as
-                // "already running" or lost (the macOS black-screen defect).
-                if (config.launch.wait_mode == WaitMode::Api) {
-                    enter_api_wait_state(machine);
-                }
+                // Under --wait=api the machine is already paused (above), so a
+                // client that calls Run() the moment the port appears finds it
+                // paused; Run() then waits (via begin/end_startup_selection)
+                // for the selection to finish before resuming, rather than
+                // being rejected as "already running" or lost (the macOS
+                // black-screen defect).
                 server.debugger_service().begin_startup_selection();
                 int resolved_station = config.machine.station_number;
                 bool auto_assigned = false;
@@ -334,15 +339,9 @@ public:
 
             // Handle wait mode. A shutdown signal during the wait means the
             // emulation loop is never entered: the machine was asked to stop
-            // before it was ever asked to run. A deferred --station auto launch
-            // already entered the Api wait state above (before selecting), so
-            // don't enter it again here.
-            WaitMode effective_wait_mode = config.launch.wait_mode;
-            if (am.pending_auto_station.has_value() &&
-                config.launch.wait_mode == WaitMode::Api) {
-                effective_wait_mode = WaitMode::None;
-            }
-            if (handle_wait_mode(machine, effective_wait_mode)) {
+            // before it was ever asked to run. The Api wait state was entered
+            // before the server announced itself.
+            if (handle_wait_mode(machine, config.launch.wait_mode)) {
                 // Run main emulation loop (blocks until shutdown)
                 run_emulation_loop(machine, server, config);
             }
