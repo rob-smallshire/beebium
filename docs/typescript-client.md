@@ -255,8 +255,9 @@ stopped, is in each method's JSDoc as two lines, `Requires: ...` and
 | `Keyboard.waitUntilReady` | a running machine | unchanged |
 | `Keyboard.tapCapsLock` | a running machine | RUNNING |
 | `Keyboard.tapShiftLock` | a running machine | RUNNING |
-| `Keyboard.pressBreak` | any run state | unchanged |
-| `Keyboard.ctrlBreak` | any run state | unchanged |
+| `Keyboard.pressBreak` | a running machine | RUNNING |
+| `Keyboard.ctrlBreak` | a running machine | RUNNING |
+| `Keyboard.shiftBreak` | a running machine | RUNNING |
 | `Keyboard.withTextInput` | a running machine | unchanged |
 | `Video.captureFrame` | any run state | unchanged |
 | `TubeSystem.run` | any run state | RUNNING |
@@ -483,8 +484,10 @@ await bbc.keyboard.releaseAll();
 
 ```typescript
 // Break key (directly connected to reset circuit, not the keyboard matrix)
+// The holds are in emulated time, so the machine must be running.
 await bbc.keyboard.pressBreak();                // press and release
 await bbc.keyboard.ctrlBreak();                 // Ctrl+Break (hard reset)
+await bbc.keyboard.shiftBreak();                // Shift+Break (auto-boot the disc)
 
 // Keyboard links (startup DIP switches)
 const links = await bbc.keyboard.getLinks();    // raw 8-bit value

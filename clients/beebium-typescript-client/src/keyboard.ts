@@ -97,6 +97,14 @@ const SHIFT_LOCK_KEY: readonly [number, number] = [5, 0];
 // 50ms held is comfortably above the minimum to register a clean press.
 const LOCK_TAP_HOLD_CYCLES = 100_000;
 
+// Key holds are measured in emulated time, so the machine sees a hold of the
+// same length however fast the host runs it (#207, as the Python client). A
+// modifier is held this many cycles before Break goes down, and after Break
+// comes up before it is released, so the two are not simultaneous.
+const MODIFIER_SETTLE_CYCLES = 4_000;
+// A key hold raises if the machine makes no emulated progress for this long.
+const HOLD_STALL_MS = 10_000;
+
 // Bound on emulator cycles spent waiting for the logical lock latch to flip
 // after the key is released. The latch is updated by the MOS keyboard scan
 // (~100Hz, every ~10ms emulated), so the flip lands within a scan period or
@@ -546,16 +554,62 @@ export class Keyboard {
         );
     }
 
+    /**
+     * Wait while the running machine advances `cycles` CPU cycles, polling the
+     * cycle count without stopping it, so the wait lasts the same emulated
+     * time on a fast host or a slow one. Rejects if the machine stops, or
+     * makes no emulated progress for HOLD_STALL_MS.
+     */
     private async _waitEmulatedCycles(cycles: number): Promise<void> {
-        const client = this._requireClient("tap");
-        const dbg = client.debugger;
-        const target = (await dbg.getState()).cycleCount + cycles;
-        // 2 MHz host clock; sleep approximately the equivalent wall-clock
-        // time, then top up by polling. Keep delays small enough not to
-        // overshoot but large enough to reduce gRPC chatter.
-        const sleepMs = Math.max(5, Math.floor(cycles / 2_000_000 * 1000 / 2));
-        while ((await dbg.getState()).cycleCount < target) {
+        if (cycles <= 0) return;
+        const dbg = this._requireClient("an emulated-time key hold").debugger;
+        const start = (await dbg.getState()).cycleCount;
+        const target = start + cycles;
+        // Sleep about half the hold at 1x between polls, to keep gRPC chatter
+        // down without overshooting a short hold by much.
+        const sleepMs = Math.max(1, Math.min(20, Math.floor(cycles / 2_000_000 * 1000 / 2)));
+        let lastCycles = start;
+        let lastProgress = Date.now();
+        for (;;) {
+            const state = await dbg.getState();
+            if (state.cycleCount >= target) return;
+            const now = Date.now();
+            if (state.cycleCount !== lastCycles) {
+                lastCycles = state.cycleCount;
+                lastProgress = now;
+            } else if (now - lastProgress > 500 && !state.isRunning) {
+                throw new DebuggerError(
+                    "machine is stopped; key holds are measured in emulated time and " +
+                    "need a running machine (call bbc.debugger.run() first)",
+                );
+            } else if (now - lastProgress > HOLD_STALL_MS) {
+                throw new DebuggerError(
+                    `no emulated progress in ${Math.round((now - lastProgress) / 1000)} s: ` +
+                    `machine stuck after ${state.cycleCount - start} of ${cycles} cycles ` +
+                    "of a key hold",
+                );
+            }
             await new Promise(r => setTimeout(r, sleepMs));
+        }
+    }
+
+    /** An emulated-time hold in milliseconds, as CPU cycles. */
+    private async _holdCycles(milliseconds: number): Promise<number> {
+        return Math.round(milliseconds / 1000 * await this._clockHz());
+    }
+
+    /**
+     * Refuse a timed key sequence on a stopped machine before any key goes
+     * down, so a refusal never leaves a key held.
+     */
+    private async _requireRunningForHold(what: string): Promise<void> {
+        const client = this._requireClient(what);
+        if (!(await client.debugger.isRunning())) {
+            throw new DebuggerError(
+                `machine is stopped; ${what} holds keys for emulated time and needs a ` +
+                "running machine (call bbc.debugger.run() first, or use " +
+                "breakDown()/breakUp() and advance time yourself)",
+            );
         }
     }
 
@@ -589,8 +643,7 @@ export class Keyboard {
      *
      * For Ctrl-Break use `ctrlBreak()`: the MOS reads CTRL as a reset option
      * after Break is released, so it must stay down for emulated time after
-     * `breakUp()`, which a `ctrlUp()` sent straight after cannot promise on a
-     * fast host.
+     * `breakUp()`, which a `ctrlUp()` sent straight after cannot promise.
      */
     async ctrlDown(): Promise<void> {
         await this.matrixDown(...CTRL_KEY);
@@ -905,8 +958,11 @@ export class Keyboard {
      * VIA configuration). A modifier meant as a reset option must therefore
      * stay down for emulated time after this resolves; releasing it straight
      * afterwards races the MOS, which on a fast host -- or at speed 0 -- has
-     * read its options long before the next call lands. Use `ctrlBreak()`,
-     * which holds CTRL either side of Break.
+     * read its options long before the next call lands, and on a slow one may
+     * not have. On a stopped machine the reset has not even begun when this
+     * resolves, so a modifier released before the machine runs again is never
+     * seen at all. Use `ctrlBreak()` or `shiftBreak()`, which hold the
+     * modifier in emulated time either side of Break on a running machine.
      *
      * @returns True if successful.
      */
@@ -936,46 +992,102 @@ export class Keyboard {
     /**
      * Press and release the Break key (perform soft reset).
      *
-     * This is a convenience method that calls breakDown(), waits
-     * briefly, then calls breakUp().
+     * Calls breakDown(), holds Break for `holdTimeMs` emulated milliseconds,
+     * then calls breakUp(). Holds are in emulated time, so the machine sees the
+     * same press on a slow host as on a fast one, at any speed multiplier; the
+     * machine must be running.
      *
-     * Requires: any run state.
-     * Leaves the machine: unchanged.
+     * Requires: a running machine.
+     * Leaves the machine: RUNNING.
      *
-     * @param holdTimeMs - How long to hold Break in milliseconds (default 20).
+     * @param holdTimeMs - How long to hold Break, in emulated milliseconds.
      * @returns True if both operations succeeded.
+     * @throws DebuggerError If the machine is stopped, or makes no progress.
      */
     async pressBreak(holdTimeMs: number = 20): Promise<boolean> {
+        await this._requireRunningForHold("pressBreak");
+        const holdCycles = await this._holdCycles(holdTimeMs);
         const downOk = await this.breakDown();
-        await new Promise(r => setTimeout(r, holdTimeMs));
-        const upOk = await this.breakUp();
+        let upOk = false;
+        try {
+            await this._waitEmulatedCycles(holdCycles);
+        } finally {
+            upOk = await this.breakUp();
+        }
         return downOk && upOk;
     }
 
     /**
      * Press Ctrl-Break (trigger MOS hard reset).
      *
-     * This holds Ctrl while pressing Break, which causes MOS to
-     * detect a "hard reset" and perform full reinitialization.
+     * Holds CTRL while pressing Break. The hardware always performs a soft
+     * reset; the MOS reads the keyboard during its reset routine and, with
+     * CTRL down, clears the VIA configuration, a hard reset. CTRL is therefore
+     * held for emulated time either side of Break, so the MOS sees it at any
+     * speed multiplier; the machine must be running.
      *
-     * Note: The hardware always performs a soft reset. MOS checks
-     * the keyboard matrix during its reset routine and clears the
-     * VIA configuration if Ctrl is held, simulating a hard reset.
+     * Requires: a running machine.
+     * Leaves the machine: RUNNING.
      *
-     * Requires: any run state.
-     * Leaves the machine: unchanged.
-     *
-     * @param holdTimeMs - How long to hold Break in milliseconds (default 20).
-     * @returns True if all operations succeeded.
+     * @param holdTimeMs - How long to hold Break, in emulated milliseconds.
+     * @returns True if both Break operations succeeded.
+     * @throws DebuggerError If the machine is stopped, or makes no progress.
      */
     async ctrlBreak(holdTimeMs: number = 20): Promise<boolean> {
-        await this.ctrlDown();
-        await new Promise(r => setTimeout(r, 10)); // Brief delay to ensure Ctrl is registered
-        const downOk = await this.breakDown();
-        await new Promise(r => setTimeout(r, holdTimeMs));
-        const upOk = await this.breakUp();
-        await new Promise(r => setTimeout(r, 10)); // Brief delay before releasing Ctrl
-        await this.ctrlUp();
+        return this._modifierBreak("ctrlBreak", CTRL_KEY, holdTimeMs, 0);
+    }
+
+    /**
+     * Press Shift-Break to auto-boot the disc's !BOOT file.
+     *
+     * DFS reads the Shift key during its reset service, a little way into the
+     * reset routine, to decide whether to run !BOOT. Shift must therefore stay
+     * held for a while AFTER Break is released, not just during it;
+     * `shiftHoldAfterMs` keeps it down past that read, and the default is
+     * comfortably longer than DFS needs. Holds are in emulated time; the
+     * machine must be running.
+     *
+     * Requires: a running machine.
+     * Leaves the machine: RUNNING.
+     *
+     * @param holdTimeMs - How long to hold Break, in emulated milliseconds.
+     * @param shiftHoldAfterMs - How long to keep Shift held after releasing
+     *     Break, in emulated milliseconds.
+     * @returns True if both Break operations succeeded.
+     * @throws DebuggerError If the machine is stopped, or makes no progress.
+     */
+    async shiftBreak(holdTimeMs: number = 20, shiftHoldAfterMs: number = 500): Promise<boolean> {
+        return this._modifierBreak("shiftBreak", SHIFT_KEY, holdTimeMs, shiftHoldAfterMs);
+    }
+
+    /**
+     * Hold `modifier` a settle either side of a Break held `holdTimeMs`, and
+     * for `holdAfterMs` more after it, all in emulated time.
+     */
+    private async _modifierBreak(
+        what: string,
+        modifier: readonly [number, number],
+        holdTimeMs: number,
+        holdAfterMs: number,
+    ): Promise<boolean> {
+        await this._requireRunningForHold(what);
+        const holdCycles = await this._holdCycles(holdTimeMs);
+        const afterCycles = Math.max(MODIFIER_SETTLE_CYCLES, await this._holdCycles(holdAfterMs));
+        let downOk = false;
+        let upOk = false;
+        await this.matrixDown(...modifier);
+        try {
+            await this._waitEmulatedCycles(MODIFIER_SETTLE_CYCLES);
+            downOk = await this.breakDown();
+            try {
+                await this._waitEmulatedCycles(holdCycles);
+            } finally {
+                upOk = await this.breakUp();
+            }
+            await this._waitEmulatedCycles(afterCycles);
+        } finally {
+            await this.matrixUp(...modifier);
+        }
         return downOk && upOk;
     }
 

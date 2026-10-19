@@ -567,7 +567,7 @@ class Keyboard:
         For Ctrl-Break use :meth:`ctrl_break`: the MOS reads CTRL as a reset
         option after Break is released, so it must stay down for emulated time
         after :meth:`break_up`, which a ``ctrl_up()`` sent straight after
-        cannot promise on a fast host.
+        cannot promise.
         """
         self.matrix_down(*CTRL_KEY)
 
@@ -852,9 +852,12 @@ class Keyboard:
         modifier meant as a reset option must therefore stay down for emulated
         time after this returns; releasing it straight afterwards races the
         MOS, which on a fast host -- or at speed 0 -- has read its options
-        long before the next call lands, and on a slow one may not have. Use
-        :meth:`ctrl_break` or :meth:`shift_break`, which hold the modifier in
-        emulated time either side of Break.
+        long before the next call lands, and on a slow one may not have. On a
+        stopped machine (after ``run_for_emulated_seconds``, say) the reset has
+        not even begun when this returns, so a modifier released before the
+        machine runs again is never seen at all. Use :meth:`ctrl_break` or
+        :meth:`shift_break`, which hold the modifier in emulated time either
+        side of Break on a running machine.
 
         Returns:
             True if successful.
