@@ -314,6 +314,8 @@ class Debugger:
 
         Requires: a stopped machine.
         Leaves the machine: RUNNING.
+        Coprocessor requires: a stopped coprocessor and a running host.
+        Leaves the coprocessor: RUNNING.
 
         Args:
             stop_at_current: Evaluate the breakpoints at the current
@@ -332,6 +334,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: STOPPED.
+        Coprocessor requires: any run state.
+        Leaves the coprocessor: STOPPED.
 
         Returns:
             The execution state after stopping.
@@ -358,6 +362,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: STOPPED.
+        Coprocessor requires: any run state.
+        Leaves the coprocessor: STOPPED.
 
         Raises:
             DebuggerError: If the reset fails.
@@ -374,6 +380,8 @@ class Debugger:
 
         Requires: a stopped machine.
         Leaves the machine: STOPPED.
+        Coprocessor requires: a stopped coprocessor.
+        Leaves the coprocessor: STOPPED.
 
         Args:
             count: Number of instructions to execute.
@@ -404,6 +412,8 @@ class Debugger:
 
         Requires: a stopped machine.
         Leaves the machine: STOPPED.
+        Coprocessor requires: a stopped coprocessor.
+        Leaves the coprocessor: STOPPED.
 
         Args:
             count: Number of cycles to execute.
@@ -448,6 +458,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: RUNNING.
+        Coprocessor requires: a running host.
+        Leaves the coprocessor: RUNNING.
         """
         if not self.is_running:
             self.run()
@@ -457,6 +469,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: STOPPED.
+        Coprocessor requires: any run state.
+        Leaves the coprocessor: STOPPED.
         """
         if self.is_running:
             self.stop()
@@ -475,6 +489,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: as it was on entry.
+        Coprocessor requires: a running host.
+        Leaves the coprocessor: as it was on entry.
         """
         was_running = self.is_running
         self.ensure_running()
@@ -932,6 +948,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: STOPPED.
+        Coprocessor requires: a running host.
+        Leaves the coprocessor: STOPPED.
 
         Args:
             timeout: Wall-clock deadline in seconds for the entire wait.
@@ -969,6 +987,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: STOPPED.
+        Coprocessor requires: a running host.
+        Leaves the coprocessor: STOPPED.
 
         Args:
             timeout: Wall-clock deadline in seconds for the wait.
@@ -1026,6 +1046,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: STOPPED.
+        Coprocessor requires: a running host.
+        Leaves the coprocessor: STOPPED.
 
         Args:
             target_cycles: The cycle count to run to.
@@ -1115,6 +1137,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: STOPPED.
+        Coprocessor requires: a running host.
+        Leaves the coprocessor: STOPPED.
 
         Args:
             address: Start address to break at.
@@ -1169,6 +1193,8 @@ class Debugger:
 
         Requires: any run state.
         Leaves the machine: STOPPED.
+        Coprocessor requires: a running host.
+        Leaves the coprocessor: STOPPED.
 
         Args:
             start_pc: Address of the first instruction measured.

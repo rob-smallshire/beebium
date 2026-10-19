@@ -1478,6 +1478,16 @@ target_compile_definitions(test_boot_tube PRIVATE
 )
 catch_discover_tests(test_boot_tube)
 
+# Host-initiated 256-byte Tube transfers, types 6 and 7 (issue #204)
+add_executable(test_tube_transfer_6502 test_tube_transfer_6502.cpp)
+target_link_libraries(test_tube_transfer_6502 PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_tube_transfer_6502 PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    BEEBIUM_TEST_ROM_DIR="${BEEBIUM_TEST_ROM_DIR}"
+    BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
+)
+catch_discover_tests(test_tube_transfer_6502)
+
 # Tube R1 transfer with real 65C02 CPU
 add_executable(test_tube_r1_6502 test_tube_r1_6502.cpp)
 target_link_libraries(test_tube_r1_6502 PRIVATE beebium_core 6502_lib Catch2::Catch2WithMain)

@@ -14,7 +14,10 @@ const SRC_DIRPATH = join(__dirname, "..", "src");
 const DOC_FILEPATH = join(__dirname, "..", "..", "..", "docs", "typescript-client.md");
 
 /** Every documented method's run-state lines, by Class.method. */
-function documented(): Map<string, [string, string]> {
+function documented(
+    requiresLine = /^\s*\* Requires: (.+)\.$/gm,
+    leavesLine = /^\s*\* Leaves the machine: (.+)\.$/gm,
+): Map<string, [string, string]> {
     const found = new Map<string, [string, string]>();
     for (const filename of readdirSync(SRC_DIRPATH).filter((f) => f.endsWith(".ts"))) {
         const text = readFileSync(join(SRC_DIRPATH, filename), "utf8");
@@ -26,22 +29,22 @@ function documented(): Map<string, [string, string]> {
                 continue;
             }
             const doc = match[2]!;
-            const requires = [...doc.matchAll(/^\s*\* Requires: (.+)\.$/gm)].map((m) => m[1]!);
-            const leaves = [...doc.matchAll(/^\s*\* Leaves the machine: (.+)\.$/gm)].map((m) => m[1]!);
+            const requires = [...doc.matchAll(requiresLine)].map((m) => m[1]!);
+            const leaves = [...doc.matchAll(leavesLine)].map((m) => m[1]!);
             if (requires.length === 0 && leaves.length === 0) continue;
             const where = `${currentClass}.${match[3]}`;
             expect(requires.length, `${where} Requires:`).toBe(1);
-            expect(leaves.length, `${where} Leaves the machine:`).toBe(1);
+            expect(leaves.length, `${where} Leaves:`).toBe(1);
             found.set(where, [requires[0]!, leaves[0]!]);
         }
     }
     return found;
 }
 
-/** The doc's run-state table, by Class.method. */
-function tabled(): Map<string, [string, string]> {
+/** A run-state table in the doc, by Class.method. */
+function tabled(heading = "## Run state"): Map<string, [string, string]> {
     const text = readFileSync(DOC_FILEPATH, "utf8");
-    const section = text.split("## Run state")[1]!.split("\n## ")[0]!;
+    const section = text.split(`${heading}\n`)[1]!.split("\n## ")[0]!;
     const rows = new Map<string, [string, string]>();
     for (const line of section.split("\n")) {
         const match = /^\| `(\w+)\.(\w+)` \| (.+) \| (.+) \|$/.exec(line);
@@ -68,6 +71,26 @@ describe("run-state documentation", () => {
             expect(
                 ["nothing", "any run state", "a running machine", "a stopped machine"]
                     .some((start) => requires.startsWith(start)),
+                where,
+            ).toBe(true);
+        }
+    });
+
+    it("the coprocessor table and the JSDoc agree (#204)", () => {
+        const doc = documented(
+            /^\s*\* Coprocessor requires: (.+)\.$/gm,
+            /^\s*\* Leaves the coprocessor: (.+)\.$/gm,
+        );
+        const table = tabled("## Coprocessor run state");
+        expect(doc.size).toBeGreaterThan(0);
+        expect([...doc.keys()].filter((k) => !table.has(k)).sort()).toEqual([]);
+        expect([...table.keys()].filter((k) => !doc.has(k)).sort()).toEqual([]);
+        for (const [where, lines] of doc) {
+            expect(table.get(where), where).toEqual(lines);
+            expect(["RUNNING", "STOPPED", "unchanged", "as it was on entry"], where).toContain(lines[1]);
+            expect(
+                ["nothing", "any run state", "a running host", "a stopped coprocessor"]
+                    .some((start) => lines[0].startsWith(start)),
                 where,
             ).toBe(true);
         }

@@ -16,6 +16,9 @@
 #include "beebium/service/DebuggerService.hpp"
 #include "debugger.grpc.pb.h"
 
+#include <functional>
+#include <utility>
+
 namespace beebium {
 
 // Adapter that exposes a DebuggerControlServiceImpl under the
@@ -29,10 +32,21 @@ namespace beebium {
 // coprocessor extension, instantiates the debugger against the abstract
 // CpuDebugTarget interface.
 
+//
+// The coprocessor runs on the host's emulation thread and advances only while
+// the host runs, so a Run with the host stopped would wait forever: the
+// adapter refuses it (#204). `host_running` says whether the host runs.
+
 class CoprocessorDebuggerAdapter final : public CoprocessorDebuggerControl::Service {
 public:
-    explicit CoprocessorDebuggerAdapter(service::DebuggerControlServiceImpl& impl)
-        : impl_(impl) {}
+    // The message a Run with the host stopped fails with.
+    static constexpr const char* HOST_STOPPED_ERROR =
+        "the host is stopped, and the coprocessor only advances while the host "
+        "runs; run both with TubeSystem.run(), or run the host first";
+
+    CoprocessorDebuggerAdapter(service::DebuggerControlServiceImpl& impl,
+                               std::function<bool()> host_running)
+        : impl_(impl), host_running_(std::move(host_running)) {}
 
     // Forward each RPC to the underlying implementation.
     // The generated Service base class and DebuggerControlServiceImpl use
@@ -49,7 +63,14 @@ public:
     { return impl_.GetState(ctx, req, resp); }
 
     grpc::Status Run(grpc::ServerContext* ctx, const RunRequest* req, RunResponse* resp) override
-    { return impl_.Run(ctx, req, resp); }
+    {
+        if (!host_running_()) {
+            resp->set_success(false);
+            resp->set_error(HOST_STOPPED_ERROR);
+            return grpc::Status::OK;
+        }
+        return impl_.Run(ctx, req, resp);
+    }
 
     grpc::Status Stop(grpc::ServerContext* ctx, const Empty* req, StopResponse* resp) override
     { return impl_.Stop(ctx, req, resp); }
@@ -138,6 +159,7 @@ public:
 
 private:
     service::DebuggerControlServiceImpl& impl_;
+    std::function<bool()> host_running_;
 };
 
 }  // namespace beebium

@@ -43,13 +43,24 @@ export class TubeSystem {
         return this.coprocessor;
     }
 
-    /** Run both processors. Ensures both are running afterwards. */
+    /**
+     * Run both processors: the host first, since the coprocessor advances
+     * only while the host runs. Ensures both are running afterwards.
+     *
+     * Requires: any run state.
+     * Leaves the machine: RUNNING.
+     */
     async run(): Promise<void> {
         if (!await this.host.debugger.isRunning()) await this.host.debugger.run();
         if (!await this.coprocessor.debugger.isRunning()) await this.coprocessor.debugger.run();
     }
 
-    /** Stop both processors. */
+    /**
+     * Stop both processors.
+     *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
+     */
     async stop(): Promise<void> {
         if (await this.host.debugger.isRunning()) await this.host.debugger.stop();
         if (await this.coprocessor.debugger.isRunning()) await this.coprocessor.debugger.stop();
@@ -62,6 +73,9 @@ export class TubeSystem {
      * chunk, both processors stop (via a server-side cycle-budget
      * breakpoint on the host with stopCounterpart), the predicate is
      * evaluated, and if false, both resume.
+     *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
      */
     async runUntil(
         predicate: () => Promise<boolean>,
@@ -111,6 +125,9 @@ export class TubeSystem {
 
     /**
      * Run both processors for the given emulated time.
+     *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
      */
     async runFor(emulatedSeconds: number): Promise<void> {
         await this.runUntil(async () => false, emulatedSeconds);

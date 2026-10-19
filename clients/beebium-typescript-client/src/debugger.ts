@@ -185,6 +185,8 @@ export class Debugger {
      *
      * Requires: a stopped machine.
      * Leaves the machine: RUNNING.
+     * Coprocessor requires: a stopped coprocessor and a running host.
+     * Leaves the coprocessor: RUNNING.
      */
     async run(options?: { stopAtCurrent?: boolean }): Promise<void> {
         const response = await promisify<{ stopAtCurrent: boolean }, { success: boolean; error: string }>(
@@ -202,6 +204,8 @@ export class Debugger {
      *
      * Requires: any run state.
      * Leaves the machine: STOPPED.
+     * Coprocessor requires: any run state.
+     * Leaves the coprocessor: STOPPED.
      */
     async stop(): Promise<ExecutionState> {
         const response = await promisify<{}, { success: boolean; state?: ProtoExecutionState }>(
@@ -223,6 +227,8 @@ export class Debugger {
      *
      * Requires: any run state.
      * Leaves the machine: STOPPED.
+     * Coprocessor requires: any run state.
+     * Leaves the coprocessor: STOPPED.
      */
     async reset(): Promise<void> {
         const response = await promisify<{}, { success: boolean }>(
@@ -241,6 +247,8 @@ export class Debugger {
      *
      * Requires: a stopped machine.
      * Leaves the machine: STOPPED.
+     * Coprocessor requires: a stopped coprocessor.
+     * Leaves the coprocessor: STOPPED.
      */
     async step(count: number = 1): Promise<StepResult> {
         const response = await promisify<{ count: number }, ProtoStepResponse>(
@@ -260,6 +268,8 @@ export class Debugger {
      *
      * Requires: a stopped machine.
      * Leaves the machine: STOPPED.
+     * Coprocessor requires: a stopped coprocessor.
+     * Leaves the coprocessor: STOPPED.
      */
     async stepCycles(count: number = 1): Promise<StepResult> {
         const response = await promisify<{ count: number }, ProtoStepResponse>(
@@ -528,6 +538,8 @@ export class Debugger {
      *
      * Requires: any run state.
      * Leaves the machine: STOPPED.
+     * Coprocessor requires: a running host.
+     * Leaves the coprocessor: STOPPED.
      *
      * @param timeoutMs - Maximum time to wait in milliseconds. Default 30000.
      */
@@ -581,6 +593,8 @@ export class Debugger {
      *
      * Requires: any run state.
      * Leaves the machine: STOPPED.
+     * Coprocessor requires: a running host.
+     * Leaves the coprocessor: STOPPED.
      *
      * @param address - Address to break at.
      * @param timeoutMs - Maximum time to wait in milliseconds. Default 30000.

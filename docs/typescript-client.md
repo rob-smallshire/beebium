@@ -259,6 +259,31 @@ stopped, is in each method's JSDoc as two lines, `Requires: ...` and
 | `Keyboard.ctrlBreak` | any run state | unchanged |
 | `Keyboard.withTextInput` | a running machine | unchanged |
 | `Video.captureFrame` | any run state | unchanged |
+| `TubeSystem.run` | any run state | RUNNING |
+| `TubeSystem.stop` | any run state | STOPPED |
+| `TubeSystem.runUntil` | any run state | STOPPED |
+| `TubeSystem.runFor` | any run state | STOPPED |
+
+## Coprocessor run state
+
+A coprocessor -- `bbc.connectCoprocessor()`, or `TubeSystem.getCoprocessor()`
+-- runs on the host's emulation thread and advances only while the host runs.
+Its debugger is the same `Debugger`, and each method's JSDoc carries two more
+lines, `Coprocessor requires: ...` and `Leaves the coprocessor: ...`, which this
+table collects (`tests/run-state-docs.test.ts` keeps them in step). A
+coprocessor call never changes whether the host runs. A coprocessor `run()`
+with the host stopped is refused: the server says the host is stopped and names
+`TubeSystem.run()`, which runs the host first and then the coprocessor.
+
+| Call | Requires | Leaves the coprocessor |
+|---|---|---|
+| `Debugger.run` | a stopped coprocessor and a running host | RUNNING |
+| `Debugger.stop` | any run state | STOPPED |
+| `Debugger.reset` | any run state | STOPPED |
+| `Debugger.step` | a stopped coprocessor | STOPPED |
+| `Debugger.stepCycles` | a stopped coprocessor | STOPPED |
+| `Debugger.waitForStop` | a running host | STOPPED |
+| `Debugger.runUntil` | a running host | STOPPED |
 
 ## Debugger control
 

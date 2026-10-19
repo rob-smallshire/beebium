@@ -368,6 +368,14 @@ server-side: a host breakpoint with `stop_counterpart` pauses the
 coprocessor through `Coprocessor::pause()`, a coprocessor breakpoint pauses
 the host.
 
+The coprocessor runs on the host's emulation thread and advances only while
+the host runs, so `CoprocessorDebuggerControl.Run` with the host stopped would
+wait forever: it is refused, with an error saying the host is stopped and
+naming `TubeSystem.run()`, which runs the host and then the coprocessor (#204).
+Stepping needs no running host: `StepInstruction` executes one whole
+coprocessor instruction whatever breakpoints it carries, as on the host. The
+clients' run-state tables have a coprocessor table to match.
+
 Clients render from the descriptor. In Python, `bbc.connect_coprocessor()`
 returns a client whose debugger calls go to the coprocessor;
 `cpu.registers` is an ordered mapping with attribute access, `cpu.signals`

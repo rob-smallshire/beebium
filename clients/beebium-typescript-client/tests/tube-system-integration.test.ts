@@ -221,6 +221,10 @@ describe("TubeSystem", () => {
             // Coprocessor should be running freely after boot
             expect(await coprocessor.debugger.isRunning()).toBe(true);
 
+            // runUntilOrTimeout left the host stopped; the coprocessor runs
+            // only while the host does (#204).
+            await host.debugger.run();
+
             // Stop should work
             await coprocessor.debugger.stop();
             expect(await coprocessor.debugger.isRunning()).toBe(false);
@@ -248,6 +252,7 @@ describe("TubeSystem", () => {
             );
 
             const coprocessor = await host.connectCoprocessor();
+            await host.debugger.run();  // the coprocessor runs only while the host does
 
             // Set a breakpoint at an address the coprocessor will never reach
             // (address $0001 is zero page, never executed in the idle loop).
@@ -323,4 +328,20 @@ describe("TubeSystem", () => {
             await host.close();
         }
     }, 30000);
+
+    it("refuses a coprocessor run while the host is stopped (#204)", async () => {
+        const host = await launchTubeServer();
+        try {
+            await host.runUntilOrTimeout(() => screenContains(host.video, "Acorn TUBE"), 10);
+            const coprocessor = await host.connectCoprocessor();
+            await coprocessor.debugger.stop();
+            await expect(coprocessor.debugger.run()).rejects.toThrow(
+                /the host is stopped.*TubeSystem\.run\(\)/,
+            );
+            expect(await coprocessor.debugger.isRunning()).toBe(false);
+            await coprocessor.close();
+        } finally {
+            await host.close();
+        }
+    }, 15000);
 });

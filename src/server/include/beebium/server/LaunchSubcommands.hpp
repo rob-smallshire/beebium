@@ -182,7 +182,9 @@ public:
                     coprocessor_debugger_impl =
                         std::make_unique<beebium::service::DebuggerControlServiceImpl>(*target);
                     coprocessor_debugger_adapter =
-                        std::make_unique<beebium::CoprocessorDebuggerAdapter>(*coprocessor_debugger_impl);
+                        std::make_unique<beebium::CoprocessorDebuggerAdapter>(
+                            *coprocessor_debugger_impl,
+                            [&machine] { return !machine.is_paused(); });
                     extension_services.push_back(coprocessor_debugger_adapter.get());
                 }
             }

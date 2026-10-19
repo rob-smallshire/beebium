@@ -248,6 +248,37 @@ sets breakpoints or watchpoints before `bbc.debugger.run()`.
 | `TubeSystem.run_until_or_timeout` | any run state | STOPPED |
 | `TubeSystem.run_for` | any run state | STOPPED |
 
+### Coprocessor run state
+
+A coprocessor -- `bbc.connect_coprocessor()`, or `TubeSystem.coprocessor` --
+runs on the host's emulation thread and advances only while the host runs. Its
+debugger is the same `Debugger`, and each method's docstring carries two more
+lines, `Coprocessor requires: ...` and `Leaves the coprocessor: ...`, which this
+table collects (a test keeps them in step). A coprocessor call never changes
+whether the host runs. A coprocessor `run()` with the host stopped is refused:
+the server says the host is stopped and names `TubeSystem.run()`, which runs
+the host first and then the coprocessor. So `run_to`, `measure` and the other
+run-to methods need the host running; stepping does not.
+
+| Call | Requires | Leaves the coprocessor |
+|---|---|---|
+| `Debugger.run` | a stopped coprocessor and a running host | RUNNING |
+| `Debugger.stop` | any run state | STOPPED |
+| `Debugger.reset` | any run state | STOPPED |
+| `Debugger.step` | a stopped coprocessor | STOPPED |
+| `Debugger.step_cycles` | a stopped coprocessor | STOPPED |
+| `Debugger.ensure_running` | a running host | RUNNING |
+| `Debugger.ensure_stopped` | any run state | STOPPED |
+| `Debugger.running` | a running host | as it was on entry |
+| `Debugger.wait_for_stop` | a running host | STOPPED |
+| `Debugger.run_and_wait_for_stop` | a running host | STOPPED |
+| `Debugger.run_to_cycle` | a running host | STOPPED |
+| `Debugger.run_to` | a running host | STOPPED |
+| `Debugger.measure` | a running host | STOPPED |
+
+`debugger.cycle_count` is a property on the host and the coprocessor alike,
+counting each processor's own cycles.
+
 ### Testing with pytest
 
 Installing `beebium` registers the pytest plugin, so the `bbc` fixture is
