@@ -12,9 +12,12 @@
 
 """Tube OSBYTE throughput test.
 
-Measures wall-clock time for OSBYTE calls through the Tube under normal
-paced execution. No coupled stepping -- pure real-time pacing throughout,
-matching interactive use.
+Times OSBYTE calls through the Tube under normal paced execution, with the
+program typed and every wait made in emulated time. The test is the bound on
+BASIC's TIME, which is emulated: the calls must complete within a budget of
+emulated seconds whatever the host. The wall-clock rate is printed as a
+measurement of the runner, not asserted, since a loaded runner paces the
+emulator below real time.
 """
 
 from __future__ import annotations
@@ -30,16 +33,14 @@ from beebium.client.screen import dump_screen, read_mode7_screen, screen_contain
 
 OSBYTE_COUNT = 1024
 
+# Emulated seconds within which BASIC's TIME must show the OSBYTE_COUNT calls
+# complete. A real machine takes about 0.9 s; this emulator about 0.5 s.
+EMULATED_BUDGET_SECONDS = 2.0
 
-def _wait_for(bbc, text, timeout=60):
-    """Wait for text to appear at the start of a screen row."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        for row in read_mode7_screen(bbc):
-            if row.strip().startswith(text):
-                return True
-        time.sleep(0.5)
-    return False
+
+def _row_starts_with(bbc, text):
+    """Return a predicate: whether a screen row starts with text."""
+    return lambda: any(row.strip().startswith(text) for row in read_mode7_screen(bbc))
 
 
 @pytest.fixture(scope="function")
@@ -80,8 +81,8 @@ def bbc(
 def test_tube_osbyte_throughput(bbc):
     """Measure OSBYTE 51 throughput through the Tube under normal pacing."""
 
-    # Wait for boot (normal pacing, no coupled stepping)
-    assert _wait_for(bbc, ">", timeout=30), f"Boot failed:\n{dump_screen(bbc)}"
+    # Boot, in emulated time.
+    assert bbc.run_until_or_timeout(_row_starts_with(bbc, ">"), 10.0), f"Boot failed:\n{dump_screen(bbc)}"
     assert screen_contains(bbc, "TUBE"), f"Tube not active:\n{dump_screen(bbc)}"
 
     # Machine code at &2000 (13 bytes): 256-iteration OSBYTE 51 loop.
@@ -102,17 +103,18 @@ def test_tube_osbyte_throughput(bbc):
         "100 DATA &A9,&33,&A2,0,&20,&F4,&FF,&EE,&30,&20,&D0,&F4,&60",
         "RUN",
     ]
-    for line in lines:
-        bbc.keyboard.type(line + "\r")
-        time.sleep(0.3)
+    # About 22 emulated seconds of typing at the queue's pace; the wait is
+    # for the server's word that it is all typed, however long the host takes.
+    bbc.keyboard.type("".join(line + "\r" for line in lines))
+    bbc.debugger.run()
+    bbc.keyboard.wait_until_typing_complete()
 
-    # Wait for =GO
-    assert _wait_for(bbc, "=GO", timeout=60), f"Program did not reach =GO:\n{dump_screen(bbc)}"
+    assert bbc.run_until_or_timeout(_row_starts_with(bbc, "=GO"), 5.0), (
+        f"Program did not reach =GO:\n{dump_screen(bbc)}"
+    )
 
     t0 = time.monotonic()
-
-    # Wait for =OK
-    ok = _wait_for(bbc, "=OK", timeout=180)
+    ok = bbc.run_until_or_timeout(_row_starts_with(bbc, "=OK"), 30.0)
     t1 = time.monotonic()
     wall_seconds = t1 - t0
 
@@ -121,7 +123,7 @@ def test_tube_osbyte_throughput(bbc):
 
     if not ok:
         print(f"\n{dump_screen(bbc)}")
-        pytest.fail(f"{OSBYTE_COUNT} OSBYTE 51 calls did not complete in 180 wall-clock seconds under normal pacing.")
+        pytest.fail(f"{OSBYTE_COUNT} OSBYTE 51 calls did not complete in 30 emulated seconds.")
 
     # Parse per-block centisecond values from the output.
     # Values are printed space-separated between =GO and =OK lines.
@@ -178,4 +180,8 @@ def test_tube_osbyte_throughput(bbc):
     print("\n  Expected (real HW): ~1100 OSBYTE/s, ~0.9 ms/call")
     print(f"{'=' * 60}")
 
-    assert wall_rate > 500, f"OSBYTE throughput {wall_rate:.0f}/s ({wall_latency:.2f}ms each), expected >500/s."
+    assert len(latencies_cs) == n_blocks, f"Expected {n_blocks} block times, got {latencies_cs}:\n{dump_screen(bbc)}"
+    total_secs = sum(latencies_cs) / 100.0
+    assert total_secs < EMULATED_BUDGET_SECONDS, (
+        f"{OSBYTE_COUNT} OSBYTE calls took {total_secs:.2f} emulated seconds, expected under {EMULATED_BUDGET_SECONDS}."
+    )
