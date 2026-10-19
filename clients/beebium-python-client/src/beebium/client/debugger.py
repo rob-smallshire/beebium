@@ -1061,6 +1061,58 @@ class Debugger:
             DebuggerError: If the target is not reached within `wall_timeout`.
         """
         start_cycles = self.cycle_count
+
+        def timed_out(elapsed: float) -> DebuggerError:
+            ran_seconds = (self.cycle_count - start_cycles) / clock_hz
+            wanted_seconds = (target_cycles - start_cycles) / clock_hz
+            if ran_seconds > 0:
+                return DebuggerError(
+                    f"slow host: ran {ran_seconds:.1f} of {wanted_seconds:.1f} emulated "
+                    f"seconds in {elapsed:.0f} s wall "
+                    f"(throughput {ran_seconds / elapsed:.2f}x)"
+                )
+            return DebuggerError(f"no emulated progress in {elapsed:.0f} s: machine stuck")
+
+        return self._run_to_condition(
+            f"cycles >= {target_cycles}",
+            wall_timeout=wall_timeout,
+            timed_out=timed_out,
+            stop_counterpart=stop_counterpart,
+            resume=resume,
+        )
+
+    def _run_to_condition(
+        self,
+        condition: str,
+        *,
+        wall_timeout: float,
+        timed_out: Callable[[float], DebuggerError],
+        stop_counterpart: bool = False,
+        resume: Callable[[], None] | None = None,
+    ) -> ExecutionState:
+        """Run until a whole-address-space breakpoint on `condition` stops the machine.
+
+        The machinery of :meth:`run_to_cycle`, for any condition: the
+        breakpoint is installed for the duration of the call, the wait is
+        subscribed before execution resumes, and it stops at the first
+        instruction boundary where the condition holds. On the wall-clock
+        deadline, ``timed_out(elapsed_seconds)`` makes the error raised, so the
+        caller can say what progress was made. Leaves the machine stopped, as
+        :meth:`run_to_cycle` does.
+
+        Args:
+            condition: A breakpoint condition (see ``describe-conditions``).
+            wall_timeout: Wall-clock deadline in seconds for the wait.
+            timed_out: Makes the error for an expired deadline, given the
+                seconds elapsed.
+            stop_counterpart: Also stop the counterpart processor.
+            resume: Starts execution once the wait is subscribed; defaults to
+                resuming this processor.
+
+        Raises:
+            DebuggerError: If the condition does not stop the machine within
+                `wall_timeout`.
+        """
         started = time.monotonic()
         deadline = started + wall_timeout
         resume = resume or self.ensure_running
@@ -1068,7 +1120,7 @@ class Debugger:
         with self.breakpoint(
             0x0000,
             end_address=0x10000,
-            condition=f"cycles >= {target_cycles}",
+            condition=condition,
             stop_counterpart=stop_counterpart,
         ):
             while True:
@@ -1090,18 +1142,7 @@ class Debugger:
                 except ExecutionWaitTimeout:
                     if time.monotonic() < deadline:
                         continue  # gRPC's wall-clock deadline expired early
-                elapsed = time.monotonic() - started
-                ran_seconds = (self.cycle_count - start_cycles) / clock_hz
-                wanted_seconds = (target_cycles - start_cycles) / clock_hz
-                if ran_seconds > 0:
-                    raise DebuggerError(
-                        f"slow host: ran {ran_seconds:.1f} of {wanted_seconds:.1f} emulated "
-                        f"seconds in {elapsed:.0f} s wall "
-                        f"(throughput {ran_seconds / elapsed:.2f}x)"
-                    ) from None
-                raise DebuggerError(
-                    f"no emulated progress in {elapsed:.0f} s: machine stuck"
-                ) from None
+                raise timed_out(time.monotonic() - started) from None
 
     # Run-to helper
 
