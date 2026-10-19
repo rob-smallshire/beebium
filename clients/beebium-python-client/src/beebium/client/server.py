@@ -27,6 +27,7 @@ from pathlib import Path
 import grpc
 
 import beebium.client as beebium
+from beebium.client.connection import open_channel
 from beebium.client.exceptions import ServerStartupError
 from beebium.client.installation import DEFAULT_VARIANT, ServerInstallation, find_in_build_tree
 
@@ -356,15 +357,16 @@ class ServerProcess:
                 return False
 
             # Try to connect
+            channel = open_channel(self.target)
             try:
-                channel = grpc.insecure_channel(self.target)
                 grpc.channel_ready_future(channel).result(timeout=poll_interval)
-                channel.close()
                 return True
             except grpc.FutureTimeoutError:
                 pass
             except Exception:
                 time.sleep(poll_interval)
+            finally:
+                channel.close()
 
         return False
 

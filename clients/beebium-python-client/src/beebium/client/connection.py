@@ -36,6 +36,18 @@ from beebium.client._proto import (
 from beebium.client.exceptions import ConnectionError
 
 
+def open_channel(target: str) -> grpc.Channel:
+    """A channel to the server at ``target``, sharing no connection with others.
+
+    A port comes round again across many launches. By default channels to one
+    address share a connection, and a channel to the stopped server that used
+    the port before backs off between reconnect attempts, longer the longer it
+    has failed; a new server there would not be seen until that backoff ran
+    out. A pool of its own keeps each channel's connection to itself.
+    """
+    return grpc.insecure_channel(target, options=[("grpc.use_local_subchannel_pool", 1)])
+
+
 class Connection:
     """Manages a gRPC connection to a beebium server.
 
@@ -76,7 +88,7 @@ class Connection:
 
     def _connect(self, timeout: float) -> None:
         """Establish the gRPC connection."""
-        self._channel = grpc.insecure_channel(self._target)
+        self._channel = open_channel(self._target)
 
         # Wait for the channel to be ready
         try:
