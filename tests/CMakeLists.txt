@@ -1985,6 +1985,14 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_grpc_tube_status)
 
+    # DeviceInspection: the Integra-B's real-time clock, without side effects (#203)
+    add_executable(test_device_inspection_rtc test_device_inspection_rtc.cpp)
+    target_link_libraries(test_device_inspection_rtc PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_device_inspection_rtc)
+
     # Server main helper function tests
     # Screenshot auto-crop geometry (pure header, no machine).
     add_executable(test_screenshot_crop test_screenshot_crop.cpp)

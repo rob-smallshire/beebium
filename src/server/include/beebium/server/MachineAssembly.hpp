@@ -1284,6 +1284,15 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         }
     }
 
+    // A board whose battery-backed seed depends on a coprocessor being fitted
+    // (the Integra-B's *CONFIGURE TUBE) is told so here, after any saved
+    // state was restored, since the coprocessor is known only now.
+    if (am->coprocessor) {
+        if constexpr (requires { machine.memory().seed_with_tube_coprocessor(); }) {
+            machine.memory().seed_with_tube_coprocessor();
+        }
+    }
+
     // Wire the coprocessor debug target's execution quiescer: halting the
     // coprocessor (which runs on the host emulation thread) to mutate its debug
     // entries means pausing the host machine. The debugger SERVICE built over

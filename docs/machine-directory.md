@@ -122,7 +122,8 @@ renamed with the time, never over another. Nothing is discarded silently.
 
 A unit with no file starts from its seed: the state of a board that has been
 set up (an Integra-B as if IBOS's Full System Reset had been run and the
-clock set), or, for an extension, what its configuration gives. That is every
+clock set, and `*CONFIGURE TUBE` too if it is launched with a Tube
+coprocessor attached), or, for an extension, what its configuration gives. That is every
 start of a transient machine and the first start of a saved one.
 `reset-battery`, or `SystemService.ResetBattery` on a running machine, removes
 `nvram/` and every `extensions/*/nvram/`, so the next start is from the seed;

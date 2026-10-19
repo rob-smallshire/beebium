@@ -2274,3 +2274,63 @@ class TubeInterrupts(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___TubeInterrupts: _TypeAlias = TubeInterrupts  # noqa: Y015
+
+@_typing.final
+class GetRealTimeClockStateRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___GetRealTimeClockStateRequest: _TypeAlias = GetRealTimeClockStateRequest  # noqa: Y015
+
+@_typing.final
+class RealTimeClockState(_message.Message):
+    """The machine's own real-time clock chip -- the Integra-B's CDP6818 -- read
+    without side effects: register C's interrupt flags are not cleared, and the
+    chip's address register is not moved, as reading through the guest's RTC
+    ports would. A plug-in clock (acorn-rtc on the user port) is an extension
+    and is not reported here.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PRESENT_FIELD_NUMBER: _builtins.int
+    CHIP_FIELD_NUMBER: _builtins.int
+    REGISTERS_FIELD_NUMBER: _builtins.int
+    ADDRESS_REGISTER_FIELD_NUMBER: _builtins.int
+    present: _builtins.bool
+    """False on a machine with no real-time clock of its own; the rest is then
+    empty.
+    """
+    chip: _builtins.str
+    """The chip, e.g. "CDP6818"."""
+    registers: _builtins.bytes
+    """All 64 registers in order, as a read of each would return them: 0-9 the
+    time and alarm, 10-13 control registers A-D, 14-63 the battery-backed
+    CMOS RAM (on the Integra-B, IBOS keeps its configuration from register
+    14, so its user register N is register 14 + N).
+    """
+    address_register: _builtins.int
+    """The register the chip's address latch selects."""
+    def __init__(
+        self,
+        *,
+        present: _builtins.bool = ...,
+        chip: _builtins.str = ...,
+        registers: _builtins.bytes = ...,
+        address_register: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["address_register", b"address_register", "chip", b"chip", "present", b"present", "registers", b"registers"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___RealTimeClockState: _TypeAlias = RealTimeClockState  # noqa: Y015

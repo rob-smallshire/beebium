@@ -56,8 +56,18 @@ the 1.20 guide.
   interrupt is always driven by emulated cycles.
 - **Battery backup:** a launch starts from a board that has been set up,
   as if IBOS's Full System Reset and `*CONFIGURE LANG 3` had already been
-  run and the clock set (`IntegraBBatterySeed.hpp`). Changes made during a
-  session are not persisted between launches.
+  run and the clock set (`IntegraBBatterySeed.hpp`). A board launched with
+  a Tube coprocessor attached (`--tube-65c02`, `--tube-65c102`, or a preset
+  such as `model-b-integra-b-disc-65c02-copro`) is seeded `*CONFIGURE TUBE`
+  as well (user register &0F bit 0 clear), so it boots with the Tube in; one
+  without is NOTUBE, as after Full System Reset. That is the seed only: a
+  saved machine keeps the CMOS its board holds, so one saved without a
+  coprocessor and later launched with one still needs `*CONFIGURE TUBE` and
+  Ctrl-Break (or `*TUBE ON`). Changes made during a session are not persisted
+  between launches unless the machine is saved. The clock's registers and
+  CMOS RAM can be read without side effects through
+  `DeviceInspection.GetRealTimeClockState` (`bbc.real_time_clock.state` in
+  Python, `bbc.realTimeClock.getState()` in TypeScript).
 - **Write protection** works per RAM chip, so it always covers two slots.
   The protection groups are `slots-4-5` and `slots-6-7`, plus `slots-8-9` to
   `slots-14-15` for socket pairs fitted with RAM. Set them at launch with

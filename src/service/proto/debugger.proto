@@ -95,6 +95,7 @@ service DeviceInspection {
     rpc GetAddressableLatchState(GetAddressableLatchStateRequest) returns (AddressableLatchState);
     rpc GetSoundGeneratorState(GetSoundGeneratorStateRequest) returns (SoundGeneratorState);
     rpc GetTubeState(GetTubeStateRequest) returns (TubeState);
+    rpc GetRealTimeClockState(GetRealTimeClockStateRequest) returns (RealTimeClockState);
 }
 
 message Empty {}
@@ -713,4 +714,29 @@ message TubeInterrupts {
     bool pirq = 2;           // Coprocessor IRQ: (I=1 AND R1 H-to-P has data) OR (J=1 AND R4 H-to-P has data)
     bool pnmi_level = 3;     // PNMI level (combinational, before edge detection)
     bool pnmi_edge = 4;      // PNMI latched rising edge
+}
+
+message GetRealTimeClockStateRequest {}
+
+// The machine's own real-time clock chip -- the Integra-B's CDP6818 -- read
+// without side effects: register C's interrupt flags are not cleared, and the
+// chip's address register is not moved, as reading through the guest's RTC
+// ports would. A plug-in clock (acorn-rtc on the user port) is an extension
+// and is not reported here.
+message RealTimeClockState {
+    // False on a machine with no real-time clock of its own; the rest is then
+    // empty.
+    bool present = 1;
+
+    // The chip, e.g. "CDP6818".
+    string chip = 2;
+
+    // All 64 registers in order, as a read of each would return them: 0-9 the
+    // time and alarm, 10-13 control registers A-D, 14-63 the battery-backed
+    // CMOS RAM (on the Integra-B, IBOS keeps its configuration from register
+    // 14, so its user register N is register 14 + N).
+    bytes registers = 3;
+
+    // The register the chip's address latch selects.
+    uint32 address_register = 4;
 }

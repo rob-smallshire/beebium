@@ -42,11 +42,17 @@ inline constexpr uint8_t RTC_REGISTER_A = 0x20;
 inline constexpr uint8_t RTC_REGISTER_B = 0x0E;
 
 // CMOS RAM from register &0E (IBOS configuration: LANG, FILE, MODE, ...);
-// registers beyond these are zero.
+// registers beyond these are zero. IBOS's user register N is CMOS RAM byte N.
 inline constexpr uint8_t CMOS_RAM[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x33, 0xFF, 0xFF, 0x78, 0x00,
     0x17, 0x20, 0x19, 0x05, 0x0A, 0x2D, 0xA1, 0xFF,
 };
+
+// IBOS user register &0F bit 0: clear for *CONFIGURE TUBE, set for
+// *CONFIGURE NOTUBE (as measured: *CONFIGURE TUBE turns &2D into &2C). The
+// seed above is NOTUBE, as a board is after Full System Reset.
+inline constexpr size_t TUBE_USER_REGISTER = 0x0F;
+inline constexpr uint8_t NOTUBE_BIT = 0x01;
 
 // IBOS workspace in private RAM (&8000-&AFFF): the non-zero bytes, as
 // (address, value) pairs; all other private RAM is zero.
@@ -68,13 +74,19 @@ inline constexpr PrivateRamByte PRIVATE_RAM[] = {
     {0x83B8, 0xFF}, {0x83B9, 0xFF}, {0x83BA, 0x90}, {0x83FF, 0x0F},
 };
 
-// The clock's battery-backed registers, as set up.
-inline void apply_to_clock(Mc146818Rtc& rtc) {
+// The clock's battery-backed registers, as set up. A board set up with a
+// Tube coprocessor fitted is configured TUBE (#203): nobody fits a second
+// processor and leaves it NOTUBE.
+inline void apply_to_clock(Mc146818Rtc& rtc, bool tube_coprocessor = false) {
     Mc146818Rtc::BatteryImage image{};
     image[Mc146818Rtc::REG_A] = RTC_REGISTER_A;
     image[Mc146818Rtc::REG_B] = RTC_REGISTER_B;
     for (size_t i = 0; i < sizeof(CMOS_RAM); ++i) {
         image[Mc146818Rtc::FIRST_RAM_REGISTER + i] = CMOS_RAM[i];
+    }
+    if (tube_coprocessor) {
+        image[Mc146818Rtc::FIRST_RAM_REGISTER + TUBE_USER_REGISTER] &=
+            static_cast<uint8_t>(~NOTUBE_BIT);
     }
     rtc.load_battery_image(image);
 }

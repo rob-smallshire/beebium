@@ -76,6 +76,7 @@ export {
 } from "./extension_ui.js";
 export { Via, ViaId, type ViaState } from "./via.js";
 export { Crtc, type CrtcState } from "./crtc.js";
+export { RealTimeClock, type RealTimeClockState, FIRST_CMOS_REGISTER } from "./real-time-clock.js";
 export { VideoUla, type VideoUlaState } from "./video-ula.js";
 export { AddressableLatch, type AddressableLatchState } from "./latch.js";
 export { Sound, type SoundChannelState, type SoundGeneratorState } from "./sound.js";

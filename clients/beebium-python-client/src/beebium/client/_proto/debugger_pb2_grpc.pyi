@@ -626,6 +626,7 @@ class DeviceInspectionStub:
     GetAddressableLatchState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetAddressableLatchStateRequest, _debugger_pb2.AddressableLatchState]
     GetSoundGeneratorState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetSoundGeneratorStateRequest, _debugger_pb2.SoundGeneratorState]
     GetTubeState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetTubeStateRequest, _debugger_pb2.TubeState]
+    GetRealTimeClockState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetRealTimeClockStateRequest, _debugger_pb2.RealTimeClockState]
 
 @_typing.type_check_only
 class DeviceInspectionAsyncStub(DeviceInspectionStub):
@@ -641,6 +642,7 @@ class DeviceInspectionAsyncStub(DeviceInspectionStub):
     GetAddressableLatchState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetAddressableLatchStateRequest, _debugger_pb2.AddressableLatchState]  # type: ignore[assignment]
     GetSoundGeneratorState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetSoundGeneratorStateRequest, _debugger_pb2.SoundGeneratorState]  # type: ignore[assignment]
     GetTubeState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetTubeStateRequest, _debugger_pb2.TubeState]  # type: ignore[assignment]
+    GetRealTimeClockState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetRealTimeClockStateRequest, _debugger_pb2.RealTimeClockState]  # type: ignore[assignment]
 
 class DeviceInspectionServicer(metaclass=_abc_1.ABCMeta):
     """BBC Micro device state inspection.
@@ -695,5 +697,12 @@ class DeviceInspectionServicer(metaclass=_abc_1.ABCMeta):
         request: _debugger_pb2.GetTubeStateRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_debugger_pb2.TubeState, _abc.Awaitable[_debugger_pb2.TubeState]]: ...
+
+    @_abc_1.abstractmethod
+    def GetRealTimeClockState(
+        self,
+        request: _debugger_pb2.GetRealTimeClockStateRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_debugger_pb2.RealTimeClockState, _abc.Awaitable[_debugger_pb2.RealTimeClockState]]: ...
 
 def add_DeviceInspectionServicer_to_server(servicer: DeviceInspectionServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

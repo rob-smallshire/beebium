@@ -458,6 +458,25 @@ if(TARGET beebium_ext_acorn_65c102_plugin)
         --machine-description "Model B+ 128K, {coprocessor-cpu} Copro ({coprocessor-clock})"
         --tube-65c102)
 endif()
+# The 6502 Second Processor on the B+ 128K and the Integra-B. An Integra-B
+# launched with a coprocessor is seeded *CONFIGURE TUBE (#203), so it boots
+# with the Tube in; the disc set-up is model-b-integra-b-disc's.
+if(TARGET beebium_ext_acorn_65c02_plugin)
+    add_plugin_preset(beebium-model-b-plus-128k beebium_ext_acorn_65c02_plugin
+        "model-b-plus-128k-65c02-copro"
+        "Model B+ 128K, 65C02 Copro (3 MHz)" "1985-06"
+        DESCRIPTION "128K B+, 65C02 copro (3 MHz)"
+        THUMBNAIL_DELAY 6
+        --machine-description "Model B+ 128K, {coprocessor-cpu} Copro ({coprocessor-clock})"
+        --tube-65c02)
+    add_plugin_preset(beebium-model-b-integra-b beebium_ext_acorn_65c02_plugin
+        "model-b-integra-b-disc-65c02-copro"
+        "Model B with Integra-B (Disc), 65C02 Copro (3 MHz)" "1988"
+        DESCRIPTION "Integra-B (IBOS 1.26), 1770 DFS, 65C02 copro (3 MHz)"
+        THUMBNAIL_DELAY 6
+        --machine-description "Model B with Integra-B (Disc), {coprocessor-cpu} Copro ({coprocessor-clock})"
+        --fdc acorn-1770 --sideways slot=1:type=rom:image=acorn-dfs_2_26.rom --tube-65c02)
+endif()
 
 # Econet-over-Piconet preset. Piconet is a plugin, so this uses add_plugin_preset
 # (depends on the plugin so it is deployed before create-preset resolves

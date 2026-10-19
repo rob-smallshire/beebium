@@ -1341,6 +1341,12 @@ TEST_CASE("capture-screenshot runs the Tube coprocessor from a preset",
          "model-b-disc",             "acorn-65c02-coprocessor"},
         {"beebium-model-b-plus-128k", "model-b-plus-128k-65c102-copro",
          "model-b-plus-128k",        "acorn-65c102-coprocessor"},
+        {"beebium-model-b-plus-128k", "model-b-plus-128k-65c02-copro",
+         "model-b-plus-128k",        "acorn-65c02-coprocessor"},
+        // Boots with the Tube in only because a board launched with a
+        // coprocessor is seeded *CONFIGURE TUBE (#203).
+        {"beebium-model-b-integra-b", "model-b-integra-b-disc-65c02-copro",
+         "model-b-integra-b-disc",   "acorn-65c02-coprocessor"},
     };
 
     auto read_file = [](const std::filesystem::path& p) {

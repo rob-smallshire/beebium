@@ -123,3 +123,44 @@ TEST_CASE("battery_units: contents of the wrong size are refused and change noth
         CHECK(unit->serialise() == before);
     }
 }
+
+namespace {
+
+uint8_t ibos_user_register(ModelBIntegraB& machine, std::size_t user_register) {
+    return machine.state().memory.rtc.battery_image()[Mc146818Rtc::FIRST_RAM_REGISTER +
+                                                      user_register];
+}
+
+constexpr std::size_t TUBE_REGISTER = integra_b_battery_seed::TUBE_USER_REGISTER;
+
+}  // namespace
+
+TEST_CASE("battery_units: an Integra-B seeded with a coprocessor is configured TUBE (#203)",
+          "[battery]") {
+    auto machine = std::make_unique<ModelBIntegraB>();
+    CHECK(ibos_user_register(*machine, TUBE_REGISTER) == 0x2D);  // NOTUBE, as Full System Reset
+
+    machine->state().memory.seed_with_tube_coprocessor();
+    CHECK(ibos_user_register(*machine, TUBE_REGISTER) == 0x2C);  // *CONFIGURE TUBE
+
+    // Only that bit: the rest of the CMOS is the seed.
+    for (std::size_t i = 0; i < sizeof(integra_b_battery_seed::CMOS_RAM); ++i) {
+        if (i == TUBE_REGISTER) continue;
+        CHECK(ibos_user_register(*machine, i) == integra_b_battery_seed::CMOS_RAM[i]);
+    }
+
+    // A later seed (reset-battery) is still one with the coprocessor fitted.
+    unit_named(machine->battery_units(), "integra-b-rtc").seed();
+    CHECK(ibos_user_register(*machine, TUBE_REGISTER) == 0x2C);
+}
+
+TEST_CASE("battery_units: a clock restored from a saved machine keeps its NOTUBE (#203)",
+          "[battery]") {
+    auto saved = std::make_unique<ModelBIntegraB>();  // saved without a coprocessor
+    const auto kept = unit_named(saved->battery_units(), "integra-b-rtc").serialise();
+
+    auto machine = std::make_unique<ModelBIntegraB>();
+    REQUIRE(unit_named(machine->battery_units(), "integra-b-rtc").restore(kept));
+    machine->state().memory.seed_with_tube_coprocessor();
+    CHECK(ibos_user_register(*machine, TUBE_REGISTER) == 0x2D);
+}

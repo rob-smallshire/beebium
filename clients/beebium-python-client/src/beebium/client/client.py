@@ -29,6 +29,7 @@ from beebium.client.basic import Basic
 from beebium.client.connection import Connection
 from beebium.client.cpu import CPU
 from beebium.client.crtc import Crtc
+from beebium.client.real_time_clock import RealTimeClock
 from beebium.client.debugger import Debugger, wall_timeout_for
 from beebium.client.disc import Disc
 from beebium.client.econet import Econet
@@ -110,6 +111,7 @@ class Beebium:
         self._system_via: Via | None = None
         self._user_via: Via | None = None
         self._crtc: Crtc | None = None
+        self._real_time_clock: RealTimeClock | None = None
         self._video_ula: VideoUla | None = None
         self._addressable_latch: AddressableLatch | None = None
         self._sound: Sound | None = None
@@ -387,6 +389,13 @@ class Beebium:
         if self._crtc is None:
             self._crtc = Crtc(self._connection.device_inspection_stub)
         return self._crtc
+
+    @property
+    def real_time_clock(self) -> RealTimeClock:
+        """Access the machine's own real-time clock chip (the Integra-B's CDP6818)."""
+        if self._real_time_clock is None:
+            self._real_time_clock = RealTimeClock(self._connection.device_inspection_stub)
+        return self._real_time_clock
 
     @property
     def video_ula(self) -> VideoUla:

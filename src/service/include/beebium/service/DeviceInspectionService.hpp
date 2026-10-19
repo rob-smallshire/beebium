@@ -14,6 +14,7 @@
 #define BEEBIUM_SERVICE_DEVICE_INSPECTION_SERVICE_HPP
 
 #include "debugger.grpc.pb.h"
+#include <beebium/devices/Mc146818Rtc.hpp>
 #include <beebium/tube/TubeSocket.hpp>
 #include <beebium/tube/TubeInspection.hpp>
 #include <grpcpp/grpcpp.h>
@@ -381,6 +382,31 @@ public:
             response->set_latched_register(chip.latched_register());
         });
 
+        return grpc::Status::OK;
+    }
+
+    grpc::Status GetRealTimeClockState(
+        grpc::ServerContext* /*context*/,
+        const GetRealTimeClockStateRequest* /*request*/,
+        RealTimeClockState* response) override
+    {
+        if constexpr (requires { machine_.memory().rtc.peek_register(uint8_t{0}); }) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            // The clock is written on the emulation thread; read it whole.
+            machine_.with_emulation_paused([&] {
+                const auto& rtc = machine_.memory().rtc;
+                std::string registers(Mc146818Rtc::REGISTER_COUNT, '\0');
+                for (uint8_t reg = 0; reg < Mc146818Rtc::REGISTER_COUNT; ++reg) {
+                    registers[reg] = static_cast<char>(rtc.peek_register(reg));
+                }
+                response->set_present(true);
+                response->set_chip("CDP6818");
+                response->set_registers(std::move(registers));
+                response->set_address_register(rtc.address());
+            });
+        } else {
+            response->set_present(false);
+        }
         return grpc::Status::OK;
     }
 

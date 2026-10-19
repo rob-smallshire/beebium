@@ -208,6 +208,12 @@ def test_the_default_name_is_the_model_or_preset_and_the_ordinal(
     [
         ("model-b-disc-65c02-copro", "model-b", "Model B (Disc), 65C02 Copro (3 MHz)"),
         ("model-b-plus-128k-65c102-copro", "model-b-plus-128k", "Model B+ 128K, 65C102 Copro (4 MHz)"),
+        ("model-b-plus-128k-65c02-copro", "model-b-plus-128k", "Model B+ 128K, 65C02 Copro (3 MHz)"),
+        (
+            "model-b-integra-b-disc-65c02-copro",
+            "model-b-integra-b",
+            "Model B with Integra-B (Disc), 65C02 Copro (3 MHz)",
+        ),
     ],
 )
 def test_a_coprocessor_preset_describes_the_machine_from_its_coprocessor(

@@ -31,6 +31,7 @@ import { ExtensionUi } from "./extension_ui.js";
 import { Indicators } from "./indicators.js";
 import { Via, ViaId } from "./via.js";
 import { Crtc } from "./crtc.js";
+import { RealTimeClock } from "./real-time-clock.js";
 import { VideoUla } from "./video-ula.js";
 import { AddressableLatch } from "./latch.js";
 import { Sound } from "./sound.js";
@@ -94,6 +95,7 @@ export class Beebium {
     private _systemVia?: Via;
     private _userVia?: Via;
     private _crtc?: Crtc;
+    private _realTimeClock?: RealTimeClock;
     private _videoUla?: VideoUla;
     private _addressableLatch?: AddressableLatch;
     private _sound?: Sound;
@@ -432,6 +434,14 @@ export class Beebium {
             this._crtc = new Crtc(this.connection.deviceInspectionStub);
         }
         return this._crtc;
+    }
+
+    /** Access the machine's own real-time clock chip (the Integra-B's CDP6818). */
+    get realTimeClock(): RealTimeClock {
+        if (this._realTimeClock === undefined) {
+            this._realTimeClock = new RealTimeClock(this.connection.deviceInspectionStub);
+        }
+        return this._realTimeClock;
     }
 
     /** Access Video ULA state. */

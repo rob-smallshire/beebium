@@ -988,8 +988,9 @@ private:
         std::uint32_t layout_version() const override { return 1; }
         std::string hardware_descriptor() const override { return "Integra-B: CDP6818"; }
         void seed() override {
-            integra_b_battery_seed::apply_to_clock(board_.rtc);
+            integra_b_battery_seed::apply_to_clock(board_.rtc, board_.seed_with_tube_coprocessor_);
             board_.rtc.set_clock_offset(std::chrono::seconds(0));
+            restored_ = false;
         }
         std::vector<uint8_t> serialise() const override {
             const auto image = board_.rtc.battery_image();
@@ -1010,19 +1011,37 @@ private:
             }
             board_.rtc.load_battery_image(image);
             board_.rtc.set_clock_offset(std::chrono::seconds(static_cast<std::int64_t>(offset)));
+            restored_ = true;
             return true;
         }
 
+        // Whether the clock holds what a saved machine kept, rather than the seed.
+        bool restored() const { return restored_; }
+
     private:
         ModelBIntegraBHardware& board_;
+        bool restored_ = false;
     };
 
     BoardRamUnit board_ram_unit_{*this};
     ClockUnit clock_unit_{*this};
 
+    // See seed_with_tube_coprocessor().
+    bool seed_with_tube_coprocessor_ = false;
+
 public:
     // The board's battery-backed units: its RAM and its clock.
     std::vector<BatteryBackedUnit*> battery_units() { return {&board_ram_unit_, &clock_unit_}; }
+
+    // A Tube coprocessor is attached, so the board's seed is one set up with
+    // it fitted: *CONFIGURE TUBE (#203). The seed only: a clock that took
+    // back a saved machine's CMOS keeps it, so a machine saved without a
+    // coprocessor and launched with one still needs *CONFIGURE TUBE. Call
+    // before power-on, once any saved state has been restored.
+    void seed_with_tube_coprocessor() {
+        seed_with_tube_coprocessor_ = true;
+        if (!clock_unit_.restored()) clock_unit_.seed();
+    }
 
 private:
 
