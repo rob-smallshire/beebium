@@ -72,8 +72,10 @@ def test_run_during_auto_selection_starts_the_machine(
     # Reproduces the macOS app defect (black screen on the auto preset): the app
     # launches with --wait=api and calls DebuggerControl.Run ONCE, immediately
     # after the port is reachable -- which is while the deferred station
-    # selection is still running. That early Run must be honoured so the machine
-    # then runs; it must not fail and must not leave the machine paused forever.
+    # selection is still running. launch() does exactly that (#198): it waits
+    # with --wait=api and issues its Run as soon as it has connected. That early
+    # Run must be honoured so the machine then runs; it must not fail and must
+    # not leave the machine paused forever.
     monkeypatch.setenv("BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS", "3000")
     monkeypatch.setenv("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none")
     monkeypatch.setenv("BEEBIUM_AUN_AUTO_BUDGET_MS", "4000")
@@ -83,14 +85,9 @@ def test_run_during_auto_selection_starts_the_machine(
         preset="model-b-disc-aun-auto",
         # Keep the real per-user map file out; discovery stays on (--station
         # auto needs it), isolated only by the range-tolerant assertion below.
-        extra_args=["--wait=api", "--aun", "map-file=none"],
+        extra_args=["--aun", "map-file=none"],
         startup_timeout=3.0,  # port is up well before the 3 s selection ends
     ) as bbc:
-        # Call Run now, while selection is still in progress. Post-fix this
-        # blocks until selection completes, then starts the machine; it must not
-        # raise ("already running" or otherwise).
-        bbc.debugger.run()
-
         # The machine actually executes: the cycle count advances.
         start_cycles = bbc.debugger.cycle_count
         deadline = time.monotonic() + 20.0
