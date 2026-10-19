@@ -75,6 +75,11 @@ public:
         return controller_->read(offset);
     }
 
+    // Read for inspection, without the controller's read side effects
+    uint8_t peek(uint16_t offset) const {
+        return controller_ ? controller_->peek(offset) : 0xFF;
+    }
+
     // Write to disc controller region
     // @param offset Address offset (0x00-0x1F within the socket's region)
     // @param value Value to write

@@ -293,7 +293,7 @@ public:
         if (addr >= 0xFEE0 && addr <= 0xFEFF) {
             return tube_socket.peek(addr & 0x07);
         }
-        return memory_map_.read(addr);
+        return memory_map_.peek(addr);
     }
 
     uint8_t peek_video(uint16_t addr) const {

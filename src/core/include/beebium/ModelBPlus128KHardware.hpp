@@ -569,7 +569,7 @@ public:
             return andy_ram.read(addr - 0x8000);
         }
         // All other regions - use main memory map
-        return memory_map_.read(addr);
+        return memory_map_.peek(addr);
     }
 
     // Video memory access - reads from currently configured video RAM.

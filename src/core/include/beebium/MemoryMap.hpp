@@ -28,6 +28,13 @@ concept MemoryMappedDevice = requires(T& device, uint16_t offset, uint8_t value)
     { device.write(offset, value) } -> std::same_as<void>;
 };
 
+// A device that can also be read without side effects, for inspection: a peek
+// leaves interrupt flags, FIFOs and data-ready latches as they were.
+template<typename T>
+concept PeekableDevice = requires(const T& device, uint16_t offset) {
+    { device.peek(offset) } -> std::convertible_to<uint8_t>;
+};
+
 // Mirror policies for address decoding
 
 struct NoMirror {
@@ -63,6 +70,16 @@ struct Region {
         void write(uint16_t addr, uint8_t value) {
             device.write(MirrorPolicy::apply(addr - Base), value);
         }
+
+        // A read for inspection: the device's peek where it has one, else its
+        // read, which then must have no side effects.
+        uint8_t peek(uint16_t addr) const {
+            if constexpr (PeekableDevice<Device>) {
+                return device.peek(MirrorPolicy::apply(addr - Base));
+            } else {
+                return device.read(MirrorPolicy::apply(addr - Base));
+            }
+        }
     };
 
     template<MemoryMappedDevice Device>
@@ -91,6 +108,21 @@ uint8_t dispatch_read(const Tuple& regions, uint16_t addr,
         return dispatch_read<I + 1>(regions, addr, last_bus_value, mode);
     } else {
         // Unmapped address: return value based on bus speed and mode
+        return unmapped_read_value(addr, last_bus_value, mode);
+    }
+}
+
+// Recursive dispatch for peek: as read, but through each device's peek
+template<size_t I, typename Tuple>
+uint8_t dispatch_peek(const Tuple& regions, uint16_t addr,
+                      uint8_t last_bus_value, OpenBusMode mode) {
+    if constexpr (I < std::tuple_size_v<Tuple>) {
+        const auto& region = std::get<I>(regions);
+        if (region.contains(addr)) {
+            return region.peek(addr);
+        }
+        return dispatch_peek<I + 1>(regions, addr, last_bus_value, mode);
+    } else {
         return unmapped_read_value(addr, last_bus_value, mode);
     }
 }
@@ -138,6 +170,12 @@ public:
         uint8_t value = detail::dispatch_read<0>(regions_, addr, last_bus_value_, open_bus_mode_);
         last_bus_value_ = value;
         return value;
+    }
+
+    // Read for inspection: no device side effects, and the bus value is left
+    // as the CPU last drove it.
+    uint8_t peek(uint16_t addr) const {
+        return detail::dispatch_peek<0>(regions_, addr, last_bus_value_, open_bus_mode_);
     }
 
     // Write to memory, updating the bus value.

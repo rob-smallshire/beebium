@@ -102,6 +102,17 @@ public:
         }
     }
 
+    // Read a register for inspection: as read(), but reading the status leaves
+    // INTRQ set and reading the data register leaves DRQ set.
+    uint8_t peek(uint16_t offset) const {
+        switch (offset & 0x03) {
+            case 0: return drq_ ? static_cast<uint8_t>(status_ | STATUS_DRQ) : status_;
+            case 1: return track_;
+            case 2: return sector_;
+            default: return data_;
+        }
+    }
+
     void write(uint16_t offset, uint8_t value) {
         switch (offset & 0x03) {
             case 0: execute_command(value); break;

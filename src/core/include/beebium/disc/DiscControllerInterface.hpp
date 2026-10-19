@@ -54,6 +54,10 @@ public:
     // @param value Value to write
     virtual void write(uint16_t offset, uint8_t value) = 0;
 
+    // Read a register for inspection, without the side effects of read()
+    // (clearing an interrupt or a data request).
+    virtual uint8_t peek(uint16_t offset) const = 0;
+
     // =========================================================================
     // Clock interface
     // =========================================================================

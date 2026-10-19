@@ -87,6 +87,14 @@ public:
         return 0xFF;
     }
 
+    uint8_t peek(uint16_t offset) const override {
+        offset &= 0x1F;
+        if (offset >= 0x04 && offset < 0x08) {
+            return wd1770_.peek(offset - 0x04);
+        }
+        return 0xFF;
+    }
+
     void write(uint16_t offset, uint8_t value) override {
         offset &= 0x1F;
 

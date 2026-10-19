@@ -487,7 +487,7 @@ public:
         if (addr >= 0xFEE0 && addr <= 0xFEFF) {
             return tube_socket.peek(addr & 0x07);
         }
-        return memory_map_.read(addr);
+        return memory_map_.peek(addr);
     }
 
     // The video circuitry is on the motherboard: it always reads main memory.

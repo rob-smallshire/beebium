@@ -352,7 +352,7 @@ public:
             return tube_socket.peek(addr & 0x07);
         }
         // All other regions have no read side effects
-        return memory_map_.read(addr);
+        return memory_map_.peek(addr);
     }
 
     // Video memory access - reads from currently configured video RAM.
