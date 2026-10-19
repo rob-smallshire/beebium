@@ -100,7 +100,8 @@ class TestWaitUntilReady:
         bbc.debugger.run()
         bbc.wait_until_ready()
         assert bbc.keyboard.typing_status().guest_ready
-        assert ">" in _screen(bbc)
+        # The prompt can be drawn after the last displayed frame was taken.
+        assert bbc.run_until_or_timeout(lambda: ">" in _screen(bbc), 1.0), _screen(bbc)
 
     def test_a_ready_guest_returns_at_once(self, launch_bbc) -> None:
         bbc = _launch_with_disc(launch_bbc, "model-b-disc", "model-b")
