@@ -64,16 +64,11 @@ def run_until_or_timeout(bbc: Beebium, predicate, emulated_seconds: float, chunk
 
 
 def wait_for_basic_prompt(bbc: Beebium, emulated_seconds: float = 10.0) -> None:
-    """Run until the BASIC prompt is up, in emulated time, before typing.
+    """Run until the BASIC prompt is up, in emulated time, failing if it never is.
 
-    A launched server is already running when the client connects, and typed
-    text is pressed at once, so text typed straight after launch lands at
-    whatever emulated moment the host has reached. Within the first ~0.3
-    emulated seconds the MOS is still resetting and the command is garbled
-    ("Searching / File not found", "Bad command", "Mistake"); a slow or
-    stalled host reaches the type call that early (issues #76, #125). Waiting for the
-    prompt in emulated time makes the boot independent of host speed. The
-    machine is left stopped.
+    For a test that reads the screen BASIC boots to, or times what follows
+    from the prompt. Typing needs no such wait: the server holds type-ahead
+    until the guest asks for input (#125). The machine is left stopped.
     """
     assert bbc.run_until_or_timeout(
         lambda: screen_contains(bbc, ">"), emulated_seconds, chunk_seconds=0.1

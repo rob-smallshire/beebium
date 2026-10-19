@@ -48,7 +48,6 @@ def _switch_to_mode(bbc: Beebium, mode: int, message: str) -> bool:
     screen, so the pitch derived from it dips before the mode has changed and a
     wait on the pitch returns while the display is still teletext.
     """
-    _wait_for_prompt(bbc)
     bbc.keyboard.type(f'MODE {mode}\rPRINT "{message}"\r')
 
     # A stopped machine never drains the type-ahead queue, so the machine has
@@ -68,7 +67,6 @@ def _run_program(bbc: Beebium, lines: list[str]) -> bool:
     is what lets a test tell grid text from off-grid text without the echoed
     source getting in the way.
     """
-    _wait_for_prompt(bbc)
     program = "".join(f"{10 * (i + 1)} {line}\r" for i, line in enumerate(lines))
     bbc.keyboard.type("NEW\r" + program + "RUN\r")
 
@@ -187,7 +185,6 @@ class TestTeletextRepertoire:
     AS_DISPLAYED = "←→↑÷"
 
     def _print_divergent(self, bbc: Beebium) -> None:
-        _wait_for_prompt(bbc)
         bbc.keyboard.type(f'PRINT "{self.DIVERGENT}"\r')
         assert bbc.run_until_or_timeout(
             lambda: self.DIVERGENT in bbc.video.screen_text().text,
@@ -228,7 +225,6 @@ class TestTeletextRepertoire:
         Unicode's block sextants are the same 2x3 pattern the SAA5050 draws,
         so this is an exact mapping and not a picture of one.
         """
-        _wait_for_prompt(bbc)
         # CHR$(151) selects contiguous graphics; then every block, the
         # top-left alone, the left column, and none.
         bbc.keyboard.type(
@@ -281,7 +277,6 @@ class TestIndentationAcrossModes:
     ]
 
     def _run_table(self, bbc: Beebium, mode: int | None) -> str:
-        _wait_for_prompt(bbc)
         lines = list(self.PROGRAM)
         if mode is not None:
             lines.insert(0, f"MODE {mode}")

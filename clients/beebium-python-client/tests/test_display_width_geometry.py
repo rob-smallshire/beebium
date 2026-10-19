@@ -128,7 +128,6 @@ class TestEliteDisplayWidth:
                 ],
                 startup_timeout=20.0,
             ) as bbc:
-                wait_for_basic_prompt(bbc)
                 bbc.disc.drive(0).insert(elite_disc_filepath)
                 bbc.keyboard.type("*RUN !BOOT\r")
                 yield bbc
@@ -254,7 +253,6 @@ class TestBoffinDisplayWidth:
                 ],
                 startup_timeout=20.0,
             ) as bbc:
-                wait_for_basic_prompt(bbc)
                 bbc.disc.drive(0).insert(boffin_disc_filepath)
                 bbc.keyboard.type("*EXEC !BOOT\r")
                 yield bbc

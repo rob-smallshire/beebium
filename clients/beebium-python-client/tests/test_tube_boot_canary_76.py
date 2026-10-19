@@ -20,10 +20,11 @@ and coprocessor cycle counts before and after streaming (so zero emulated
 progress can be told from a stream/transport disruption), the Tube ULA state
 with its transfer counters and interrupts, the screen text, and both CPUs' PCs.
 
-It waits for the boot banner in emulated time before typing. Issue #76 was a
-command typed straight after launch: on a slow or stalled CI host it landed
-within the MOS reset and was garbled, so Elite never loaded (#125 tracks
-making that wait unnecessary).
+It requires the Tube boot banner, in emulated time, before booting the disc.
+Issue #76 was a command typed straight after launch, which on a slow or
+stalled CI host landed within the MOS reset and was garbled; the server now
+holds type-ahead until the guest asks for input (#125), so the typing no
+longer depends on that wait.
 
 Requirements:
     - Beebium server executable (auto-detected or via BEEBIUM_SERVER)

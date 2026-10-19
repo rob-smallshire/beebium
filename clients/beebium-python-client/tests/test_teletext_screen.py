@@ -43,7 +43,6 @@ class TestTeletextScreen:
         assert "BASIC" in screen.text
 
     def test_typed_text_appears(self, bbc: Beebium) -> None:
-        _wait_for_prompt(bbc)
         bbc.keyboard.type('PRINT "TELETEXT"\r')
 
         # Advance the machine while waiting rather than calling
@@ -172,7 +171,6 @@ class TestTeletextCellAttributes:
     def test_a_colour_code_sets_the_foreground_and_is_marked_a_control_code(
         self, bbc: Beebium
     ) -> None:
-        _wait_for_prompt(bbc)
         bbc.keyboard.type('PRINT CHR$(130);"Q"\r')  # alpha green, then Q
 
         cell = self._find_cell(bbc, lambda c: c.character == ord("Q") and c.fg == 2)
@@ -190,7 +188,6 @@ class TestTeletextCellAttributes:
     ) -> None:
         # A concealed cell keeps its character on the wire -- the reader is what
         # declines to copy it -- so it is found by cell, not by text.
-        _wait_for_prompt(bbc)
         bbc.keyboard.type('PRINT CHR$(152);"Q"\r')  # conceal, then Q
 
         cell = self._find_cell(
@@ -199,7 +196,6 @@ class TestTeletextCellAttributes:
         assert cell.concealed
 
     def test_graphics_codes_switch_the_character_set(self, bbc: Beebium) -> None:
-        _wait_for_prompt(bbc)
         # Graphics white then contiguous, and separately separated graphics.
         bbc.keyboard.type("PRINT CHR$(151);CHR$(255)\r")
         contiguous = self._find_cell(
@@ -214,7 +210,6 @@ class TestTeletextCellAttributes:
         assert separated.charset == CHARSET_SEPARATED
 
     def test_double_height_is_carried(self, bbc: Beebium) -> None:
-        _wait_for_prompt(bbc)
         bbc.keyboard.type('PRINT CHR$(141);"Q"\r')  # double height, then Q
 
         cell = self._find_cell(
@@ -226,7 +221,6 @@ class TestTeletextCellAttributes:
     def test_flash_is_carried_on_the_concealed_phase(self, bbc: Beebium) -> None:
         # Flash is phase-dependent: the cell reads as flashing only on the frames
         # where the character is hidden. Sampling across frames catches one.
-        _wait_for_prompt(bbc)
         bbc.keyboard.type('PRINT CHR$(136);"Q"\r')  # flash, then Q
 
         cell = self._find_cell(
