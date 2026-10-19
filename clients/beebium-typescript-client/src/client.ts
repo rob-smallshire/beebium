@@ -173,22 +173,32 @@ export class Beebium {
     /**
      * Launch a beebium-server subprocess and connect to it.
      *
-     * The server is managed by this client instance. Calling close()
-     * will stop the server process.
+     * The server waits for this client, which starts the machine once it has
+     * connected and verified the protocol, so a launch means the same thing in
+     * emulated time however long the host took to connect. The server is
+     * managed by this client instance. Calling close() will stop the server
+     * process.
      *
      * Requires: nothing.
-     * Leaves the machine: STOPPED.
+     * Leaves the machine: RUNNING.
      *
      * @param options - Server process options (model, args, etc.) plus
-     *     an optional timeoutMs for the connection (default 5000).
+     *     an optional timeoutMs for the connection (default 5000), and
+     *     startStopped to leave the machine stopped having executed no
+     *     instruction: the reset sequence has run and the PC is at the reset
+     *     vector, so breakpoints and watchpoints set before
+     *     `debugger.run()` see everything the guest does. (`run()` steps over
+     *     a breakpoint at the PC it starts from; use
+     *     `run({ stopAtCurrent: true })` to stop on one at the reset vector
+     *     itself.)
      * @returns A connected Beebium client managing the server process.
      * @throws ServerStartupError if the server fails to start.
      * @throws TimeoutError if the connection cannot be established.
      */
     static async launch(
-        options: ServerProcessOptions & { timeoutMs?: number },
+        options: ServerProcessOptions & { timeoutMs?: number; startStopped?: boolean },
     ): Promise<Beebium> {
-        const { timeoutMs = 5000, ...serverOptions } = options;
+        const { timeoutMs = 5000, startStopped = false, ...serverOptions } = options;
         const server = new ServerProcess(serverOptions);
         await server.start(serverOptions.timeout ?? timeoutMs);
 
@@ -212,6 +222,9 @@ export class Beebium {
                 await new Promise(r => setTimeout(r, 10));
             }
 
+            if (!startStopped) {
+                await bbc.debugger.run();
+            }
             return bbc;
         } catch (error) {
             connection?.close();

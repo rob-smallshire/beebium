@@ -189,7 +189,14 @@ try {
 ```
 
 `launch()` allocates a free port (using `--port 0`), starts the server with
-`--wait=api` (machine paused until a client sends a command), and connects.
+`--wait=api` (the machine waits for a client), connects, and then starts the
+machine, so a launch means the same thing in emulated time however long the
+host took to connect. Pass `startStopped: true` to leave it stopped instead,
+having executed no instruction: the reset sequence has run and the PC is at the
+reset vector, so breakpoints and watchpoints set before `bbc.debugger.run()`
+see everything the guest does. (`run()` steps over a breakpoint at the PC it
+starts from; use `run({ stopAtCurrent: true })` to stop on one at the reset
+vector itself.)
 
 ### Launch options
 
@@ -202,6 +209,7 @@ const bbc = await Beebium.launch({
     timeoutMs: 5000,                     // gRPC connection timeout (ms)
     provenanceType: "my-test-harness",   // identifies the launcher
     provenanceVersion: "1.0.0",
+    startStopped: false,                 // true: stopped before the first instruction
 });
 ```
 
@@ -225,14 +233,12 @@ await using bbc = await Beebium.launch({ model: "B" });
 Whether a call needs the machine running, and whether it leaves it running or
 stopped, is in each method's JSDoc as two lines, `Requires: ...` and
 `Leaves the machine: ...`; this table collects them, and
-`tests/run-state-docs.test.ts` keeps the two in step. Unlike the Python client,
-`Beebium.launch` returns the machine stopped (the server starts with
-`--wait=api`), so call `bbc.debugger.run()` before anything that needs it
-running.
+`tests/run-state-docs.test.ts` keeps the two in step. As in the Python client,
+`Beebium.launch` returns the machine running unless `startStopped` is set.
 
 | Call | Requires | Leaves the machine |
 |---|---|---|
-| `Beebium.launch` | nothing | STOPPED |
+| `Beebium.launch` | nothing | RUNNING |
 | `Beebium.connect` | nothing | unchanged |
 | `Beebium.waitUntilReady` | a running machine | unchanged |
 | `Beebium.runForEmulatedSeconds` | any run state | STOPPED |
@@ -256,8 +262,8 @@ running.
 
 ## Debugger control
 
-The server starts with the machine paused when `--wait=api` is used (the
-default for `launch()`). Use the debugger to control execution:
+`launch()` leaves the machine running (or, with `startStopped`, paused at the
+reset vector). Use the debugger to control execution:
 
 ```typescript
 // Query execution state

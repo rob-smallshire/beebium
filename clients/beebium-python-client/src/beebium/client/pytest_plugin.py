@@ -362,6 +362,7 @@ def _launcher(
         variant: str = DEFAULT_VARIANT,
         extra_args: Sequence[str] = (),
         startup_timeout: float = 10.0,
+        start_stopped: bool = False,
     ) -> Beebium:
         # The MOS and BASIC fixtures are the Model B's ROMs; any other variant
         # boots the defaults its own server resolves.
@@ -385,6 +386,7 @@ def _launcher(
                     extra_args=list(extra_args),
                     startup_timeout=startup_timeout,
                     preset=preset_filepath,
+                    start_stopped=start_stopped,
                 )
             )
         except ServerNotFoundError as e:
@@ -402,7 +404,9 @@ def launch_bbc(
     """A factory that launches BBC Micros, each torn down when the test ends.
 
     ``launch_bbc(preset=None, variant="model-b", extra_args=(),
-    startup_timeout=10.0)`` launches a machine and returns it connected. A test
+    startup_timeout=10.0, start_stopped=False)`` launches a machine and returns
+    it connected, running, or stopped before its first instruction with
+    ``start_stopped=True``. A test
     can launch several (a Model B and a B+, say, or the same program booted
     from disc and loaded into memory), or launch one only after its own setup.
     Skips the test if the server executable is not available.

@@ -193,6 +193,10 @@ stopped, is in each method's docstring as two lines, `Requires: ...` and
 step). The calls that run to a point -- `run_for_emulated_seconds`,
 `run_until_or_timeout` and the debugger's run-to methods -- leave the machine
 STOPPED; call `bbc.debugger.run()` before anything that needs it running.
+`launch()` starts the machine itself once it has connected, so a launch means
+the same thing in emulated time on every host; `start_stopped=True` leaves it
+stopped at the reset vector, having executed no instruction, for a test that
+sets breakpoints or watchpoints before `bbc.debugger.run()`.
 
 | Call | Requires | Leaves the machine |
 |---|---|---|

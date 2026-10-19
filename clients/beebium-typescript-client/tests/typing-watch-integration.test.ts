@@ -23,8 +23,6 @@ afterEach(async () => {
 async function launchHost(): Promise<Beebium> {
     const host = await Beebium.launch({ model: "B", timeoutMs: 20000 });
     activeHosts.add(host);
-    // The queue only drains while the machine is executing.
-    await host.debugger.run();
     return host;
 }
 

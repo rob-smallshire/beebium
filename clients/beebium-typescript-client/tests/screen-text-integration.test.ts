@@ -22,7 +22,6 @@ afterEach(async () => {
 async function launchAtPrompt(): Promise<Beebium> {
     const host = await Beebium.launch({ model: "B", timeoutMs: 20000 });
     activeHosts.add(host);
-    await host.debugger.run();
 
     // Wait for BASIC rather than a fixed delay.
     const deadline = Date.now() + 20000;

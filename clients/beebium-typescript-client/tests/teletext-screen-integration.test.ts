@@ -25,7 +25,6 @@ afterEach(async () => {
 async function launchAtPrompt(): Promise<Beebium> {
     const host = await Beebium.launch({ model: "B", timeoutMs: 20000 });
     activeHosts.add(host);
-    await host.debugger.run();
 
     // Wait for BASIC rather than a fixed delay.
     const deadline = Date.now() + 20000;
@@ -251,7 +250,6 @@ describe("the MODE 7 screen helpers in a shadow mode", () => {
         const bbc = await Beebium.launch({ model: "B+", timeoutMs: 20000 });
         activeHosts.add(bbc);
         await bbc.system.setSpeedMultiplier(0.0);
-        await bbc.debugger.run();
         await bbc.waitUntilReady();
         // Printed by a command whose own text does not contain it.
         await bbc.keyboard.type('MODE 135:PRINT "SHADOWED"+" SCREEN"\r');

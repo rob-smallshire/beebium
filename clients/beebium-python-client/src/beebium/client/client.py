@@ -61,6 +61,10 @@ from beebium.client.via import Via, ViaId
 from beebium.client.video import Video
 from beebium.client.video_ula import VideoUla
 
+# The 6502 reset sequence, which a server started with --wait=api runs before
+# it stops to wait for its client.
+_RESET_SEQUENCE_CYCLES = 7
+
 
 class Beebium:
     """Main client for interacting with a beebium emulator instance.
@@ -185,10 +189,14 @@ class Beebium:
         connection_timeout: float = 5.0,
         extra_args: list[str] | None = None,
         preset: str | Path | None = None,
+        start_stopped: bool = False,
     ) -> Iterator[Beebium]:
         """Start a beebium-server process and connect to it.
 
-        The server is automatically stopped when the context manager exits.
+        The server waits for this client, which starts the machine once it has
+        connected and verified the protocol, so a launch means the same thing
+        in emulated time however long the host took to connect. The server is
+        automatically stopped when the context manager exits.
 
         Requires: nothing.
         Leaves the machine: RUNNING.
@@ -212,6 +220,13 @@ class Beebium:
                 ``--preset``: a preset file path, or the id of a system or user
                 preset as reported by ``list-presets`` (e.g. "model-b-disc").
                 Command-line options, including ``extra_args``, override it.
+            start_stopped: Leave the machine stopped, having executed no
+                instruction: the reset sequence has run and the PC is at the
+                reset vector, so breakpoints and watchpoints set before
+                ``debugger.run()`` see everything the guest does. (``run()``
+                steps over a breakpoint at the PC it starts from; use
+                ``run(stop_at_current=True)`` to stop on one at the reset
+                vector itself.)
 
         Yields:
             A connected Beebium client.
@@ -226,7 +241,7 @@ class Beebium:
             server=server,
             variant=variant,
             port=port,
-            extra_args=extra_args,
+            extra_args=["--wait=api", *(extra_args or [])],
             preset=preset,
         )
 
@@ -242,6 +257,9 @@ class Beebium:
                 instance_uuid=process.provenance_instance_uuid,
             )
             client._verify_protocol(installation_description=process.installation.describe())
+            client._await_wait_mode(connection_timeout)
+            if not start_stopped:
+                client.debugger.run()
             yield client
         finally:
             # Shut the server down as a user would, so it keeps what a
@@ -252,6 +270,13 @@ class Beebium:
                 client.close()
             else:
                 process.stop()
+
+    def _await_wait_mode(self, timeout: float) -> None:
+        """Wait until a server started with --wait=api has run the reset
+        sequence and stopped, so the first debugger call does not race it."""
+        deadline = time.monotonic() + timeout
+        while self.debugger.cycle_count < _RESET_SEQUENCE_CYCLES and time.monotonic() < deadline:
+            time.sleep(0.01)
 
     def _verify_protocol(self, installation_description: str | None = None) -> None:
         """Assert the server's wire protocol matches this client's.

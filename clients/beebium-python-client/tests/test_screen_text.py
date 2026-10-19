@@ -50,13 +50,15 @@ def _switch_to_mode(bbc: Beebium, mode: int, message: str) -> bool:
     """
     bbc.keyboard.type(f'MODE {mode}\rPRINT "{message}"\r')
 
+    def in_bitmap_mode() -> bool:
+        # Before the first whole frame, or mid-reprogramming, a frame can carry
+        # no bands at all, so the first band is reached only once one exists.
+        bands = bbc.video.screen_geometry().bands
+        return bool(bands) and bands[0].cell_width != TELETEXT_CELL_WIDTH
+
     # A stopped machine never drains the type-ahead queue, so the machine has
     # to be advanced while waiting rather than merely waited on.
-    return bbc.run_until_or_timeout(
-        lambda: bbc.video.screen_geometry().bands[0].cell_width
-        != TELETEXT_CELL_WIDTH,
-        emulated_seconds=10.0,
-    )
+    return bbc.run_until_or_timeout(in_bitmap_mode, emulated_seconds=10.0)
 
 
 def _run_program(bbc: Beebium, lines: list[str]) -> bool:
