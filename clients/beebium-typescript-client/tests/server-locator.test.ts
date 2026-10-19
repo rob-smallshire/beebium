@@ -45,6 +45,22 @@ describe("BEEBIUM_SERVER", () => {
             .toBe(exe);
     });
 
+    it("takes a server binary as the Model B, finding another model's server beside it", () => {
+        // As the Python client does: BEEBIUM_SERVER=<build>/beebium-model-b
+        // still launches a B+ as the B+.
+        const exe = makeExecutable(join(root, "anywhere", EXE));
+        const bPlus = makeExecutable(join(root, "anywhere", "beebium-model-b-plus"));
+        const context = { env: { BEEBIUM_SERVER: exe }, cwd: emptyDir("cwd"), packageDirpath: emptyDir("pkg") };
+        expect(locateServer("beebium-model-b-plus", context)).toBe(bPlus);
+    });
+
+    it("throws when another model's server is not beside the binary", () => {
+        const exe = makeExecutable(join(root, "anywhere", EXE));
+        const context = { env: { BEEBIUM_SERVER: exe }, cwd: emptyDir("cwd"), packageDirpath: emptyDir("pkg") };
+        expect(() => locateServer("beebium-model-b-plus", context)).toThrow(ServerNotFoundError);
+        expect(() => locateServer("beebium-model-b-plus", context)).toThrow(/no beebium-model-b-plus beside it/);
+    });
+
     it("accepts an install root containing bin/", () => {
         const exe = makeExecutable(join(root, "prefix", "bin", EXE));
         expect(locateServer(EXE, { env: { BEEBIUM_SERVER: join(root, "prefix") }, cwd: emptyDir("cwd"), packageDirpath: emptyDir("pkg") }))

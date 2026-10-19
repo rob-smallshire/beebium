@@ -138,7 +138,7 @@ npm run build             # TypeScript compilation (optional -- vitest handles .
 
 | Variable | Purpose |
 |----------|---------|
-| `BEEBIUM_SERVER` | Path to the server executable. Used by `ServerProcess` when no explicit path is given. Falls back to the default build directory. |
+| `BEEBIUM_SERVER` | The server executable, an install root containing `bin/`, or a `bin/` directory. Used by `ServerProcess` when no explicit path is given. An executable is the Model B server; the other models' servers are looked for beside it. Falls back to the default build directory. |
 | `BEEBIUM_ROM_DIR` | ROM directory path. Passed through to the server process via environment inheritance. |
 
 ## Connecting to a running server
@@ -206,7 +206,8 @@ const bbc = await Beebium.launch({
 ```
 
 If `executableFilepath` is not specified, `ServerProcess` checks:
-1. The `BEEBIUM_SERVER` environment variable
+1. The `BEEBIUM_SERVER` environment variable: an executable is the Model B
+   server, and another model's server is the one of that name beside it
 2. A default build directory (`build/src/server/`)
 
 ### Async dispose

@@ -5,8 +5,9 @@
  * given to ServerProcess or Beebium.launch:
  *
  *   1. BEEBIUM_SERVER: a server binary, an install root containing bin/, or a
- *      bin/ directory itself. When set it must resolve; a wrong value throws
- *      rather than silently falling through.
+ *      bin/ directory itself. A binary is the Model B server; the other
+ *      models' servers are looked for beside it. When set it must resolve; a
+ *      wrong value throws rather than silently falling through.
  *   2. The checkout build: a build/src/server directory (or another common
  *      CMake build directory name, with or without a multi-config Release or
  *      Debug subdirectory) at or above this package's own directory or the
@@ -90,9 +91,13 @@ function ancestors(dirpath: string): string[] {
     return result;
 }
 
+/** The server a binary given as BEEBIUM_SERVER is taken to be. */
+const DEFAULT_SERVER_BASENAME = "beebium-model-b";
+
 /**
  * Resolve BEEBIUM_SERVER: a binary, an install root containing bin/, or a
- * bin/ directory. Throws when it names nothing usable.
+ * bin/ directory. A binary is the Model B server, and another model's server
+ * is the one of that name beside it. Throws when it names nothing usable.
  */
 function fromEnvironment(value: string, exeName: string, platform: NodeJS.Platform): string {
     if (isDirectory(value)) {
@@ -106,7 +111,16 @@ function fromEnvironment(value: string, exeName: string, platform: NodeJS.Platfo
         );
     }
     if (isExecutableFile(value, platform)) {
-        return value;
+        if (exeName === serverExecutableName(DEFAULT_SERVER_BASENAME, platform)) {
+            return value;
+        }
+        const beside = join(dirname(value), exeName);
+        if (isExecutableFile(beside, platform)) {
+            return beside;
+        }
+        throw new ServerNotFoundError(
+            `BEEBIUM_SERVER is ${value}, taken as the Model B server, with no ${exeName} beside it.`,
+        );
     }
     throw new ServerNotFoundError(`BEEBIUM_SERVER is ${value}, which is not an executable server.`);
 }
