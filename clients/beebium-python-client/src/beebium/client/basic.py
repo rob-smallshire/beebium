@@ -151,10 +151,10 @@ class Basic:
             mode: Screen mode (default 7 for teletext).
 
         Returns:
-            The screen text as a string with newlines between rows.
-
-        Raises:
-            BeebiumError: If ``mode`` is 7 and the display is not MODE 7.
+            The screen text as a string with newlines between rows. In mode
+            7 it is blank until a MODE 7 frame has been displayed; ask
+            ``video.teletext_screen().active`` to know whether the display
+            is MODE 7.
         """
         if mode not in SCREEN_MODES:
             raise ValueError(f"Unsupported mode: {mode}")

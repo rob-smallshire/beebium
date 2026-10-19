@@ -96,8 +96,9 @@ export class Basic {
      * @param startRow - First row to read (0-based, default 0).
      * @param endRow - Last row to read (exclusive). Undefined means all rows for the mode.
      * @param mode - Screen mode (default 7 for teletext).
-     * @returns The screen text as a string with newlines between rows.
-     * @throws BeebiumError If `mode` is 7 and the display is not MODE 7.
+     * @returns The screen text as a string with newlines between rows. In mode
+     *   7 it is blank until a MODE 7 frame has been displayed; ask
+     *   `video.teletextScreen()` for `active` to know whether the display is MODE 7.
      */
     async readScreenText(startRow = 0, endRow?: number, mode = 7): Promise<string> {
         const modeInfo = SCREEN_MODES[mode];

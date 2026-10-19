@@ -5,7 +5,6 @@
  * grid, so they follow hardware scrolling and shadow modes.
  */
 
-import { BeebiumError } from "./exceptions.js";
 import type { TeletextScreen } from "./video.js";
 
 /** Screen mode definition. */
@@ -37,6 +36,10 @@ export interface TeletextSource {
     teletextScreen(): Promise<TeletextScreen>;
 }
 
+/** The MODE 7 grid's size. */
+const MODE7_ROWS = 25;
+const MODE7_COLUMNS = 40;
+
 /**
  * The displayed MODE 7 screen as text rows, or null when the display is not
  * MODE 7 (or has shown no MODE 7 frame yet).
@@ -66,23 +69,23 @@ async function displayedRows(video: TeletextSource): Promise<string[] | null> {
  * Read the displayed MODE 7 screen as text.
  *
  * Characters 0x20-0x7E are returned as ASCII; teletext control codes and 0x7F
- * become spaces. Read in one piece from the last complete frame.
+ * become spaces. Read in one piece from the last complete frame. The screen is
+ * blank until a MODE 7 frame has been displayed, so this can poll a machine that
+ * is still booting or changing mode; ask `video.teletextScreen()` for `active`
+ * to know whether the display is MODE 7.
  *
  * @param video - The machine's video service (`bbc.video`).
  * @param startRow - First row to read (0-based, default 0).
  * @param endRow - Last row to read (exclusive, default 25).
  * @returns The screen text with newlines between rows, trailing spaces stripped.
- * @throws BeebiumError If the display is not MODE 7.
  */
 export async function readMode7Screen(
     video: TeletextSource,
     startRow = 0,
     endRow = 25,
 ): Promise<string> {
-    const rows = await displayedRows(video);
-    if (rows === null) {
-        throw new BeebiumError("the display is not MODE 7, so there is no MODE 7 screen to read");
-    }
+    const rows =
+        (await displayedRows(video)) ?? Array.from({ length: MODE7_ROWS }, () => " ".repeat(MODE7_COLUMNS));
     startRow = Math.max(0, Math.min(startRow, rows.length - 1));
     endRow = Math.max(startRow + 1, Math.min(endRow, rows.length));
     return rows.slice(startRow, endRow).map((row) => row.trimEnd()).join("\n");

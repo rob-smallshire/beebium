@@ -23,9 +23,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
-from beebium.client.exceptions import BeebiumError
 from beebium.client.screen import (
     cells_to_text,
     dewrapped,
@@ -202,18 +199,18 @@ class TestComposition:
         assert len(rows) == ROWS
         assert all(len(row) == COLUMNS for row in rows)
 
-    def test_reading_a_display_that_is_not_mode_7_raises(self) -> None:
+    def test_a_display_that_is_not_mode_7_reads_blank(self) -> None:
+        # So a polling loop can read the screen from launch, before the first
+        # MODE 7 frame has been displayed.
         bbc = _bbc_showing(["STALE"], active=False)
-        with pytest.raises(BeebiumError, match="not MODE 7"):
-            read_mode7_cells(bbc)
-        with pytest.raises(BeebiumError, match="not MODE 7"):
-            read_mode7_screen(bbc)
+        assert read_mode7_cells(bbc) == [b" " * COLUMNS] * ROWS
+        assert read_mode7_screen(bbc) == [" " * COLUMNS] * ROWS
 
     def test_a_display_that_is_not_mode_7_contains_nothing(self) -> None:
         bbc = _bbc_showing(["STALE"], active=False)
         assert not screen_contains(bbc, "STALE")
         assert find(bbc, "STALE") is None
-        assert "not MODE 7" in dump_screen(bbc)
+        assert dump_screen(bbc) == "MODE 7 screen: the display is not MODE 7 (frame 1)"
 
     def test_screen_contains_finds_text(self) -> None:
         bbc = _bbc_showing(["You are on the top of a mountain."])

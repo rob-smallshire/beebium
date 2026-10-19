@@ -32,10 +32,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 
-from beebium.client.exceptions import BeebiumError
-
 if TYPE_CHECKING:
-    from beebium.client.video import Video
+    from beebium.client.video import TeletextScreen, Video
 
 # A row is 40 raw screen bytes; rows compose into the 25-row display grid.
 Row = bytes | str
@@ -49,6 +47,12 @@ RowT = TypeVar("RowT", bytes, str)
 # a separator of the same type (bytes for byte rows, str for text rows), so that
 # decisions based on the last/first cell of each row are possible.
 Separator = Callable[[Row, Row], Row]
+
+# The MODE 7 grid's size, and what the read helpers return while the display
+# has no MODE 7 frame to show.
+MODE7_ROWS = 25
+MODE7_COLUMNS = 40
+_BLANK_CELLS = [b" " * MODE7_COLUMNS for _ in range(MODE7_ROWS)]
 
 
 class _ScreenClient(Protocol):
@@ -187,12 +191,12 @@ def _displayed_cells(bbc: _ScreenClient) -> list[bytes] | None:
     """The displayed MODE 7 grid as rows of character codes, or None when the
     display is not MODE 7 (or has shown no MODE 7 frame yet)."""
     screen = bbc.video.teletext_screen()
-    if not screen.active:
-        return None
-    return [
-        bytes(screen.cell(row, column).character for column in range(screen.columns))
-        for row in range(screen.rows)
-    ]
+    return _cells_of(screen) if screen.active else None
+
+
+def _cells_of(screen: TeletextScreen) -> list[bytes]:
+    """A teletext grid's cells as rows of character codes."""
+    return [bytes(screen.cell(row, column).character for column in range(screen.columns)) for row in range(screen.rows)]
 
 
 def _displayed_rows(bbc: _ScreenClient) -> list[str] | None:
@@ -213,29 +217,31 @@ def read_mode7_cells(bbc: _ScreenClient) -> list[bytes]:
     Args:
         bbc: A Beebium client.
 
+    The grid is blank (all spaces) until a MODE 7 frame has been displayed,
+    so this can poll a machine that is still booting or changing mode; ask
+    ``video.teletext_screen().active`` to know whether the display is MODE 7.
+
+    Args:
+        bbc: A Beebium client.
+
     Returns:
         25 rows of 40 character codes each, in display order.
-
-    Raises:
-        BeebiumError: If the display is not MODE 7.
     """
     cells = _displayed_cells(bbc)
-    if cells is None:
-        raise BeebiumError("the display is not MODE 7, so there is no MODE 7 screen to read")
-    return cells
+    return list(_BLANK_CELLS) if cells is None else cells
 
 
 def read_mode7_screen(bbc: _ScreenClient) -> list[str]:
     """Read the displayed MODE 7 screen as 25 rows of 40 characters.
+
+    The rows are blank until a MODE 7 frame has been displayed; ask
+    ``video.teletext_screen().active`` to know whether the display is MODE 7.
 
     Args:
         bbc: A Beebium client.
 
     Returns:
         A list of 25 strings, each 40 characters long.
-
-    Raises:
-        BeebiumError: If the display is not MODE 7.
     """
     return cells_to_text(read_mode7_cells(bbc))
 
@@ -291,9 +297,10 @@ def dump_screen(bbc: _ScreenClient) -> str:
         A multi-line string with row numbers and the screen content, or a
         line saying the display is not MODE 7.
     """
-    rows = _displayed_rows(bbc)
-    if rows is None:
-        return "MODE 7 screen: the display is not MODE 7"
+    screen = bbc.video.teletext_screen()
+    if not screen.active:
+        return f"MODE 7 screen: the display is not MODE 7 (frame {screen.frame_number})"
+    rows = cells_to_text(_cells_of(screen))
     lines = ["MODE 7 screen:"]
     for index, row in enumerate(rows):
         lines.append(f"Row {index:2d}: [{row}]")

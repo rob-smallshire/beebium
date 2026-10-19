@@ -6,7 +6,6 @@ import {
     screenContains,
     type TeletextSource,
 } from "../src/screen.js";
-import { BeebiumError } from "../src/exceptions.js";
 import type { TeletextScreen } from "../src/video.js";
 import type { TeletextScreenCell } from "../src/generated/video.js";
 
@@ -66,9 +65,10 @@ describe("readMode7Screen", () => {
         expect(screen.split("\n").length).toBe(25);
     });
 
-    it("raises when the display is not MODE 7", async () => {
-        await expect(readMode7Screen(showing(["STALE"], false))).rejects.toThrow(BeebiumError);
-        await expect(readMode7Screen(showing(["STALE"], false))).rejects.toThrow(/not MODE 7/);
+    it("reads blank when the display is not MODE 7", async () => {
+        // So a polling loop can read the screen from launch, before the first
+        // MODE 7 frame has been displayed.
+        expect(await readMode7Screen(showing(["STALE"], false))).toBe("\n".repeat(24));
     });
 });
 
