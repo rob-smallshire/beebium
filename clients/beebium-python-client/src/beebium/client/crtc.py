@@ -51,6 +51,7 @@ class CrtcState:
     # field starts at a vsync rising edge.
     odd_field: bool = True  # The field in progress is the odd (first) field; interlace only
     cycles_since_vsync: int = 0  # CPU cycles since the field started
+    field: int = 0  # Vsync rising edges since the machine was made (the `field` condition)
 
     # Register name constants
     R0_HTOTAL = 0
@@ -218,6 +219,7 @@ class Crtc:
             display_enabled=response.display_enabled,
             odd_field=response.odd_field,
             cycles_since_vsync=response.cycles_since_vsync,
+            field=response.field,
         )
 
     @property

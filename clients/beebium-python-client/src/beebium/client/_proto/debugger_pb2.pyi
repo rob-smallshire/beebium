@@ -1531,6 +1531,7 @@ class CrtcState(_message.Message):
     DISPLAY_ENABLED_FIELD_NUMBER: _builtins.int
     ODD_FIELD_FIELD_NUMBER: _builtins.int
     CYCLES_SINCE_VSYNC_FIELD_NUMBER: _builtins.int
+    FIELD_FIELD_NUMBER: _builtins.int
     address_register: _builtins.int
     """Currently selected register (address register)"""
     column: _builtins.int
@@ -1564,6 +1565,8 @@ class CrtcState(_message.Message):
     only when R8 selects interlace
     CPU cycles since the field started
     """
+    field: _builtins.int
+    """Vsync rising edges since the machine was"""
     @_builtins.property
     def registers(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
         """All 18 registers (R0-R17, includes write-only timing registers)"""
@@ -1584,10 +1587,11 @@ class CrtcState(_message.Message):
         display_enabled: _builtins.bool = ...,
         odd_field: _builtins.bool = ...,
         cycles_since_vsync: _builtins.int = ...,
+        field: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["address_register", b"address_register", "char_addr", b"char_addr", "column", b"column", "cursor_position", b"cursor_position", "cycles_since_vsync", b"cycles_since_vsync", "display_enabled", b"display_enabled", "in_hsync", b"in_hsync", "in_vsync", b"in_vsync", "odd_field", b"odd_field", "raster", b"raster", "registers", b"registers", "row", b"row", "screen_start", b"screen_start"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["address_register", b"address_register", "char_addr", b"char_addr", "column", b"column", "cursor_position", b"cursor_position", "cycles_since_vsync", b"cycles_since_vsync", "display_enabled", b"display_enabled", "field", b"field", "in_hsync", b"in_hsync", "in_vsync", b"in_vsync", "odd_field", b"odd_field", "raster", b"raster", "registers", b"registers", "row", b"row", "screen_start", b"screen_start"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

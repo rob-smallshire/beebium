@@ -510,6 +510,9 @@ message CrtcState {
                                     // field of an interlaced frame; meaningful
                                     // only when R8 selects interlace
     uint64 cycles_since_vsync = 13; // CPU cycles since the field started
+    uint64 field = 14;              // Vsync rising edges since the machine was
+                                    // made (the `field` condition variable);
+                                    // no reset, Break included, clears it
 }
 
 // === Video ULA ===

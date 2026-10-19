@@ -236,7 +236,14 @@ export type ScreenTextCharactersMode = "codes" | "displayed";
 
 export interface Frame {
     frameNumber: number;
+    /** Emulated cycle of the vsync rising edge that completed the frame. */
     cycleCount: number;
+    /**
+     * The machine's field count from that edge on (the `field` condition
+     * variable): a run that stops when `field` reaches F has just completed
+     * the frame stamped F. 0 when unknown.
+     */
+    field: number;
     width: number;
     height: number;
     pixels: Buffer;
@@ -349,6 +356,7 @@ function toFrame(proto: ProtoFrame): Frame {
     return {
         frameNumber: proto.frameNumber,
         cycleCount: proto.cycleCount,
+        field: proto.field,
         width: proto.width,
         height: proto.height,
         pixels: proto.pixels,
@@ -610,7 +618,11 @@ export class Video {
      * Capture a single frame.
      *
      * Starts a frame stream, waits for the first frame, then cancels.
-     * Throws TimeoutError if no frame arrives within the timeout.
+     * Throws TimeoutError if no frame arrives within the timeout. On a stopped
+     * machine it is the latest frame the machine completed: after
+     * `bbc.runFields(n)`, the frame whose `field` is the one the run stopped
+     * at, when that vsync edge completed a frame (every edge does in a
+     * progressive mode; in an interlaced one, such as MODE 7, every other).
      *
      * Requires: any run state.
      * Leaves the machine: unchanged.

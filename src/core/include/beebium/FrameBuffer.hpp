@@ -63,6 +63,11 @@ struct FrameMetadata {
     // that ended its (last) field. 0 when unknown -- no stamp source wired, or
     // the edge's stamp was lost.
     uint64_t cycle_count = 0;
+    // The machine's field count (the `field` condition variable) from the
+    // vsync rising edge that completed the frame on: the field that starts as
+    // this frame ends. So a run that stops when `field` reaches F has just
+    // completed the frame stamped F. 0 when unknown, as cycle_count.
+    uint64_t field = 0;
     bool interlaced = false;       // True for MODE 7 and custom interlace modes
 
     // Target display resolution after scaling.

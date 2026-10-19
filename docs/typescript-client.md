@@ -243,6 +243,7 @@ stopped, is in each method's JSDoc as two lines, `Requires: ...` and
 | `Beebium.waitUntilReady` | a running machine | unchanged |
 | `Beebium.runForEmulatedSeconds` | any run state | STOPPED |
 | `Beebium.runUntilOrTimeout` | any run state | STOPPED |
+| `Beebium.runFields` | any run state | STOPPED |
 | `Debugger.run` | a stopped machine | RUNNING |
 | `Debugger.stop` | any run state | STOPPED |
 | `Debugger.reset` | any run state | STOPPED |

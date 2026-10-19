@@ -9,7 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { Connection } from "./connection.js";
 import { ServerProcess, type ServerProcessOptions } from "./server-process.js";
-import { Debugger } from "./debugger.js";
+import { Debugger, type ExecutionState } from "./debugger.js";
 import { CPU } from "./cpu.js";
 import { Memory } from "./memory.js";
 import { Keyboard } from "./keyboard.js";
@@ -37,7 +37,7 @@ import { AddressableLatch } from "./latch.js";
 import { Sound } from "./sound.js";
 import { TubeUlaInspection } from "./tube-ula.js";
 import { Basic } from "./basic.js";
-import { ConnectionError } from "./exceptions.js";
+import { ConnectionError, DebuggerError } from "./exceptions.js";
 
 /** Default gRPC port for the Beebium server (0xBEEB). */
 const DEFAULT_GRPC_PORT = 0xBEEB;
@@ -555,6 +555,58 @@ export class Beebium {
             await this.debugger.stop();
         }
         await this.debugger.stepCycles(cycles);
+    }
+
+    /**
+     * Run until `n` more fields have started, and stop.
+     *
+     * A field starts at each vsync rising edge; the server counts them as the
+     * `field` condition variable (also `crtc.getState().field`), which no reset
+     * clears. The machine is stopped first if running; this reads the count
+     * there, F, and runs to a server-side whole-address-space breakpoint on
+     * `field >= F + n`, so the machine stops at the first instruction boundary
+     * at or after the nth vsync rising edge after the stop. When that edge
+     * completes a frame (every edge does in a progressive mode; every other one
+     * in an interlaced mode such as MODE 7), the frame is the one stamped
+     * `field == F + n`, and on the stopped machine `video.captureFrame()`
+     * returns it.
+     *
+     * Requires: any run state.
+     * Leaves the machine: STOPPED.
+     *
+     * @param n - Fields to run, at least 1.
+     * @returns The execution state where the machine stopped.
+     */
+    async runFields(n: number = 1): Promise<ExecutionState> {
+        if (!Number.isInteger(n) || n < 1) {
+            throw new RangeError(`n must be an integer of at least 1, not ${n}`);
+        }
+        if (await this.debugger.isRunning()) {
+            await this.debugger.stop();
+        }
+        const target = (await this.crtc.getState()).field + n;
+        const bpId = await this.debugger.addBreakpoint(0x0000, {
+            endAddress: 0x10000,
+            condition: `field >= ${target}`,
+        });
+        try {
+            // Subscribe, then run: a stop with a later sequence is this one.
+            const iter = this.debugger.watchExecutionState();
+            const initial = await iter.next();
+            const runSequence = initial.value!.state.sequence;
+            await this.debugger.run();
+            for await (const event of iter) {
+                if (!event.state.isRunning && event.state.sequence > runSequence) {
+                    return event.state;
+                }
+            }
+            throw new DebuggerError("Execution state stream ended without a stop event");
+        } finally {
+            await this.debugger.removeBreakpoint(bpId);
+            if (await this.debugger.isRunning()) {
+                await this.debugger.stop();
+            }
+        }
     }
 
     /**

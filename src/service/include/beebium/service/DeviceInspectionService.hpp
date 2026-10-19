@@ -286,6 +286,7 @@ public:
             const auto& video = machine_.video_binding();
             response->set_odd_field(video.field_odd());
             response->set_cycles_since_vsync(machine_.cycle_count() - video.last_vsync_cycle());
+            response->set_field(video.field_count());
         });
 
         return grpc::Status::OK;

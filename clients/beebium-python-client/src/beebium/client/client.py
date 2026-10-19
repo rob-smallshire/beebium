@@ -30,7 +30,7 @@ from beebium.client.connection import Connection
 from beebium.client.cpu import CPU
 from beebium.client.crtc import Crtc
 from beebium.client.real_time_clock import RealTimeClock
-from beebium.client.debugger import Debugger, wall_timeout_for
+from beebium.client.debugger import Debugger, ExecutionState, wall_timeout_for
 from beebium.client.disc import Disc
 from beebium.client.econet import Econet
 from beebium.client.econet_transport import EconetTransport
@@ -61,6 +61,9 @@ from beebium.client.tube_ula import TubeUlaInspection
 from beebium.client.via import Via, ViaId
 from beebium.client.video import Video
 from beebium.client.video_ula import VideoUla
+
+# A PAL field at the standard 6845 programming, for sizing wall-clock deadlines.
+FIELD_SECONDS = 0.02
 
 
 class Beebium:
@@ -692,6 +695,64 @@ class Beebium:
                 target_cycles,
                 clock_hz=clock_hz,
                 wall_timeout=wall_timeout_for(seconds, self._configured_speed_multiplier()),
+            )
+        finally:
+            self.debugger.ensure_stopped()
+
+    def run_fields(self, n: int = 1) -> ExecutionState:
+        """Run until ``n`` more fields have started, and stop.
+
+        A field starts at each vsync rising edge; the server counts them as
+        the ``field`` condition variable (also ``crtc.state.field``), which no
+        reset clears. The machine is stopped first if running; this reads the
+        count there, F, and runs to a server-side whole-address-space
+        breakpoint on ``field >= F + n`` -- the mechanism of
+        :meth:`run_for_emulated_seconds` -- so the machine stops at the first
+        instruction boundary at or after the nth vsync rising edge after the
+        stop. When that edge completes a frame (every edge does in a
+        progressive mode; every other one in an interlaced mode such as MODE
+        7), the frame is the one stamped ``field == F + n``, and on the
+        stopped machine :meth:`Video.capture_frame` returns it.
+
+        The wall-clock deadline allows for n fields of 20 ms at the configured
+        speed (see :func:`~beebium.client.debugger.wall_timeout_for`); if it
+        expires the error says how many fields did start.
+
+        Requires: any run state.
+        Leaves the machine: STOPPED.
+
+        Args:
+            n: Fields to run, at least 1.
+
+        Returns:
+            The execution state where the machine stopped.
+
+        Raises:
+            ValueError: If ``n`` is less than 1.
+            DebuggerError: If the fields do not start within the deadline.
+        """
+        if n < 1:
+            raise ValueError(f"n must be at least 1, not {n}")
+        self.debugger.ensure_stopped()
+        start_field = self.crtc.state.field
+        target_field = start_field + n
+
+        def timed_out(elapsed: float) -> DebuggerError:
+            ran = self.crtc.state.field - start_field
+            if ran > 0:
+                return DebuggerError(
+                    f"slow host: {ran} of {n} fields started in {elapsed:.0f} s wall"
+                )
+            return DebuggerError(
+                f"no field started in {elapsed:.0f} s: machine stuck, or the 6845 "
+                f"is not producing vertical sync"
+            )
+
+        try:
+            return self.debugger._run_to_condition(
+                f"field >= {target_field}",
+                wall_timeout=wall_timeout_for(n * FIELD_SECONDS, self._configured_speed_multiplier()),
+                timed_out=timed_out,
             )
         finally:
             self.debugger.ensure_stopped()

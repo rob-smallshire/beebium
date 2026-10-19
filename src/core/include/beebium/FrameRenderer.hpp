@@ -125,7 +125,9 @@ public:
 
         // Handle VSYNC rising edge - finalize frame and swap buffers
         if (vsync && !in_vsync_) {
-            edge_cycle_ = take_field_cycle();
+            const FieldCycle stamp = take_field_cycle();
+            edge_cycle_ = stamp.cycle;
+            edge_field_ = stamp.field;
             // Capture frame scanline count before reset
             max_frame_scanlines_ = std::max(max_frame_scanlines_, frame_scanline_count_);
             frame_scanline_count_ = 0;
@@ -325,16 +327,16 @@ private:
     // The stamp for the vsync rising edge being handled, matched by edge
     // number: older stamps (from edges this renderer never saw a stamp slot
     // for) are skipped, and a missing one reads as 0.
-    uint64_t take_field_cycle() {
+    FieldCycle take_field_cycle() {
         const uint64_t edge = next_edge_++;
-        if (!field_cycles_) return 0;
+        if (!field_cycles_) return {};
         while (true) {
             auto buffers = field_cycles_->get_consumer_buffer();
-            if (buffers.empty()) return 0;
+            if (buffers.empty()) return {};
             const FieldCycle front = buffers.a[0];
-            if (front.edge > edge) return 0;
+            if (front.edge > edge) return {};
             field_cycles_->consume(1);
-            if (front.edge == edge) return front.cycle;
+            if (front.edge == edge) return front;
         }
     }
 
@@ -354,6 +356,7 @@ private:
         meta.height = static_cast<uint32_t>(frame_height);
         meta.frame_number = frame_buffer_->version() + 1;
         meta.cycle_count = edge_cycle_;
+        meta.field = edge_field_;
         meta.interlaced = in_interlace_mode_;
 
         // display_width is the frame's physical width in 16MHz pixel clocks;
@@ -505,6 +508,7 @@ private:
     OutputQueue<FieldCycle>* field_cycles_ = nullptr;
     uint64_t next_edge_ = 0;     // number of the next vsync rising edge
     uint64_t edge_cycle_ = 0;    // stamp of the latest vsync rising edge
+    uint64_t edge_field_ = 0;    // and the field that starts there
     bool in_hsync_;
     DisplayTiming timing_;
     int horizontal_offset_;  // Pixels from HSYNC end to display start

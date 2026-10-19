@@ -82,6 +82,7 @@ struct VideoBinding {
     void set_cycle_source(const uint64_t* cycle_count) {
         cycle_source_ = cycle_count;
         renderer.set_cycle_source(cycle_count);
+        renderer.set_field_source(&field_count_);
     }
 
     // The emulated cycle of the latest vsync rising edge (the start of the

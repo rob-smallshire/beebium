@@ -237,6 +237,7 @@ def _frame_from_proto(proto) -> Frame:
     return Frame(
         frame_number=proto.frame_number,
         cycle_count=proto.cycle_count,
+        field=proto.field,
         width=proto.width,
         height=proto.height,
         pixels=proto.pixels,
@@ -324,6 +325,11 @@ class Frame:
 
     # Per-region geometry for split-screen modes
     regions: tuple[DisplayRegion, ...] = ()
+
+    # The machine's field count from the vsync edge that completed this frame
+    # on (the `field` condition variable): a run that stops when `field`
+    # reaches F has just completed the frame stamped F. 0 when unknown.
+    field: int = 0
 
     def to_pil_image(self):
         """Convert to PIL Image (requires Pillow).
@@ -680,7 +686,11 @@ class Video:
         """Capture a single frame.
 
         Without ``after_cycle``, starts a frame stream, captures one frame, and
-        stops.
+        stops. On a stopped machine that is the latest frame the machine
+        completed: after :meth:`Beebium.run_fields`, the frame whose ``field``
+        is the one the run stopped at, when that vsync edge completed a frame
+        (every edge does in a progressive mode; in an interlaced one, such as
+        MODE 7, every other).
 
         With ``after_cycle``, returns the frame the machine completed at or
         after that emulated cycle (``frame.cycle_count >= after_cycle``): the
@@ -758,6 +768,7 @@ class Video:
             frame = Frame(
                 frame_number=proto_frame.frame_number,
                 cycle_count=proto_frame.cycle_count,
+                field=proto_frame.field,
                 width=proto_frame.width,
                 height=proto_frame.height,
                 pixels=proto_frame.pixels,

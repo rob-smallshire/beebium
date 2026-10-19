@@ -106,6 +106,7 @@ void to_proto_frame(const FrameMetadata& meta,
                     uint32_t stride, Frame* out) {
     out->set_frame_number(meta.frame_number);
     out->set_cycle_count(meta.cycle_count);
+    out->set_field(meta.field);
     out->set_width(meta.width);
     out->set_height(meta.height);
 
@@ -457,6 +458,10 @@ grpc::Status VideoServiceImpl::SubscribeFrames(
 
     uint64_t last_version = 0;
 
+    // A stopped machine's last frame may still be on its way to the frame
+    // buffer; the first frame sent is the latest it completed.
+    if (settle_output_) settle_output_();
+
     // Pre-allocated at capacity to hold any frame size.
     std::vector<uint32_t> pixels(frame_buffer_.capacity_pixels());
     const auto stride = static_cast<uint32_t>(frame_buffer_.stride_pixels());
@@ -500,6 +505,9 @@ grpc::Status VideoServiceImpl::CaptureFrame(
 
     std::vector<uint32_t> pixels(frame_buffer_.capacity_pixels());
     const auto stride = static_cast<uint32_t>(frame_buffer_.stride_pixels());
+
+    // On a stopped machine, the latest frame it completed, not one behind it.
+    if (settle_output_) settle_output_();
 
     // The frame buffer answers the capture as frames are published, so the
     // frame returned is the first to qualify however late this thread runs.

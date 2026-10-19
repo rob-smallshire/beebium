@@ -280,6 +280,7 @@ class Frame(_message.Message):
     DISPLAY_WIDTH_FIELD_NUMBER: _builtins.int
     DISPLAY_HEIGHT_FIELD_NUMBER: _builtins.int
     REGIONS_FIELD_NUMBER: _builtins.int
+    FIELD_FIELD_NUMBER: _builtins.int
     frame_number: _builtins.int
     cycle_count: _builtins.int
     width: _builtins.int
@@ -314,6 +315,14 @@ class Frame(_message.Message):
     """
     display_height: _builtins.int
     """Target display height (typically 256)"""
+    field: _builtins.int
+    """The machine's field count (the `field` breakpoint condition variable,
+    CrtcState.field) from the vsync rising edge that completed this frame
+    on: the field that starts as the frame ends. A run that stops when
+    `field` reaches F has just completed the frame stamped F, so "run N
+    fields" and a captured frame share one counter. 0 when unknown, as
+    cycle_count.
+    """
     @_builtins.property
     def regions(self) -> _containers.RepeatedCompositeFieldContainer[Global___DisplayRegion]:
         """Per-region display geometry for split-screen modes.
@@ -336,10 +345,11 @@ class Frame(_message.Message):
         display_width: _builtins.int = ...,
         display_height: _builtins.int = ...,
         regions: _abc.Iterable[Global___DisplayRegion] | None = ...,
+        field: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["bottom_border", b"bottom_border", "cycle_count", b"cycle_count", "display_height", b"display_height", "display_width", b"display_width", "field_order", b"field_order", "frame_number", b"frame_number", "height", b"height", "left_border", b"left_border", "pixels", b"pixels", "regions", b"regions", "right_border", b"right_border", "top_border", b"top_border", "width", b"width"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bottom_border", b"bottom_border", "cycle_count", b"cycle_count", "display_height", b"display_height", "display_width", b"display_width", "field", b"field", "field_order", b"field_order", "frame_number", b"frame_number", "height", b"height", "left_border", b"left_border", "pixels", b"pixels", "regions", b"regions", "right_border", b"right_border", "top_border", b"top_border", "width", b"width"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

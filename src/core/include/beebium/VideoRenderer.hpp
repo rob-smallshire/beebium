@@ -93,6 +93,11 @@ public:
     // The machine's cycle counter, read to stamp each vsync rising edge.
     void set_cycle_source(const uint64_t* cycle_count) { cycle_source_ = cycle_count; }
 
+    // The machine's field count, read to stamp each vsync rising edge with the
+    // field that starts there. The count is advanced before the edge's batch is
+    // delivered, and a batch is far shorter than a field, so it is the edge's.
+    void set_field_source(const uint64_t* field_count) { field_source_ = field_count; }
+
     // The emulated cycle of each vsync rising edge in the delivered pixel
     // stream, in order, published before the batch that carries the edge. The
     // frame renderer consuming the pixel queue pops them to stamp each frame
@@ -217,7 +222,8 @@ private:
         if (queue.available() == 0) return;
         const bool vsync = batch.vsync();
         if (vsync && !last_delivered_vsync_) {
-            field_cycles_.push(FieldCycle{next_edge_, cycle_source_ ? *cycle_source_ : 0});
+            field_cycles_.push(FieldCycle{next_edge_, cycle_source_ ? *cycle_source_ : 0,
+                                          field_source_ ? *field_source_ : 0});
             ++next_edge_;
         }
         queue.push(batch);
@@ -231,6 +237,7 @@ private:
     // machine reset does not reset.
     static constexpr size_t kFieldCycleCapacity = 1024;
     const uint64_t* cycle_source_ = nullptr;
+    const uint64_t* field_source_ = nullptr;
     OutputQueue<FieldCycle> field_cycles_{kFieldCycleCapacity};
     uint64_t next_edge_ = 0;
     bool last_delivered_vsync_ = false;

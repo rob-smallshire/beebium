@@ -32,6 +32,18 @@ export interface CrtcState {
     inVsync: boolean;
     /** Display output enabled */
     displayEnabled: boolean;
+    /**
+     * The field in progress is the odd (first) field of an interlaced frame;
+     * meaningful only when R8 selects interlace.
+     */
+    oddField: boolean;
+    /** CPU cycles since the field in progress started (at a vsync rising edge). */
+    cyclesSinceVsync: number;
+    /**
+     * Vsync rising edges since the machine was made (the `field` condition
+     * variable); no reset, Break included, clears it.
+     */
+    field: number;
 }
 
 // -- Register index constants -------------------------------------------------
@@ -134,6 +146,9 @@ function toCrtcState(proto: ProtoCrtcState): CrtcState {
         inHsync: proto.inHsync,
         inVsync: proto.inVsync,
         displayEnabled: proto.displayEnabled,
+        oddField: proto.oddField,
+        cyclesSinceVsync: proto.cyclesSinceVsync,
+        field: proto.field,
     };
 }
 

@@ -220,6 +220,7 @@ sets breakpoints or watchpoints before `bbc.debugger.run()`.
 | `Beebium.wait_until_ready` | a running machine | unchanged |
 | `Beebium.run_for_emulated_seconds` | any run state | STOPPED |
 | `Beebium.run_until_or_timeout` | any run state | STOPPED |
+| `Beebium.run_fields` | any run state | STOPPED |
 | `Debugger.run` | a stopped machine | RUNNING |
 | `Debugger.stop` | any run state | STOPPED |
 | `Debugger.reset` | any run state | STOPPED |

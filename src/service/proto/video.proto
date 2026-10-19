@@ -121,6 +121,14 @@ message Frame {
     // Per-region display geometry for split-screen modes.
     // Always populated with at least one region.
     repeated DisplayRegion regions = 13;
+
+    // The machine's field count (the `field` breakpoint condition variable,
+    // CrtcState.field) from the vsync rising edge that completed this frame
+    // on: the field that starts as the frame ends. A run that stops when
+    // `field` reaches F has just completed the frame stamped F, so "run N
+    // fields" and a captured frame share one counter. 0 when unknown, as
+    // cycle_count.
+    uint64 field = 14;
 }
 
 // A horizontal region of scanlines sharing the same logical pixel width.

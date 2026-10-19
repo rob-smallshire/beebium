@@ -304,6 +304,19 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         [this](const std::function<void()>& fn) {
             impl_->machine.with_emulation_paused(fn);
         });
+    // A stopped machine produces no more video, so the render thread can
+    // catch up with everything it did produce, the frame completed at the
+    // last vsync included: wait for that (it consumes a batch only once it
+    // has rendered it). The backstop only bounds a render thread that has
+    // stalled; it never passes on a working server.
+    impl_->video_service->set_output_settler([this] {
+        auto& memory = impl_->machine.state().memory;
+        if (!impl_->machine.is_paused() || !memory.video_output) return;
+        const auto backstop = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+        while (!memory.video_output->empty() && std::chrono::steady_clock::now() < backstop) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    });
     // Read with the emulation thread halted, so the 6845 start address, the
     // latch and the paging describe one moment.
     impl_->video_service->set_screen_memory_source([this] {

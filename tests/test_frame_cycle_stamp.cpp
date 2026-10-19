@@ -68,6 +68,47 @@ TEST_CASE("FrameRenderer stamps each frame with its vsync edge's cycle", "[video
     CHECK(frame_buffer.metadata().cycle_count == 80872);
 }
 
+TEST_CASE("FrameRenderer stamps each frame with the field its edge starts (#190)",
+          "[video][frame][field]") {
+    FrameBuffer frame_buffer;
+    FrameRenderer renderer(&frame_buffer);
+    OutputQueue<FieldCycle> field_cycles(16);
+    renderer.set_field_cycles(&field_cycles);
+
+    field_cycles.push({0, 1000, 57});
+    field_cycles.push({1, 40936, 58});
+
+    feed_field(renderer);
+    CHECK(frame_buffer.metadata().field == 57);
+    feed_field(renderer);
+    CHECK(frame_buffer.metadata().field == 58);
+}
+
+TEST_CASE("A machine's frames carry its field count at the edge that completed them (#190)",
+          "[video][frame][field]") {
+    ModelB machine;
+    machine.memory().enable_video_output();
+    machine.reset();
+    FrameBuffer frame_buffer;
+    FrameRenderer renderer(&frame_buffer);
+    renderer.set_field_cycles(&machine.video_binding().renderer.field_cycles());
+    auto& video_output = *machine.memory().video_output;
+
+    // With no ROM the 6845's registers stay zero and it sends a vsync every
+    // few hundred cycles: plenty of edges. After each new one, the published
+    // frame is the one that edge completed.
+    int checked = 0;
+    for (int i = 0; i < 20000 && checked < 10; ++i) {
+        const uint64_t before = machine.video_binding().field_count();
+        machine.run(1);
+        if (machine.video_binding().field_count() == before) continue;
+        while (renderer.process(video_output, 100000) > 0) {}
+        CHECK(frame_buffer.metadata().field == machine.video_binding().field_count());
+        ++checked;
+    }
+    CHECK(checked == 10);
+}
+
 TEST_CASE("FrameRenderer reads a missing stamp as 0 and stays matched", "[video][frame][cycle]") {
     FrameBuffer frame_buffer;
     FrameRenderer renderer(&frame_buffer);

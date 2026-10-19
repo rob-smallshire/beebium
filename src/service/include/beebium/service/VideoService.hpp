@@ -91,6 +91,13 @@ public:
         screen_memory_ = std::move(source);
     }
 
+    // Returns once everything a stopped machine has produced is in the frame
+    // buffer, so the latest frame published is the latest the machine
+    // completed; returns at once while it runs. Supplied by the server, which
+    // sees the machine and the pixel queue; none in a unit test.
+    using SettleOutput = std::function<void()>;
+    void set_output_settler(SettleOutput settle) { settle_output_ = std::move(settle); }
+
     grpc::Status GetScreenText(
         grpc::ServerContext* context,
         const GetScreenTextRequest* request,
@@ -138,6 +145,7 @@ private:
     FrameBuffer& frame_buffer_;
     TeletextGrid& teletext_grid_;
     PeekByte peek_byte_;
+    SettleOutput settle_output_;
     RunPaused with_paused_;
     ScreenMemorySource screen_memory_;
 
