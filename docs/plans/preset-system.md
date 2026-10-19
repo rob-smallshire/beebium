@@ -464,7 +464,7 @@ is an implementation detail hidden from users.
 | Edit | Click [Edit] button | Opens edit sheet for configuration |
 | Delete | Click [Delete] button | Confirmation alert, then removes preset |
 | Refresh | Automatic on pane open | Re-scans for core executables |
-| Import | File > Import Preset... | Copies a `.preset.beebium` file into user presets directory |
+| Import | File > Import Presets... | Copies a `.preset.beebium` file into user presets directory |
 | Export | Right-click > Export... | Saves preset to user-chosen location for sharing |
 | Reveal | Right-click > Show in Finder | Opens the presets directory in the system file browser |
 
@@ -478,7 +478,7 @@ Since preset directories are hidden by default on all platforms, the application
 3. Creates `my-elite-setup.preset.beebium` in the user presets directory
 4. Opens the preset editor
 
-**Import**: The "Import Preset..." menu item or drag-and-drop allows users to add presets from external sources:
+**Import**: The "Import Presets..." menu item or drag-and-drop allows users to add presets from external sources:
 - Validates the preset file is valid JSON with required fields
 - Copies the file to the user presets directory
 - Handles name conflicts by appending numbers (e.g., `elite-setup-2.preset.beebium`)

@@ -65,7 +65,7 @@ struct FileCommands: Commands {
 
             Divider()
 
-            Button("Import Preset...") {
+            Button("Import Presets...") {
                 importPreset()
             }
             .keyboardShortcut("i", modifiers: [.command, .shift])
