@@ -214,9 +214,6 @@ def read_mode7_cells(bbc: _ScreenClient) -> list[bytes]:
     is the RAM on screen. Each code is the 7 bits the SAA5050 uses; bit 7 of
     the screen byte is not kept.
 
-    Args:
-        bbc: A Beebium client.
-
     The grid is blank (all spaces) until a MODE 7 frame has been displayed,
     so this can poll a machine that is still booting or changing mode; ask
     ``video.teletext_screen().active`` to know whether the display is MODE 7.
