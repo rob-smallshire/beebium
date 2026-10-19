@@ -777,6 +777,10 @@ add_executable(test_disc_controller_peek test_disc_controller_peek.cpp)
 target_link_libraries(test_disc_controller_peek PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_disc_controller_peek)
 
+add_executable(test_disc_nmi_across_break test_disc_nmi_across_break.cpp)
+target_link_libraries(test_disc_nmi_across_break PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_disc_nmi_across_break)
+
 # Expression engine tests
 add_executable(test_expression test_expression.cpp)
 target_link_libraries(test_expression PRIVATE beebium_core Catch2::Catch2WithMain)

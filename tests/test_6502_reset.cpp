@@ -296,3 +296,125 @@ TEST_CASE("Reset clears D on CMOS parts and leaves it unchanged on NMOS (#78)") 
         }
     }
 }
+
+// An NMI edge latched before the reset sequence is consumed by it (#132).
+//
+// On the NMOS part the reset sequence is the BRK/interrupt sequence with the
+// RES vector taking over, and the Visual6502 analysis (nesdev wiki, "6502
+// Interrupt Recognition Stages and Tolerances") has that sequence clear the
+// NMI's stage-1 recognition. An NMI edge latched while RES is held is
+// therefore never taken: the RES vector wins and no NMI vector is fetched.
+// On the BBC this matters because the device that raised the edge has been
+// reset by the same Break; delivering the edge ran DFS's stale NMI handler.
+
+namespace {
+
+constexpr M6502_DeviceNMIFlags kNmiMask = 0x01;
+
+// Run the CPU for CYCLES cycles over the flat memory, recording the address of
+// every opcode fetch and whether the NMI vector was read.
+struct Trace {
+    std::vector<uint16_t> fetches;
+    bool read_nmi_vector = false;
+};
+
+Trace run_cycles(M6502 &cpu, size_t cycles) {
+    Trace trace;
+    for (size_t c = 0; c < cycles; ++c) {
+        (*cpu.tfn)(&cpu);
+        if (cpu.read) {
+            if (cpu.abus.w == 0xfffa || cpu.abus.w == 0xfffb) {
+                trace.read_nmi_vector = true;
+            }
+            cpu.dbus = g_mem[cpu.abus.w];
+        } else {
+            g_mem[cpu.abus.w] = cpu.dbus;
+        }
+        if (M6502_IsAboutToExecute(&cpu)) {
+            trace.fetches.push_back(cpu.abus.w);
+        }
+    }
+    return trace;
+}
+
+bool fetched(const Trace &trace, uint16_t address) {
+    for (uint16_t f : trace.fetches) {
+        if (f == address) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+TEST_CASE("An NMI edge latched while halted is not taken after reset (#132)") {
+    for (const auto &nc : kConfigs) {
+        SECTION(nc.name) {
+            for (bool still_asserted : {true, false}) {
+                setup_memory();
+                M6502 cpu;
+                M6502_Init(&cpu, nc.config);
+                M6502_Reset(&cpu);
+                run_cycles(cpu, 32); // into the NOPs at the reset target
+
+                M6502_Halt(&cpu); // Break held: the CPU is frozen
+                run_cycles(cpu, 8);
+                M6502_SetDeviceNMI(&cpu, kNmiMask, 1); // the disc controller's edge
+                run_cycles(cpu, 8);
+                if (!still_asserted) {
+                    M6502_SetDeviceNMI(&cpu, kNmiMask, 0); // device reset with the Break
+                }
+
+                M6502_Reset(&cpu); // Break released
+                Trace trace = run_cycles(cpu, 64);
+
+                INFO(nc.name << (still_asserted ? " (line still low)" : " (line released)"));
+                REQUIRE_FALSE(trace.fetches.empty());
+                CHECK(trace.fetches.front() == kResetTarget);
+                CHECK_FALSE(fetched(trace, kNmiTarget));
+                CHECK_FALSE(trace.read_nmi_vector);
+            }
+        }
+    }
+}
+
+TEST_CASE("An NMI edge latched just before reset is not taken after it (#132)") {
+    for (const auto &nc : kConfigs) {
+        SECTION(nc.name) {
+            setup_memory();
+            M6502 cpu;
+            M6502_Init(&cpu, nc.config);
+            M6502_Reset(&cpu);
+            run_cycles(cpu, 32);
+
+            M6502_SetDeviceNMI(&cpu, kNmiMask, 1); // edge, not yet recognised
+            M6502_SetDeviceNMI(&cpu, kNmiMask, 0);
+            M6502_Reset(&cpu);
+            Trace trace = run_cycles(cpu, 64);
+
+            REQUIRE_FALSE(trace.fetches.empty());
+            CHECK(trace.fetches.front() == kResetTarget);
+            CHECK_FALSE(fetched(trace, kNmiTarget));
+            CHECK_FALSE(trace.read_nmi_vector);
+        }
+    }
+}
+
+TEST_CASE("An NMI edge after reset is taken as usual (#132 guard)") {
+    for (const auto &nc : kConfigs) {
+        SECTION(nc.name) {
+            setup_memory();
+            M6502 cpu;
+            M6502_Init(&cpu, nc.config);
+            M6502_Reset(&cpu);
+            run_cycles(cpu, 32);
+
+            M6502_SetDeviceNMI(&cpu, kNmiMask, 1);
+            Trace trace = run_cycles(cpu, 32);
+
+            CHECK(trace.read_nmi_vector);
+            CHECK(fetched(trace, kNmiTarget));
+        }
+    }
+}

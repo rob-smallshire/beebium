@@ -2916,6 +2916,14 @@ void M6502_Reset(M6502 *s) {
     // after reset sees a spurious "about to execute" at the pre-reset PC.
     s->read = M6502ReadType_Instruction;
 
+    // The reset sequence is the interrupt sequence with the RES vector taking
+    // over, and it consumes an NMI edge already recognised: the RES vector wins
+    // and the NMI vector is never taken. IRQ is a level, so it is re-derived
+    // from what the devices assert now rather than from a stale latch.
+    // (B2's library keeps both across a reset.)
+    s->nmi_flags = 0;
+    s->irq_flags = s->device_irq_flags;
+
     s->tfn = &Cycle0_Reset;
 }
 
