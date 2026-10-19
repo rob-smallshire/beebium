@@ -3664,6 +3664,11 @@ internal protocol Beebium_DeviceInspectionClientProtocol: GRPCClient {
     _ request: Beebium_GetTubeStateRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_GetTubeStateRequest, Beebium_TubeState>
+
+  func getRealTimeClockState(
+    _ request: Beebium_GetRealTimeClockStateRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_GetRealTimeClockStateRequest, Beebium_RealTimeClockState>
 }
 
 extension Beebium_DeviceInspectionClientProtocol {
@@ -3796,6 +3801,24 @@ extension Beebium_DeviceInspectionClientProtocol {
       interceptors: self.interceptors?.makeGetTubeStateInterceptors() ?? []
     )
   }
+
+  /// Unary call to GetRealTimeClockState
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetRealTimeClockState.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getRealTimeClockState(
+    _ request: Beebium_GetRealTimeClockStateRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_GetRealTimeClockStateRequest, Beebium_RealTimeClockState> {
+    return self.makeUnaryCall(
+      path: Beebium_DeviceInspectionClientMetadata.Methods.getRealTimeClockState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetRealTimeClockStateInterceptors() ?? []
+    )
+  }
 }
 
 @available(*, deprecated)
@@ -3896,6 +3919,11 @@ internal protocol Beebium_DeviceInspectionAsyncClientProtocol: GRPCClient {
     _ request: Beebium_GetTubeStateRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_GetTubeStateRequest, Beebium_TubeState>
+
+  func makeGetRealTimeClockStateCall(
+    _ request: Beebium_GetRealTimeClockStateRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_GetRealTimeClockStateRequest, Beebium_RealTimeClockState>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -3991,6 +4019,18 @@ extension Beebium_DeviceInspectionAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetTubeStateInterceptors() ?? []
     )
   }
+
+  internal func makeGetRealTimeClockStateCall(
+    _ request: Beebium_GetRealTimeClockStateRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_GetRealTimeClockStateRequest, Beebium_RealTimeClockState> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DeviceInspectionClientMetadata.Methods.getRealTimeClockState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetRealTimeClockStateInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -4078,6 +4118,18 @@ extension Beebium_DeviceInspectionAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetTubeStateInterceptors() ?? []
     )
   }
+
+  internal func getRealTimeClockState(
+    _ request: Beebium_GetRealTimeClockStateRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_RealTimeClockState {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DeviceInspectionClientMetadata.Methods.getRealTimeClockState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetRealTimeClockStateInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -4119,6 +4171,9 @@ internal protocol Beebium_DeviceInspectionClientInterceptorFactoryProtocol: Send
 
   /// - Returns: Interceptors to use when invoking 'getTubeState'.
   func makeGetTubeStateInterceptors() -> [ClientInterceptor<Beebium_GetTubeStateRequest, Beebium_TubeState>]
+
+  /// - Returns: Interceptors to use when invoking 'getRealTimeClockState'.
+  func makeGetRealTimeClockStateInterceptors() -> [ClientInterceptor<Beebium_GetRealTimeClockStateRequest, Beebium_RealTimeClockState>]
 }
 
 internal enum Beebium_DeviceInspectionClientMetadata {
@@ -4133,6 +4188,7 @@ internal enum Beebium_DeviceInspectionClientMetadata {
       Beebium_DeviceInspectionClientMetadata.Methods.getAddressableLatchState,
       Beebium_DeviceInspectionClientMetadata.Methods.getSoundGeneratorState,
       Beebium_DeviceInspectionClientMetadata.Methods.getTubeState,
+      Beebium_DeviceInspectionClientMetadata.Methods.getRealTimeClockState,
     ]
   )
 
@@ -4176,6 +4232,12 @@ internal enum Beebium_DeviceInspectionClientMetadata {
     internal static let getTubeState = GRPCMethodDescriptor(
       name: "GetTubeState",
       path: "/beebium.DeviceInspection/GetTubeState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getRealTimeClockState = GRPCMethodDescriptor(
+      name: "GetRealTimeClockState",
+      path: "/beebium.DeviceInspection/GetRealTimeClockState",
       type: GRPCCallType.unary
     )
   }
@@ -6317,6 +6379,8 @@ internal protocol Beebium_DeviceInspectionProvider: CallHandlerProvider {
   func getSoundGeneratorState(request: Beebium_GetSoundGeneratorStateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SoundGeneratorState>
 
   func getTubeState(request: Beebium_GetTubeStateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_TubeState>
+
+  func getRealTimeClockState(request: Beebium_GetRealTimeClockStateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RealTimeClockState>
 }
 
 extension Beebium_DeviceInspectionProvider {
@@ -6394,6 +6458,15 @@ extension Beebium_DeviceInspectionProvider {
         userFunction: self.getTubeState(request:context:)
       )
 
+    case "GetRealTimeClockState":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetRealTimeClockStateRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RealTimeClockState>(),
+        interceptors: self.interceptors?.makeGetRealTimeClockStateInterceptors() ?? [],
+        userFunction: self.getRealTimeClockState(request:context:)
+      )
+
     default:
       return nil
     }
@@ -6443,6 +6516,11 @@ internal protocol Beebium_DeviceInspectionAsyncProvider: CallHandlerProvider, Se
     request: Beebium_GetTubeStateRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_TubeState
+
+  func getRealTimeClockState(
+    request: Beebium_GetRealTimeClockStateRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_RealTimeClockState
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -6527,6 +6605,15 @@ extension Beebium_DeviceInspectionAsyncProvider {
         wrapping: { try await self.getTubeState(request: $0, context: $1) }
       )
 
+    case "GetRealTimeClockState":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetRealTimeClockStateRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RealTimeClockState>(),
+        interceptors: self.interceptors?.makeGetRealTimeClockStateInterceptors() ?? [],
+        wrapping: { try await self.getRealTimeClockState(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -6562,6 +6649,10 @@ internal protocol Beebium_DeviceInspectionServerInterceptorFactoryProtocol: Send
   /// - Returns: Interceptors to use when handling 'getTubeState'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetTubeStateInterceptors() -> [ServerInterceptor<Beebium_GetTubeStateRequest, Beebium_TubeState>]
+
+  /// - Returns: Interceptors to use when handling 'getRealTimeClockState'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetRealTimeClockStateInterceptors() -> [ServerInterceptor<Beebium_GetRealTimeClockStateRequest, Beebium_RealTimeClockState>]
 }
 
 internal enum Beebium_DeviceInspectionServerMetadata {
@@ -6576,6 +6667,7 @@ internal enum Beebium_DeviceInspectionServerMetadata {
       Beebium_DeviceInspectionServerMetadata.Methods.getAddressableLatchState,
       Beebium_DeviceInspectionServerMetadata.Methods.getSoundGeneratorState,
       Beebium_DeviceInspectionServerMetadata.Methods.getTubeState,
+      Beebium_DeviceInspectionServerMetadata.Methods.getRealTimeClockState,
     ]
   )
 
@@ -6619,6 +6711,12 @@ internal enum Beebium_DeviceInspectionServerMetadata {
     internal static let getTubeState = GRPCMethodDescriptor(
       name: "GetTubeState",
       path: "/beebium.DeviceInspection/GetTubeState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getRealTimeClockState = GRPCMethodDescriptor(
+      name: "GetRealTimeClockState",
+      path: "/beebium.DeviceInspection/GetRealTimeClockState",
       type: GRPCCallType.unary
     )
   }

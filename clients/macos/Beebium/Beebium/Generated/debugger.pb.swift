@@ -1273,6 +1273,9 @@ struct Beebium_CrtcState: Sendable {
   /// only when R8 selects interlace
   var cyclesSinceVsync: UInt64 = 0
 
+  /// Vsync rising edges since the machine was
+  var field: UInt64 = 0
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -1808,6 +1811,47 @@ struct Beebium_TubeInterrupts: Sendable {
 
   /// PNMI latched rising edge
   var pnmiEdge: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_GetRealTimeClockStateRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// The machine's own real-time clock chip -- the Integra-B's CDP6818 -- read
+/// without side effects: register C's interrupt flags are not cleared, and the
+/// chip's address register is not moved, as reading through the guest's RTC
+/// ports would. A plug-in clock (acorn-rtc on the user port) is an extension
+/// and is not reported here.
+struct Beebium_RealTimeClockState: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// False on a machine with no real-time clock of its own; the rest is then
+  /// empty.
+  var present: Bool = false
+
+  /// The chip, e.g. "CDP6818".
+  var chip: String = String()
+
+  /// All 64 registers in order, as a read of each would return them: 0-9 the
+  /// time and alarm, 10-13 control registers A-D, 14-63 the battery-backed
+  /// CMOS RAM (on the Integra-B, IBOS keeps its configuration from register
+  /// 14, so its user register N is register 14 + N).
+  var registers: Data = Data()
+
+  /// The register the chip's address latch selects.
+  var addressRegister: UInt32 = 0
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3930,7 +3974,7 @@ extension Beebium_GetCrtcStateRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Beebium_CrtcState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".CrtcState"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}registers\0\u{3}address_register\0\u{1}column\0\u{1}row\0\u{1}raster\0\u{3}char_addr\0\u{3}screen_start\0\u{3}cursor_position\0\u{3}in_hsync\0\u{3}in_vsync\0\u{3}display_enabled\0\u{3}odd_field\0\u{3}cycles_since_vsync\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}registers\0\u{3}address_register\0\u{1}column\0\u{1}row\0\u{1}raster\0\u{3}char_addr\0\u{3}screen_start\0\u{3}cursor_position\0\u{3}in_hsync\0\u{3}in_vsync\0\u{3}display_enabled\0\u{3}odd_field\0\u{3}cycles_since_vsync\0\u{1}field\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3951,6 +3995,7 @@ extension Beebium_CrtcState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
       case 11: try { try decoder.decodeSingularBoolField(value: &self.displayEnabled) }()
       case 12: try { try decoder.decodeSingularBoolField(value: &self.oddField) }()
       case 13: try { try decoder.decodeSingularUInt64Field(value: &self.cyclesSinceVsync) }()
+      case 14: try { try decoder.decodeSingularUInt64Field(value: &self.field) }()
       default: break
       }
     }
@@ -3996,6 +4041,9 @@ extension Beebium_CrtcState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     if self.cyclesSinceVsync != 0 {
       try visitor.visitSingularUInt64Field(value: self.cyclesSinceVsync, fieldNumber: 13)
     }
+    if self.field != 0 {
+      try visitor.visitSingularUInt64Field(value: self.field, fieldNumber: 14)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -4013,6 +4061,7 @@ extension Beebium_CrtcState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     if lhs.displayEnabled != rhs.displayEnabled {return false}
     if lhs.oddField != rhs.oddField {return false}
     if lhs.cyclesSinceVsync != rhs.cyclesSinceVsync {return false}
+    if lhs.field != rhs.field {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -4924,6 +4973,70 @@ extension Beebium_TubeInterrupts: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     if lhs.pirq != rhs.pirq {return false}
     if lhs.pnmiLevel != rhs.pnmiLevel {return false}
     if lhs.pnmiEdge != rhs.pnmiEdge {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_GetRealTimeClockStateRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".GetRealTimeClockStateRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_GetRealTimeClockStateRequest, rhs: Beebium_GetRealTimeClockStateRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_RealTimeClockState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".RealTimeClockState"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}present\0\u{1}chip\0\u{1}registers\0\u{3}address_register\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.present) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.chip) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self.registers) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.addressRegister) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.present != false {
+      try visitor.visitSingularBoolField(value: self.present, fieldNumber: 1)
+    }
+    if !self.chip.isEmpty {
+      try visitor.visitSingularStringField(value: self.chip, fieldNumber: 2)
+    }
+    if !self.registers.isEmpty {
+      try visitor.visitSingularBytesField(value: self.registers, fieldNumber: 3)
+    }
+    if self.addressRegister != 0 {
+      try visitor.visitSingularUInt32Field(value: self.addressRegister, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_RealTimeClockState, rhs: Beebium_RealTimeClockState) -> Bool {
+    if lhs.present != rhs.present {return false}
+    if lhs.chip != rhs.chip {return false}
+    if lhs.registers != rhs.registers {return false}
+    if lhs.addressRegister != rhs.addressRegister {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

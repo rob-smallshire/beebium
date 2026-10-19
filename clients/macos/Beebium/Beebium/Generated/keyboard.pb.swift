@@ -430,6 +430,16 @@ struct Beebium_TypingStatus: Sendable {
   /// WatchTypingStatus pushes as it advances, at the stream's interval.
   var cyclesSinceReset: UInt64 = 0
 
+  /// Characters a reset discarded since text was last enqueued (TypeQuickly)
+  /// or the queue was cleared (ClearTyping). A reset of any kind -- power-on,
+  /// Break pressed, or a reset without Break -- discards the string in
+  /// progress and every string queued behind it: what was typed of them went
+  /// with the old session, and the rest must not arrive in the new one. Text
+  /// typed after the reset (or while Break is held) is for the new session
+  /// and is held until guest_ready. Non-zero means text was never delivered
+  /// in full; idle is then true, but the typing did not complete.
+  var discardedByReset: UInt32 = 0
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -1308,7 +1318,7 @@ extension Beebium_WatchTypingStatusRequest: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".TypingStatus"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}idle\0\u{3}pending_characters\0\u{3}strings_queued\0\u{3}machine_running\0\u{3}guest_ready\0\u{3}cycles_since_reset\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}idle\0\u{3}pending_characters\0\u{3}strings_queued\0\u{3}machine_running\0\u{3}guest_ready\0\u{3}cycles_since_reset\0\u{3}discarded_by_reset\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1322,6 +1332,7 @@ extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 4: try { try decoder.decodeSingularBoolField(value: &self.machineRunning) }()
       case 5: try { try decoder.decodeSingularBoolField(value: &self.guestReady) }()
       case 6: try { try decoder.decodeSingularUInt64Field(value: &self.cyclesSinceReset) }()
+      case 7: try { try decoder.decodeSingularUInt32Field(value: &self.discardedByReset) }()
       default: break
       }
     }
@@ -1346,6 +1357,9 @@ extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if self.cyclesSinceReset != 0 {
       try visitor.visitSingularUInt64Field(value: self.cyclesSinceReset, fieldNumber: 6)
     }
+    if self.discardedByReset != 0 {
+      try visitor.visitSingularUInt32Field(value: self.discardedByReset, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1356,6 +1370,7 @@ extension Beebium_TypingStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.machineRunning != rhs.machineRunning {return false}
     if lhs.guestReady != rhs.guestReady {return false}
     if lhs.cyclesSinceReset != rhs.cyclesSinceReset {return false}
+    if lhs.discardedByReset != rhs.discardedByReset {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

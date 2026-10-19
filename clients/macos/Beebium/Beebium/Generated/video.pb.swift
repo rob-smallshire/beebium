@@ -370,6 +370,14 @@ struct Beebium_Frame: Sendable {
   /// Always populated with at least one region.
   var regions: [Beebium_DisplayRegion] = []
 
+  /// The machine's field count (the `field` breakpoint condition variable,
+  /// CrtcState.field) from the vsync rising edge that completed this frame
+  /// on: the field that starts as the frame ends. A run that stops when
+  /// `field` reaches F has just completed the frame stamped F, so "run N
+  /// fields" and a captured frame share one counter. 0 when unknown, as
+  /// cycle_count.
+  var field: UInt64 = 0
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -792,44 +800,46 @@ struct Beebium_HoldScreenRequest: Sendable {
   init() {}
 }
 
-struct Beebium_ScreenHold: Sendable {
+struct Beebium_ScreenHold: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// Names this hold in later GetScreenText and GetScreenGeometry calls.
-  var holdID: UInt64 = 0
+  var holdID: UInt64 {
+    get {return _storage._holdID}
+    set {_uniqueStorage()._holdID = newValue}
+  }
 
   /// The grid the held screen implies. Returned here so a drag can snap
   /// without a second call, and so the geometry can never drift from the
   /// pixels it describes.
   var geometry: Beebium_ScreenGeometry {
-    get {return _geometry ?? Beebium_ScreenGeometry()}
-    set {_geometry = newValue}
+    get {return _storage._geometry ?? Beebium_ScreenGeometry()}
+    set {_uniqueStorage()._geometry = newValue}
   }
   /// Returns true if `geometry` has been explicitly set.
-  var hasGeometry: Bool {return self._geometry != nil}
+  var hasGeometry: Bool {return _storage._geometry != nil}
   /// Clears the value of `geometry`. Subsequent reads from it will return its default value.
-  mutating func clearGeometry() {self._geometry = nil}
+  mutating func clearGeometry() {_uniqueStorage()._geometry = nil}
 
   /// The held still, when `include_frame` was set, in the same shape the frame
   /// stream carries so a client can display it through the code it already
   /// has.
   var frame: Beebium_Frame {
-    get {return _frame ?? Beebium_Frame()}
-    set {_frame = newValue}
+    get {return _storage._frame ?? Beebium_Frame()}
+    set {_uniqueStorage()._frame = newValue}
   }
   /// Returns true if `frame` has been explicitly set.
-  var hasFrame: Bool {return self._frame != nil}
+  var hasFrame: Bool {return _storage._frame != nil}
   /// Clears the value of `frame`. Subsequent reads from it will return its default value.
-  mutating func clearFrame() {self._frame = nil}
+  mutating func clearFrame() {_uniqueStorage()._frame = nil}
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 
-  fileprivate var _geometry: Beebium_ScreenGeometry? = nil
-  fileprivate var _frame: Beebium_Frame? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 struct Beebium_ReleaseScreenRequest: Sendable {
@@ -989,7 +999,7 @@ extension Beebium_CaptureFrameRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Beebium_Frame: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".Frame"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}frame_number\0\u{3}cycle_count\0\u{1}width\0\u{1}height\0\u{1}pixels\0\u{3}field_order\0\u{3}left_border\0\u{3}right_border\0\u{3}top_border\0\u{3}bottom_border\0\u{3}display_width\0\u{3}display_height\0\u{1}regions\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}frame_number\0\u{3}cycle_count\0\u{1}width\0\u{1}height\0\u{1}pixels\0\u{3}field_order\0\u{3}left_border\0\u{3}right_border\0\u{3}top_border\0\u{3}bottom_border\0\u{3}display_width\0\u{3}display_height\0\u{1}regions\0\u{1}field\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1010,6 +1020,7 @@ extension Beebium_Frame: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
       case 11: try { try decoder.decodeSingularUInt32Field(value: &self.displayWidth) }()
       case 12: try { try decoder.decodeSingularUInt32Field(value: &self.displayHeight) }()
       case 13: try { try decoder.decodeRepeatedMessageField(value: &self.regions) }()
+      case 14: try { try decoder.decodeSingularUInt64Field(value: &self.field) }()
       default: break
       }
     }
@@ -1055,6 +1066,9 @@ extension Beebium_Frame: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
     if !self.regions.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.regions, fieldNumber: 13)
     }
+    if self.field != 0 {
+      try visitor.visitSingularUInt64Field(value: self.field, fieldNumber: 14)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1072,6 +1086,7 @@ extension Beebium_Frame: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
     if lhs.displayWidth != rhs.displayWidth {return false}
     if lhs.displayHeight != rhs.displayHeight {return false}
     if lhs.regions != rhs.regions {return false}
+    if lhs.field != rhs.field {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1774,41 +1789,81 @@ extension Beebium_ScreenHold: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   static let protoMessageName: String = _protobuf_package + ".ScreenHold"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}hold_id\0\u{1}geometry\0\u{1}frame\0")
 
+  fileprivate class _StorageClass {
+    var _holdID: UInt64 = 0
+    var _geometry: Beebium_ScreenGeometry? = nil
+    var _frame: Beebium_Frame? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _holdID = source._holdID
+      _geometry = source._geometry
+      _frame = source._frame
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.holdID) }()
-      case 2: try { try decoder.decodeSingularMessageField(value: &self._geometry) }()
-      case 3: try { try decoder.decodeSingularMessageField(value: &self._frame) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularUInt64Field(value: &_storage._holdID) }()
+        case 2: try { try decoder.decodeSingularMessageField(value: &_storage._geometry) }()
+        case 3: try { try decoder.decodeSingularMessageField(value: &_storage._frame) }()
+        default: break
+        }
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if self.holdID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.holdID, fieldNumber: 1)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if _storage._holdID != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._holdID, fieldNumber: 1)
+      }
+      try { if let v = _storage._geometry {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+      } }()
+      try { if let v = _storage._frame {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+      } }()
     }
-    try { if let v = self._geometry {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    } }()
-    try { if let v = self._frame {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_ScreenHold, rhs: Beebium_ScreenHold) -> Bool {
-    if lhs.holdID != rhs.holdID {return false}
-    if lhs._geometry != rhs._geometry {return false}
-    if lhs._frame != rhs._frame {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._holdID != rhs_storage._holdID {return false}
+        if _storage._geometry != rhs_storage._geometry {return false}
+        if _storage._frame != rhs_storage._frame {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
