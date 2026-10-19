@@ -1069,6 +1069,11 @@ add_executable(test_cycle_breakpoint test_cycle_breakpoint.cpp)
 target_link_libraries(test_cycle_breakpoint PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_cycle_breakpoint)
 
+# Stepping over the stopped-on breakpoint across runs and resets (issue #202)
+add_executable(test_breakpoint_step_over test_breakpoint_step_over.cpp)
+target_link_libraries(test_breakpoint_step_over PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_breakpoint_step_over)
+
 # dp111 6502 timing suite, whole-machine &FCD0 result-register trap (issue #81)
 add_executable(test_dp111_timing_fcd0 test_dp111_timing_fcd0.cpp)
 target_link_libraries(test_dp111_timing_fcd0 PRIVATE beebium_core Catch2::Catch2WithMain)

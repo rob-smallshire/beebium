@@ -156,6 +156,7 @@ public:
         in_reset_ = false;
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
+        step_over_breakpoints_ = false;
         state_.memory.system_via_peripheral.type_ahead().set_guest_ready(false);
         ++sequence_;
         if (on_reset_) on_reset_(/*hard=*/true);
@@ -181,6 +182,7 @@ public:
         in_reset_ = false;
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
+        step_over_breakpoints_ = false;
         state_.memory.system_via_peripheral.type_ahead().set_guest_ready(false);
         ++sequence_;
         if (on_reset_) on_reset_(/*hard=*/false);
@@ -425,6 +427,13 @@ public:
             RunGuard(std::atomic<bool>& f) : flag(f) { flag.store(true, std::memory_order_seq_cst); }
             ~RunGuard() { flag.store(false, std::memory_order_release); }
         } guard{in_run_};
+
+        // A step-over with no breakpoints to step over is spent: left armed, it
+        // would skip a breakpoint added later at an instruction reached at the
+        // same cycle count (issue #202). Tested only when not paused, which
+        // the in_run_ handshake makes safe to read and write.
+        if (step_over_breakpoints_ && breakpoint_entries_.empty() && !paused_.load())
+            step_over_breakpoints_ = false;
 
         const uint64_t target = state_.cycle_count + cycles;
         while (!paused_.load()) {
@@ -786,7 +795,8 @@ public:
     // enabled, but are not evaluated, so not reported again, for that one
     // instruction. Only a machine stopped at that instruction's boundary is
     // affected; one stopped part-way through an instruction runs on to the
-    // next, whose breakpoints are evaluated. Call while paused, before resume().
+    // next, whose breakpoints are evaluated. A run with no breakpoints, and a
+    // reset, spend it. Call while paused, before resume().
     void step_over_breakpoints_once() {
         step_over_breakpoints_ = true;
         step_over_cycle_ = state_.cycle_count;
