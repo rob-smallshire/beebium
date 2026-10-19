@@ -62,8 +62,8 @@ bool CoprocessorRunner::refresh_hold_if_due() {
 // tick, charge read_cycle_ticks or write_cycle_ticks by the cycle's R/W, advance
 // the refresh timer, watchpoint check. Returns false if a breakpoint paused
 // before the cycle ran. Charges the tick budget unconditionally.
-bool CoprocessorRunner::execute_one_cycle() {
-    if (check_breakpoints()) return false;
+bool CoprocessorRunner::execute_one_cycle(bool check_breakpoints) {
+    if (check_breakpoints && this->check_breakpoints()) return false;
     cpu_.tick();
     const uint32_t cost =
         cpu_.cpu().read ? timing_.read_cycle_ticks : timing_.write_cycle_ticks;
@@ -181,16 +181,20 @@ void CoprocessorRunner::run(uint64_t cycles) {
 }
 
 uint64_t CoprocessorRunner::step_instruction() {
-    // Loop the single step until the CPU is about to execute again after at least
-    // one executed cycle, going through the same breakpoint/watchpoint and refresh
-    // charging as run_until (the old direct cpu_.step_instruction() bypassed all
-    // of them). A leading refresh hold executes no cycle, so it is charged but not
-    // counted; the return is CPU cycles executed. A breakpoint that pauses stops it.
+    // Step cycles until the CPU is about to execute again after at least one
+    // executed cycle, going through the same watchpoint and refresh charging as
+    // run_until. A leading refresh hold executes no cycle, so it is charged but
+    // not counted; the return is CPU cycles executed. The debugger steps a
+    // paused coprocessor, so being paused does not end the step (#204), and, as
+    // on the host, the instruction asked for is executed whatever breakpoints it
+    // carries: stepping is how a debugger gets off one. (Breakpoints are checked
+    // only at an opcode fetch, and the step ends at the next, so a step
+    // evaluates none.)
     const uint64_t start = cpu_.cycle_count();
+    refresh_hold_if_due();
     do {
-        step();
-        if (paused_) break;
-    } while (cpu_.cycle_count() == start || !M6502_IsAboutToExecute(&cpu_.cpu()));
+        execute_one_cycle(/*check_breakpoints=*/false);
+    } while (!M6502_IsAboutToExecute(&cpu_.cpu()));
     return cpu_.cycle_count() - start;
 }
 

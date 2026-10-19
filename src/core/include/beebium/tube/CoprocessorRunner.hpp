@@ -306,10 +306,11 @@ private:
     // the hold's ticks, executes nothing, reloads the timer) and returns whether
     // it did. execute_one_cycle() runs one CPU cycle (breakpoint check, tick,
     // charge read/write ticks, advance the refresh timer, watchpoint check) and
-    // returns false if a breakpoint paused before the cycle. run_until() gates
-    // both on the tick budget; step() calls them ungated.
+    // returns false if a breakpoint paused before the cycle; check_breakpoints
+    // false skips that check. run_until() gates both on the tick budget;
+    // step() calls them ungated.
     bool refresh_hold_if_due();
-    bool execute_one_cycle();
+    bool execute_one_cycle(bool check_breakpoints = true);
 
     TubeCoprocessorBackend& tube_port_;                     // reference to active port
     CoprocessorMemoryMap memory_;

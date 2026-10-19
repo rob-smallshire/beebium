@@ -221,7 +221,7 @@ TEST_CASE("Board timing: a debugger step across a due refresh charges the hold",
 
 // step_instruction() now loops the shared step(), so breakpoints and watchpoints
 // fire under it (the old direct cpu_.step_instruction() bypassed both).
-TEST_CASE("Board timing: breakpoints and watchpoints fire under step_instruction",
+TEST_CASE("Board timing: watchpoints fire under step_instruction; breakpoints under run_until",
           "[coprocessor][board-timing][issue70]") {
     SECTION("a watchpoint on the store address fires") {
         TubeUla tube;
@@ -245,10 +245,19 @@ TEST_CASE("Board timing: breakpoints and watchpoints fire under step_instruction
         runner.run_until(0);
 
         int hits = 0;
-        runner.set_breakpoint_hit_callback([&](const BreakpointEntry&, uint16_t) { ++hits; });
+        runner.set_breakpoint_hit_callback([&](const BreakpointEntry&, uint16_t) {
+            ++hits;
+            runner.pause();
+        });
         runner.set_breakpoint_entries({BreakpointEntry{1, 0xF802, 0xF803}});  // the second instruction
 
-        for (int i = 0; i < 40 && hits == 0; ++i) runner.step_instruction();
+        // Stepping executes the instruction asked for, as on the host (#204)...
+        for (int i = 0; i < 40; ++i) runner.step_instruction();
+        CHECK(hits == 0);
+        // ...while running stops at the breakpoint.
+        runner.resume();
+        for (uint64_t host = 1; host < 1000 && hits == 0; ++host) runner.run_until(host * 10);
         CHECK(hits > 0);
+        CHECK(runner.pc() == 0xF802);
     }
 }

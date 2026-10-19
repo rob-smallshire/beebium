@@ -108,6 +108,52 @@ TEST_CASE("CoprocessorRunner step_instruction returns cycle count", "[coprocesso
     CHECK(nop_cycles == 2);
 }
 
+TEST_CASE("CoprocessorRunner steps a whole instruction while paused, as the debugger does (#204)",
+          "[coprocessor][runner][execution]") {
+    // The debugger steps only a stopped coprocessor, so the runner is paused
+    // throughout; that must not cut the instruction short.
+    TubeUla tube;
+    auto rom = make_nop_rom();
+    CoprocessorRunner runner(tube, rom);
+    runner.reset();
+    runner.pause();
+
+    CHECK(runner.step_instruction() == 7);  // the reset sequence
+    CHECK(runner.cpu().opcode_pc.w == 0xF800);
+    CHECK(runner.step_instruction() == 2);  // NOP
+    CHECK_FALSE(runner.mid_instruction());
+    CHECK(runner.step_instruction() == 2);
+    CHECK(runner.is_paused());
+}
+
+TEST_CASE("CoprocessorRunner steps off a breakpoint it is stopped on (#204)",
+          "[coprocessor][runner][debug]") {
+    // As on the host, stepping executes the instruction whatever breakpoints
+    // it carries: a stepped instruction is not a run that a breakpoint stops.
+    TubeUla tube;
+    auto rom = make_nop_rom();
+    CoprocessorRunner runner(tube, rom);
+    runner.reset();
+    runner.step_instruction();  // the reset sequence, to the NOP at &F800
+
+    BreakpointEntry bp{};
+    bp.id = 1;
+    bp.start = 0xF800;
+    bp.end = 0xF810;
+    runner.set_breakpoint_entries({bp});
+    int hits = 0;
+    runner.set_breakpoint_hit_callback([&](const BreakpointEntry&, uint32_t) {
+        ++hits;
+        runner.pause();
+    });
+    runner.pause();
+
+    CHECK(runner.step_instruction() == 2);
+    CHECK(runner.step_instruction() == 2);
+    CHECK(runner.cpu().opcode_pc.w == 0xF802);  // two one-byte NOPs on
+    CHECK(hits == 0);
+}
+
 // ===========================================================================
 // Pause/resume (debugger support)
 // ===========================================================================
