@@ -38,11 +38,11 @@ if _version_not_supported:
 
 
 class TubeServiceStub(object):
-    """Tube coprocessor management service.
+    """The Tube and the coprocessor attached to it.
 
-    Runs on the host's gRPC server. The coprocessor process connects to
-    negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of coprocessor state.
+    A coprocessor is an in-process plugin, attached at launch (--tube-65c02,
+    --tube-65c102, or a preset's coprocessor); it is driven and debugged through
+    CoprocessorDebuggerControl. This service says what is fitted.
     """
 
     def __init__(self, channel):
@@ -51,71 +51,24 @@ class TubeServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.Connect = channel.unary_unary(
-                '/beebium.TubeService/Connect',
-                request_serializer=tube__pb2.TubeConnectRequest.SerializeToString,
-                response_deserializer=tube__pb2.TubeConnectResponse.FromString,
-                _registered_method=True)
-        self.RegisterEndpoint = channel.unary_unary(
-                '/beebium.TubeService/RegisterEndpoint',
-                request_serializer=tube__pb2.RegisterEndpointRequest.SerializeToString,
-                response_deserializer=tube__pb2.RegisterEndpointResponse.FromString,
-                _registered_method=True)
         self.GetStatus = channel.unary_unary(
                 '/beebium.TubeService/GetStatus',
                 request_serializer=tube__pb2.GetTubeStatusRequest.SerializeToString,
                 response_deserializer=tube__pb2.GetTubeStatusResponse.FromString,
                 _registered_method=True)
-        self.GetState = channel.unary_unary(
-                '/beebium.TubeService/GetState',
-                request_serializer=tube__pb2.TubeGetStateRequest.SerializeToString,
-                response_deserializer=tube__pb2.TubeGetStateResponse.FromString,
-                _registered_method=True)
-        self.RestoreState = channel.unary_unary(
-                '/beebium.TubeService/RestoreState',
-                request_serializer=tube__pb2.TubeRestoreStateRequest.SerializeToString,
-                response_deserializer=tube__pb2.TubeRestoreStateResponse.FromString,
-                _registered_method=True)
 
 
 class TubeServiceServicer(object):
-    """Tube coprocessor management service.
+    """The Tube and the coprocessor attached to it.
 
-    Runs on the host's gRPC server. The coprocessor process connects to
-    negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of coprocessor state.
+    A coprocessor is an in-process plugin, attached at launch (--tube-65c02,
+    --tube-65c102, or a preset's coprocessor); it is driven and debugged through
+    CoprocessorDebuggerControl. This service says what is fitted.
     """
 
-    def Connect(self, request, context):
-        """Coprocessor connects, receives shared memory name and size.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def RegisterEndpoint(self, request, context):
-        """Coprocessor registers its gRPC endpoint after starting its own server.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def GetStatus(self, request, context):
-        """Query current Tube status (enabled, coprocessor type, shared memory info).
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetState(self, request, context):
-        """Host requests full coprocessor state for save/restore.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def RestoreState(self, request, context):
-        """Host sends saved coprocessor state for restore after reconnection.
+        """Whether the machine has a Tube, whether it is enabled, and which
+        coprocessor is attached to it.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -124,30 +77,10 @@ class TubeServiceServicer(object):
 
 def add_TubeServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'Connect': grpc.unary_unary_rpc_method_handler(
-                    servicer.Connect,
-                    request_deserializer=tube__pb2.TubeConnectRequest.FromString,
-                    response_serializer=tube__pb2.TubeConnectResponse.SerializeToString,
-            ),
-            'RegisterEndpoint': grpc.unary_unary_rpc_method_handler(
-                    servicer.RegisterEndpoint,
-                    request_deserializer=tube__pb2.RegisterEndpointRequest.FromString,
-                    response_serializer=tube__pb2.RegisterEndpointResponse.SerializeToString,
-            ),
             'GetStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.GetStatus,
                     request_deserializer=tube__pb2.GetTubeStatusRequest.FromString,
                     response_serializer=tube__pb2.GetTubeStatusResponse.SerializeToString,
-            ),
-            'GetState': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetState,
-                    request_deserializer=tube__pb2.TubeGetStateRequest.FromString,
-                    response_serializer=tube__pb2.TubeGetStateResponse.SerializeToString,
-            ),
-            'RestoreState': grpc.unary_unary_rpc_method_handler(
-                    servicer.RestoreState,
-                    request_deserializer=tube__pb2.TubeRestoreStateRequest.FromString,
-                    response_serializer=tube__pb2.TubeRestoreStateResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -158,66 +91,12 @@ def add_TubeServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class TubeService(object):
-    """Tube coprocessor management service.
+    """The Tube and the coprocessor attached to it.
 
-    Runs on the host's gRPC server. The coprocessor process connects to
-    negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of coprocessor state.
+    A coprocessor is an in-process plugin, attached at launch (--tube-65c02,
+    --tube-65c102, or a preset's coprocessor); it is driven and debugged through
+    CoprocessorDebuggerControl. This service says what is fitted.
     """
-
-    @staticmethod
-    def Connect(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/beebium.TubeService/Connect',
-            tube__pb2.TubeConnectRequest.SerializeToString,
-            tube__pb2.TubeConnectResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def RegisterEndpoint(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/beebium.TubeService/RegisterEndpoint',
-            tube__pb2.RegisterEndpointRequest.SerializeToString,
-            tube__pb2.RegisterEndpointResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
 
     @staticmethod
     def GetStatus(request,
@@ -236,60 +115,6 @@ class TubeService(object):
             '/beebium.TubeService/GetStatus',
             tube__pb2.GetTubeStatusRequest.SerializeToString,
             tube__pb2.GetTubeStatusResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetState(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/beebium.TubeService/GetState',
-            tube__pb2.TubeGetStateRequest.SerializeToString,
-            tube__pb2.TubeGetStateResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def RestoreState(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/beebium.TubeService/RestoreState',
-            tube__pb2.TubeRestoreStateRequest.SerializeToString,
-            tube__pb2.TubeRestoreStateResponse.FromString,
             options,
             channel_credentials,
             insecure,

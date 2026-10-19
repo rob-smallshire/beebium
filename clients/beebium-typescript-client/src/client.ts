@@ -495,7 +495,7 @@ export class Beebium {
      */
     async connectCoprocessor(): Promise<Beebium> {
         const status = await this.tube.getStatus();
-        if (!status.enabled) {
+        if (!status.coprocessorConnected) {
             throw new ConnectionError("No Tube coprocessor is active");
         }
         return Beebium.fromCoprocessorStub(this.connection);

@@ -63,7 +63,7 @@ def main():
         "--aun", "port=0",
         "--machine-name", "L3FS-DIAG",
         "--acorn-rtc", "layout=7bit-year-in-r7:time=1985-10-26T0121",
-        "--tube", "65C02-3MHz",
+        "--tube-65c02",
         "--advertise",
     ]
 

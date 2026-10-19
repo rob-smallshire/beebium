@@ -29,114 +29,8 @@ else:
 DESCRIPTOR: _descriptor.FileDescriptor
 
 @_typing.final
-class TubeConnectRequest(_message.Message):
-    """--- Connect ---"""
-
-    DESCRIPTOR: _descriptor.Descriptor
-
-    PROTOCOL_VERSION_FIELD_NUMBER: _builtins.int
-    COPROCESSOR_TYPE_FIELD_NUMBER: _builtins.int
-    COPROCESSOR_CLOCK_HZ_FIELD_NUMBER: _builtins.int
-    protocol_version: _builtins.int
-    """Protocol version for forward compatibility."""
-    coprocessor_type: _builtins.str
-    """Coprocessor CPU type (e.g. "6502", "65C02", "z80", "arm", "32016")."""
-    coprocessor_clock_hz: _builtins.int
-    """Coprocessor clock frequency in Hz (e.g. 3000000 for 3 MHz)."""
-    def __init__(
-        self,
-        *,
-        protocol_version: _builtins.int = ...,
-        coprocessor_type: _builtins.str = ...,
-        coprocessor_clock_hz: _builtins.int = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["coprocessor_clock_hz", b"coprocessor_clock_hz", "coprocessor_type", b"coprocessor_type", "protocol_version", b"protocol_version"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___TubeConnectRequest: _TypeAlias = TubeConnectRequest  # noqa: Y015
-
-@_typing.final
-class TubeConnectResponse(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    SHARED_MEMORY_NAME_FIELD_NUMBER: _builtins.int
-    SHARED_MEMORY_SIZE_FIELD_NUMBER: _builtins.int
-    PROTOCOL_VERSION_FIELD_NUMBER: _builtins.int
-    HOST_UUID_FIELD_NUMBER: _builtins.int
-    shared_memory_name: _builtins.str
-    """POSIX shared memory name (e.g. "/beebium-tube-<uuid>")
-    or Windows file mapping name.
-    """
-    shared_memory_size: _builtins.int
-    """Size of the shared memory region in bytes."""
-    protocol_version: _builtins.int
-    """Protocol version accepted by host."""
-    host_uuid: _builtins.str
-    """Host machine UUID for mDNS linkage."""
-    def __init__(
-        self,
-        *,
-        shared_memory_name: _builtins.str = ...,
-        shared_memory_size: _builtins.int = ...,
-        protocol_version: _builtins.int = ...,
-        host_uuid: _builtins.str = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["host_uuid", b"host_uuid", "protocol_version", b"protocol_version", "shared_memory_name", b"shared_memory_name", "shared_memory_size", b"shared_memory_size"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___TubeConnectResponse: _TypeAlias = TubeConnectResponse  # noqa: Y015
-
-@_typing.final
-class RegisterEndpointRequest(_message.Message):
-    """--- RegisterEndpoint ---"""
-
-    DESCRIPTOR: _descriptor.Descriptor
-
-    GRPC_ADDRESS_FIELD_NUMBER: _builtins.int
-    grpc_address: _builtins.str
-    """The coprocessor's gRPC address (e.g. "localhost:50052")."""
-    def __init__(
-        self,
-        *,
-        grpc_address: _builtins.str = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["grpc_address", b"grpc_address"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___RegisterEndpointRequest: _TypeAlias = RegisterEndpointRequest  # noqa: Y015
-
-@_typing.final
-class RegisterEndpointResponse(_message.Message):
-    """Empty on success; RPC status indicates errors."""
-
-    DESCRIPTOR: _descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___RegisterEndpointResponse: _TypeAlias = RegisterEndpointResponse  # noqa: Y015
-
-@_typing.final
 class GetTubeStatusRequest(_message.Message):
-    """--- Status ---
-
-    Empty - returns full status.
-    """
+    """Empty - returns full status."""
 
     DESCRIPTOR: _descriptor.Descriptor
 
@@ -158,25 +52,28 @@ class GetTubeStatusResponse(_message.Message):
     HAS_TUBE_SOCKET_FIELD_NUMBER: _builtins.int
     ENABLED_FIELD_NUMBER: _builtins.int
     COPROCESSOR_CONNECTED_FIELD_NUMBER: _builtins.int
-    COPROCESSOR_TYPE_FIELD_NUMBER: _builtins.int
+    COPROCESSOR_CPU_FIELD_NUMBER: _builtins.int
     COPROCESSOR_CLOCK_HZ_FIELD_NUMBER: _builtins.int
-    SHARED_MEMORY_NAME_FIELD_NUMBER: _builtins.int
-    COPROCESSOR_GRPC_ADDRESS_FIELD_NUMBER: _builtins.int
+    COPROCESSOR_EXTENSION_ID_FIELD_NUMBER: _builtins.int
     has_tube_socket: _builtins.bool
     """True if this machine variant has a Tube socket (compile-time)."""
     enabled: _builtins.bool
     """True if Tube hardware is currently enabled (runtime)."""
     coprocessor_connected: _builtins.bool
-    """True if a coprocessor process is connected."""
-    coprocessor_type: _builtins.str
-    """Coprocessor CPU type (populated when connected)."""
+    """True if a coprocessor is attached to the Tube. The fields below are
+    empty or zero when it is not.
+    """
+    coprocessor_cpu: _builtins.str
+    """The coprocessor's CPU as people name it ("65C02", "65C102"), as the
+    coprocessor-cpu machine-description placeholder shows it.
+    """
     coprocessor_clock_hz: _builtins.int
-    """Coprocessor clock frequency in Hz (populated when connected)."""
-    shared_memory_name: _builtins.str
-    """Shared memory name (populated when enabled)."""
-    coprocessor_grpc_address: _builtins.str
-    """Coprocessor's gRPC address (e.g. "localhost:50052").
-    Populated after RegisterEndpoint is called.
+    """The coprocessor's nominal clock in hertz (3000000 for the 6502 Second
+    Processor), which the coprocessor-clock placeholder formats.
+    """
+    coprocessor_extension_id: _builtins.str
+    """The coprocessor extension's instance id, as PeripheralExtensionService
+    lists it (ExtensionInfo.id).
     """
     def __init__(
         self,
@@ -184,108 +81,14 @@ class GetTubeStatusResponse(_message.Message):
         has_tube_socket: _builtins.bool = ...,
         enabled: _builtins.bool = ...,
         coprocessor_connected: _builtins.bool = ...,
-        coprocessor_type: _builtins.str = ...,
+        coprocessor_cpu: _builtins.str = ...,
         coprocessor_clock_hz: _builtins.int = ...,
-        shared_memory_name: _builtins.str = ...,
-        coprocessor_grpc_address: _builtins.str = ...,
+        coprocessor_extension_id: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["coprocessor_clock_hz", b"coprocessor_clock_hz", "coprocessor_connected", b"coprocessor_connected", "coprocessor_grpc_address", b"coprocessor_grpc_address", "coprocessor_type", b"coprocessor_type", "enabled", b"enabled", "has_tube_socket", b"has_tube_socket", "shared_memory_name", b"shared_memory_name"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["coprocessor_clock_hz", b"coprocessor_clock_hz", "coprocessor_connected", b"coprocessor_connected", "coprocessor_cpu", b"coprocessor_cpu", "coprocessor_extension_id", b"coprocessor_extension_id", "enabled", b"enabled", "has_tube_socket", b"has_tube_socket"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___GetTubeStatusResponse: _TypeAlias = GetTubeStatusResponse  # noqa: Y015
-
-@_typing.final
-class TubeGetStateRequest(_message.Message):
-    """--- State Save/Restore ---
-
-    Empty - returns full coprocessor state.
-    """
-
-    DESCRIPTOR: _descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___TubeGetStateRequest: _TypeAlias = TubeGetStateRequest  # noqa: Y015
-
-@_typing.final
-class TubeGetStateResponse(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    CPU_STATE_FIELD_NUMBER: _builtins.int
-    RAM_FIELD_NUMBER: _builtins.int
-    TUBE_STATE_FIELD_NUMBER: _builtins.int
-    cpu_state: _builtins.bytes
-    """Serialised coprocessor CPU registers."""
-    ram: _builtins.bytes
-    """Full coprocessor RAM contents (typically 64 KB)."""
-    tube_state: _builtins.bytes
-    """Tube ULA register state."""
-    def __init__(
-        self,
-        *,
-        cpu_state: _builtins.bytes = ...,
-        ram: _builtins.bytes = ...,
-        tube_state: _builtins.bytes = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["cpu_state", b"cpu_state", "ram", b"ram", "tube_state", b"tube_state"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___TubeGetStateResponse: _TypeAlias = TubeGetStateResponse  # noqa: Y015
-
-@_typing.final
-class TubeRestoreStateRequest(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    CPU_STATE_FIELD_NUMBER: _builtins.int
-    RAM_FIELD_NUMBER: _builtins.int
-    TUBE_STATE_FIELD_NUMBER: _builtins.int
-    cpu_state: _builtins.bytes
-    """Serialised coprocessor CPU registers."""
-    ram: _builtins.bytes
-    """Full coprocessor RAM contents."""
-    tube_state: _builtins.bytes
-    """Tube ULA register state."""
-    def __init__(
-        self,
-        *,
-        cpu_state: _builtins.bytes = ...,
-        ram: _builtins.bytes = ...,
-        tube_state: _builtins.bytes = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["cpu_state", b"cpu_state", "ram", b"ram", "tube_state", b"tube_state"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___TubeRestoreStateRequest: _TypeAlias = TubeRestoreStateRequest  # noqa: Y015
-
-@_typing.final
-class TubeRestoreStateResponse(_message.Message):
-    """Empty on success; RPC status indicates errors."""
-
-    DESCRIPTOR: _descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___TubeRestoreStateResponse: _TypeAlias = TubeRestoreStateResponse  # noqa: Y015

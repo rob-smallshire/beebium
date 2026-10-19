@@ -211,7 +211,7 @@ class Beebium:
             startup_timeout: Maximum time to wait for server to start (seconds).
             connection_timeout: Maximum time to wait for connection (seconds).
             extra_args: Additional command-line arguments to pass to the server
-                (e.g., ["--tube", "65C02-3MHz"]).
+                (e.g., ["--tube-65c02"]).
             preset: A preset to configure the machine from, passed as
                 ``--preset``: a preset file path, or the id of a system or user
                 preset as reported by ``list-presets`` (e.g. "model-b-disc").
@@ -516,8 +516,7 @@ class Beebium:
         Raises:
             BeebiumConnectionError: If no Tube coprocessor extension is active.
         """
-        status = self.tube.status
-        if not status.enabled:
+        if not self.tube.status.coprocessor_connected:
             raise BeebiumConnectionError("No Tube coprocessor is active")
         return Beebium._from_coprocessor_stub(self._connection)
 

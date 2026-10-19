@@ -2,68 +2,16 @@ syntax = "proto3";
 
 package beebium;
 
-// Tube coprocessor management service.
+// The Tube and the coprocessor attached to it.
 //
-// Runs on the host's gRPC server. The coprocessor process connects to
-// negotiate the shared memory link, and the host uses GetState/RestoreState
-// for save/restore of coprocessor state.
+// A coprocessor is an in-process plugin, attached at launch (--tube-65c02,
+// --tube-65c102, or a preset's coprocessor); it is driven and debugged through
+// CoprocessorDebuggerControl. This service says what is fitted.
 service TubeService {
-    // Coprocessor connects, receives shared memory name and size.
-    rpc Connect(TubeConnectRequest) returns (TubeConnectResponse);
-
-    // Coprocessor registers its gRPC endpoint after starting its own server.
-    rpc RegisterEndpoint(RegisterEndpointRequest) returns (RegisterEndpointResponse);
-
-    // Query current Tube status (enabled, coprocessor type, shared memory info).
+    // Whether the machine has a Tube, whether it is enabled, and which
+    // coprocessor is attached to it.
     rpc GetStatus(GetTubeStatusRequest) returns (GetTubeStatusResponse);
-
-    // Host requests full coprocessor state for save/restore.
-    rpc GetState(TubeGetStateRequest) returns (TubeGetStateResponse);
-
-    // Host sends saved coprocessor state for restore after reconnection.
-    rpc RestoreState(TubeRestoreStateRequest) returns (TubeRestoreStateResponse);
 }
-
-// --- Connect ---
-
-message TubeConnectRequest {
-    // Protocol version for forward compatibility.
-    uint32 protocol_version = 1;
-
-    // Coprocessor CPU type (e.g. "6502", "65C02", "z80", "arm", "32016").
-    string coprocessor_type = 2;
-
-    // Coprocessor clock frequency in Hz (e.g. 3000000 for 3 MHz).
-    uint32 coprocessor_clock_hz = 3;
-}
-
-message TubeConnectResponse {
-    // POSIX shared memory name (e.g. "/beebium-tube-<uuid>")
-    // or Windows file mapping name.
-    string shared_memory_name = 1;
-
-    // Size of the shared memory region in bytes.
-    uint32 shared_memory_size = 2;
-
-    // Protocol version accepted by host.
-    uint32 protocol_version = 3;
-
-    // Host machine UUID for mDNS linkage.
-    string host_uuid = 4;
-}
-
-// --- RegisterEndpoint ---
-
-message RegisterEndpointRequest {
-    // The coprocessor's gRPC address (e.g. "localhost:50052").
-    string grpc_address = 1;
-}
-
-message RegisterEndpointResponse {
-    // Empty on success; RPC status indicates errors.
-}
-
-// --- Status ---
 
 message GetTubeStatusRequest {
     // Empty - returns full status.
@@ -76,51 +24,19 @@ message GetTubeStatusResponse {
     // True if Tube hardware is currently enabled (runtime).
     bool enabled = 2;
 
-    // True if a coprocessor process is connected.
+    // True if a coprocessor is attached to the Tube. The fields below are
+    // empty or zero when it is not.
     bool coprocessor_connected = 3;
 
-    // Coprocessor CPU type (populated when connected).
-    string coprocessor_type = 4;
+    // The coprocessor's CPU as people name it ("65C02", "65C102"), as the
+    // coprocessor-cpu machine-description placeholder shows it.
+    string coprocessor_cpu = 4;
 
-    // Coprocessor clock frequency in Hz (populated when connected).
-    uint32 coprocessor_clock_hz = 5;
+    // The coprocessor's nominal clock in hertz (3000000 for the 6502 Second
+    // Processor), which the coprocessor-clock placeholder formats.
+    uint64 coprocessor_clock_hz = 5;
 
-    // Shared memory name (populated when enabled).
-    string shared_memory_name = 6;
-
-    // Coprocessor's gRPC address (e.g. "localhost:50052").
-    // Populated after RegisterEndpoint is called.
-    string coprocessor_grpc_address = 7;
-}
-
-// --- State Save/Restore ---
-
-message TubeGetStateRequest {
-    // Empty - returns full coprocessor state.
-}
-
-message TubeGetStateResponse {
-    // Serialised coprocessor CPU registers.
-    bytes cpu_state = 1;
-
-    // Full coprocessor RAM contents (typically 64 KB).
-    bytes ram = 2;
-
-    // Tube ULA register state.
-    bytes tube_state = 3;
-}
-
-message TubeRestoreStateRequest {
-    // Serialised coprocessor CPU registers.
-    bytes cpu_state = 1;
-
-    // Full coprocessor RAM contents.
-    bytes ram = 2;
-
-    // Tube ULA register state.
-    bytes tube_state = 3;
-}
-
-message TubeRestoreStateResponse {
-    // Empty on success; RPC status indicates errors.
+    // The coprocessor extension's instance id, as PeripheralExtensionService
+    // lists it (ExtensionInfo.id).
+    string coprocessor_extension_id = 6;
 }

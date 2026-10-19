@@ -21,30 +21,37 @@ from beebium.client._proto import tube_pb2, tube_pb2_grpc
 
 @dataclass(frozen=True)
 class TubeStatus:
-    """Current Tube coprocessor status."""
+    """The Tube and the coprocessor attached to it.
+
+    A coprocessor is an in-process plugin attached at launch (``--tube-65c02``,
+    ``--tube-65c102``, or a preset's coprocessor). When none is attached,
+    ``coprocessor_connected`` is False and the coprocessor fields are empty or
+    zero.
+    """
 
     has_tube_socket: bool
     enabled: bool
     coprocessor_connected: bool
-    coprocessor_type: str
+    coprocessor_cpu: str
+    """The CPU as people name it ("65C02", "65C102"), as the
+    ``{coprocessor-cpu}`` machine-description placeholder shows it."""
     coprocessor_clock_hz: int
-    shared_memory_name: str
-    coprocessor_grpc_address: str
+    """The nominal clock in hertz (3000000 for the 6502 Second Processor)."""
+    coprocessor_extension_id: str
+    """The coprocessor extension's instance id, as the peripheral extension
+    listing gives it."""
 
 
 class Tube:
-    """Tube coprocessor management.
-
-    Provides access to Tube status queries.
+    """The Tube and its coprocessor.
 
     Usage:
-        # Check Tube status
         status = bbc.tube.status
-        print(f"Enabled: {status.enabled}, Coprocessor: {status.coprocessor_type}")
+        if status.coprocessor_connected:
+            print(f"{status.coprocessor_cpu} at {status.coprocessor_clock_hz} Hz")
 
-        # Quick checks
-        if bbc.tube.is_enabled:
-            print(f"Coprocessor at: {bbc.tube.coprocessor_grpc_address}")
+    The coprocessor itself is driven and debugged through
+    :meth:`Beebium.connect_coprocessor`.
     """
 
     def __init__(self, stub: tube_pb2_grpc.TubeServiceStub):
@@ -64,10 +71,9 @@ class Tube:
             has_tube_socket=response.has_tube_socket,
             enabled=response.enabled,
             coprocessor_connected=response.coprocessor_connected,
-            coprocessor_type=response.coprocessor_type,
+            coprocessor_cpu=response.coprocessor_cpu,
             coprocessor_clock_hz=response.coprocessor_clock_hz,
-            shared_memory_name=response.shared_memory_name,
-            coprocessor_grpc_address=response.coprocessor_grpc_address,
+            coprocessor_extension_id=response.coprocessor_extension_id,
         )
 
     @property
@@ -77,10 +83,5 @@ class Tube:
 
     @property
     def coprocessor_connected(self) -> bool:
-        """True if a coprocessor process is connected."""
+        """True if a coprocessor is attached to the Tube."""
         return self.status.coprocessor_connected
-
-    @property
-    def coprocessor_grpc_address(self) -> str:
-        """Coprocessor's gRPC address (empty if not registered)."""
-        return self.status.coprocessor_grpc_address

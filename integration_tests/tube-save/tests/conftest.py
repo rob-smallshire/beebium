@@ -134,7 +134,7 @@ def bbc_with_tube(
     source_ssd_filepath: Path,
     blank_ssd_filepath: Path,
 ):
-    """Model B with 1770 DFS, Tube 65C02-3MHz, two floppy drives."""
+    """Model B with 1770 DFS, a 65C02 Second Processor (3 MHz), two floppy drives."""
     try:
         with Beebium.launch(
             mos_filepath=mos_filepath,

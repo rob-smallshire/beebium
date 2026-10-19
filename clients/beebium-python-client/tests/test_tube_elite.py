@@ -116,19 +116,15 @@ class TestTubeEliteBoot:
     """Test booting 6502 Second Processor Elite via the Tube."""
 
     def test_tube_enabled(self, bbc_tube: Beebium) -> None:
-        """Verify Tube hardware is enabled.
+        """Verify Tube hardware is enabled and reports its coprocessor.
 
-        Only checks host-side status. In the single-process Tube
-        architecture the coprocessor runs inside the same server, so
-        coprocessor_connected / coprocessor_type / coprocessor_grpc_address
-        fields (retained on GetTubeStatusResponse for compatibility)
-        are no longer populated by the server. The test_tube_banner
-        test below is the functional check that the coprocessor is
-        actually running.
+        The test_tube_banner test below is the functional check that the
+        coprocessor is actually running.
         """
         status = bbc_tube.tube.status
         assert status.has_tube_socket, "Machine should have a Tube socket"
         assert status.enabled, "Tube should be enabled"
+        assert status.coprocessor_connected, "A coprocessor should be attached"
 
     def test_tube_banner(self, bbc_tube: Beebium) -> None:
         """After boot, screen should show the Tube banner."""

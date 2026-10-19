@@ -39,72 +39,44 @@ GRPC_GENERATED_VERSION: str
 GRPC_VERSION: str
 
 class TubeServiceStub:
-    """Tube coprocessor management service.
+    """The Tube and the coprocessor attached to it.
 
-    Runs on the host's gRPC server. The coprocessor process connects to
-    negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of coprocessor state.
+    A coprocessor is an in-process plugin, attached at launch (--tube-65c02,
+    --tube-65c102, or a preset's coprocessor); it is driven and debugged through
+    CoprocessorDebuggerControl. This service says what is fitted.
     """
 
     @_typing.overload
     def __new__(cls, channel: _grpc.Channel) -> _Self: ...
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> TubeServiceAsyncStub: ...
-    Connect: _grpc.UnaryUnaryMultiCallable[_tube_pb2.TubeConnectRequest, _tube_pb2.TubeConnectResponse]
-    """Coprocessor connects, receives shared memory name and size."""
-    RegisterEndpoint: _grpc.UnaryUnaryMultiCallable[_tube_pb2.RegisterEndpointRequest, _tube_pb2.RegisterEndpointResponse]
-    """Coprocessor registers its gRPC endpoint after starting its own server."""
     GetStatus: _grpc.UnaryUnaryMultiCallable[_tube_pb2.GetTubeStatusRequest, _tube_pb2.GetTubeStatusResponse]
-    """Query current Tube status (enabled, coprocessor type, shared memory info)."""
-    GetState: _grpc.UnaryUnaryMultiCallable[_tube_pb2.TubeGetStateRequest, _tube_pb2.TubeGetStateResponse]
-    """Host requests full coprocessor state for save/restore."""
-    RestoreState: _grpc.UnaryUnaryMultiCallable[_tube_pb2.TubeRestoreStateRequest, _tube_pb2.TubeRestoreStateResponse]
-    """Host sends saved coprocessor state for restore after reconnection."""
+    """Whether the machine has a Tube, whether it is enabled, and which
+    coprocessor is attached to it.
+    """
 
 @_typing.type_check_only
 class TubeServiceAsyncStub(TubeServiceStub):
-    """Tube coprocessor management service.
+    """The Tube and the coprocessor attached to it.
 
-    Runs on the host's gRPC server. The coprocessor process connects to
-    negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of coprocessor state.
+    A coprocessor is an in-process plugin, attached at launch (--tube-65c02,
+    --tube-65c102, or a preset's coprocessor); it is driven and debugged through
+    CoprocessorDebuggerControl. This service says what is fitted.
     """
 
     def __init__(self, channel: _aio.Channel) -> None: ...
-    Connect: _aio.UnaryUnaryMultiCallable[_tube_pb2.TubeConnectRequest, _tube_pb2.TubeConnectResponse]  # type: ignore[assignment]
-    """Coprocessor connects, receives shared memory name and size."""
-    RegisterEndpoint: _aio.UnaryUnaryMultiCallable[_tube_pb2.RegisterEndpointRequest, _tube_pb2.RegisterEndpointResponse]  # type: ignore[assignment]
-    """Coprocessor registers its gRPC endpoint after starting its own server."""
     GetStatus: _aio.UnaryUnaryMultiCallable[_tube_pb2.GetTubeStatusRequest, _tube_pb2.GetTubeStatusResponse]  # type: ignore[assignment]
-    """Query current Tube status (enabled, coprocessor type, shared memory info)."""
-    GetState: _aio.UnaryUnaryMultiCallable[_tube_pb2.TubeGetStateRequest, _tube_pb2.TubeGetStateResponse]  # type: ignore[assignment]
-    """Host requests full coprocessor state for save/restore."""
-    RestoreState: _aio.UnaryUnaryMultiCallable[_tube_pb2.TubeRestoreStateRequest, _tube_pb2.TubeRestoreStateResponse]  # type: ignore[assignment]
-    """Host sends saved coprocessor state for restore after reconnection."""
-
-class TubeServiceServicer(metaclass=_abc_1.ABCMeta):
-    """Tube coprocessor management service.
-
-    Runs on the host's gRPC server. The coprocessor process connects to
-    negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of coprocessor state.
+    """Whether the machine has a Tube, whether it is enabled, and which
+    coprocessor is attached to it.
     """
 
-    @_abc_1.abstractmethod
-    def Connect(
-        self,
-        request: _tube_pb2.TubeConnectRequest,
-        context: _ServicerContext,
-    ) -> _typing.Union[_tube_pb2.TubeConnectResponse, _abc.Awaitable[_tube_pb2.TubeConnectResponse]]:
-        """Coprocessor connects, receives shared memory name and size."""
+class TubeServiceServicer(metaclass=_abc_1.ABCMeta):
+    """The Tube and the coprocessor attached to it.
 
-    @_abc_1.abstractmethod
-    def RegisterEndpoint(
-        self,
-        request: _tube_pb2.RegisterEndpointRequest,
-        context: _ServicerContext,
-    ) -> _typing.Union[_tube_pb2.RegisterEndpointResponse, _abc.Awaitable[_tube_pb2.RegisterEndpointResponse]]:
-        """Coprocessor registers its gRPC endpoint after starting its own server."""
+    A coprocessor is an in-process plugin, attached at launch (--tube-65c02,
+    --tube-65c102, or a preset's coprocessor); it is driven and debugged through
+    CoprocessorDebuggerControl. This service says what is fitted.
+    """
 
     @_abc_1.abstractmethod
     def GetStatus(
@@ -112,22 +84,8 @@ class TubeServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _tube_pb2.GetTubeStatusRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_tube_pb2.GetTubeStatusResponse, _abc.Awaitable[_tube_pb2.GetTubeStatusResponse]]:
-        """Query current Tube status (enabled, coprocessor type, shared memory info)."""
-
-    @_abc_1.abstractmethod
-    def GetState(
-        self,
-        request: _tube_pb2.TubeGetStateRequest,
-        context: _ServicerContext,
-    ) -> _typing.Union[_tube_pb2.TubeGetStateResponse, _abc.Awaitable[_tube_pb2.TubeGetStateResponse]]:
-        """Host requests full coprocessor state for save/restore."""
-
-    @_abc_1.abstractmethod
-    def RestoreState(
-        self,
-        request: _tube_pb2.TubeRestoreStateRequest,
-        context: _ServicerContext,
-    ) -> _typing.Union[_tube_pb2.TubeRestoreStateResponse, _abc.Awaitable[_tube_pb2.TubeRestoreStateResponse]]:
-        """Host sends saved coprocessor state for restore after reconnection."""
+        """Whether the machine has a Tube, whether it is enabled, and which
+        coprocessor is attached to it.
+        """
 
 def add_TubeServiceServicer_to_server(servicer: TubeServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

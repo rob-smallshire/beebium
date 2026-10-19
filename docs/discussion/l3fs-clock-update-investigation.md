@@ -26,6 +26,11 @@ to lag significantly behind wall-clock time.
   --tube 65C02-3MHz --advertise
 ```
 
+(Historical: this is the command line as it was during the investigation,
+when coprocessors ran as a separate executable. Today the coprocessor is a
+plugin attached with `--tube-65c02`, and several of the other options have
+changed form too.)
+
 After boot, `*RUN FS3v126`, respond `1` (drives), `S` (start), `2`
 (stations). The time display at the bottom-right should update roughly
 every 30 seconds. In Beebium it updates every 3-5 minutes.

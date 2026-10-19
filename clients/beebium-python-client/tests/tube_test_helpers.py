@@ -145,9 +145,9 @@ def dump_diagnostics(bbc: Beebium) -> None:
         print(
             f"Tube: enabled={tube_status.enabled}, "
             f"connected={tube_status.coprocessor_connected}, "
-            f"type={tube_status.coprocessor_type}, "
+            f"cpu={tube_status.coprocessor_cpu}, "
             f"clock={tube_status.coprocessor_clock_hz}Hz, "
-            f"coprocessor_addr={tube_status.coprocessor_grpc_address}"
+            f"extension={tube_status.coprocessor_extension_id}"
         )
     except (BeebiumError, grpc.RpcError) as e:
         print(f"Tube: error reading - {e}")

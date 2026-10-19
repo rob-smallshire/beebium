@@ -69,7 +69,7 @@ class ServerProcess:
             variant: the machine variant within the installation ("model-b").
             port: Port to listen on. If 0 (default), a free port is allocated.
             extra_args: Additional command-line arguments to pass to the server
-                (e.g., ["--tube", "65C02-3MHz"]).
+                (e.g., ["--tube-65c02"]).
             preset: A preset to configure the machine from, passed as
                 ``--preset``: a preset file path, or the id of a system or user
                 preset as reported by ``list-presets`` (e.g. "model-b-disc").

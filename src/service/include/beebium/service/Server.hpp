@@ -104,9 +104,10 @@ public:
     }
 
     /// The Tube coprocessor fitted at launch, for the coprocessor-cpu and
-    /// coprocessor-clock placeholders, or nullptr. Call before start(); it
-    /// must outlive the server.
+    /// coprocessor-clock placeholders and TubeService's status, or nullptr.
+    /// Call before start(); it must outlive the server.
     void set_launch_coprocessor(const CoprocessorExtension* coprocessor) {
+        impl_->launch_coprocessor = coprocessor;
         impl_->coprocessor_name_placeholders.set_coprocessor(coprocessor);
     }
 
@@ -186,6 +187,7 @@ private:
         EconetNamePlaceholders<MachineType> econet_name_placeholders{machine};
         StorageNamePlaceholders<MachineType> storage_name_placeholders{machine};
         CoprocessorNamePlaceholders coprocessor_name_placeholders;
+        const CoprocessorExtension* launch_coprocessor = nullptr;
         NamePlaceholderRegistry name_placeholders;
 
         TeletextGrid teletext_grid;
@@ -377,7 +379,7 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         impl_->machine);
 
     impl_->tube_service = std::make_unique<TubeServiceImpl<MachineType>>(
-        impl_->machine);
+        impl_->machine, impl_->launch_coprocessor);
 
     // Build server address
     std::ostringstream addr_stream;
