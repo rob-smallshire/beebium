@@ -105,7 +105,23 @@ public:
     // Clear the queue, cancelling pending input (thread-safe)
     // Returns number of characters that were pending. Any key held for the
     // string in progress is released by the emulator thread on its next tick.
+    // Also forgets any characters a reset discarded.
     size_t clear();
+
+    // A reset has begun (power-on, Break pressed, or a reset without Break):
+    // the guest is no longer ready for input, and the string in progress and
+    // every string queued behind it are discarded, because what was typed of
+    // them went with the old session and the rest would arrive in the new
+    // one. The discarded characters are added to discarded_by_reset().
+    // Returns how many were discarded (thread-safe).
+    size_t begin_reset();
+
+    // Characters discarded by resets since text was last enqueued or the
+    // queue was cleared. Non-zero means text a client typed was never
+    // delivered in full (thread-safe).
+    size_t discarded_by_reset() const {
+        return discarded_by_reset_.load(std::memory_order_acquire);
+    }
 
     // Monotonic counter bumped whenever the typing status changes: a character
     // consumed, a string started or finished, text enqueued, or the queue
@@ -120,13 +136,12 @@ public:
     // the address in the REMV vector with X = 0), which the machine detects
     // and reports here. Keys pressed earlier land in the MOS's reset, where
     // they are lost or read as reset options, so nothing is pressed until it
-    // is set. A reset clears it; a string in progress then pauses, releasing
-    // its key, and that character is pressed again once the guest is ready.
-    // True until a machine first clears it, so a queue on its own types at
-    // once.
+    // is set. begin_reset() clears it, discarding everything queued; text
+    // enqueued after that waits for the guest to be ready again. True until a
+    // machine first resets, so a queue on its own types at once.
     bool guest_ready() const { return guest_ready_.load(std::memory_order_acquire); }
-    void set_guest_ready(bool ready) {
-        if (guest_ready_.exchange(ready, std::memory_order_acq_rel) != ready) {
+    void mark_guest_ready() {
+        if (!guest_ready_.exchange(true, std::memory_order_acq_rel)) {
             note_status_change();
         }
     }
@@ -164,6 +179,10 @@ private:
     // Abandon the string in progress, releasing any held key (emulator thread)
     void cancel_current_string();
 
+    // Drain the queue and ask for the string in progress to be abandoned;
+    // returns the characters dropped (thread-safe).
+    size_t drop_pending();
+
     // Return to Idle with no current string (emulator thread)
     void finish_current_string();
 
@@ -189,6 +208,9 @@ private:
     // See guest_ready().
     std::atomic<bool> guest_ready_{true};
 
+    // See discarded_by_reset().
+    std::atomic<size_t> discarded_by_reset_{0};
+
     // Bytes of the current string not yet consumed, zero when idle. Written
     // by the emulator thread, read by status queries on other threads.
     std::atomic<size_t> current_remaining_{0};
@@ -200,9 +222,6 @@ private:
     size_t current_hold_cycles_ = DEFAULT_HOLD_CYCLES;
     size_t current_gap_cycles_ = DEFAULT_GAP_CYCLES;
     size_t cycle_count_ = 0;
-    // Set when a reset cut the current character short, so it is pressed
-    // again rather than skipped (emulator thread).
-    bool repress_current_ = false;
 
     // Bumped on every observable change; see status_sequence(). Atomic rather
     // than mutex-protected so a watcher can check for changes without

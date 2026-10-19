@@ -274,6 +274,16 @@ message TypingStatus {
     // budgets the wait against this. While guest_ready is false,
     // WatchTypingStatus pushes as it advances, at the stream's interval.
     uint64 cycles_since_reset = 6;
+
+    // Characters a reset discarded since text was last enqueued (TypeQuickly)
+    // or the queue was cleared (ClearTyping). A reset of any kind -- power-on,
+    // Break pressed, or a reset without Break -- discards the string in
+    // progress and every string queued behind it: what was typed of them went
+    // with the old session, and the rest must not arrive in the new one. Text
+    // typed after the reset (or while Break is held) is for the new session
+    // and is held until guest_ready. Non-zero means text was never delivered
+    // in full; idle is then true, but the typing did not complete.
+    uint32 discarded_by_reset = 7;
 }
 
 // Clear typing queue

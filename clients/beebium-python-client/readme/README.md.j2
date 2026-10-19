@@ -103,6 +103,19 @@ ready, so `wait_until_typing_complete()` and `wait_until_ready()` give it
 `ready_within=5.0` emulated seconds after its reset and then raise; pass a
 larger budget, or `None`, for a boot known to be slow.
 
+Typing is paced in emulated time, 80 ms a character at 2 MHz (12.5 characters
+an emulated second) whatever the speed multiplier, so N characters need
+N x 0.08 emulated seconds before the last key, a final RETURN say, has gone in.
+Rather than budget that, run the machine and call
+`bbc.keyboard.wait_until_typing_complete()`. A reset of any kind -- Break,
+Ctrl-Break, `bbc.debugger.reset()` -- discards the line being typed and
+everything queued behind it rather than finishing it in the new session;
+`typing_status().discarded_by_reset` counts what was lost, and
+`wait_until_typing_complete()` raises on it. Type again after the reset for
+the new session. A modifier meant as a reset option must stay down for emulated
+time after Break is released, so use `ctrl_break()` and `shift_break()` rather
+than `ctrl_down()`, `break_down()`, `break_up()`, `ctrl_up()` by hand.
+
 ### Read the screen
 
 `bbc.video.screen_text()` reads the displayed text in any mode. For MODE 7
@@ -169,7 +182,7 @@ sets breakpoints or watchpoints before `bbc.debugger.run()`.
 | `Debugger.run_to` | any run state | STOPPED |
 | `Debugger.measure` | any run state | STOPPED |
 | `Keyboard.type` | any run state | unchanged |
-| `Keyboard.wait_until_typing_complete` | a running machine, unless nothing is queued | unchanged |
+| `Keyboard.wait_until_typing_complete` | a running machine and no reset part-way, unless nothing is queued | unchanged |
 | `Keyboard.wait_until_ready` | a running machine | unchanged |
 | `Keyboard.press_break` | a running machine | RUNNING |
 | `Keyboard.ctrl_break` | a running machine | RUNNING |

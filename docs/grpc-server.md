@@ -351,8 +351,17 @@ after a reset, that the guest removes a character from the MOS keyboard buffer:
 an opcode fetch at the address held in the REMV vector (&022C) with X = 0. Every
 MOS text-input path (OSRDCH, OSWORD 0, INKEY) makes that call, whatever the
 language and with or without a Tube, and the vector is read rather than a MOS
-address assumed (IBOS moves it). A reset clears it; a key down at that moment is
-let go and pressed again once the guest is ready.
+address assumed (IBOS moves it). A reset clears it.
+
+A reset of any kind -- power-on, Break pressed, a reset without Break -- also
+discards the string being typed and every string queued behind it, releasing
+any key held for it: what was typed of them went with the old session, and the
+rest must not arrive in the new one (#206). `TypingStatus.discarded_by_reset`
+counts what was discarded since text was last queued or the queue cleared, and
+the clients' waits for typing raise on it. Text queued after the reset, or while
+Break is held, is for the new session and waits for the guest to be ready. The
+pacing is 80 ms a character at 2 MHz (40 ms down, 40 ms up), 12.5 characters
+an emulated second whatever the speed multiplier.
 
 Earlier is too early. Keys pressed while the MOS resets are lost (with
 `*RUN !BOOT` typed 0.0, 0.1 and 0.3 emulated seconds after power-on a Model B

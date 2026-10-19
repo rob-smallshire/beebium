@@ -618,6 +618,7 @@ class TypingStatus(_message.Message):
     MACHINE_RUNNING_FIELD_NUMBER: _builtins.int
     GUEST_READY_FIELD_NUMBER: _builtins.int
     CYCLES_SINCE_RESET_FIELD_NUMBER: _builtins.int
+    DISCARDED_BY_RESET_FIELD_NUMBER: _builtins.int
     idle: _builtins.bool
     """True if queue is empty (all typing complete)"""
     pending_characters: _builtins.int
@@ -649,6 +650,16 @@ class TypingStatus(_message.Message):
     budgets the wait against this. While guest_ready is false,
     WatchTypingStatus pushes as it advances, at the stream's interval.
     """
+    discarded_by_reset: _builtins.int
+    """Characters a reset discarded since text was last enqueued (TypeQuickly)
+    or the queue was cleared (ClearTyping). A reset of any kind -- power-on,
+    Break pressed, or a reset without Break -- discards the string in
+    progress and every string queued behind it: what was typed of them went
+    with the old session, and the rest must not arrive in the new one. Text
+    typed after the reset (or while Break is held) is for the new session
+    and is held until guest_ready. Non-zero means text was never delivered
+    in full; idle is then true, but the typing did not complete.
+    """
     def __init__(
         self,
         *,
@@ -658,10 +669,11 @@ class TypingStatus(_message.Message):
         machine_running: _builtins.bool = ...,
         guest_ready: _builtins.bool = ...,
         cycles_since_reset: _builtins.int = ...,
+        discarded_by_reset: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["cycles_since_reset", b"cycles_since_reset", "guest_ready", b"guest_ready", "idle", b"idle", "machine_running", b"machine_running", "pending_characters", b"pending_characters", "strings_queued", b"strings_queued"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["cycles_since_reset", b"cycles_since_reset", "discarded_by_reset", b"discarded_by_reset", "guest_ready", b"guest_ready", "idle", b"idle", "machine_running", b"machine_running", "pending_characters", b"pending_characters", "strings_queued", b"strings_queued"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

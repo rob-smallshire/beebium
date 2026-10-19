@@ -157,7 +157,7 @@ public:
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
         step_over_breakpoints_ = false;
-        state_.memory.system_via_peripheral.type_ahead().set_guest_ready(false);
+        state_.memory.system_via_peripheral.type_ahead().begin_reset();
         ++sequence_;
         if (on_reset_) on_reset_(/*hard=*/true);
     }
@@ -174,6 +174,9 @@ public:
     // config/fns/interrupt_tfn were established by the power-on reset() and
     // persist across a soft reset.
     void soft_reset() {
+        // Break pressed has already begun the type-ahead reset, and anything
+        // typed while it was held is for the new session.
+        if (!in_reset_) state_.memory.system_via_peripheral.type_ahead().begin_reset();
         M6502_Reset(&state_.cpu);
         state_.memory.soft_reset();
         video_binding_.reset();
@@ -183,7 +186,6 @@ public:
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
         step_over_breakpoints_ = false;
-        state_.memory.system_via_peripheral.type_ahead().set_guest_ready(false);
         ++sequence_;
         if (on_reset_) on_reset_(/*hard=*/false);
     }
@@ -204,8 +206,10 @@ public:
             in_reset_ = true;
             M6502_Halt(&state_.cpu);
             reset_cycle_.store(state_.cycle_count, std::memory_order_relaxed);
-            // A key down when Break is released is a reset option, not input.
-            state_.memory.system_via_peripheral.type_ahead().set_guest_ready(false);
+            // A key down when Break is released is a reset option, not input,
+            // and a line typed into the old session must not finish in the
+            // new one: type-ahead stops here and discards what is queued.
+            state_.memory.system_via_peripheral.type_ahead().begin_reset();
             ++sequence_;
         });
     }
@@ -980,7 +984,7 @@ private:
         const uint16_t remv = static_cast<uint16_t>(
             state_.memory.peek(0x022C) | (state_.memory.peek(0x022D) << 8));
         if (state_.cpu.opcode_pc.w != remv || state_.cpu.x != 0) return;
-        type_ahead.set_guest_ready(true);
+        type_ahead.mark_guest_ready();
         if (on_guest_ready_) on_guest_ready_();
     }
     std::vector<WatchpointEntry> watchpoint_entries_;   // sorted by start, modified only while stopped

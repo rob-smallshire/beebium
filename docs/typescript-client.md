@@ -251,7 +251,7 @@ stopped, is in each method's JSDoc as two lines, `Requires: ...` and
 | `Debugger.waitForStop` | any run state | STOPPED |
 | `Debugger.runUntil` | any run state | STOPPED |
 | `Keyboard.type` | any run state | unchanged |
-| `Keyboard.waitForTyping` | a running machine, unless nothing is queued | unchanged |
+| `Keyboard.waitForTyping` | a running machine and no reset part-way, unless nothing is queued | unchanged |
 | `Keyboard.waitUntilReady` | a running machine | unchanged |
 | `Keyboard.tapCapsLock` | a running machine | RUNNING |
 | `Keyboard.tapShiftLock` | a running machine | RUNNING |
@@ -421,6 +421,15 @@ console.log(`Pending: ${status.pendingCharacters}`);
 // Clear the queue
 await bbc.keyboard.clearTyping();
 ```
+
+Typing is paced in emulated time, 80 ms a character at 2 MHz (12.5 characters
+an emulated second) whatever the speed multiplier, so N characters need
+N x 0.08 emulated seconds before the last key, a final RETURN say, has gone in.
+Rather than budget that, run the machine and call `waitForTyping()`. A reset of
+any kind -- Break, Ctrl-Break, `debugger.reset()` -- discards the line being
+typed and everything queued behind it rather than finishing it in the new
+session; `typingStatus()` reports `discardedByReset`, and `waitForTyping()`
+rejects on it. Type again after the reset for the new session.
 
 ### Character and matrix-level input
 

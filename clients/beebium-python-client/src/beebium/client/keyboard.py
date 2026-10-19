@@ -114,6 +114,10 @@ class TypingStatus(NamedTuple):
     word on whether the guest has asked for typed input since its last reset;
     nothing is typed until it has. ``cycles_since_reset`` is how long, in
     emulated CPU cycles, the guest has had to get there.
+    ``discarded_by_reset`` counts characters a reset threw away since text was
+    last typed or the queue cleared: a reset of any kind discards the line in
+    progress and everything queued behind it, so non-zero means that text was
+    never delivered in full, though the queue is idle.
     """
 
     idle: bool
@@ -122,6 +126,7 @@ class TypingStatus(NamedTuple):
     machine_running: bool
     guest_ready: bool
     cycles_since_reset: int
+    discarded_by_reset: int
 
 
 def _typing_status(response: keyboard_pb2.TypingStatus) -> TypingStatus:
@@ -132,6 +137,7 @@ def _typing_status(response: keyboard_pb2.TypingStatus) -> TypingStatus:
         machine_running=response.machine_running,
         guest_ready=response.guest_ready,
         cycles_since_reset=response.cycles_since_reset,
+        discarded_by_reset=response.discarded_by_reset,
     )
 
 
@@ -185,6 +191,20 @@ class Keyboard:
         reliably registered by the MOS keyboard scan, so there is no
         timing knob to tune. For deliberate custom timing, drive
         :meth:`key_down` / :meth:`key_up` directly.
+
+        The pacing is in emulated time: 80 ms a character at 2 MHz (40 ms
+        down, 40 ms up), so 12.5 characters an emulated second, whatever the
+        speed multiplier. Text of N characters needs N x 0.08 emulated seconds
+        before its last key -- a final RETURN, say -- has gone in; a capital
+        costs no extra time. Rather than budget that, run the machine and call
+        :meth:`wait_until_typing_complete`.
+
+        A reset of any kind -- Break, Ctrl-Break, ``debugger.reset()`` --
+        discards the line being typed and everything queued behind it, rather
+        than finishing it in the new session; ``typing_status()`` reports the
+        discarded count and :meth:`wait_until_typing_complete` raises on it.
+        Text typed after the reset, or while Break is held, is for the new
+        session, and waits until the guest is ready for it.
 
         By default the server translates host text conventions into what
         the BBC keyboard can type: every line-ending convention becomes a
@@ -542,7 +562,13 @@ class Keyboard:
         self.matrix_up(*SHIFT_KEY)
 
     def ctrl_down(self) -> None:
-        """Press the CTRL key."""
+        """Press the CTRL key.
+
+        For Ctrl-Break use :meth:`ctrl_break`: the MOS reads CTRL as a reset
+        option after Break is released, so it must stay down for emulated time
+        after :meth:`break_up`, which a ``ctrl_up()`` sent straight after
+        cannot promise on a fast host.
+        """
         self.matrix_down(*CTRL_KEY)
 
     def ctrl_up(self) -> None:
@@ -681,7 +707,9 @@ class Keyboard:
         Returns as soon as the queue is empty, including immediately if it
         already was. Also returns if the stream ends for any other reason -- a
         cleared queue, a dropped connection, a stopped server -- because in
-        every case there is nothing further to wait for.
+        every case there is nothing further to wait for. Raises instead if a
+        reset discarded queued text since it was typed (see :meth:`type`): the
+        queue is then empty, but the text was never delivered in full.
 
         Only a running machine drains the queue, and the server says whether
         the machine is running, so the wait raises at once if the machine is
@@ -704,7 +732,7 @@ class Keyboard:
         :meth:`key_up`, which are never held. Pass ``ready_within=None`` for a
         boot known to be slow. Once the guest is ready there is no time limit.
 
-        Requires: a running machine, unless nothing is queued.
+        Requires: a running machine and no reset part-way, unless nothing is queued.
         Leaves the machine: unchanged.
 
         Args:
@@ -715,10 +743,17 @@ class Keyboard:
 
         Raises:
             DebuggerError: If the machine is stopped with characters pending,
-                or the guest is not ready within `ready_within`.
+                the guest is not ready within `ready_within`, or a reset
+                discarded queued text.
         """
         clock_hz = self._clock_hz()
         for status in self.watch_typing_status(min_interval_ms=min_interval_ms):
+            if status.discarded_by_reset:
+                raise DebuggerError(
+                    f"a reset discarded {status.discarded_by_reset} characters of "
+                    f"type-ahead before they were typed; type the text again "
+                    f"for the new session"
+                )
             if status.idle:
                 return
             if not status.machine_running:
@@ -811,9 +846,15 @@ class Keyboard:
         This releases the reset line. The CPU will execute the 7-cycle
         reset sequence and then begin execution from the reset vector.
 
-        MOS checks if Ctrl is held at this moment to determine reset type:
-        - If Ctrl pressed: MOS performs "hard reset" (clears VIA config)
-        - If Ctrl not pressed: MOS performs "warm reset" (preserves state)
+        The MOS reads the keyboard for its reset options during the reset that
+        follows, in emulated time: CTRL held makes it a hard reset (clearing
+        the VIA configuration), SHIFT reverses the auto-boot option. A
+        modifier meant as a reset option must therefore stay down for emulated
+        time after this returns; releasing it straight afterwards races the
+        MOS, which on a fast host -- or at speed 0 -- has read its options
+        long before the next call lands, and on a slow one may not have. Use
+        :meth:`ctrl_break` or :meth:`shift_break`, which hold the modifier in
+        emulated time either side of Break.
 
         Returns:
             True if successful.

@@ -750,3 +750,111 @@ TEST_CASE("KeyboardService WatchTypingStatus pushes the count while the guest is
     }
     (void)reader->Finish();
 }
+
+namespace {
+
+beebium::TypingStatus typing_status(KeyboardTestFixture& fixture) {
+    grpc::ClientContext context;
+    beebium::TypingStatus status;
+    REQUIRE(fixture.stub()
+                .GetTypingStatus(&context, beebium::GetTypingStatusRequest{}, &status)
+                .ok());
+    return status;
+}
+
+void type_text(KeyboardTestFixture& fixture, const std::string& text) {
+    grpc::ClientContext context;
+    beebium::TypeQuicklyRequest request;
+    request.set_text(text);
+    beebium::TypeQuicklyResponse response;
+    REQUIRE(fixture.stub().TypeQuickly(&context, request, &response).ok());
+    REQUIRE(response.accepted());
+}
+
+// The MODE 7 screen memory as text. The display may start anywhere in it,
+// but a search for a word does not care.
+std::string mode7_screen(KeyboardTestFixture& fixture) {
+    std::string text;
+    for (uint16_t addr = 0x7C00; addr < 0x8000; ++addr) {
+        text += static_cast<char>(fixture.machine().state().memory.peek(addr) & 0x7F);
+    }
+    return text;
+}
+
+constexpr uint64_t CYCLES_PER_CHARACTER = 160'000;  // 40 ms down + 40 ms up at 2 MHz
+constexpr uint64_t ONE_SECOND = 2'000'000;
+
+} // anonymous namespace
+
+TEST_CASE("Break part-way through typing discards that line and the ones behind it (#206)",
+          "[grpc][keyboard][typing]") {
+#ifndef BEEBIUM_ROM_DIR
+    SKIP("needs the MOS and BASIC ROMs");
+#else
+    KeyboardTestFixture fixture;
+    fixture.machine().run(ONE_SECOND / 2);
+    REQUIRE(typing_status(fixture).guest_ready());
+
+    type_text(fixture, "PRINT 12345\r");
+    type_text(fixture, "PRINT 67890\r");
+    fixture.machine().run(5 * CYCLES_PER_CHARACTER);  // "PRINT" typed, " 12345" not
+    const auto pending = typing_status(fixture).pending_characters();
+    REQUIRE(pending > 12);
+
+    fixture.machine().break_down();
+    fixture.machine().run(1000);
+    fixture.machine().break_up();
+    fixture.machine().run(2 * ONE_SECOND);
+
+    const auto status = typing_status(fixture);
+    CHECK(status.idle());
+    CHECK(status.discarded_by_reset() == pending);
+    const auto screen = mode7_screen(fixture);
+    CHECK(screen.find("12345") == std::string::npos);
+    CHECK(screen.find("67890") == std::string::npos);
+    CHECK(screen.find("Mistake") == std::string::npos);
+#endif
+}
+
+TEST_CASE("Text typed while Break is held is typed into the new session (#206)",
+          "[grpc][keyboard][typing]") {
+#ifndef BEEBIUM_ROM_DIR
+    SKIP("needs the MOS and BASIC ROMs");
+#else
+    KeyboardTestFixture fixture;
+    fixture.machine().run(ONE_SECOND / 2);
+
+    fixture.machine().break_down();
+    type_text(fixture, "PRINT 6*7\r");
+    fixture.machine().run(1000);
+    fixture.machine().break_up();
+    fixture.machine().run(3 * ONE_SECOND);
+
+    const auto status = typing_status(fixture);
+    CHECK(status.idle());
+    CHECK(status.discarded_by_reset() == 0);
+    const auto screen = mode7_screen(fixture);
+    CHECK(screen.find("PRINT 6*7") != std::string::npos);
+    CHECK(screen.find("42") != std::string::npos);
+#endif
+}
+
+TEST_CASE("A power-on reset discards type-ahead in progress (#206)",
+          "[grpc][keyboard][typing]") {
+    KeyboardTestFixture fixture;
+    fixture.machine().run(ONE_SECOND / 2);
+
+    type_text(fixture, "PRINT 12345\r");
+    fixture.machine().run(3 * CYCLES_PER_CHARACTER);
+    const auto pending = typing_status(fixture).pending_characters();
+    REQUIRE(pending > 0);
+
+    fixture.machine().reset();
+    const auto status = typing_status(fixture);
+    CHECK(status.idle());
+    CHECK(status.discarded_by_reset() == pending);
+    CHECK_FALSE(status.guest_ready());
+
+    type_text(fixture, "P");  // text for the new session starts afresh
+    CHECK(typing_status(fixture).discarded_by_reset() == 0);
+}

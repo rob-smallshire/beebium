@@ -32,6 +32,7 @@ bool TypeAheadQueue::enqueue(std::string_view text, size_t hold_cycles, size_t g
         queue_.push(QueueEntry{std::string(text), hold_cycles, gap_cycles});
         queued_strings_.fetch_add(1, std::memory_order_release);
     }
+    discarded_by_reset_.store(0, std::memory_order_release);
     note_status_change();
     return true;
 }
@@ -70,14 +71,6 @@ void TypeAheadQueue::tick_active() {
         }
 
         case State::KeyDown: {
-            if (!guest_ready()) {
-                // A reset: let the key go, and press it again once ready.
-                release_current_key();
-                cycle_count_ = 0;
-                state_ = State::KeyUp;
-                repress_current_ = true;
-                break;
-            }
             cycle_count_++;
             if (cycle_count_ >= current_hold_cycles_) {
                 // Release key after the key-down hold time
@@ -91,12 +84,8 @@ void TypeAheadQueue::tick_active() {
         case State::KeyUp: {
             cycle_count_++;
             if (cycle_count_ >= current_gap_cycles_) {
-                if (!guest_ready()) {
-                    cycle_count_ = current_gap_cycles_;  // wait, gap served
-                    break;
-                }
                 // Move to next character after the key-up gap time
-                if (!std::exchange(repress_current_, false)) current_index_++;
+                current_index_++;
                 cycle_count_ = 0;
 
                 if (current_index_ < current_text_.size()) {
@@ -150,6 +139,21 @@ size_t TypeAheadQueue::strings_queued() const {
 }
 
 size_t TypeAheadQueue::clear() {
+    const size_t count = drop_pending();
+    discarded_by_reset_.store(0, std::memory_order_release);
+    note_status_change();
+    return count;
+}
+
+size_t TypeAheadQueue::begin_reset() {
+    guest_ready_.store(false, std::memory_order_release);
+    const size_t count = drop_pending();
+    discarded_by_reset_.fetch_add(count, std::memory_order_acq_rel);
+    note_status_change();
+    return count;
+}
+
+size_t TypeAheadQueue::drop_pending() {
     size_t count = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -168,8 +172,6 @@ size_t TypeAheadQueue::clear() {
     if (current_remaining_.load(std::memory_order_acquire) != 0) {
         cancel_requested_.store(true, std::memory_order_release);
     }
-
-    note_status_change();
     return count;
 }
 
@@ -185,7 +187,6 @@ void TypeAheadQueue::finish_current_string() {
     current_text_.clear();
     current_index_ = 0;
     cycle_count_ = 0;
-    repress_current_ = false;
     publish_current_remaining();
 }
 

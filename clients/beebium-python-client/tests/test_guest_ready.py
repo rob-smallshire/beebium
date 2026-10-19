@@ -202,3 +202,75 @@ class TestReadyWithin:
             bbc.wait_until_ready(ready_within=1.0)
         slow = _booted_from(launch_bbc, "slow_boot.ssd")
         slow.wait_until_ready(ready_within=30.0)
+
+
+# ---------------------------------------------------------------------------
+# A reset discards the type-ahead it interrupts (#206)
+# ---------------------------------------------------------------------------
+
+FIRST_LINE = "PRINT 12345\r"
+SECOND_LINE = "PRINT 67890\r"
+SECONDS_PER_CHARACTER = 0.08  # 40 ms down, 40 ms up
+
+
+def _at_prompt(bbc: Beebium) -> bool:
+    lines = [line.rstrip() for line in _screen(bbc).splitlines() if line.strip()]
+    return bool(lines) and lines[-1] == ">"
+
+
+def _reset_by_break(bbc: Beebium) -> None:
+    bbc.debugger.run()
+    bbc.keyboard.press_break()
+
+
+def _reset_by_ctrl_break(bbc: Beebium) -> None:
+    bbc.debugger.run()
+    bbc.keyboard.ctrl_break()
+
+
+def _reset_by_debugger(bbc: Beebium) -> None:
+    bbc.debugger.reset()
+
+
+@pytest.mark.parametrize(
+    "reset", [_reset_by_break, _reset_by_ctrl_break, _reset_by_debugger],
+    ids=["break", "ctrl-break", "debugger-reset"],
+)
+def test_a_reset_discards_the_line_being_typed_and_those_behind_it(launch_bbc, reset) -> None:
+    bbc = launch_bbc(preset="model-b-disc")
+    bbc.system.set_speed_multiplier(0.0)
+    bbc.wait_until_ready()
+    bbc.debugger.ensure_stopped()
+
+    bbc.keyboard.type(FIRST_LINE)
+    bbc.keyboard.type(SECOND_LINE)
+    bbc.run_for_emulated_seconds(5 * SECONDS_PER_CHARACTER)  # "PRINT" in, " 12345" not
+    pending = bbc.keyboard.typing_status().pending_characters
+    assert pending > len(SECOND_LINE)
+
+    reset(bbc)
+    assert bbc.run_until_or_timeout(lambda: _at_prompt(bbc), 5.0), _screen(bbc)
+    bbc.run_for_emulated_seconds(len(FIRST_LINE + SECOND_LINE) * SECONDS_PER_CHARACTER)
+
+    screen = _screen(bbc)
+    assert "12345" not in screen and "67890" not in screen and "Mistake" not in screen, screen
+    status = bbc.keyboard.typing_status()
+    assert status.idle
+    # A Break is pressed on a running machine, which may type a little more first.
+    assert len(SECOND_LINE) < status.discarded_by_reset <= pending
+    with pytest.raises(DebuggerError, match=f"a reset discarded {status.discarded_by_reset} characters"):
+        bbc.keyboard.wait_until_typing_complete()
+
+
+def test_text_typed_after_the_reset_is_typed_into_the_new_session(launch_bbc) -> None:
+    bbc = launch_bbc(preset="model-b-disc")
+    bbc.system.set_speed_multiplier(0.0)
+    bbc.wait_until_ready()
+    bbc.keyboard.type(FIRST_LINE)
+    bbc.keyboard.press_break()
+
+    bbc.keyboard.type("PRINT 6*7\r")
+    assert bbc.keyboard.typing_status().discarded_by_reset == 0
+    bbc.keyboard.wait_until_typing_complete()
+    assert bbc.run_until_or_timeout(lambda: "42" in _screen(bbc), 5.0), _screen(bbc)
+    assert "12345" not in _screen(bbc)

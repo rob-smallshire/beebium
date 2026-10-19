@@ -147,3 +147,25 @@ describe("readyWithin", () => {
         expect((await bbc.keyboard.typingStatus()).guestReady).toBe(true);
     });
 });
+
+describe("a reset part-way through typing (#206)", () => {
+    it("discards the queued lines and rejects the wait", async () => {
+        const bbc = await launchHost();
+        await bbc.waitUntilReady();
+        await bbc.debugger.stop();
+        await bbc.keyboard.type("PRINT 12345\r");
+        await bbc.keyboard.type("PRINT 67890\r");
+        const pending = (await bbc.keyboard.typingStatus()).pendingCharacters;
+
+        await bbc.debugger.reset();
+        const status = await bbc.keyboard.typingStatus();
+        expect(status.idle).toBe(true);
+        expect(status.discardedByReset).toBe(pending);
+        await expect(bbc.keyboard.waitForTyping()).rejects.toThrow(
+            new RegExp(`a reset discarded ${pending} characters`),
+        );
+
+        await bbc.keyboard.type("PRINT 6*7\r");  // for the new session
+        expect((await bbc.keyboard.typingStatus()).discardedByReset).toBe(0);
+    });
+});

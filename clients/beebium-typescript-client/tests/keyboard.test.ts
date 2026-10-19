@@ -346,6 +346,7 @@ describe("Keyboard", () => {
                     machineRunning: true,
                     guestReady: false,
                     cyclesSinceReset: 1234,
+                    discardedByReset: 7,
                 }),
             });
             const kb = new Keyboard(stub as any);
@@ -357,6 +358,7 @@ describe("Keyboard", () => {
                 machineRunning: true,
                 guestReady: false,
                 cyclesSinceReset: 1234,
+                discardedByReset: 7,
             });
         });
 

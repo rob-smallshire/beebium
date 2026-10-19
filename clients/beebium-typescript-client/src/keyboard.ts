@@ -41,6 +41,10 @@ import type { Beebium } from "./client.js";
  * word on whether the emulator is running: only a running machine drains
  * the queue. `guestReady` is its word on whether the guest has asked for
  * typed input since its last reset; nothing is typed until it has.
+ * `discardedByReset` counts characters a reset threw away since text was last
+ * typed or the queue cleared: a reset of any kind discards the line in
+ * progress and everything queued behind it, so non-zero means that text was
+ * never delivered in full, though the queue is idle.
  */
 export interface TypingQueueStatus {
     idle: boolean;
@@ -50,6 +54,8 @@ export interface TypingQueueStatus {
     guestReady: boolean;
     /** Emulated CPU cycles since the last reset began. */
     cyclesSinceReset: number;
+    /** Characters a reset discarded since text was last typed or cleared. */
+    discardedByReset: number;
 }
 
 /**
@@ -77,6 +83,7 @@ function typingQueueStatus(proto: TypingStatus): TypingQueueStatus {
         machineRunning: proto.machineRunning,
         guestReady: proto.guestReady,
         cyclesSinceReset: proto.cyclesSinceReset,
+        discardedByReset: proto.discardedByReset,
     };
 }
 
@@ -204,6 +211,20 @@ export class Keyboard {
      * reliably registered by the MOS keyboard scan, so there is no
      * timing knob to tune. For deliberate custom timing, drive
      * `keyDown` / `keyUp` directly.
+     *
+     * The pacing is in emulated time: 80 ms a character at 2 MHz (40 ms down,
+     * 40 ms up), so 12.5 characters an emulated second, whatever the speed
+     * multiplier. Text of N characters needs N x 0.08 emulated seconds before
+     * its last key -- a final RETURN, say -- has gone in; a capital costs no
+     * extra time. Rather than budget that, run the machine and call
+     * `waitForTyping()`.
+     *
+     * A reset of any kind -- Break, Ctrl-Break, `debugger.reset()` -- discards
+     * the line being typed and everything queued behind it, rather than
+     * finishing it in the new session; `typingStatus()` reports the discarded
+     * count and `waitForTyping()` rejects on it. Text typed after the reset,
+     * or while Break is held, is for the new session, and waits until the
+     * guest is ready for it.
      *
      * By default the server translates host text conventions into what the
      * BBC keyboard can type: every line-ending convention becomes a single
@@ -563,7 +584,14 @@ export class Keyboard {
         await this.matrixUp(...SHIFT_KEY);
     }
 
-    /** Press the CTRL key. */
+    /**
+     * Press the CTRL key.
+     *
+     * For Ctrl-Break use `ctrlBreak()`: the MOS reads CTRL as a reset option
+     * after Break is released, so it must stay down for emulated time after
+     * `breakUp()`, which a `ctrlUp()` sent straight after cannot promise on a
+     * fast host.
+     */
     async ctrlDown(): Promise<void> {
         await this.matrixDown(...CTRL_KEY);
     }
@@ -690,7 +718,9 @@ export class Keyboard {
      * Returns as soon as the queue is empty, including immediately if it
      * already was. Also returns if the stream ends for any other reason -- a
      * cleared queue, a dropped connection, a stopped server -- because in
-     * every case there is nothing further to wait for.
+     * every case there is nothing further to wait for. Rejects instead if a
+     * reset discarded queued text since it was typed (see `type()`): the queue
+     * is then empty, but the text was never delivered in full.
      *
      * Only a running machine drains the queue, and the server says whether
      * the machine is running, so the wait needs no timeout: it rejects at
@@ -708,16 +738,23 @@ export class Keyboard {
      * `readyWithin: null` for a boot known to be slow. Once the guest is ready
      * there is no time limit.
      *
-     * Requires: a running machine, unless nothing is queued.
+     * Requires: a running machine and no reset part-way, unless nothing is queued.
      * Leaves the machine: unchanged.
      *
      * @throws DebuggerError If the machine is stopped with characters pending,
-     *     or the guest is not ready within `readyWithin`.
+     *     the guest is not ready within `readyWithin`, or a reset discarded
+     *     queued text.
      */
     async waitForTyping(options?: { readyWithin?: number | null }): Promise<void> {
         const readyWithin = options?.readyWithin === undefined ? 5.0 : options.readyWithin;
         const clockHz = await this._clockHz();
         for await (const status of this.watchTypingStatus()) {
+            if (status.discardedByReset) {
+                throw new DebuggerError(
+                    `a reset discarded ${status.discardedByReset} characters of type-ahead ` +
+                    "before they were typed; type the text again for the new session",
+                );
+            }
             if (status.idle) {
                 return;
             }
@@ -863,9 +900,13 @@ export class Keyboard {
      * This releases the reset line. The CPU will execute the 7-cycle
      * reset sequence and then begin execution from the reset vector.
      *
-     * MOS checks if Ctrl is held at this moment to determine reset type:
-     * - If Ctrl pressed: MOS performs "hard reset" (clears VIA config)
-     * - If Ctrl not pressed: MOS performs "warm reset" (preserves state)
+     * The MOS reads the keyboard for its reset options during the reset that
+     * follows, in emulated time: CTRL held makes it a hard reset (clearing the
+     * VIA configuration). A modifier meant as a reset option must therefore
+     * stay down for emulated time after this resolves; releasing it straight
+     * afterwards races the MOS, which on a fast host -- or at speed 0 -- has
+     * read its options long before the next call lands. Use `ctrlBreak()`,
+     * which holds CTRL either side of Break.
      *
      * @returns True if successful.
      */

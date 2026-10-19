@@ -256,6 +256,7 @@ void KeyboardServiceImpl::snapshot_typing_status(TypingStatus& status) const {
     status.set_machine_running(machine_running_());
     status.set_guest_ready(type_ahead.guest_ready());
     status.set_cycles_since_reset(cycles_since_reset_());
+    status.set_discarded_by_reset(static_cast<uint32_t>(type_ahead.discarded_by_reset()));
 }
 
 grpc::Status KeyboardServiceImpl::WatchTypingStatus(
