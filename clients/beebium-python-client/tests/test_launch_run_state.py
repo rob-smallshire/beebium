@@ -36,9 +36,16 @@ def _reset_vector(bbc: Beebium) -> int:
 def test_launch_leaves_the_machine_running(launch_bbc) -> None:
     bbc = launch_bbc()
     assert bbc.debugger.is_running
+    # is_running is the server's word; the cycle count shows the machine
+    # really moves. Wait for it to move, since a loaded host may not schedule
+    # the emulation thread within any fixed interval.
     start = bbc.debugger.cycle_count
-    time.sleep(0.1)
-    assert bbc.debugger.cycle_count > start
+    deadline = time.monotonic() + 10.0
+    cycle_count = start
+    while cycle_count <= start and time.monotonic() < deadline:
+        time.sleep(0.01)
+        cycle_count = bbc.debugger.cycle_count
+    assert cycle_count > start
 
 
 def test_start_stopped_leaves_the_machine_at_the_reset_vector(launch_bbc) -> None:

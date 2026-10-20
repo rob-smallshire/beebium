@@ -41,8 +41,16 @@ describe("launch run state", () => {
         const bbc = await launch();
         const start = await bbc.debugger.getState();
         expect(start.isRunning).toBe(true);
-        await new Promise((r) => setTimeout(r, 100));
-        expect((await bbc.debugger.getState()).cycleCount).toBeGreaterThan(start.cycleCount);
+        // isRunning is the server's word; the cycle count shows the machine
+        // really moves. Wait for it to move, since a loaded host may not
+        // schedule the emulation thread within any fixed interval.
+        const deadline = Date.now() + 10000;
+        let cycleCount = start.cycleCount;
+        while (cycleCount <= start.cycleCount && Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 10));
+            cycleCount = (await bbc.debugger.getState()).cycleCount;
+        }
+        expect(cycleCount).toBeGreaterThan(start.cycleCount);
     }, 30000);
 
     it("with startStopped leaves it at the reset vector, no instruction executed", async () => {
