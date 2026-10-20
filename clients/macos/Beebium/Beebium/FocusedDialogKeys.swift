@@ -43,25 +43,30 @@ class AppActions: ObservableObject {
     /// the main window once it can open windows (it needs SwiftUI's openWindow).
     /// A request that arrives before then -- a cold launch by opening a document
     /// -- is queued and delivered when the handler is set.
-    var openSavedMachine: ((URL) -> Void)? {
+    /// Opens a saved machine, and closes the auto-opened empty Welcome window
+    /// when the request came from an opened URL (so Finder opens leave no
+    /// Welcome behind); File > Open... passes false and leaves the window it
+    /// was invoked from alone.
+    var openSavedMachine: ((URL, Bool) -> Void)? {
         willSet { objectWillChange.send() }
         didSet {
-            guard openSavedMachine != nil, !pendingOpenMachineURLs.isEmpty else { return }
-            let queued = pendingOpenMachineURLs
-            pendingOpenMachineURLs = []
-            for url in queued { openSavedMachine?(url) }
+            guard openSavedMachine != nil, !pendingOpenMachineRequests.isEmpty else { return }
+            let queued = pendingOpenMachineRequests
+            pendingOpenMachineRequests = []
+            for request in queued { openSavedMachine?(request.url, request.closeWelcomeWindows) }
         }
     }
-    private var pendingOpenMachineURLs: [URL] = []
+    private var pendingOpenMachineRequests: [(url: URL, closeWelcomeWindows: Bool)] = []
 
-    /// Request that a saved machine be opened, queuing the URL if the handler is
-    /// not ready yet (a document opened at launch, before the first window has
-    /// registered its opener).
-    func requestOpenSavedMachine(_ url: URL) {
+    /// Request that a saved machine be opened, queuing it if the handler is not
+    /// ready yet (a document opened at launch, before the first window has
+    /// registered its opener). `closeWelcomeWindows` closes the empty Welcome
+    /// window afterwards; set for Finder/URL opens, left off for File > Open...
+    func requestOpenSavedMachine(_ url: URL, closeWelcomeWindows: Bool = false) {
         if let openSavedMachine {
-            openSavedMachine(url)
+            openSavedMachine(url, closeWelcomeWindows)
         } else {
-            pendingOpenMachineURLs.append(url)
+            pendingOpenMachineRequests.append((url, closeWelcomeWindows))
         }
     }
 }

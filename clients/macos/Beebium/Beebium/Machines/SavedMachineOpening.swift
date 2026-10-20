@@ -26,7 +26,9 @@ import AppKit
 enum SavedMachineOpening {
 
     @MainActor
-    static func open(openedURL: URL, openMainWindow: @escaping () -> Void) async {
+    static func open(openedURL: URL,
+                     closeWelcomeWindows: Bool = false,
+                     openMainWindow: @escaping () -> Void) async {
         let machineDirpath = MachinePackage.machineDirectory(forOpenedPath: openedURL)
 
         guard let description = await PresetManager.shared.describeMachine(path: machineDirpath.path) else {
@@ -41,16 +43,19 @@ enum SavedMachineOpening {
             if let target = MachineManager.shared.target(forProcessIdentifier: pid) {
                 ConnectionRegistry.shared.activateWindow(for: target)
             }
+            if closeWelcomeWindows { WelcomeWindow.closeAutoOpened() }
         case .reportInUse(let pid):
             presentError("\"\(description.name)\" is already open in another process (pid \(pid)).")
         case .launch:
-            await launch(description: description, machineDirpath: machineDirpath, openMainWindow: openMainWindow)
+            await launch(description: description, machineDirpath: machineDirpath,
+                         closeWelcomeWindows: closeWelcomeWindows, openMainWindow: openMainWindow)
         }
     }
 
     @MainActor
     private static func launch(description: MachineDescription,
                                machineDirpath: URL,
+                               closeWelcomeWindows: Bool,
                                openMainWindow: @escaping () -> Void) async {
         let result = await PresetManager.shared.launchMachine(
             machineDirpath: machineDirpath.path, model: description.model)
@@ -63,6 +68,10 @@ enum SavedMachineOpening {
             state.pendingNeedsRun = true
             state.pendingProvenanceUUID = core.provenanceUUID
             openMainWindow()
+            // openMainWindow() creates the machine window synchronously, so the
+            // empty Welcome can be closed right after (deferred one turn) and
+            // never outlives the machine it was replaced by.
+            if closeWelcomeWindows { WelcomeWindow.closeAutoOpened() }
             MachineRecents().remember(machineDirpath: machineDirpath)
         case .failure(let error):
             presentError("Beebium could not open \"\(description.name)\": \(error.localizedDescription)")

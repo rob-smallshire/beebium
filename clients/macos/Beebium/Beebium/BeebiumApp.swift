@@ -34,8 +34,18 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
     /// and delivered then. The server identifies a machine by its machine.json,
     /// so a renamed directory opens too.
     func application(_ application: NSApplication, open urls: [URL]) {
+        // The second of two entry points for an opened URL. A document open --
+        // a double-clicked or dropped .beebium-machine -- is delivered here,
+        // but in practice the "main" WindowGroup's .onOpenURL claims opened URLs
+        // first (see BeebiumApp.handleOpenedURL), so this rarely fires. Both
+        // paths classify through OpenedURL, so they cannot disagree about what a
+        // URL means. A beebium:// connect link arrives as a URL scheme through
+        // the scene, never here, so only the saved-machine case is actionable
+        // from a document open.
         for url in urls {
-            AppActions.shared.requestOpenSavedMachine(url)
+            if case .savedMachine(let machineURL) = OpenedURL.classify(url) {
+                AppActions.shared.requestOpenSavedMachine(machineURL, closeWelcomeWindows: true)
+            }
         }
     }
 
@@ -223,7 +233,7 @@ struct BeebiumApp: App {
                 keyboardMappingManager: keyboardMappingManager
             )
             .onOpenURL { url in
-                handleDeepLink(url)
+                handleOpenedURL(url)
             }
         }
         .windowToolbarStyle(.unified)
@@ -373,15 +383,34 @@ struct BeebiumApp: App {
         }
     }
 
+    /// The first of two entry points for an opened URL (the other is the
+    /// delegate's `application(_:open:)`). SwiftUI delivers both the app's
+    /// `beebium://` connect links and opened documents (a double-clicked or
+    /// dropped `.beebium-machine`) to a scene's `.onOpenURL` as URLs, and the
+    /// scene claims them before the delegate sees them. A single classifier
+    /// decides what each URL is so the two entry points cannot diverge.
+    @MainActor
+    private func handleOpenedURL(_ url: URL) {
+        switch OpenedURL.classify(url) {
+        case .connect(let request):
+            handleConnect(request)
+        case .savedMachine(let machineURL):
+            // Route to the same open flow as File > Open..., and close the empty
+            // Welcome window SwiftUI auto-opens so a machine opened from Finder
+            // does not leave a Welcome behind -- as the connect path does.
+            AppActions.shared.requestOpenSavedMachine(machineURL, closeWelcomeWindows: true)
+        case .ignored:
+            break
+        }
+    }
+
     /// Handle a `beebium://connect?host=...&port=...` deep link by attaching a
     /// window to the given server, bypassing Bonjour discovery and the Connect
     /// dialog. Used by automated soak drivers to point the frontend at a server
     /// on an ephemeral, un-advertised port; also usable interactively via
     /// `open "beebium://connect?host=localhost&port=48875"`.
     @MainActor
-    private func handleDeepLink(_ url: URL) {
-        guard let request = DeepLink.parseConnect(url) else { return }
-
+    private func handleConnect(_ request: DeepLinkConnectRequest) {
         // If a window is already connected to this target, just bring it
         // forward rather than opening a duplicate. This also makes a
         // double-delivered URL idempotent.
@@ -401,13 +430,8 @@ struct BeebiumApp: App {
         // A beebium:// connect opens the machine window directly, so close the
         // empty Welcome window SwiftUI auto-opens at launch (and any other
         // unconnected Welcome window). Launching a disc via URL should not leave
-        // a Welcome screen behind. Deferred so the machine window exists first.
-        DispatchQueue.main.async {
-            for window in NSApplication.shared.windows
-            where window.title == WelcomeWindow.title {
-                window.close()
-            }
-        }
+        // a Welcome screen behind.
+        WelcomeWindow.closeAutoOpened()
     }
 }
 

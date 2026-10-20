@@ -14,10 +14,26 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// Identity of the Welcome window, shared so a beebium:// launch can find and
-/// close the empty Welcome that SwiftUI auto-opens (see BeebiumApp.handleDeepLink).
+/// Identity of the Welcome window, shared so an opened URL can find and close
+/// the empty Welcome that SwiftUI auto-opens (see BeebiumApp.handleOpenedURL and
+/// SavedMachineOpening).
 enum WelcomeWindow {
     static let title = "Welcome to Beebium"
+
+    /// Close the empty Welcome window SwiftUI auto-opens at launch (and any
+    /// other unconnected Welcome window), now that a machine window has taken
+    /// its place. Deferred one runloop turn so the machine window -- opened
+    /// synchronously just before -- already exists; windows are matched by
+    /// title. Used by both a beebium:// connect launch and a saved machine
+    /// opened from Finder, so neither leaves a Welcome behind.
+    @MainActor
+    static func closeAutoOpened() {
+        DispatchQueue.main.async {
+            for window in NSApplication.shared.windows where window.title == title {
+                window.close()
+            }
+        }
+    }
 }
 
 /// Routes the main WindowGroup to either welcome or emulator content based on whether
@@ -81,9 +97,10 @@ struct MainWindowRouter: View {
             // openWindow. Any window works, and setting it again is harmless;
             // a request queued before the first window registers is flushed
             // here (a document opened at launch). See AppActions.
-            AppActions.shared.openSavedMachine = { [openWindow] url in
+            AppActions.shared.openSavedMachine = { [openWindow] url, closeWelcomeWindows in
                 Task { @MainActor in
                     await SavedMachineOpening.open(openedURL: url,
+                                                   closeWelcomeWindows: closeWelcomeWindows,
                                                    openMainWindow: { openWindow(id: "main") })
                 }
             }
