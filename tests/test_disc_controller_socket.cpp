@@ -15,6 +15,15 @@
 #include "beebium/disc/DiscControllerSocket.hpp"
 #include "beebium/disc/Acorn1770DiscController.hpp"
 #include "beebium/disc/DiscDrive.hpp"
+#include "beebium/ModelBHardware.hpp"
+#include "beebium/ModelBRomRamBoardHardware.hpp"
+#include "beebium/ModelBAtplSidewiseHardware.hpp"
+#include "beebium/ModelBWatfordRomRamHardware.hpp"
+#include "beebium/ModelBIntegraBHardware.hpp"
+
+#include <catch2/catch_template_test_macros.hpp>
+
+#include <vector>
 
 using namespace beebium;
 
@@ -49,7 +58,7 @@ TEST_CASE("DiscControllerSocket empty socket behavior", "[disc][socket]") {
     }
 
     SECTION("empty socket reset does nothing") {
-        socket.reset();  // Should not crash
+        socket.reset(ResetCause::PowerOn);  // Should not crash
         CHECK_FALSE(socket.has_controller());
     }
 
@@ -170,7 +179,7 @@ TEST_CASE("DiscControllerSocket delegates to controller", "[disc][socket]") {
 
     SECTION("reset delegates to controller") {
         socket.write(0x00, 0x55);
-        socket.reset();
+        socket.reset(ResetCause::PowerOn);
 
         auto* ctrl = dynamic_cast<Acorn1770DiscController*>(socket.controller());
         REQUIRE(ctrl != nullptr);
@@ -194,4 +203,57 @@ TEST_CASE("The Acorn 1770 controller names its chip from the device", "[disc][fd
     Acorn1770DiscController controller;
     CHECK(controller.fdc_chip() == controller.wd1770().name());
     CHECK(controller.fdc_chip() == "WD1770");
+}
+
+namespace {
+
+// A controller that records the resets it is given.
+class ResetRecordingController : public DiscControllerInterface {
+public:
+    explicit ResetRecordingController(std::vector<ResetCause>& causes) : causes_(causes) {}
+    uint8_t read(uint16_t) override { return 0xFF; }
+    void write(uint16_t, uint8_t) override {}
+    uint8_t peek(uint16_t) const override { return 0xFF; }
+    void tick() override {}
+    bool nmi_pending() const override { return false; }
+    void reset(ResetCause cause) override { causes_.push_back(cause); }
+    void attach_drive(int, DiscDrive*) override {}
+    void detach_drives() override {}
+    DiscDrive* attached_drive(int) const override { return nullptr; }
+    std::string_view name() const override { return "Recorder"; }
+    std::string_view fdc_chip() const override { return "none"; }
+    void set_spin_up_delay_enabled(bool) override {}
+    bool spin_up_delay_enabled() const override { return false; }
+
+private:
+    std::vector<ResetCause>& causes_;
+};
+
+}  // namespace
+
+TEST_CASE("DiscControllerSocket passes the reset cause to its controller", "[disc][socket][reset]") {
+    // A controller may need to tell power-on from Break: the 8271 clears its
+    // register file only at power-on.
+    std::vector<ResetCause> causes;
+    DiscControllerSocket socket;
+    socket.install(std::make_unique<ResetRecordingController>(causes));
+
+    socket.reset(ResetCause::PowerOn);
+    socket.reset(ResetCause::Break);
+
+    CHECK(causes == std::vector<ResetCause>{ResetCause::PowerOn, ResetCause::Break});
+}
+
+TEMPLATE_TEST_CASE("Socketed Model B variants reset their disc controller by cause",
+                   "[disc][socket][reset]",
+                   ModelBHardware, ModelBRomRamBoardHardware, ModelBAtplSidewiseHardware,
+                   ModelBWatfordRomRamHardware, ModelBIntegraBHardware) {
+    std::vector<ResetCause> causes;
+    auto hardware = std::make_unique<TestType>();
+    hardware->install_disc_controller(std::make_unique<ResetRecordingController>(causes));
+
+    hardware->reset();
+    hardware->soft_reset();
+
+    CHECK(causes == std::vector<ResetCause>{ResetCause::PowerOn, ResetCause::Break});
 }

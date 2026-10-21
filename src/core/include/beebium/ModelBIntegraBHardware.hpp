@@ -508,7 +508,7 @@ public:
         sound_chip.reset();
         addressable_latch.reset();
         reset_board_latches();
-        disc_socket.reset();
+        disc_socket.reset(ResetCause::PowerOn);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();
@@ -524,7 +524,7 @@ public:
         sound_chip.reset();
         addressable_latch.reset();
         reset_board_latches();
-        disc_socket.reset();
+        disc_socket.reset(ResetCause::Break);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();

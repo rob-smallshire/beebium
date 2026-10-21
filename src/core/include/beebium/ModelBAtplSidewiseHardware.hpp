@@ -343,7 +343,7 @@ public:
         sound_chip.reset();
         addressable_latch.reset();
         sideways.select_bank(0);
-        disc_socket.reset();
+        disc_socket.reset(ResetCause::PowerOn);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();
@@ -356,7 +356,7 @@ public:
         saa5050.reset();
         sound_chip.reset();
         addressable_latch.reset();
-        disc_socket.reset();
+        disc_socket.reset(ResetCause::Break);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();

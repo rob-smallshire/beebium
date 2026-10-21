@@ -435,7 +435,7 @@ public:
         // The S1/S2 switches persist - they are physical board switches, not
         // reset by Break. (soft_reset leaves both selects untouched, as ROMSEL is.)
         write_select_ = 0;
-        disc_socket.reset();
+        disc_socket.reset(ResetCause::PowerOn);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();
@@ -448,7 +448,7 @@ public:
         saa5050.reset();
         sound_chip.reset();
         addressable_latch.reset();
-        disc_socket.reset();
+        disc_socket.reset(ResetCause::Break);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();

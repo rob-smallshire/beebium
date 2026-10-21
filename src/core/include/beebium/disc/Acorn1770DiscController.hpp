@@ -135,7 +135,8 @@ public:
     // Reset
     // =========================================================================
 
-    void reset() override {
+    // The board resets alike for power-on and Break
+    void reset(ResetCause) override {
         wd1770_.reset();
         control_ = 0;
         nmi_enabled_ = false;

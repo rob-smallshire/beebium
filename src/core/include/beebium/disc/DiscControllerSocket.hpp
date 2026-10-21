@@ -200,9 +200,9 @@ public:
 
     // Reset the installed controller
     // No-op if no controller is installed
-    void reset() {
+    void reset(ResetCause cause) {
         if (controller_) {
-            controller_->reset();
+            controller_->reset(cause);
         }
     }
 

@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include "beebium/ResetCause.hpp"
+
 #include <cstdint>
 #include <string_view>
 
@@ -78,8 +80,9 @@ public:
     // Reset
     // =========================================================================
 
-    // Reset controller to power-on state
-    virtual void reset() = 0;
+    // Reset the controller. A controller that holds state across Break (the
+    // 8271's register file) clears it only for ResetCause::PowerOn.
+    virtual void reset(ResetCause cause) = 0;
 
     // =========================================================================
     // Drive management
