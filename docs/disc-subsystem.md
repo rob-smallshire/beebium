@@ -275,7 +275,7 @@ Note: Bits 0 and 1 are active-high drive selects, not a binary drive number. DFS
 
 ### 8271 vs 1770 Detection
 
-The Model B+ motherboard was designed to accept either an Intel 8271 or WD1770 disc controller. In practice, only the WD1770 was ever fitted (soldered in). However, the address decoding deliberately swaps the register addresses between the two controllers to allow DFS to detect which is present:
+The Model B's original disc interface is the Intel 8271; the WD1770 came later, as an upgrade board for the Model B and built into the B+. The B+ has its 1770 built in and cannot take an 8271. Acorn arranged the two controllers' address decoding the other way round from each other, so that disc software can tell which one it is talking to:
 
 | Controller | Command/Status Registers | Data/Control Registers |
 |------------|-------------------------|------------------------|
@@ -286,7 +286,7 @@ From the B+ Service Manual (section 5.5.2):
 
 > "It can be seen that the 1770 controller and the 8271 controller address space has been swapped. This is to allow the disc system software to distinguish between the two devices."
 
-**Detection mechanism:** DFS reads from 0xFE80. If it receives a valid response (indicating 8271 command/status registers), it uses 8271 protocol. If it receives 0xFF (open bus from the write-only IC17 latch), it knows a WD1770 is fitted and uses the registers at 0xFE84-0xFE87.
+**Detection mechanism:** DFS reads 0xFE80. With an 8271 fitted that is the 8271's status register, whose bits 1 and 0 always read 0; with a 1770 board it is the write-only control latch, which reads 0xFF. Acorn DFS 1.20 tests exactly those two bits (`LDA FDCS : AND #3`, non-zero meaning "no 8271"). A DFS built for one controller does nothing useful with the other: see [ROM pairing](#rom-pairing).
 
 The disc control register (IC17) is a write-only latch that provides:
 - Drive/side/density selection
@@ -294,7 +294,7 @@ The disc control register (IC17) is a write-only latch that provides:
 - WD1770 reset
 - NMI enable gating
 
-Since Beebium only emulates Model B+ with WD1770 (the only configuration ever manufactured), reading 0xFE80-0xFE83 returns 0xFF.
+On the B+, reading 0xFE80-0xFE83 therefore returns 0xFF.
 
 ## Hardware Integration (Model B)
 
@@ -302,6 +302,7 @@ Since Beebium only emulates Model B+ with WD1770 (the only configuration ever ma
 - `src/core/include/beebium/disc/DiscControllerSocket.hpp`
 - `src/core/include/beebium/disc/DiscControllerInterface.hpp`
 - `src/core/include/beebium/disc/Acorn1770DiscController.hpp`
+- `src/core/include/beebium/disc/Intel8271DiscController.hpp`, `Intel8271.hpp`
 
 Unlike the Model B+ which has a soldered WD1770, the BBC Model B had a physical socket for optional disc controller upgrades. Beebium models this with a pluggable socket architecture.
 
@@ -317,9 +318,9 @@ ModelBHardware
             └── DiscControllerInterface* (optional, runtime-pluggable)
                     │
                     ├── Acorn1770DiscController (WD1770 + Acorn control register)
+                    ├── Intel8271DiscController (Intel 8271, the original Acorn interface)
                     ├── OpusDiscController (future: WD2793)
-                    ├── WatfordDiscController (future)
-                    └── Intel8271DiscController (future)
+                    └── WatfordDiscController (future)
 ```
 
 ### Key Design Decisions
@@ -393,6 +394,26 @@ The Acorn 1770 upgrade board wraps a WD1770 FDC with Acorn's control register la
 | 0x07 | WD1770 Data | WD1770 Data |
 
 Control register bits match the Model B+ layout (see above).
+
+### Intel8271DiscController
+
+The Acorn 8271 board, the Model B's original disc interface (`--fdc acorn-8271`). The chip's registers answer at 0xFE80-0xFE83 and its data register, reached by DACK with A1:A0 ignored, at 0xFE84-0xFE87; the eight addresses repeat across 0xFE80-0xFE9F.
+
+| Offset | Read | Write |
+|--------|------|-------|
+| 0x00 | Status | Command |
+| 0x01 | Result | Parameter |
+| 0x02 | Sector byte counter MSB (undocumented) | Reset (1 resets) |
+| 0x03 | Sector byte counter LSB (undocumented) | - |
+| 0x04-0x07 | Data | Data |
+
+There is no control latch. Drive select, side, head load and motor all come from the 8271's own drive output port (special register 0x23): SELECT1 0x80, SELECT0 0x40, SIDE 0x20, LOW HEAD CURRENT 0x10, LOAD HEAD 0x08, DIRECTION 0x04, STEP 0x02, WRITE ENABLE 0x01. LOAD HEAD is the motor, and on the shared cable MOTOR ON is common to both drives. The 8271's INT output drives NMI, once for each data byte and once at completion; DRQ is not wired, so only non-DMA transfers work.
+
+The chip (`Intel8271`) models the 8271's internal register file, which software can reach through the special register commands, and works the disc one FM byte (64 us) at a time; seek, settle and head-load waits are timers in emulated milliseconds. Power-on and Break reset it differently (`ResetCause`): Break clears the status, mode and drive outputs but keeps the register file, result and data. Its behaviour, the evidence for it, and the choices recorded as assumptions are in [discussion/intel-8271-study.md](discussion/intel-8271-study.md).
+
+### ROM pairing
+
+Acorn DFS drives one controller: the 0.9x and 1.xx releases need the 8271, the 2.xx releases the 1770. `resolve-preset` and the launch warn, at the ROM's preset entry, when a known DFS is fitted with the other controller or with none. Known ROMs are recognised by the SHA-1 of their contents (`src/server/include/beebium/server/DfsRomManifest.hpp`); unknown ROMs are not judged, and a DNFS fitted for its NFS alone is legitimate, so this is a warning, not an error.
 
 ### Command-Line Configuration
 
@@ -507,21 +528,21 @@ Note the ordering: NMI state is sampled **before** ticking the controller. This 
 
 ### Motor Control
 
-The BBC Micro's disc interface supported two different floppy disc controllers with fundamentally different motor control mechanisms. Understanding this distinction is crucial for emulator implementation.
+The BBC Micro's two disc controllers turn the motor in different ways.
 
 #### 8271 vs WD1770 Motor Control
 
 | Controller | Motor Control | Used In |
 |------------|--------------|---------|
-| Intel 8271 | **Explicit** via disc control register bit 4 | Model B (original) |
+| Intel 8271 | The 8271's LOAD HEAD output (drive output port bit 3) | Model B (original) |
 | WD1770 | **Internal** to controller during command execution | Model B+ (built-in), Model B (upgrade) |
 
-The disc control register at 0xFE80 has bit 4 labelled "Motor on" in documentation, but this is only relevant for 8271-style explicit motor control. The WD1770 manages motor state internally:
+The 1770 board's control latch at 0xFE80 has a bit 4 labelled "Motor on", but the WD1770 manages its motor itself and DFS 2.26 leaves the bit clear. The 8271 board has no latch at all: software loads the head, which turns the motor, by writing the 8271's drive output port (DFS writes 0x48 for drive 0, side 0), and the 8271 unloads it a set number of index pulses after the last command:
 
 ```
 8271 Motor Control:
-    DFS software → writes 0x1x to 0xFE80 → motor on
-    DFS software → writes 0x0x to 0xFE80 → motor off
+    DFS software → WRITE SPECIAL REGISTER 0x23 = 0x48 → LOAD HEAD → motor on (both drives)
+    8271 → N index pulses after a command (SPECIFY) → unloads head, deselects → motor off
 
 WD1770 Motor Control:
     DFS software → writes command to 0xFE84 → WD1770 spins up internally
@@ -665,50 +686,16 @@ WD1770 (disc controller)
 
 The WD1770 talks to drives (via `DiscDrive` pointers), and drives encapsulate their motor. The disc controller doesn't directly manipulate indicators; that's handled by `DiscDrive::set_motor()`.
 
-#### Implications for 8271 Implementation
-
-When implementing Intel 8271 support for Model B compatibility:
-
-1. **8271 does NOT have internal motor control** -- the motor bit in the disc control register (0xFE80 bit 4) must directly control `DiscDrive::set_motor()`
-
-2. **DFS for 8271 explicitly sets motor bit** -- the software writes to enable/disable motor
-
-3. **Same DiscDrive class can be used** -- only the controller logic differs:
-   ```cpp
-   // 8271 disc control register write handler
-   void write(uint16_t, uint8_t value) {
-       // ...
-       // Bit 4: Motor on (8271 explicit control)
-       drive0.set_motor((value & 0x10) != 0);
-       drive1.set_motor((value & 0x10) != 0);
-       // ...
-   }
-   ```
-
-4. **Detection mechanism** -- DFS reads from 0xFE80 to distinguish controllers:
-   - 8271: Returns valid status (command/status registers at 0xFE80-0xFE83)
-   - WD1770: Returns 0xFF (write-only latch, open bus on read)
-
 #### Drive Activity LED Indicators
 
-Motor state directly controls the drive activity LED indicator:
+A drive's front LED is lit by its select line while the drive turns: `DiscDrive` takes select (`set_selected`) and motor (`set_motor`) as separate inputs and lights the LED only with both. This is the "in use" jumper setting Acorn shipped its drives with. Select alone would not do: DFS 2.26 leaves the 1770 latch's select bit set between commands. Motor alone would not either: on the 8271 board LOAD HEAD turns both drives, but only the selected one's LED is lit.
 
-```cpp
-// In DiscDrive::set_motor()
-void set_motor(bool on) {
-    if (motor_on_ != on) {
-        motor_on_ = on;
-        if (indicators_) {
-            indicators_->set(activity_led_id_, on ? 255 : 0);
-        }
-    }
-}
-```
-
-With WD1770 internal motor control:
+With the WD1770:
 - LED activates when WD1770 executes any Type I/II/III command
 - LED remains on during command execution and idle timeout
 - LED deactivates ~2 seconds after last command completes
+
+With the 8271, the LED is lit while the head is loaded on the selected drive, and goes out when the 8271 unloads the head after its index-pulse count.
 
 ## File Formats
 
@@ -919,6 +906,7 @@ registry.
 - Drive activity LED indicators via motor state
 - Model B+ hardware integration
 - Command-line disc configuration
+- Intel 8271 on the Acorn 8271 board (`--fdc acorn-8271`): every command (scan fails, as on a BBC without DMA), the host protocol, per-byte NMIs with late-DMA detection, seek, settle, head load and unload timing, bad tracks, deleted data, read ID, write and format with host-supplied IDs, and power-on and Break resets
 
 ### Capability Gaps
 
@@ -962,7 +950,6 @@ The following features are not implemented. They may be needed for compatibility
 
 #### Acorn Controllers
 
-- **Intel 8271**: Required for Model B disc compatibility (uses 0xFE80-0xFE83 for command/status registers, completely different command protocol). Note: The Model B+ was designed to support 8271 but only WD1770 was ever fitted.
 - **WD1772**: Faster step rates (2ms, 3ms, 6ms, 12ms).
 
 #### Opus Controllers

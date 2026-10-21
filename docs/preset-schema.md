@@ -226,7 +226,7 @@ The MOS ROM, a name or path as for `--mos`. Default: the model's MOS
 
 | Key | Type | Meaning |
 |-----|------|---------|
-| `fdc_socket.id` | string | The disc controller in the socket: an id from `list-fdcs` (today `acorn-1770`), or `none` for an empty socket. Only models with a disc controller socket; a model with a built-in controller (the B+ family) ignores it with a warning. Default: empty socket |
+| `fdc_socket.id` | string | The disc controller in the socket: an id from `list-fdcs` (today `acorn-1770` or `acorn-8271`), or `none` for an empty socket. A DFS ROM in the sideways bank that needs the other controller (DFS 0.9x and 1.xx need `acorn-8271`, DFS 2.xx `acorn-1770`) is reported as a warning at that ROM's entry. Only models with a disc controller socket; a model with a built-in controller (the B+ family) ignores it with a warning. Default: empty socket |
 | `floppy_drives[]` | array | `{ "drive": 0 or 1, "image_uri": path, URI or null }`. `null` leaves the drive empty. Default: both empty |
 
 Accepted image types are the floppy formats `list-disc-formats` lists.

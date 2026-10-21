@@ -442,17 +442,17 @@ Notes:
 
 The releases poll the drive differently, so drive-ready, index and track-0
 behaviour must be right for all of them, not tuned to one. The sharpest case is
-an empty drive: DFS 1.20 can report "Drive not ready", while 1.21 and 1.22 loop
-until the drive becomes ready. A model in which an empty, spinning, selected
-drive reads as ready (beebjit's, section 4 rows 17 and 19) gives neither: with
-no disc there are no index edges, so a read never times out. jsbeeb, which
+an empty drive: Harston's table says 1.21 onward never return "Drive not ready"
+but loop until the drive is ready. A model in which an empty, spinning, selected
+drive reads as ready (beebjit's, section 4 rows 17 and 19) cannot show any such
+difference: with no disc there are no index edges, so a read never times out. jsbeeb, which
 inherits that model, sat in `*CAT` on an empty drive with no error under both
 DFS 1.20 and 0.90 for as long as it was run. A real drive's READY output needs a
 disc turning (typically two index pulses after the disc is inserted and the
 motor is on). So Beebium's drive model should make READY depend on a disc being
 present and turning, not just on select and motor. That is a departure from
 beebjit, pinned by a test that records it as an assumption, and checked
-against MAME's empty-drive behaviour for each release.
+against MAME's empty-drive behaviour for each release (section 11.2).
 
 ### 6.2 Oracles
 
@@ -675,9 +675,8 @@ Test-first throughout; targeted tests per commit, full suites left to CI.
    release. DFS 0.90, 0.98, 1.00, 1.20 and 1.22 are bundled and run in CI; DFS
    1.21 is opt-in and skips when the ROM is absent (it is not on disc today).
    Release-specific checks in the same matrix:
-   - empty drive: DFS 1.20 reports "Drive not ready" (or whatever MAME shows
-     for that release), DFS 1.22 keeps waiting and then succeeds when a disc is
-     inserted;
+   - empty drive: each release's visible behaviour matches MAME's (section
+     11.2 records what they do);
    - DFS 0.90 treats OSWORD above &7F as &7D and has no service call &12;
      0.98 onward do not trap and do answer &12;
    - DFS 1.00 onward: OSGBPB uses direct sector reads (multi-sector &13
@@ -695,7 +694,9 @@ Test-first throughout; targeted tests per commit, full suites left to CI.
    fixes Flip! is DFS 1.2x's workspace layout (FLIP2 loads at &1100, inside
    DFS 2.26's workspace); the 8271 is what makes DFS 1.2x usable.
 
-## 10. Decisions for the architect
+## 10. Decisions taken
+
+The architect's rulings on the decisions this section listed:
 
 1. Licence route for the model (section 8.1): fresh implementation from this
    study (recommended), a beebjit port as GPL-3.0-only, or ask Chris Evans.
@@ -704,3 +705,48 @@ Test-first throughout; targeted tests per commit, full suites left to CI.
 4. The ROM manifest: warning-only and keyed by SHA-1 (section 8.8).
 5. Whether LOAD HEAD lights both drives' activity indicators (section 5 item 6).
 6. B+ out of scope: it cannot take an 8271 (confirmed).
+
+Rulings: a fresh implementation, citing beebjit and the write-up; ResetCause
+{PowerOn, Break} (ResetKind is taken by system.proto); DiscWriteBack extracted
+first; the manifest warning-only, by SHA-1; the drive LED lit by select while
+the drive turns (the in-use jumper setting Acorn shipped), with LOAD HEAD
+turning both drives; the 8271 for the Model B only.
+
+## 11. Results
+
+### 11.1 Flip! (#85, #86)
+
+The acceptance run, with `Disc013-FlipTheCartoonStrategyGame.ssd` (SHA-256
+064ef866...dad586, downloaded for the run and not committed) and the keystrokes
+the #86 investigation used in MAME (`*DISC`, `PAGE=&1900`, `CHAIN"FLIP!"`),
+then 20 seconds:
+
+| Configuration | Result |
+|---|---|
+| MAME 0.289 `bbcb`, 8271, DFS 1.20 | options menu (scramble words / normal words / computer word / user words / start game) |
+| Beebium Model B, `acorn-8271`, DFS 1.20 | the same options menu; the copyright line shows clean spaces |
+| Beebium Model B, `acorn-1770`, DFS 2.26 (control) | title screen with marks between the words, then a bare `>`, as #85 and #86 describe |
+
+With the game booted from its `!BOOT` instead, the 8271 configuration shows the
+instruction pages from `CARTOON` and waits for SPACE, as it should.
+
+### 11.2 An empty drive, release by release
+
+`*CAT` with no disc in drive 0, on a Model B with `acorn-8271`:
+
+| Release | Beebium | MAME 0.289 |
+|---|---|---|
+| DFS 0.90 | waits at `*CAT`, no message; Escape is not taken within 2 s | waits, no message |
+| DFS 0.98 | waits, no message | not run |
+| DFS 1.00 | waits, no message | not run |
+| DFS 1.20 | waits, no message; Escape gives "Escape" | waits, no message |
+| DFS 1.22 | waits, no message; Escape gives "Escape" | not run |
+
+So no release reports "Drive not ready" for an empty drive: DFS 1.20's own
+source waits in `STARTW` for the drive to become ready, checking only for
+Escape, before it issues a command. Harston's note on 1.21 presumably
+concerns a drive that is not ready when a command runs (his note mentions
+3.5" drives), not an empty drive at selection; that is not verified. MAME reaches the same visible result by
+a different route (its BBC wiring never reports not-ready, and a read with no
+index pulses never times out). The MAME harness cannot send Escape without a
+change, so the Escape column has no MAME comparison.

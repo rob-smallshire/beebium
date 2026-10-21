@@ -109,8 +109,10 @@ The L3FS requires:
 The bundled preset needs only ANFS and ADFS: its SCSI image carries the file
 server binary and boots it from ADFS.
 
-**Why ANFS and not DNFS?** DNFS 3.02/3.34 contain 8271-only DFS code which is
-NOT compatible with the Acorn 1770 floppy controller. Since we need 1770 DFS
+**Why ANFS and not DNFS?** The combined DFS and NFS ROMs ("DNFS": DFS 1.00
+to 1.22, including the bundled `acorn-dnfs_3_02.rom`, which is the DFS 1.22
+release) contain 8271-only DFS code which is NOT compatible with the Acorn
+1770 floppy controller. Since we need 1770 DFS
 (for the SSD boot disc) AND Tube Host Code (for the 65C02), we use separate
 DFS 2.26 and ANFS 4.18 ROMs. ANFS contains the same Tube Host Code as DNFS.
 

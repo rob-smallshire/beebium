@@ -237,7 +237,8 @@ validation rules per machine are described in
 The `--floppy` option accepts file paths (most common) or `file://` URLs.
 
 Disc controller types for `--fdc`:
-- `acorn-1770` - Acorn WD1770 controller
+- `acorn-1770` - Acorn WD1770 controller (Acorn DFS 2.xx)
+- `acorn-8271` - Acorn Intel 8271 controller, the Model B's original (Acorn DFS 0.90-1.22)
 - `none` - Leave socket empty (no disc)
 
 #### gRPC Server
@@ -534,6 +535,8 @@ Output varies by format (see [Output Formats](#output-formats)):
 Available disc controllers:
   acorn-1770 - Acorn 1770 (WD1770)
       Standard Acorn disc controller upgrade for BBC Model B
+  acorn-8271 - Acorn 8271 (8271)
+      Original Intel 8271 disc interface for BBC Model B (DFS 0.90-1.22)
   none - No disc controller (leave socket empty)
 ```
 
@@ -541,12 +544,14 @@ Available disc controllers:
 ```
 id	display_name	fdc_chip	description
 acorn-1770	Acorn 1770	WD1770	Standard Acorn disc controller upgrade for BBC Model B
+acorn-8271	Acorn 8271	8271	Original Intel 8271 disc interface for BBC Model B (DFS 0.90-1.22)
 none	No controller	-	Leave socket empty (no disc)
 ```
 
 **`--format jsonl`**:
 ```
 {"id":"acorn-1770","display_name":"Acorn 1770","fdc_chip":"WD1770","description":"Standard Acorn disc controller upgrade for BBC Model B"}
+{"id":"acorn-8271","display_name":"Acorn 8271","fdc_chip":"8271","description":"Original Intel 8271 disc interface for BBC Model B (DFS 0.90-1.22)"}
 {"id":"none","display_name":"No controller","fdc_chip":"-","description":"Leave socket empty (no disc)"}
 ```
 

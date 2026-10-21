@@ -1585,7 +1585,7 @@ The DNFS (Disc and Network Filing System) ROM combines DFS 1.20 and NFS 3.60 int
 - **Selection:** Keyboard switch 1 (link S1) overrides to select NFS at boot
 - **Commands:** Use `*NET` or `*DISC` to switch filing systems at runtime
 
-**Important limitation:** DNFS's DFS 1.20 component requires the Intel 8271 FDC. There is no DNFS ROM with a WD1770-compatible DFS. Since Beebium's only disc controller is the WD1770 (`list-fdcs`), DNFS's DFS cannot drive a disc. Instead, the bundled Econet client presets (`model-b-disc-aun-80`, `model-b-disc-aun-auto`, `model-b-disc-eco-81`) use separate ROMs in two sideways slots:
+**Important limitation:** DNFS's DFS component requires the Intel 8271 FDC. There is no DNFS ROM with a WD1770-compatible DFS. The bundled `acorn-dnfs_3_02.rom` is the DFS 1.22 release (DFS + NFS 3.62), and `acorn-dnfs_1_20.rom` the DFS 1.20 release (DFS + NFS 3.60); both need `--fdc acorn-8271` for their DFS to drive a disc. The bundled Econet client presets (`model-b-disc-aun-80`, `model-b-disc-aun-auto`, `model-b-disc-eco-81`) fit the WD1770 instead, with separate ROMs in two sideways slots:
 - DFS 2.26 (WD1770-compatible) — `acorn-dfs_2_26.rom` in slot 13
 - ANFS 4.18 — `acorn-anfs_4_18.rom` in slot 14
 
