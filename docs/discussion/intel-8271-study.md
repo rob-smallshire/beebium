@@ -369,27 +369,84 @@ only to disc-level software and copy protection.
 
 ROMs are copyright and none were copied or committed.
 
-| ROM | Where | MD5 | Contents |
+#### The Acorn DFS release line
+
+The authority here is J.G. Harston's version history and release table:
+https://mdfs.net/System/ROMs/Filing/Disk/Acorn/DFS.txt and
+https://mdfs.net/System/ROMs/Filing/Disk/Acorn/versions. The 8271 releases
+(all BBC B; the table says "B/B+", the B+ having been designed to take either
+chip) are:
+
+| Release | FDC | ROM contents | Notes that matter to us |
 |---|---|---|---|
-| Acorn DFS 0.90 (8 KB) | jsbeeb `public/roms/b/DFS-0.9.rom`; b-em `roms/general/dfs09.rom`; beebjit `roms/DFS-0.9.rom`; MAME romset `bbc_acorn8271.zip::dfs090.rom` | 803530149c274994fabc6d28cbe03679 | DFS 0.90 |
-| Acorn DFS 0.98 (8 KB) | MAME `bbc_acorn8271.zip::dfs098.rom` | 5a3ddfae96178e025f27bf1f69bfa629 | DFS 0.98 |
-| DNFS "1.20" (16 KB) | jsbeeb `b/DFS-1.2.rom`; beebjit `roms/acorn_dnfs.rom`; BeebEm `DNFS.rom`; MAME `dnfs120.rom` | 5daed103918277e2065dd7e8d23e57a5 | NFS 3.60 + DFS 1.20 |
-| DNFS 1.00 (16 KB) | jsbeeb `us/USDNFS.rom`; b-em `usdnfs.rom`; MAME `dnfs100.rom` | d636ffb7a80fc29b133d32e4250fbab6 | NFS 3.40 + DFS 1.00 |
-| Beebium `roms/acorn-dnfs_3_02.rom` | in the repository | ab3fcb1f9d6c7599f79bc31fa5909097 | **NFS 3.62 + DFS 1.22** |
-| Watford DFS 1.30-1.44 | MAME `bbc_acorn8271.zip` | - | 8271 Watford DFS |
+| DFS 0.90 | 8271 | DFS 0.90 (8 KB) | Traps every OSWORD above &7F and treats it as &7D. No service call &12 (select filing system). OSGBPB by repeated BGET/BPUT. Executed code entered with A undefined. |
+| DFS 0.98 | 8271 | DFS 0.98 (8 KB) | OSWORD above &7F not trapped; has service call &12. |
+| DFS 1.00 | 8271 | DFS 1.00 + NFS 3.40 + TUBE 1.00 (16 KB) | OSGBPB uses direct sector reads and writes. |
+| DFS 1.20 | 8271 | DFS 1.20 + NFS 3.60 + TUBE 1.20? (16 KB) | Executed code entered with A = 1; "Go? (Y/N)". |
+| DFS 1.21 | 8271 | DFS 1.21 + NFS 3.60 (16 KB) | Never returns "Drive not ready": loops until ready or another error (for 3.5" drives). |
+| DFS 1.22 | 8271 | DFS 1.21 + NFS 3.62 (16 KB) | Utilities use the stack instead of a page below PAGE. |
+| DFS 2.00 onward | 1770 | DFS 2.xx + TUBE (+ SRAM) | 2.26 is the last B/B+ release and is the one Beebium bundles. 2.20's Shift-Z Break "emulates the 8271" (out of scope). |
+
+"DNFS" is the informal name for exactly the combined 1.xx ROMs (all carry the
+header title "DFS,NET" and version byte &83, so the header alone cannot tell
+them apart). So MAME's "DNFS 1.20" and jsbeeb's "DFS-1.2.rom" are the DFS 1.20
+release, and Acorn's "DNFS 3.00" source package (DFS 1.20 + NFS 3.60 + Tube host
+1.10, by its README) is the same release under a package name. The name "DNFS
+3.02" appears on neither page.
+
+The rule for the manifest is clean: **0.9x and 1.xx are 8271-only, 2.xx are
+1770-only** (section 8.8 gives it as data).
+
+#### What is on disc
+
+Identified from each image's header (title, version byte, service entry) and its
+own `*HELP` version strings:
+
+| Release | Where | Size | SHA-1 | Header | Version strings |
+|---|---|---|---|---|---|
+| DFS 0.90 | jsbeeb `public/roms/b/DFS-0.9.rom`; b-em `roms/general/dfs09.rom`; beebjit `roms/DFS-0.9.rom`; MAME `bbc_acorn8271.zip::dfs090.rom` | 8192 | 5cc0f14b8f46855c70eaa653cca4ad079b458732 | "DFS", ver &5A, service &9455 | DFS 0.90 |
+| DFS 0.98 | MAME `bbc_acorn8271.zip::dfs098.rom` | 8192 | 6df3552d5426f3a4625b9a0c7829bdba03f05e84 | "DFS", ver &61, service &9446 | DFS 0.98 |
+| DFS 1.00 | jsbeeb `us/USDNFS.rom`; b-em `usdnfs.rom`; MAME `dnfs100.rom` | 16384 | 161f585dc45665ea77433c84afd2f95049f7f5a0 | "DFS,NET", ver &83, service &80F7 | DFS 1.00, NFS 3.40 |
+| DFS 1.20 | jsbeeb `b/DFS-1.2.rom`; beebjit `roms/acorn_dnfs.rom`; BeebEm `DNFS.rom`; MAME `dnfs120.rom` | 16384 | 7e3c536baeae84d6498a14e8405319e01ee78232 | "DFS,NET", ver &83, service &80F7 | DFS 1.20, NFS 3.60 |
+| DFS 1.21 | **not found locally** | | | | |
+| DFS 1.22 | Beebium `roms/acorn-dnfs_3_02.rom` (bundled) | 16384 | 822c333526d08ad4582ac0360344210ce4e3f0fb | "DFS,NET", ver &83, service &80F7 | DFS 1.22, NFS 3.62 |
+| DFS 2.26 | Beebium `roms/acorn-dfs_2_26.rom` (bundled) | 16384 | cf2ebc422a8d24ec6f1a0320520c38a0e704109a | "DFS", ver &7B, service &BEC8 | DFS 2.26 |
+| Watford DFS 1.30-1.44 | MAME `bbc_acorn8271.zip` | | not hashed | | 8271 Watford DFS (not Acorn) |
+
+**The bundled `acorn-dnfs_3_02.rom` is the Acorn DFS 1.22 release** (NFS 3.62).
+Its `*HELP` string reads "DFS 1.22"; Harston's table lists that release's DFS
+component as 1.21, so the string and the table disagree by one in the DFS
+component only. Either way it is the 1.22 release, it inherits 1.21's
+loop-until-ready behaviour, and it is 8271-only. Documentation should call it
+"Acorn DFS 1.22 (DFS + NFS 3.62)". The file name stays as it is.
 
 Notes:
 
-- "DNFS 1.20" (named by DFS version, MAME and jsbeeb) and Acorn's "DNFS 3.00"
-  source release (DFS 1.20 + NFS 3.60) are the same components. Beebium's
-  "DNFS 3.02" is a later revision with DFS 1.22; the name is a package label.
-  `docs/networking.md` and `docs/level-3-file-server-setup.md` call its DFS
-  "1.20" and should say 1.22.
-- No standalone 8 KB DFS 1.20 exists locally; every "DFS 1.2" is the 16 KB DNFS
-  image. No DNFS 3.34 exists locally.
+- `docs/networking.md` and `docs/level-3-file-server-setup.md` call this ROM's
+  DFS "1.20"; they should say 1.22.
+- No standalone 8 KB DFS 1.20 exists (none was released: 1.xx are all combined
+  ROMs). No DFS 1.21 release is on disc, so the 1.21 row of the test matrix is
+  opt-in and currently unrunnable here; 1.22 covers the same loop-until-ready
+  behaviour.
 - Because `acorn-dnfs_3_02.rom` is already in the repository, an 8271 boot test
-  with DFS 1.22 can run in CI. DFS 0.90 / 1.20 tests must be opt-in and skip
-  when the ROM is absent.
+  with DFS 1.22 can run in CI. DFS 0.90, 0.98, 1.00 and 1.20 tests are opt-in and
+  skip when the ROM is absent.
+
+#### Drive-ready semantics across releases
+
+The releases poll the drive differently, so drive-ready, index and track-0
+behaviour must be right for all of them, not tuned to one. The sharpest case is
+an empty drive: DFS 1.20 can report "Drive not ready", while 1.21 and 1.22 loop
+until the drive becomes ready. A model in which an empty, spinning, selected
+drive reads as ready (beebjit's, section 4 rows 17 and 19) gives neither: with
+no disc there are no index edges, so a read never times out. jsbeeb, which
+inherits that model, sat in `*CAT` on an empty drive with no error under both
+DFS 1.20 and 0.90 for as long as it was run. A real drive's READY output needs a
+disc turning (typically two index pulses after the disc is inserted and the
+motor is on). So Beebium's drive model should make READY depend on a disc being
+present and turning, not just on select and motor. That is a departure from
+beebjit, pinned by a test that records it as an assumption, and checked
+against MAME's empty-drive behaviour for each release.
 
 ### 6.2 Oracles
 
@@ -477,6 +534,7 @@ Mirror the WD1770 split between the chip and the board:
 |---|---|---|
 | Rotation while idle (index edges count for head unload; drive status INDEX bit) | the WD1770 advances the head only while a command runs | the 8271 controller advances the selected spinning drive every 64 ticks itself, as the WD1770 does inside commands; `DiscDrive` stays passive |
 | Index as a level about 4 ms wide | `is_index_pulse()` is true only at position 0 | add `DiscDrive::index_level()`: `head_position < track_length * 4 / 200` with a disc, always true without one (beebjit `disc_drive.c`) |
+| READY that needs a disc turning (section 6.1, drive-ready semantics) | no READY concept | the controller (or `DiscDrive`) reports ready only when selected, motor on and a disc present and turning; pinned as an assumption |
 | Write protect reads 0 with no disc | already so | none |
 | Write fail-safe when protected | `write_pulses` already drops writes | none |
 | Weak bits from unformatted (all-zero) regions | quasi-random pulses only with no disc | defer; needed only for weak-bit protection (later FSD/HFE work) |
@@ -531,9 +589,22 @@ The failure mode is silent: DNFS on a WD1770 deadlocks or does nothing, and
 DFS 2.26 on an 8271 finds no controller. Proposal, minimal and server-side:
 
 - A **DFS ROM manifest** in the core: a table of known filing-system ROMs keyed
-  by SHA-1 (the hashes in section 6.1 plus DFS 2.26 and the other 1770 DFSs),
-  each with the FDC chip it requires ("8271", "WD1770") and a display name.
-  Unknown ROMs are not judged.
+  by SHA-1, each with the FDC chip it requires and a display name. Unknown ROMs
+  are not judged. The rule (0.9x and 1.xx need an 8271; 2.xx need a 1770) is
+  captured as data, one row per known image:
+
+  | SHA-1 | Release | Requires |
+  |---|---|---|
+  | 5cc0f14b8f46855c70eaa653cca4ad079b458732 | Acorn DFS 0.90 | 8271 |
+  | 6df3552d5426f3a4625b9a0c7829bdba03f05e84 | Acorn DFS 0.98 | 8271 |
+  | 161f585dc45665ea77433c84afd2f95049f7f5a0 | Acorn DFS 1.00 (NFS 3.40) | 8271 |
+  | 7e3c536baeae84d6498a14e8405319e01ee78232 | Acorn DFS 1.20 (NFS 3.60) | 8271 |
+  | 822c333526d08ad4582ac0360344210ce4e3f0fb | Acorn DFS 1.22 (NFS 3.62) | 8271 |
+  | cf2ebc422a8d24ec6f1a0320520c38a0e704109a | Acorn DFS 2.26 | WD1770 |
+
+  Further 2.xx images (2.10-2.25, in MAME's `bbc_acorn1770.zip`) and DFS 1.21 are
+  added as rows when their hashes are taken; the table, not code, carries the
+  rule.
 - `resolve-preset` and launch check every fitted sideways ROM against the
   socket's controller and report a **warning** at the ROM's preset path, such as
   "DFS 1.20 needs an 8271 disc controller; this machine has a WD1770". The
@@ -593,10 +664,18 @@ Test-first throughout; targeted tests per commit, full suites left to CI.
    registry and `--fdc acorn-8271`, the motor and side wiring.
 5. **Image round trips**: write through the 8271, flush, reload, compare, for
    SSD, DSD and HFE.
-6. **DFS boot** (C++ or Python scenario, CI-safe with the bundled ROM): a Model B
-   with `acorn-8271` and DNFS 3.02 (DFS 1.22) boots and `*CAT`s
-   `Disc016-Boffin.ssd`; `SAVE` then `LOAD` round trip; opt-in variants with
-   DFS 0.90 and DFS 1.20 that skip when the ROM is absent.
+6. **DFS boot and catalogue matrix**: a Model B with `acorn-8271` boots and
+   `*CAT`s `Disc016-Boffin.ssd`, then a `SAVE` / `LOAD` round trip, for each
+   release. DFS 1.22 (the bundled ROM) runs in CI; DFS 0.90, 0.98, 1.00, 1.20
+   and 1.21 are opt-in and skip when the ROM is absent (1.21 is not on disc
+   today). Release-specific checks in the same matrix:
+   - empty drive: DFS 1.20 reports "Drive not ready" (or whatever MAME shows
+     for that release), DFS 1.22 keeps waiting and then succeeds when a disc is
+     inserted;
+   - DFS 0.90 treats OSWORD above &7F as &7D and has no service call &12;
+     0.98 onward do not trap and do answer &12;
+   - DFS 1.00 onward: OSGBPB uses direct sector reads (multi-sector &13
+     commands visible in the command trace).
 7. **Pairing diagnostics**: resolve-preset warns for DNFS on `acorn-1770` and
    DFS 2.26 on `acorn-8271`; no warning for matched pairs or unknown ROMs.
 8. **Differential, opt-in**: the same boot-and-`*CAT` scenario through MAME
