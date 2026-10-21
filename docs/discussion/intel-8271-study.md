@@ -373,9 +373,10 @@ ROMs are copyright and none were copied or committed.
 
 The authority here is J.G. Harston's version history and release table:
 https://mdfs.net/System/ROMs/Filing/Disk/Acorn/DFS.txt and
-https://mdfs.net/System/ROMs/Filing/Disk/Acorn/versions. The 8271 releases
-(all BBC B; the table says "B/B+", the B+ having been designed to take either
-chip) are:
+https://mdfs.net/System/ROMs/Filing/Disk/Acorn/versions. The 8271 releases are
+below. Harston's table lists the machine as "B/B+", but the B+ has its WD1770
+built in and cannot take an 8271, so in practice the 8271 releases apply to the
+Model B only:
 
 | Release | FDC | ROM contents | Notes that matter to us |
 |---|---|---|---|
@@ -385,7 +386,7 @@ chip) are:
 | DFS 1.20 | 8271 | DFS 1.20 + NFS 3.60 + TUBE 1.20? (16 KB) | Executed code entered with A = 1; "Go? (Y/N)". |
 | DFS 1.21 | 8271 | DFS 1.21 + NFS 3.60 (16 KB) | Never returns "Drive not ready": loops until ready or another error (for 3.5" drives). |
 | DFS 1.22 | 8271 | DFS 1.21 + NFS 3.62 (16 KB) | Utilities use the stack instead of a page below PAGE. |
-| DFS 2.00 onward | 1770 | DFS 2.xx + TUBE (+ SRAM) | 2.26 is the last B/B+ release and is the one Beebium bundles. 2.20's Shift-Z Break "emulates the 8271" (out of scope). |
+| DFS 2.00 onward | 1770 | DFS 2.xx + TUBE (+ SRAM) | 2.26 is the last release for the Model B (1770 upgrade) and B+, and is the one Beebium bundles. 2.20's Shift-Z Break "emulates the 8271" (out of scope). |
 
 "DNFS" is the informal name for exactly the combined 1.xx ROMs (all carry the
 header title "DFS,NET" and version byte &83, so the header alone cannot tell
@@ -400,7 +401,11 @@ The rule for the manifest is clean: **0.9x and 1.xx are 8271-only, 2.xx are
 #### What is on disc
 
 Identified from each image's header (title, version byte, service entry) and its
-own `*HELP` version strings:
+own `*HELP` version strings. The four 8271-era releases found locally are now
+bundled in `roms/`, named `<vendor>-<name>_<major>_<minor>.rom` with the
+combined ROMs named by their DFS component version, as MAME does:
+`acorn-dfs_0_90.rom`, `acorn-dfs_0_98.rom`, `acorn-dnfs_1_00.rom` and
+`acorn-dnfs_1_20.rom`. Each was checked against the SHA-1 below after copying.
 
 | Release | Where | Size | SHA-1 | Header | Version strings |
 |---|---|---|---|---|---|
@@ -418,7 +423,9 @@ Its `*HELP` string reads "DFS 1.22"; Harston's table lists that release's DFS
 component as 1.21, so the string and the table disagree by one in the DFS
 component only. Either way it is the 1.22 release, it inherits 1.21's
 loop-until-ready behaviour, and it is 8271-only. Documentation should call it
-"Acorn DFS 1.22 (DFS + NFS 3.62)". The file name stays as it is.
+"Acorn DFS 1.22 (DFS + NFS 3.62)". The file keeps its name,
+`acorn-dnfs_3_02.rom`, for compatibility with existing presets and docs; under
+the naming used for the other combined ROMs it would be `acorn-dnfs_1_22.rom`.
 
 Notes:
 
@@ -428,9 +435,8 @@ Notes:
   ROMs). No DFS 1.21 release is on disc, so the 1.21 row of the test matrix is
   opt-in and currently unrunnable here; 1.22 covers the same loop-until-ready
   behaviour.
-- Because `acorn-dnfs_3_02.rom` is already in the repository, an 8271 boot test
-  with DFS 1.22 can run in CI. DFS 0.90, 0.98, 1.00 and 1.20 tests are opt-in and
-  skip when the ROM is absent.
+- With DFS 0.90, 0.98, 1.00, 1.20 and 1.22 all bundled, the 8271 boot matrix for
+  those releases runs in CI. Only DFS 1.21 stays opt-in.
 
 #### Drive-ready semantics across releases
 
@@ -579,9 +585,9 @@ touching the five socketed hardware policies and the tests that call `reset()`.
 ### 8.7 Which machines accept it
 
 All five socketed variants get it automatically from the registry: Model B,
-ROM/RAM board, ATPL Sidewise, Watford ROM/RAM and Integra-B. The B+ has a
-built-in WD1770 with no socket; an 8271 option there was never manufactured, so
-leave it out of scope (issue #87 says optional).
+ROM/RAM board, ATPL Sidewise, Watford ROM/RAM and Integra-B, all of them Model
+Bs. The 8271 applies to the Model B only: the B+ has its WD1770 built in and
+cannot take an 8271.
 
 ### 8.8 ROM pairing
 
@@ -666,9 +672,9 @@ Test-first throughout; targeted tests per commit, full suites left to CI.
    SSD, DSD and HFE.
 6. **DFS boot and catalogue matrix**: a Model B with `acorn-8271` boots and
    `*CAT`s `Disc016-Boffin.ssd`, then a `SAVE` / `LOAD` round trip, for each
-   release. DFS 1.22 (the bundled ROM) runs in CI; DFS 0.90, 0.98, 1.00, 1.20
-   and 1.21 are opt-in and skip when the ROM is absent (1.21 is not on disc
-   today). Release-specific checks in the same matrix:
+   release. DFS 0.90, 0.98, 1.00, 1.20 and 1.22 are bundled and run in CI; DFS
+   1.21 is opt-in and skips when the ROM is absent (it is not on disc today).
+   Release-specific checks in the same matrix:
    - empty drive: DFS 1.20 reports "Drive not ready" (or whatever MAME shows
      for that release), DFS 1.22 keeps waiting and then succeeds when a disc is
      inserted;
@@ -697,4 +703,4 @@ Test-first throughout; targeted tests per commit, full suites left to CI.
 3. Extracting the write-back flush policy from `WD1770` first (section 8.3).
 4. The ROM manifest: warning-only and keyed by SHA-1 (section 8.8).
 5. Whether LOAD HEAD lights both drives' activity indicators (section 5 item 6).
-6. B+ out of scope.
+6. B+ out of scope: it cannot take an 8271 (confirmed).

@@ -22,6 +22,17 @@ ROMs use the format `<supplier>-<product>_<version>.rom`:
 | `acorn-mos_2_0.rom` | MOS 2.0 for BBC Model B+ | 16 KB |
 | `bbc-basic_2.rom` | BBC BASIC II | 16 KB |
 | `acorn-dfs_2_26.rom` | DFS 2.26 (1770) | 16 KB |
+| `acorn-dfs_0_90.rom` | Acorn DFS 0.90 (8271) | 8 KB |
+| `acorn-dfs_0_98.rom` | Acorn DFS 0.98 (8271) | 8 KB |
+| `acorn-dnfs_1_00.rom` | Acorn DFS 1.00 + NFS 3.40 (8271) | 16 KB |
+| `acorn-dnfs_1_20.rom` | Acorn DFS 1.20 + NFS 3.60 (8271) | 16 KB |
+| `acorn-dnfs_3_02.rom` | Acorn DFS 1.22 + NFS 3.62 (8271) | 16 KB |
+
+The combined DFS and NFS ROMs ("DNFS") are named by their DFS component
+version. `acorn-dnfs_3_02.rom` is the exception: it is the DFS 1.22 release,
+and keeps its older name for compatibility with existing presets and docs.
+The 0.9x and 1.xx DFS releases need an Intel 8271 disc controller
+(`--fdc acorn-8271`); DFS 2.26 needs the WD1770 (`--fdc acorn-1770`).
 
 ### Default ROMs per Machine
 
