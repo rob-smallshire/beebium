@@ -360,6 +360,14 @@ public:
         return head_position_ == 0 && pulse_sub_position_ == 0;
     }
 
+    // The drive's INDEX output as a level: asserted for about the first 4ms
+    // of each 200ms revolution. With no disc the sensor's light path is open,
+    // so INDEX stays asserted and never gives an edge.
+    bool index_level() const {
+        if (!disc_) return true;
+        return head_position_ < track_length() * 4 / 200;
+    }
+
     // Flush any dirty tracks on the current disc. When sync_to_disk is set,
     // also force the host file out of the OS cache to the storage device
     // (used by the controller's write-inactivity flush so a settled save is

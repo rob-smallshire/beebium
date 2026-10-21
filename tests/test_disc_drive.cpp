@@ -164,6 +164,27 @@ TEST_CASE("DiscDrive activity LED needs both select and motor", "[disc][pulsedri
     CHECK(led() == 0);
 }
 
+TEST_CASE("DiscDrive index level lasts about 4ms per revolution", "[disc][pulsedrive][index]") {
+    DiscDrive drive;
+    drive.insert(make_test_disc());
+    uint32_t asserted = 0;
+    for (uint32_t i = 0; i < drive.track_length(); ++i) {
+        if (drive.index_level()) ++asserted;
+        drive.advance_head();
+    }
+    // 3125 bytes of 64us per 200ms revolution: 4ms is 62 bytes.
+    CHECK(asserted == 62);
+    CHECK(drive.index_level());   // back at the start of the track
+}
+
+TEST_CASE("DiscDrive index level is held with no disc", "[disc][pulsedrive][index]") {
+    DiscDrive drive;
+    for (int i = 0; i < 5000; ++i) {
+        CHECK(drive.index_level());
+        drive.advance_head();
+    }
+}
+
 TEST_CASE("DiscDrive select does not start the motor", "[disc][pulsedrive]") {
     DiscDrive drive;
     drive.set_selected(true);

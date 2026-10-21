@@ -441,6 +441,10 @@ add_executable(test_wd1770 test_wd1770.cpp)
 target_link_libraries(test_wd1770 PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_wd1770)
 
+add_executable(test_intel8271 test_intel8271.cpp)
+target_link_libraries(test_intel8271 PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_intel8271)
+
 # MC6854 ADLC tests
 add_executable(test_mc6854 test_mc6854.cpp)
 target_link_libraries(test_mc6854 PRIVATE beebium_core Catch2::Catch2WithMain)
