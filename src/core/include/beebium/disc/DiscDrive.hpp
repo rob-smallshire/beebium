@@ -410,7 +410,9 @@ private:
 
     // The front LED is lit by the select line, and only while the drive
     // turns: a DFS may leave a drive selected between commands, and the
-    // motor may turn a drive that is not selected.
+    // motor may turn a drive that is not selected. This models the "in use"
+    // jumper setting Acorn shipped its drives with (selected and spinning);
+    // select alone would leave the LED lit after every 1770 DFS command.
     void update_activity_led() {
         bool lit = selected_ && motor_on_;
         if (indicators_ && lit != activity_led_lit_) {
