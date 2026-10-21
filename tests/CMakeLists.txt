@@ -445,6 +445,10 @@ add_executable(test_intel8271 test_intel8271.cpp)
 target_link_libraries(test_intel8271 PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_intel8271)
 
+add_executable(test_intel8271_machine test_intel8271_machine.cpp)
+target_link_libraries(test_intel8271_machine PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_intel8271_machine)
+
 # MC6854 ADLC tests
 add_executable(test_mc6854 test_mc6854.cpp)
 target_link_libraries(test_mc6854 PRIVATE beebium_core Catch2::Catch2WithMain)

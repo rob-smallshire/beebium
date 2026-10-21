@@ -14,6 +14,7 @@
 
 #include "beebium/disc/DiscControllerSocket.hpp"
 #include "beebium/disc/Acorn1770DiscController.hpp"
+#include "beebium/disc/Intel8271DiscController.hpp"
 #include "beebium/disc/DiscDrive.hpp"
 #include "beebium/ModelBHardware.hpp"
 #include "beebium/ModelBRomRamBoardHardware.hpp"
@@ -256,4 +257,86 @@ TEMPLATE_TEST_CASE("Socketed Model B variants reset their disc controller by cau
     hardware->soft_reset();
 
     CHECK(causes == std::vector<ResetCause>{ResetCause::PowerOn, ResetCause::Break});
+}
+
+// =============================================================================
+// The Acorn 8271 board
+// =============================================================================
+
+TEST_CASE("Intel8271DiscController decodes the 8271 at &FE80-&FE87, mirrored", "[disc][socket][i8271]") {
+    DiscControllerSocket socket;
+    socket.install(std::make_unique<Intel8271DiscController>());
+    socket.reset(ResetCause::PowerOn);
+
+    SECTION("&FE80 is the readable status register") {
+        // DFS 1.20 tells an 8271 from a 1770 board by bits 1:0 of &FE80.
+        CHECK((socket.read(0x00) & 0x03) == 0x00);
+        CHECK(socket.read(0x00) == 0x00);
+    }
+    SECTION("the data register answers at every DACK address") {
+        socket.write(0x05, 0x41);
+        CHECK(socket.read(0x04) == 0x41);
+        CHECK(socket.read(0x07) == 0x41);
+    }
+    SECTION("the eight registers mirror across the 32-byte window") {
+        socket.write(0x1D, 0x5A);   // &FE9D: data
+        CHECK(socket.read(0x0C) == 0x5A);
+        socket.write(0x08, 0x2C);   // &FE88: command READ DRIVE STATUS
+        CHECK(socket.read(0x10) == 0x10);   // &FE90: status, result ready
+        CHECK(socket.read(0x19) == 0x81);   // &FE99: result
+    }
+    SECTION("peek has no side effects") {
+        socket.write(0x00, 0x2C);
+        CHECK(socket.peek(0x01) == 0x81);
+        CHECK(socket.peek(0x00) == 0x10);   // result still ready
+    }
+}
+
+TEST_CASE("Intel8271DiscController raises NMI for a completion", "[disc][socket][i8271]") {
+    DiscDrive drive_0;
+    DiscDrive drive_1;
+    DiscControllerSocket socket;
+    socket.install(std::make_unique<Intel8271DiscController>());
+    socket.attach_drive(0, &drive_0);
+    socket.attach_drive(1, &drive_1);
+    socket.reset(ResetCause::PowerOn);
+
+    // Seek drive 0 to track 0: with no disc the drive is not ready, so the
+    // command completes with an interrupt.
+    socket.write(0x00, 0x69);
+    socket.write(0x01, 0x00);
+    for (int i = 0; i < 10 && !socket.nmi_pending(); ++i) socket.tick();
+    CHECK(socket.nmi_pending());
+    CHECK(socket.read(0x01) == 0x10);
+    CHECK_FALSE(socket.nmi_pending());
+}
+
+TEST_CASE("Intel8271DiscController identifies its chip", "[disc][socket][i8271]") {
+    DiscControllerSocket socket;
+    socket.install(std::make_unique<Intel8271DiscController>());
+    CHECK(socket.fdc_chip() == "8271");
+    CHECK(socket.controller()->name() == "Acorn 8271");
+}
+
+TEST_CASE("Intel8271DiscController lights only the selected drive's LED", "[disc][socket][i8271][indicators]") {
+    // LOAD HEAD turns both drives, but a drive's LED follows its select line.
+    Indicators indicators;
+    DiscDrive drive_0(indicators, "floppy-0-activity-led", "Drive 0");
+    DiscDrive drive_1(indicators, "floppy-1-activity-led", "Drive 1");
+    DiscControllerSocket socket;
+    socket.install(std::make_unique<Intel8271DiscController>());
+    socket.attach_drive(0, &drive_0);
+    socket.attach_drive(1, &drive_1);
+    socket.reset(ResetCause::PowerOn);
+
+    // WRITE SPECIAL REGISTER &23 = &48: select drive 0, load head
+    socket.write(0x00, 0x3A);
+    socket.write(0x01, 0x23);
+    socket.write(0x01, 0x48);
+
+    indicators.process_pending();
+    CHECK(drive_0.motor_on());
+    CHECK(drive_1.motor_on());
+    CHECK(indicators.get("floppy-0-activity-led") == 255);
+    CHECK(indicators.get("floppy-1-activity-led") == 0);
 }
