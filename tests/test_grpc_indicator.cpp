@@ -547,7 +547,8 @@ TEST_CASE("IndicatorService Subscribe filters by name", "[grpc][indicator]") {
 TEST_CASE("IndicatorService Model B+ disc motor indicator updates", "[grpc][indicator]") {
     IndicatorTestFixtureBPlus fixture;
 
-    // Turn on disc motor for drive 0
+    // Select drive 0 and turn on its motor: the LED needs both
+    fixture.machine().state().memory.disc_drive_0.set_selected(true);
     fixture.machine().state().memory.disc_drive_0.set_motor(true);
 
     // Wait for indicator to become non-zero (polling with timeout for CI reliability)
@@ -569,7 +570,9 @@ TEST_CASE("IndicatorService Model B+ disc motor indicator updates", "[grpc][indi
 TEST_CASE("IndicatorService Model B+ both drives can be active", "[grpc][indicator]") {
     IndicatorTestFixtureBPlus fixture;
 
-    // Turn on both disc motors
+    // Select both drives and turn on both motors: each LED needs both
+    fixture.machine().state().memory.disc_drive_0.set_selected(true);
+    fixture.machine().state().memory.disc_drive_1.set_selected(true);
     fixture.machine().state().memory.disc_drive_0.set_motor(true);
     fixture.machine().state().memory.disc_drive_1.set_motor(true);
 

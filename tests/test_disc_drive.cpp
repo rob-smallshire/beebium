@@ -123,6 +123,51 @@ TEST_CASE("DiscDrive motor control", "[disc][pulsedrive]") {
     CHECK_FALSE(drive.motor_on());
 }
 
+TEST_CASE("DiscDrive select control", "[disc][pulsedrive]") {
+    DiscDrive drive;
+    CHECK_FALSE(drive.selected());
+
+    drive.set_selected(true);
+    CHECK(drive.selected());
+
+    drive.set_selected(false);
+    CHECK_FALSE(drive.selected());
+}
+
+// A drive's front LED is lit by its select line, and only while the drive
+// is turning: a motor shared by both drives must not light the deselected
+// drive's LED, and a select line a DFS leaves asserted between commands must
+// not keep the LED lit once the motor stops.
+TEST_CASE("DiscDrive activity LED needs both select and motor", "[disc][pulsedrive][indicators]") {
+    Indicators indicators;
+    DiscDrive drive(indicators, "floppy-0-activity-led", "Drive 0");
+    auto led = [&] {
+        indicators.process_pending();
+        return indicators.get("floppy-0-activity-led");
+    };
+
+    drive.set_motor(true);
+    CHECK(led() == 0);
+
+    drive.set_selected(true);
+    CHECK(led() == 255);
+
+    drive.set_motor(false);
+    CHECK(led() == 0);
+
+    drive.set_motor(true);
+    CHECK(led() == 255);
+
+    drive.set_selected(false);
+    CHECK(led() == 0);
+}
+
+TEST_CASE("DiscDrive select does not start the motor", "[disc][pulsedrive]") {
+    DiscDrive drive;
+    drive.set_selected(true);
+    CHECK_FALSE(drive.motor_on());
+}
+
 // =============================================================================
 // Pulse-Level Access
 // =============================================================================

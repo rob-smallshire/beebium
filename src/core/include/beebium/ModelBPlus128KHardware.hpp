@@ -395,6 +395,8 @@ private:
                 controller.set_drive(1);
             }
             // If neither bit set, drive selection is indeterminate
+            drive0.set_selected((value & 0x01) != 0);
+            drive1.set_selected((value & 0x02) != 0);
 
             // Bit 2: Side select (propagated to FDC and drives)
             uint8_t side = (value & 0x04) ? 1 : 0;
@@ -624,6 +626,8 @@ public:
         vdu_latch_ = false;
         disc_controller.reset();
         disc_control_ = 0;
+        disc_drive_0.set_selected(false);
+        disc_drive_1.set_selected(false);
         nmi_enabled_ = false;
         econet_socket.reset();
         serial_socket.reset();
@@ -645,6 +649,8 @@ public:
         addressable_latch.reset();
         disc_controller.reset();
         disc_control_ = 0;
+        disc_drive_0.set_selected(false);
+        disc_drive_1.set_selected(false);
         nmi_enabled_ = false;
         econet_socket.reset();
         serial_socket.reset();

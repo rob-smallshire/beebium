@@ -139,6 +139,9 @@ public:
         wd1770_.reset();
         control_ = 0;
         nmi_enabled_ = false;
+        for (DiscDrive* drive : drives_) {
+            if (drive) drive->set_selected(false);
+        }
     }
 
     // =========================================================================
@@ -153,6 +156,9 @@ public:
     }
 
     void detach_drives() override {
+        for (DiscDrive* drive : drives_) {
+            if (drive) drive->set_selected(false);
+        }
         drives_[0] = nullptr;
         drives_[1] = nullptr;
         wd1770_.attach_drive(0, nullptr);
@@ -217,6 +223,8 @@ private:
             wd1770_.set_drive(1);
         }
         // If neither bit set, drive selection is indeterminate
+        if (drives_[0]) drives_[0]->set_selected((value & 0x01) != 0);
+        if (drives_[1]) drives_[1]->set_selected((value & 0x02) != 0);
 
         // Bit 2: Side select (propagated to both FDC and drives)
         uint8_t side = (value & 0x04) ? 1 : 0;

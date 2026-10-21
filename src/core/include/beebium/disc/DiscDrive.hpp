@@ -267,15 +267,29 @@ public:
                 motor_off_since_ = clock::now();
             }
             motor_on_ = on;
-            if (indicators_) {
-                indicators_->set(activity_led_id_, on ? 255 : 0);
-            }
+            update_activity_led();
             notify(DiscDriveEvent{on ? DiscDriveEventType::MotorOn
                                      : DiscDriveEventType::MotorOff});
         }
     }
 
     bool motor_on() const { return motor_on_; }
+
+    // =========================================================================
+    // Drive Select
+    // =========================================================================
+
+    // The drive's select line, driven by the controller board. Selecting a
+    // drive does not turn it: on a shared cable the motor line is common to
+    // both drives, so motor and select are separate inputs.
+    void set_selected(bool selected) {
+        if (selected_ != selected) {
+            selected_ = selected;
+            update_activity_led();
+        }
+    }
+
+    bool selected() const { return selected_; }
 
     // Check if motor has been off for at least the specified duration
     bool is_quiescent(std::chrono::milliseconds min_off) const {
@@ -394,6 +408,17 @@ private:
         return disc;
     }
 
+    // The front LED is lit by the select line, and only while the drive
+    // turns: a DFS may leave a drive selected between commands, and the
+    // motor may turn a drive that is not selected.
+    void update_activity_led() {
+        bool lit = selected_ && motor_on_;
+        if (indicators_ && lit != activity_led_lit_) {
+            indicators_->set(activity_led_id_, lit ? 255 : 0);
+        }
+        activity_led_lit_ = lit;
+    }
+
     void notify(const DiscDriveEvent& event) const {
         if (observer_) {
             observer_(event);
@@ -431,6 +456,8 @@ private:
     uint8_t current_track_ = 0;
     uint8_t selected_side_ = 0;
     bool motor_on_ = false;
+    bool selected_ = false;
+    bool activity_led_lit_ = false;
     clock::time_point motor_off_since_ = clock::now();
 
     // Head position within current track
