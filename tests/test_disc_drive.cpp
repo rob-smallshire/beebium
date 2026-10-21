@@ -11,10 +11,12 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include <beebium/disc/DiscDrive.hpp>
+#include <beebium/disc/DiscWriteBack.hpp>
 #include <beebium/disc/formats/SsdFormatHandler.hpp>
 #include <beebium/disc/TrackBuilder.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <vector>
@@ -298,6 +300,60 @@ TEST_CASE("DiscDrive flush_if_dirty writes back every dirty track",
     // A second flush with nothing dirty is a no-op.
     drive.flush_if_dirty();
     CHECK(flushed_tracks.size() == 1);
+}
+
+TEST_CASE("DiscWriteBack flushes every drive once writes fall idle",
+          "[disc][pulsedrive][flush]") {
+    // The write-inactivity flush every disc controller owns: writes reach the
+    // host image a short settle time after they stop, well before the motor
+    // spins down or a safe eject could run.
+    DiscDrive drive_0;
+    DiscDrive drive_1;
+    std::array<DiscDrive*, 2> drives{&drive_0, &drive_1};
+    drive_0.insert(make_test_disc());
+    drive_1.insert(make_test_disc());
+    drive_0.write_pulses(0x12345678);
+    drive_1.write_pulses(0x12345678);
+
+    DiscWriteBack write_back;
+    write_back.note_write();
+
+    for (int i = 1; i < DiscWriteBack::FLUSH_IDLE_TICKS; ++i) write_back.tick(drives);
+    CHECK(drive_0.disc()->has_dirty_tracks());
+    CHECK(drive_1.disc()->has_dirty_tracks());
+
+    write_back.tick(drives);
+    CHECK_FALSE(drive_0.disc()->has_dirty_tracks());
+    CHECK_FALSE(drive_1.disc()->has_dirty_tracks());
+}
+
+TEST_CASE("DiscWriteBack restarts the settle time on every write",
+          "[disc][pulsedrive][flush]") {
+    DiscDrive drive;
+    std::array<DiscDrive*, 2> drives{&drive, nullptr};
+    drive.insert(make_test_disc());
+
+    DiscWriteBack write_back;
+    drive.write_pulses(0x12345678);
+    write_back.note_write();
+    for (int i = 0; i < DiscWriteBack::FLUSH_IDLE_TICKS - 10; ++i) write_back.tick(drives);
+    write_back.note_write();
+    for (int i = 0; i < DiscWriteBack::FLUSH_IDLE_TICKS - 10; ++i) write_back.tick(drives);
+    CHECK(drive.disc()->has_dirty_tracks());
+
+    for (int i = 0; i < 10; ++i) write_back.tick(drives);
+    CHECK_FALSE(drive.disc()->has_dirty_tracks());
+}
+
+TEST_CASE("DiscWriteBack does nothing without a write", "[disc][pulsedrive][flush]") {
+    DiscDrive drive;
+    std::array<DiscDrive*, 2> drives{&drive, nullptr};
+    drive.insert(make_test_disc());
+    drive.write_pulses(0x12345678);  // a write the controller never noted
+
+    DiscWriteBack write_back;
+    for (int i = 0; i < 2 * DiscWriteBack::FLUSH_IDLE_TICKS; ++i) write_back.tick(drives);
+    CHECK(drive.disc()->has_dirty_tracks());
 }
 
 TEST_CASE("DiscDrive flushes a dirty track when the head steps away",

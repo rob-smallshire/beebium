@@ -14,6 +14,7 @@
 
 #include "IbmDiscFormat.hpp"
 #include "DiscDrive.hpp"
+#include "DiscWriteBack.hpp"
 
 #include <array>
 #include <cstdint>
@@ -127,21 +128,7 @@ public:
     // =========================================================================
 
     void tick() {
-        // Write-back flush on write inactivity.
-        //
-        // Once disc writes stop for a short period, flush dirty tracks to the
-        // host image. This is deliberately independent of motor spin-down
-        // (~2 seconds) and of eject quiescence: it fires promptly (well within
-        // the motor-on window) so saved data reaches the host file quickly, and
-        // because it always completes long before the motor-off/eject path can
-        // run, it cannot race a concurrent eject for the same disc.
-        if (writes_pending_flush_) {
-            if (++write_idle_ticks_ >= FLUSH_IDLE_TICKS) {
-                flush_dirty_drives(/*sync_to_disk=*/true);
-                writes_pending_flush_ = false;
-                write_idle_ticks_ = 0;
-            }
-        }
+        write_back_.tick(drives_);
 
         // Motor spindown when idle
         if (!(status_ & STATUS_BUSY)) {
@@ -341,10 +328,6 @@ private:
     static constexpr int US_PER_MFM_BYTE = 32;   // 32us per MFM byte at 250kbps
     static constexpr int MOTOR_OFF_DELAY_TICKS = 2'000'000;
     static constexpr int SPIN_UP_DELAY_TICKS = 1'200'000;
-    // Flush dirty tracks after this much write inactivity (~250ms at 1MHz).
-    // Much shorter than MOTOR_OFF_DELAY_TICKS so writes reach the host file
-    // promptly and always before the motor-off/eject path can run.
-    static constexpr int FLUSH_IDLE_TICKS = 250'000;
     static constexpr int MAX_INDEX_REVOLUTIONS = 5;  // RNF after 5 revolutions
 
     int byte_period() const { return is_double_density() ? US_PER_MFM_BYTE : US_PER_FM_BYTE; }
@@ -416,7 +399,7 @@ private:
         if (!drive) return;
         uint32_t pulses = ibm_disc_format::fm_to_2us_pulses(clocks, data);
         drive->write_pulses(pulses);
-        note_disc_write();
+        write_back_.note_write();
         bool index = drive->advance_head();
         if (index) on_index_pulse();
     }
@@ -434,7 +417,7 @@ private:
             word = (word & 0xFFFF0000) | static_cast<uint32_t>(mfm_pulses);
         }
         drive->write_pulses(word);
-        note_disc_write();
+        write_back_.note_write();
         bool index = drive->advance_head_half();
         if (index) on_index_pulse();
     }
@@ -1197,20 +1180,6 @@ private:
         return drives_[selected_drive_];
     }
 
-    // Record that a byte was just written to the disc, arming the write-back
-    // inactivity timer (see tick()).
-    void note_disc_write() {
-        writes_pending_flush_ = true;
-        write_idle_ticks_ = 0;
-    }
-
-    // Flush dirty tracks on every attached drive to their host images.
-    void flush_dirty_drives(bool sync_to_disk) {
-        for (DiscDrive* drive : drives_) {
-            if (drive) drive->flush_if_dirty(sync_to_disk);
-        }
-    }
-
     void spin_up() {
         if (!motor_on_) {
             motor_on_ = true;
@@ -1269,9 +1238,8 @@ private:
     bool spin_up_delay_enabled_ = true;
     int spin_up_delay_ = 0;
 
-    // Write-back inactivity timer (independent of motor spin-down)
-    bool writes_pending_flush_ = false;
-    int write_idle_ticks_ = 0;
+    // Flushes written tracks once writes settle, independent of the motor
+    DiscWriteBack write_back_;
 
     // Index pulse counting
     int index_count_ = 0;
