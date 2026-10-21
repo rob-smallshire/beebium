@@ -228,10 +228,11 @@ Texas Instruments SN76489 emulation with:
 
 ### Disc Controller (`devices/` + `docs/disc-subsystem.md`)
 
-WD1770 controller with:
-- Type I-IV command set
-- SSD/DSD image format support
-- Automatic format detection
+Two controllers for the Model B's FDC socket, chosen with `--fdc`:
+- Intel 8271 (`acorn-8271`): the original Model B controller, FM only, for DFS 0.90 to 1.22; modelled on the reverse-engineered chip behaviour
+- WD1770 (`acorn-1770`): Type I-IV command set, for DFS 2.xx; built into the B+
+- SSD/DSD/HFE image formats with automatic format detection
+- A DFS ROM manifest warns when a fitted DFS needs the other controller
 
 ## Documentation
 
@@ -312,7 +313,7 @@ Complete transcripts of BBC Micro documentation:
 - 6845 CRTC with display timing
 - Video ULA with all display modes (0-7)
 - SN76489 sound chip
-- WD1770 disc controller with SSD/DSD support
+- Intel 8271 and WD1770 disc controllers with SSD/DSD/HFE support
 - Keyboard matrix with type-ahead
 - Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger
 - gRPC service layer (17 services)
