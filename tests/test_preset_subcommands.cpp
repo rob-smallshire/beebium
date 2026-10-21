@@ -1288,13 +1288,14 @@ TEST_CASE("shipped system presets load, validate, and boot",
     struct PresetCase {
         std::string executable;
         std::string preset_id;
-        bool expect_dfs;  // disc-equipped (preset) or integral (B+)
+        std::string dfs_rom;  // disc-equipped (preset) or integral (B+); empty: none
     };
     const std::vector<PresetCase> cases = {
-        {"beebium-model-b",        "model-b",             false},  // bare cassette
-        {"beebium-model-b",        "model-b-disc",        true},   // 1770 + DFS via preset
-        {"beebium-model-b-romram", "model-b-romram-disc", true},   // 1770 + DFS via preset
-        {"beebium-model-b-plus",   "model-b-plus",        true},   // integral DFS
+        {"beebium-model-b",        "model-b",             ""},                    // bare cassette
+        {"beebium-model-b",        "model-b-disc",        "acorn-dfs_2_26.rom"},  // 1770 + DFS via preset
+        {"beebium-model-b",        "model-b-8271-disc",   "acorn-dnfs_1_20.rom"}, // 8271 + DFS 1.20 via preset
+        {"beebium-model-b-romram", "model-b-romram-disc", "acorn-dfs_2_26.rom"},  // 1770 + DFS via preset
+        {"beebium-model-b-plus",   "model-b-plus",        "acorn-dfs_2_26.rom"},  // integral DFS
     };
 
     for (const auto& c : cases) {
@@ -1312,8 +1313,8 @@ TEST_CASE("shipped system presets load, validate, and boot",
             "\" --duration 0");
         INFO("stderr: " << result.stderr_output);
         REQUIRE(result.exit_code == 0);
-        if (c.expect_dfs) {
-            REQUIRE(result.stdout_output.find("acorn-dfs_2_26.rom") != std::string::npos);
+        if (!c.dfs_rom.empty()) {
+            REQUIRE(result.stdout_output.find(c.dfs_rom) != std::string::npos);
         }
         remove_quietly(screenshot_filepath);
     }

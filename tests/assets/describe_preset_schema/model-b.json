@@ -119,6 +119,12 @@
             "label": "Acorn 1770",
             "device": "WD1770",
             "description": "Standard Acorn disc controller upgrade for BBC Model B"
+          },
+          {
+            "id": "acorn-8271",
+            "label": "Acorn 8271",
+            "device": "8271",
+            "description": "Original Intel 8271 disc interface for BBC Model B (DFS 0.90-1.22)"
           }
         ]
       },

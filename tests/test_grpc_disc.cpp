@@ -616,6 +616,48 @@ TEST_CASE("DiscService ListAvailableControllers returns available controllers", 
     CHECK(found_acorn_1770);
 }
 
+TEST_CASE("DiscService ListAvailableControllers includes the Acorn 8271", "[grpc][disc][i8271]") {
+    DiscTestFixtureModelB fixture;
+
+    grpc::ClientContext context;
+    beebium::ListAvailableControllersRequest request;
+    beebium::ListAvailableControllersResponse response;
+    REQUIRE(fixture.stub().ListAvailableControllers(&context, request, &response).ok());
+
+    bool found = false;
+    for (const auto& ctrl : response.controllers()) {
+        if (ctrl.id() == "acorn-8271") {
+            found = true;
+            CHECK(ctrl.display_name() == "Acorn 8271");
+            CHECK(ctrl.fdc_chip() == "8271");
+            CHECK_FALSE(ctrl.description().empty());
+        }
+    }
+    CHECK(found);
+}
+
+TEST_CASE("DiscService installs the Acorn 8271 in a Model B", "[grpc][disc][i8271]") {
+    DiscTestFixtureModelB fixture;
+    {
+        grpc::ClientContext context;
+        beebium::InstallDiscControllerRequest request;
+        request.set_controller_id("acorn-8271");
+        beebium::InstallDiscControllerResponse response;
+        REQUIRE(fixture.stub().InstallDiscController(&context, request, &response).ok());
+        CHECK(response.success());
+        CHECK(response.controller_type() == "Acorn 8271");
+    }
+    {
+        grpc::ClientContext context;
+        beebium::GetDriveStatusRequest request;
+        beebium::GetDriveStatusResponse response;
+        fixture.stub().GetDriveStatus(&context, request, &response);
+        CHECK(response.has_disc_controller());
+        CHECK(response.installed_controller_id() == "acorn-8271");
+        CHECK(response.drives_size() == 2);
+    }
+}
+
 // ============================================================================
 // InstallDiscController tests
 // ============================================================================

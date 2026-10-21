@@ -1531,6 +1531,29 @@ TEST_CASE("describe-preset-schema: Model B fdc_socket has acorn-1770 option", "[
     REQUIRE(found_acorn_1770);
 }
 
+TEST_CASE("describe-preset-schema: Model B fdc_socket has acorn-8271 option", "[cli][describe-preset-schema][json]") {
+    auto output = capture_describe_preset_schema_output<MachineType>();
+    auto json = nlohmann::json::parse(output);
+
+    nlohmann::json storage;
+    for (const auto& section : json["sections"]) {
+        if (section.contains("type") && section["type"] == "storage") {
+            storage = section;
+            break;
+        }
+    }
+
+    bool found = false;
+    for (const auto& option : storage["fdc_socket"]["options"]) {
+        if (option["id"] == "acorn-8271") {
+            found = true;
+            CHECK(option["label"] == "Acorn 8271");
+            CHECK(option["device"] == "8271");
+        }
+    }
+    REQUIRE(found);
+}
+
 TEST_CASE("describe-preset-schema: storage section has floppy_drives", "[cli][describe-preset-schema][json]") {
     auto output = capture_describe_preset_schema_output<MachineType>();
     auto json = nlohmann::json::parse(output);

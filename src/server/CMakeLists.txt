@@ -334,12 +334,13 @@ add_custom_command(TARGET beebium-model-b POST_BUILD
         "${BEEBIUM_ROM_DIR}/acorn-mos_2_0.rom"
         "${BEEBIUM_ROM_DIR}/bbc-basic_2.rom"
         "${BEEBIUM_ROM_DIR}/acorn-dfs_2_26.rom"
+        "${BEEBIUM_ROM_DIR}/acorn-dnfs_1_20.rom"
         # Every sideways ROM any shipped preset references (see the add_*_preset
         # --sideways NN:rom:... lines above) must be copied here, or a dev-tree /
         # BEEBIUM_SERVERS_DIRPATH launch of that preset fails with "ROM file not
         # found" (installed bundles ship all *.rom, so this bites the build tree
-        # only). Currently: DFS 2.26, ANFS 4.18, ADFS 1.30, plus the Integra-B's
-        # IBOS, a machine default ROM. (Tube coprocessor
+        # only). Currently: DFS 2.26, DFS 1.20 (8271), ANFS 4.18, ADFS 1.30,
+        # plus the Integra-B's IBOS, a machine default ROM. (Tube coprocessor
         # ROMs are NOT here -- they ship inside each coprocessor plugin's roms/
         # directory and load via the extension, not the ROM directory.)
         "${BEEBIUM_ROM_DIR}/acorn-anfs_4_18.rom"
@@ -358,6 +359,11 @@ add_system_preset(beebium-model-b "model-b" "Model B" "1981-12"
 add_system_preset(beebium-model-b "model-b-disc" "Model B (Disc)" "1982"
     DESCRIPTION "32K Model B, 1770 DFS"
     --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom)
+# The Model B's original disc interface: the Intel 8271 with Acorn DFS 1.20
+# (combined with NFS 3.60), for software written for the 8271 era.
+add_system_preset(beebium-model-b "model-b-8271-disc" "Model B (8271 Disc)" "1982"
+    DESCRIPTION "32K Model B, 8271 DFS 1.20"
+    --fdc acorn-8271 --sideways slot=14:type=rom:image=acorn-dnfs_1_20.rom)
 add_system_preset(beebium-model-b-romram "model-b-romram-disc"
     "Model B with ROM/RAM Board (Disc)" "1984"
     DESCRIPTION "Model B, ROM/RAM board, 1770 DFS"

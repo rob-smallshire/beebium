@@ -1,4 +1,4 @@
-// Copyright 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -15,6 +15,7 @@
 
 #include "DiscControllerInterface.hpp"
 #include "Acorn1770DiscController.hpp"
+#include "Intel8271DiscController.hpp"
 
 #include <array>
 #include <memory>
@@ -56,8 +57,10 @@ public:
         if (id == "acorn-1770") {
             return std::make_unique<Acorn1770DiscController>();
         }
+        if (id == "acorn-8271") {
+            return std::make_unique<Intel8271DiscController>();
+        }
         // Future controllers:
-        // if (id == "acorn-8271") return std::make_unique<Intel8271DiscController>();
         // if (id == "opus-ddos") return std::make_unique<OpusDdosDiscController>();
         return nullptr;
     }
@@ -70,12 +73,18 @@ public:
 private:
     // Static registry of available controllers
     // Note: Order matters - first entry is the default recommendation
-    static constexpr std::array<ControllerTypeEntry, 1> registry_ = {{
+    static constexpr std::array<ControllerTypeEntry, 2> registry_ = {{
         {
             .id = "acorn-1770",
             .display_name = "Acorn 1770",
             .fdc_chip = "WD1770",
             .description = "Standard Acorn disc controller upgrade for BBC Model B"
+        },
+        {
+            .id = "acorn-8271",
+            .display_name = "Acorn 8271",
+            .fdc_chip = "8271",
+            .description = "Original Intel 8271 disc interface for BBC Model B (DFS 0.90-1.22)"
         }
         // Future controllers will be added here
     }};

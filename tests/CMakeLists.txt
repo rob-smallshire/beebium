@@ -1004,6 +1004,14 @@ target_compile_definitions(test_disc_integration PRIVATE
     BEEBIUM_DISCS_DIR="${BEEBIUM_DISCS_DIR}"
 )
 
+add_executable(test_intel8271_dfs test_intel8271_dfs.cpp)
+target_link_libraries(test_intel8271_dfs PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_intel8271_dfs PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    BEEBIUM_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+)
+catch_discover_tests(test_intel8271_dfs)
+
 # Boot trace tests (uses ProgramCounterHistogram for instruction profiling)
 add_executable(test_boot_trace test_boot_trace.cpp)
 target_link_libraries(test_boot_trace PRIVATE beebium_core Catch2::Catch2WithMain)
