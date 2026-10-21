@@ -2588,6 +2588,86 @@ TEST_CASE("resolve-preset: a bare hard-disc name found nowhere is a warning",
     CHECK(out.at("diagnostics")[0].at("path") == "/extensions/1/config/image");
 }
 
+namespace {
+
+// The resolve-preset diagnostics at one path.
+std::vector<nlohmann::json> diagnostics_at(const nlohmann::json& out, const std::string& path) {
+    std::vector<nlohmann::json> found;
+    for (const auto& d : out.at("diagnostics")) {
+        if (d.at("path") == path) found.push_back(d);
+    }
+    return found;
+}
+
+std::string disc_preset(const std::string& fdc, const std::string& rom) {
+    return R"({"model": "model-b", "storage": {"fdc_socket": {"id": ")" + fdc +
+           R"("}}, "sideways_bank": {"slots": [{"slot": 14, "type": "rom", "image_uri": ")" +
+           rom + R"("}]}})";
+}
+
+}  // namespace
+
+TEST_CASE("resolve-preset: an 8271 DFS with the 1770 controller is a warning at the ROM",
+          "[integration][preset][resolve-preset][rom-manifest]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "mismatch.preset.beebium";
+    std::ofstream(preset_filepath) << disc_preset("acorn-1770", "acorn-dnfs_1_20.rom");
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    auto found = diagnostics_at(out, "/sideways_bank/slots/0/image_uri");
+    REQUIRE(found.size() == 1);
+    CHECK(found[0].at("severity") == "warning");
+    auto message = found[0].at("message").get<std::string>();
+    CHECK(message.find("DFS 1.20") != std::string::npos);
+    CHECK(message.find("8271") != std::string::npos);
+    CHECK(message.find("WD1770") != std::string::npos);
+}
+
+TEST_CASE("resolve-preset: a 1770 DFS with the 8271 controller is a warning at the ROM",
+          "[integration][preset][resolve-preset][rom-manifest]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "mismatch.preset.beebium";
+    std::ofstream(preset_filepath) << disc_preset("acorn-8271", "acorn-dfs_2_26.rom");
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    auto found = diagnostics_at(out, "/sideways_bank/slots/0/image_uri");
+    REQUIRE(found.size() == 1);
+    CHECK(found[0].at("severity") == "warning");
+    CHECK(found[0].at("message").get<std::string>().find("WD1770") != std::string::npos);
+}
+
+TEST_CASE("resolve-preset: a DFS with no disc controller is a warning at the ROM",
+          "[integration][preset][resolve-preset][rom-manifest]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "nofdc.preset.beebium";
+    std::ofstream(preset_filepath) << disc_preset("none", "acorn-dfs_0_90.rom");
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    auto found = diagnostics_at(out, "/sideways_bank/slots/0/image_uri");
+    REQUIRE(found.size() == 1);
+    CHECK(found[0].at("severity") == "warning");
+    CHECK(found[0].at("message").get<std::string>().find("has none") != std::string::npos);
+}
+
+TEST_CASE("resolve-preset: a DFS matched to its controller has no diagnostics",
+          "[integration][preset][resolve-preset][rom-manifest]") {
+    TempDirectory temp_dir;
+    for (const auto& [fdc, rom] : std::vector<std::pair<std::string, std::string>>{
+             {"acorn-8271", "acorn-dfs_0_90.rom"},
+             {"acorn-8271", "acorn-dnfs_3_02.rom"},
+             {"acorn-1770", "acorn-dfs_2_26.rom"},
+             {"acorn-1770", "bbc-basic_2.rom"}}) {   // not a DFS: not judged
+        INFO(fdc << " " << rom);
+        auto preset_filepath = temp_dir.path() / "match.preset.beebium";
+        std::ofstream(preset_filepath) << disc_preset(fdc, rom);
+        auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+        CHECK(out.at("diagnostics").empty());
+    }
+}
+
 TEST_CASE("resolve-preset: every extension instance is written with an id",
           "[integration][preset][resolve-preset][ids]") {
     TempDirectory temp_dir;
@@ -2858,6 +2938,7 @@ TEST_CASE("a launch from a preset archive takes its discs and ROMs from inside i
     const auto user_dirpath = temp_dir.path() / "user";
     beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
     const std::string document = R"({"model": "model-b",
+        "storage": {"fdc_socket": {"id": "acorn-1770"}},
         "sideways_bank": {"slots": [{"slot": 14, "type": "rom", "image_uri": "roms/dfs.rom"}]},
         "extensions": [
             {"name": "acorn-scsi"},
@@ -2922,6 +3003,7 @@ TEST_CASE("create-preset --from: the copy holds the source's files, not its thum
           "[integration][preset][create-preset][preset_archive]") {
     TempDirectory user_dir;
     const std::string document = R"({"name": "Source", "model": "model-b",
+        "storage": {"fdc_socket": {"id": "acorn-1770"}},
         "sideways_bank": {"slots": [{"slot": 14, "type": "rom", "image_uri": "roms/dfs.rom"}]}})";
     std::ifstream dfs(built_file("roms", "acorn-dfs_2_26.rom"), std::ios::binary);
     beebium::zip::write_zip(

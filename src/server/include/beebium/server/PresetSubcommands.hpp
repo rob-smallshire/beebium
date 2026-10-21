@@ -20,6 +20,7 @@
 #include "beebium/MachineModels.hpp"
 #include "beebium/server/PresetWriter.hpp"
 #include "beebium/server/RomPaths.hpp"
+#include "beebium/server/DfsRomManifest.hpp"
 #include "beebium/disc/DiscControllerRegistry.hpp"
 #include "beebium/disc/DiscLoader.hpp"
 #include <nlohmann/json.hpp>
@@ -1191,6 +1192,7 @@ private:
         apply_rom_defaults(config);
         if (check_bundled_images_exist(config, error, warning)) failed = true;
         check_roms_exist(config, preset, warning);
+        check_dfs_controllers(config, preset, warning);
         check_floppies_exist(config, warning);
 
         std::string write_error;
@@ -1222,12 +1224,7 @@ private:
         check(preset.mos_image_uri ? "/mos_image_uri" : "", config.machine.mos_filepath);
         for (const auto& [slot, image] : config.machine.rom_slots) {
             if (image == EMPTY_SLOT_MARKER) continue;
-            std::string path;
-            for (std::size_t i = 0; i < preset.sideways.size(); ++i) {
-                if (preset.sideways[i].slot == slot) {
-                    path = "/sideways_bank/slots/" + std::to_string(i) + "/image_uri";
-                }
-            }
+            std::string path = sideways_image_path(preset, slot);
             if (image == RAM_SLOT_MARKER) {
                 for (const auto& c : config.machine.sideways_configs) {
                     if (c.slot == slot && !c.image_filepath.empty()) {
@@ -1238,6 +1235,42 @@ private:
             }
             check(path, image);
         }
+    }
+
+    // A known DFS fitted with the other disc controller (or with none) is
+    // reported, not fatal: a DNFS may be fitted for its NFS alone. ROMs that
+    // cannot be read are check_roms_exist's to report.
+    template<typename Warning>
+    static void check_dfs_controllers(const ServerConfig<MachineType>& config,
+                                      const PresetConfig& preset, Warning warning) {
+        using Memory = typename MachineType::Memory;
+        const std::string fitted = fitted_fdc_chip<Memory>(config.machine.fdc_type);
+        for (const auto& [slot, image] : config.machine.rom_slots) {
+            if (image == EMPTY_SLOT_MARKER || image == RAM_SLOT_MARKER) continue;
+            RomPaths::LoadedRom rom;
+            try {
+                rom = RomPaths::load_rom(image, config.launch.reference_container());
+            } catch (const std::exception&) {
+                continue;
+            }
+            const DfsRom* dfs = find_dfs_rom(rom.data);
+            if (!dfs) continue;
+            if (auto complaint = dfs_controller_mismatch(*dfs, fitted)) {
+                warning(sideways_image_path(preset, slot), *complaint);
+            }
+        }
+    }
+
+    // Where the preset names a sideways slot's image, or empty for a slot it
+    // leaves to the model's defaults.
+    static std::string sideways_image_path(const PresetConfig& preset, uint8_t slot) {
+        std::string path;
+        for (std::size_t i = 0; i < preset.sideways.size(); ++i) {
+            if (preset.sideways[i].slot == slot) {
+                path = "/sideways_bank/slots/" + std::to_string(i) + "/image_uri";
+            }
+        }
+        return path;
     }
 
     // A bare name in a parameter declared bundled must name a ROM its plugin

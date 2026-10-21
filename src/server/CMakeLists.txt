@@ -328,24 +328,14 @@ add_custom_target(beebium-servers DEPENDS ${BEEBIUM_SERVERS_DEPS})
 set(ROM_OUTPUT_DIR "${CMAKE_BINARY_DIR}/roms")
 file(MAKE_DIRECTORY ${ROM_OUTPUT_DIR})
 
+# Every bundled ROM, as an installed bundle ships them all, so a dev-tree or
+# BEEBIUM_SERVERS_DIRPATH launch finds any ROM a preset or --sideways names.
+# (Tube coprocessor ROMs are not here: they ship inside each coprocessor
+# plugin's roms/ directory and load via the extension.)
+file(GLOB BUNDLED_ROM_FILEPATHS CONFIGURE_DEPENDS "${BEEBIUM_ROM_DIR}/*.rom")
 add_custom_command(TARGET beebium-model-b POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${BEEBIUM_ROM_DIR}/acorn-mos_1_20.rom"
-        "${BEEBIUM_ROM_DIR}/acorn-mos_2_0.rom"
-        "${BEEBIUM_ROM_DIR}/bbc-basic_2.rom"
-        "${BEEBIUM_ROM_DIR}/acorn-dfs_2_26.rom"
-        "${BEEBIUM_ROM_DIR}/acorn-dnfs_1_20.rom"
-        # Every sideways ROM any shipped preset references (see the add_*_preset
-        # --sideways NN:rom:... lines above) must be copied here, or a dev-tree /
-        # BEEBIUM_SERVERS_DIRPATH launch of that preset fails with "ROM file not
-        # found" (installed bundles ship all *.rom, so this bites the build tree
-        # only). Currently: DFS 2.26, DFS 1.20 (8271), ANFS 4.18, ADFS 1.30,
-        # plus the Integra-B's IBOS, a machine default ROM. (Tube coprocessor
-        # ROMs are NOT here -- they ship inside each coprocessor plugin's roms/
-        # directory and load via the extension, not the ROM directory.)
-        "${BEEBIUM_ROM_DIR}/acorn-anfs_4_18.rom"
-        "${BEEBIUM_ROM_DIR}/acorn-adfs_1_30.rom"
-        "${BEEBIUM_ROM_DIR}/computech-ibos_1_26.rom"
+        ${BUNDLED_ROM_FILEPATHS}
         "${ROM_OUTPUT_DIR}/"
     COMMENT "Copying host ROMs to build directory"
 )

@@ -2175,6 +2175,18 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_preset_paths)
 
+    # The DFS ROM manifest: which disc controller each known DFS needs
+    add_executable(test_dfs_rom_manifest test_dfs_rom_manifest.cpp)
+    target_link_libraries(test_dfs_rom_manifest PRIVATE
+        beebium_server_headers
+        beebium_core
+        Catch2::Catch2WithMain
+    )
+    target_compile_definitions(test_dfs_rom_manifest PRIVATE
+        BEEBIUM_ROM_DIR="${CMAKE_SOURCE_DIR}/roms"
+    )
+    catch_discover_tests(test_dfs_rom_manifest)
+
     # Preset subcommand integration tests
     add_executable(test_preset_subcommands test_preset_subcommands.cpp)
     target_link_libraries(test_preset_subcommands PRIVATE

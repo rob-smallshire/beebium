@@ -25,6 +25,7 @@
 #include "beebium/server/MachineDocument.hpp"
 #include "beebium/server/NvramStore.hpp"
 #include "beebium/server/RomPaths.hpp"
+#include "beebium/server/DfsRomManifest.hpp"
 #include "beebium/extension/CoprocessorExtension.hpp"
 #include "beebium/extension/ExtensionPersistence.hpp"
 #include "beebium/extension/CpuDebugTarget.hpp"
@@ -134,6 +135,13 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
             || !std::has_single_bit(rom_data.size())) {
             std::cerr << "Warning: ROM is " << rom_data.size()
                       << " bytes, expected a power-of-two size up to 16384\n";
+        }
+        if (const DfsRom* dfs = find_dfs_rom(rom_data)) {
+            using Memory = typename std::remove_cvref_t<decltype(machine.state().memory)>;
+            if (auto complaint = dfs_controller_mismatch(
+                    *dfs, fitted_fdc_chip<Memory>(config.machine.fdc_type))) {
+                std::cerr << "Warning: " << *complaint << "\n";
+            }
         }
 
         // Unified API handles slot type configuration and loading together.
