@@ -20,6 +20,9 @@ Useful external documentation for BBC Micro emulation development.
 - **jsbeeb**: https://github.com/mattgodbolt/jsbeeb
   JavaScript BBC Micro emulator used as test oracle for differential testing.
 
+- **beebjit**: https://github.com/scarybeasts/beebjit
+  Chris Evans' BBC Micro emulator. Beebium's Intel 8271 model (`Intel8271.hpp`, GPL-3.0 only) is derived from its `intel_fdc.c`, built from his reverse engineering of the chip: https://scarybeastsecurity.blogspot.com/2020/11/reverse-engineering-forgotten-1970s.html
+
 - **b-em**: https://github.com/stardot/b-em
   Cross-platform BBC Micro emulator with extensive hardware support.
 

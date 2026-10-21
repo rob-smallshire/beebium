@@ -2,13 +2,21 @@
 //
 // This file is part of Beebium.
 //
-// Beebium is free software: you can redistribute it and/or modify it under the terms of the
-// GNU General Public License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version. Beebium is distributed in the hope that it will
-// be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-// FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-// You should have received a copy of the GNU General Public License along with Beebium.
-// If not, see <https://www.gnu.org/licenses/>.
+// This file is derived from the Intel 8271 model in beebjit
+// (https://github.com/scarybeasts/beebjit), file intel_fdc.c, Copyright (C) Chris Evans
+// <scarybeasts@gmail.com>, which is licensed under version 3 of the GNU General Public License
+// (GPL-3.0 only, per beebjit's COPYING). This file is therefore licensed under version 3 of the
+// GNU General Public License only, not "or any later version", unlike the rest of Beebium.
+//
+// The translation to C++ and the Beebium integration are Copyright (C) 2026 Robert Smallshire
+// <robert@smallshire.org.uk>.
+//
+// This file is free software: you can redistribute it and/or modify it under the terms of
+// version 3 of the GNU General Public License as published by the Free Software Foundation. It
+// is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+// implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details. You should have received a copy of the GNU General Public
+// License along with Beebium. If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -32,13 +40,13 @@ namespace beebium {
 // read and write every one of those registers through the special register
 // commands, and some copy protection does.
 //
-// Behaviour follows docs/discussion/intel-8271-study.md, which compares the
-// emulations and records what the real chip does where the evidence settles
-// it. The principal references are beebjit's 8271 model by Chris Evans, built
-// from a reading of the chip's program ROM and checked against a real Model
-// B, and his write-up "Reverse engineering a forgotten 1970s Intel dual core
-// beast: 8271" (2020). Where the study records an assumption, a test named
-// for it pins the choice.
+// The model is derived from beebjit's 8271 model by Chris Evans, which he
+// built from his reading of the chip's program ROM and checked against a real
+// Model B; see also his write-up "Reverse engineering a forgotten 1970s Intel
+// dual core beast: 8271" (2020). docs/discussion/intel-8271-study.md compares
+// the emulations and records what the real chip does where the evidence
+// settles it. Where the study records an assumption, a test named for it pins
+// the choice.
 //
 // Timing: tick() is called at 1MHz. The disc side works one FM byte (64us,
 // one pulse word) at a time while the selected drive turns; seek, settle

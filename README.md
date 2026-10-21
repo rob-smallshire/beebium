@@ -178,12 +178,13 @@ This sets up a pre-commit hook that verifies copyright notices in source files.
 ## License
 
 Beebium is licensed under the [GNU General Public License v3.0](COPYING.txt).
+Files derived from sources licensed under GPL-3.0 only carry that licence instead of "or any later version": currently `src/core/include/beebium/disc/Intel8271.hpp`, derived from beebjit.
 
 ## Acknowledgments
 
 - **Tom Seddon** - The 6502 library is ported from [B2](https://github.com/tom-seddon/b2), Tom's excellent BBC Micro emulator
 - **Matt Godbolt** - Creator of [jsbeeb](https://github.com/mattgodbolt/jsbeeb), from which VIA timing tests and 1MHz bus stretching logic were adapted
-- **Chris Evans** (@scarybeasts) - Hardware-validated VIA timing data measured on real BBC Master hardware, and CRTC 6845 edge case tests from [beebjit](https://github.com/scarybeasts/beebjit)
+- **Chris Evans** (@scarybeasts) - Hardware-validated VIA timing data measured on real BBC Master hardware, and CRTC 6845 edge case tests from [beebjit](https://github.com/scarybeasts/beebjit). Beebium's Intel 8271 disc controller model is derived from beebjit's, which Chris built from his [reverse engineering of the chip](https://scarybeastsecurity.blogspot.com/2020/11/reverse-engineering-forgotten-1970s.html); `Intel8271.hpp` is therefore GPL-3.0 only
 - **Nicola Salmoria and MAME contributors** - Hardware-verified SN76489/SN76496 sound chip behaviors documented in [MAME](https://github.com/mamedev/mame), including LFSR tap positions, noise reset behavior, and chip variant differences
 - **David Banks** (hoglet) - The Tube ULA register 3 FIFO test program from his [Tube ULA Re-Implementation](https://stardot.org.uk/forums/viewtopic.php?t=28080) thread, with measurements of a real Ferranti Tube ULA that Beebium's Tube register behaviour is validated against
 - **James** (acheton1984) - The [Tak benchmark reconstruction](https://github.com/acheton1984/ReTestingTheTak), timed on real BBC Micro and second-processor hardware, which showed Beebium's 6502 Second Processor running fast and now anchors its timing tests; and careful, generous testing of Beebium releases
