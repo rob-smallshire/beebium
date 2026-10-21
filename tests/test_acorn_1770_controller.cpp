@@ -12,6 +12,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "beebium/ResetCause.hpp"
 #include "beebium/disc/Acorn1770DiscController.hpp"
 #include "beebium/disc/DiscDrive.hpp"
 
@@ -213,7 +214,7 @@ TEST_CASE("Acorn1770DiscController reset", "[disc][acorn1770]") {
         controller.write(0x00, 0x55);
         CHECK(controller.control() == 0x55);
 
-        controller.reset();
+        controller.reset(ResetCause::PowerOn);
         CHECK(controller.control() == 0x00);
     }
 
@@ -221,7 +222,7 @@ TEST_CASE("Acorn1770DiscController reset", "[disc][acorn1770]") {
         controller.write(0x00, 0x40);
         CHECK(controller.nmi_enabled() == true);
 
-        controller.reset();
+        controller.reset(ResetCause::PowerOn);
         CHECK(controller.nmi_enabled() == false);
     }
 
@@ -229,7 +230,7 @@ TEST_CASE("Acorn1770DiscController reset", "[disc][acorn1770]") {
         controller.write(0x05, 0x10);  // Track
         controller.write(0x06, 0x05);  // Sector
 
-        controller.reset();
+        controller.reset(ResetCause::PowerOn);
 
         CHECK(controller.read(0x05) == 0x00);  // Track reset
         CHECK(controller.read(0x06) == 0x01);  // Sector reset to 1
