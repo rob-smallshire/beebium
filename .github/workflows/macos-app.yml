@@ -326,22 +326,27 @@ jobs:
           done
           [ "${status}" = "Accepted" ] || { echo "::error::app notarization did not reach Accepted after retries (last id ${id}, status ${status:-<none>})"; exit 1; }
           echo "APP_NOTARIZE_ID=${id}" >> "${GITHUB_ENV}"
-          xcrun stapler staple "${APP_PATH}"
-          # stapler validate re-checks the ticket with a CloudKit lookup
-          # (api.apple-cloudkit.com .../ticket-delivery/...), which drops
-          # transiently the same way notarytool submit does: in v0.10.0 the
-          # x86_64 lane failed here with NSURLError -1005 ("network connection
-          # was lost") right after a successful staple. Retry the lookup on the
-          # same 3-attempt, 30 s cadence as the submit. This does not make
-          # validate optional: an app whose ticket cannot be looked up three
-          # times running still fails the job.
-          for attempt in 1 2 3; do
-            echo "== stapler validate app (attempt ${attempt}/3) =="
-            if xcrun stapler validate "${APP_PATH}"; then break; fi
-            [ "${attempt}" = 3 ] && { echo "::error::app stapler validate failed after 3 attempts"; exit 1; }
-            echo "::warning::transient stapler validate failure on attempt ${attempt}; retrying in 30s"
-            sleep 30
-          done
+          # Both stapler staple and stapler validate fetch the ticket with a
+          # CloudKit lookup (api.apple-cloudkit.com .../ticket-delivery/...),
+          # which drops transiently the same way notarytool submit does: in
+          # v0.10.0 the x86_64 lane failed on validate, and in v0.13.0 on
+          # staple, with NSURLError -1005 ("network connection was lost") right
+          # after a successful submit. Retry each lookup on the same 3-attempt,
+          # 30 s cadence as the submit. This does not make either step
+          # optional: an app whose ticket cannot be fetched three times running
+          # still fails the job.
+          stapler_with_retry() {
+            local verb="$1" target="$2"
+            for attempt in 1 2 3; do
+              echo "== stapler ${verb} ${target} (attempt ${attempt}/3) =="
+              if xcrun stapler "${verb}" "${target}"; then return 0; fi
+              [ "${attempt}" = 3 ] && { echo "::error::stapler ${verb} ${target} failed after 3 attempts"; return 1; }
+              echo "::warning::transient stapler ${verb} failure on attempt ${attempt}; retrying in 30s"
+              sleep 30
+            done
+          }
+          stapler_with_retry staple "${APP_PATH}"
+          stapler_with_retry validate "${APP_PATH}"
 
       # dmgbuild (run by make-dmg.sh via uvx) needs uv on the runner.
       - name: Install uv
@@ -402,7 +407,26 @@ jobs:
           done
           [ "${status}" = "Accepted" ] || { echo "::error::DMG notarization did not reach Accepted after retries (last id ${id}, status ${status:-<none>})"; exit 1; }
           echo "DMG_NOTARIZE_ID=${id}" >> "${GITHUB_ENV}"
-          xcrun stapler staple "${DMG_PATH}"
+          # stapler staple fetches the ticket with a CloudKit lookup
+          # (api.apple-cloudkit.com .../ticket-delivery/...), which drops
+          # transiently the same way notarytool submit does: in v0.13.0 the
+          # x86_64 lane failed on the app staple with NSURLError -1005
+          # ("network connection was lost") right after a successful submit.
+          # Retry on the same 3-attempt, 30 s cadence as the submit. This does
+          # not make stapling optional: a DMG whose ticket cannot be fetched
+          # three times running still fails the job. (Steps do not share
+          # functions, so this mirrors the helper in the app step.)
+          stapler_with_retry() {
+            local verb="$1" target="$2"
+            for attempt in 1 2 3; do
+              echo "== stapler ${verb} ${target} (attempt ${attempt}/3) =="
+              if xcrun stapler "${verb}" "${target}"; then return 0; fi
+              [ "${attempt}" = 3 ] && { echo "::error::stapler ${verb} ${target} failed after 3 attempts"; return 1; }
+              echo "::warning::transient stapler ${verb} failure on attempt ${attempt}; retrying in 30s"
+              sleep 30
+            done
+          }
+          stapler_with_retry staple "${DMG_PATH}"
 
       # Gatekeeper acceptance gates: the app runs, the DMG opens, and both carry a
       # stapled ticket (validate offline).
