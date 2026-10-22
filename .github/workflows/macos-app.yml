@@ -331,16 +331,20 @@ jobs:
           # which drops transiently the same way notarytool submit does: in
           # v0.10.0 the x86_64 lane failed on validate, and in v0.13.0 on
           # staple, with NSURLError -1005 ("network connection was lost") right
-          # after a successful submit. Retry each lookup on the same 3-attempt,
-          # 30 s cadence as the submit. This does not make either step
-          # optional: an app whose ticket cannot be fetched three times running
-          # still fails the job.
+          # after a successful submit. Retry each lookup five times at 30 s,
+          # more than the submit's three: across attempts 2 to 4 of the
+          # v0.13.0 release run, single-shot CloudKit lookups on the Intel
+          # runner (macos-15-intel) went 4 succeeded, 3 dropped, about a 40
+          # percent drop rate, at which three attempts per call still fail
+          # this lane roughly one run in three and five bring that to a few
+          # percent. This does not make either step optional: an app whose
+          # ticket cannot be fetched five times running still fails the job.
           stapler_with_retry() {
             local verb="$1" target="$2"
-            for attempt in 1 2 3; do
-              echo "== stapler ${verb} ${target} (attempt ${attempt}/3) =="
+            for attempt in 1 2 3 4 5; do
+              echo "== stapler ${verb} ${target} (attempt ${attempt}/5) =="
               if xcrun stapler "${verb}" "${target}"; then return 0; fi
-              [ "${attempt}" = 3 ] && { echo "::error::stapler ${verb} ${target} failed after 3 attempts"; return 1; }
+              [ "${attempt}" = 5 ] && { echo "::error::stapler ${verb} ${target} failed after 5 attempts"; return 1; }
               echo "::warning::transient stapler ${verb} failure on attempt ${attempt}; retrying in 30s"
               sleep 30
             done
@@ -412,16 +416,18 @@ jobs:
           # transiently the same way notarytool submit does: in v0.13.0 the
           # x86_64 lane failed on the app staple with NSURLError -1005
           # ("network connection was lost") right after a successful submit.
-          # Retry on the same 3-attempt, 30 s cadence as the submit. This does
-          # not make stapling optional: a DMG whose ticket cannot be fetched
-          # three times running still fails the job. (Steps do not share
-          # functions, so this mirrors the helper in the app step.)
+          # Retry five times at 30 s, more than the submit's three, for the
+          # measured reason given in the app step: about a 40 percent
+          # single-shot drop rate on the Intel runner. This does not make
+          # stapling optional: a DMG whose ticket cannot be fetched five times
+          # running still fails the job. (Steps do not share functions, so
+          # this mirrors the helper in the app step.)
           stapler_with_retry() {
             local verb="$1" target="$2"
-            for attempt in 1 2 3; do
-              echo "== stapler ${verb} ${target} (attempt ${attempt}/3) =="
+            for attempt in 1 2 3 4 5; do
+              echo "== stapler ${verb} ${target} (attempt ${attempt}/5) =="
               if xcrun stapler "${verb}" "${target}"; then return 0; fi
-              [ "${attempt}" = 3 ] && { echo "::error::stapler ${verb} ${target} failed after 3 attempts"; return 1; }
+              [ "${attempt}" = 5 ] && { echo "::error::stapler ${verb} ${target} failed after 5 attempts"; return 1; }
               echo "::warning::transient stapler ${verb} failure on attempt ${attempt}; retrying in 30s"
               sleep 30
             done
@@ -444,16 +450,18 @@ jobs:
           # transiently the same way notarytool submit does: in v0.10.0 the
           # x86_64 lane failed on this validate with NSURLError -1005 ("network
           # connection was lost") right after a successful staple. Retry the
-          # lookup on the same 3-attempt, 30 s cadence as the submit, for both
-          # the app and the DMG. This does not make validate optional: a target
-          # whose ticket cannot be looked up three times running still fails the
-          # job.
+          # lookup five times at 30 s, more than the submit's three, for the
+          # measured reason given in the app step: about a 40 percent
+          # single-shot drop rate on the Intel runner. Both the app and the
+          # DMG are checked. This does not make validate optional: a target
+          # whose ticket cannot be looked up five times running still fails
+          # the job.
           validate_with_retry() {
             local target="$1"
-            for attempt in 1 2 3; do
-              echo "== stapler validate ${target} (attempt ${attempt}/3) =="
+            for attempt in 1 2 3 4 5; do
+              echo "== stapler validate ${target} (attempt ${attempt}/5) =="
               if xcrun stapler validate "${target}"; then return 0; fi
-              [ "${attempt}" = 3 ] && { echo "::error::stapler validate ${target} failed after 3 attempts"; return 1; }
+              [ "${attempt}" = 5 ] && { echo "::error::stapler validate ${target} failed after 5 attempts"; return 1; }
               echo "::warning::transient stapler validate failure on attempt ${attempt}; retrying in 30s"
               sleep 30
             done
