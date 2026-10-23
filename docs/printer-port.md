@@ -75,15 +75,6 @@ throwing if occupied, and `is_occupied()`. The `printer-port` attachment
 point has occupancy 0..1 and exists on every machine whose hardware
 satisfies `HasPrinterPort`, which is every B-series model.
 
-### The activity indicator
-
-The port, not any sink, owns the `printer-activity-led` indicator (label
-"PRINTER"). It lights on a strobe and goes out after 200 ms of emulated
-time without one. It lights whether or not a device is attached, because
-it reports traffic at the connector. A machine stalled waiting for /ACK
-therefore shows a lit printer lamp until the timeout, which is the right
-cue for "the printer is not answering".
-
 ## The Centronics receiver
 
 Every printer-like sink needs the same handshake behaviour, so it is

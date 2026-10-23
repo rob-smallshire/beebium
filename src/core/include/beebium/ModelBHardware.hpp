@@ -166,9 +166,8 @@ public:
     SystemViaPeripheral system_via_peripheral{addressable_latch, indicators};
 
     // User VIA peripheral: the composite installed on user_via, carrying the
-    // User Port (Port B, CB1/CB2) and printer port (Port A, CA1/CA2) halves
-    // and the printer activity indicator.
-    UserViaPeripheral user_via_peripheral{indicators};
+    // User Port (Port B, CB1/CB2) and printer port (Port A, CA1/CA2) halves.
+    UserViaPeripheral user_via_peripheral;
 
     // User Port handle (must be declared after user_via_peripheral for init order)
     UserPort user_port_{user_via_peripheral};

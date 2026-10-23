@@ -16,14 +16,9 @@
 #include "Via6522.hpp"
 #include "extension/PrinterPortDevice.hpp"
 #include "extension/UserPortDevice.hpp"
-#include "indicators/IndicatorFilter.hpp"
-#include "indicators/Indicators.hpp"
 
 #include <cstdint>
-#include <memory>
 #include <stdexcept>
-#include <string>
-#include <unordered_map>
 
 namespace beebium {
 
@@ -43,35 +38,9 @@ namespace beebium {
 // The port B half is a UserPortDevice attached through the UserPort
 // handle. The port A half is a PrinterPortDevice attached through the
 // PrinterPort handle.
-//
-// The composite also owns the printer activity indicator, because the
-// indicator reports traffic at the connector: it lights on a strobe whether
-// or not a device is attached, and goes out after 200 ms of emulated time
-// without one. A machine stalled waiting for /ACK therefore shows a lit
-// lamp until the timeout.
 class UserViaPeripheral : public ViaPeripheral {
 public:
-    static constexpr const char* kPrinterActivityIndicatorName = "printer-activity-led";
-
-    // Emulated time, in VIA ticks at 1 MHz, that the printer activity
-    // indicator stays lit after the last strobe.
-    static constexpr uint32_t kPrinterActivityTimeoutTicks = 200000;
-
-    // A composite without an indicator registry (for tests).
     UserViaPeripheral() = default;
-
-    // A composite that registers the printer activity indicator with the
-    // machine's registry. Must be constructed before Indicators::start().
-    explicit UserViaPeripheral(Indicators& indicators)
-        : indicators_(&indicators) {
-        std::unordered_map<std::string, std::string> metadata;
-        metadata.emplace("label", "PRINTER");
-        metadata.emplace("color", "568nm");
-        metadata.emplace("shape", "rectangular");
-        printer_activity_led_id_ = indicators_->register_indicator(
-            kPrinterActivityIndicatorName, std::make_unique<PassthroughFilter>(),
-            std::move(metadata));
-    }
 
     // Attach a device to the User Port half (Port B, CB1, CB2).
     // Throws std::runtime_error if a device is already attached.
@@ -135,31 +104,9 @@ private:
     // ca2 is /STROBE as the VIA drives it; ca1 is /ACK, which the VIA resets
     // to 1 after every tick, so the device's level is written on every call.
     void port_a_control_lines(uint8_t& ca1, uint8_t& ca2) {
-        update_printer_activity(ca2);
         if (printer_port_device_) {
             ca1 = printer_port_device_->update_control_lines(ca2, data_lines_);
         }
-    }
-
-    void update_printer_activity(uint8_t strobe) {
-        bool falling_edge = (strobe_level_ != 0) && (strobe == 0);
-        strobe_level_ = strobe;
-        if (falling_edge) {
-            printer_activity_ticks_remaining_ = kPrinterActivityTimeoutTicks;
-            set_printer_activity_led(true);
-        } else if (printer_activity_ticks_remaining_ > 0) {
-            --printer_activity_ticks_remaining_;
-            if (printer_activity_ticks_remaining_ == 0) {
-                set_printer_activity_led(false);
-            }
-        }
-    }
-
-    void set_printer_activity_led(bool lit) {
-        if (indicators_ && lit != printer_activity_led_lit_) {
-            indicators_->set(printer_activity_led_id_, lit ? 255 : 0);
-        }
-        printer_activity_led_lit_ = lit;
     }
 
     // Port B half: the User Port device, if one is attached.
@@ -170,13 +117,6 @@ private:
     // so floating high).
     PrinterPortDevice* printer_port_device_ = nullptr;
     uint8_t data_lines_ = 0xFF;
-
-    // Printer activity indicator (optional)
-    Indicators* indicators_ = nullptr;
-    uint16_t printer_activity_led_id_ = 0;
-    uint8_t strobe_level_ = 1;
-    uint32_t printer_activity_ticks_remaining_ = 0;
-    bool printer_activity_led_lit_ = false;
 };
 
 } // namespace beebium

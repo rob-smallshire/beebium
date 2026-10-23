@@ -19,11 +19,9 @@
 #include <beebium/ModelBHardware.hpp>
 #include <beebium/ModelBPlusHardware.hpp>
 #include <beebium/ModelBRomRamBoardHardware.hpp>
-#include <beebium/indicators/Indicators.hpp>
 
 #include <stdexcept>
 #include <string>
-#include <algorithm>
 #include <vector>
 
 using namespace beebium;
@@ -265,61 +263,6 @@ TEST_CASE("A strobe through a real Via6522 reaches the device and its /ACK raise
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// Activity indicator
-//////////////////////////////////////////////////////////////////////////////
-
-TEST_CASE("Printer activity indicator lights on a strobe and times out", "[printer-port][indicator]") {
-    Indicators indicators;
-    UserViaPeripheral peripheral(indicators);
-
-    auto led = [&] {
-        indicators.process_pending();
-        return indicators.get(UserViaPeripheral::kPrinterActivityIndicatorName);
-    };
-
-    REQUIRE(indicators.metadata(UserViaPeripheral::kPrinterActivityIndicatorName).at("label") == "PRINTER");
-    REQUIRE(led() == 0);
-
-    uint8_t ca1 = 1, ca2 = 1, cb1 = 1, cb2 = 1;
-
-    SECTION("Lights on the falling edge of /STROBE with no device attached") {
-        peripheral.update_control_lines(ca1, ca2, cb1, cb2);
-        REQUIRE(led() == 0);
-        ca2 = 0;
-        peripheral.update_control_lines(ca1, ca2, cb1, cb2);
-        REQUIRE(led() == 255);
-    }
-
-    SECTION("Goes out after 200 ms of emulated time without a strobe") {
-        ca2 = 0;
-        peripheral.update_control_lines(ca1, ca2, cb1, cb2);
-        ca2 = 1;
-        for (uint32_t i = 0; i < UserViaPeripheral::kPrinterActivityTimeoutTicks - 1; ++i) {
-            peripheral.update_control_lines(ca1, ca2, cb1, cb2);
-        }
-        REQUIRE(led() == 255);
-        peripheral.update_control_lines(ca1, ca2, cb1, cb2);
-        REQUIRE(led() == 0);
-    }
-
-    SECTION("A further strobe restarts the timeout") {
-        ca2 = 0;
-        peripheral.update_control_lines(ca1, ca2, cb1, cb2);
-        ca2 = 1;
-        for (uint32_t i = 0; i < UserViaPeripheral::kPrinterActivityTimeoutTicks / 2; ++i) {
-            peripheral.update_control_lines(ca1, ca2, cb1, cb2);
-        }
-        ca2 = 0;
-        peripheral.update_control_lines(ca1, ca2, cb1, cb2);
-        ca2 = 1;
-        for (uint32_t i = 0; i < UserViaPeripheral::kPrinterActivityTimeoutTicks / 2; ++i) {
-            peripheral.update_control_lines(ca1, ca2, cb1, cb2);
-        }
-        REQUIRE(led() == 255);
-    }
-}
-
-//////////////////////////////////////////////////////////////////////////////
 // Hardware policies
 //////////////////////////////////////////////////////////////////////////////
 
@@ -335,11 +278,6 @@ TEST_CASE("Hardware policies expose a printer port on the User VIA composite", "
     REQUIRE(hw.printer_port().is_occupied());
     REQUIRE(hw.user_via_peripheral.has_printer_port_device());
     REQUIRE(hw.user_via.peripheral() == &hw.user_via_peripheral);
-
-    // The indicator is registered with the machine's registry at construction
-    auto names = hw.indicators.names();
-    REQUIRE(std::find(names.begin(), names.end(),
-                      UserViaPeripheral::kPrinterActivityIndicatorName) != names.end());
 }
 
 //////////////////////////////////////////////////////////////////////////////
