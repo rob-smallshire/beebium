@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package beebium;
+
+// Typed API for the tcp-printer extension: the sink that sends everything the
+// BBC prints to a raw TCP printer port on the network. This service belongs
+// to the tcp-printer PeripheralExtension and is present only when
+// --tcp-printer is loaded. There is no SetOnline: the printer is online
+// exactly while it is connected.
+service TcpPrinter {
+    // The endpoint, whether it is connected, and the byte counts.
+    rpc GetStatus(TcpPrinterGetStatusRequest) returns (TcpPrinterStatus);
+}
+
+message TcpPrinterGetStatusRequest {}
+
+message TcpPrinterStatus {
+    string endpoint = 1;         // host:port, an IPv6 host in brackets
+    bool connected = 2;          // connected, and so online
+    uint64 bytes_received = 3;   // bytes accepted from the port since launch
+    uint64 bytes_sent = 4;       // bytes written to the socket
+}

@@ -1,0 +1,58 @@
+{
+    "name": "tcp-printer",
+    "display_name": "Network Printer",
+    "description": "Sends everything the BBC prints to a raw TCP printer port on the network, such as a JetDirect printer or a printer emulator.",
+    "library": "tcp-printer",
+    "attaches_to": [
+        "printer-port"
+    ],
+    "cli": "tcp-printer",
+    "parameters": [
+        {
+            "key": "url",
+            "label": "Printer URL",
+            "type": "string",
+            "excludes": [
+                "host",
+                "port"
+            ],
+            "description": "Printer endpoint as [scheme://]host:port (e.g. url=\"socket://printer.local:9100\"); alternative to host/port, cannot be combined with them"
+        },
+        {
+            "key": "host",
+            "label": "Printer host",
+            "type": "string",
+            "excludes": [
+                "url"
+            ],
+            "description": "Printer hostname or address (default localhost; alternative to url)"
+        },
+        {
+            "key": "port",
+            "label": "Printer port",
+            "type": "integer",
+            "excludes": [
+                "url"
+            ],
+            "description": "Printer TCP port (default 9100, the JetDirect convention; alternative to url)",
+            "min": 1,
+            "max": 65535
+        },
+        {
+            "key": "buffer",
+            "label": "Buffer (bytes)",
+            "type": "integer",
+            "default": "256",
+            "description": "receiver queue depth in bytes; when it is full the BBC waits for /ACK",
+            "min": 1
+        },
+        {
+            "key": "reconnect_ms",
+            "label": "Reconnect interval (ms)",
+            "type": "integer",
+            "default": "1000",
+            "description": "milliseconds between connection attempts while not connected; 0 makes one attempt and never retries",
+            "min": 0
+        }
+    ]
+}
