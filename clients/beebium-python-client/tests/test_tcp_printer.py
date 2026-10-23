@@ -13,7 +13,7 @@
 """Integration test for the printer port with the tcp-printer extension (#99).
 
 A listening socket in the test stands in for a raw TCP printer (a JetDirect
-port, ``nc -l 9100``, or Printium). A real Model B launched with
+port, ``nc -l 9100``, or Papyrium). A real Model B launched with
 ``--tcp-printer`` prints through the MOS driver and the bytes arrive at the
 socket. Every wait polls the guest, the socket or the server's own
 accounting, never the wall clock alone.
