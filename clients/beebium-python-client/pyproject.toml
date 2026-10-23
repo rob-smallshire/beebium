@@ -79,6 +79,7 @@ rpc-serial = "beebium.ext.peripheral.rpc_serial:RpcSerial"
 host-serial = "beebium.ext.peripheral.host_serial:HostSerial"
 file-printer = "beebium.ext.peripheral.file_printer:FilePrinter"
 tcp-printer = "beebium.ext.peripheral.tcp_printer:TcpPrinter"
+host-parallel-printer = "beebium.ext.peripheral.host_parallel_printer:HostParallelPrinter"
 acorn-rtc = "beebium.ext.peripheral.acorn_rtc:AcornRtc"
 acorn-scsi = "beebium.ext.peripheral.acorn_scsi:AcornScsi"
 

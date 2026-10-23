@@ -25,6 +25,7 @@ import { RpcSerial } from "./rpc_serial.js";
 import { HostSerial } from "./host_serial.js";
 import { FilePrinter } from "./file_printer.js";
 import { TcpPrinter } from "./tcp_printer.js";
+import { HostParallelPrinter } from "./host_parallel_printer.js";
 import { Tube } from "./tube.js";
 import { Aun } from "./aun.js";
 import { Piconet } from "./piconet.js";
@@ -90,6 +91,7 @@ export class Beebium {
     private _hostSerial?: HostSerial;
     private _filePrinter?: FilePrinter;
     private _tcpPrinter?: TcpPrinter;
+    private _hostParallelPrinter?: HostParallelPrinter;
     private _tube?: Tube;
     private _aun?: Aun;
     private _piconet?: Piconet;
@@ -352,6 +354,19 @@ export class Beebium {
             );
         }
         return this._tcpPrinter;
+    }
+
+    /**
+     * Read the host printer's status and list the host's printer devices
+     * (requires the server's --host-parallel-printer extension).
+     */
+    get hostParallelPrinter(): HostParallelPrinter {
+        if (this._hostParallelPrinter === undefined) {
+            this._hostParallelPrinter = new HostParallelPrinter(
+                new ExtensionChannel(this.connection.extensionRpcStub),
+            );
+        }
+        return this._hostParallelPrinter;
     }
 
     /** Access Tube coprocessor management. */

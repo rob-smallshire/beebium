@@ -48,6 +48,11 @@ export {
 } from "./host_serial.js";
 export { FilePrinter, type FilePrinterStatus } from "./file_printer.js";
 export { TcpPrinter, type TcpPrinterStatus } from "./tcp_printer.js";
+export {
+    HostParallelPrinter,
+    type HostParallelPrinterStatus,
+    type HostPrinterDevice,
+} from "./host_parallel_printer.js";
 export { Tube, type TubeStatus } from "./tube.js";
 export {
     Aun,
