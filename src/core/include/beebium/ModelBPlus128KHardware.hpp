@@ -14,6 +14,7 @@
 
 #include "beebium/MachineModels.hpp"
 #include "extension/OneMHzBusPort.hpp"
+#include "extension/PrinterPort.hpp"
 #include "extension/UserPort.hpp"
 #include "extension/SerialPort.hpp"
 #include "AddressableLatch.hpp"
@@ -272,12 +273,15 @@ public:
     SystemViaPeripheral system_via_peripheral{addressable_latch, indicators};
 
     // User VIA peripheral: the composite installed on user_via, carrying the
-    // User Port (Port B, CB1/CB2) half; the printer port (Port A, CA1/CA2)
-    // half will join it there.
-    UserViaPeripheral user_via_peripheral;
+    // User Port (Port B, CB1/CB2) and printer port (Port A, CA1/CA2) halves
+    // and the printer activity indicator.
+    UserViaPeripheral user_via_peripheral{indicators};
 
     // User Port handle (must be declared after user_via_peripheral for init order)
     UserPort user_port_{user_via_peripheral};
+
+    // Printer port handle (must be declared after user_via_peripheral for init order)
+    PrinterPort printer_port_{user_via_peripheral};
 
     // Disc controller (WD1770 built-in on Model B+)
     WD1770 disc_controller;
@@ -740,6 +744,7 @@ public:
     OneMHzBusPort& one_mhz_bus() { return one_mhz_bus_; }
 
     UserPort& user_port() { return user_port_; }
+    PrinterPort& printer_port() { return printer_port_; }
     SerialPort& serial_port() { return serial_port_; }
 
     // Paging register accessors for testing

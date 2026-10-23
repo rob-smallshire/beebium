@@ -101,10 +101,10 @@ struct ViaPort {
     uint8_t ddr     = 0x00;   // Data direction register (DDRx)
     uint8_t p       = 0xFF;   // Port pins state (Px)
     uint8_t p_latch = 0xFF;   // Latched input value
-    uint8_t c1      = 0;      // Control line 1 (Cx1)
-    uint8_t old_c1  = 0;      // Previous C1 for edge detection
-    uint8_t c2      = 0;      // Control line 2 (Cx2)
-    uint8_t old_c2  = 0;      // Previous C2 for edge detection
+    uint8_t c1      = 1;      // Control line 1 (Cx1), idle high through the pull-up
+    uint8_t old_c1  = 1;      // Previous C1 for edge detection
+    uint8_t c2      = 1;      // Control line 2 (Cx2), an input at reset, idle high
+    uint8_t old_c2  = 1;      // Previous C2 for edge detection
     uint8_t pulse   = 0;      // Pulse countdown for output pulse mode
 };
 
