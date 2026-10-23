@@ -232,6 +232,7 @@
 		D68AE50897EB5CBD1070CC1E /* WindowKeyActivator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33D43E265EBE4A74BF8AE260 /* WindowKeyActivator.swift */; };
 		D74BF8677E5A5731DC06D3FD /* keyboard.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2073A33AE028AF1DFA0983DC /* keyboard.grpc.swift */; };
 		D7BE097905B0FE46BD611CB5 /* PresetManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2AFB016D3C8A8EF789C4A9 /* PresetManager.swift */; };
+		D924EC224D99F91FA17CAB43 /* CoreCLITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8A265E36533E541F11ECAC5 /* CoreCLITests.swift */; };
 		D9718E6F6B0170B2E3BDDD45 /* extension_ui.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E1A6F06137647B3CB8F6C8 /* extension_ui.grpc.swift */; };
 		DA2A617393E4BA1C28E528F7 /* ModalEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91EE41147FA34459F83B3130 /* ModalEditorView.swift */; };
 		DA8B66BA897FDC6A944A0603 /* DiscImageReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6378C40652987D58945A27B7 /* DiscImageReferenceTests.swift */; };
@@ -494,6 +495,7 @@
 		B79C08E01A7BA46EE2246BF7 /* SidewaysSchemaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysSchemaTests.swift; sourceTree = "<group>"; };
 		B8422ED3425ABC72999C86CC /* MachineNamesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNamesTests.swift; sourceTree = "<group>"; };
 		B86FF568406281481A0E0D88 /* AudioRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRenderer.swift; sourceTree = "<group>"; };
+		B8A265E36533E541F11ECAC5 /* CoreCLITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreCLITests.swift; sourceTree = "<group>"; };
 		B9223FE588BFE580551E0819 /* SaveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveClient.swift; sourceTree = "<group>"; };
 		B98CF59648104556C3677412 /* KeyboardMTKView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMTKView.swift; sourceTree = "<group>"; };
 		B9D68557079BA374D2FAD131 /* BeebiumTouchBarKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarKeys.swift; sourceTree = "<group>"; };
@@ -914,6 +916,7 @@
 				BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */,
 				C46D7348FD4254C5DB38C76D /* CommittingFieldTests.swift */,
 				D0D8B92DB46302357CC513AA /* ConfigurationEditorOrderTests.swift */,
+				B8A265E36533E541F11ECAC5 /* CoreCLITests.swift */,
 				F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */,
 				5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */,
 				D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */,
@@ -1118,6 +1121,7 @@
 				524A3CDC4C24461BC89C6886 /* ComboBoxRepresentableTests.swift in Sources */,
 				E0FA0966EB7097E8B3EF885D /* CommittingFieldTests.swift in Sources */,
 				E403C3B64C6DF471BEEDA99A /* ConfigurationEditorOrderTests.swift in Sources */,
+				D924EC224D99F91FA17CAB43 /* CoreCLITests.swift in Sources */,
 				7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */,
 				7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */,
 				7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */,

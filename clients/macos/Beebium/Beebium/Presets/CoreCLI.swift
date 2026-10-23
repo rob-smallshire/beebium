@@ -26,15 +26,20 @@ import Foundation
 /// parsers (`PresetManager.parseDiscFormats`, `parseSerialPortPaths`) stay there
 /// too, with their pinned-sample tests; this wrapper calls them.
 ///
-/// `@MainActor` so `run(...)`'s synchronous `waitUntilExit()` blocks the same
-/// actor it did when this was PresetManager.runCli, keeping the threading
-/// behaviour unchanged.
+/// `@MainActor` because PresetManager drives it from there; `run(...)` itself
+/// is nonisolated and never blocks, so a slow subcommand costs the main actor
+/// nothing but an await.
 @MainActor
 struct CoreCLI {
     /// Run `executablePath` with `arguments` to completion, returning its stdout
     /// and, on a non-zero exit (or a spawn failure), an error message (the
     /// trimmed stderr, or a status/thrown description).
-    func run(executablePath: String, arguments: [String]) async -> (stdout: String, error: String?) {
+    ///
+    /// Both pipes are drained to end concurrently from the moment of spawn and
+    /// the exit is awaited only afterwards. The order matters: a pipe holds
+    /// 64 KiB, so a child that writes more blocks in write until someone reads,
+    /// and waiting for its exit first would deadlock (#214).
+    nonisolated func run(executablePath: String, arguments: [String]) async -> (stdout: String, error: String?) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
@@ -44,25 +49,55 @@ struct CoreCLI {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
+        async let stdoutData = Self.readToEnd(stdoutPipe.fileHandleForReading)
+        async let stderrData = Self.readToEnd(stderrPipe.fileHandleForReading)
+
+        let status: Int32
         do {
-            try process.run()
-            process.waitUntilExit()
-
-            let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
-
-            guard process.terminationStatus == 0 else {
-                let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let stderrText = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let errorMsg = stderrText.isEmpty
-                    ? "exit status \(process.terminationStatus)"
-                    : stderrText
-                return (stdout, errorMsg)
-            }
-
-            return (stdout, nil)
+            status = try await Self.runToExit(process)
         } catch {
+            // Nothing was spawned, so nothing will ever close the pipes' write
+            // ends: close them here so the readers reach end of file.
+            try? stdoutPipe.fileHandleForWriting.close()
+            try? stderrPipe.fileHandleForWriting.close()
+            _ = await (stdoutData, stderrData)
             return ("", error.localizedDescription)
+        }
+
+        let stdout = String(data: await stdoutData, encoding: .utf8) ?? ""
+
+        guard status == 0 else {
+            let stderrText = String(data: await stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let errorMsg = stderrText.isEmpty
+                ? "exit status \(status)"
+                : stderrText
+            return (stdout, errorMsg)
+        }
+
+        return (stdout, nil)
+    }
+
+    /// Read `handle` to end of file on a global queue, so the read never
+    /// occupies a cooperative thread or the main actor while it waits.
+    nonisolated private static func readToEnd(_ handle: FileHandle) async -> Data {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                continuation.resume(returning: handle.readDataToEndOfFile())
+            }
+        }
+    }
+
+    /// Spawn `process` and await its exit status without blocking any thread.
+    /// The termination handler is installed before the spawn: one set after a
+    /// process has already exited is never called.
+    nonisolated private static func runToExit(_ process: Process) async throws -> Int32 {
+        try await withCheckedThrowingContinuation { continuation in
+            process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
         }
     }
 
