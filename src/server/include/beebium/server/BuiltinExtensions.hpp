@@ -26,6 +26,7 @@
 // appears in this table.
 
 #include "AunEconetTransportExtension.hpp"
+#include "FilePrinterExtension.hpp"
 #include "HostSerialExtension.hpp"
 #include "beebium/extension/Extension.hpp"
 #include "beebium/extension/ExtensionManifest.hpp"
@@ -174,6 +175,57 @@ inline std::vector<Entry> make_entries() {
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new HostSerialExtension()); }});
+    }
+
+    // File printer.
+    //
+    // Built-in so that --file-printer works without a plugin directory, so
+    // that presets can name it unconditionally, and because it is the test
+    // oracle for everything else on the printer port. Attaches a
+    // CentronicsReceiver to the printer port and spools what it receives
+    // into a file. See docs/printer-port.md.
+    {
+        ExtensionManifest m;
+        m.name = "file-printer";
+        m.display_name = "File Printer";
+        m.description =
+            "Spools everything the BBC sends to its printer port into a file on the host.";
+        m.cli_name = "file-printer";
+        m.extension_kind = "peripheral";
+        m.attaches_to = {"printer-port"};
+        m.parameters.push_back(
+            {"path", "filepath", "file to write; created or truncated at attach",
+             -1, true, false, ""});
+        m.parameters.push_back(
+            {"line_ending", "string",
+             "'raw' keeps the bytes as sent; 'lf' and 'crlf' translate the "
+             "Beeb's CR line ends",
+             -1, false, false, "raw"});
+        m.parameters.push_back(
+            {"buffer", "integer", "receiver queue depth in bytes",
+             -1, false, false, "256"});
+        m.parameters.push_back(
+            {"online", "boolean",
+             "start online; false models a printer that is switched off",
+             -1, false, false, "true"});
+        for (auto& p : m.parameters) {
+            if (p.key == "path") {
+                p.label = "File";
+            } else if (p.key == "line_ending") {
+                p.label = "Line ending";
+                p.choices = {{"raw", "As sent"},
+                             {"lf", "LF"},
+                             {"crlf", "CR LF"}};
+            } else if (p.key == "buffer") {
+                p.label = "Buffer (bytes)";
+                p.min = 1;
+            } else if (p.key == "online") {
+                p.label = "Online";
+            }
+        }
+        result.push_back({std::move(m),
+                          [] { return std::unique_ptr<Extension>(
+                              new FilePrinterExtension()); }});
     }
 
     // Every manifest passes the checks a plugin's does when it is read; a

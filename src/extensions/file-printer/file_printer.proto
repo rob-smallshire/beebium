@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package beebium;
+
+// Typed API for the file-printer extension: the sink that spools everything
+// the BBC sends to its printer port into a file on the host. This service
+// belongs to the file-printer PeripheralExtension and is present only when
+// --file-printer is loaded. SetOnline drives the same receiver state as the
+// panel's Online toggle, so either is reflected in the other.
+service FilePrinter {
+    // The file being written, the byte counts and the online state.
+    rpc GetStatus(FilePrinterGetStatusRequest) returns (FilePrinterStatus);
+
+    // Switch the printer online or offline. Offline, the receiver holds the
+    // byte the BBC strobed and withholds /ACK, so the guest waits as it would
+    // for a switched-off printer; online again, it accepts the byte and the
+    // print resumes. Returns the status after the change.
+    rpc SetOnline(FilePrinterSetOnlineRequest) returns (FilePrinterStatus);
+}
+
+message FilePrinterGetStatusRequest {}
+
+message FilePrinterStatus {
+    string path = 1;             // the file being written
+    uint64 bytes_received = 2;   // bytes accepted from the port since launch
+    uint64 bytes_written = 3;    // bytes written to the file, after line-ending translation
+    bool online = 4;             // is the printer accepting bytes?
+}
+
+message FilePrinterSetOnlineRequest {
+    bool online = 1;
+}

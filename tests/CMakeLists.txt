@@ -1445,6 +1445,18 @@ if(NOT WIN32)
     catch_discover_tests(test_host_serial_extension)
 endif()
 
+# File-printer extension test: attachment, spooling, line ends, panel and RPC.
+add_executable(test_file_printer_extension test_file_printer_extension.cpp)
+target_include_directories(test_file_printer_extension PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/extensions/file-printer
+)
+target_link_libraries(test_file_printer_extension PRIVATE
+    beebium_ext_file_printer
+    beebium_extension_ui_proto
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_file_printer_extension)
+
 # Host-serial endpoint test (cross-platform: stuck-peer back-pressure, no pty).
 add_executable(test_host_serial_endpoint test_host_serial_endpoint.cpp)
 target_include_directories(test_host_serial_endpoint PRIVATE
@@ -2064,6 +2076,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_acorn_65c02
         beebium_ext_aun
         beebium_ext_host_serial
+        beebium_ext_file_printer
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain
@@ -2084,6 +2097,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_acorn_65c02
         beebium_ext_aun
         beebium_ext_host_serial
+        beebium_ext_file_printer
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain

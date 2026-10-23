@@ -20,6 +20,7 @@ AUN_PROTO_DIR="$REPO_ROOT/src/extensions/aun"
 PICONET_PROTO_DIR="$REPO_ROOT/src/extensions/piconet"
 RPC_SERIAL_PROTO_DIR="$REPO_ROOT/src/extensions/rpc-serial"
 HOST_SERIAL_PROTO_DIR="$REPO_ROOT/src/extensions/host-serial"
+FILE_PRINTER_PROTO_DIR="$REPO_ROOT/src/extensions/file-printer"
 EXTENSION_UI_PROTO_DIR="$REPO_ROOT/src/core/extension-api/proto"
 
 # ts-proto plugin path
@@ -54,6 +55,7 @@ PROTOS=(
     "$PICONET_PROTO_DIR:piconet_service.proto"
     "$RPC_SERIAL_PROTO_DIR:rpc_serial.proto"
     "$HOST_SERIAL_PROTO_DIR:host_serial.proto"
+    "$FILE_PRINTER_PROTO_DIR:file_printer.proto"
     "$EXTENSION_UI_PROTO_DIR:extension_ui.proto"
 )
 
@@ -77,6 +79,7 @@ for entry in "${PROTOS[@]}"; do
         -I "$PICONET_PROTO_DIR" \
         -I "$RPC_SERIAL_PROTO_DIR" \
         -I "$HOST_SERIAL_PROTO_DIR" \
+        -I "$FILE_PRINTER_PROTO_DIR" \
         -I "$EXTENSION_UI_PROTO_DIR" \
         "$proto_dir/$proto_filename"
 done

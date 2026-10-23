@@ -368,3 +368,31 @@ TEST_CASE("ExtensionContext hands out the printer port", "[printer-port][extensi
         }
     }
 }
+
+TEST_CASE("A strobe from the MOS's power-on PCR state latches the byte written to ORA", "[printer-port][via]") {
+    // The MOS leaves the User VIA with PCR = &0E (CA2 output high) and DDRA =
+    // &FF. Software then selects pulse mode and writes ORA; the device must
+    // latch that byte, not the lines as they stood before the write.
+    Via6522 via;
+    UserViaPeripheral peripheral;
+    via.set_peripheral(&peripheral);
+    FakePrinterPortDevice device;
+    peripheral.attach_printer_port_device(device);
+
+    auto tick = [&] {
+        via.update_phi2_trailing_edge();
+        via.update_phi2_leading_edge();
+    };
+
+    via.write(Via6522::REG_DDRA, 0xFF);
+    via.write(Via6522::REG_PCR, 0x0E);
+    for (int i = 0; i < 100; ++i) tick();
+    via.write(Via6522::REG_PCR, 0x0A);
+    for (int i = 0; i < 100; ++i) tick();
+    REQUIRE(device.strobe_count == 0);
+
+    via.write(Via6522::REG_ORA, 0x41);
+    for (int i = 0; i < 10; ++i) tick();
+    REQUIRE(device.strobe_count == 1);
+    REQUIRE(device.latched_data == 0x41);
+}

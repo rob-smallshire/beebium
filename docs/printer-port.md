@@ -55,9 +55,11 @@ struct PrinterPortDevice {
     // Most devices ignore this and read the data at the strobe instead.
     virtual void update_data_lines(uint8_t data) { (void)data; }
 
-    // Called every VIA tick (1 MHz). strobe is the level of /STROBE as the
-    // VIA drives it (CA2). The device returns the level it drives on /ACK
-    // (CA1): 1 when idle (the pull-up), 0 while asserted.
+    // Called every VIA tick (1 MHz), and again on a port A register write.
+    // strobe is the level of /STROBE as the VIA drives it (CA2). The device
+    // returns the level it drives on /ACK (CA1): 1 when idle (the pull-up),
+    // 0 while asserted, on every call, because the VIA resets CA1 to 1
+    // after each tick.
     virtual uint8_t update_control_lines(uint8_t strobe, uint8_t data) = 0;
 };
 ```
@@ -95,7 +97,10 @@ implemented once, in core, as `CentronicsReceiver`, a `PrinterPortDevice`:
   consumer has made room. The MOS is waiting for that acknowledge, so a
   slow consumer stalls the guest, never the host, and no byte is lost.
 - `set_online(bool)`: while offline nothing is accepted and /ACK stays
-  high, which is what an absent or switched-off printer looks like.
+  high, which is what an absent or switched-off printer looks like. The byte
+  strobed while offline is held like a byte strobed into a full queue, and
+  accepted and acknowledged once the receiver is online again, so a print
+  that stalled on a switched-off printer resumes where it stopped.
 - The queue is a single-producer, single-consumer lock-free queue. The
   emulation thread produces; the sink's own thread consumes with
   `try_dequeue` and `wait_dequeue_timed`. The emulation thread never
@@ -125,9 +130,10 @@ Typed API over the ExtensionRpc channel, service `FilePrinter`:
 `SetOnline` sets the online state. A declarative sidebar panel shows the
 same. Python and TypeScript bindings follow the `rpc_serial` layout.
 
-Note on line ends: the MOS sends CR for a newline and, by default
-(`*FX6,10`), suppresses LF to the printer. So `PRINT "HELLO"` reaches the
-sink as `HELLO` followed by a single CR. `*FX6,0` lets the LF through.
+Note on line ends: BASIC ends a line with LF then CR, and the MOS by
+default (`*FX6,10`) suppresses LF to the printer. So `PRINT "HELLO"` reaches
+the sink as `HELLO` followed by a single CR. `*FX6,0` lets the LF through,
+in the Beeb's order: `HELLO` LF CR.
 `line_ending=lf` turns a lone CR into LF and a CR LF pair into LF;
 `crlf` turns a lone CR into CR LF and leaves CR LF alone.
 
@@ -156,5 +162,6 @@ both. macOS has no such device node.
   `file-printer`: `*FX5,1` then `VDU 2 : PRINT "HELLO" : VDU 3` produces
   `HELLO` CR in the file; a BASIC program that sets DDRA, selects a CA2
   pulse mode, writes ORA and polls IFR sees the CA1 flag; with
-  `online=false` the same print stalls and Escape returns the prompt.
+  `online=false` a print longer than the MOS printer buffer stalls, and
+  `SetOnline(true)` lets it finish with every byte in the file.
   Every wait polls the guest, never the wall clock.

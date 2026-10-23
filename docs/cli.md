@@ -434,6 +434,26 @@ an `econet.aun_map` key is ignored, like any other unknown key.
 
 See `docs/networking.md` for the architecture and `docs/discussion/piconet-feasibility.md` for the Piconet design.
 
+#### Printer
+
+The parallel printer port (`printer-port`) takes one sink extension. The
+built-in `file-printer` spools everything the BBC sends to the port into a
+file on the host; `describe-extension file-printer` prints the same list.
+See `docs/printer-port.md` for the port model and the other sinks.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--file-printer path=<file>[:key=value...]` | (omitted = no printer) | Spool the printer port to `<file>`, created or truncated at launch. |
+
+`--file-printer` parameters (colon-separated, the generic extension grammar):
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `path=<file>` | required | File to write; created or truncated at attach. |
+| `line_ending=raw\|lf\|crlf` | `raw` | `raw` keeps the bytes as sent. The MOS sends CR for a newline and, by default (`*FX6,10`), suppresses LF to the printer; `lf` turns a lone CR into LF and a CR LF pair into LF, `crlf` turns a lone CR into CR LF and leaves CR LF alone. |
+| `buffer=<n>` | `256` | Receiver queue depth in bytes. When it is full the next byte waits for /ACK until the file has caught up, so a slow disc stalls the guest, never the host. |
+| `online=true\|false` | `true` | Start online. `false` models a switched-off printer: the BBC's print stalls waiting for /ACK until `FilePrinter.SetOnline` (or the panel's Online toggle) switches it on, and then resumes. |
+
 #### Startup Control
 
 | Option | Description |

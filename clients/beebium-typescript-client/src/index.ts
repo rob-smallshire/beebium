@@ -46,6 +46,7 @@ export {
     type HostSerialConfig,
     type HostSerialSetConfigOptions,
 } from "./host_serial.js";
+export { FilePrinter, type FilePrinterStatus } from "./file_printer.js";
 export { Tube, type TubeStatus } from "./tube.js";
 export {
     Aun,

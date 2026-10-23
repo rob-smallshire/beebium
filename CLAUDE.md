@@ -255,6 +255,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 - `frontend-local-server-gating.md` - How a front-end discovers whether the server shares its filesystem (SystemInfo.host_fingerprint), and which path-exchanging features must be gated on it; platform-independent rules plus macOS specifics, for future front-ends
 - `frontend-sleep-wake.md` - How a front-end survives host sleep: present-on-frame for display sleep, and a platform-abstracted wake signal driving active reconnect for full system sleep; for future front-ends
 - `indicators.md` - LED status indicators
+- `printer-port.md` - The parallel printer port: the port A half of the User VIA composite, `PrinterPortDevice`, the `CentronicsReceiver` handshake, the activity indicator, and the `file-printer` sink
 - `sideways-slots.md` - Sideways ROM/RAM topology, validation rules, motherboard links
 - `deployment.md` - Installed layout and runtime ROM/preset discovery
 - `preset-schema.md` - The preset file format: every key, path resolution, which models accept what, CLI-over-preset precedence, resolve-preset and describe-preset-schema
