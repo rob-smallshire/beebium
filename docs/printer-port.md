@@ -136,12 +136,14 @@ disconnected the receiver is offline, so the guest waits as with a
 switched-off printer. This is the link to Printium and works against
 `nc -l 9100`.
 
-### host-parallel-printer (plugin, later)
+### host-parallel-printer (plugin)
 
 Opens the host's printer device: `/dev/lp0` or `/dev/usb/lp0` on Linux,
 `LPT1` or the USB printer class on Windows. A USB-to-parallel adapter and a
 real port look the same to the operating system, so one extension covers
 both. macOS has no such device node.
+It has been verified only against stand-ins that keep the device-file
+contract, a FIFO and a regular file, not against a physical printer.
 
 ## Testing the port
 
