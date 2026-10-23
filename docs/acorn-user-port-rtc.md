@@ -293,9 +293,13 @@ src/extensions/acorn-rtc/
 The extension framework was extended with a `UserPortDevice` interface that
 exposes only the User Port signals (PB0--PB7, CB1, CB2) -- deliberately NOT
 a subclass of `ViaPeripheral` to prevent extensions from accessing Port A or
-CA1/CA2. The `UserPort` handle enforces a single-device constraint (the User
-Port has one physical connector) and contains an internal `ViaPeripheral`
-bridge that forwards only Port B and CB1/CB2.
+CA1/CA2. The `UserPort` handle is a thin front over the hardware-owned
+`UserViaPeripheral`, the one `ViaPeripheral` installed on the User VIA. That
+composite forwards Port B and CB1/CB2 to the attached `UserPortDevice` and
+keeps Port A and CA1/CA2 (the printer port's half of the same chip) separate,
+so a User Port device and a printer-port device can share the VIA. It also
+enforces the single-device constraint (the User Port has one physical
+connector).
 
 ### SAF3019P Chip Emulation
 

@@ -17,26 +17,23 @@
 #include "UserPortDevice.hpp"
 
 #include <concepts>
-#include <memory>
 
 namespace beebium {
 
-class Via6522;
-class ViaPeripheral;
+class UserViaPeripheral;
 
 // Port handle for the BBC Micro's User Port.
 //
-// Manages attachment of a single UserPortDevice to the User VIA's
-// Port B and CB1/CB2 lines. Internally creates a ViaPeripheral bridge
-// that forwards only Port B and CB1/CB2 calls to the attached device,
-// leaving Port A and CA1/CA2 at their defaults.
+// A thin handle over the hardware-owned UserViaPeripheral composite, which
+// is the ViaPeripheral installed on the User VIA. Attaching a device here
+// places it on the composite's Port B / CB1 / CB2 half; the device never
+// sees Port A or CA1/CA2, which belong to the printer port.
 //
 // Only one device can be attached at a time -- the User Port has a
 // single physical connector. Attempting to attach a second device throws.
 class BEEBIUM_EXT_API UserPort {
 public:
-    explicit UserPort(Via6522& user_via);
-    ~UserPort();
+    explicit UserPort(UserViaPeripheral& user_via_peripheral);
 
     // Attach a device to the User Port.
     // Throws std::runtime_error if a device is already attached.
@@ -46,13 +43,7 @@ public:
     bool is_occupied() const;
 
 private:
-    Via6522& user_via_;
-    UserPortDevice* device_ = nullptr;
-
-    // Bridge: implements ViaPeripheral, forwards Port B and CB1/CB2
-    // to the attached UserPortDevice. Port A and CA1/CA2 return defaults.
-    class Bridge;
-    std::unique_ptr<Bridge> bridge_;
+    UserViaPeripheral& user_via_peripheral_;
 };
 
 // Concept to detect hardware that has a User Port.

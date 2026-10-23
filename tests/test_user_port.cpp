@@ -12,6 +12,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <beebium/extension/UserPort.hpp>
+#include <beebium/UserViaPeripheral.hpp>
 #include <beebium/Via6522.hpp>
 #include <beebium/ModelBHardware.hpp>
 #include <beebium/ModelBPlusHardware.hpp>
@@ -58,7 +59,9 @@ public:
 
 TEST_CASE("UserPort attachment", "[user-port]") {
     Via6522 via;
-    UserPort port(via);
+    UserViaPeripheral peripheral;
+    via.set_peripheral(&peripheral);
+    UserPort port(peripheral);
 
     SECTION("Initially unoccupied") {
         REQUIRE_FALSE(port.is_occupied());
@@ -84,7 +87,9 @@ TEST_CASE("UserPort attachment", "[user-port]") {
 
 TEST_CASE("UserPort forwards Port B writes to device", "[user-port][port-b]") {
     Via6522 via;
-    UserPort port(via);
+    UserViaPeripheral peripheral;
+    via.set_peripheral(&peripheral);
+    UserPort port(peripheral);
     MockUserPortDevice device;
     port.attach(device);
 
@@ -127,7 +132,9 @@ TEST_CASE("UserPort forwards Port B writes to device", "[user-port][port-b]") {
 
 TEST_CASE("UserPort forwards CB1/CB2 to device", "[user-port][control-lines]") {
     Via6522 via;
-    UserPort port(via);
+    UserViaPeripheral peripheral;
+    via.set_peripheral(&peripheral);
+    UserPort port(peripheral);
     MockUserPortDevice device;
     port.attach(device);
 
@@ -157,12 +164,87 @@ TEST_CASE("UserPort forwards CB1/CB2 to device", "[user-port][control-lines]") {
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// UserViaPeripheral composite tests
+//////////////////////////////////////////////////////////////////////////////
+
+TEST_CASE("UserViaPeripheral forwards Port B and CB1/CB2 only", "[user-port][composite]") {
+    UserViaPeripheral peripheral;
+
+    SECTION("Empty composite behaves as the ViaPeripheral defaults") {
+        REQUIRE_FALSE(peripheral.has_user_port_device());
+        REQUIRE(peripheral.update_port_a(0x00, 0xFF) == 0xFF);
+        REQUIRE(peripheral.update_port_b(0x00, 0xFF) == 0xFF);
+        uint8_t ca1 = 1, ca2 = 1, cb1 = 1, cb2 = 1;
+        peripheral.update_control_lines(ca1, ca2, cb1, cb2);
+        REQUIRE(ca1 == 1);
+        REQUIRE(ca2 == 1);
+        REQUIRE(cb1 == 1);
+        REQUIRE(cb2 == 1);
+    }
+
+    SECTION("Attached device sees Port B and CB1/CB2; Port A and CA1/CA2 stay default") {
+        MockUserPortDevice device;
+        device.input_value = 0x5A;
+        device.cb1_drive = 0;
+        device.cb2_drive = 0;
+        peripheral.attach_user_port_device(device);
+        REQUIRE(peripheral.has_user_port_device());
+
+        REQUIRE(peripheral.update_port_b(0x12, 0x34) == 0x5A);
+        REQUIRE(device.last_output == 0x12);
+        REQUIRE(device.last_ddr == 0x34);
+
+        // Port A is not the device's: inputs read high regardless of the device
+        REQUIRE(peripheral.update_port_a(0x00, 0x00) == 0xFF);
+
+        uint8_t ca1 = 1, ca2 = 1, cb1 = 1, cb2 = 1;
+        peripheral.update_control_lines(ca1, ca2, cb1, cb2);
+        REQUIRE(ca1 == 1);
+        REQUIRE(ca2 == 1);
+        REQUIRE(cb1 == 0);
+        REQUIRE(cb2 == 0);
+        REQUIRE(device.update_control_lines_call_count == 1);
+    }
+
+    SECTION("Second attach throws") {
+        MockUserPortDevice device1;
+        MockUserPortDevice device2;
+        peripheral.attach_user_port_device(device1);
+        REQUIRE_THROWS_AS(peripheral.attach_user_port_device(device2), std::runtime_error);
+    }
+}
+
+TEST_CASE("UserPort handle attaches through a UserViaPeripheral on a Via6522", "[user-port][composite]") {
+    Via6522 via;
+    UserViaPeripheral peripheral;
+    via.set_peripheral(&peripheral);
+    REQUIRE(via.peripheral() == &peripheral);
+
+    UserPort port(peripheral);
+    MockUserPortDevice device;
+    port.attach(device);
+
+    // The handle reports through the composite...
+    REQUIRE(port.is_occupied());
+    REQUIRE(peripheral.has_user_port_device());
+
+    // ...and the VIA reaches the device through the composite it already holds
+    via.write(Via6522::REG_DDRB, 0x00);
+    device.input_value = 0x7F;
+    via.update_phi2_trailing_edge();
+    REQUIRE(via.read(Via6522::REG_ORB) == 0x7F);
+    REQUIRE(via.peripheral() == &peripheral);
+}
+
+//////////////////////////////////////////////////////////////////////////////
 // Port A isolation tests
 //////////////////////////////////////////////////////////////////////////////
 
 TEST_CASE("UserPort does not affect Port A", "[user-port][isolation]") {
     Via6522 via;
-    UserPort port(via);
+    UserViaPeripheral peripheral;
+    via.set_peripheral(&peripheral);
+    UserPort port(peripheral);
     MockUserPortDevice device;
     device.input_value = 0x00;  // Try to drive everything low
     port.attach(device);

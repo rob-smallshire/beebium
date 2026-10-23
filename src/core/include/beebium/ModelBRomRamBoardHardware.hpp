@@ -31,6 +31,7 @@
 #include "SlotProtection.hpp"
 #include "SlotTopology.hpp"
 #include "SystemViaPeripheral.hpp"
+#include "UserViaPeripheral.hpp"
 #include "Via6522.hpp"
 #include "PixelBatch.hpp"
 #include "devices/ConfigurableBankedMemory.hpp"
@@ -105,9 +106,6 @@ public:
     Via6522 system_via;
     Via6522 user_via;
 
-    // User Port handle (must be declared after user_via for init order)
-    UserPort user_port_{user_via};
-
     // IRQ aggregator type - polls VIAs, Tube, and 1 MHz bus for IRQ status
     using IrqAggregatorType = IrqAggregator<
         IrqBinding<Via6522, 0>,        // System VIA → bit 0
@@ -137,6 +135,14 @@ public:
     // System VIA peripherals
     AddressableLatch addressable_latch;
     SystemViaPeripheral system_via_peripheral{addressable_latch, indicators};
+
+    // User VIA peripheral: the composite installed on user_via, carrying the
+    // User Port (Port B, CB1/CB2) half; the printer port (Port A, CA1/CA2)
+    // half will join it there.
+    UserViaPeripheral user_via_peripheral;
+
+    // User Port handle (must be declared after user_via_peripheral for init order)
+    UserPort user_port_{user_via_peripheral};
 
     // Disc subsystem
     DiscDrive disc_drive_0{indicators, "floppy-0-activity-led", "FDD 0", "568nm"};
@@ -248,6 +254,7 @@ public:
         , irq_aggregator_(make_irq_aggregator())
     {
         system_via.set_peripheral(&system_via_peripheral);
+        user_via.set_peripheral(&user_via_peripheral);
         system_via_peripheral.set_sound_chip(&sound_chip);
         // Note: indicators.start() is deferred to the server bootstrap, after
         // extension init() runs. This keeps the registration window open for
@@ -258,7 +265,10 @@ public:
         tube_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
     }
 
-    // Constructor with custom peripherals (for testing)
+    // Constructor with custom peripherals (for testing).
+    // The supplied user peripheral replaces the user_via_peripheral composite on
+    // the User VIA, so a device attached through user_port() is not reached by
+    // the VIA in this configuration.
     ModelBRomRamBoardHardware(ViaPeripheral& system_peripheral, ViaPeripheral& user_peripheral)
         : system_via(system_peripheral)
         , user_via(user_peripheral)

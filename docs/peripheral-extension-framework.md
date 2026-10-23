@@ -90,6 +90,8 @@ The `offset` parameter in `OneMHzBusDevice` is relative to 0xFC00 (the start of 
 
 Future port types (UserPort, AnaloguePort) will follow the same pattern: a port handle class and a device callback interface, added without changing existing code.
 
+Where one chip serves two connectors, the hardware owns a composite `ViaPeripheral` and the port handles front its halves. The User VIA is the case in point: `UserViaPeripheral` is installed on the VIA once by the hardware policy, `UserPort::attach()` places a `UserPortDevice` on its Port B / CB1 / CB2 half, and Port A / CA1 / CA2 are reserved for the printer port.
+
 ### Dependency Resolution
 
 The `ExtensionRegistry` collects extensions and resolves their dependency graph via topological sort (Kahn's algorithm) at startup:
