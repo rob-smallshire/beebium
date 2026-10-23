@@ -137,7 +137,7 @@ in the Beeb's order: `HELLO` LF CR.
 `line_ending=lf` turns a lone CR into LF and a CR LF pair into LF;
 `crlf` turns a lone CR into CR LF and leaves CR LF alone.
 
-### tcp-printer (plugin, later)
+### tcp-printer (plugin)
 
 A raw TCP client to `host:port`, default port 9100, the JetDirect
 convention. No protocol: the byte stream is all that crosses. While
