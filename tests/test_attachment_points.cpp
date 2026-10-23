@@ -28,6 +28,7 @@ TEST_CASE("attachment-point catalogue gives display names and occupancy",
           "[extension][attachment-points]") {
     CHECK(attachment_point_display_name("serial-port") == "Serial Port");
     CHECK(attachment_point_display_name("user-port") == "User Port");
+    CHECK(attachment_point_display_name("printer-port") == "Printer Port");
     CHECK(attachment_point_display_name("1mhz-bus") == "1 MHz Bus");
     CHECK(attachment_point_display_name("tube") == "Coprocessor");
     CHECK(attachment_point_display_name("scsi") == "SCSI Bus");
@@ -37,6 +38,8 @@ TEST_CASE("attachment-point catalogue gives display names and occupancy",
     CHECK(find_attachment_point("serial-port")->min_occupancy == 0);
     CHECK(find_attachment_point("serial-port")->max_occupancy == 1);
     CHECK(find_attachment_point("tube")->max_occupancy == 1);
+    CHECK(find_attachment_point("printer-port")->min_occupancy == 0);
+    CHECK(find_attachment_point("printer-port")->max_occupancy == 1);
     CHECK(find_attachment_point("1mhz-bus")->max_occupancy == std::nullopt);  // unbounded
     CHECK(find_attachment_point("scsi")->max_occupancy == 7);
 

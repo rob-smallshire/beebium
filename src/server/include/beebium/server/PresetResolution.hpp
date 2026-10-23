@@ -39,6 +39,7 @@
 #include "beebium/extension/OneMHzBusPort.hpp"
 #include "beebium/extension/PluginLoader.hpp"
 #include "beebium/extension/SerialPort.hpp"
+#include "beebium/extension/PrinterPort.hpp"
 #include "beebium/extension/UserPort.hpp"
 #include "beebium/tube/TubeConcepts.hpp"
 
@@ -496,6 +497,7 @@ std::vector<std::string> machine_attachment_points() {
     std::vector<std::string> points;
     if constexpr (beebium::HasOneMHzBus<Memory>) points.push_back("1mhz-bus");
     if constexpr (beebium::HasUserPort<Memory>) points.push_back("user-port");
+    if constexpr (beebium::HasPrinterPort<Memory>) points.push_back("printer-port");
     if constexpr (beebium::HasTubeSocket<Memory>) points.push_back("tube");
     if constexpr (beebium::HasSerialPort<Memory>) points.push_back("serial-port");
     return points;

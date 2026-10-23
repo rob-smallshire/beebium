@@ -16,6 +16,7 @@
 #include "Export.hpp"
 #include "OneMHzBusPort.hpp"
 #include "PeripheralExtension.hpp"
+#include "PrinterPort.hpp"
 #include "SerialPort.hpp"
 #include "UserPort.hpp"
 #include "../tube/TubeSocket.hpp"
@@ -45,12 +46,14 @@ public:
                              UserPort* user_port = nullptr,
                              TubeSocket* tube_socket = nullptr,
                              Indicators* indicators = nullptr,
-                             SerialPort* serial_port = nullptr)
+                             SerialPort* serial_port = nullptr,
+                             PrinterPort* printer_port = nullptr)
         : one_mhz_bus_port_(one_mhz_bus_port)
         , user_port_(user_port)
         , tube_socket_(tube_socket)
         , indicators_(indicators)
-        , serial_port_(serial_port) {}
+        , serial_port_(serial_port)
+        , printer_port_(printer_port) {}
 
     // Type-safe port handle access.
     template<typename T>
@@ -79,6 +82,12 @@ public:
                     "ExtensionContext: serial port not available on this machine");
             }
             return *serial_port_;
+        } else if constexpr (std::is_same_v<T, PrinterPort>) {
+            if (!printer_port_) {
+                throw std::runtime_error(
+                    "ExtensionContext: printer-port not available on this machine");
+            }
+            return *printer_port_;
         } else {
             static_assert(!std::is_same_v<T, T>, "Unknown port type");
         }
@@ -95,6 +104,8 @@ public:
             return tube_socket_ != nullptr;
         } else if constexpr (std::is_same_v<T, SerialPort>) {
             return serial_port_ != nullptr;
+        } else if constexpr (std::is_same_v<T, PrinterPort>) {
+            return printer_port_ != nullptr;
         } else {
             return false;
         }
@@ -140,6 +151,7 @@ private:
     TubeSocket* tube_socket_;
     Indicators* indicators_;
     SerialPort* serial_port_;
+    PrinterPort* printer_port_;
     std::unordered_map<std::string, PeripheralExtension*> providers_;
 };
 

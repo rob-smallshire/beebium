@@ -286,6 +286,15 @@
           ]
         },
         {
+          "id": "printer-port",
+          "display_name": "Printer Port",
+          "description": "The parallel printer port, a Centronics connector for a printer.",
+          "min_occupancy": 0,
+          "max_occupancy": 1,
+          "provided_by": null,
+          "extensions": []
+        },
+        {
           "id": "tube",
           "display_name": "Coprocessor",
           "description": "The Tube connector, which takes a second processor.",

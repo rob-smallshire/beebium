@@ -12,6 +12,7 @@
 
 
 #include <catch2/catch_test_macros.hpp>
+#include <beebium/extension/ExtensionContext.hpp>
 #include <beebium/extension/PrinterPort.hpp>
 #include <beebium/UserViaPeripheral.hpp>
 #include <beebium/Via6522.hpp>
@@ -339,4 +340,31 @@ TEST_CASE("Hardware policies expose a printer port on the User VIA composite", "
     auto names = hw.indicators.names();
     REQUIRE(std::find(names.begin(), names.end(),
                       UserViaPeripheral::kPrinterActivityIndicatorName) != names.end());
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// ExtensionContext
+//////////////////////////////////////////////////////////////////////////////
+
+TEST_CASE("ExtensionContext hands out the printer port", "[printer-port][extension-context]") {
+    UserViaPeripheral peripheral;
+    PrinterPort port(peripheral);
+
+    SECTION("Available when the machine supplies one") {
+        ExtensionContext ctx(nullptr, nullptr, nullptr, nullptr, nullptr, &port);
+        REQUIRE(ctx.has<PrinterPort>());
+        REQUIRE(&ctx.get<PrinterPort>() == &port);
+    }
+
+    SECTION("Absent otherwise, with a message naming the point") {
+        ExtensionContext ctx;
+        REQUIRE_FALSE(ctx.has<PrinterPort>());
+        try {
+            ctx.get<PrinterPort>();
+            FAIL("expected std::runtime_error");
+        } catch (const std::runtime_error& e) {
+            REQUIRE(std::string(e.what()) ==
+                "ExtensionContext: printer-port not available on this machine");
+        }
+    }
 }

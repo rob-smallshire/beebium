@@ -3418,8 +3418,8 @@ TEST_CASE("resolve-preset --json output for an unloadable preset is stable",
 namespace {
 
 nlohmann::ordered_json without_build_dependent_parts(nlohmann::ordered_json schema) {
-    static const std::set<std::string> machine_points{"1mhz-bus", "user-port", "tube",
-                                                      "serial-port"};
+    static const std::set<std::string> machine_points{"1mhz-bus", "user-port", "printer-port",
+                                                      "tube", "serial-port"};
     for (auto& section : schema.at("sections")) {
         const auto type = section.at("type").get<std::string>();
         if (type == "econet") {

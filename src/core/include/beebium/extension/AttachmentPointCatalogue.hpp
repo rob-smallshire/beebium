@@ -53,6 +53,8 @@ inline const std::vector<AttachmentPoint>& attachment_point_catalogue() {
          "The RS423 serial port, for modems, printers and other computers.", 0, 1},
         {"user-port", "User Port",
          "The user port, a parallel connector for add-ons such as a real-time clock.", 0, 1},
+        {"printer-port", "Printer Port",
+         "The parallel printer port, a Centronics connector for a printer.", 0, 1},
         {"1mhz-bus", "1 MHz Bus",
          "The 1 MHz bus, the expansion connector for add-ons such as a SCSI host adapter.", 0, std::nullopt},
         {"tube", "Coprocessor",

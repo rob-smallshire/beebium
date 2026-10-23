@@ -67,7 +67,7 @@ private:
 
 The attachment-point names are the ubiquitous-language strings from
 `docs/sideways-slots.md` / the extension framework: `serial-port`,
-`user-port`, `1mhz-bus`, `tube`, `scsi`. `ctx.get<T>()` hands you the typed
+`user-port`, `printer-port`, `1mhz-bus`, `tube`, `scsi`. `ctx.get<T>()` hands you the typed
 handle for a point you declared in `attaches_to()`.
 
 Configuration arrives before `init()`. The framework parses

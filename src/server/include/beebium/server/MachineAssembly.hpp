@@ -1234,7 +1234,8 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         beebium::HasUserPort<Memory> ? &machine.state().memory.user_port() : nullptr,
         beebium::HasTubeSocket<Memory> ? &machine.state().memory.tube_socket : nullptr,
         &machine.state().memory.indicators,
-        beebium::HasSerialPort<Memory> ? &machine.state().memory.serial_port() : nullptr);
+        beebium::HasSerialPort<Memory> ? &machine.state().memory.serial_port() : nullptr,
+        beebium::HasPrinterPort<Memory> ? &machine.state().memory.printer_port() : nullptr);
     extension_registry.resolve_and_init(*am->extension_context);
 
     // A saved machine's extensions take back what their batteries kept,

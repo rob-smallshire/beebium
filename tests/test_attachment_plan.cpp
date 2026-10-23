@@ -60,7 +60,8 @@ const std::vector<const ExtensionManifest*>& known() {
     return kKnown;
 }
 
-const std::vector<std::string> kMachinePoints{"1mhz-bus", "user-port", "tube", "serial-port"};
+const std::vector<std::string> kMachinePoints{"1mhz-bus", "user-port", "printer-port", "tube",
+                                              "serial-port"};
 
 }  // namespace
 

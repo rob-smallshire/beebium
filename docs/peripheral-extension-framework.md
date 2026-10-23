@@ -21,7 +21,8 @@ Extension points are named attachment sites where extensions can register. Built
 | Extension Point | Type | Provider |
 |----------------|------|----------|
 | `1mhz-bus` | Built-in | Machine hardware (FRED/JIM region, 0xFC00-0xFDFF) |
-| `user-port` | Built-in | User VIA Port B (future) |
+| `user-port` | Built-in | User VIA Port B, CB1/CB2 |
+| `printer-port` | Built-in | User VIA Port A, CA1/CA2: the parallel printer port (see `docs/printer-port.md`) |
 | `analogue-port` | Built-in | ADC (future) |
 | `scsi` | Dynamic | Created by SCSI Host Adapter extension (future) |
 
