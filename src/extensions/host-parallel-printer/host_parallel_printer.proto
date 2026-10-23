@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package beebium;
+
+// Typed API for the host-parallel-printer extension: the sink that sends
+// everything the BBC prints to a printer device on the host, such as
+// /dev/usb/lp0 or LPT1. This service belongs to the host-parallel-printer
+// PeripheralExtension and is present only when --host-parallel-printer is
+// loaded. There is no SetOnline: the printer is online exactly while its
+// device is open.
+service HostParallelPrinter {
+    // The device, whether it is open, and the byte counts.
+    rpc GetStatus(HostParallelPrinterGetStatusRequest) returns (HostParallelPrinterStatus);
+
+    // The printer devices present on the host, to help a user choose the
+    // device parameter: on Linux the /dev/usb/lp* and /dev/lp* nodes, on
+    // Windows the USB printer class interface paths. Enumeration only;
+    // nothing is opened or chosen. Empty when there are none.
+    rpc ListDevices(HostParallelPrinterListDevicesRequest) returns (HostParallelPrinterDeviceList);
+}
+
+message HostParallelPrinterGetStatusRequest {}
+
+message HostParallelPrinterStatus {
+    string device = 1;           // the host device path, as configured
+    bool open = 2;               // open, and so online
+    uint64 bytes_received = 3;   // bytes accepted from the port since launch
+    uint64 bytes_sent = 4;       // bytes written to the device
+}
+
+message HostParallelPrinterListDevicesRequest {}
+
+message HostParallelPrinterDevice {
+    string path = 1;   // what to give as device=
+    string name = 2;   // a friendly name
+}
+
+message HostParallelPrinterDeviceList {
+    repeated HostParallelPrinterDevice devices = 1;
+}

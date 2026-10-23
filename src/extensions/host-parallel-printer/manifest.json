@@ -1,0 +1,35 @@
+{
+    "name": "host-parallel-printer",
+    "display_name": "Host Printer Port",
+    "description": "Sends everything the BBC prints to a printer port on the host computer, such as /dev/usb/lp0 or LPT1.",
+    "library": "host-parallel-printer",
+    "attaches_to": [
+        "printer-port"
+    ],
+    "cli": "host-parallel-printer",
+    "parameters": [
+        {
+            "key": "device",
+            "label": "Device",
+            "type": "string",
+            "required": true,
+            "description": "Host printer device: /dev/usb/lp0 or /dev/lp0 on Linux; on Windows a USB printer's \\\\?\\usb#... interface path (HostParallelPrinter.ListDevices lists them) or LPTn, opened as \\\\.\\LPTn"
+        },
+        {
+            "key": "buffer",
+            "label": "Buffer (bytes)",
+            "type": "integer",
+            "default": "256",
+            "description": "receiver queue depth in bytes; when it is full the BBC waits for /ACK",
+            "min": 1
+        },
+        {
+            "key": "reconnect_ms",
+            "label": "Reopen interval (ms)",
+            "type": "integer",
+            "default": "1000",
+            "description": "milliseconds between attempts to open the device while it is not open; 0 makes one attempt and never retries",
+            "min": 0
+        }
+    ]
+}

@@ -150,7 +150,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::server exited $LASTEXITCODE (likely a missing DLL)"; exit 1 }
           $out
           $clis = ($out | Select-Object -Skip 1) | ForEach-Object { ($_ -split "`t")[0] }
-          foreach ($cli in @('host-serial','aun','scsi-hdd','rpc-serial','ip232-serial','rfc2217-client-serial','rfc2217-server-serial','loopback-serial','piconet','acorn-scsi','acorn-rtc','tcp-printer')) {
+          foreach ($cli in @('host-serial','aun','scsi-hdd','rpc-serial','ip232-serial','rfc2217-client-serial','rfc2217-server-serial','loopback-serial','piconet','acorn-scsi','acorn-rtc','tcp-printer','host-parallel-printer')) {
             if ($clis -notcontains $cli) { Write-Host "::error::extension not discovered from the ZIP: $cli"; exit 1 }
           }
           $presets = @(Get-ChildItem "extracted\share\beebium\presets\*.beebium-preset" -ErrorAction SilentlyContinue)

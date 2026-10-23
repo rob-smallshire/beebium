@@ -64,7 +64,8 @@ endif()
 # runtime deps (gRPC for rpc-serial) must also resolve from the installed tree.
 foreach(plugin scsi-hdd acorn-rtc piconet
                ip232-serial rpc-serial loopback-serial
-               rfc2217-client-serial rfc2217-server-serial tcp-printer)
+               rfc2217-client-serial rfc2217-server-serial tcp-printer
+               host-parallel-printer)
     if(NOT out MATCHES "${plugin}")
         message(FATAL_ERROR "plugin '${plugin}' not discovered from the installed "
                             "tree (bin/extensions):\n${out}")

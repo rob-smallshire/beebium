@@ -1468,6 +1468,18 @@ target_link_libraries(test_tcp_printer_extension PRIVATE
 )
 catch_discover_tests(test_tcp_printer_extension)
 
+# host-parallel-printer extension test: the sink against stand-ins for a
+# printer device (a regular file everywhere, a FIFO on POSIX), the
+# extension's options, its panel and its RPC.
+add_executable(test_host_parallel_printer_extension test_host_parallel_printer_extension.cpp)
+target_link_libraries(test_host_parallel_printer_extension PRIVATE
+    beebium_ext_host_parallel_printer
+    beebium_extension_ui_proto
+    Threads::Threads
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_host_parallel_printer_extension)
+
 # Host-serial endpoint test (cross-platform: stuck-peer back-pressure, no pty).
 add_executable(test_host_serial_endpoint test_host_serial_endpoint.cpp)
 target_include_directories(test_host_serial_endpoint PRIVATE
@@ -1810,6 +1822,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_rfc2217_client_plugin
         beebium_ext_rfc2217_server_plugin
         beebium_ext_tcp_printer_plugin
+        beebium_ext_host_parallel_printer_plugin
     )
     catch_discover_tests(test_plugin_loader)
 

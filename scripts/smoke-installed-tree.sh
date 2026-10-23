@@ -63,7 +63,7 @@ ext_out="$("${server}" list-extensions)" || fail "list-extensions exited non-zer
 echo "${ext_out}"
 # One plugin of each kind plus the network-serial extensions (rpc-serial pulls in
 # gRPC, so its presence also proves those deps resolve from the installed tree).
-expected_plugins="scsi-hdd acorn-rtc piconet ip232-serial rpc-serial loopback-serial rfc2217-client-serial rfc2217-server-serial tcp-printer"
+expected_plugins="scsi-hdd acorn-rtc piconet ip232-serial rpc-serial loopback-serial rfc2217-client-serial rfc2217-server-serial tcp-printer host-parallel-printer"
 for plugin in ${expected_plugins}; do
     echo "${ext_out}" | grep -q "${plugin}" \
         || fail "plugin '${plugin}' not discovered from the installed tree"
