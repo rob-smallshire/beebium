@@ -23,22 +23,11 @@ struct StatusBarView: View {
     var connectionTarget: ConnectionTarget
     var onToggleUnlink: (() -> Void)?
 
-    /// Display order for indicators (keyboard LEDs first, then drives)
-    private let indicatorOrder = [
-        "caps-lock-led",
-        "shift-lock-led",
-        "floppy-0-activity-led",
-        "floppy-1-activity-led",
-        "hdd-0-activity-led",
-        "hdd-1-activity-led",
-        "hdd-2-activity-led"
-    ]
-
     var body: some View {
         HStack(spacing: 12) {
-            // Indicators on left
+            // Indicators on left, every one the server reports, in server order
             if indicatorClient.isLoaded {
-                ForEach(indicatorOrder, id: \.self) { name in
+                ForEach(indicatorClient.orderedNames, id: \.self) { name in
                     if let meta = indicatorClient.metadata[name] {
                         IndicatorView(
                             value: indicatorClient.values[name] ?? 0,

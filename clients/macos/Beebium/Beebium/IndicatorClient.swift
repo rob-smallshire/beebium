@@ -32,6 +32,11 @@ final class IndicatorClient: ObservableObject, Disconnectable {
     /// Indicator metadata keyed by name
     @Published private(set) var metadata: [String: IndicatorMetadata] = [:]
 
+    /// Indicator names in the order ListIndicators returned them. The server
+    /// registers keyboard LEDs first, then drives, then whatever extensions add,
+    /// and that registration order is the display order (issue #212).
+    @Published private(set) var orderedNames: [String] = []
+
     /// Whether metadata has been loaded
     @Published private(set) var isLoaded: Bool = false
 
@@ -71,6 +76,7 @@ final class IndicatorClient: ObservableObject, Disconnectable {
         isLoaded = false
         values = [:]
         metadata = [:]
+        orderedNames = []
         errorMessage = nil
         // Re-arm the lock-LED change detection so a reconnect's first values are
         // seen as changes and re-adopted. The token stays monotonic.
@@ -87,7 +93,9 @@ final class IndicatorClient: ObservableObject, Disconnectable {
             let response = try await client.listIndicators(request).response.get()
 
             var newMetadata: [String: IndicatorMetadata] = [:]
+            var newOrderedNames: [String] = []
             for info in response.indicators {
+                newOrderedNames.append(info.name)
                 let label = info.metadata["label"] ?? info.name
                 let colorString = info.metadata["color"] ?? ""
                 let color = colorFromMetadata(colorString)
@@ -104,6 +112,7 @@ final class IndicatorClient: ObservableObject, Disconnectable {
 
             await MainActor.run {
                 self.metadata = newMetadata
+                self.orderedNames = newOrderedNames
                 self.isLoaded = true
                 self.errorMessage = nil
             }
