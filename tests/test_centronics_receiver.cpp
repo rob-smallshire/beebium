@@ -106,13 +106,15 @@ TEST_CASE("CentronicsReceiver offline accepts nothing and never acknowledges", "
     REQUIRE(rx.bytes_received() == 0);
     REQUIRE(drain(rx).empty());
 
-    SECTION("A strobe arriving once online is accepted and acknowledged") {
+    SECTION("Going online accepts and acknowledges the held byte, so a print resumes") {
         rx.set_online(true);
         REQUIRE(rx.is_online());
-        strobe(rx, 'R');
         ack = idle_ticks(rx, 12);
         REQUIRE(std::count(ack.begin(), ack.end(), 0) == 4);
-        REQUIRE(drain(rx) == "R");
+        REQUIRE(rx.bytes_received() == 1);
+        strobe(rx, 'R');
+        idle_ticks(rx, 12);
+        REQUIRE(drain(rx) == "QR");
     }
 }
 

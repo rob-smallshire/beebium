@@ -36,7 +36,9 @@ namespace beebium::printer {
 // acknowledge is deferred until the consumer has made room, so a slow sink
 // stalls the guest (which is waiting for /ACK) and never the host, and no
 // byte is lost. While offline nothing is accepted and /ACK stays high, which
-// is what a switched-off or absent printer looks like.
+// is what a switched-off printer looks like; the strobed byte is held in the
+// same way and accepted once the receiver is online again, so a print that
+// stalled on an offline printer resumes where it stopped.
 //
 // Threads: the emulation thread is the producer through
 // update_control_lines(); the sink's own thread is the consumer through
@@ -66,14 +68,14 @@ public:
         const bool falling_edge = (strobe_level_ != 0) && (strobe == 0);
         strobe_level_ = strobe;
 
-        if (falling_edge && online_.load(std::memory_order_relaxed)) {
+        if (falling_edge) {
             // A strobe while a byte is still held replaces it: the Beeb has
             // no BUSY line, and well-behaved software waits for /ACK first.
             held_byte_ = data;
             holding_ = true;
         }
 
-        if (holding_ && offer_held_byte()) {
+        if (holding_ && online_.load(std::memory_order_relaxed) && offer_held_byte()) {
             holding_ = false;
             ticks_since_accept_ = 0;
             acknowledging_ = true;
