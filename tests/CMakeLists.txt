@@ -813,6 +813,10 @@ add_executable(test_printer_port test_printer_port.cpp)
 target_link_libraries(test_printer_port PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_printer_port)
 
+add_executable(test_centronics_receiver test_centronics_receiver.cpp)
+target_link_libraries(test_centronics_receiver PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_centronics_receiver)
+
 # SAF3019P RTC chip emulation tests
 add_executable(test_saf3019p test_saf3019p.cpp)
 target_link_libraries(test_saf3019p PRIVATE beebium_rtc_core Catch2::Catch2WithMain)
