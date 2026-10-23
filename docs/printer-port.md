@@ -12,7 +12,7 @@ seam). The design discussion that led here is
 |---------|-------|-------|
 | The port: the connector's electrical behaviour and timing | Beebium core | `PrinterPort`, `PrinterPortDevice`, the port A half of `UserViaPeripheral` |
 | The sink: where the bytes go | Extensions on the `printer-port` attachment point | `file-printer` (built in), `tcp-printer`, `host-parallel-printer` |
-| The printer: a command language, a character ROM, paper | Printium, a separate project | reached over a raw TCP byte stream |
+| The printer: a command language, a character ROM, paper | Scriptorium, a separate project | reached over a raw TCP byte stream |
 
 Beebium contains no printer-language code. A sink sees bytes and nothing
 else, so the same port serves an ESC/P emulator, a capture file, a real
@@ -133,7 +133,7 @@ in the Beeb's order: `HELLO` LF CR.
 A raw TCP client to `host:port`, default port 9100, the JetDirect
 convention. No protocol: the byte stream is all that crosses. While
 disconnected the receiver is offline, so the guest waits as with a
-switched-off printer. This is the link to Printium and works against
+switched-off printer. This is the link to Scriptorium and works against
 `nc -l 9100`.
 
 ### host-parallel-printer (plugin)

@@ -458,7 +458,7 @@ See `docs/printer-port.md` for the port model and the other sinks.
 
 The `tcp-printer` plugin sends everything the BBC prints to a raw TCP
 printer port on the network: a JetDirect printer, a printer emulator such as
-Printium, or `nc -l 9100`. Only the bytes cross, with no framing or protocol.
+Scriptorium, or `nc -l 9100`. Only the bytes cross, with no framing or protocol.
 The printer is online exactly while it is connected: until the connection is
 made, and after it drops, the BBC's print waits for /ACK as it would for a
 switched-off printer, and carries on once the printer is reachable again.
