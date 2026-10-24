@@ -343,6 +343,24 @@ add_custom_command(TARGET beebium-model-b POST_BUILD
     COMMENT "Copying host ROMs to build directory"
 )
 
+# Blank disc templates (discs/blank/, made by scripts/make-blank-discs.sh),
+# copied beside each executable for exe-relative discovery from the build
+# tree, as the presets are; installed to share/beebium/blank-discs below.
+set(BLANK_DISCS_SRC_DIR "${CMAKE_SOURCE_DIR}/discs/blank")
+file(GLOB BLANK_DISC_FILEPATHS CONFIGURE_DEPENDS "${BLANK_DISCS_SRC_DIR}/*")
+foreach(server_target ${BEEBIUM_SERVERS_DEPS})
+    if(server_target MATCHES "^beebium-model-")
+        add_custom_command(TARGET ${server_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:${server_target}>/blank-discs"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${BLANK_DISC_FILEPATHS}
+                "$<TARGET_FILE_DIR:${server_target}>/blank-discs/"
+            VERBATIM
+        )
+    endif()
+endforeach()
+
 # Generate the shipped system presets (and their thumbnails). Model B serves
 # two presets: a bare cassette machine and a disc-equipped variant. A filing
 # system is provisioned explicitly via --sideways; no machine auto-loads DFS
@@ -566,4 +584,7 @@ install(DIRECTORY ${PRESETS_OUTPUT_DIR}/
     DESTINATION share/beebium/presets
     FILES_MATCHING
         PATTERN "*.beebium-preset"
+)
+install(DIRECTORY ${BLANK_DISCS_SRC_DIR}/
+    DESTINATION share/beebium/blank-discs
 )
