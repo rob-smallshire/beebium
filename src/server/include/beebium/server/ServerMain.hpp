@@ -17,6 +17,7 @@
 // and dispatches to a subcommand. Each family of subcommands lives in its own
 // header; this one only gathers them.
 
+#include "beebium/server/BlankDiscSubcommands.hpp"
 #include "beebium/server/ConditionSubcommands.hpp"
 #include "beebium/server/AunMapSubcommands.hpp"
 #include "beebium/server/ExtensionSubcommands.hpp"
@@ -61,6 +62,8 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<StartSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListFdcsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListDiscFormatsSubcommand<MachineType>>());
+        v.push_back(std::make_unique<ListBlankDiscsSubcommand<MachineType>>());
+        v.push_back(std::make_unique<CreateDiscSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListExtensionsSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeExtensionSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListAttachmentPointsSubcommand<MachineType>>());

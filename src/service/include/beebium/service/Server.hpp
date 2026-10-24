@@ -41,7 +41,9 @@
 #include <grpcpp/grpcpp.h>
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <sstream>
@@ -114,6 +116,12 @@ public:
     /// Where the machine is kept on disk, for SaveMachine, ResetBattery and
     /// SystemInfo. Call before start(); it must outlive the server.
     void set_machine_store(MachineStore* store) { impl_->machine_store = store; }
+
+    /// Where the blank disc templates are, for DiscService's ListBlankDiscs
+    /// and CreateDisc. Call before start(); none means no templates.
+    void set_blank_discs_dirpath(std::optional<std::filesystem::path> dirpath) {
+        impl_->blank_discs_dirpath = std::move(dirpath);
+    }
 
     /// The frame the machine last presented, as clients are sent it.
     const FrameBuffer& frame_buffer() const { return impl_->frame_buffer; }
@@ -202,6 +210,7 @@ private:
         std::unique_ptr<IndicatorServiceImpl<MachineType>> indicator_service;
         std::unique_ptr<SystemServiceImpl<MachineType>> system_service;
         MachineStore* machine_store = nullptr;
+        std::optional<std::filesystem::path> blank_discs_dirpath;
         std::unique_ptr<AudioServiceImpl<MachineType>> audio_service;
         std::unique_ptr<SidewaysServiceImpl<MachineType>> sideways_service;
         // Motherboard link state captured before start(), applied to
@@ -348,6 +357,7 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
 
     impl_->disc_service = std::make_unique<DiscServiceImpl<MachineType>>(
         impl_->machine);
+    impl_->disc_service->set_blank_discs_dirpath(impl_->blank_discs_dirpath);
 
     impl_->indicator_service = std::make_unique<IndicatorServiceImpl<MachineType>>(
         impl_->machine);

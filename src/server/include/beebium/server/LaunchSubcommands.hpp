@@ -18,6 +18,7 @@
 #include "beebium/server/FramePng.hpp"
 #include "beebium/server/MachineAssembly.hpp"
 #include "beebium/server/MachineStoreImpl.hpp"
+#include "beebium/server/SystemDirectories.hpp"
 
 #include <algorithm>
 #include <array>
@@ -204,6 +205,7 @@ public:
             ServedMachineStore<MachineType> machine_store(am, config, server.frame_buffer(),
                                                           std::move(recorded_document));
             server.set_machine_store(&machine_store);
+            server.set_blank_discs_dirpath(find_blank_discs_dirpath());
 
             beebium::service::Provenance provenance{
                 config.launch.provenance_type,

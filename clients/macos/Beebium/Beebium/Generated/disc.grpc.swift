@@ -66,6 +66,16 @@ internal protocol Beebium_DiscServiceClientProtocol: GRPCClient {
     _ request: Beebium_InstallDiscControllerRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_InstallDiscControllerRequest, Beebium_InstallDiscControllerResponse>
+
+  func listBlankDiscs(
+    _ request: Beebium_ListBlankDiscsRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_ListBlankDiscsRequest, Beebium_ListBlankDiscsResponse>
+
+  func createDisc(
+    _ request: Beebium_CreateDiscRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_CreateDiscRequest, Beebium_CreateDiscResponse>
 }
 
 extension Beebium_DiscServiceClientProtocol {
@@ -243,6 +253,43 @@ extension Beebium_DiscServiceClientProtocol {
       interceptors: self.interceptors?.makeInstallDiscControllerInterceptors() ?? []
     )
   }
+
+  /// List the blank disc templates the server ships, in file name order
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ListBlankDiscs.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func listBlankDiscs(
+    _ request: Beebium_ListBlankDiscsRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_ListBlankDiscsRequest, Beebium_ListBlankDiscsResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_DiscServiceClientMetadata.Methods.listBlankDiscs.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListBlankDiscsInterceptors() ?? []
+    )
+  }
+
+  /// Copy a blank disc template to a path on the server's host, byte for
+  /// byte. Inserting the new disc is a separate InsertDisc.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to CreateDisc.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func createDisc(
+    _ request: Beebium_CreateDiscRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_CreateDiscRequest, Beebium_CreateDiscResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_DiscServiceClientMetadata.Methods.createDisc.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCreateDiscInterceptors() ?? []
+    )
+  }
 }
 
 @available(*, deprecated)
@@ -355,6 +402,16 @@ internal protocol Beebium_DiscServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_InstallDiscControllerRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_InstallDiscControllerRequest, Beebium_InstallDiscControllerResponse>
+
+  func makeListBlankDiscsCall(
+    _ request: Beebium_ListBlankDiscsRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_ListBlankDiscsRequest, Beebium_ListBlankDiscsResponse>
+
+  func makeCreateDiscCall(
+    _ request: Beebium_CreateDiscRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_CreateDiscRequest, Beebium_CreateDiscResponse>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -474,6 +531,30 @@ extension Beebium_DiscServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeInstallDiscControllerInterceptors() ?? []
     )
   }
+
+  internal func makeListBlankDiscsCall(
+    _ request: Beebium_ListBlankDiscsRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_ListBlankDiscsRequest, Beebium_ListBlankDiscsResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DiscServiceClientMetadata.Methods.listBlankDiscs.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListBlankDiscsInterceptors() ?? []
+    )
+  }
+
+  internal func makeCreateDiscCall(
+    _ request: Beebium_CreateDiscRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_CreateDiscRequest, Beebium_CreateDiscResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DiscServiceClientMetadata.Methods.createDisc.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCreateDiscInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -585,6 +666,30 @@ extension Beebium_DiscServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeInstallDiscControllerInterceptors() ?? []
     )
   }
+
+  internal func listBlankDiscs(
+    _ request: Beebium_ListBlankDiscsRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ListBlankDiscsResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DiscServiceClientMetadata.Methods.listBlankDiscs.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListBlankDiscsInterceptors() ?? []
+    )
+  }
+
+  internal func createDisc(
+    _ request: Beebium_CreateDiscRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CreateDiscResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DiscServiceClientMetadata.Methods.createDisc.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCreateDiscInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -632,6 +737,12 @@ internal protocol Beebium_DiscServiceClientInterceptorFactoryProtocol: Sendable 
 
   /// - Returns: Interceptors to use when invoking 'installDiscController'.
   func makeInstallDiscControllerInterceptors() -> [ClientInterceptor<Beebium_InstallDiscControllerRequest, Beebium_InstallDiscControllerResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'listBlankDiscs'.
+  func makeListBlankDiscsInterceptors() -> [ClientInterceptor<Beebium_ListBlankDiscsRequest, Beebium_ListBlankDiscsResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'createDisc'.
+  func makeCreateDiscInterceptors() -> [ClientInterceptor<Beebium_CreateDiscRequest, Beebium_CreateDiscResponse>]
 }
 
 internal enum Beebium_DiscServiceClientMetadata {
@@ -648,6 +759,8 @@ internal enum Beebium_DiscServiceClientMetadata {
       Beebium_DiscServiceClientMetadata.Methods.getSpinUpDelay,
       Beebium_DiscServiceClientMetadata.Methods.listAvailableControllers,
       Beebium_DiscServiceClientMetadata.Methods.installDiscController,
+      Beebium_DiscServiceClientMetadata.Methods.listBlankDiscs,
+      Beebium_DiscServiceClientMetadata.Methods.createDisc,
     ]
   )
 
@@ -705,6 +818,18 @@ internal enum Beebium_DiscServiceClientMetadata {
       path: "/beebium.DiscService/InstallDiscController",
       type: GRPCCallType.unary
     )
+
+    internal static let listBlankDiscs = GRPCMethodDescriptor(
+      name: "ListBlankDiscs",
+      path: "/beebium.DiscService/ListBlankDiscs",
+      type: GRPCCallType.unary
+    )
+
+    internal static let createDisc = GRPCMethodDescriptor(
+      name: "CreateDisc",
+      path: "/beebium.DiscService/CreateDisc",
+      type: GRPCCallType.unary
+    )
   }
 }
 
@@ -749,6 +874,13 @@ internal protocol Beebium_DiscServiceProvider: CallHandlerProvider {
 
   /// Install a disc controller into the socket (machines with sockets only)
   func installDiscController(request: Beebium_InstallDiscControllerRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_InstallDiscControllerResponse>
+
+  /// List the blank disc templates the server ships, in file name order
+  func listBlankDiscs(request: Beebium_ListBlankDiscsRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListBlankDiscsResponse>
+
+  /// Copy a blank disc template to a path on the server's host, byte for
+  /// byte. Inserting the new disc is a separate InsertDisc.
+  func createDisc(request: Beebium_CreateDiscRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CreateDiscResponse>
 }
 
 extension Beebium_DiscServiceProvider {
@@ -844,6 +976,24 @@ extension Beebium_DiscServiceProvider {
         userFunction: self.installDiscController(request:context:)
       )
 
+    case "ListBlankDiscs":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ListBlankDiscsRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListBlankDiscsResponse>(),
+        interceptors: self.interceptors?.makeListBlankDiscsInterceptors() ?? [],
+        userFunction: self.listBlankDiscs(request:context:)
+      )
+
+    case "CreateDisc":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CreateDiscRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CreateDiscResponse>(),
+        interceptors: self.interceptors?.makeCreateDiscInterceptors() ?? [],
+        userFunction: self.createDisc(request:context:)
+      )
+
     default:
       return nil
     }
@@ -921,6 +1071,19 @@ internal protocol Beebium_DiscServiceAsyncProvider: CallHandlerProvider, Sendabl
     request: Beebium_InstallDiscControllerRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_InstallDiscControllerResponse
+
+  /// List the blank disc templates the server ships, in file name order
+  func listBlankDiscs(
+    request: Beebium_ListBlankDiscsRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ListBlankDiscsResponse
+
+  /// Copy a blank disc template to a path on the server's host, byte for
+  /// byte. Inserting the new disc is a separate InsertDisc.
+  func createDisc(
+    request: Beebium_CreateDiscRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CreateDiscResponse
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -1023,6 +1186,24 @@ extension Beebium_DiscServiceAsyncProvider {
         wrapping: { try await self.installDiscController(request: $0, context: $1) }
       )
 
+    case "ListBlankDiscs":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ListBlankDiscsRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListBlankDiscsResponse>(),
+        interceptors: self.interceptors?.makeListBlankDiscsInterceptors() ?? [],
+        wrapping: { try await self.listBlankDiscs(request: $0, context: $1) }
+      )
+
+    case "CreateDisc":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CreateDiscRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CreateDiscResponse>(),
+        interceptors: self.interceptors?.makeCreateDiscInterceptors() ?? [],
+        wrapping: { try await self.createDisc(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -1066,6 +1247,14 @@ internal protocol Beebium_DiscServiceServerInterceptorFactoryProtocol: Sendable 
   /// - Returns: Interceptors to use when handling 'installDiscController'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeInstallDiscControllerInterceptors() -> [ServerInterceptor<Beebium_InstallDiscControllerRequest, Beebium_InstallDiscControllerResponse>]
+
+  /// - Returns: Interceptors to use when handling 'listBlankDiscs'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeListBlankDiscsInterceptors() -> [ServerInterceptor<Beebium_ListBlankDiscsRequest, Beebium_ListBlankDiscsResponse>]
+
+  /// - Returns: Interceptors to use when handling 'createDisc'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeCreateDiscInterceptors() -> [ServerInterceptor<Beebium_CreateDiscRequest, Beebium_CreateDiscResponse>]
 }
 
 internal enum Beebium_DiscServiceServerMetadata {
@@ -1082,6 +1271,8 @@ internal enum Beebium_DiscServiceServerMetadata {
       Beebium_DiscServiceServerMetadata.Methods.getSpinUpDelay,
       Beebium_DiscServiceServerMetadata.Methods.listAvailableControllers,
       Beebium_DiscServiceServerMetadata.Methods.installDiscController,
+      Beebium_DiscServiceServerMetadata.Methods.listBlankDiscs,
+      Beebium_DiscServiceServerMetadata.Methods.createDisc,
     ]
   )
 
@@ -1137,6 +1328,18 @@ internal enum Beebium_DiscServiceServerMetadata {
     internal static let installDiscController = GRPCMethodDescriptor(
       name: "InstallDiscController",
       path: "/beebium.DiscService/InstallDiscController",
+      type: GRPCCallType.unary
+    )
+
+    internal static let listBlankDiscs = GRPCMethodDescriptor(
+      name: "ListBlankDiscs",
+      path: "/beebium.DiscService/ListBlankDiscs",
+      type: GRPCCallType.unary
+    )
+
+    internal static let createDisc = GRPCMethodDescriptor(
+      name: "CreateDisc",
+      path: "/beebium.DiscService/CreateDisc",
       type: GRPCCallType.unary
     )
   }

@@ -155,7 +155,9 @@ jobs:
           }
           $presets = @(Get-ChildItem "extracted\share\beebium\presets\*.beebium-preset" -ErrorAction SilentlyContinue)
           if ($presets.Count -eq 0) { Write-Host "::error::no presets in the ZIP (share\beebium\presets is empty) -- presets drive --preset machine configs"; exit 1 }
-          Write-Host "Windows smoke OK: extracted ZIP runs, discovers all extensions, and ships $($presets.Count) preset(s)"
+          $blank = @(& $exe --format tsv list-blank-discs | Select-Object -Skip 1 | Where-Object { $_ })
+          if ($blank.Count -eq 0) { Write-Host "::error::list-blank-discs lists no templates from the ZIP (share\beebium\blank-discs) -- create-disc needs them"; exit 1 }
+          Write-Host "Windows smoke OK: extracted ZIP runs, discovers all extensions, and ships $($presets.Count) preset(s) and $($blank.Count) blank disc template(s)"
 
       # list-extensions above reads only the manifests, so it lists a plugin
       # whose DLL is missing. Every plugin's DLL must sit beside its manifest in

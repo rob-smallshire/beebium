@@ -39,6 +39,13 @@ service DiscService {
 
     // Install a disc controller into the socket (machines with sockets only)
     rpc InstallDiscController(InstallDiscControllerRequest) returns (InstallDiscControllerResponse);
+
+    // List the blank disc templates the server ships, in file name order
+    rpc ListBlankDiscs(ListBlankDiscsRequest) returns (ListBlankDiscsResponse);
+
+    // Copy a blank disc template to a path on the server's host, byte for
+    // byte. Inserting the new disc is a separate InsertDisc.
+    rpc CreateDisc(CreateDiscRequest) returns (CreateDiscResponse);
 }
 
 // --- Drive State ---
@@ -220,4 +227,43 @@ message InstallDiscControllerResponse {
     bool success = 1;
     string error = 2;                  // Error message if !success
     string controller_type = 3;        // Name of installed controller (e.g., "WD1770")
+}
+
+// --- Blank Discs ---
+
+message ListBlankDiscsRequest {
+    // Empty - returns every template
+}
+
+message ListBlankDiscsResponse {
+    repeated BlankDisc discs = 1;      // In file name order
+}
+
+// A blank disc template
+message BlankDisc {
+    string label = 1;                  // File name without its extension (e.g. "Acorn DFS 80T SS 200K")
+    string filename = 2;               // Template file name (e.g. "Acorn DFS 80T SS 200K.ssd")
+    string kind = 3;                   // "floppy"
+    uint64 size_bytes = 4;             // Size of the image
+}
+
+// Why a CreateDisc failed, so a client can react without parsing `error`
+enum CreateDiscErrorKind {
+    CREATE_DISC_ERROR_KIND_UNSPECIFIED = 0;        // No error
+    CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL = 1;      // No template has that label
+    CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS = 2; // The destination exists (or is a directory) and overwrite was not set
+    CREATE_DISC_ERROR_KIND_WRITE_FAILED = 3;       // The copy could not be written
+}
+
+message CreateDiscRequest {
+    string label = 1;                  // Template label, from ListBlankDiscs
+    string destination_path = 2;       // Path of the new disc on the server's host
+    bool overwrite = 3;                // Replace an existing file at destination_path
+}
+
+message CreateDiscResponse {
+    bool success = 1;
+    string error = 2;                  // Lower-case message if !success
+    string created_path = 3;           // Absolute path of the new disc (if success)
+    CreateDiscErrorKind kind = 4;      // Failure classification if !success
 }

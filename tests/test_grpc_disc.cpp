@@ -30,6 +30,8 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -141,6 +143,47 @@ std::filesystem::path get_test_disc_path() {
 #else
     return std::filesystem::path();
 #endif
+}
+
+// A Model B+ server given a blank disc templates directory, or none.
+class BlankDiscsFixture {
+public:
+    explicit BlankDiscsFixture(std::optional<std::filesystem::path> blank_discs_dirpath) {
+        server_ = std::make_unique<beebium::service::Server<beebium::ModelBPlus>>(
+            machine_, "127.0.0.1", 0);
+        server_->set_blank_discs_dirpath(std::move(blank_discs_dirpath));
+        server_->start({}, {});
+        channel_ = grpc::CreateChannel("127.0.0.1:" + std::to_string(server_->port()),
+                                       grpc::InsecureChannelCredentials());
+        stub_ = beebium::DiscService::NewStub(channel_);
+    }
+
+    ~BlankDiscsFixture() { server_->stop(); }
+
+    beebium::DiscService::Stub& stub() { return *stub_; }
+
+private:
+    beebium::ModelBPlus machine_;
+    std::unique_ptr<beebium::service::Server<beebium::ModelBPlus>> server_;
+    std::shared_ptr<grpc::Channel> channel_;
+    std::unique_ptr<beebium::DiscService::Stub> stub_;
+};
+
+std::filesystem::path committed_blank_discs_dirpath() {
+    return std::filesystem::path(BEEBIUM_BLANK_DISCS_DIR);
+}
+
+beebium::CreateDiscResponse create_disc(beebium::DiscService::Stub& stub, const std::string& label,
+                                        const std::filesystem::path& destination, bool overwrite) {
+    grpc::ClientContext context;
+    beebium::CreateDiscRequest request;
+    request.set_label(label);
+    request.set_destination_path(destination.string());
+    request.set_overwrite(overwrite);
+    beebium::CreateDiscResponse response;
+    auto status = stub.CreateDisc(&context, request, &response);
+    REQUIRE(status.ok());
+    return response;
 }
 
 } // anonymous namespace
@@ -1115,4 +1158,93 @@ TEST_CASE("DiscService reports a cancelled eject to subscribers", "[grpc][disc]"
 
     CHECK(saw_requested);
     CHECK(saw_cancelled);
+}
+
+TEST_CASE("DiscService ListBlankDiscs lists the templates in file name order",
+          "[grpc][disc][blank-discs]") {
+    BlankDiscsFixture fixture(committed_blank_discs_dirpath());
+
+    grpc::ClientContext context;
+    beebium::ListBlankDiscsResponse response;
+    auto status = fixture.stub().ListBlankDiscs(&context, beebium::ListBlankDiscsRequest(),
+                                                &response);
+
+    REQUIRE(status.ok());
+    std::vector<std::string> labels;
+    for (const auto& disc : response.discs()) labels.push_back(disc.label());
+    CHECK(labels == std::vector<std::string>{
+                        "Acorn ADFS L 640K", "Acorn ADFS M 320K", "Acorn ADFS S 160K",
+                        "Acorn DFS 40T DS 200K", "Acorn DFS 40T SS 100K",
+                        "Acorn DFS 80T DS 400K", "Acorn DFS 80T SS 200K"});
+    const auto& first = response.discs(0);
+    CHECK(first.filename() == "Acorn ADFS L 640K.adl");
+    CHECK(first.kind() == "floppy");
+    CHECK(first.size_bytes() == 655360);
+}
+
+TEST_CASE("DiscService ListBlankDiscs is empty without templates", "[grpc][disc][blank-discs]") {
+    BlankDiscsFixture fixture(std::nullopt);
+
+    grpc::ClientContext context;
+    beebium::ListBlankDiscsResponse response;
+    REQUIRE(fixture.stub()
+                .ListBlankDiscs(&context, beebium::ListBlankDiscsRequest(), &response)
+                .ok());
+    CHECK(response.discs_size() == 0);
+}
+
+TEST_CASE("DiscService CreateDisc copies a template that InsertDisc then loads",
+          "[grpc][disc][blank-discs]") {
+    BlankDiscsFixture fixture(committed_blank_discs_dirpath());
+    beebium::test::ScopedTempDir out{"beebium-create-disc-"};
+    auto destination = out / "blank.ssd";
+
+    auto response = create_disc(fixture.stub(), "Acorn DFS 80T SS 200K", destination, false);
+
+    REQUIRE(response.success());
+    CHECK(response.kind() == beebium::CREATE_DISC_ERROR_KIND_UNSPECIFIED);
+    CHECK(std::filesystem::path(response.created_path()) == destination);
+    std::ifstream copy(destination, std::ios::binary);
+    std::ifstream original(committed_blank_discs_dirpath() / "Acorn DFS 80T SS 200K.ssd",
+                           std::ios::binary);
+    CHECK(std::vector<char>(std::istreambuf_iterator<char>(copy), {}) ==
+          std::vector<char>(std::istreambuf_iterator<char>(original), {}));
+
+    grpc::ClientContext context;
+    beebium::InsertDiscRequest insert;
+    insert.set_drive(0);
+    insert.set_url(response.created_path());
+    beebium::InsertDiscResponse inserted;
+    REQUIRE(fixture.stub().InsertDisc(&context, insert, &inserted).ok());
+    CHECK(inserted.success());
+    CHECK_FALSE(inserted.disc().write_protected());
+}
+
+TEST_CASE("DiscService CreateDisc refuses an existing destination unless overwrite",
+          "[grpc][disc][blank-discs]") {
+    BlankDiscsFixture fixture(committed_blank_discs_dirpath());
+    beebium::test::ScopedTempDir out{"beebium-create-disc-"};
+    auto destination = out / "existing.ssd";
+    std::ofstream(destination) << "keep";
+
+    auto refused = create_disc(fixture.stub(), "Acorn DFS 40T SS 100K", destination, false);
+    CHECK_FALSE(refused.success());
+    CHECK(refused.kind() == beebium::CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS);
+    CHECK(refused.error() == "destination already exists: " + destination.string());
+    CHECK(std::filesystem::file_size(destination) == 4);
+
+    auto replaced = create_disc(fixture.stub(), "Acorn DFS 40T SS 100K", destination, true);
+    CHECK(replaced.success());
+    CHECK(std::filesystem::file_size(destination) == 102400);
+}
+
+TEST_CASE("DiscService CreateDisc errors on an unknown label", "[grpc][disc][blank-discs]") {
+    BlankDiscsFixture fixture(committed_blank_discs_dirpath());
+    beebium::test::ScopedTempDir out{"beebium-create-disc-"};
+
+    auto response = create_disc(fixture.stub(), "Acorn DFS 81T", out / "new.ssd", false);
+    CHECK_FALSE(response.success());
+    CHECK(response.kind() == beebium::CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL);
+    CHECK(response.error() == "no blank disc named 'Acorn DFS 81T'");
+    CHECK(response.created_path().empty());
 }

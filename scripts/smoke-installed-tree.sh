@@ -112,4 +112,12 @@ preset_count="$(find "${prefix}/share/beebium/presets" -maxdepth 1 -name '*.beeb
     || fail "no *.beebium-preset under ${prefix}/share/beebium/presets -- presets drive --preset machine configs"
 echo "found ${preset_count} preset(s)"
 
+echo "== blank disc templates discovered (share/beebium/blank-discs) =="
+blank_disc_out="$("${prefix}/bin/beebium-model-b" --format tsv list-blank-discs)" \
+    || fail "list-blank-discs failed"
+blank_disc_count="$(printf '%s\n' "${blank_disc_out}" | tail -n +2 | grep -c .)" || true
+[ "${blank_disc_count}" -gt 0 ] \
+    || fail "list-blank-discs lists no templates -- create-disc needs share/beebium/blank-discs"
+echo "found ${blank_disc_count} blank disc template(s)"
+
 echo "SMOKE PASS: ${prefix} is runnable on $(uname -m)/$(uname -s)"

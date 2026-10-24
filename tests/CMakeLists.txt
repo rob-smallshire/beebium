@@ -1731,6 +1731,7 @@ if(BEEBIUM_BUILD_SERVICE)
     target_compile_definitions(test_grpc_disc PRIVATE
         BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
         BEEBIUM_DISCS_DIR="${BEEBIUM_DISCS_DIR}"
+        BEEBIUM_BLANK_DISCS_DIR="${CMAKE_SOURCE_DIR}/discs/blank"
     )
     catch_discover_tests(test_grpc_disc)
 
@@ -2221,6 +2222,20 @@ if(BEEBIUM_BUILD_SERVICE)
         Catch2::Catch2WithMain
     )
     catch_discover_tests(test_preset_paths)
+
+    # Blank disc templates (#25): listing, copying, discovery and the
+    # list-blank-discs and create-disc subcommands
+    add_executable(test_blank_discs test_blank_discs.cpp)
+    target_link_libraries(test_blank_discs PRIVATE
+        beebium_server_headers
+        beebium_service
+        nlohmann_json::nlohmann_json
+        Catch2::Catch2WithMain
+    )
+    target_compile_definitions(test_blank_discs PRIVATE
+        BEEBIUM_BLANK_DISCS_DIR="${CMAKE_SOURCE_DIR}/discs/blank"
+    )
+    catch_discover_tests(test_blank_discs)
 
     # The DFS ROM manifest: which disc controller each known DFS needs
     add_executable(test_dfs_rom_manifest test_dfs_rom_manifest.cpp)

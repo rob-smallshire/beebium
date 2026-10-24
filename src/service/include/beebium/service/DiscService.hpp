@@ -14,6 +14,7 @@
 #define BEEBIUM_SERVICE_DISC_SERVICE_HPP
 
 #include "disc.grpc.pb.h"
+#include "beebium/disc/BlankDiscs.hpp"
 #include "beebium/disc/DiscConcepts.hpp"
 #include "beebium/disc/DiscDrive.hpp"
 #include "beebium/disc/DiscLoader.hpp"
@@ -22,8 +23,10 @@
 #include <grpcpp/grpcpp.h>
 #include <condition_variable>
 #include <deque>
+#include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 namespace beebium::service {
@@ -48,6 +51,21 @@ inline beebium::DiscErrorKind to_wire_error_kind(beebium::DiscLoadErrorKind kind
         case beebium::DiscLoadErrorKind::LoadFailed:   return beebium::DISC_ERROR_KIND_LOAD_FAILED;
     }
     return beebium::DISC_ERROR_KIND_UNSPECIFIED;
+}
+
+// Map a blank disc copy failure to its wire enum value.
+inline beebium::CreateDiscErrorKind to_wire_error_kind(beebium::CreateBlankDiscErrorKind kind) {
+    switch (kind) {
+        case beebium::CreateBlankDiscErrorKind::None:
+            return beebium::CREATE_DISC_ERROR_KIND_UNSPECIFIED;
+        case beebium::CreateBlankDiscErrorKind::UnknownLabel:
+            return beebium::CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL;
+        case beebium::CreateBlankDiscErrorKind::DestinationExists:
+            return beebium::CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS;
+        case beebium::CreateBlankDiscErrorKind::WriteFailed:
+            return beebium::CREATE_DISC_ERROR_KIND_WRITE_FAILED;
+    }
+    return beebium::CREATE_DISC_ERROR_KIND_UNSPECIFIED;
 }
 
 // gRPC service implementation for DiscService
@@ -480,6 +498,50 @@ public:
         }
     }
 
+    // Where the blank disc templates are, found by the server as for the
+    // CLI's list-blank-discs. Set before the service is reached; none means
+    // no templates.
+    void set_blank_discs_dirpath(std::optional<std::filesystem::path> dirpath) {
+        blank_discs_dirpath_ = std::move(dirpath);
+    }
+
+    grpc::Status ListBlankDiscs(
+        grpc::ServerContext* context,
+        const ListBlankDiscsRequest* request,
+        ListBlankDiscsResponse* response) override
+    {
+        (void)context;
+        (void)request;
+        for (const auto& disc : beebium::list_blank_discs(blank_discs_dirpath_)) {
+            auto* item = response->add_discs();
+            item->set_label(disc.label);
+            item->set_filename(disc.filename);
+            item->set_kind(disc.kind);
+            item->set_size_bytes(disc.size_bytes);
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status CreateDisc(
+        grpc::ServerContext* context,
+        const CreateDiscRequest* request,
+        CreateDiscResponse* response) override
+    {
+        (void)context;
+        auto result = beebium::create_blank_disc(
+            blank_discs_dirpath_, request->label(),
+            std::filesystem::path(request->destination_path()), request->overwrite());
+        if (!result) {
+            response->set_success(false);
+            response->set_error(result.error);
+            response->set_kind(to_wire_error_kind(result.kind));
+            return grpc::Status::OK;
+        }
+        response->set_success(true);
+        response->set_created_path(result.created_filepath.string());
+        return grpc::Status::OK;
+    }
+
 private:
     void fill_disc_metadata(DiscMetadata* metadata, const Disc* disc) {
         if (!disc) return;
@@ -643,6 +705,7 @@ private:
     MachineType& machine_;
     std::mutex mutex_;
     Broker broker_;
+    std::optional<std::filesystem::path> blank_discs_dirpath_;
 };
 
 } // namespace beebium::service

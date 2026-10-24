@@ -154,6 +154,34 @@ DISC_EVENT_MOTOR_OFF: DiscEventType.ValueType  # 7
 """Motor stopped"""
 Global___DiscEventType: _TypeAlias = DiscEventType  # noqa: Y015
 
+class _CreateDiscErrorKind:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _CreateDiscErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_CreateDiscErrorKind.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    CREATE_DISC_ERROR_KIND_UNSPECIFIED: _CreateDiscErrorKind.ValueType  # 0
+    """No error"""
+    CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL: _CreateDiscErrorKind.ValueType  # 1
+    """No template has that label"""
+    CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS: _CreateDiscErrorKind.ValueType  # 2
+    """The destination exists (or is a directory) and overwrite was not set"""
+    CREATE_DISC_ERROR_KIND_WRITE_FAILED: _CreateDiscErrorKind.ValueType  # 3
+    """The copy could not be written"""
+
+class CreateDiscErrorKind(_CreateDiscErrorKind, metaclass=_CreateDiscErrorKindEnumTypeWrapper):
+    """Why a CreateDisc failed, so a client can react without parsing `error`"""
+
+CREATE_DISC_ERROR_KIND_UNSPECIFIED: CreateDiscErrorKind.ValueType  # 0
+"""No error"""
+CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL: CreateDiscErrorKind.ValueType  # 1
+"""No template has that label"""
+CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS: CreateDiscErrorKind.ValueType  # 2
+"""The destination exists (or is a directory) and overwrite was not set"""
+CREATE_DISC_ERROR_KIND_WRITE_FAILED: CreateDiscErrorKind.ValueType  # 3
+"""The copy could not be written"""
+Global___CreateDiscErrorKind: _TypeAlias = CreateDiscErrorKind  # noqa: Y015
+
 @_typing.final
 class InsertDiscRequest(_message.Message):
     """--- Insert ---"""
@@ -730,3 +758,138 @@ class InstallDiscControllerResponse(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___InstallDiscControllerResponse: _TypeAlias = InstallDiscControllerResponse  # noqa: Y015
+
+@_typing.final
+class ListBlankDiscsRequest(_message.Message):
+    """--- Blank Discs ---
+
+    Empty - returns every template
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ListBlankDiscsRequest: _TypeAlias = ListBlankDiscsRequest  # noqa: Y015
+
+@_typing.final
+class ListBlankDiscsResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    DISCS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def discs(self) -> _containers.RepeatedCompositeFieldContainer[Global___BlankDisc]:
+        """In file name order"""
+
+    def __init__(
+        self,
+        *,
+        discs: _abc.Iterable[Global___BlankDisc] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["discs", b"discs"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ListBlankDiscsResponse: _TypeAlias = ListBlankDiscsResponse  # noqa: Y015
+
+@_typing.final
+class BlankDisc(_message.Message):
+    """A blank disc template"""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    LABEL_FIELD_NUMBER: _builtins.int
+    FILENAME_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
+    SIZE_BYTES_FIELD_NUMBER: _builtins.int
+    label: _builtins.str
+    """File name without its extension (e.g. "Acorn DFS 80T SS 200K")"""
+    filename: _builtins.str
+    """Template file name (e.g. "Acorn DFS 80T SS 200K.ssd")"""
+    kind: _builtins.str
+    """"floppy" """
+    size_bytes: _builtins.int
+    """Size of the image"""
+    def __init__(
+        self,
+        *,
+        label: _builtins.str = ...,
+        filename: _builtins.str = ...,
+        kind: _builtins.str = ...,
+        size_bytes: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["filename", b"filename", "kind", b"kind", "label", b"label", "size_bytes", b"size_bytes"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___BlankDisc: _TypeAlias = BlankDisc  # noqa: Y015
+
+@_typing.final
+class CreateDiscRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    LABEL_FIELD_NUMBER: _builtins.int
+    DESTINATION_PATH_FIELD_NUMBER: _builtins.int
+    OVERWRITE_FIELD_NUMBER: _builtins.int
+    label: _builtins.str
+    """Template label, from ListBlankDiscs"""
+    destination_path: _builtins.str
+    """Path of the new disc on the server's host"""
+    overwrite: _builtins.bool
+    """Replace an existing file at destination_path"""
+    def __init__(
+        self,
+        *,
+        label: _builtins.str = ...,
+        destination_path: _builtins.str = ...,
+        overwrite: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["destination_path", b"destination_path", "label", b"label", "overwrite", b"overwrite"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CreateDiscRequest: _TypeAlias = CreateDiscRequest  # noqa: Y015
+
+@_typing.final
+class CreateDiscResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUCCESS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    CREATED_PATH_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
+    success: _builtins.bool
+    error: _builtins.str
+    """Lower-case message if !success"""
+    created_path: _builtins.str
+    """Absolute path of the new disc (if success)"""
+    kind: Global___CreateDiscErrorKind.ValueType
+    """Failure classification if !success"""
+    def __init__(
+        self,
+        *,
+        success: _builtins.bool = ...,
+        error: _builtins.str = ...,
+        created_path: _builtins.str = ...,
+        kind: Global___CreateDiscErrorKind.ValueType = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["created_path", b"created_path", "error", b"error", "kind", b"kind", "success", b"success"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CreateDiscResponse: _TypeAlias = CreateDiscResponse  # noqa: Y015

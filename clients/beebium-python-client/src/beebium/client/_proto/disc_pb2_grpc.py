@@ -95,6 +95,16 @@ class DiscServiceStub(object):
                 request_serializer=disc__pb2.InstallDiscControllerRequest.SerializeToString,
                 response_deserializer=disc__pb2.InstallDiscControllerResponse.FromString,
                 _registered_method=True)
+        self.ListBlankDiscs = channel.unary_unary(
+                '/beebium.DiscService/ListBlankDiscs',
+                request_serializer=disc__pb2.ListBlankDiscsRequest.SerializeToString,
+                response_deserializer=disc__pb2.ListBlankDiscsResponse.FromString,
+                _registered_method=True)
+        self.CreateDisc = channel.unary_unary(
+                '/beebium.DiscService/CreateDisc',
+                request_serializer=disc__pb2.CreateDiscRequest.SerializeToString,
+                response_deserializer=disc__pb2.CreateDiscResponse.FromString,
+                _registered_method=True)
 
 
 class DiscServiceServicer(object):
@@ -173,6 +183,21 @@ class DiscServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListBlankDiscs(self, request, context):
+        """List the blank disc templates the server ships, in file name order
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateDisc(self, request, context):
+        """Copy a blank disc template to a path on the server's host, byte for
+        byte. Inserting the new disc is a separate InsertDisc.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DiscServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -220,6 +245,16 @@ def add_DiscServiceServicer_to_server(servicer, server):
                     servicer.InstallDiscController,
                     request_deserializer=disc__pb2.InstallDiscControllerRequest.FromString,
                     response_serializer=disc__pb2.InstallDiscControllerResponse.SerializeToString,
+            ),
+            'ListBlankDiscs': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListBlankDiscs,
+                    request_deserializer=disc__pb2.ListBlankDiscsRequest.FromString,
+                    response_serializer=disc__pb2.ListBlankDiscsResponse.SerializeToString,
+            ),
+            'CreateDisc': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateDisc,
+                    request_deserializer=disc__pb2.CreateDiscRequest.FromString,
+                    response_serializer=disc__pb2.CreateDiscResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -469,6 +504,60 @@ class DiscService(object):
             '/beebium.DiscService/InstallDiscController',
             disc__pb2.InstallDiscControllerRequest.SerializeToString,
             disc__pb2.InstallDiscControllerResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListBlankDiscs(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DiscService/ListBlankDiscs',
+            disc__pb2.ListBlankDiscsRequest.SerializeToString,
+            disc__pb2.ListBlankDiscsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateDisc(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DiscService/CreateDisc',
+            disc__pb2.CreateDiscRequest.SerializeToString,
+            disc__pb2.CreateDiscResponse.FromString,
             options,
             channel_credentials,
             insecure,

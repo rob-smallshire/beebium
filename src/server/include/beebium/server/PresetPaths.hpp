@@ -15,6 +15,7 @@
 
 #include "beebium/server/Platform.hpp"
 #include "beebium/server/PresetSource.hpp"
+#include "beebium/server/SystemDirectories.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -53,34 +54,7 @@ public:
     // Get the system presets directory (shipped with software)
     // Returns empty optional if no system presets directory found
     static std::optional<std::filesystem::path> get_system_presets_dirpath() {
-        // 1. Environment variable override
-        if (auto env_dir = platform::get_env("BEEBIUM_SERVERS_DIRPATH")) {
-            std::filesystem::path presets_path = std::filesystem::path(*env_dir) / "presets";
-            if (std::filesystem::is_directory(presets_path)) {
-                return presets_path;
-            }
-        }
-
-        // Anchor the relative lookups on the executable's real on-disk
-        // directory (symlinks resolved, so a bin/ symlink into an installed
-        // tree still finds that tree's share/). Fall back to the current
-        // directory when the OS cannot report the executable's location.
-        auto exe_dirpath = beebium::platform::executable_directory()
-                               .value_or(std::filesystem::current_path());
-
-        // 2. Build directory layout: sibling presets/ directory
-        auto build_presets = exe_dirpath / "presets";
-        if (std::filesystem::is_directory(build_presets)) {
-            return build_presets;
-        }
-
-        // 3. Installed layout: ../share/beebium/presets/ relative to executable
-        auto installed_presets = exe_dirpath.parent_path() / "share" / "beebium" / "presets";
-        if (std::filesystem::is_directory(installed_presets)) {
-            return installed_presets;
-        }
-
-        return std::nullopt;
+        return find_system_dirpath("presets");
     }
 
     // Get the user presets directory (user-created presets)

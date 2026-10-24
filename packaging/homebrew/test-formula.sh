@@ -212,6 +212,14 @@ for preset in model-b model-b-disc; do
 done
 echo "built-in presets discovered"
 
+# Blank disc templates are found the same way, from share/beebium/blank-discs.
+blank_disc_out="$("${keg_bin_dirpath}/beebium-model-b" --format tsv list-blank-discs)"
+printf '%s\n' "${blank_disc_out}" | grep -q "^Acorn DFS 80T SS 200K$(printf '\t')" || {
+  echo "MISSING blank disc template: Acorn DFS 80T SS 200K" >&2
+  exit 1
+}
+echo "blank disc templates discovered"
+
 shot_filepath="${work_dirpath}/shot.png"
 "${keg_bin_dirpath}/beebium-model-b" capture-screenshot --output "${shot_filepath}" --duration 0.5
 [ -s "${shot_filepath}" ] || {

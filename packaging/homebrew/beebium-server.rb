@@ -86,6 +86,11 @@ class BeebiumServer < Formula
     assert_match(/^model-b\t/, presets)
     assert_match(/^model-b-disc\t/, presets)
 
+    # Blank disc templates are found the same way, in libexec/share/beebium/
+    # blank-discs.
+    blank_discs = shell_output("#{bin}/beebium-model-b --format tsv list-blank-discs")
+    assert_match(/^Acorn DFS 80T SS 200K\t/, blank_discs)
+
     # ROM discovery: a headless screenshot loads the MOS from libexec/share/
     # beebium/roms, runs briefly and exits on its own, so no server has to be
     # backgrounded. A binary that anchors on the symlink's own directory fails

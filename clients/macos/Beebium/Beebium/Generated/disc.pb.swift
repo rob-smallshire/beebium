@@ -222,6 +222,57 @@ enum Beebium_DiscEventType: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// Why a CreateDisc failed, so a client can react without parsing `error`
+enum Beebium_CreateDiscErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+
+  /// No error
+  case unspecified // = 0
+
+  /// No template has that label
+  case unknownLabel // = 1
+
+  /// The destination exists (or is a directory) and overwrite was not set
+  case destinationExists // = 2
+
+  /// The copy could not be written
+  case writeFailed // = 3
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .unspecified
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .unknownLabel
+    case 2: self = .destinationExists
+    case 3: self = .writeFailed
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .unknownLabel: return 1
+    case .destinationExists: return 2
+    case .writeFailed: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_CreateDiscErrorKind] = [
+    .unspecified,
+    .unknownLabel,
+    .destinationExists,
+    .writeFailed,
+  ]
+
+}
+
 struct Beebium_InsertDiscRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -616,6 +667,93 @@ struct Beebium_InstallDiscControllerResponse: Sendable {
   init() {}
 }
 
+/// Empty - returns every template
+struct Beebium_ListBlankDiscsRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ListBlankDiscsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// In file name order
+  var discs: [Beebium_BlankDisc] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// A blank disc template
+struct Beebium_BlankDisc: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// File name without its extension (e.g. "Acorn DFS 80T SS 200K")
+  var label: String = String()
+
+  /// Template file name (e.g. "Acorn DFS 80T SS 200K.ssd")
+  var filename: String = String()
+
+  /// "floppy"
+  var kind: String = String()
+
+  /// Size of the image
+  var sizeBytes: UInt64 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_CreateDiscRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Template label, from ListBlankDiscs
+  var label: String = String()
+
+  /// Path of the new disc on the server's host
+  var destinationPath: String = String()
+
+  /// Replace an existing file at destination_path
+  var overwrite: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_CreateDiscResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var success: Bool = false
+
+  /// Lower-case message if !success
+  var error: String = String()
+
+  /// Absolute path of the new disc (if success)
+  var createdPath: String = String()
+
+  /// Failure classification if !success
+  var kind: Beebium_CreateDiscErrorKind = .unspecified
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "beebium"
@@ -630,6 +768,10 @@ extension Beebium_DiscErrorKind: SwiftProtobuf._ProtoNameProviding {
 
 extension Beebium_DiscEventType: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DISC_EVENT_UNKNOWN\0\u{1}DISC_EVENT_INSERTED\0\u{1}DISC_EVENT_EJECTED\0\u{1}DISC_EVENT_FORCE_EJECTED\0\u{1}DISC_EVENT_EJECT_REQUESTED\0\u{1}DISC_EVENT_EJECT_CANCELLED\0\u{1}DISC_EVENT_MOTOR_ON\0\u{1}DISC_EVENT_MOTOR_OFF\0")
+}
+
+extension Beebium_CreateDiscErrorKind: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CREATE_DISC_ERROR_KIND_UNSPECIFIED\0\u{1}CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL\0\u{1}CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS\0\u{1}CREATE_DISC_ERROR_KIND_WRITE_FAILED\0")
 }
 
 extension Beebium_InsertDiscRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -1400,6 +1542,185 @@ extension Beebium_InstallDiscControllerResponse: SwiftProtobuf.Message, SwiftPro
     if lhs.success != rhs.success {return false}
     if lhs.error != rhs.error {return false}
     if lhs.controllerType != rhs.controllerType {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ListBlankDiscsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ListBlankDiscsRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ListBlankDiscsRequest, rhs: Beebium_ListBlankDiscsRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ListBlankDiscsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ListBlankDiscsResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}discs\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.discs) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.discs.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.discs, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ListBlankDiscsResponse, rhs: Beebium_ListBlankDiscsResponse) -> Bool {
+    if lhs.discs != rhs.discs {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_BlankDisc: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".BlankDisc"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}label\0\u{1}filename\0\u{1}kind\0\u{3}size_bytes\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.filename) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.kind) }()
+      case 4: try { try decoder.decodeSingularUInt64Field(value: &self.sizeBytes) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 1)
+    }
+    if !self.filename.isEmpty {
+      try visitor.visitSingularStringField(value: self.filename, fieldNumber: 2)
+    }
+    if !self.kind.isEmpty {
+      try visitor.visitSingularStringField(value: self.kind, fieldNumber: 3)
+    }
+    if self.sizeBytes != 0 {
+      try visitor.visitSingularUInt64Field(value: self.sizeBytes, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_BlankDisc, rhs: Beebium_BlankDisc) -> Bool {
+    if lhs.label != rhs.label {return false}
+    if lhs.filename != rhs.filename {return false}
+    if lhs.kind != rhs.kind {return false}
+    if lhs.sizeBytes != rhs.sizeBytes {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_CreateDiscRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".CreateDiscRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}label\0\u{3}destination_path\0\u{1}overwrite\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.destinationPath) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.overwrite) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 1)
+    }
+    if !self.destinationPath.isEmpty {
+      try visitor.visitSingularStringField(value: self.destinationPath, fieldNumber: 2)
+    }
+    if self.overwrite != false {
+      try visitor.visitSingularBoolField(value: self.overwrite, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_CreateDiscRequest, rhs: Beebium_CreateDiscRequest) -> Bool {
+    if lhs.label != rhs.label {return false}
+    if lhs.destinationPath != rhs.destinationPath {return false}
+    if lhs.overwrite != rhs.overwrite {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_CreateDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".CreateDiscResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{3}created_path\0\u{1}kind\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.createdPath) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    if !self.createdPath.isEmpty {
+      try visitor.visitSingularStringField(value: self.createdPath, fieldNumber: 3)
+    }
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_CreateDiscResponse, rhs: Beebium_CreateDiscResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.createdPath != rhs.createdPath {return false}
+    if lhs.kind != rhs.kind {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

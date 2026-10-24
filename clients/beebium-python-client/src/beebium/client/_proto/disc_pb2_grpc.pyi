@@ -75,6 +75,12 @@ class DiscServiceStub:
     """List available disc controller types (for machines with sockets)"""
     InstallDiscController: _grpc.UnaryUnaryMultiCallable[_disc_pb2.InstallDiscControllerRequest, _disc_pb2.InstallDiscControllerResponse]
     """Install a disc controller into the socket (machines with sockets only)"""
+    ListBlankDiscs: _grpc.UnaryUnaryMultiCallable[_disc_pb2.ListBlankDiscsRequest, _disc_pb2.ListBlankDiscsResponse]
+    """List the blank disc templates the server ships, in file name order"""
+    CreateDisc: _grpc.UnaryUnaryMultiCallable[_disc_pb2.CreateDiscRequest, _disc_pb2.CreateDiscResponse]
+    """Copy a blank disc template to a path on the server's host, byte for
+    byte. Inserting the new disc is a separate InsertDisc.
+    """
 
 @_typing.type_check_only
 class DiscServiceAsyncStub(DiscServiceStub):
@@ -111,6 +117,12 @@ class DiscServiceAsyncStub(DiscServiceStub):
     """List available disc controller types (for machines with sockets)"""
     InstallDiscController: _aio.UnaryUnaryMultiCallable[_disc_pb2.InstallDiscControllerRequest, _disc_pb2.InstallDiscControllerResponse]  # type: ignore[assignment]
     """Install a disc controller into the socket (machines with sockets only)"""
+    ListBlankDiscs: _aio.UnaryUnaryMultiCallable[_disc_pb2.ListBlankDiscsRequest, _disc_pb2.ListBlankDiscsResponse]  # type: ignore[assignment]
+    """List the blank disc templates the server ships, in file name order"""
+    CreateDisc: _aio.UnaryUnaryMultiCallable[_disc_pb2.CreateDiscRequest, _disc_pb2.CreateDiscResponse]  # type: ignore[assignment]
+    """Copy a blank disc template to a path on the server's host, byte for
+    byte. Inserting the new disc is a separate InsertDisc.
+    """
 
 class DiscServiceServicer(metaclass=_abc_1.ABCMeta):
     """Floppy disc drive management service.
@@ -198,5 +210,23 @@ class DiscServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_disc_pb2.InstallDiscControllerResponse, _abc.Awaitable[_disc_pb2.InstallDiscControllerResponse]]:
         """Install a disc controller into the socket (machines with sockets only)"""
+
+    @_abc_1.abstractmethod
+    def ListBlankDiscs(
+        self,
+        request: _disc_pb2.ListBlankDiscsRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_disc_pb2.ListBlankDiscsResponse, _abc.Awaitable[_disc_pb2.ListBlankDiscsResponse]]:
+        """List the blank disc templates the server ships, in file name order"""
+
+    @_abc_1.abstractmethod
+    def CreateDisc(
+        self,
+        request: _disc_pb2.CreateDiscRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_disc_pb2.CreateDiscResponse, _abc.Awaitable[_disc_pb2.CreateDiscResponse]]:
+        """Copy a blank disc template to a path on the server's host, byte for
+        byte. Inserting the new disc is a separate InsertDisc.
+        """
 
 def add_DiscServiceServicer_to_server(servicer: DiscServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...
