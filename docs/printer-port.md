@@ -192,8 +192,17 @@ Opens the host's printer device: `/dev/lp0` or `/dev/usb/lp0` on Linux,
 `LPT1` or the USB printer class on Windows. A USB-to-parallel adapter and a
 real port look the same to the operating system, so one extension covers
 both. macOS has no such device node.
-It has been verified only against stand-ins that keep the device-file
-contract, a FIFO and a regular file, not against a physical printer.
+
+Verified on Linux arm64 against two USB-to-parallel adapters with no
+printer behind them, a Prolific PL2305 (the StarTech ICUSB1284) and a
+CH340S: `ListDevices` names both, the device opens and stays open, and
+the guest stalls on the busy printer as it would on real hardware. Such
+an adapter accepts one 4 KiB write and then reports EAGAIN until a
+printer drains it, which is the busy case, not an offline one. The data
+path onto paper is verified only against stand-ins that keep the
+device-file contract, a FIFO and a regular file. `bytes_sent` in the
+status counts bytes handed to the device file, which the kernel may
+still be holding for a busy printer.
 
 ## Testing the port
 
