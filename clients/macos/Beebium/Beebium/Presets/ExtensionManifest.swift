@@ -52,6 +52,11 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     let key: String
     /// "string", "integer", "boolean", "filepath" or "dirpath".
     let type: String
+    /// For a path parameter (filepath/dirpath), whether the server reads the file
+    /// ("read", the default) or writes it ("write"). A write filepath is offered a
+    /// Save panel rather than an Open panel. Absent -- and for every non-path type
+    /// -- it is "read".
+    var access: String = "read"
     let isList: Bool
     let required: Bool
     /// The default, always as a string (e.g. "19200", "" for none). For a
@@ -110,7 +115,7 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     var displayLabel: String { label.isEmpty ? key : label }
 
     enum CodingKeys: String, CodingKey {
-        case key, type, required, bundled, unique, description, label, choices, position, excludes, fields
+        case key, type, access, required, bundled, unique, description, label, choices, position, excludes, fields
         case isList = "is_list"
         case defaultValue = "default"
         case defaultFrom = "default_from"
@@ -131,6 +136,7 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         key = try c.decode(String.self, forKey: .key)
         type = try c.decode(String.self, forKey: .type)
+        access = try c.decodeIfPresent(String.self, forKey: .access) ?? "read"
         isList = try c.decodeIfPresent(Bool.self, forKey: .isList) ?? false
         required = try c.decodeIfPresent(Bool.self, forKey: .required) ?? false
         defaultValue = try c.decodeIfPresent(String.self, forKey: .defaultValue) ?? ""

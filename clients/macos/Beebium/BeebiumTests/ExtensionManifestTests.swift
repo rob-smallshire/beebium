@@ -237,6 +237,40 @@ final class ExtensionCatalogueTests: XCTestCase {
             2)
     }
 
+    /// A path parameter's `access` decodes, defaulting to read when absent;
+    /// "write" is carried through as-is.
+    func testPathAccessDecodes() throws {
+        let readByDefault = try parameter(#"{"key":"rom","type":"filepath"}"#)
+        XCTAssertEqual(readByDefault.access, "read")
+        let write = try parameter(#"{"key":"path","type":"filepath","access":"write"}"#)
+        XCTAssertEqual(write.access, "write")
+    }
+
+    /// A read filepath opens an Open panel; a write filepath (file-printer's
+    /// output path) opens a Save panel; a dirpath opens a directory panel whatever
+    /// its access. The suggested Save name is the value's last component, else the
+    /// default's, else none (the panel keeps its own default).
+    func testFileChooserAndSuggestedName() throws {
+        let readPath = try parameter(#"{"key":"rom","type":"filepath"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileChooser(for: readPath, value: ""), .openFile)
+
+        let directory = try parameter(#"{"key":"directory","type":"dirpath","access":"write"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileChooser(for: directory, value: ""), .openDirectory)
+
+        // A write filepath with no value and no default: Save, panel keeps its own name.
+        let writeNoDefault = try parameter(#"{"key":"path","type":"filepath","access":"write"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileChooser(for: writeNoDefault, value: ""),
+                       .save(suggestedName: nil))
+        // With a default, the Save name is the default's last component.
+        let writeDefault = try parameter(
+            #"{"key":"path","type":"filepath","access":"write","default":"prints/output.txt"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileChooser(for: writeDefault, value: ""),
+                       .save(suggestedName: "output.txt"))
+        // A set value wins over the default.
+        XCTAssertEqual(ExtensionParameterForm.fileChooser(for: writeDefault, value: "/tmp/job.prn"),
+                       .save(suggestedName: "job.prn"))
+    }
+
     func testBundledImageKindNounsComeFromSchema() throws {
         let withKinds = try schema(from: """
         { "type": "extensions", "attachment_points": [],

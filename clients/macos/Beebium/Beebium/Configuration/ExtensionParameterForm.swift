@@ -363,6 +363,36 @@ struct ExtensionParameterForm: View {
         (showsUseDefault ? 1 : 0) + masterCount + 1 + (showsClear ? 1 : 0)
     }
 
+    /// Which file chooser a path parameter opens when "Choose..." is picked. A
+    /// dirpath picks a directory (an Open panel for folders); a filepath the
+    /// server writes (`access == "write"`, as file-printer's output path) is a
+    /// Save panel so the destination need not exist yet; every other filepath,
+    /// which names a file the server reads, is an Open panel. Pure, so the
+    /// Save-against-Open decision is testable apart from AppKit.
+    enum FileChooser: Equatable {
+        case openFile
+        case openDirectory
+        case save(suggestedName: String?)
+    }
+
+    static func fileChooser(for parameter: ExtensionParameter, value: String) -> FileChooser {
+        if parameter.type == "dirpath" { return .openDirectory }
+        if parameter.access == "write" {
+            return .save(suggestedName: suggestedSaveName(value: value, default: parameter.defaultValue))
+        }
+        return .openFile
+    }
+
+    /// The name to pre-fill a Save panel with: the current value's last path
+    /// component when one is set, else the parameter's default's, else nil (leave
+    /// the panel's own default). Pure.
+    static func suggestedSaveName(value: String, default defaultValue: String) -> String? {
+        let source = value.isEmpty ? defaultValue : value
+        guard !source.isEmpty else { return nil }
+        let name = URL(fileURLWithPath: source).lastPathComponent
+        return name.isEmpty ? nil : name
+    }
+
     // MARK: - Value helpers (pure)
 
     static func stringValue(_ key: String, in config: [String: JSONValue]) -> String {
@@ -611,7 +641,7 @@ private struct FilepathParameterControl: View {
                 .help(value)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if singleChoose {
-                Button("Choose…") { browse(parameter.key, isDirectory: isDirectory) }
+                Button("Choose…") { browse() }
                     .fixedSize()
             } else {
                 Menu {
@@ -627,7 +657,7 @@ private struct FilepathParameterControl: View {
                             }
                         }
                     }
-                    Button("Choose \(noun.localizedCapitalized)…") { browse(parameter.key, isDirectory: isDirectory) }
+                    Button("Choose \(noun.localizedCapitalized)…") { browse() }
                     if showsClear {
                         Button("Clear") { setValue(parameter.key, .string("")) }
                     }
@@ -646,13 +676,29 @@ private struct FilepathParameterControl: View {
         }
     }
 
-    private func browse(_ key: String, isDirectory: Bool) {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = isDirectory
-        panel.canChooseFiles = !isDirectory
-        if panel.runModal() == .OK, let url = panel.url {
-            setValue(key, .string(url.path))
+    private func browse() {
+        let value = ExtensionParameterForm.stringValue(parameter.key, in: config)
+        switch ExtensionParameterForm.fileChooser(for: parameter, value: value) {
+        case .openFile, .openDirectory:
+            let panel = NSOpenPanel()
+            panel.allowsMultipleSelection = false
+            let directory = parameter.type == "dirpath"
+            panel.canChooseDirectories = directory
+            panel.canChooseFiles = !directory
+            if panel.runModal() == .OK, let url = panel.url {
+                setValue(parameter.key, .string(url.path))
+            }
+        case .save(let suggestedName):
+            // The server creates (and replaces) this file, so the destination
+            // need not exist: a Save panel. The user is choosing a destination
+            // now, not writing yet, so the prompt reads "Choose"; the panel's own
+            // replace confirmation is kept.
+            let panel = NSSavePanel()
+            panel.prompt = "Choose"
+            if let suggestedName = suggestedName { panel.nameFieldStringValue = suggestedName }
+            if panel.runModal() == .OK, let url = panel.url {
+                setValue(parameter.key, .string(url.path))
+            }
         }
     }
 
