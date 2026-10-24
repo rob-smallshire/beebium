@@ -15,6 +15,7 @@
 
 #include "peripheral_extension.grpc.pb.h"
 #include "beebium/extension/AttachmentPointCatalogue.hpp"
+#include "beebium/extension/ExtensionArgParser.hpp"
 #include "beebium/extension/ExtensionRegistry.hpp"
 #include "beebium/extension/ExtensionStorage.hpp"
 
@@ -212,6 +213,7 @@ private:
         p.set_unique(param.unique);
         p.set_provider_of(param.provider_of);
         p.set_item_format(param.item_format);
+        if (is_path_type(param.type)) p.set_access(param.access);
         for (const auto& field : param.fields) {
             auto* f = p.add_fields();
             f->set_key(field.key);

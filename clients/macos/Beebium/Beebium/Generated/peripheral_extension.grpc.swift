@@ -14,6 +14,9 @@ import SwiftProtobuf
 /// Service for discovering loaded peripheral extensions.
 /// This is a core service (always present), not an extension-provided service.
 /// Frontends use it to enumerate what extensions are loaded and what they provide.
+/// Everything a frontend shows about them -- the names of the attachment points,
+/// where each extension is attached, each parameter's label and choices -- comes
+/// from here, so a frontend need not know any of it itself.
 ///
 /// Usage: instantiate `Beebium_PeripheralExtensionServiceClient`, then call methods of this protocol to make API calls.
 internal protocol Beebium_PeripheralExtensionServiceClientProtocol: GRPCClient {
@@ -110,6 +113,9 @@ internal struct Beebium_PeripheralExtensionServiceNIOClient: Beebium_PeripheralE
 /// Service for discovering loaded peripheral extensions.
 /// This is a core service (always present), not an extension-provided service.
 /// Frontends use it to enumerate what extensions are loaded and what they provide.
+/// Everything a frontend shows about them -- the names of the attachment points,
+/// where each extension is attached, each parameter's label and choices -- comes
+/// from here, so a frontend need not know any of it itself.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 internal protocol Beebium_PeripheralExtensionServiceAsyncClientProtocol: GRPCClient {
   static var serviceDescriptor: GRPCServiceDescriptor { get }
@@ -203,6 +209,9 @@ internal enum Beebium_PeripheralExtensionServiceClientMetadata {
 /// Service for discovering loaded peripheral extensions.
 /// This is a core service (always present), not an extension-provided service.
 /// Frontends use it to enumerate what extensions are loaded and what they provide.
+/// Everything a frontend shows about them -- the names of the attachment points,
+/// where each extension is attached, each parameter's label and choices -- comes
+/// from here, so a frontend need not know any of it itself.
 ///
 /// To build a server, implement a class that conforms to this protocol.
 internal protocol Beebium_PeripheralExtensionServiceProvider: CallHandlerProvider {
@@ -242,6 +251,9 @@ extension Beebium_PeripheralExtensionServiceProvider {
 /// Service for discovering loaded peripheral extensions.
 /// This is a core service (always present), not an extension-provided service.
 /// Frontends use it to enumerate what extensions are loaded and what they provide.
+/// Everything a frontend shows about them -- the names of the attachment points,
+/// where each extension is attached, each parameter's label and choices -- comes
+/// from here, so a frontend need not know any of it itself.
 ///
 /// To implement a server, implement an object which conforms to this protocol.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)

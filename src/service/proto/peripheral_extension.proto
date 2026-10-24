@@ -133,7 +133,7 @@ message StorageDevice {
 // gives it.
 message ParameterSchemaInfo {
     string key = 1;
-    string type = 2;                        // "string", "integer", "boolean", "filepath"
+    string type = 2;                        // "string", "integer", "boolean", "filepath", "dirpath"
     string description = 3;
     int32 position = 4;                     // -1 = keyword-only
     bool required = 5;
@@ -164,6 +164,10 @@ message ParameterSchemaInfo {
     // literal separators, e.g. "{net}.{station}@{host}@{port}".
     string item_format = 19;
     repeated ParameterFieldInfo fields = 20;  // is_list only: each item's parts
+    // "filepath"/"dirpath" only: "read" (default) or "write", whether the
+    // extension reads the path or creates/replaces it; a UI offers a Save
+    // panel for write. Empty for other types.
+    string access = 21;
 }
 
 // One of the values a parameter or field allows.

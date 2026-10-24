@@ -136,7 +136,9 @@ def test_extension_info_from_proto_maps_the_full_parameter_schema():
     param.fields.add(key="host", label="Host", type="string")
     port = proto.parameters.add(key="port", type="integer", min=0, max=65535)
     port.choices.add(value="auto", label="Automatic", description="Any free port.")
-    map_file = proto.parameters.add(key="map-file", type="filepath", default_from="aun-map-file")
+    map_file = proto.parameters.add(
+        key="map-file", type="filepath", default_from="aun-map-file", access="write"
+    )
     map_file.effective_default = "/home/user/aun-map.json"
     group = proto.groups.add(key="start", label="Start", parameters=["port", "map"])
     group.none.label = "Unchanged"
@@ -158,6 +160,8 @@ def test_extension_info_from_proto_maps_the_full_parameter_schema():
     assert port_info.choices == (ParameterChoiceInfo("auto", "Automatic", "Any free port."),)
     assert map_file_info.default_value == ""
     assert map_file_info.effective_default == "/home/user/aun-map.json"
+    assert map_file_info.access == "write"
+    assert peers.access == ""
     assert info.groups[0].parameters == ("port", "map")
     assert info.groups[0].none == ("Unchanged", "")
     assert info.groups[1].none is None

@@ -147,6 +147,9 @@ class ParameterSchemaInfo:
     item_format: str
     # is_list only: the parts of each item.
     fields: tuple[ParameterFieldInfo, ...]
+    # "filepath"/"dirpath" only: "read" or "write" (the extension creates or
+    # replaces the path); empty for other types.
+    access: str
 
 
 @dataclass(frozen=True)
@@ -273,6 +276,7 @@ def _parameter_schema_from_proto(proto: pe_pb2.ParameterSchemaInfo) -> Parameter
         provider_of=proto.provider_of,
         item_format=proto.item_format,
         fields=tuple(_field_from_proto(f) for f in proto.fields),
+        access=proto.access,
     )
 
 

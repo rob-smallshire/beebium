@@ -207,7 +207,8 @@ Parameter schema fields:
   the other; resolution and anchoring are the same either way. Any other
   value, or `access` on a parameter of another type, is refused when the
   manifest is loaded. `describe-extension --json` gives it for path
-  parameters and `null` for the rest.
+  parameters and `null` for the rest; `ListExtensions` gives it as
+  `ParameterSchemaInfo.access`, empty for the rest.
   - Neither: a **location** the extension owns and may create (AUN's
     `map-file`), anchored where it is written but never searched for; a bare
     value is the extension's own (`none`).

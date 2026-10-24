@@ -412,6 +412,11 @@ beebium::ExtensionManifest drive_manifest() {
     map.default_from = "test-host-default";
     m.parameters.push_back(map);
 
+    beebium::ParameterSchema log("log", "filepath", "Where the drive logs commands.");
+    log.access = "write";
+    m.parameters.push_back(log);
+    m.parameters.emplace_back("image_dirpath", "dirpath", "Where the drive's images are.");
+
     beebium::ParameterSchema peer("peer", "string", "Peers the drive knows.", -1, false, true);
     peer.item_format = "{station}@{host}";
     beebium::ParameterField station;
@@ -555,6 +560,10 @@ TEST_CASE("PeripheralExtensionService ListExtensions names the attachment points
         CHECK(map.default_value().empty());
         CHECK(map.default_from() == "test-host-default");
         CHECK(map.effective_default() == "/host/map.json");
+
+        CHECK(params.at("log")->access() == "write");
+        CHECK(params.at("image_dirpath")->access() == "read");
+        CHECK(map.access().empty());  // only a path has access
 
         const auto& peer = *params.at("peer");
         CHECK(peer.is_list());

@@ -397,9 +397,10 @@ class ParameterSchemaInfo(_message.Message):
     PROVIDER_OF_FIELD_NUMBER: _builtins.int
     ITEM_FORMAT_FIELD_NUMBER: _builtins.int
     FIELDS_FIELD_NUMBER: _builtins.int
+    ACCESS_FIELD_NUMBER: _builtins.int
     key: _builtins.str
     type: _builtins.str
-    """"string", "integer", "boolean", "filepath" """
+    """"string", "integer", "boolean", "filepath", "dirpath" """
     description: _builtins.str
     position: _builtins.int
     """-1 = keyword-only"""
@@ -439,6 +440,11 @@ class ParameterSchemaInfo(_message.Message):
     """is_list with fields: an item's string form, {key} placeholders between
     literal separators, e.g. "{net}.{station}@{host}@{port}".
     """
+    access: _builtins.str
+    """"filepath"/"dirpath" only: "read" (default) or "write", whether the
+    extension reads the path or creates/replaces it; a UI offers a Save
+    panel for write. Empty for other types.
+    """
     @_builtins.property
     def choices(self) -> _containers.RepeatedCompositeFieldContainer[Global___ParameterChoiceInfo]:
         """non-empty: the only values allowed"""
@@ -474,10 +480,11 @@ class ParameterSchemaInfo(_message.Message):
         provider_of: _builtins.str = ...,
         item_format: _builtins.str = ...,
         fields: _abc.Iterable[Global___ParameterFieldInfo] | None = ...,
+        access: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_max", b"_max", "_min", b"_min", "max", b"max", "min", b"min"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_max", b"_max", "_min", b"_min", "bundled", b"bundled", "choices", b"choices", "choices_from", b"choices_from", "default_from", b"default_from", "default_value", b"default_value", "description", b"description", "effective_default", b"effective_default", "excludes", b"excludes", "fields", b"fields", "is_list", b"is_list", "item_format", b"item_format", "key", b"key", "label", b"label", "max", b"max", "min", b"min", "position", b"position", "provider_of", b"provider_of", "required", b"required", "type", b"type", "unique", b"unique"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_max", b"_max", "_min", b"_min", "access", b"access", "bundled", b"bundled", "choices", b"choices", "choices_from", b"choices_from", "default_from", b"default_from", "default_value", b"default_value", "description", b"description", "effective_default", b"effective_default", "excludes", b"excludes", "fields", b"fields", "is_list", b"is_list", "item_format", b"item_format", "key", b"key", "label", b"label", "max", b"max", "min", b"min", "position", b"position", "provider_of", b"provider_of", "required", b"required", "type", b"type", "unique", b"unique"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__max: _TypeAlias = _typing.Literal["max"]  # noqa: Y015
     _WhichOneofArgType__max: _TypeAlias = _typing.Literal["_max", b"_max"]  # noqa: Y015

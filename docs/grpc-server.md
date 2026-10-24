@@ -880,7 +880,8 @@ instance's name), `display_name` (the manifest's), `description`, `has_ui`,
 - `parameters`: each manifest parameter with every property
   `describe-extension --json` gives it (`label`, `is_list`, `default_value`,
   `default_from`, `effective_default`, `min`/`max`, `choices`, `choices_from`,
-  `excludes`, `bundled`, `unique`, `provider_of`, `item_format`, `fields`).
+  `excludes`, `bundled`, `unique`, `provider_of`, `item_format`, `fields`,
+  and `access` for a `filepath` or `dirpath`, empty for other types).
 - `groups`: the manifest's groups of alternative parameters.
 
 `AttachmentPointInfo` gives `id`, `display_name`, `description`,

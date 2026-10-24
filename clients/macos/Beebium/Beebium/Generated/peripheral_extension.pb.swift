@@ -271,7 +271,7 @@ struct Beebium_ParameterSchemaInfo: @unchecked Sendable {
     set {_uniqueStorage()._key = newValue}
   }
 
-  /// "string", "integer", "boolean", "filepath"
+  /// "string", "integer", "boolean", "filepath", "dirpath"
   var type: String {
     get {return _storage._type}
     set {_uniqueStorage()._type = newValue}
@@ -394,6 +394,14 @@ struct Beebium_ParameterSchemaInfo: @unchecked Sendable {
   var fields: [Beebium_ParameterFieldInfo] {
     get {return _storage._fields}
     set {_uniqueStorage()._fields = newValue}
+  }
+
+  /// "filepath"/"dirpath" only: "read" (default) or "write", whether the
+  /// extension reads the path or creates/replaces it; a UI offers a Save
+  /// panel for write. Empty for other types.
+  var access: String {
+    get {return _storage._access}
+    set {_uniqueStorage()._access = newValue}
   }
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -822,7 +830,7 @@ extension Beebium_StorageDevice.Kind: SwiftProtobuf._ProtoNameProviding {
 
 extension Beebium_ParameterSchemaInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ParameterSchemaInfo"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}type\0\u{1}description\0\u{1}position\0\u{1}required\0\u{3}default_value\0\u{1}label\0\u{3}is_list\0\u{3}default_from\0\u{3}effective_default\0\u{1}min\0\u{1}max\0\u{1}choices\0\u{3}choices_from\0\u{1}excludes\0\u{1}bundled\0\u{1}unique\0\u{3}provider_of\0\u{3}item_format\0\u{1}fields\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}type\0\u{1}description\0\u{1}position\0\u{1}required\0\u{3}default_value\0\u{1}label\0\u{3}is_list\0\u{3}default_from\0\u{3}effective_default\0\u{1}min\0\u{1}max\0\u{1}choices\0\u{3}choices_from\0\u{1}excludes\0\u{1}bundled\0\u{1}unique\0\u{3}provider_of\0\u{3}item_format\0\u{1}fields\0\u{1}access\0")
 
   fileprivate class _StorageClass {
     var _key: String = String()
@@ -845,6 +853,7 @@ extension Beebium_ParameterSchemaInfo: SwiftProtobuf.Message, SwiftProtobuf._Mes
     var _providerOf: String = String()
     var _itemFormat: String = String()
     var _fields: [Beebium_ParameterFieldInfo] = []
+    var _access: String = String()
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -875,6 +884,7 @@ extension Beebium_ParameterSchemaInfo: SwiftProtobuf.Message, SwiftProtobuf._Mes
       _providerOf = source._providerOf
       _itemFormat = source._itemFormat
       _fields = source._fields
+      _access = source._access
     }
   }
 
@@ -913,6 +923,7 @@ extension Beebium_ParameterSchemaInfo: SwiftProtobuf.Message, SwiftProtobuf._Mes
         case 18: try { try decoder.decodeSingularStringField(value: &_storage._providerOf) }()
         case 19: try { try decoder.decodeSingularStringField(value: &_storage._itemFormat) }()
         case 20: try { try decoder.decodeRepeatedMessageField(value: &_storage._fields) }()
+        case 21: try { try decoder.decodeSingularStringField(value: &_storage._access) }()
         default: break
         }
       }
@@ -985,6 +996,9 @@ extension Beebium_ParameterSchemaInfo: SwiftProtobuf.Message, SwiftProtobuf._Mes
       if !_storage._fields.isEmpty {
         try visitor.visitRepeatedMessageField(value: _storage._fields, fieldNumber: 20)
       }
+      if !_storage._access.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._access, fieldNumber: 21)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1014,6 +1028,7 @@ extension Beebium_ParameterSchemaInfo: SwiftProtobuf.Message, SwiftProtobuf._Mes
         if _storage._providerOf != rhs_storage._providerOf {return false}
         if _storage._itemFormat != rhs_storage._itemFormat {return false}
         if _storage._fields != rhs_storage._fields {return false}
+        if _storage._access != rhs_storage._access {return false}
         return true
       }
       if !storagesAreEqual {return false}

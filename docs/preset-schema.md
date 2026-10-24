@@ -308,7 +308,8 @@ Each entry is one extension instance: `name` is the extension's canonical
 name (`list-extensions`), and `config` its parameters. The parameters, their
 types and defaults are the extension's manifest's, given by
 `describe-extension <name>` (`--json` for every property: label, bounds,
-choices and the attachment properties below; the manifest format is in
+choices, a path's `access` (`"read"`, or `"write"` for a path the extension
+creates or replaces) and the attachment properties below; the manifest format is in
 [peripheral-extension-framework.md](peripheral-extension-framework.md#extension-manifest)). Values may be JSON strings, integers, booleans,
 or for a repeatable (`is_list`) parameter an array. An item of a list
 parameter that declares `fields` (the AUN transport's `map` and `subnet`) may
