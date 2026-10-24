@@ -14,6 +14,7 @@
 		02202BCE716C487C5A3D36FC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3FE1A20DF4E1D3707C33DE /* SettingsView.swift */; };
 		02956037B5EAA66AA17BCBEB /* SidewaysSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9483385D371D21EC9020EC06 /* SidewaysSchemaSection.swift */; };
 		02EAA3A16D440CCD12071A3D /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F2683BAFB4C72B6644F473 /* AudioEngine.swift */; };
+		03172AD1E0B845745E898635 /* RecentDiscsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A634C79BE6154BBDAA516A5 /* RecentDiscsTests.swift */; };
 		03B945147D637860AEC9B652 /* aun.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32A705682AF714B2B54471F /* aun.grpc.swift */; };
 		03C5C1F2F50E23EAF2E63CEE /* AttachmentPointGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2CFD235F740189691B8B05 /* AttachmentPointGroup.swift */; };
 		03F8C1AF54A149B3750029EE /* audio.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF6E0FC8FC2E9B1DD5775CD0 /* audio.grpc.swift */; };
@@ -65,6 +66,7 @@
 		25614C8EFD2EC82348C86EEA /* ExtensionEditorForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 965A81E6609BBCFAA7FA3997 /* ExtensionEditorForm.swift */; };
 		26F83122590B987F48169D2D /* VideoSettingsLoadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74AEA0430FDD370E37C07678 /* VideoSettingsLoadTests.swift */; };
 		281A106F8708C92D91CD9240 /* keyboard.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61C3011B028BF1FDAD579A4 /* keyboard.pb.swift */; };
+		283A136A708296FC4885B039 /* RecentDiscs.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0EF891426E226950452857 /* RecentDiscs.swift */; };
 		2883A894AD63C6DEF4FD0046 /* TransientMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EE051165760A831AA7396F /* TransientMessage.swift */; };
 		2E9C2894C04791EF7CCDE424 /* BeebiumTouchBarLEDs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */; };
 		2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */; };
@@ -308,6 +310,7 @@
 		0787829BB8681E1354B9C585 /* BeebiumTouchBarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarManager.swift; sourceTree = "<group>"; };
 		08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClient.swift; sourceTree = "<group>"; };
 		0A03414ECE92D9AA04944FBB /* TextInputField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputField.swift; sourceTree = "<group>"; };
+		0A634C79BE6154BBDAA516A5 /* RecentDiscsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentDiscsTests.swift; sourceTree = "<group>"; };
 		0A9849250F602C15283E458A /* StatusBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarView.swift; sourceTree = "<group>"; };
 		0ABF4358E2083C3EFF42FC02 /* SpeedPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedPresentation.swift; sourceTree = "<group>"; };
 		0C19550BD759DAA9DFA9A015 /* extension_ui.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = extension_ui.pb.swift; sourceTree = "<group>"; };
@@ -499,6 +502,7 @@
 		B9223FE588BFE580551E0819 /* SaveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveClient.swift; sourceTree = "<group>"; };
 		B98CF59648104556C3677412 /* KeyboardMTKView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMTKView.swift; sourceTree = "<group>"; };
 		B9D68557079BA374D2FAD131 /* BeebiumTouchBarKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarKeys.swift; sourceTree = "<group>"; };
+		BA0EF891426E226950452857 /* RecentDiscs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentDiscs.swift; sourceTree = "<group>"; };
 		BA2BF078F2B01129AF2ABBFB /* PresetListing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetListing.swift; sourceTree = "<group>"; };
 		BBBE634AA648CA594D5DBC2D /* OpenMachinePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenMachinePlan.swift; sourceTree = "<group>"; };
 		BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComboBoxRepresentableTests.swift; sourceTree = "<group>"; };
@@ -851,6 +855,7 @@
 				9C2BCB8ED24D409A21A27A8C /* PopoverTextField.swift */,
 				A3BEAA83FA16284B08EE75DC /* ProtocolFingerprint.swift */,
 				B5B19F4DD5A21B41C2CF9630 /* RecentConnections.swift */,
+				BA0EF891426E226950452857 /* RecentDiscs.swift */,
 				DBE3C453D296DD3F81E0B829 /* ReconnectCoordinator.swift */,
 				69DA862227C857FDE208AF04 /* ScreenSelectionGeometry.swift */,
 				15311FE0E08476CA352DD0FB /* SelectionCoordinator.swift */,
@@ -959,6 +964,7 @@
 				DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */,
 				8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */,
 				84D7A1533095D918422CCB43 /* PresetThumbnailCacheTests.swift */,
+				0A634C79BE6154BBDAA516A5 /* RecentDiscsTests.swift */,
 				27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */,
 				A6BFD7398FCBA9FE674D15E9 /* SaveClientTests.swift */,
 				A23791D4D4E455D1E91ADF78 /* SavedMachinesModelTests.swift */,
@@ -1164,6 +1170,7 @@
 				316C036A4CF391595A4DD8CC /* PresetManagerDraftLaunchTests.swift in Sources */,
 				62024A31F9AD52CA2676CCB2 /* PresetTests.swift in Sources */,
 				12F8F293AAD228BC164AB68D /* PresetThumbnailCacheTests.swift in Sources */,
+				03172AD1E0B845745E898635 /* RecentDiscsTests.swift in Sources */,
 				4324F1B48C46D8B71A0D31B5 /* ReconnectCoordinatorTests.swift in Sources */,
 				B311C396F3F537A2B430147A /* SaveClientTests.swift in Sources */,
 				ECE1E145C8CE64CCADB2A9BD /* SavedMachinesModelTests.swift in Sources */,
@@ -1306,6 +1313,7 @@
 				BAF0C8765FE555AA7FE0528A /* ProcessorSectionView.swift in Sources */,
 				EE33BF0A4DE7E404A3288E43 /* ProtocolFingerprint.swift in Sources */,
 				F369818B03931A54C795F6D6 /* RecentConnections.swift in Sources */,
+				283A136A708296FC4885B039 /* RecentDiscs.swift in Sources */,
 				FBA4B50F2A55D17E9C34AEF9 /* ReconnectCoordinator.swift in Sources */,
 				BA7685640D333A974EF6D1F6 /* ResettableControls.swift in Sources */,
 				1C6C1476609292CEC12F9374 /* RomHeaderInfo.swift in Sources */,

@@ -235,6 +235,9 @@ private struct StorageDeviceRowView: View {
 private struct DriveRowView: View {
     let drive: Beebium_DriveStatus
     @ObservedObject var discClient: DiscClient
+    /// The shared recent-discs list, behind the Browse icon's menu and fed by
+    /// every successful insert this row makes.
+    @ObservedObject private var recentDiscs = RecentDiscsManager.shared
     /// See StorageModeView.isServerLocal.
     let isServerLocal: Bool
     @State private var isDropTargeted = false
@@ -430,17 +433,50 @@ private struct DriveRowView: View {
     private var browseButton: some View {
         // Browsing picks a file on this host and sends its path for the
         // server to open, which only works when the server is here too.
+        //
+        // The folder icon is a menu whose primary action is still Browse, so a
+        // plain click opens the file panel exactly as before; the menu adds a
+        // Recent submenu of recently inserted images. It sits on this icon
+        // because the icon exists only while the drive is empty and the server
+        // is local -- the same gating a recent insert needs. Room is left for a
+        // future New... item (#25) without adding it here.
         let isEnabled = isEmpty && !isProcessing && isServerLocal
-        return Button {
-            browseForDisc()
+        return Menu {
+            Button("Browse...") { browseForDisc() }
+            recentMenu
         } label: {
             Image(systemName: "folder")
                 .font(.system(size: 16))
                 .foregroundColor(isEnabled ? .primary.opacity(0.6) : .secondary.opacity(0.3))
+        } primaryAction: {
+            browseForDisc()
         }
-        .buttonStyle(.borderless)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
         .disabled(!isEnabled)
         .help(browseHelp)
+    }
+
+    /// The Recent submenu: recently inserted images newest first, each
+    /// reinserting through the same path as Browse. An entry whose file is
+    /// gone is shown disabled so the user still sees what was there. The
+    /// submenu itself is disabled when the list is empty.
+    @ViewBuilder
+    private var recentMenu: some View {
+        let discs = recentDiscs.discs
+        let labels = RecentDiscsManager.menuLabels(for: discs)
+        Menu("Recent") {
+            ForEach(Array(zip(discs, labels)), id: \.0.id) { disc, label in
+                Button(label) {
+                    insertDisc(url: URL(fileURLWithPath: disc.filepath))
+                }
+                .disabled(!FileManager.default.fileExists(atPath: disc.filepath))
+            }
+            Divider()
+            Button("Clear Recent Discs") { recentDiscs.clear() }
+        }
+        .disabled(discs.isEmpty)
     }
 
     private var browseHelp: String {
@@ -521,7 +557,12 @@ private struct DriveRowView: View {
             let result = await discClient.insertDisc(drive: Int(drive.drive), url: url)
             await MainActor.run {
                 isProcessing = false
-                if case .failure(let error) = result {
+                switch result {
+                case .success:
+                    // Recorded on the server's success, not on the attempt, so
+                    // the list only holds images that really went in.
+                    recentDiscs.record(filepath: url.path)
+                case .failure(let error):
                     NSLog("[StorageModeView] Insert failed: \(error.localizedDescription)")
                     // The inline marker is a short label chosen from the server's
                     // failure kind ("Cannot open", "Empty disc image", ...),
