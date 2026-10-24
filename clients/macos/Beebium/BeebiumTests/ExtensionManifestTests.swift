@@ -197,6 +197,44 @@ final class ExtensionCatalogueTests: XCTestCase {
         // A plain filepath says "file".
         let plain = try parameter(#"{"key":"path","type":"filepath"}"#)
         XCTAssertEqual(ExtensionParameterForm.fileNoun(plain, kinds: bundledKindNames), "file")
+        // A dirpath says "directory", so the labels read "No directory",
+        // "Choose Directory...".
+        let directory = try parameter(#"{"key":"directory","type":"dirpath"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(directory, kinds: bundledKindNames), "directory")
+    }
+
+    /// Both a plain filepath and a plain dirpath map to the one filepath control.
+    func testFilepathAndDirpathShareOneControl() throws {
+        let file = try parameter(#"{"key":"path","type":"filepath"}"#)
+        let directory = try parameter(#"{"key":"directory","type":"dirpath"}"#)
+        XCTAssertEqual(ExtensionParameterForm.kind(of: file), .filepath)
+        XCTAssertEqual(ExtensionParameterForm.kind(of: directory), .filepath)
+    }
+
+    /// The chooser is a plain "Choose..." button exactly when its menu would hold
+    /// the one action: an empty value with no bundled masters, no default to
+    /// return to and nothing to clear. Two or more actions keep the menu.
+    func testFilepathChooserButtonVersusMenu() {
+        // Empty plain filepath/dirpath: Choose alone -> a button.
+        XCTAssertEqual(
+            ExtensionParameterForm.filepathChooserActionCount(
+                masterCount: 0, showsUseDefault: false, showsClear: false),
+            1)
+        // A set value with no default offers Choose + Clear -> a menu.
+        XCTAssertEqual(
+            ExtensionParameterForm.filepathChooserActionCount(
+                masterCount: 0, showsUseDefault: false, showsClear: true),
+            2)
+        // A bundled parameter offers its masters plus Choose -> a menu.
+        XCTAssertEqual(
+            ExtensionParameterForm.filepathChooserActionCount(
+                masterCount: 3, showsUseDefault: false, showsClear: false),
+            4)
+        // A chosen value against a bundled default offers Use default + Choose.
+        XCTAssertEqual(
+            ExtensionParameterForm.filepathChooserActionCount(
+                masterCount: 0, showsUseDefault: true, showsClear: false),
+            2)
     }
 
     func testBundledImageKindNounsComeFromSchema() throws {

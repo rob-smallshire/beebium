@@ -50,7 +50,7 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     }
 
     let key: String
-    /// "string", "integer", "boolean" or "filepath".
+    /// "string", "integer", "boolean", "filepath" or "dirpath".
     let type: String
     let isList: Bool
     let required: Bool

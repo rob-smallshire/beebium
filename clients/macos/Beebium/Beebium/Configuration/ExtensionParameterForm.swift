@@ -150,9 +150,15 @@ struct ExtensionParameterForm: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             DiagnosticLabels(diagnostics: diagnostics.forConfigKey(parameter.key))
         }
+        // Claim the full column width so a short description is proposed the whole
+        // width and reads as one line; a long one still wraps. Without this the
+        // row sizes to its widest definite-width child (e.g. a 260pt field) and
+        // squeezes the description narrower than the panel.
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Dispatch
@@ -184,7 +190,7 @@ struct ExtensionParameterForm: View {
         switch parameter.type {
         case "boolean": return .boolean
         case "integer": return .integer
-        case "filepath": return .filepath
+        case "filepath", "dirpath": return .filepath
         default:
             return parameter.choicesFrom == "serial-ports" ? .serialPort : .string
         }
@@ -325,12 +331,14 @@ struct ExtensionParameterForm: View {
     /// The noun for a filepath parameter's affordance, taken from the parameter,
     /// not the extension: a bundled-image parameter says its kind in the server's
     /// words (e.g. "hard disc", "ROM"), a `choices_from: serial-ports` parameter
-    /// says "device", and a plain filepath says "file". The bundled-kind nouns
-    /// come from the schema (`kinds`: kind id -> display noun), so there is no
-    /// per-extension wording in the client.
+    /// says "device", a `dirpath` parameter says "directory", and a plain
+    /// filepath says "file". The bundled-kind nouns come from the schema
+    /// (`kinds`: kind id -> display noun), so there is no per-extension wording in
+    /// the client.
     static func fileNoun(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
         if !parameter.bundled.isEmpty { return bundledNoun(parameter, kinds: kinds) }
         if parameter.choicesFrom == "serial-ports" { return "device" }
+        if parameter.type == "dirpath" { return "directory" }
         return "file"
     }
 
@@ -341,6 +349,18 @@ struct ExtensionParameterForm: View {
     /// The bundled-section heading in the chooser menu, e.g. "Bundled hard discs".
     static func bundledSectionTitle(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
         "Bundled \(bundledNoun(parameter, kinds: kinds))s"
+    }
+
+    /// How many actions a filepath/dirpath chooser menu would offer: the
+    /// always-present "Choose...", plus one per bundled master, an optional way
+    /// back to a bundled default, and an optional Clear. When this is one -- an
+    /// empty value with no bundled masters, no default to return to and nothing
+    /// to clear -- the field shows a plain "Choose..." button in place of a
+    /// one-item menu (which reads as needless ceremony). Pure.
+    static func filepathChooserActionCount(masterCount: Int,
+                                           showsUseDefault: Bool,
+                                           showsClear: Bool) -> Int {
+        (showsUseDefault ? 1 : 0) + masterCount + 1 + (showsClear ? 1 : 0)
     }
 
     // MARK: - Value helpers (pure)
@@ -546,6 +566,11 @@ private struct FilepathParameterControl: View {
 
     var body: some View {
         let value = ExtensionParameterForm.stringValue(parameter.key, in: config)
+        // A dirpath parameter picks a directory: the panel chooses folders not
+        // files, the empty placeholder reads "No directory", and a dropped file
+        // is ignored (only a folder sets it).
+        let isDirectory = parameter.type == "dirpath"
+        let noun = ExtensionParameterForm.fileNoun(parameter, kinds: bundledKindNames)
         let masters = parameter.bundled.isEmpty ? [] : (bundledImages[parameter.bundled] ?? [])
             .filter { $0.availableTo(extensionName: manifestName) }
         // A parameter with a bundled default (a coprocessor's client ROM) comes
@@ -561,12 +586,23 @@ private struct FilepathParameterControl: View {
         if usingDefault {
             display = "Default: \(defaultLabel ?? "")"
         } else if value.isEmpty {
-            display = "No \(ExtensionParameterForm.fileNoun(parameter, kinds: bundledKindNames))"
+            display = "No \(noun)"
         } else if isBare {
             display = masters.first(where: { $0.image == value })?.displayName ?? value
         } else {
             display = URL(fileURLWithPath: value).lastPathComponent
         }
+        // The by-exception menu actions beside the always-present "Choose...": the
+        // way back to a bundled default, and a Clear when there is no default to
+        // fall back to (with a default, clearing IS "use default").
+        let showsUseDefault = defaultLabel != nil && !usingDefault
+        let showsClear = !value.isEmpty && defaultLabel == nil
+        let actionCount = ExtensionParameterForm.filepathChooserActionCount(
+            masterCount: masters.count, showsUseDefault: showsUseDefault, showsClear: showsClear)
+        // With a bare "Choose..." the one-item menu is needless ceremony, so show
+        // a plain button instead. Only when there is no default to return to -- a
+        // default keeps its "Use a different ..." menu even if that is its lone item.
+        let singleChoose = actionCount == 1 && defaultLabel == nil
         return HStack(spacing: 8) {
             Text(display)
                 .font(.subheadline)
@@ -574,50 +610,63 @@ private struct FilepathParameterControl: View {
                 .lineLimit(1).truncationMode(.middle)
                 .help(value)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Menu {
-                // The way back to the default, when something else is chosen.
-                if let defaultLabel = defaultLabel, !usingDefault {
-                    Button("Use default (\(defaultLabel))") { setValue(parameter.key, .string("")) }
-                    Divider()
-                }
-                if !masters.isEmpty {
-                    Section(ExtensionParameterForm.bundledSectionTitle(parameter, kinds: bundledKindNames)) {
-                        ForEach(masters, id: \.image) { master in
-                            Button(master.displayName) { setValue(parameter.key, .string(master.image)) }
+            if singleChoose {
+                Button("Choose…") { browse(parameter.key, isDirectory: isDirectory) }
+                    .fixedSize()
+            } else {
+                Menu {
+                    // The way back to the default, when something else is chosen.
+                    if showsUseDefault, let defaultLabel = defaultLabel {
+                        Button("Use default (\(defaultLabel))") { setValue(parameter.key, .string("")) }
+                        Divider()
+                    }
+                    if !masters.isEmpty {
+                        Section(ExtensionParameterForm.bundledSectionTitle(parameter, kinds: bundledKindNames)) {
+                            ForEach(masters, id: \.image) { master in
+                                Button(master.displayName) { setValue(parameter.key, .string(master.image)) }
+                            }
                         }
                     }
+                    Button("Choose \(noun.localizedCapitalized)…") { browse(parameter.key, isDirectory: isDirectory) }
+                    if showsClear {
+                        Button("Clear") { setValue(parameter.key, .string("")) }
+                    }
+                } label: {
+                    Text(usingDefault ? "Use a different \(noun)…"
+                                      : (value.isEmpty ? "Choose…" : "Change…"))
                 }
-                Button("Choose \(ExtensionParameterForm.fileNoun(parameter, kinds: bundledKindNames).localizedCapitalized)…") { browse(parameter.key) }
-                // With a default, clearing IS "use default"; offer Clear only when
-                // there is no default to fall back to.
-                if !value.isEmpty && defaultLabel == nil {
-                    Button("Clear") { setValue(parameter.key, .string("")) }
-                }
-            } label: {
-                Text(usingDefault ? "Use a different \(ExtensionParameterForm.fileNoun(parameter, kinds: bundledKindNames))…"
-                                  : (value.isEmpty ? "Choose…" : "Change…"))
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            loadDroppedFile(providers) { url in setValue(parameter.key, .string(url.path)) }
+            loadDroppedFile(providers, acceptDirectory: isDirectory) { url in
+                setValue(parameter.key, .string(url.path))
+            }
         }
     }
 
-    private func browse(_ key: String) {
+    private func browse(_ key: String, isDirectory: Bool) {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = isDirectory
+        panel.canChooseFiles = !isDirectory
         if panel.runModal() == .OK, let url = panel.url {
             setValue(key, .string(url.path))
         }
     }
 
-    private func loadDroppedFile(_ providers: [NSItemProvider], _ accept: @escaping (URL) -> Void) -> Bool {
+    private func loadDroppedFile(_ providers: [NSItemProvider], acceptDirectory: Bool,
+                                 _ accept: @escaping (URL) -> Void) -> Bool {
         guard let provider = providers.first else { return false }
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             guard let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+            // A dirpath field takes only a folder; a dropped file is ignored.
+            if acceptDirectory {
+                var isDir: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+                      isDir.boolValue else { return }
+            }
             Task { @MainActor in accept(url) }
         }
         return true
