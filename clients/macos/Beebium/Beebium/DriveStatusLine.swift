@@ -56,6 +56,7 @@ extension Beebium_CreateDiscErrorKind {
         case .unknownLabel: return "Unknown template"
         case .destinationExists: return "File exists"
         case .writeFailed: return "Couldn't write disc"
+        case .wrongExtension: return "Wrong extension"
         case .unspecified, .UNRECOGNIZED: return nil
         }
     }
@@ -69,6 +70,7 @@ extension Beebium_CreateDiscErrorKind {
         case .unknownLabel: return "That blank disc template is not available."
         case .destinationExists: return "A file already exists there."
         case .writeFailed: return "The disc image could not be written."
+        case .wrongExtension: return "That name has the wrong file extension for this disc."
         case .unspecified, .UNRECOGNIZED: return "The disc image could not be created."
         }
     }

@@ -13,6 +13,25 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Naming rules for a blank disc the user saves, factored out of the view so
+/// they can be tested without a panel. The server detects a disc's format from
+/// its file extension, so a saved blank must keep the template's own.
+enum BlankDiscNaming {
+    /// The chosen save URL, made to carry the template's file extension:
+    /// unchanged when it already matches (case-insensitive), otherwise the
+    /// template's extension is appended. The save panel can return a name the
+    /// user typed with no extension, or a different one, and either would have
+    /// the server refuse the image or read it as the wrong format.
+    static func url(forChosen chosenURL: URL, templateFilename: String) -> URL {
+        let templateExtension = (templateFilename as NSString).pathExtension
+        guard !templateExtension.isEmpty else { return chosenURL }
+        if chosenURL.pathExtension.lowercased() == templateExtension.lowercased() {
+            return chosenURL
+        }
+        return chosenURL.appendingPathExtension(templateExtension)
+    }
+}
+
 /// Storage mode view: floppy drives at the top (powered by DiscClient
 /// as before), then a section per media type for storage devices
 /// published by peripheral extensions (hard discs today; RAM discs,
@@ -570,10 +589,19 @@ private struct DriveRowView: View {
             let panel = NSSavePanel()
             panel.title = "New Blank Disc"
             panel.nameFieldStringValue = disc.filename
-            panel.allowedContentTypes = await PresetManager.shared.discImageContentTypes(kind: "floppy")
+            // Only the template's own type, so the panel appends the template's
+            // extension -- not the first of every floppy type, which turned a
+            // .dsd template into a .ssd file the server then refused to insert.
+            let templateExtension = (disc.filename as NSString).pathExtension
+            if let type = UTType(filenameExtension: templateExtension) {
+                panel.allowedContentTypes = [type]
+            }
 
             guard panel.runModal() == .OK, let url = panel.url else { return }
-            createDisc(label: disc.label, destination: url)
+            // Belt and braces: if the returned name still does not carry the
+            // template's extension, add it rather than creating a wrong name.
+            let destination = BlankDiscNaming.url(forChosen: url, templateFilename: disc.filename)
+            createDisc(label: disc.label, destination: destination)
         }
     }
 

@@ -20,6 +20,7 @@ final class CreateDiscErrorKindLabelTests: XCTestCase {
         XCTAssertEqual(Beebium_CreateDiscErrorKind.unknownLabel.markerLabel, "Unknown template")
         XCTAssertEqual(Beebium_CreateDiscErrorKind.destinationExists.markerLabel, "File exists")
         XCTAssertEqual(Beebium_CreateDiscErrorKind.writeFailed.markerLabel, "Couldn't write disc")
+        XCTAssertEqual(Beebium_CreateDiscErrorKind.wrongExtension.markerLabel, "Wrong extension")
     }
 
     func testUnclassifiedKindsHaveNoMarkerLabel() {
@@ -32,7 +33,8 @@ final class CreateDiscErrorKindLabelTests: XCTestCase {
         // Every kind, classified or not, yields a capitalised sentence so the
         // popover always reads as prose even for a kind we do not yet map.
         for kind: Beebium_CreateDiscErrorKind in
-            [.unknownLabel, .destinationExists, .writeFailed, .unspecified, .UNRECOGNIZED(99)] {
+            [.unknownLabel, .destinationExists, .writeFailed, .wrongExtension,
+             .unspecified, .UNRECOGNIZED(99)] {
             let lead = kind.sentenceLead
             XCTAssertFalse(lead.isEmpty)
             XCTAssertEqual(lead.first, lead.first?.uppercased().first)
@@ -49,5 +51,14 @@ final class CreateDiscErrorKindLabelTests: XCTestCase {
         XCTAssertEqual(
             sentence,
             "A file already exists there: destination already exists: /tmp/a.ssd.")
+    }
+
+    func testWrongExtensionSentenceCompletesTheServerFragment() {
+        let sentence = SaveClient.sentence(
+            Beebium_CreateDiscErrorKind.wrongExtension.sentenceLead,
+            detail: "destination must end in .dsd: /tmp/blank.ssd")
+        XCTAssertEqual(
+            sentence,
+            "That name has the wrong file extension for this disc: destination must end in .dsd: /tmp/blank.ssd.")
     }
 }

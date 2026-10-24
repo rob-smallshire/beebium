@@ -68,6 +68,7 @@
 		281A106F8708C92D91CD9240 /* keyboard.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61C3011B028BF1FDAD579A4 /* keyboard.pb.swift */; };
 		283A136A708296FC4885B039 /* RecentDiscs.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0EF891426E226950452857 /* RecentDiscs.swift */; };
 		2883A894AD63C6DEF4FD0046 /* TransientMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EE051165760A831AA7396F /* TransientMessage.swift */; };
+		2DFA99C752F8021C8A4C91AE /* BlankDiscNamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C858E5C4019E78FFD1AD693F /* BlankDiscNamingTests.swift */; };
 		2E9C2894C04791EF7CCDE424 /* BeebiumTouchBarLEDs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */; };
 		2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */; };
 		30ACE9109C0CD0CFC4CAFC47 /* EconetStationPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22FC5E47C7A9D0A75ABD0E0C /* EconetStationPresentation.swift */; };
@@ -520,6 +521,7 @@
 		C553A829BF023E2C2B374139 /* PresetCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetCatalog.swift; sourceTree = "<group>"; };
 		C77B26F9E1A4E18DB0374443 /* MachineSavingCloseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineSavingCloseTests.swift; sourceTree = "<group>"; };
 		C793157DDB8EFB24A11C7D63 /* SidewaysClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysClient.swift; sourceTree = "<group>"; };
+		C858E5C4019E78FFD1AD693F /* BlankDiscNamingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlankDiscNamingTests.swift; sourceTree = "<group>"; };
 		C9A1A70DB6662E96A6210970 /* KeyboardMappings */ = {isa = PBXFileReference; lastKnownFileType = folder; name = KeyboardMappings; path = Beebium/Resources/KeyboardMappings; sourceTree = SOURCE_ROOT; };
 		CA006204A482FCD8B77F7549 /* EconetClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetClient.swift; sourceTree = "<group>"; };
 		CB59783F295E0122C4DF3A8D /* AudioRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRendererTests.swift; sourceTree = "<group>"; };
@@ -919,6 +921,7 @@
 				CB59783F295E0122C4DF3A8D /* AudioRendererTests.swift */,
 				1DFE84A58CCC1A258C1DA04E /* BBCModifierStateTests.swift */,
 				BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */,
+				C858E5C4019E78FFD1AD693F /* BlankDiscNamingTests.swift */,
 				31CA435023B19D31740E399C /* ColorExtensionsTests.swift */,
 				BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */,
 				C46D7348FD4254C5DB38C76D /* CommittingFieldTests.swift */,
@@ -1126,6 +1129,7 @@
 				0C7D8FBEE3E4006E99C883D0 /* AudioRendererTests.swift in Sources */,
 				E2C3C9AB563A0A8406735C73 /* BBCModifierStateTests.swift in Sources */,
 				9E04292AEA136B391E1E68CE /* BiquadFilterTests.swift in Sources */,
+				2DFA99C752F8021C8A4C91AE /* BlankDiscNamingTests.swift in Sources */,
 				BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */,
 				524A3CDC4C24461BC89C6886 /* ComboBoxRepresentableTests.swift in Sources */,
 				E0FA0966EB7097E8B3EF885D /* CommittingFieldTests.swift in Sources */,
