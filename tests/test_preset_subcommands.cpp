@@ -3582,6 +3582,28 @@ TEST_CASE("describe-extension: job-file-printer's directory is a dirpath",
     CHECK(directory->at("type") == "dirpath");
 }
 
+TEST_CASE("describe-extension: the file printers have no online parameter and plain descriptions",
+          "[integration][extension][printer-port]") {
+    for (const char* name : {"file-printer", "job-file-printer"}) {
+        INFO(name);
+        auto result = run_command(EXECUTABLE + " describe-extension " + name + " --json");
+        REQUIRE(result.exit_code == 0);
+        const auto manifest = nlohmann::json::parse(result.stdout_output);
+        std::map<std::string, std::string> descriptions;
+        for (const auto& p : manifest.at("parameters")) {
+            descriptions[p.at("key").get<std::string>()] = p.at("description").get<std::string>();
+        }
+        CHECK(descriptions.count("online") == 0);
+        CHECK(descriptions.at("line_ending") ==
+              "keep the bytes as sent, or translate the Beeb's CR line ends to LF or CR LF");
+    }
+
+    // A user setting no longer: refused as an unknown key.
+    auto result = run_command(EXECUTABLE + " start --file-printer path=out.txt:online=false"
+                              " --port 0");
+    CHECK(result.exit_code == 64);
+}
+
 TEST_CASE("start: a file given for a directory parameter is refused before the machine starts",
           "[integration][extension][dirpath]") {
     beebium::test::ScopedTempDir temp_dir("beebium-dirpath-");

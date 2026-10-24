@@ -15,27 +15,16 @@ syntax = "proto3";
 package beebium;
 
 service JobFilePrinter {
-    // The directory, the job being written, the counts and the online state.
+    // The directory, the job being written and the counts.
     rpc GetStatus(JobFilePrinterGetStatusRequest) returns (JobFilePrinterStatus);
-
-    // Switch the printer online or offline. Offline, the receiver holds the
-    // byte the BBC strobed and withholds /ACK, so the guest waits as it would
-    // for a switched-off printer; online again, it accepts the byte and the
-    // print resumes. Returns the status after the change.
-    rpc SetOnline(JobFilePrinterSetOnlineRequest) returns (JobFilePrinterStatus);
 }
 
 message JobFilePrinterGetStatusRequest {}
 
 message JobFilePrinterStatus {
     string directory = 1;          // where job files are written
-    bool online = 2;               // is the printer accepting bytes?
-    string current_job_file = 3;   // the job file being written, or empty between jobs
-    uint64 bytes_in_job = 4;       // bytes written to the current job file
-    uint64 jobs_completed = 5;     // jobs ended since launch
-    uint64 total_bytes = 6;        // bytes written to all job files, after line-ending translation
-}
-
-message JobFilePrinterSetOnlineRequest {
-    bool online = 1;
+    string current_job_file = 2;   // the job file being written, or empty between jobs
+    uint64 bytes_in_job = 3;       // bytes written to the current job file
+    uint64 jobs_completed = 4;     // jobs ended since launch
+    uint64 total_bytes = 5;        // bytes written to all job files, after line-ending translation
 }

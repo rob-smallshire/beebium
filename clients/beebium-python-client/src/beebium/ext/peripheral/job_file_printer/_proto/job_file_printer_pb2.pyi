@@ -47,15 +47,12 @@ class JobFilePrinterStatus(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     DIRECTORY_FIELD_NUMBER: _builtins.int
-    ONLINE_FIELD_NUMBER: _builtins.int
     CURRENT_JOB_FILE_FIELD_NUMBER: _builtins.int
     BYTES_IN_JOB_FIELD_NUMBER: _builtins.int
     JOBS_COMPLETED_FIELD_NUMBER: _builtins.int
     TOTAL_BYTES_FIELD_NUMBER: _builtins.int
     directory: _builtins.str
     """where job files are written"""
-    online: _builtins.bool
-    """is the printer accepting bytes?"""
     current_job_file: _builtins.str
     """the job file being written, or empty between jobs"""
     bytes_in_job: _builtins.int
@@ -68,7 +65,6 @@ class JobFilePrinterStatus(_message.Message):
         self,
         *,
         directory: _builtins.str = ...,
-        online: _builtins.bool = ...,
         current_job_file: _builtins.str = ...,
         bytes_in_job: _builtins.int = ...,
         jobs_completed: _builtins.int = ...,
@@ -76,27 +72,8 @@ class JobFilePrinterStatus(_message.Message):
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["bytes_in_job", b"bytes_in_job", "current_job_file", b"current_job_file", "directory", b"directory", "jobs_completed", b"jobs_completed", "online", b"online", "total_bytes", b"total_bytes"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bytes_in_job", b"bytes_in_job", "current_job_file", b"current_job_file", "directory", b"directory", "jobs_completed", b"jobs_completed", "total_bytes", b"total_bytes"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___JobFilePrinterStatus: _TypeAlias = JobFilePrinterStatus  # noqa: Y015
-
-@_typing.final
-class JobFilePrinterSetOnlineRequest(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    ONLINE_FIELD_NUMBER: _builtins.int
-    online: _builtins.bool
-    def __init__(
-        self,
-        *,
-        online: _builtins.bool = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["online", b"online"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___JobFilePrinterSetOnlineRequest: _TypeAlias = JobFilePrinterSetOnlineRequest  # noqa: Y015

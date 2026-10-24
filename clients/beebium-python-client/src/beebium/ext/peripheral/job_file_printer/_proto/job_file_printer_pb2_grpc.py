@@ -51,28 +51,13 @@ class JobFilePrinterStub(object):
                 request_serializer=job__file__printer__pb2.JobFilePrinterGetStatusRequest.SerializeToString,
                 response_deserializer=job__file__printer__pb2.JobFilePrinterStatus.FromString,
                 _registered_method=True)
-        self.SetOnline = channel.unary_unary(
-                '/beebium.JobFilePrinter/SetOnline',
-                request_serializer=job__file__printer__pb2.JobFilePrinterSetOnlineRequest.SerializeToString,
-                response_deserializer=job__file__printer__pb2.JobFilePrinterStatus.FromString,
-                _registered_method=True)
 
 
 class JobFilePrinterServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetStatus(self, request, context):
-        """The directory, the job being written, the counts and the online state.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SetOnline(self, request, context):
-        """Switch the printer online or offline. Offline, the receiver holds the
-        byte the BBC strobed and withholds /ACK, so the guest waits as it would
-        for a switched-off printer; online again, it accepts the byte and the
-        print resumes. Returns the status after the change.
+        """The directory, the job being written and the counts.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -84,11 +69,6 @@ def add_JobFilePrinterServicer_to_server(servicer, server):
             'GetStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.GetStatus,
                     request_deserializer=job__file__printer__pb2.JobFilePrinterGetStatusRequest.FromString,
-                    response_serializer=job__file__printer__pb2.JobFilePrinterStatus.SerializeToString,
-            ),
-            'SetOnline': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetOnline,
-                    request_deserializer=job__file__printer__pb2.JobFilePrinterSetOnlineRequest.FromString,
                     response_serializer=job__file__printer__pb2.JobFilePrinterStatus.SerializeToString,
             ),
     }
@@ -118,33 +98,6 @@ class JobFilePrinter(object):
             target,
             '/beebium.JobFilePrinter/GetStatus',
             job__file__printer__pb2.JobFilePrinterGetStatusRequest.SerializeToString,
-            job__file__printer__pb2.JobFilePrinterStatus.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SetOnline(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/beebium.JobFilePrinter/SetOnline',
-            job__file__printer__pb2.JobFilePrinterSetOnlineRequest.SerializeToString,
             job__file__printer__pb2.JobFilePrinterStatus.FromString,
             options,
             channel_credentials,

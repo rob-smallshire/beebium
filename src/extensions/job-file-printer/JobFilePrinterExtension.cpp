@@ -71,7 +71,6 @@ void JobFilePrinterExtension::init(ExtensionContext& ctx) {
     options.line_ending = printer::parse_line_ending_option("job-file-printer",
                                                             config_value("line_ending"));
     options.buffer = printer::parse_buffer_option("job-file-printer", config_value("buffer"));
-    options.online = config_bool("online", true);
     options.on_activity = [this] { ui_.mark_dirty(); };
 
     sink_ = std::make_unique<printer::JobFilePrinterSink>(std::move(options));

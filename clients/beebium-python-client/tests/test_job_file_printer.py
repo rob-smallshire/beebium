@@ -90,7 +90,6 @@ def test_two_prints_separated_by_more_than_idle_are_two_job_files(
     assert status.current_job_file == ""
     assert status.bytes_in_job == 0
     assert status.total_bytes == 8
-    assert status.online
 
     job_filepaths = sorted(jobs_dirpath.iterdir())
     assert len(job_filepaths) == 2

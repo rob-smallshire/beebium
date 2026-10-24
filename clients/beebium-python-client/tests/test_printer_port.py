@@ -144,11 +144,13 @@ def test_bit_banged_strobe_sees_ack_on_ca1(launch_bbc, tmp_path: Path) -> None:
 
 
 def test_offline_printer_stalls_the_print_until_set_online(launch_bbc, tmp_path: Path) -> None:
-    """With online=false the print stalls: the MOS waits for an /ACK that never
-    comes. SetOnline(true) lets it finish and the file has every byte."""
+    """Offline, through the SetOnline test hook, the print stalls: the MOS waits
+    for an /ACK that never comes. SetOnline(true) lets it finish and the file
+    has every byte."""
     out_filepath = tmp_path / "printout.txt"
-    bbc, printer = _launch(launch_bbc, out_filepath, "online=false")
-    assert not printer.get_status().online
+    bbc, printer = _launch(launch_bbc, out_filepath)
+    assert printer.get_status().online, "the printer starts online"
+    assert not printer.set_online(False).online
 
     _type_line(bbc, "*FX5,1")
     # More than the MOS printer buffer holds, so the PRINT itself blocks.

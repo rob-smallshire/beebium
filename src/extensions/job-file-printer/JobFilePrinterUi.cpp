@@ -26,7 +26,6 @@ namespace {
 constexpr const char* CONTROL_DIRECTORY = "directory";
 constexpr const char* CONTROL_JOB       = "job";
 constexpr const char* CONTROL_JOBS      = "jobs";
-constexpr const char* CONTROL_ONLINE    = "online";
 
 }  // namespace
 
@@ -66,25 +65,10 @@ void JobFilePrinterUi::build_view(View* out) const {
                                            " completed, " + std::to_string(status.total_bytes) +
                                            " bytes written");
     }
-    {
-        auto* control = group->add_controls();
-        control->set_id(CONTROL_ONLINE);
-        auto* toggle = control->mutable_toggle();
-        toggle->set_label("Online");
-        toggle->set_value(status.online);
-    }
 }
 
-void JobFilePrinterUi::handle_event(const DispatchRequest& request) {
-    if (request.control_id() != CONTROL_ONLINE) {
-        return;  // unknown control: no-op
-    }
-    auto* sink = ext_.sink();
-    if (!sink) {
-        return;  // not initialised
-    }
-    sink->set_online(request.bool_value());
-    mark_dirty();
+void JobFilePrinterUi::handle_event(const DispatchRequest& /*request*/) {
+    // The panel has no controls.
 }
 
 }  // namespace beebium

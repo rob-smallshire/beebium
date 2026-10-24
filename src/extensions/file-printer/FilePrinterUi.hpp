@@ -20,9 +20,8 @@ namespace beebium {
 
 class FilePrinterExtension;
 
-// Peripherals-sidebar panel for the file printer: the file being written, the
-// byte counts, and an Online toggle. The toggle is a state control: it shows
-// the receiver's online state and sets it.
+// Peripherals-sidebar panel for the file printer: the file being written and
+// the byte counts. It has no controls.
 class FilePrinterUi : public ExtensionUi {
 public:
     explicit FilePrinterUi(FilePrinterExtension& ext) : ext_(ext) {}

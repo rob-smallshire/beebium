@@ -195,20 +195,15 @@ inline std::vector<Entry> make_entries() {
         m.extension_kind = "peripheral";
         m.attaches_to = {"printer-port"};
         m.parameters.push_back(
-            {"path", "filepath", "file to write; created or truncated at attach",
+            {"path", "filepath", "file to write; an existing file is replaced",
              -1, true, false, ""});
         m.parameters.push_back(
             {"line_ending", "string",
-             "'raw' keeps the bytes as sent; 'lf' and 'crlf' translate the "
-             "Beeb's CR line ends",
+             "keep the bytes as sent, or translate the Beeb's CR line ends to LF or CR LF",
              -1, false, false, "raw"});
         m.parameters.push_back(
             {"buffer", "integer", "receiver queue depth in bytes",
              -1, false, false, "256"});
-        m.parameters.push_back(
-            {"online", "boolean",
-             "start online; false models a printer that is switched off",
-             -1, false, false, "true"});
         for (auto& p : m.parameters) {
             if (p.key == "path") {
                 p.label = "File";
@@ -220,8 +215,6 @@ inline std::vector<Entry> make_entries() {
             } else if (p.key == "buffer") {
                 p.label = "Buffer (bytes)";
                 p.min = 1;
-            } else if (p.key == "online") {
-                p.label = "Online";
             }
         }
         result.push_back({std::move(m),
@@ -247,7 +240,7 @@ inline std::vector<Entry> make_entries() {
         m.extension_kind = "peripheral";
         m.attaches_to = {"printer-port"};
         m.parameters.push_back(
-            {"directory", "dirpath", "directory to write job files into; created if missing",
+            {"directory", "dirpath", "directory to write job files into",
              -1, true, false, ""});
         m.parameters.push_back(
             {"idle", "integer",
@@ -255,16 +248,11 @@ inline std::vector<Entry> make_entries() {
              -1, false, false, "5"});
         m.parameters.push_back(
             {"line_ending", "string",
-             "'raw' keeps the bytes as sent; 'lf' and 'crlf' translate the "
-             "Beeb's CR line ends",
+             "keep the bytes as sent, or translate the Beeb's CR line ends to LF or CR LF",
              -1, false, false, "raw"});
         m.parameters.push_back(
             {"buffer", "integer", "receiver queue depth in bytes",
              -1, false, false, "256"});
-        m.parameters.push_back(
-            {"online", "boolean",
-             "start online; false models a printer that is switched off",
-             -1, false, false, "true"});
         for (auto& p : m.parameters) {
             if (p.key == "directory") {
                 p.label = "Directory";
@@ -279,8 +267,6 @@ inline std::vector<Entry> make_entries() {
             } else if (p.key == "buffer") {
                 p.label = "Buffer (bytes)";
                 p.min = 1;
-            } else if (p.key == "online") {
-                p.label = "Online";
             }
         }
         result.push_back({std::move(m),

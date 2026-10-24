@@ -60,7 +60,6 @@ public:
         uint64_t idle_ticks = 5'000'000;     // quiet that ends a job, in VIA ticks
         LineEnding line_ending = LineEnding::Raw;
         std::size_t buffer = 256;            // receiver queue depth in bytes
-        bool online = true;
         // The wall-clock time a job file is stamped with.
         std::function<std::chrono::system_clock::time_point()> now =
             [] { return std::chrono::system_clock::now(); };
@@ -71,7 +70,6 @@ public:
 
     struct Status {
         std::string dirpath;
-        bool online = true;
         std::string current_job_filepath;    // empty between jobs
         uint64_t bytes_in_job = 0;           // written to the current job file
         uint64_t jobs_completed = 0;
@@ -115,13 +113,10 @@ public:
 
     CentronicsReceiver& receiver() { return receiver_; }
 
-    void set_online(bool online) { receiver_.set_online(online); }
-
     // Safe from any thread.
     Status status() const {
         Status status;
         status.dirpath = options_.dirpath.string();
-        status.online = receiver_.is_online();
         {
             std::lock_guard<std::mutex> lock(job_filepath_mutex_);
             status.current_job_filepath = job_filepath_.string();
@@ -192,7 +187,6 @@ private:
     static CentronicsReceiver::Options receiver_options(const Options& options) {
         CentronicsReceiver::Options rx;
         rx.queue_depth = options.buffer;
-        rx.online = options.online;
         return rx;
     }
 

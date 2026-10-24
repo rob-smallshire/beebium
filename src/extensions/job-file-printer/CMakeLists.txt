@@ -10,7 +10,7 @@
 # unconditionally. See BuiltinExtensions.hpp.
 #
 # When the service layer is being built, compiles the job_file_printer.proto
-# MESSAGES (not the gRPC stub); the typed API (GetStatus / SetOnline) is
+# MESSAGES (not the gRPC stub); the typed API (GetStatus) is
 # served through the core's ExtensionRpc channel by a hand-written
 # JobFilePrinterDispatcher, so this library links protobuf but NOT gRPC.
 

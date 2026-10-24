@@ -39,14 +39,6 @@ public:
             }
             return reply_status(response);
         }
-        if (method == "SetOnline") {
-            JobFilePrinterSetOnlineRequest req;
-            if (!parse(request, req)) {
-                return bad_request("SetOnline");
-            }
-            sink_.set_online(req.online());
-            return reply_status(response);
-        }
         return RpcStatus::error(
             kRpcUnimplemented,
             "JobFilePrinter has no method '" + std::string(method) + "'");
@@ -57,7 +49,6 @@ private:
         const auto status = sink_.status();
         JobFilePrinterStatus resp;
         resp.set_directory(status.dirpath);
-        resp.set_online(status.online);
         resp.set_current_job_file(status.current_job_filepath);
         resp.set_bytes_in_job(status.bytes_in_job);
         resp.set_jobs_completed(status.jobs_completed);

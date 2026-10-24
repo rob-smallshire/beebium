@@ -111,15 +111,22 @@ oracle for everything else on the port.
 
 | Parameter | Type | Default | Meaning |
 |-----------|------|---------|---------|
-| `path` | string | required | File to write; created or truncated at attach |
-| `line_ending` | `raw`, `lf`, `crlf` | `raw` | Translate the Beeb's CR line ends, or keep the bytes as sent |
+| `path` | filepath | required | File to write; an existing file is replaced |
+| `line_ending` | `raw`, `lf`, `crlf` | `raw` | Keep the bytes as sent, or translate the Beeb's CR line ends to LF or CR LF |
 | `buffer` | integer | 256 | Receiver queue depth in bytes |
-| `online` | boolean | true | Start online; false models a printer that is switched off |
 
 Typed API over the ExtensionRpc channel, service `FilePrinter`:
-`GetStatus` returns path, bytes received, bytes written and online;
-`SetOnline` sets the online state. A declarative sidebar panel shows the
-same. Python and TypeScript bindings follow the `rpc_serial` layout.
+`GetStatus` returns path, bytes received, bytes written and online. A
+declarative sidebar panel shows the path and the counts; it has no
+controls. Python and TypeScript bindings follow the `rpc_serial` layout.
+
+**`SetOnline` is a test hook**, not a user setting: a printer connected to
+the computer but offline is not a situation anyone wants, so there is no
+`online` parameter and no panel toggle, and the printer starts online.
+`SetOnline(false)` exists to exercise the port's switched-off-printer
+behaviour: the receiver holds the byte the BBC strobed and withholds /ACK,
+so the guest waits; `SetOnline(true)` accepts the byte and the print
+resumes. Only file-printer has it, as the test oracle for the port.
 
 Note on line ends: BASIC ends a line with LF then CR, and the MOS by
 default (`*FX6,10`) suppresses LF to the printer. So `PRINT "HELLO"` reaches
@@ -140,18 +147,16 @@ directory and presets can name it.
 
 | Parameter | Type | Default | Meaning |
 |-----------|------|---------|---------|
-| `directory` | string | required | Directory to write job files into; created if missing |
+| `directory` | dirpath | required | Directory to write job files into; created if missing |
 | `idle` | integer (seconds) | 5 | Quiet, in emulated time, that ends a job; at least 1 |
 | `line_ending` | `raw`, `lf`, `crlf` | `raw` | As file-printer, translated afresh in each job |
 | `buffer` | integer | 256 | Receiver queue depth in bytes |
-| `online` | boolean | true | As file-printer |
 
 Quiet is counted in VIA ticks, which advance only while the machine runs:
 the device attached to the port passes every call through to the
 `CentronicsReceiver` and counts the ticks since it last accepted a byte.
 So a paused machine, a debugger stop or host sleep in the middle of a job
-does not split it, and at real speed the two clocks agree. Offline time
-is not quiet either, as no job has begun until a byte is accepted. When a
+does not split it, and at real speed the two clocks agree. When a
 job has been quiet for `idle`, the emulation thread hands the sink thread
 the count of bytes received by the job's end, and the sink closes the job
 file once it has written that many. Form feed is a page boundary, not a
@@ -166,10 +171,10 @@ and flushed as they arrive, not held until the job ends, so a long job is
 visible while it prints and a crash loses nothing.
 
 Typed API over the ExtensionRpc channel, service `JobFilePrinter`:
-`GetStatus` returns the directory, online, the current job file (empty
-between jobs), bytes in the current job, jobs completed and total bytes
-written; `SetOnline` sets the online state. A declarative sidebar panel
-shows the same, with the Online toggle. Python
+`GetStatus` returns the directory, the current job file (empty between
+jobs), bytes in the current job, jobs completed and total bytes written.
+There is no `SetOnline`: the printer is always online. A declarative
+sidebar panel shows the same; it has no controls. Python
 `beebium.ext.peripheral.job_file_printer` and TypeScript
 `Beebium.jobFilePrinter` follow file-printer's.
 
@@ -199,7 +204,7 @@ contract, a FIFO and a regular file, not against a physical printer.
 - Integration, over the Python client against a Model B with
   `file-printer`: `*FX5,1` then `VDU 2 : PRINT "HELLO" : VDU 3` produces
   `HELLO` CR in the file; a BASIC program that sets DDRA, selects a CA2
-  pulse mode, writes ORA and polls IFR sees the CA1 flag; with
-  `online=false` a print longer than the MOS printer buffer stalls, and
-  `SetOnline(true)` lets it finish with every byte in the file.
+  pulse mode, writes ORA and polls IFR sees the CA1 flag; after the
+  `SetOnline(false)` test hook a print longer than the MOS printer buffer
+  stalls, and `SetOnline(true)` lets it finish with every byte in the file.
   Every wait polls the guest, never the wall clock.

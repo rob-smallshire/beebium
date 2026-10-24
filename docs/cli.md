@@ -451,10 +451,9 @@ See `docs/printer-port.md` for the port model and the other sinks.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `path=<file>` | required | File to write; created or truncated at attach. |
+| `path=<file>` | required | File to write; an existing file is replaced. |
 | `line_ending=raw\|lf\|crlf` | `raw` | `raw` keeps the bytes as sent. The MOS sends CR for a newline and, by default (`*FX6,10`), suppresses LF to the printer; `lf` turns a lone CR into LF and a CR LF pair into LF, `crlf` turns a lone CR into CR LF and leaves CR LF alone. |
 | `buffer=<n>` | `256` | Receiver queue depth in bytes. When it is full the next byte waits for /ACK until the file has caught up, so a slow disc stalls the guest, never the host. |
-| `online=true\|false` | `true` | Start online. `false` models a switched-off printer: the BBC's print stalls waiting for /ACK until `FilePrinter.SetOnline` (or the panel's Online toggle) switches it on, and then resumes. |
 
 ##### job-file-printer
 
@@ -472,11 +471,10 @@ beebium-model-b --job-file-printer directory=~/BBC/print-jobs:idle=2:line_ending
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `directory=<dir>` | required | Directory to write job files into; created if missing. |
+| `directory=<dir>` | required | Directory to write job files into; created if missing. A file there is refused before the machine starts. |
 | `idle=<seconds>` | `5` | Whole seconds of emulated quiet that end a job; at least 1. Form feed does not end a job. |
 | `line_ending=raw\|lf\|crlf` | `raw` | As `--file-printer`. |
 | `buffer=<n>` | `256` | As `--file-printer`. |
-| `online=true\|false` | `true` | As `--file-printer`; `JobFilePrinter.SetOnline` or the panel's Online toggle switches it on. |
 
 ##### tcp-printer
 

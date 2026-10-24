@@ -36,12 +36,11 @@ class JobFilePrinterDispatcher;  // defined when the service layer is built
 // quiet. It owns a JobFilePrinterSink and attaches the sink's device to the
 // printer port via the PrinterPort handle.
 //
-// CLI: --job-file-printer directory=<dir>[:idle=<s>][:line_ending=raw|lf|crlf][:buffer=<n>][:online=<bool>]
+// CLI: --job-file-printer directory=<dir>[:idle=<s>][:line_ending=raw|lf|crlf][:buffer=<n>]
 //   directory   : where job files are written, created if missing (required)
 //   idle        : seconds of emulated quiet that end a job (default 5)
 //   line_ending : raw (default), lf or crlf; see printer::LineEnding
 //   buffer      : receiver queue depth in bytes (default 256)
-//   online      : start online (default true); false models a switched-off printer
 class JobFilePrinterExtension : public PeripheralExtension {
 public:
     JobFilePrinterExtension();
@@ -52,7 +51,7 @@ public:
     void init(ExtensionContext& ctx) override;
     void shutdown() override;
 
-    // Typed API (GetStatus / SetOnline) over the core's ExtensionRpc channel.
+    // Typed API (GetStatus) over the core's ExtensionRpc channel.
     std::vector<ExtensionRpcDispatcher*> rpc_dispatchers() override;
 
     // Peripherals-sidebar panel.

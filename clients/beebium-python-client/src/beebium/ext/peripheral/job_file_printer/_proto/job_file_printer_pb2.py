@@ -36,7 +36,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16job_file_printer.proto\x12\x07\x62\x65\x65\x62ium\" \n\x1eJobFilePrinterGetStatusRequest\"\x96\x01\n\x14JobFilePrinterStatus\x12\x11\n\tdirectory\x18\x01 \x01(\t\x12\x0e\n\x06online\x18\x02 \x01(\x08\x12\x18\n\x10\x63urrent_job_file\x18\x03 \x01(\t\x12\x14\n\x0c\x62ytes_in_job\x18\x04 \x01(\x04\x12\x16\n\x0ejobs_completed\x18\x05 \x01(\x04\x12\x13\n\x0btotal_bytes\x18\x06 \x01(\x04\"0\n\x1eJobFilePrinterSetOnlineRequest\x12\x0e\n\x06online\x18\x01 \x01(\x08\x32\xba\x01\n\x0eJobFilePrinter\x12S\n\tGetStatus\x12\'.beebium.JobFilePrinterGetStatusRequest\x1a\x1d.beebium.JobFilePrinterStatus\x12S\n\tSetOnline\x12\'.beebium.JobFilePrinterSetOnlineRequest\x1a\x1d.beebium.JobFilePrinterStatusb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16job_file_printer.proto\x12\x07\x62\x65\x65\x62ium\" \n\x1eJobFilePrinterGetStatusRequest\"\x86\x01\n\x14JobFilePrinterStatus\x12\x11\n\tdirectory\x18\x01 \x01(\t\x12\x18\n\x10\x63urrent_job_file\x18\x02 \x01(\t\x12\x14\n\x0c\x62ytes_in_job\x18\x03 \x01(\x04\x12\x16\n\x0ejobs_completed\x18\x04 \x01(\x04\x12\x13\n\x0btotal_bytes\x18\x05 \x01(\x04\x32\x65\n\x0eJobFilePrinter\x12S\n\tGetStatus\x12\'.beebium.JobFilePrinterGetStatusRequest\x1a\x1d.beebium.JobFilePrinterStatusb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -46,9 +46,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_JOBFILEPRINTERGETSTATUSREQUEST']._serialized_start=35
   _globals['_JOBFILEPRINTERGETSTATUSREQUEST']._serialized_end=67
   _globals['_JOBFILEPRINTERSTATUS']._serialized_start=70
-  _globals['_JOBFILEPRINTERSTATUS']._serialized_end=220
-  _globals['_JOBFILEPRINTERSETONLINEREQUEST']._serialized_start=222
-  _globals['_JOBFILEPRINTERSETONLINEREQUEST']._serialized_end=270
-  _globals['_JOBFILEPRINTER']._serialized_start=273
-  _globals['_JOBFILEPRINTER']._serialized_end=459
+  _globals['_JOBFILEPRINTERSTATUS']._serialized_end=204
+  _globals['_JOBFILEPRINTER']._serialized_start=206
+  _globals['_JOBFILEPRINTER']._serialized_end=307
 # @@protoc_insertion_point(module_scope)

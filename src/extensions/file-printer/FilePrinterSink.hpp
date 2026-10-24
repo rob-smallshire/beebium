@@ -43,7 +43,6 @@ public:
         std::filesystem::path path;          // created or truncated here
         LineEnding line_ending = LineEnding::Raw;
         std::size_t buffer = 256;            // receiver queue depth in bytes
-        bool online = true;
         // Called on the sink thread after each drain pass, for a panel that
         // wants to redraw its counters.
         std::function<void()> on_activity;
@@ -81,6 +80,7 @@ public:
     // The device to attach to the printer port.
     CentronicsReceiver& receiver() { return receiver_; }
 
+    // The test hook behind FilePrinter.SetOnline; the printer starts online.
     void set_online(bool online) { receiver_.set_online(online); }
 
     // Safe from any thread.
@@ -95,7 +95,6 @@ private:
     static CentronicsReceiver::Options receiver_options(const Options& options) {
         CentronicsReceiver::Options rx;
         rx.queue_depth = options.buffer;
-        rx.online = options.online;
         return rx;
     }
 

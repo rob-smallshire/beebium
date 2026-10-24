@@ -185,11 +185,13 @@ TEST_CASE("FilePrinterSink offline holds the byte until set online", "[printer-p
     ScopedTempDir temp_dir("beebium-file-printer-");
     printer::FilePrinterSink::Options options;
     options.path = temp_dir / "out.txt";
-    options.online = false;
     printer::FilePrinterSink sink(options);
     UserViaPeripheral peripheral;
     peripheral.attach_printer_port_device(sink.receiver());
 
+    // It starts online; set_online is the test hook behind SetOnline.
+    CHECK(sink.status().online);
+    sink.set_online(false);
     CHECK_FALSE(sink.status().online);
     strobe_string(peripheral, "Z");
     CHECK(sink.status().bytes_received == 0);
@@ -204,7 +206,7 @@ TEST_CASE("FilePrinterSink offline holds the byte until set online", "[printer-p
     CHECK(sink.status().bytes_received == 1);
 }
 
-TEST_CASE("FilePrinterUi shows the path, the counts and an Online toggle that sets the state",
+TEST_CASE("FilePrinterUi shows the path and the counts, and no controls",
           "[printer-port][file-printer][ui]") {
     ScopedTempDir temp_dir("beebium-file-printer-");
     const auto out_filepath = temp_dir / "printout.txt";
@@ -219,7 +221,7 @@ TEST_CASE("FilePrinterUi shows the path, the counts and an Online toggle that se
         View view;
         ext.ui()->build_view(&view);
         REQUIRE(view.root().control_case() == Control::kGroup);
-        REQUIRE(view.root().group().controls_size() == 3);
+        REQUIRE(view.root().group().controls_size() == 2);
         CHECK(view.root().group().controls(0).label().text() == "(unset)");
     }
 
@@ -232,25 +234,14 @@ TEST_CASE("FilePrinterUi shows the path, the counts and an Online toggle that se
         View view;
         ext.ui()->build_view(&view);
         const auto& group = view.root().group();
-        REQUIRE(group.controls_size() == 3);
+        REQUIRE(group.controls_size() == 2);
         CHECK(group.controls(0).id() == "path");
         CHECK(group.controls(0).label().text() == out_filepath.string());
         CHECK(group.controls(1).id() == "bytes");
         CHECK(group.controls(1).label().text() == "2 bytes received, 2 written");
-        CHECK(group.controls(2).id() == "online");
-        REQUIRE(group.controls(2).control_case() == Control::kToggle);
-        CHECK(group.controls(2).toggle().label() == "Online");
-        CHECK(group.controls(2).toggle().value());
-
-        DispatchRequest request;
-        request.set_control_id("online");
-        request.set_bool_value(false);
-        ext.ui()->handle_event(request);
-        CHECK_FALSE(ext.sink()->status().online);
-
-        View after;
-        ext.ui()->build_view(&after);
-        CHECK_FALSE(after.root().group().controls(2).toggle().value());
+        for (const auto& control : group.controls()) {
+            CHECK(control.control_case() == Control::kLabel);
+        }
     }
 }
 

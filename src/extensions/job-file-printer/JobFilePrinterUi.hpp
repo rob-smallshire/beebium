@@ -19,8 +19,8 @@ namespace beebium {
 
 class JobFilePrinterExtension;
 
-// The Peripherals-sidebar panel: the directory, the job being written, the
-// counts, and an Online toggle.
+// The Peripherals-sidebar panel: the directory, the job being written and the
+// counts. It has no controls.
 class JobFilePrinterUi : public ExtensionUi {
 public:
     explicit JobFilePrinterUi(JobFilePrinterExtension& ext) : ext_(ext) {}

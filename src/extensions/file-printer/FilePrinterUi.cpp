@@ -25,7 +25,6 @@ namespace {
 
 constexpr const char* CONTROL_PATH   = "path";
 constexpr const char* CONTROL_BYTES  = "bytes";
-constexpr const char* CONTROL_ONLINE = "online";
 
 }  // namespace
 
@@ -55,25 +54,10 @@ void FilePrinterUi::build_view(View* out) const {
                                            " bytes received, " +
                                            std::to_string(status.bytes_written) + " written");
     }
-    {
-        auto* control = group->add_controls();
-        control->set_id(CONTROL_ONLINE);
-        auto* toggle = control->mutable_toggle();
-        toggle->set_label("Online");
-        toggle->set_value(status.online);
-    }
 }
 
-void FilePrinterUi::handle_event(const DispatchRequest& request) {
-    if (request.control_id() != CONTROL_ONLINE) {
-        return;  // unknown control: no-op
-    }
-    auto* sink = ext_.sink();
-    if (!sink) {
-        return;  // not initialised
-    }
-    sink->set_online(request.bool_value());
-    mark_dirty();
+void FilePrinterUi::handle_event(const DispatchRequest& /*request*/) {
+    // The panel has no controls.
 }
 
 }  // namespace beebium

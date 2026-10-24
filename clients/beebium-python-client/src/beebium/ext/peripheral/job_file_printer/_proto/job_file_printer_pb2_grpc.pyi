@@ -43,25 +43,13 @@ class JobFilePrinterStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> JobFilePrinterAsyncStub: ...
     GetStatus: _grpc.UnaryUnaryMultiCallable[_job_file_printer_pb2.JobFilePrinterGetStatusRequest, _job_file_printer_pb2.JobFilePrinterStatus]
-    """The directory, the job being written, the counts and the online state."""
-    SetOnline: _grpc.UnaryUnaryMultiCallable[_job_file_printer_pb2.JobFilePrinterSetOnlineRequest, _job_file_printer_pb2.JobFilePrinterStatus]
-    """Switch the printer online or offline. Offline, the receiver holds the
-    byte the BBC strobed and withholds /ACK, so the guest waits as it would
-    for a switched-off printer; online again, it accepts the byte and the
-    print resumes. Returns the status after the change.
-    """
+    """The directory, the job being written and the counts."""
 
 @_typing.type_check_only
 class JobFilePrinterAsyncStub(JobFilePrinterStub):
     def __init__(self, channel: _aio.Channel) -> None: ...
     GetStatus: _aio.UnaryUnaryMultiCallable[_job_file_printer_pb2.JobFilePrinterGetStatusRequest, _job_file_printer_pb2.JobFilePrinterStatus]  # type: ignore[assignment]
-    """The directory, the job being written, the counts and the online state."""
-    SetOnline: _aio.UnaryUnaryMultiCallable[_job_file_printer_pb2.JobFilePrinterSetOnlineRequest, _job_file_printer_pb2.JobFilePrinterStatus]  # type: ignore[assignment]
-    """Switch the printer online or offline. Offline, the receiver holds the
-    byte the BBC strobed and withholds /ACK, so the guest waits as it would
-    for a switched-off printer; online again, it accepts the byte and the
-    print resumes. Returns the status after the change.
-    """
+    """The directory, the job being written and the counts."""
 
 class JobFilePrinterServicer(metaclass=_abc_1.ABCMeta):
     @_abc_1.abstractmethod
@@ -70,18 +58,6 @@ class JobFilePrinterServicer(metaclass=_abc_1.ABCMeta):
         request: _job_file_printer_pb2.JobFilePrinterGetStatusRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_job_file_printer_pb2.JobFilePrinterStatus, _abc.Awaitable[_job_file_printer_pb2.JobFilePrinterStatus]]:
-        """The directory, the job being written, the counts and the online state."""
-
-    @_abc_1.abstractmethod
-    def SetOnline(
-        self,
-        request: _job_file_printer_pb2.JobFilePrinterSetOnlineRequest,
-        context: _ServicerContext,
-    ) -> _typing.Union[_job_file_printer_pb2.JobFilePrinterStatus, _abc.Awaitable[_job_file_printer_pb2.JobFilePrinterStatus]]:
-        """Switch the printer online or offline. Offline, the receiver holds the
-        byte the BBC strobed and withholds /ACK, so the guest waits as it would
-        for a switched-off printer; online again, it accepts the byte and the
-        print resumes. Returns the status after the change.
-        """
+        """The directory, the job being written and the counts."""
 
 def add_JobFilePrinterServicer_to_server(servicer: JobFilePrinterServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

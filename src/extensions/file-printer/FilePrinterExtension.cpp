@@ -53,7 +53,6 @@ void FilePrinterExtension::init(ExtensionContext& ctx) {
                                                             config_value("line_ending"));
     options.buffer = printer::parse_buffer_option("file-printer", config_value("buffer"));
 
-    options.online = config_bool("online", true);
     options.on_activity = [this] { ui_.mark_dirty(); };
 
     sink_ = std::make_unique<printer::FilePrinterSink>(std::move(options));

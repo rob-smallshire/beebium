@@ -37,11 +37,10 @@ class FilePrinterDispatcher;  // defined when the service layer is built
 // CentronicsReceiver drained by a sink thread into a file) and attaches the
 // receiver to the printer port via the PrinterPort handle.
 //
-// CLI: --file-printer path=<file>[:line_ending=raw|lf|crlf][:buffer=<n>][:online=<bool>]
+// CLI: --file-printer path=<file>[:line_ending=raw|lf|crlf][:buffer=<n>]
 //   path        : the file to write, created or truncated at attach (required)
 //   line_ending : raw (default), lf or crlf; see printer::LineEnding
 //   buffer      : receiver queue depth in bytes (default 256)
-//   online      : start online (default true); false models a switched-off printer
 class FilePrinterExtension : public PeripheralExtension {
 public:
     FilePrinterExtension();

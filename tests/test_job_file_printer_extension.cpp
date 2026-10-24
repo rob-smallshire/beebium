@@ -285,30 +285,6 @@ TEST_CASE("Shutting down closes the open job", "[printer-port][job-file-printer]
     CHECK(read_file(temp_dir / names[0]) == "UNFINISHED\r");
 }
 
-TEST_CASE("Offline holds the byte until set online", "[printer-port][job-file-printer]") {
-    ScopedTempDir temp_dir("beebium-job-file-printer-");
-    auto options = sink_options(temp_dir.path());
-    options.online = false;
-    printer::JobFilePrinterSink sink(options);
-    UserViaPeripheral peripheral;
-    peripheral.attach_printer_port_device(sink.device());
-
-    CHECK_FALSE(sink.status().online);
-    strobe_string(peripheral, "Z");
-    // Offline time is not idle time: no job has begun.
-    tick(peripheral, IDLE_TICKS + 10);
-    CHECK(sink.receiver().bytes_received() == 0);
-    CHECK(job_filenames(temp_dir.path()).empty());
-
-    sink.set_online(true);
-    CHECK(sink.status().online);
-    tick(peripheral, 12);
-    REQUIRE(wait_for_bytes(sink, 1));
-    tick(peripheral, IDLE_TICKS + 10);
-    REQUIRE(wait_for_jobs(sink, 1));
-    CHECK(read_file(temp_dir / "job-20261024T153045Z.prn") == "Z");
-}
-
 TEST_CASE("Line ends are translated within each job", "[printer-port][job-file-printer]") {
     ScopedTempDir temp_dir("beebium-job-file-printer-");
     auto options = sink_options(temp_dir.path());
@@ -390,7 +366,7 @@ TEST_CASE("JobFilePrinterExtension requires a directory and checks its options",
     }
 }
 
-TEST_CASE("JobFilePrinterUi shows the directory, the job, the counts and an Online toggle",
+TEST_CASE("JobFilePrinterUi shows the directory, the job and the counts, and no controls",
           "[printer-port][job-file-printer][ui]") {
     ScopedTempDir temp_dir("beebium-job-file-printer-");
     UserViaPeripheral peripheral;
@@ -403,7 +379,7 @@ TEST_CASE("JobFilePrinterUi shows the directory, the job, the counts and an Onli
         View view;
         ext.ui()->build_view(&view);
         REQUIRE(view.root().control_case() == Control::kGroup);
-        REQUIRE(view.root().group().controls_size() == 4);
+        REQUIRE(view.root().group().controls_size() == 3);
         CHECK(view.root().group().controls(0).label().text() == "(unset)");
     }
 
@@ -421,7 +397,7 @@ TEST_CASE("JobFilePrinterUi shows the directory, the job, the counts and an Onli
         View view;
         ext.ui()->build_view(&view);
         const auto& group = view.root().group();
-        REQUIRE(group.controls_size() == 4);
+        REQUIRE(group.controls_size() == 3);
         CHECK(group.controls(0).id() == "directory");
         CHECK(group.controls(0).label().text() == temp_dir.path().string());
         CHECK(group.controls(1).id() == "job");
@@ -430,26 +406,15 @@ TEST_CASE("JobFilePrinterUi shows the directory, the job, the counts and an Onli
         CHECK(job_text.find(".prn, 2 bytes") != std::string::npos);
         CHECK(group.controls(2).id() == "jobs");
         CHECK(group.controls(2).label().text() == "0 jobs completed, 2 bytes written");
-        CHECK(group.controls(3).id() == "online");
-        REQUIRE(group.controls(3).control_case() == Control::kToggle);
-        CHECK(group.controls(3).toggle().label() == "Online");
-        CHECK(group.controls(3).toggle().value());
-
-        DispatchRequest request;
-        request.set_control_id("online");
-        request.set_bool_value(false);
-        ext.ui()->handle_event(request);
-        CHECK_FALSE(ext.sink()->status().online);
-
-        View after;
-        ext.ui()->build_view(&after);
-        CHECK_FALSE(after.root().group().controls(3).toggle().value());
+        for (const auto& control : group.controls()) {
+            CHECK(control.control_case() == Control::kLabel);
+        }
         ext.shutdown();
     }
 }
 
 #ifdef BEEBIUM_BUILD_SERVICE
-TEST_CASE("JobFilePrinterDispatcher serves GetStatus and SetOnline",
+TEST_CASE("JobFilePrinterDispatcher serves GetStatus only",
           "[printer-port][job-file-printer][rpc]") {
     ScopedTempDir temp_dir("beebium-job-file-printer-");
     UserViaPeripheral peripheral;
@@ -476,21 +441,16 @@ TEST_CASE("JobFilePrinterDispatcher serves GetStatus and SetOnline",
         JobFilePrinterStatus reply;
         REQUIRE(reply.ParseFromString(response));
         CHECK(reply.directory() == temp_dir.path().string());
-        CHECK(reply.online());
         CHECK(fs::path(reply.current_job_file()).parent_path() == temp_dir.path());
         CHECK(reply.bytes_in_job() == 3);
         CHECK(reply.jobs_completed() == 0);
         CHECK(reply.total_bytes() == 3);
     }
     {
-        JobFilePrinterSetOnlineRequest req;
-        req.set_online(false);
-        auto status = dispatcher->invoke("SetOnline", req.SerializeAsString(), response, rpc_ctx);
-        REQUIRE(status.is_ok());
-        JobFilePrinterStatus reply;
-        REQUIRE(reply.ParseFromString(response));
-        CHECK_FALSE(reply.online());
-        CHECK_FALSE(ext.sink()->status().online);
+        // A printer connected to the computer but offline is not a situation
+        // anyone wants, so there is no SetOnline.
+        auto status = dispatcher->invoke("SetOnline", "", response, rpc_ctx);
+        CHECK_FALSE(status.is_ok());
     }
     {
         auto status = dispatcher->invoke("Nope", "", response, rpc_ctx);

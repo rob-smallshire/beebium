@@ -2,9 +2,9 @@
  * Client for the file-printer extension's typed API.
  *
  * The file-printer extension spools everything the BBC sends to its printer
- * port into a file on the host. This client reads what it has written so far
- * and switches the printer online or offline -- the scripting-friendly
- * equivalent of the sidebar panel. Requires the server to be launched with
+ * port into a file on the host. This client reads what it has written so far,
+ * the scripting-friendly equivalent of the sidebar panel, and has a test hook
+ * that switches the printer offline. Requires the server to be launched with
  * --file-printer path=<file>.
  *
  * The FilePrinter messages are tunnelled over the core's ExtensionRpc channel.
@@ -31,7 +31,7 @@ export interface FilePrinterStatus {
     online: boolean;
 }
 
-/** Read the file printer's status and switch it online or offline. */
+/** Read the file printer's status; switch it offline to test the port. */
 export class FilePrinter {
     private readonly channel: ExtensionChannel;
 
@@ -49,10 +49,12 @@ export class FilePrinter {
     }
 
     /**
-     * Switch the printer online or offline. Offline, the receiver holds the
-     * byte the BBC strobed and withholds /ACK, so the guest waits as it would
-     * for a switched-off printer; online again, it accepts the byte and the
-     * print resumes. Returns the status after the change. Never blocks.
+     * A test hook, not a user setting: switch the printer online or offline,
+     * to exercise the port's switched-off-printer behaviour. Offline, the
+     * receiver holds the byte the BBC strobed and withholds /ACK, so the guest
+     * waits as it would for a switched-off printer; online again, it accepts
+     * the byte and the print resumes. The printer starts online. Returns the
+     * status after the change. Never blocks.
      */
     async setOnline(online: boolean): Promise<FilePrinterStatus> {
         const payload = FilePrinterSetOnlineRequest.encode(

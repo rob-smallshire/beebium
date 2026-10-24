@@ -41,8 +41,7 @@ class FilePrinterStub(object):
     """Typed API for the file-printer extension: the sink that spools everything
     the BBC sends to its printer port into a file on the host. This service
     belongs to the file-printer PeripheralExtension and is present only when
-    --file-printer is loaded. SetOnline drives the same receiver state as the
-    panel's Online toggle, so either is reflected in the other.
+    --file-printer is loaded.
     """
 
     def __init__(self, channel):
@@ -67,8 +66,7 @@ class FilePrinterServicer(object):
     """Typed API for the file-printer extension: the sink that spools everything
     the BBC sends to its printer port into a file on the host. This service
     belongs to the file-printer PeripheralExtension and is present only when
-    --file-printer is loaded. SetOnline drives the same receiver state as the
-    panel's Online toggle, so either is reflected in the other.
+    --file-printer is loaded.
     """
 
     def GetStatus(self, request, context):
@@ -79,10 +77,12 @@ class FilePrinterServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def SetOnline(self, request, context):
-        """Switch the printer online or offline. Offline, the receiver holds the
-        byte the BBC strobed and withholds /ACK, so the guest waits as it would
-        for a switched-off printer; online again, it accepts the byte and the
-        print resumes. Returns the status after the change.
+        """A test hook, not a user setting: switch the printer online or offline,
+        to exercise the port's switched-off-printer behaviour. Offline, the
+        receiver holds the byte the BBC strobed and withholds /ACK, so the guest
+        waits as it would for a switched-off printer; online again, it accepts
+        the byte and the print resumes. The printer starts online. Returns the
+        status after the change.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -113,8 +113,7 @@ class FilePrinter(object):
     """Typed API for the file-printer extension: the sink that spools everything
     the BBC sends to its printer port into a file on the host. This service
     belongs to the file-printer PeripheralExtension and is present only when
-    --file-printer is loaded. SetOnline drives the same receiver state as the
-    panel's Online toggle, so either is reflected in the other.
+    --file-printer is loaded.
     """
 
     @staticmethod

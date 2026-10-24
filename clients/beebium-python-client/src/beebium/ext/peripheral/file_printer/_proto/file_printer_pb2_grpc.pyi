@@ -42,8 +42,7 @@ class FilePrinterStub:
     """Typed API for the file-printer extension: the sink that spools everything
     the BBC sends to its printer port into a file on the host. This service
     belongs to the file-printer PeripheralExtension and is present only when
-    --file-printer is loaded. SetOnline drives the same receiver state as the
-    panel's Online toggle, so either is reflected in the other.
+    --file-printer is loaded.
     """
 
     @_typing.overload
@@ -53,10 +52,12 @@ class FilePrinterStub:
     GetStatus: _grpc.UnaryUnaryMultiCallable[_file_printer_pb2.FilePrinterGetStatusRequest, _file_printer_pb2.FilePrinterStatus]
     """The file being written, the byte counts and the online state."""
     SetOnline: _grpc.UnaryUnaryMultiCallable[_file_printer_pb2.FilePrinterSetOnlineRequest, _file_printer_pb2.FilePrinterStatus]
-    """Switch the printer online or offline. Offline, the receiver holds the
-    byte the BBC strobed and withholds /ACK, so the guest waits as it would
-    for a switched-off printer; online again, it accepts the byte and the
-    print resumes. Returns the status after the change.
+    """A test hook, not a user setting: switch the printer online or offline,
+    to exercise the port's switched-off-printer behaviour. Offline, the
+    receiver holds the byte the BBC strobed and withholds /ACK, so the guest
+    waits as it would for a switched-off printer; online again, it accepts
+    the byte and the print resumes. The printer starts online. Returns the
+    status after the change.
     """
 
 @_typing.type_check_only
@@ -64,26 +65,26 @@ class FilePrinterAsyncStub(FilePrinterStub):
     """Typed API for the file-printer extension: the sink that spools everything
     the BBC sends to its printer port into a file on the host. This service
     belongs to the file-printer PeripheralExtension and is present only when
-    --file-printer is loaded. SetOnline drives the same receiver state as the
-    panel's Online toggle, so either is reflected in the other.
+    --file-printer is loaded.
     """
 
     def __init__(self, channel: _aio.Channel) -> None: ...
     GetStatus: _aio.UnaryUnaryMultiCallable[_file_printer_pb2.FilePrinterGetStatusRequest, _file_printer_pb2.FilePrinterStatus]  # type: ignore[assignment]
     """The file being written, the byte counts and the online state."""
     SetOnline: _aio.UnaryUnaryMultiCallable[_file_printer_pb2.FilePrinterSetOnlineRequest, _file_printer_pb2.FilePrinterStatus]  # type: ignore[assignment]
-    """Switch the printer online or offline. Offline, the receiver holds the
-    byte the BBC strobed and withholds /ACK, so the guest waits as it would
-    for a switched-off printer; online again, it accepts the byte and the
-    print resumes. Returns the status after the change.
+    """A test hook, not a user setting: switch the printer online or offline,
+    to exercise the port's switched-off-printer behaviour. Offline, the
+    receiver holds the byte the BBC strobed and withholds /ACK, so the guest
+    waits as it would for a switched-off printer; online again, it accepts
+    the byte and the print resumes. The printer starts online. Returns the
+    status after the change.
     """
 
 class FilePrinterServicer(metaclass=_abc_1.ABCMeta):
     """Typed API for the file-printer extension: the sink that spools everything
     the BBC sends to its printer port into a file on the host. This service
     belongs to the file-printer PeripheralExtension and is present only when
-    --file-printer is loaded. SetOnline drives the same receiver state as the
-    panel's Online toggle, so either is reflected in the other.
+    --file-printer is loaded.
     """
 
     @_abc_1.abstractmethod
@@ -100,10 +101,12 @@ class FilePrinterServicer(metaclass=_abc_1.ABCMeta):
         request: _file_printer_pb2.FilePrinterSetOnlineRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_file_printer_pb2.FilePrinterStatus, _abc.Awaitable[_file_printer_pb2.FilePrinterStatus]]:
-        """Switch the printer online or offline. Offline, the receiver holds the
-        byte the BBC strobed and withholds /ACK, so the guest waits as it would
-        for a switched-off printer; online again, it accepts the byte and the
-        print resumes. Returns the status after the change.
+        """A test hook, not a user setting: switch the printer online or offline,
+        to exercise the port's switched-off-printer behaviour. Offline, the
+        receiver holds the byte the BBC strobed and withholds /ACK, so the guest
+        waits as it would for a switched-off printer; online again, it accepts
+        the byte and the print resumes. The printer starts online. Returns the
+        status after the change.
         """
 
 def add_FilePrinterServicer_to_server(servicer: FilePrinterServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...
