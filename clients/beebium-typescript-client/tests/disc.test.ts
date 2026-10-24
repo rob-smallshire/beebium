@@ -202,6 +202,78 @@ describe("Disc", () => {
             expect(controllers[1]!.id).toBe("watford-ddfs");
         });
     });
+
+    describe("listBlankDiscs", () => {
+        it("maps the templates in the server's order", async () => {
+            const stub = makeDiscStub({
+                listBlankDiscs: () => ({
+                    discs: [
+                        { label: "Acorn ADFS L 640K", filename: "Acorn ADFS L 640K.adl",
+                          kind: "floppy", sizeBytes: 655360 },
+                        { label: "Acorn DFS 80T SS 200K", filename: "Acorn DFS 80T SS 200K.ssd",
+                          kind: "floppy", sizeBytes: 204800 },
+                    ],
+                }),
+            });
+            const disc = new Disc(stub as any);
+            const blankDiscs = await disc.listBlankDiscs();
+            expect(blankDiscs.map((d) => d.label)).toEqual([
+                "Acorn ADFS L 640K",
+                "Acorn DFS 80T SS 200K",
+            ]);
+            expect(blankDiscs[1]).toEqual({
+                label: "Acorn DFS 80T SS 200K",
+                filename: "Acorn DFS 80T SS 200K.ssd",
+                kind: "floppy",
+                sizeBytes: 204800,
+            });
+        });
+    });
+
+    describe("createDisc", () => {
+        it("sends the label, destination and overwrite, and returns the created path", async () => {
+            const stub = makeDiscStub({
+                createDisc: () => ({ success: true, error: "", createdPath: "/tmp/new.ssd", kind: 0 }),
+            });
+            const disc = new Disc(stub as any);
+            const created = await disc.createDisc("Acorn DFS 80T SS 200K", "/tmp/new.ssd", {
+                overwrite: true,
+            });
+            expect(created).toBe("/tmp/new.ssd");
+            expect(stub.createDisc!.mock.calls[0]![0]).toEqual({
+                label: "Acorn DFS 80T SS 200K",
+                destinationPath: "/tmp/new.ssd",
+                overwrite: true,
+            });
+        });
+
+        it("does not overwrite by default", async () => {
+            const stub = makeDiscStub({
+                createDisc: () => ({ success: true, error: "", createdPath: "/tmp/new.ssd", kind: 0 }),
+            });
+            const disc = new Disc(stub as any);
+            await disc.createDisc("Acorn DFS 80T SS 200K", "/tmp/new.ssd");
+            expect(stub.createDisc!.mock.calls[0]![0].overwrite).toBe(false);
+        });
+
+        it("throws DiscError classified by the wire kind", async () => {
+            const stub = makeDiscStub({
+                createDisc: () => ({
+                    success: false,
+                    error: "destination already exists: /tmp/new.ssd",
+                    createdPath: "",
+                    kind: 2, // CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS
+                }),
+            });
+            const disc = new Disc(stub as any);
+            const error = await disc
+                .createDisc("Acorn DFS 80T SS 200K", "/tmp/new.ssd")
+                .catch((e: unknown) => e);
+            expect(error).toBeInstanceOf(DiscError);
+            expect((error as DiscError).kind).toBe(DiscErrorKind.DESTINATION_EXISTS);
+            expect((error as DiscError).message).toContain("destination already exists");
+        });
+    });
 });
 
 describe("Drive", () => {

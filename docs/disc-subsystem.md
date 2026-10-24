@@ -744,6 +744,12 @@ beebium-model-b-plus --drive0 <filepath> --drive1 <filepath>
 
 **Error handling:** Exits with error if file not found or format unrecognized.
 
+**Blank discs:** a new, empty floppy is a copy of one of the server's blank disc
+templates (one per format, `discs/blank/`), made with `create-disc` or
+DiscService's `CreateDisc` and then inserted like any other image. The copy is
+always writable. See [cli.md](cli.md#list-blank-discs) and
+[deployment.md](deployment.md#blank-disc-templates).
+
 ### Programmatic Configuration
 
 ```cpp

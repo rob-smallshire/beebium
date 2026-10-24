@@ -78,7 +78,8 @@ build/
 ├── src/server/
 │   ├── beebium-model-b, beebium-model-b-plus, ...
 │   ├── extensions/<name>/{<plugin library>, manifest.json}
-│   └── presets/   (*.beebium-preset)
+│   ├── presets/   (*.beebium-preset)
+│   └── blank-discs/   (copied from discs/blank/)
 ├── roms/
 │   ├── acorn-mos_1_20.rom
 │   ├── acorn-mos_2_0.rom
@@ -102,7 +103,8 @@ When installed via `cmake --install`, the tree is relocatable and self-describin
 │   └── libbeebium_extension_ui_proto.so
 └── share/beebium/
     ├── roms/      (acorn-mos_1_20.rom, ...)
-    └── presets/   (*.beebium-preset)
+    ├── presets/   (*.beebium-preset)
+    └── blank-discs/   (Acorn DFS 80T SS 200K.ssd, ...)
 ```
 
 The server binaries carry an `$ORIGIN`-relative `RPATH` (`@loader_path` on macOS),
@@ -124,8 +126,9 @@ is entirely relative to the binary's own location, all of these work unchanged.
 For the self-contained, statically linked bundles (and how they are built,
 validated, and shipped), see [Packaging and Distribution](packaging.md).
 
-The executable locates ROMs via `../share/beebium/roms/` and presets via
-`../share/beebium/presets/`, relative to its directory.
+The executable locates ROMs via `../share/beebium/roms/`, presets via
+`../share/beebium/presets/` and blank disc templates via
+`../share/beebium/blank-discs/`, relative to its directory.
 
 ## ROM Discovery Algorithm
 
@@ -175,6 +178,7 @@ The CMake install rules handle:
 - The extension ABI libraries to `lib/`
 - ROM files (`.rom`) to `share/beebium/roms/`
 - System presets, each an archive holding its thumbnail and any disc it carries, to `share/beebium/presets/`
+- Blank disc templates (`discs/blank/`) to `share/beebium/blank-discs/`
 
 ## Preset Discovery
 
@@ -192,6 +196,25 @@ Every stored preset is a `<id>.beebium-preset` zip archive holding its
 `presets/` in the per-user state directory (below). `list-presets --format jsonl` gives each preset's `filepath`.
 A preset id is looked up among the system presets first, then the user
 presets.
+
+## Blank Disc Templates
+
+A user who wants a new, empty floppy gets a copy of a shipped template: one
+empty disc image per format, named so that the file name without its
+extension is the label the user chooses it by (`Acorn DFS 80T SS 200K.ssd`,
+`Acorn ADFS M 320K.adm`, ...). Beebium does not make disc formats itself, so
+adding a format is adding a file. `list-blank-discs` lists them in file name
+order and `create-disc` copies one into place (DiscService's `ListBlankDiscs`
+and `CreateDisc` for clients); see [cli.md](cli.md#list-blank-discs).
+
+The templates are committed under `discs/blank/`, made by
+`scripts/make-blank-discs.sh` with a pinned `oaknut-disc` so the set is
+byte-reproducible (`make-blank-discs.sh --check` verifies it). They are found
+in this order, as the system presets are:
+
+1. `$BEEBIUM_SERVERS_DIRPATH/blank-discs/`
+2. `<executable_dir>/blank-discs/` (build layout)
+3. `<executable_dir>/../share/beebium/blank-discs/` (installed layout)
 
 ## Bundled Discs and Machine Directories
 
@@ -290,7 +313,7 @@ launcher enables it.
 | Variable | Description |
 |----------|-------------|
 | `BEEBIUM_ROM_DIR` | Path to ROM directory (overrides auto-detection) |
-| `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets (overrides auto-detection) |
+| `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets and whose `blank-discs/` holds the blank disc templates (overrides auto-detection) |
 | `BEEBIUM_USER_DIRPATH` | The per-user state directory (overrides the platform default); its `presets/`, `discs/`, `aun-map.json` and `aun-auto-next` follow it. For tests and CI, to keep a run away from the real user's files |
 | `BEEBIUM_AUN_MAP_FILEPATH` | AUN map file path (overrides the per-user `aun-map.json`; `--aun map-file=` overrides this, and `map-file=none` disables the map file) |
 | `BEEBIUM_AUN_AUTO_STATE_FILEPATH` | AUN automatic-station hint file (overrides the per-user `aun-auto-next`; `none` disables the hint) |

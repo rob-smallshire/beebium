@@ -63,6 +63,10 @@ class DiscErrorKind(Enum):
     NO_CONTROLLER = "no_controller"
     INVALID_DRIVE = "invalid_drive"
     DRIVE_OCCUPIED = "drive_occupied"
+    # Disc.create_disc
+    UNKNOWN_LABEL = "unknown_label"
+    DESTINATION_EXISTS = "destination_exists"
+    WRITE_FAILED = "write_failed"
 
 
 _DISC_ERROR_KIND_FROM_PROTO = {
@@ -78,9 +82,28 @@ _DISC_ERROR_KIND_FROM_PROTO = {
 }
 
 
+_CREATE_DISC_ERROR_KIND_FROM_PROTO = {
+    disc_pb2.CREATE_DISC_ERROR_KIND_UNSPECIFIED: DiscErrorKind.UNSPECIFIED,
+    disc_pb2.CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL: DiscErrorKind.UNKNOWN_LABEL,
+    disc_pb2.CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS: DiscErrorKind.DESTINATION_EXISTS,
+    disc_pb2.CREATE_DISC_ERROR_KIND_WRITE_FAILED: DiscErrorKind.WRITE_FAILED,
+}
+
+
 def _disc_error_kind(value: int) -> DiscErrorKind:
     """Map a wire DiscErrorKind value to the client enum (unknown -> UNSPECIFIED)."""
     return _DISC_ERROR_KIND_FROM_PROTO.get(value, DiscErrorKind.UNSPECIFIED)
+
+
+@dataclass(frozen=True)
+class BlankDisc:
+    """A blank disc template the server ships, from which :meth:`Disc.create_disc`
+    makes a disc."""
+
+    label: str  # the file name without its extension, e.g. "Acorn DFS 80T SS 200K"
+    filename: str  # e.g. "Acorn DFS 80T SS 200K.ssd"
+    kind: str  # "floppy"
+    size_bytes: int
 
 
 @dataclass(frozen=True)
@@ -538,6 +561,51 @@ class Disc:
             )
             for ctrl in response.controllers
         ]
+
+    def list_blank_discs(self) -> list[BlankDisc]:
+        """The blank disc templates the server ships, in file name order."""
+        response = self._stub.ListBlankDiscs(disc_pb2.ListBlankDiscsRequest())
+        return [
+            BlankDisc(
+                label=disc.label,
+                filename=disc.filename,
+                kind=disc.kind,
+                size_bytes=disc.size_bytes,
+            )
+            for disc in response.discs
+        ]
+
+    def create_disc(self, label: str, destination: str | Path, *,
+                    overwrite: bool = False) -> Path:
+        """Create a blank disc: copy the template with this label to a path on
+        the server's host. Insert it with :meth:`Drive.insert`.
+
+        Args:
+            label: A template label from :meth:`list_blank_discs`.
+            destination: Where the new disc goes, on the server's host.
+            overwrite: Replace an existing file at `destination`.
+
+        Returns:
+            The absolute path of the new disc.
+
+        Raises:
+            DiscError: If the label is unknown (kind UNKNOWN_LABEL), the
+                destination exists and `overwrite` is not set
+                (DESTINATION_EXISTS), or the copy cannot be written
+                (WRITE_FAILED).
+        """
+        request = disc_pb2.CreateDiscRequest(
+            label=label,
+            destination_path=str(destination),
+            overwrite=overwrite,
+        )
+        response = self._stub.CreateDisc(request)
+        if not response.success:
+            raise DiscError(
+                f"Failed to create disc: {response.error}",
+                kind=_CREATE_DISC_ERROR_KIND_FROM_PROTO.get(response.kind,
+                                                            DiscErrorKind.UNSPECIFIED))
+        return Path(response.created_path)
 
     def install_controller(self, controller_id: str) -> str:
         """Install a disc controller (socketed machines only).

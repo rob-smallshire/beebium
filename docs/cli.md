@@ -660,6 +660,42 @@ Acorn SCSI	hard-disc	Acorn SCSI hard disc image: the sectors in a .dat file, wit
 
 A hard disc is a pair of files; `extensions` names the one a user picks (`.dat`), and the `.dsc` beside it goes with it.
 
+### list-blank-discs
+
+List the blank disc templates the server ships, in file name order: one empty disc image per format, which `create-disc` copies into place. Each has a `label` (its file name without the extension, which `create-disc` takes), its `filename`, its `kind` (`floppy`) and its `size_bytes`. The templates are found as the presets are (see [deployment.md](deployment.md#blank-disc-templates)); adding a format is adding a file there. DiscService's `ListBlankDiscs` gives a client the same list.
+
+```bash
+beebium-model-b list-blank-discs
+```
+
+**`--format tsv`** (default for non-TTY):
+```
+label	filename	kind	size_bytes
+Acorn ADFS L 640K	Acorn ADFS L 640K.adl	floppy	655360
+Acorn ADFS M 320K	Acorn ADFS M 320K.adm	floppy	327680
+Acorn ADFS S 160K	Acorn ADFS S 160K.ads	floppy	163840
+Acorn DFS 40T DS 200K	Acorn DFS 40T DS 200K.dsd	floppy	204800
+Acorn DFS 40T SS 100K	Acorn DFS 40T SS 100K.ssd	floppy	102400
+Acorn DFS 80T DS 400K	Acorn DFS 80T DS 400K.dsd	floppy	409600
+Acorn DFS 80T SS 200K	Acorn DFS 80T SS 200K.ssd	floppy	204800
+```
+
+**`--format jsonl`**:
+```
+{"label":"Acorn ADFS L 640K","filename":"Acorn ADFS L 640K.adl","kind":"floppy","size_bytes":655360}
+```
+
+### create-disc
+
+Create a blank disc image: copy the template with the given label to the destination, byte for byte, and print the new disc's absolute path. The copy is an ordinary writable file. Insert it as any other disc (`--floppy 0:<filepath>`, or DiscService's `InsertDisc`).
+
+```bash
+beebium-model-b create-disc "Acorn DFS 80T SS 200K" ~/Discs/Work.ssd
+beebium-model-b create-disc "Acorn ADFS M 320K" ~/Discs/Work.adm --overwrite
+```
+
+An existing destination is refused unless `--overwrite` is given; a directory is always refused. Keep the template's extension on the destination: it is what the server's format detection goes by when the disc is inserted. Exit codes: `EX_NOINPUT` (66) for an unknown label, `EX_CANTCREAT` (73) for an existing destination, `EX_IOERR` (74) when the copy cannot be written, `EX_USAGE` (64) for missing or extra arguments. DiscService's `CreateDisc(label, destination_path, overwrite)` does the same, with the same error messages, on the server's host.
+
 ### list-extensions
 
 List every peripheral or transport extension that the server can recognise via a `--<cli-name>` flag, in the same priority order that `start` would resolve. See [Extension Search Paths](peripheral-extension-framework.md#extension-search-paths) in the extension framework doc for the full ordering rules.

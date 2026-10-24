@@ -21,11 +21,14 @@ import type {
     ListAvailableControllersResponse as ProtoListAvailableControllersResponse,
     DiscControllerTypeInfo as ProtoDiscControllerTypeInfo,
     InstallDiscControllerResponse as ProtoInstallDiscControllerResponse,
+    ListBlankDiscsResponse as ProtoListBlankDiscsResponse,
+    CreateDiscResponse as ProtoCreateDiscResponse,
 } from "./generated/disc.js";
 import {
     DiscDriveState as ProtoDiscDriveState,
     DiscEventType as ProtoDiscEventType,
     DiscErrorKind as ProtoDiscErrorKind,
+    CreateDiscErrorKind as ProtoCreateDiscErrorKind,
 } from "./generated/disc.js";
 import { promisify } from "./call-utils.js";
 import { toAsyncIterable, BackgroundStreamHandle } from "./stream-utils.js";
@@ -62,6 +65,12 @@ export enum DiscErrorKind {
     NO_CONTROLLER = "no_controller",
     INVALID_DRIVE = "invalid_drive",
     DRIVE_OCCUPIED = "drive_occupied",
+    /** {@link Disc.createDisc}: no blank disc template has that label. */
+    UNKNOWN_LABEL = "unknown_label",
+    /** {@link Disc.createDisc}: the destination exists and overwrite was not set. */
+    DESTINATION_EXISTS = "destination_exists",
+    /** {@link Disc.createDisc}: the copy could not be written. */
+    WRITE_FAILED = "write_failed",
 }
 
 export interface DiscMetadata {
@@ -96,6 +105,17 @@ export interface DiscEvent {
     timestampCycles: number;
     disc: DiscMetadata | undefined;
     discUrl: string;
+}
+
+/** A blank disc template the server ships, from which {@link Disc.createDisc} makes a disc. */
+export interface BlankDisc {
+    /** The file name without its extension, e.g. "Acorn DFS 80T SS 200K". */
+    label: string;
+    /** The template's file name, e.g. "Acorn DFS 80T SS 200K.ssd". */
+    filename: string;
+    /** "floppy". */
+    kind: string;
+    sizeBytes: number;
 }
 
 export interface DiscControllerInfo {
@@ -157,6 +177,20 @@ function toDiscErrorKind(proto: ProtoDiscErrorKind): DiscErrorKind {
         case ProtoDiscErrorKind.DISC_ERROR_KIND_DRIVE_OCCUPIED:
             return DiscErrorKind.DRIVE_OCCUPIED;
         case ProtoDiscErrorKind.DISC_ERROR_KIND_UNSPECIFIED:
+        default:
+            return DiscErrorKind.UNSPECIFIED;
+    }
+}
+
+function toCreateDiscErrorKind(proto: ProtoCreateDiscErrorKind): DiscErrorKind {
+    switch (proto) {
+        case ProtoCreateDiscErrorKind.CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL:
+            return DiscErrorKind.UNKNOWN_LABEL;
+        case ProtoCreateDiscErrorKind.CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS:
+            return DiscErrorKind.DESTINATION_EXISTS;
+        case ProtoCreateDiscErrorKind.CREATE_DISC_ERROR_KIND_WRITE_FAILED:
+            return DiscErrorKind.WRITE_FAILED;
+        case ProtoCreateDiscErrorKind.CREATE_DISC_ERROR_KIND_UNSPECIFIED:
         default:
             return DiscErrorKind.UNSPECIFIED;
     }
@@ -444,6 +478,54 @@ export class Disc {
             {},
         );
         return response.controllers.map(toDiscControllerInfo);
+    }
+
+    /** List the blank disc templates the server ships, in file name order. */
+    async listBlankDiscs(): Promise<BlankDisc[]> {
+        const response = await promisify<{}, ProtoListBlankDiscsResponse>(
+            this.stub as unknown as Record<string, Function>,
+            "listBlankDiscs",
+            {},
+        );
+        return response.discs.map((disc) => ({
+            label: disc.label,
+            filename: disc.filename,
+            kind: disc.kind,
+            sizeBytes: disc.sizeBytes,
+        }));
+    }
+
+    /**
+     * Create a blank disc: copy the template with this label to a path on the
+     * server's host. Insert it with {@link Drive.insert}.
+     *
+     * @param label - A template label from {@link listBlankDiscs}.
+     * @param destinationPath - Where the new disc goes, on the server's host.
+     * @param options.overwrite - Replace an existing file at destinationPath.
+     * @returns The absolute path of the new disc.
+     * @throws DiscError - If the label is unknown, the destination exists and
+     *   overwrite is not set, or the copy cannot be written.
+     */
+    async createDisc(
+        label: string,
+        destinationPath: string,
+        options: { overwrite?: boolean } = {},
+    ): Promise<string> {
+        const response = await promisify<
+            { label: string; destinationPath: string; overwrite: boolean },
+            ProtoCreateDiscResponse
+        >(
+            this.stub as unknown as Record<string, Function>,
+            "createDisc",
+            { label, destinationPath, overwrite: options.overwrite ?? false },
+        );
+        if (!response.success) {
+            throw new DiscError(
+                `Create disc failed: ${response.error}`,
+                toCreateDiscErrorKind(response.kind),
+            );
+        }
+        return response.createdPath;
     }
 
     /**

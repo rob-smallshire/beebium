@@ -32,7 +32,7 @@ export {
     TELETEXT_COLUMNS,
 } from "./video.js";
 export { System, type Provenance, type MachineIdentity, type DescriptionPlaceholder, type DescriptionTemplateReport, type MachineDescriptionPreview, type SetMachineDescriptionResult, type ServerStatusEvent, type ShutdownResponse, type ShutdownConditionStatus, type AdvertisementState, type PacingStats, ServerStatus, ShutdownMode } from "./system.js";
-export { Disc, Drive, type DiscMetadata, type DriveStatus, type DiscControllerStatus, type DiscEvent, type DiscControllerInfo, DriveState, DiscEventType, DiscErrorKind } from "./disc.js";
+export { Disc, Drive, type DiscMetadata, type DriveStatus, type DiscControllerStatus, type DiscEvent, type DiscControllerInfo, type BlankDisc, DriveState, DiscEventType, DiscErrorKind } from "./disc.js";
 export { Econet, type EconetStatus, type AdlcStatus, type HandshakeStatus } from "./econet.js";
 export { Serial, type SerialStatus } from "./serial.js";
 export {
