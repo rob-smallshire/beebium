@@ -24,6 +24,7 @@ import { ExtensionChannel } from "./extension_rpc.js";
 import { RpcSerial } from "./rpc_serial.js";
 import { HostSerial } from "./host_serial.js";
 import { FilePrinter } from "./file_printer.js";
+import { JobFilePrinter } from "./job_file_printer.js";
 import { TcpPrinter } from "./tcp_printer.js";
 import { HostParallelPrinter } from "./host_parallel_printer.js";
 import { Tube } from "./tube.js";
@@ -90,6 +91,7 @@ export class Beebium {
     private _rpcSerial?: RpcSerial;
     private _hostSerial?: HostSerial;
     private _filePrinter?: FilePrinter;
+    private _jobFilePrinter?: JobFilePrinter;
     private _tcpPrinter?: TcpPrinter;
     private _hostParallelPrinter?: HostParallelPrinter;
     private _tube?: Tube;
@@ -344,6 +346,16 @@ export class Beebium {
             );
         }
         return this._filePrinter;
+    }
+
+    /** Read/switch the job file printer (requires the server's --job-file-printer extension). */
+    get jobFilePrinter(): JobFilePrinter {
+        if (this._jobFilePrinter === undefined) {
+            this._jobFilePrinter = new JobFilePrinter(
+                new ExtensionChannel(this.connection.extensionRpcStub),
+            );
+        }
+        return this._jobFilePrinter;
     }
 
     /** Read the network printer's status (requires the server's --tcp-printer extension). */

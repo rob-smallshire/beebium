@@ -21,6 +21,7 @@ PICONET_PROTO_DIR="$REPO_ROOT/src/extensions/piconet"
 RPC_SERIAL_PROTO_DIR="$REPO_ROOT/src/extensions/rpc-serial"
 HOST_SERIAL_PROTO_DIR="$REPO_ROOT/src/extensions/host-serial"
 FILE_PRINTER_PROTO_DIR="$REPO_ROOT/src/extensions/file-printer"
+JOB_FILE_PRINTER_PROTO_DIR="$REPO_ROOT/src/extensions/job-file-printer"
 TCP_PRINTER_PROTO_DIR="$REPO_ROOT/src/extensions/tcp-printer"
 HOST_PARALLEL_PRINTER_PROTO_DIR="$REPO_ROOT/src/extensions/host-parallel-printer"
 EXTENSION_UI_PROTO_DIR="$REPO_ROOT/src/core/extension-api/proto"
@@ -58,6 +59,7 @@ PROTOS=(
     "$RPC_SERIAL_PROTO_DIR:rpc_serial.proto"
     "$HOST_SERIAL_PROTO_DIR:host_serial.proto"
     "$FILE_PRINTER_PROTO_DIR:file_printer.proto"
+    "$JOB_FILE_PRINTER_PROTO_DIR:job_file_printer.proto"
     "$TCP_PRINTER_PROTO_DIR:tcp_printer.proto"
     "$HOST_PARALLEL_PRINTER_PROTO_DIR:host_parallel_printer.proto"
     "$EXTENSION_UI_PROTO_DIR:extension_ui.proto"
@@ -84,6 +86,7 @@ for entry in "${PROTOS[@]}"; do
         -I "$RPC_SERIAL_PROTO_DIR" \
         -I "$HOST_SERIAL_PROTO_DIR" \
         -I "$FILE_PRINTER_PROTO_DIR" \
+        -I "$JOB_FILE_PRINTER_PROTO_DIR" \
         -I "$TCP_PRINTER_PROTO_DIR" \
         -I "$HOST_PARALLEL_PRINTER_PROTO_DIR" \
         -I "$EXTENSION_UI_PROTO_DIR" \

@@ -47,6 +47,7 @@ export {
     type HostSerialSetConfigOptions,
 } from "./host_serial.js";
 export { FilePrinter, type FilePrinterStatus } from "./file_printer.js";
+export { JobFilePrinter, type JobFilePrinterStatus } from "./job_file_printer.js";
 export { TcpPrinter, type TcpPrinterStatus } from "./tcp_printer.js";
 export {
     HostParallelPrinter,
