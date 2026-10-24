@@ -128,6 +128,51 @@ in the Beeb's order: `HELLO` LF CR.
 `line_ending=lf` turns a lone CR into LF and a CR LF pair into LF;
 `crlf` turns a lone CR into CR LF and leaves CR LF alone.
 
+### job-file-printer (built in)
+
+Writes one file per print job into a directory. A job is a run of bytes
+separated from the next by quiet: it begins with the first byte after
+quiet and ends when no byte has been accepted for `idle` seconds of
+emulated time. The output is the replay record a printer emulator such as
+Papyrium wants, and a plain record for anyone else. Built in for the same
+reasons as `file-printer`: `--job-file-printer` works without a plugin
+directory and presets can name it.
+
+| Parameter | Type | Default | Meaning |
+|-----------|------|---------|---------|
+| `directory` | string | required | Directory to write job files into; created if missing |
+| `idle` | integer (seconds) | 5 | Quiet, in emulated time, that ends a job; at least 1 |
+| `line_ending` | `raw`, `lf`, `crlf` | `raw` | As file-printer, translated afresh in each job |
+| `buffer` | integer | 256 | Receiver queue depth in bytes |
+| `online` | boolean | true | As file-printer |
+
+Quiet is counted in VIA ticks, which advance only while the machine runs:
+the device attached to the port passes every call through to the
+`CentronicsReceiver` and counts the ticks since it last accepted a byte.
+So a paused machine, a debugger stop or host sleep in the middle of a job
+does not split it, and at real speed the two clocks agree. Offline time
+is not quiet either, as no job has begun until a byte is accepted. When a
+job has been quiet for `idle`, the emulation thread hands the sink thread
+the count of bytes received by the job's end, and the sink closes the job
+file once it has written that many. Form feed is a page boundary, not a
+job boundary. Shutting the machine down, or detaching the extension,
+writes what is queued and closes the open job.
+
+Job files are named `job-<YYYYMMDDThhmmssZ>.prn` in UTC, stamped when the
+job's first byte is written, so they sort by when printing began. A job
+that begins in the same second as an existing file gets `-2`, `-3`... before
+the extension; an existing file is never overwritten. Bytes are written
+and flushed as they arrive, not held until the job ends, so a long job is
+visible while it prints and a crash loses nothing.
+
+Typed API over the ExtensionRpc channel, service `JobFilePrinter`:
+`GetStatus` returns the directory, online, the current job file (empty
+between jobs), bytes in the current job, jobs completed and total bytes
+written; `SetOnline` sets the online state. A declarative sidebar panel
+shows the same, with the Online toggle. Python
+`beebium.ext.peripheral.job_file_printer` and TypeScript
+`Beebium.jobFilePrinter` follow file-printer's.
+
 ### tcp-printer (plugin)
 
 A raw TCP client to `host:port`, default port 9100, the JetDirect
