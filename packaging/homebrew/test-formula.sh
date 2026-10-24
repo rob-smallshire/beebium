@@ -192,7 +192,8 @@ echo "${server_count} servers exposed in ${keg_bin_dirpath}"
 ext_out="$("${keg_bin_dirpath}/beebium-model-b" list-extensions)"
 for cli in host-serial aun scsi-hdd ip232-serial rfc2217-client-serial \
            rfc2217-server-serial rpc-serial loopback-serial piconet \
-           acorn-scsi acorn-rtc tcp-printer host-parallel-printer; do
+           acorn-scsi acorn-rtc file-printer job-file-printer tcp-printer \
+           host-parallel-printer; do
   echo "${ext_out}" | grep -q "^${cli}	" || {
     echo "MISSING extension: ${cli}" >&2
     exit 1

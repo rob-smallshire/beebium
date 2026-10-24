@@ -1457,6 +1457,19 @@ target_link_libraries(test_file_printer_extension PRIVATE
 )
 catch_discover_tests(test_file_printer_extension)
 
+# job-file-printer extension test: jobs split by emulated idle time, file
+# naming, shutdown, offline, panel and RPC.
+add_executable(test_job_file_printer_extension test_job_file_printer_extension.cpp)
+target_include_directories(test_job_file_printer_extension PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/extensions/job-file-printer
+)
+target_link_libraries(test_job_file_printer_extension PRIVATE
+    beebium_ext_job_file_printer
+    beebium_extension_ui_proto
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_job_file_printer_extension)
+
 # tcp-printer extension test: the sink against a loopback listener, the
 # extension's options, its panel and its RPC.
 add_executable(test_tcp_printer_extension test_tcp_printer_extension.cpp)
@@ -2103,6 +2116,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_aun
         beebium_ext_host_serial
         beebium_ext_file_printer
+        beebium_ext_job_file_printer
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain
@@ -2124,6 +2138,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_aun
         beebium_ext_host_serial
         beebium_ext_file_printer
+        beebium_ext_job_file_printer
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain
