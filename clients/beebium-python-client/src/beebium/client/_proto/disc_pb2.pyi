@@ -168,6 +168,8 @@ class _CreateDiscErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_C
     """The destination exists (or is a directory) and overwrite was not set"""
     CREATE_DISC_ERROR_KIND_WRITE_FAILED: _CreateDiscErrorKind.ValueType  # 3
     """The copy could not be written"""
+    CREATE_DISC_ERROR_KIND_WRONG_EXTENSION: _CreateDiscErrorKind.ValueType  # 4
+    """destination_path ends in another extension than the template's"""
 
 class CreateDiscErrorKind(_CreateDiscErrorKind, metaclass=_CreateDiscErrorKindEnumTypeWrapper):
     """Why a CreateDisc failed, so a client can react without parsing `error`"""
@@ -180,6 +182,8 @@ CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS: CreateDiscErrorKind.ValueType  # 2
 """The destination exists (or is a directory) and overwrite was not set"""
 CREATE_DISC_ERROR_KIND_WRITE_FAILED: CreateDiscErrorKind.ValueType  # 3
 """The copy could not be written"""
+CREATE_DISC_ERROR_KIND_WRONG_EXTENSION: CreateDiscErrorKind.ValueType  # 4
+"""destination_path ends in another extension than the template's"""
 Global___CreateDiscErrorKind: _TypeAlias = CreateDiscErrorKind  # noqa: Y015
 
 @_typing.final
@@ -845,7 +849,7 @@ class CreateDiscRequest(_message.Message):
     label: _builtins.str
     """Template label, from ListBlankDiscs"""
     destination_path: _builtins.str
-    """Path of the new disc on the server's host"""
+    """Path of the new disc on the server's host; without an extension, the template's is added"""
     overwrite: _builtins.bool
     """Replace an existing file at destination_path"""
     def __init__(

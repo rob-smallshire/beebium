@@ -71,6 +71,8 @@ export enum DiscErrorKind {
     DESTINATION_EXISTS = "destination_exists",
     /** {@link Disc.createDisc}: the copy could not be written. */
     WRITE_FAILED = "write_failed",
+    /** {@link Disc.createDisc}: the destination ends in another extension than the template's. */
+    WRONG_EXTENSION = "wrong_extension",
 }
 
 export interface DiscMetadata {
@@ -190,6 +192,8 @@ function toCreateDiscErrorKind(proto: ProtoCreateDiscErrorKind): DiscErrorKind {
             return DiscErrorKind.DESTINATION_EXISTS;
         case ProtoCreateDiscErrorKind.CREATE_DISC_ERROR_KIND_WRITE_FAILED:
             return DiscErrorKind.WRITE_FAILED;
+        case ProtoCreateDiscErrorKind.CREATE_DISC_ERROR_KIND_WRONG_EXTENSION:
+            return DiscErrorKind.WRONG_EXTENSION;
         case ProtoCreateDiscErrorKind.CREATE_DISC_ERROR_KIND_UNSPECIFIED:
         default:
             return DiscErrorKind.UNSPECIFIED;
@@ -499,12 +503,17 @@ export class Disc {
      * Create a blank disc: copy the template with this label to a path on the
      * server's host. Insert it with {@link Drive.insert}.
      *
+     * The new disc has the template's extension, which is how the server knows
+     * its format: a destination without one gets it, and one with another
+     * extension is refused.
+     *
      * @param label - A template label from {@link listBlankDiscs}.
      * @param destinationPath - Where the new disc goes, on the server's host.
      * @param options.overwrite - Replace an existing file at destinationPath.
      * @returns The absolute path of the new disc.
      * @throws DiscError - If the label is unknown, the destination exists and
-     *   overwrite is not set, or the copy cannot be written.
+     *   overwrite is not set, the destination has another extension, or the
+     *   copy cannot be written.
      */
     async createDisc(
         label: string,

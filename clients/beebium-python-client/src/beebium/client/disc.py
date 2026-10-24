@@ -67,6 +67,7 @@ class DiscErrorKind(Enum):
     UNKNOWN_LABEL = "unknown_label"
     DESTINATION_EXISTS = "destination_exists"
     WRITE_FAILED = "write_failed"
+    WRONG_EXTENSION = "wrong_extension"
 
 
 _DISC_ERROR_KIND_FROM_PROTO = {
@@ -87,6 +88,7 @@ _CREATE_DISC_ERROR_KIND_FROM_PROTO = {
     disc_pb2.CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL: DiscErrorKind.UNKNOWN_LABEL,
     disc_pb2.CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS: DiscErrorKind.DESTINATION_EXISTS,
     disc_pb2.CREATE_DISC_ERROR_KIND_WRITE_FAILED: DiscErrorKind.WRITE_FAILED,
+    disc_pb2.CREATE_DISC_ERROR_KIND_WRONG_EXTENSION: DiscErrorKind.WRONG_EXTENSION,
 }
 
 
@@ -580,6 +582,10 @@ class Disc:
         """Create a blank disc: copy the template with this label to a path on
         the server's host. Insert it with :meth:`Drive.insert`.
 
+        The new disc has the template's extension, which is how the server
+        knows its format: a `destination` without one gets it, and one with
+        another extension is refused.
+
         Args:
             label: A template label from :meth:`list_blank_discs`.
             destination: Where the new disc goes, on the server's host.
@@ -591,8 +597,9 @@ class Disc:
         Raises:
             DiscError: If the label is unknown (kind UNKNOWN_LABEL), the
                 destination exists and `overwrite` is not set
-                (DESTINATION_EXISTS), or the copy cannot be written
-                (WRITE_FAILED).
+                (DESTINATION_EXISTS), `destination` ends in another
+                extension than the template's (WRONG_EXTENSION), or the copy
+                cannot be written (WRITE_FAILED).
         """
         request = disc_pb2.CreateDiscRequest(
             label=label,

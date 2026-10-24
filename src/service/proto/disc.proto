@@ -44,7 +44,9 @@ service DiscService {
     rpc ListBlankDiscs(ListBlankDiscsRequest) returns (ListBlankDiscsResponse);
 
     // Copy a blank disc template to a path on the server's host, byte for
-    // byte. Inserting the new disc is a separate InsertDisc.
+    // byte. The copy always has the template's extension, which is how the
+    // server knows its format: a destination without one gets it, and one
+    // with another is refused. Inserting the new disc is a separate InsertDisc.
     rpc CreateDisc(CreateDiscRequest) returns (CreateDiscResponse);
 }
 
@@ -253,11 +255,12 @@ enum CreateDiscErrorKind {
     CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL = 1;      // No template has that label
     CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS = 2; // The destination exists (or is a directory) and overwrite was not set
     CREATE_DISC_ERROR_KIND_WRITE_FAILED = 3;       // The copy could not be written
+    CREATE_DISC_ERROR_KIND_WRONG_EXTENSION = 4;    // destination_path ends in another extension than the template's
 }
 
 message CreateDiscRequest {
     string label = 1;                  // Template label, from ListBlankDiscs
-    string destination_path = 2;       // Path of the new disc on the server's host
+    string destination_path = 2;       // Path of the new disc on the server's host; without an extension, the template's is added
     bool overwrite = 3;                // Replace an existing file at destination_path
 }
 

@@ -273,7 +273,9 @@ extension Beebium_DiscServiceClientProtocol {
   }
 
   /// Copy a blank disc template to a path on the server's host, byte for
-  /// byte. Inserting the new disc is a separate InsertDisc.
+  /// byte. The copy always has the template's extension, which is how the
+  /// server knows its format: a destination without one gets it, and one
+  /// with another is refused. Inserting the new disc is a separate InsertDisc.
   ///
   /// - Parameters:
   ///   - request: Request to send to CreateDisc.
@@ -879,7 +881,9 @@ internal protocol Beebium_DiscServiceProvider: CallHandlerProvider {
   func listBlankDiscs(request: Beebium_ListBlankDiscsRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListBlankDiscsResponse>
 
   /// Copy a blank disc template to a path on the server's host, byte for
-  /// byte. Inserting the new disc is a separate InsertDisc.
+  /// byte. The copy always has the template's extension, which is how the
+  /// server knows its format: a destination without one gets it, and one
+  /// with another is refused. Inserting the new disc is a separate InsertDisc.
   func createDisc(request: Beebium_CreateDiscRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CreateDiscResponse>
 }
 
@@ -1079,7 +1083,9 @@ internal protocol Beebium_DiscServiceAsyncProvider: CallHandlerProvider, Sendabl
   ) async throws -> Beebium_ListBlankDiscsResponse
 
   /// Copy a blank disc template to a path on the server's host, byte for
-  /// byte. Inserting the new disc is a separate InsertDisc.
+  /// byte. The copy always has the template's extension, which is how the
+  /// server knows its format: a destination without one gets it, and one
+  /// with another is refused. Inserting the new disc is a separate InsertDisc.
   func createDisc(
     request: Beebium_CreateDiscRequest,
     context: GRPCAsyncServerCallContext

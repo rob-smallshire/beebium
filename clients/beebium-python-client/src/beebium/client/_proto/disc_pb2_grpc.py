@@ -192,7 +192,9 @@ class DiscServiceServicer(object):
 
     def CreateDisc(self, request, context):
         """Copy a blank disc template to a path on the server's host, byte for
-        byte. Inserting the new disc is a separate InsertDisc.
+        byte. The copy always has the template's extension, which is how the
+        server knows its format: a destination without one gets it, and one
+        with another is refused. Inserting the new disc is a separate InsertDisc.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

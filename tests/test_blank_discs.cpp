@@ -203,6 +203,59 @@ TEST_CASE("create_blank_disc errors on an unknown label", "[blank-discs]") {
     CHECK_FALSE(fs::exists(destination));
 }
 
+TEST_CASE("create_blank_disc gives a destination without an extension the template's",
+          "[blank-discs]") {
+    TemplatesDir templates;
+    ScopedTempDir out{"beebium-blank-disc-out-"};
+
+    auto result = beebium::create_blank_disc(templates.dir.path(), "Zed 80T", out / "Work", false);
+
+    REQUIRE(result);
+    CHECK(result.created_filepath == out / "Work.ssd");
+    CHECK(read_bytes(out / "Work.ssd") == pattern(512, 3));
+    CHECK_FALSE(fs::exists(out / "Work"));
+}
+
+TEST_CASE("create_blank_disc checks for an existing destination with the extension added",
+          "[blank-discs]") {
+    TemplatesDir templates;
+    ScopedTempDir out{"beebium-blank-disc-out-"};
+    write_bytes(out / "Work.ssd", {'k', 'e', 'e', 'p'});
+
+    auto result = beebium::create_blank_disc(templates.dir.path(), "Zed 80T", out / "Work", false);
+
+    CHECK_FALSE(result);
+    CHECK(result.kind == beebium::CreateBlankDiscErrorKind::DestinationExists);
+    CHECK(read_bytes(out / "Work.ssd") == std::vector<char>{'k', 'e', 'e', 'p'});
+}
+
+TEST_CASE("create_blank_disc refuses a destination with another extension", "[blank-discs]") {
+    TemplatesDir templates;
+    ScopedTempDir out{"beebium-blank-disc-out-"};
+
+    // A copy under another format's extension would not load: the server
+    // goes by the extension.
+    for (const std::string filename : {"Work.dsd", "Work.adl", "Work.", "My.Disc"}) {
+        auto destination = out / filename;
+        auto result = beebium::create_blank_disc(templates.dir.path(), "Zed 80T", destination, true);
+        CHECK_FALSE(result);
+        CHECK(result.kind == beebium::CreateBlankDiscErrorKind::WrongExtension);
+        CHECK(result.error == "destination must end in .ssd: " + destination.string());
+        CHECK_FALSE(fs::exists(destination));
+    }
+}
+
+TEST_CASE("create_blank_disc takes the template's extension in any case", "[blank-discs]") {
+    TemplatesDir templates;
+    ScopedTempDir out{"beebium-blank-disc-out-"};
+
+    auto result = beebium::create_blank_disc(templates.dir.path(), "Zed 80T", out / "WORK.SSD", false);
+
+    REQUIRE(result);
+    CHECK(result.created_filepath.filename() == "WORK.SSD");
+    CHECK(read_bytes(result.created_filepath) == pattern(512, 3));
+}
+
 TEST_CASE("create_blank_disc reports a destination it cannot write", "[blank-discs]") {
     TemplatesDir templates;
     ScopedTempDir out{"beebium-blank-disc-out-"};
@@ -251,15 +304,23 @@ TEST_CASE("create-disc copies a template and prints the new disc's path", "[blan
     CHECK(output == fs::absolute(destination).string() + "\n");
     CHECK(read_bytes(destination) == pattern(512, 3));
 
-    // Again, without and then with --overwrite.
+    // Without an extension, the template's is added.
+    REQUIRE(run<CreateCommand>({"Zed 80T", (out / "bare").string()}, OutputFormat::Tsv, output) ==
+            ExitCode::OK);
+    CHECK(output == fs::absolute(out / "bare.ssd").string() + "\n");
+
+    // Again, over a changed disc: without and then with --overwrite.
+    write_bytes(destination, {'u', 's', 'e', 'd'});
     CHECK(run<CreateCommand>({"Zed 80T", destination}, OutputFormat::Tsv, output) ==
           ExitCode::CANTCREAT);
-    CHECK(run<CreateCommand>({"Acorn ADFS S 160K", destination, "--overwrite"}, OutputFormat::Tsv,
+    CHECK(read_bytes(destination) == std::vector<char>{'u', 's', 'e', 'd'});
+    CHECK(run<CreateCommand>({"Zed 80T", destination, "--overwrite"}, OutputFormat::Tsv,
                              output) == ExitCode::OK);
-    CHECK(read_bytes(destination) == pattern(1024, 5));
+    CHECK(read_bytes(destination) == pattern(512, 3));
 }
 
-TEST_CASE("create-disc rejects an unknown label and missing arguments", "[blank-discs][cli]") {
+TEST_CASE("create-disc rejects an unknown label, a wrong extension and missing arguments",
+          "[blank-discs][cli]") {
     TemplatesDir templates;
     ScopedTempDir servers{"beebium-servers-"};
     fs::create_directory_symlink(templates.dir.path(), servers / "blank-discs");
@@ -269,6 +330,9 @@ TEST_CASE("create-disc rejects an unknown label and missing arguments", "[blank-
     std::string output;
     CHECK(run<CreateCommand>({"No Such Disc", (out / "a.ssd").string()}, OutputFormat::Tsv,
                              output) == ExitCode::NOINPUT);
+    CHECK(run<CreateCommand>({"Zed 80T", (out / "a.dsd").string()}, OutputFormat::Tsv,
+                             output) == ExitCode::USAGE);
+    CHECK_FALSE(fs::exists(out / "a.dsd"));
     CHECK(run<CreateCommand>({"Zed 80T"}, OutputFormat::Tsv, output) == ExitCode::USAGE);
     CHECK(run<CreateCommand>({"Zed 80T", "a", "b"}, OutputFormat::Tsv, output) ==
           ExitCode::USAGE);

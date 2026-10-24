@@ -1248,3 +1248,31 @@ TEST_CASE("DiscService CreateDisc errors on an unknown label", "[grpc][disc][bla
     CHECK(response.error() == "no blank disc named 'Acorn DFS 81T'");
     CHECK(response.created_path().empty());
 }
+
+TEST_CASE("DiscService CreateDisc adds the template's extension to a destination without one",
+          "[grpc][disc][blank-discs]") {
+    BlankDiscsFixture fixture(committed_blank_discs_dirpath());
+    beebium::test::ScopedTempDir out{"beebium-create-disc-"};
+
+    auto response = create_disc(fixture.stub(), "Acorn DFS 80T DS 400K", out / "Work", false);
+
+    REQUIRE(response.success());
+    CHECK(std::filesystem::path(response.created_path()) == out / "Work.dsd");
+    CHECK(std::filesystem::file_size(out / "Work.dsd") == 409600);
+}
+
+TEST_CASE("DiscService CreateDisc refuses a destination with another format's extension",
+          "[grpc][disc][blank-discs]") {
+    BlankDiscsFixture fixture(committed_blank_discs_dirpath());
+    beebium::test::ScopedTempDir out{"beebium-create-disc-"};
+    // The double-sided DFS template is a .dsd; as a .ssd it would not load.
+    auto destination = out / "blank-Acorn-DFS-80T-DS-400K.ssd";
+
+    auto response = create_disc(fixture.stub(), "Acorn DFS 80T DS 400K", destination, true);
+
+    CHECK_FALSE(response.success());
+    CHECK(response.kind() == beebium::CREATE_DISC_ERROR_KIND_WRONG_EXTENSION);
+    CHECK(response.error() == "destination must end in .dsd: " + destination.string());
+    CHECK(response.created_path().empty());
+    CHECK_FALSE(std::filesystem::exists(destination));
+}

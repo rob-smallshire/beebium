@@ -49,6 +49,7 @@ enum class CreateBlankDiscErrorKind {
     UnknownLabel,       // no template has that label
     DestinationExists,  // the destination exists and overwrite was not asked for
     WriteFailed,        // the template could not be read or the copy written
+    WrongExtension,     // the destination's extension is not the template's
 };
 
 struct CreateBlankDiscResult {
@@ -59,13 +60,19 @@ struct CreateBlankDiscResult {
     explicit operator bool() const { return kind == CreateBlankDiscErrorKind::None; }
 };
 
+// The extension of `filepath`, in lower case.
+inline std::string lower_case_extension(const std::filesystem::path& filepath) {
+    std::string extension = filepath.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return extension;
+}
+
 // The kind of disc a file named `filepath` is, by its extension: "floppy"
 // when a floppy format handler loads that extension, or nullopt when no
 // format does, so that a file that is not a disc image is not offered.
 inline std::optional<std::string> blank_disc_kind(const std::filesystem::path& filepath) {
-    std::string extension = filepath.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    const std::string extension = lower_case_extension(filepath);
     for (const auto& handler : default_format_registry().handlers()) {
         for (auto handled : handler->file_extensions()) {
             if (extension == handled) return std::string("floppy");
@@ -112,7 +119,10 @@ inline std::optional<BlankDiscTemplate> find_blank_disc(
 // Copy the template labelled `label` in `dirpath` to `destination_filepath`,
 // byte for byte, refusing an existing destination unless `overwrite`. The copy
 // is an ordinary writable file whatever the template's permissions, so the
-// new disc is not write-protected.
+// new disc is not write-protected. The server knows a disc's format by its
+// extension, so the copy always has the template's: a destination without
+// one gets it, and one with another extension is refused, since that copy
+// would not load.
 inline CreateBlankDiscResult create_blank_disc(const std::optional<std::filesystem::path>& dirpath,
                                           const std::string& label,
                                           const std::filesystem::path& destination_filepath,
@@ -133,14 +143,29 @@ inline CreateBlankDiscResult create_blank_disc(const std::optional<std::filesyst
     }
 
     std::error_code ec;
-    const auto status = std::filesystem::status(destination_filepath, ec);
-    if (std::filesystem::is_directory(status)) {
+    if (std::filesystem::is_directory(destination_filepath, ec)) {
         return failed(CreateBlankDiscErrorKind::DestinationExists,
                       "destination is a directory: " + destination_filepath.string());
     }
+
+    const auto template_extension = disc->filepath.extension().string();
+    auto filepath = destination_filepath;
+    if (!filepath.has_extension()) {
+        filepath += template_extension;
+    } else if (lower_case_extension(filepath) != lower_case_extension(disc->filepath)) {
+        return failed(CreateBlankDiscErrorKind::WrongExtension,
+                      "destination must end in " + template_extension + ": " +
+                          destination_filepath.string());
+    }
+
+    const auto status = std::filesystem::status(filepath, ec);
+    if (std::filesystem::is_directory(status)) {
+        return failed(CreateBlankDiscErrorKind::DestinationExists,
+                      "destination is a directory: " + filepath.string());
+    }
     if (std::filesystem::exists(status) && !overwrite) {
         return failed(CreateBlankDiscErrorKind::DestinationExists,
-                      "destination already exists: " + destination_filepath.string());
+                      "destination already exists: " + filepath.string());
     }
 
     std::ifstream in(disc->filepath, std::ios::binary);
@@ -150,18 +175,17 @@ inline CreateBlankDiscResult create_blank_disc(const std::optional<std::filesyst
                       "cannot read blank disc: " + disc->filepath.string());
     }
 
-    std::ofstream out(destination_filepath, std::ios::binary | std::ios::trunc);
+    std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     out.close();
     if (!out) {
-        std::filesystem::remove(destination_filepath, ec);
-        return failed(CreateBlankDiscErrorKind::WriteFailed,
-                      "cannot write " + destination_filepath.string());
+        std::filesystem::remove(filepath, ec);
+        return failed(CreateBlankDiscErrorKind::WriteFailed, "cannot write " + filepath.string());
     }
 
     CreateBlankDiscResult result;
-    result.created_filepath = std::filesystem::absolute(destination_filepath, ec);
-    if (ec) result.created_filepath = destination_filepath;
+    result.created_filepath = std::filesystem::absolute(filepath, ec);
+    if (ec) result.created_filepath = filepath;
     return result;
 }
 

@@ -237,6 +237,9 @@ enum Beebium_CreateDiscErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
 
   /// The copy could not be written
   case writeFailed // = 3
+
+  /// destination_path ends in another extension than the template's
+  case wrongExtension // = 4
   case UNRECOGNIZED(Int)
 
   init() {
@@ -249,6 +252,7 @@ enum Beebium_CreateDiscErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 1: self = .unknownLabel
     case 2: self = .destinationExists
     case 3: self = .writeFailed
+    case 4: self = .wrongExtension
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -259,6 +263,7 @@ enum Beebium_CreateDiscErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .unknownLabel: return 1
     case .destinationExists: return 2
     case .writeFailed: return 3
+    case .wrongExtension: return 4
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -269,6 +274,7 @@ enum Beebium_CreateDiscErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     .unknownLabel,
     .destinationExists,
     .writeFailed,
+    .wrongExtension,
   ]
 
 }
@@ -722,7 +728,7 @@ struct Beebium_CreateDiscRequest: Sendable {
   /// Template label, from ListBlankDiscs
   var label: String = String()
 
-  /// Path of the new disc on the server's host
+  /// Path of the new disc on the server's host; without an extension, the template's is added
   var destinationPath: String = String()
 
   /// Replace an existing file at destination_path
@@ -771,7 +777,7 @@ extension Beebium_DiscEventType: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Beebium_CreateDiscErrorKind: SwiftProtobuf._ProtoNameProviding {
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CREATE_DISC_ERROR_KIND_UNSPECIFIED\0\u{1}CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL\0\u{1}CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS\0\u{1}CREATE_DISC_ERROR_KIND_WRITE_FAILED\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CREATE_DISC_ERROR_KIND_UNSPECIFIED\0\u{1}CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL\0\u{1}CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS\0\u{1}CREATE_DISC_ERROR_KIND_WRITE_FAILED\0\u{1}CREATE_DISC_ERROR_KIND_WRONG_EXTENSION\0")
 }
 
 extension Beebium_InsertDiscRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

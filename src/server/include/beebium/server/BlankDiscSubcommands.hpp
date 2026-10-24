@@ -118,7 +118,9 @@ public:
                   << "\n"
                   << "Copies the blank disc template with this label (see list-blank-discs)\n"
                   << "to the destination, byte for byte, and prints the path of the new disc.\n"
-                  << "An existing destination is refused unless --overwrite is given.\n";
+                  << "The new disc has the template's extension: a destination without one\n"
+                  << "gets it, and one with another extension is refused. An existing\n"
+                  << "destination is refused unless --overwrite is given.\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
@@ -167,6 +169,8 @@ public:
                     return ExitCode::NOINPUT;
                 case beebium::CreateBlankDiscErrorKind::DestinationExists:
                     return ExitCode::CANTCREAT;
+                case beebium::CreateBlankDiscErrorKind::WrongExtension:
+                    return ExitCode::USAGE;
                 default:
                     return ExitCode::IOERR;
             }

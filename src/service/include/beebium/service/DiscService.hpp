@@ -64,6 +64,8 @@ inline beebium::CreateDiscErrorKind to_wire_error_kind(beebium::CreateBlankDiscE
             return beebium::CREATE_DISC_ERROR_KIND_DESTINATION_EXISTS;
         case beebium::CreateBlankDiscErrorKind::WriteFailed:
             return beebium::CREATE_DISC_ERROR_KIND_WRITE_FAILED;
+        case beebium::CreateBlankDiscErrorKind::WrongExtension:
+            return beebium::CREATE_DISC_ERROR_KIND_WRONG_EXTENSION;
     }
     return beebium::CREATE_DISC_ERROR_KIND_UNSPECIFIED;
 }

@@ -273,6 +273,22 @@ describe("Disc", () => {
             expect((error as DiscError).kind).toBe(DiscErrorKind.DESTINATION_EXISTS);
             expect((error as DiscError).message).toContain("destination already exists");
         });
+
+        it("classifies a destination with another extension", async () => {
+            const stub = makeDiscStub({
+                createDisc: () => ({
+                    success: false,
+                    error: "destination must end in .dsd: /tmp/new.ssd",
+                    createdPath: "",
+                    kind: 4, // CREATE_DISC_ERROR_KIND_WRONG_EXTENSION
+                }),
+            });
+            const disc = new Disc(stub as any);
+            const error = await disc
+                .createDisc("Acorn DFS 80T DS 400K", "/tmp/new.ssd")
+                .catch((e: unknown) => e);
+            expect((error as DiscError).kind).toBe(DiscErrorKind.WRONG_EXTENSION);
+        });
     });
 });
 

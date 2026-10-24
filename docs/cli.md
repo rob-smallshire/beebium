@@ -694,7 +694,7 @@ beebium-model-b create-disc "Acorn DFS 80T SS 200K" ~/Discs/Work.ssd
 beebium-model-b create-disc "Acorn ADFS M 320K" ~/Discs/Work.adm --overwrite
 ```
 
-An existing destination is refused unless `--overwrite` is given; a directory is always refused. Keep the template's extension on the destination: it is what the server's format detection goes by when the disc is inserted. Exit codes: `EX_NOINPUT` (66) for an unknown label, `EX_CANTCREAT` (73) for an existing destination, `EX_IOERR` (74) when the copy cannot be written, `EX_USAGE` (64) for missing or extra arguments. DiscService's `CreateDisc(label, destination_path, overwrite)` does the same, with the same error messages, on the server's host.
+The new disc always has the template's extension, which is what the server's format detection goes by when the disc is inserted: a destination without an extension gets the template's (`~/Discs/Work` becomes `~/Discs/Work.ssd`, and that is the path printed), and one with another extension is refused (`destination must end in .ssd: <path>`), since that copy would not load. The comparison ignores case. An existing destination is refused unless `--overwrite` is given; a directory is always refused. Exit codes: `EX_NOINPUT` (66) for an unknown label, `EX_CANTCREAT` (73) for an existing destination, `EX_IOERR` (74) when the copy cannot be written, `EX_USAGE` (64) for a wrong extension and for missing or extra arguments. DiscService's `CreateDisc(label, destination_path, overwrite)` does the same, with the same error messages, on the server's host.
 
 ### list-extensions
 

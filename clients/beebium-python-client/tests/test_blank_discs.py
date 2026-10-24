@@ -118,3 +118,22 @@ def test_create_disc_reports_an_unknown_label(bbc_disc: Beebium, tmp_path: Path)
         bbc_disc.disc.create_disc("Acorn DFS 81T", tmp_path / "new.ssd")
     assert excinfo.value.kind == DiscErrorKind.UNKNOWN_LABEL
     assert "no blank disc named 'Acorn DFS 81T'" in str(excinfo.value)
+
+
+def test_create_disc_adds_the_template_extension_to_a_bare_destination(
+    bbc_disc: Beebium, tmp_path: Path
+) -> None:
+    created = bbc_disc.disc.create_disc("Acorn DFS 80T DS 400K", tmp_path / "Work")
+    assert created == tmp_path / "Work.dsd"
+    assert created.stat().st_size == 409600
+    assert not (tmp_path / "Work").exists()
+
+
+def test_create_disc_refuses_another_formats_extension(bbc_disc: Beebium, tmp_path: Path) -> None:
+    """A double-sided DFS template copied to a .ssd would not load, so it is refused."""
+    destination = tmp_path / "blank-Acorn-DFS-80T-DS-400K.ssd"
+    with pytest.raises(DiscError) as excinfo:
+        bbc_disc.disc.create_disc("Acorn DFS 80T DS 400K", destination, overwrite=True)
+    assert excinfo.value.kind == DiscErrorKind.WRONG_EXTENSION
+    assert f"destination must end in .dsd: {destination}" in str(excinfo.value)
+    assert not destination.exists()
