@@ -435,11 +435,16 @@ private struct DriveRowView: View {
         // server to open, which only works when the server is here too.
         //
         // The folder icon is a menu whose primary action is still Browse, so a
-        // plain click opens the file panel exactly as before; the menu adds a
-        // Recent submenu of recently inserted images. It sits on this icon
-        // because the icon exists only while the drive is empty and the server
-        // is local -- the same gating a recent insert needs. Room is left for a
-        // future New... item (#25) without adding it here.
+        // plain click opens the file panel exactly as before; a small
+        // disclosure chevron beside it opens the menu, which adds a Recent
+        // submenu of recently inserted images. It sits on this icon because the
+        // icon exists only while the drive is empty and the server is local --
+        // the same gating a recent insert needs. Room is left for a future
+        // New... item (#25) without adding it here.
+        //
+        // The .button menu style with a borderless button is what renders the
+        // primary action and a visible, clickable chevron together; the legacy
+        // borderless-button style draws no usable affordance for the menu.
         let isEnabled = isEmpty && !isProcessing && isServerLocal
         return Menu {
             Button("Browse...") { browseForDisc() }
@@ -451,8 +456,8 @@ private struct DriveRowView: View {
         } primaryAction: {
             browseForDisc()
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .menuStyle(.button)
+        .buttonStyle(.borderless)
         .fixedSize()
         .disabled(!isEnabled)
         .help(browseHelp)
