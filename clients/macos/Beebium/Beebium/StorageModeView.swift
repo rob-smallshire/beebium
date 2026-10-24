@@ -449,6 +449,7 @@ private struct DriveRowView: View {
         return Menu {
             Button("Browse...") { browseForDisc() }
             recentMenu
+            newBlankDiscMenu
         } label: {
             Image(systemName: "folder")
                 .font(.system(size: 16))
@@ -482,6 +483,21 @@ private struct DriveRowView: View {
             Button("Clear Recent Discs") { recentDiscs.clear() }
         }
         .disabled(discs.isEmpty)
+    }
+
+    /// The New Blank Disc submenu: one entry per shipped template, labelled by
+    /// the server. Choosing one saves a copy to a path the user picks and
+    /// inserts it. The labels come from the server (nothing hard-coded), so the
+    /// submenu is disabled when the server offers none.
+    @ViewBuilder
+    private var newBlankDiscMenu: some View {
+        let blanks = discClient.blankDiscs
+        Menu("New Blank Disc") {
+            ForEach(blanks, id: \.label) { disc in
+                Button(disc.label) { newBlankDisc(disc) }
+            }
+        }
+        .disabled(blanks.isEmpty)
     }
 
     private var browseHelp: String {
@@ -542,6 +558,52 @@ private struct DriveRowView: View {
 
             if panel.runModal() == .OK, let url = panel.url {
                 insertDisc(url: url)
+            }
+        }
+    }
+
+    /// Make a blank disc from a shipped template: suggest the template's own
+    /// file name in a save panel (keeping its extension), then copy and insert.
+    /// Picking the path on this host is why the menu is gated on a local server.
+    private func newBlankDisc(_ disc: Beebium_BlankDisc) {
+        Task { @MainActor in
+            let panel = NSSavePanel()
+            panel.title = "New Blank Disc"
+            panel.nameFieldStringValue = disc.filename
+            panel.allowedContentTypes = await PresetManager.shared.discImageContentTypes(kind: "floppy")
+
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            createDisc(label: disc.label, destination: url)
+        }
+    }
+
+    /// Copy the template to `destination` and, on success, insert it -- which
+    /// also records it in Recent. The save panel has already confirmed any
+    /// replacement, so overwrite is passed true. A failure takes the row's
+    /// usual marker and popover, the server's fragment completed into a
+    /// sentence as the save and move alerts do.
+    private func createDisc(label: String, destination: URL) {
+        dropRefusal = nil
+        driveError.clear()
+        isProcessing = true
+        Task {
+            let result = await discClient.createDisc(
+                label: label, destinationPath: destination.path, overwrite: true)
+            await MainActor.run {
+                switch result {
+                case .success(let createdPath):
+                    // Hand straight to the insert path; it manages isProcessing
+                    // and records Recent on the server's success.
+                    isProcessing = false
+                    insertDisc(url: URL(fileURLWithPath: createdPath))
+                case .failure(let error):
+                    isProcessing = false
+                    NSLog("[StorageModeView] Create disc failed: \(error.localizedDescription)")
+                    driveError.showFailure(
+                        error.kind.markerLabel ?? "Couldn't create disc",
+                        detail: SaveClient.sentence(error.kind.sentenceLead,
+                                                    detail: error.localizedDescription))
+                }
             }
         }
     }

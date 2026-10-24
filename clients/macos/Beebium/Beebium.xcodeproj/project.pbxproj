@@ -255,6 +255,7 @@
 		E529443D463B439E147AEDD0 /* MemorySectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D87F51F70C1CA8A3C2CB01F4 /* MemorySectionView.swift */; };
 		E5C73027F3EBE4D4754E5E0D /* VideoClientEventLoopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB7B6DCB7E4F65741BE1EDA /* VideoClientEventLoopTests.swift */; };
 		E5F649776BF1A6D963F3A89E /* ExtensionsSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B1EDE37C44C9225386BC79 /* ExtensionsSchemaSection.swift */; };
+		E85AEC8B5CD92B414DA54B01 /* CreateDiscErrorKindLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46732E0BDB1827EAD156DED4 /* CreateDiscErrorKindLabelTests.swift */; };
 		E89BC098B23BC7953F1F7317 /* WelcomeWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BE9E7191CAFDC8E2EAE7ADA /* WelcomeWindow.swift */; };
 		EB57600D1B017B3105D1F79D /* system.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C4007152A43F9E94FB30A5 /* system.pb.swift */; };
 		EB7386AD783AEBB8DCABC15A /* keyboard.proto in Resources */ = {isa = PBXBuildFile; fileRef = DFB1414298AE8F8261138293 /* keyboard.proto */; };
@@ -362,6 +363,7 @@
 		3DC9C04EC6C010373F7AF591 /* ExtensionParameterForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionParameterForm.swift; sourceTree = "<group>"; };
 		42858282A95435EEDFA1413F /* ConnectDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectDialog.swift; sourceTree = "<group>"; };
 		4635C74CA6E1654868006CA6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		46732E0BDB1827EAD156DED4 /* CreateDiscErrorKindLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateDiscErrorKindLabelTests.swift; sourceTree = "<group>"; };
 		49A08A816DC6C9CBA1A9B27B /* StorageSchemaSectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSchemaSectionTests.swift; sourceTree = "<group>"; };
 		4A25B5AEA5BC043A1C1314DA /* debugger.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = debugger.grpc.swift; sourceTree = "<group>"; };
 		4A3FE1A20DF4E1D3707C33DE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -922,6 +924,7 @@
 				C46D7348FD4254C5DB38C76D /* CommittingFieldTests.swift */,
 				D0D8B92DB46302357CC513AA /* ConfigurationEditorOrderTests.swift */,
 				B8A265E36533E541F11ECAC5 /* CoreCLITests.swift */,
+				46732E0BDB1827EAD156DED4 /* CreateDiscErrorKindLabelTests.swift */,
 				F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */,
 				5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */,
 				D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */,
@@ -1128,6 +1131,7 @@
 				E0FA0966EB7097E8B3EF885D /* CommittingFieldTests.swift in Sources */,
 				E403C3B64C6DF471BEEDA99A /* ConfigurationEditorOrderTests.swift in Sources */,
 				D924EC224D99F91FA17CAB43 /* CoreCLITests.swift in Sources */,
+				E85AEC8B5CD92B414DA54B01 /* CreateDiscErrorKindLabelTests.swift in Sources */,
 				7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */,
 				7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */,
 				7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */,

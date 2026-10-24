@@ -46,6 +46,34 @@ extension Beebium_DiscErrorKind {
     }
 }
 
+extension Beebium_CreateDiscErrorKind {
+    /// The short, honest inline marker label for a failed disc creation, or nil
+    /// for an unclassified failure -- in which case the caller keeps its own
+    /// generic ("Couldn't create disc"), so a future server kind we don't yet
+    /// map still reads honestly. The popover shows the full sentence regardless.
+    var markerLabel: String? {
+        switch self {
+        case .unknownLabel: return "Unknown template"
+        case .destinationExists: return "File exists"
+        case .writeFailed: return "Couldn't write disc"
+        case .unspecified, .UNRECOGNIZED: return nil
+        }
+    }
+
+    /// The capitalised lead for the user-facing sentence a failed creation
+    /// shows: an alert must be a sentence, while the server's own message is a
+    /// lower-case fragment, so this leads and the fragment completes it (via
+    /// SaveClient.sentence).
+    var sentenceLead: String {
+        switch self {
+        case .unknownLabel: return "That blank disc template is not available."
+        case .destinationExists: return "A file already exists there."
+        case .writeFailed: return "The disc image could not be written."
+        case .unspecified, .UNRECOGNIZED: return "The disc image could not be created."
+        }
+    }
+}
+
 /// The "should the failure popover open now?" decision, factored out of the
 /// SwiftUI view so it can be unit-tested directly. Popover-first means it opens
 /// once per failure: on a real failure whose token differs from the one already

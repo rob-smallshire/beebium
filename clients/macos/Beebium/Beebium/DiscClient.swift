@@ -40,6 +40,33 @@ enum DiscError: LocalizedError {
     }
 }
 
+/// Error type for creating a blank disc from a shipped template.
+enum CreateDiscError: LocalizedError {
+    case notConnected
+    case operationFailed(String, kind: Beebium_CreateDiscErrorKind)
+
+    var errorDescription: String? {
+        switch self {
+        case .notConnected:
+            return "Not connected to server"
+        case .operationFailed(let message, _):
+            return message
+        }
+    }
+
+    /// The server's failure classification, used to choose the short inline
+    /// marker and the user-facing sentence. Unclassified (including a
+    /// client-side not-connected) leaves the caller's own generic in place.
+    var kind: Beebium_CreateDiscErrorKind {
+        switch self {
+        case .notConnected:
+            return .unspecified
+        case .operationFailed(_, let kind):
+            return kind
+        }
+    }
+}
+
 /// Client for managing disc drives via gRPC
 @MainActor
 final class DiscClient: ObservableObject, Disconnectable {
@@ -57,6 +84,12 @@ final class DiscClient: ObservableObject, Disconnectable {
 
     /// Error message if loading or operations failed
     @Published private(set) var errorMessage: String?
+
+    /// The blank disc templates the server ships, in file-name order, behind
+    /// the Browse icon's New Blank Disc submenu. Fetched once on connect;
+    /// nothing is hard-coded, so the submenu is simply empty (and disabled) if
+    /// the server has none or the call fails.
+    @Published private(set) var blankDiscs: [Beebium_BlankDisc] = []
 
     private var client: Beebium_DiscServiceNIOClient?
     private var subscriptionTask: Task<Void, Never>?
@@ -80,6 +113,7 @@ final class DiscClient: ObservableObject, Disconnectable {
         hasDiscController = false
         controllerType = ""
         errorMessage = nil
+        blankDiscs = []
     }
 
     /// Insert a disc image into the specified drive
@@ -165,6 +199,33 @@ final class DiscClient: ObservableObject, Disconnectable {
         }
     }
 
+    /// Create a blank disc from a shipped template, copying it to a path on the
+    /// server's host. `overwrite` is for when the chosen path already exists;
+    /// the caller passes it true once a save panel has confirmed replacement.
+    /// - Returns: the absolute path of the created image, ready for insertDisc.
+    func createDisc(label: String, destinationPath: String, overwrite: Bool)
+        async -> Result<String, CreateDiscError> {
+        guard let client = client else {
+            return .failure(.notConnected)
+        }
+
+        var request = Beebium_CreateDiscRequest()
+        request.label = label
+        request.destinationPath = destinationPath
+        request.overwrite = overwrite
+
+        do {
+            let response = try await client.createDisc(request).response.get()
+            if response.success {
+                return .success(response.createdPath)
+            } else {
+                return .failure(.operationFailed(response.error, kind: response.kind))
+            }
+        } catch {
+            return .failure(.operationFailed(error.localizedDescription, kind: .unspecified))
+        }
+    }
+
     /// Fetch drive status and subscribe to events
     private func fetchStatusAndSubscribe() async {
         guard let client = client else { return }
@@ -187,6 +248,17 @@ final class DiscClient: ObservableObject, Disconnectable {
                 self.isLoaded = false
             }
             return
+        }
+
+        // Fetch the shipped blank disc templates. A failure here is not fatal to
+        // the drive view -- the New Blank Disc submenu is simply left empty.
+        do {
+            let response = try await client.listBlankDiscs(Beebium_ListBlankDiscsRequest())
+                .response.get()
+            await MainActor.run { self.blankDiscs = response.discs }
+        } catch {
+            NSLog("[DiscClient] ListBlankDiscs failed: \(error.localizedDescription)")
+            await MainActor.run { self.blankDiscs = [] }
         }
 
         // Then subscribe to streaming events
