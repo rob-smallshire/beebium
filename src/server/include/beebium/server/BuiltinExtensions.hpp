@@ -207,6 +207,7 @@ inline std::vector<Entry> make_entries() {
         for (auto& p : m.parameters) {
             if (p.key == "path") {
                 p.label = "File";
+                p.access = "write";
             } else if (p.key == "line_ending") {
                 p.label = "Line ending";
                 p.choices = {{"raw", "As sent"},
@@ -279,6 +280,9 @@ inline std::vector<Entry> make_entries() {
     for (auto& e : result) {
         for (const auto& p : e.manifest.parameters) {
             if (auto err = check_item_format(p)) {
+                throw std::logic_error("built-in extension '" + e.manifest.name + "': " + *err);
+            }
+            if (auto err = check_access(p)) {
                 throw std::logic_error("built-in extension '" + e.manifest.name + "': " + *err);
             }
         }

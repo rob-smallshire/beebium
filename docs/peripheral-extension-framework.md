@@ -200,6 +200,14 @@ Parameter schema fields:
   - `bundled` (`rom`): a **ROM** this extension ships, searched for by bare
     name ending in its own `roms/` directory, which also limits the names that
     may be given, and read in place.
+- `access` -- for a `filepath` or `dirpath`, which way the data goes:
+  `"read"` (the default) when the extension reads what the path names,
+  `"write"` when it creates or replaces it (file-printer's `path`). A
+  configuration UI offers an Open dialogue for one and a Save dialogue for
+  the other; resolution and anchoring are the same either way. Any other
+  value, or `access` on a parameter of another type, is refused when the
+  manifest is loaded. `describe-extension --json` gives it for path
+  parameters and `null` for the rest.
   - Neither: a **location** the extension owns and may create (AUN's
     `map-file`), anchored where it is written but never searched for; a bare
     value is the extension's own (`none`).

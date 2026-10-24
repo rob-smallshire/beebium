@@ -233,6 +233,22 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
                                          ": parameter '" + param.key +
                                          "' cannot be both bundled and media");
             }
+            if (p.contains("access")) {
+                if (!p["access"].is_string()) {
+                    throw std::runtime_error("Manifest " + manifest_filepath.string() +
+                                             ": parameter '" + param.key +
+                                             "' access must be \"read\" or \"write\"");
+                }
+                if (!is_path_type(param.type)) {
+                    throw std::runtime_error(
+                        "Manifest " + manifest_filepath.string() + ": parameter '" + param.key +
+                        "' declares access, which only a filepath or dirpath parameter has");
+                }
+                param.access = p["access"].get<std::string>();
+            }
+            if (auto err = check_access(param)) {
+                throw std::runtime_error("Manifest " + manifest_filepath.string() + ": " + *err);
+            }
             param.label = p.value("label", "");
             param.choices_from = p.value("choices_from", "");
             param.default_from = p.value("default_from", "");

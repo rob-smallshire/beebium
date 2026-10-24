@@ -298,6 +298,8 @@ inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSche
         {"excludes", p.excludes},
         {"bundled", p.bundled},
         {"media", p.media},
+        {"access", is_path_type(p.type) ? nlohmann::ordered_json(p.access)
+                                        : nlohmann::ordered_json(nullptr)},
         {"unique", p.unique},
         {"provider_of", p.provider_of},
         {"item_format", p.item_format},
@@ -362,8 +364,8 @@ public:
                   << "attaches_to, provides, parameters (key, label, description,\n"
                   << "type, required, is_list, position, default, default_from,\n"
                   << "effective_default, min, max, choices, choices_from, excludes,\n"
-                  << "bundled, unique, provider_of, item_format, fields), groups (key,\n"
-                  << "label, description,\n"
+                  << "bundled, media, access, unique, provider_of, item_format, fields),\n"
+                  << "groups (key, label, description,\n"
                   << "parameters, and none when the group names the state with no member\n"
                   << "given) and roms.\n";
     }

@@ -3604,6 +3604,25 @@ TEST_CASE("describe-extension: the file printers have no online parameter and pl
     CHECK(result.exit_code == 64);
 }
 
+TEST_CASE("describe-extension: file-printer writes its path, and access is given only for paths",
+          "[integration][extension][access]") {
+    auto access_of = [](const std::string& name) {
+        auto result = run_command(EXECUTABLE + " describe-extension " + name + " --json");
+        REQUIRE(result.exit_code == 0);
+        std::map<std::string, nlohmann::json> access;
+        const auto manifest = nlohmann::json::parse(result.stdout_output);
+        for (const auto& p : manifest.at("parameters")) {
+            access[p.at("key").get<std::string>()] = p.at("access");
+        }
+        return access;
+    };
+    const auto file_printer = access_of("file-printer");
+    CHECK(file_printer.at("path") == "write");
+    CHECK(file_printer.at("buffer").is_null());
+    CHECK(access_of("job-file-printer").at("directory") == "read");
+    CHECK(access_of("aun").at("map-file") == "read");
+}
+
 TEST_CASE("start: a file given for a directory parameter is refused before the machine starts",
           "[integration][extension][dirpath]") {
     beebium::test::ScopedTempDir temp_dir("beebium-dirpath-");

@@ -196,6 +196,18 @@ std::string field_value(const ListItemFields& fields, const std::string& key) {
 
 }  // namespace
 
+std::optional<std::string> check_access(const ParameterSchema& p) {
+    if (p.access != "read" && p.access != "write") {
+        return "parameter '" + p.key + "' access must be \"read\" or \"write\", got \"" +
+               p.access + "\"";
+    }
+    if (p.access != "read" && !is_path_type(p.type)) {
+        return "parameter '" + p.key +
+               "' declares access, which only a filepath or dirpath parameter has";
+    }
+    return std::nullopt;
+}
+
 std::optional<std::string> check_item_format(const ParameterSchema& p) {
     if (p.fields.empty()) {
         if (p.item_format.empty()) return std::nullopt;

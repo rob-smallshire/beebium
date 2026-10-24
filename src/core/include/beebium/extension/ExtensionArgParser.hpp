@@ -99,6 +99,11 @@ struct ParameterSchema {
                                 // e.g. "hard-disc"), searched for by bare
                                 // name and copied into the machine's
                                 // directory. Never with `bundled`.
+    std::string access = "read";  // a filepath or dirpath only: "read" when
+                                  // the extension reads what the path names,
+                                  // "write" when it creates or replaces it, so
+                                  // a UI offers an Open or a Save dialogue.
+                                  // Resolution is the same either way.
     bool unique = false;        // the value must differ among the instances
                                 // attached to the same provider (e.g. a SCSI
                                 // target ID on one bus)
@@ -160,6 +165,12 @@ struct ConfigListItem {
 // field may then be absent together with its separator ("254@host@port" for
 // "{net}.{station}@{host}@{port}"). A separator may appear more than once.
 BEEBIUM_EXT_API std::optional<std::string> check_item_format(const ParameterSchema& p);
+
+// Why a parameter's access cannot stand, or nullopt when it can: it must be
+// "read" or "write", and only a filepath or dirpath parameter may be "write".
+// The manifest loader also refuses a non-path parameter that declares access
+// at all.
+BEEBIUM_EXT_API std::optional<std::string> check_access(const ParameterSchema& p);
 
 // A problem with one item of a list parameter: the field it concerns (empty
 // for the item as a whole) and what is wrong.

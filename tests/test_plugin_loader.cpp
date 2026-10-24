@@ -721,3 +721,61 @@ TEST_CASE("Manifest media: a parameter may name a medium, but not also a bundled
     CHECK(manifests[0].parameters.at(0).media == "hard-disc");
     CHECK(manifests[0].parameters.at(0).bundled.empty());
 }
+
+TEST_CASE("Manifest access: a path parameter says whether the extension reads or writes it",
+          "[extension][plugin][access]") {
+    auto dir = write_manifest(R"({
+        "name": "paths", "library": "paths",
+        "parameters": [{"key": "rom", "type": "filepath"},
+                       {"key": "log", "type": "filepath", "access": "write"},
+                       {"key": "spool", "type": "dirpath", "access": "write"},
+                       {"key": "source", "type": "dirpath", "access": "read"},
+                       {"key": "count", "type": "integer"}]
+    })");
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    std::filesystem::remove_all(dir);
+    REQUIRE(manifests.size() == 1);
+    const auto& parameters = manifests[0].parameters;
+    CHECK(parameters.at(0).access == "read");  // the default
+    CHECK(parameters.at(1).access == "write");
+    CHECK(parameters.at(2).access == "write");
+    CHECK(parameters.at(3).access == "read");
+    CHECK(parameters.at(4).access == "read");  // the default, meaningless off a path
+}
+
+TEST_CASE("Manifest access: only read or write, and only on a path parameter",
+          "[extension][plugin][access]") {
+    CHECK(manifests_scanned(R"({
+        "name": "a", "library": "a",
+        "parameters": [{"key": "log", "type": "filepath", "access": "append"}]
+    })") == 0);
+    CHECK(manifests_scanned(R"({
+        "name": "b", "library": "b",
+        "parameters": [{"key": "log", "type": "filepath", "access": true}]
+    })") == 0);
+    CHECK(manifests_scanned(R"({
+        "name": "c", "library": "c",
+        "parameters": [{"key": "name", "type": "string", "access": "write"}]
+    })") == 0);
+    CHECK(manifests_scanned(R"({
+        "name": "d", "library": "d",
+        "parameters": [{"key": "name", "type": "string", "access": "read"}]
+    })") == 0);
+}
+
+TEST_CASE("check_access explains what is wrong", "[extension][access]") {
+    beebium::ParameterSchema p{"log", "filepath", "a log"};
+    CHECK_FALSE(beebium::check_access(p));
+    p.access = "write";
+    CHECK_FALSE(beebium::check_access(p));
+    p.access = "append";
+    REQUIRE(beebium::check_access(p));
+    CHECK(*beebium::check_access(p) ==
+          "parameter 'log' access must be \"read\" or \"write\", got \"append\"");
+    p = beebium::ParameterSchema{"name", "string", "a name"};
+    p.access = "write";
+    REQUIRE(beebium::check_access(p));
+    CHECK(*beebium::check_access(p) ==
+          "parameter 'name' declares access, which only a filepath or dirpath parameter has");
+}
