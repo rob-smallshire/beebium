@@ -15,6 +15,7 @@
 #define BEEBIUM_EXT_FILE_PRINTER_SINK_HPP
 
 #include <beebium/printer/CentronicsReceiver.hpp>
+#include <beebium/printer/SinkOptions.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -28,14 +29,6 @@
 #include <thread>
 
 namespace beebium::printer {
-
-// How the Beeb's CR line ends are written to the file. The MOS sends CR for a
-// newline and by default (*FX6,10) suppresses LF to the printer.
-enum class LineEnding {
-    Raw,   // the bytes as sent
-    Lf,    // a lone CR becomes LF; a CR LF pair becomes LF
-    CrLf,  // a lone CR becomes CR LF; a CR LF pair is left alone
-};
 
 // Spools bytes from a CentronicsReceiver into a file on the host.
 //
@@ -66,6 +59,7 @@ public:
     explicit FilePrinterSink(Options options)
         : options_(std::move(options))
         , receiver_(receiver_options(options_))
+        , translator_(options_.line_ending)
         , file_(options_.path, std::ios::binary | std::ios::trunc) {
         if (!file_) {
             throw std::runtime_error("file-printer: cannot open '" +
@@ -133,29 +127,7 @@ private:
     }
 
     void write_translated(uint8_t byte) {
-        constexpr uint8_t CR = 0x0D;
-        constexpr uint8_t LF = 0x0A;
-        if (options_.line_ending == LineEnding::Raw) {
-            put(byte);
-            return;
-        }
-        // The LF of a CR LF pair has already been written as part of the
-        // translated CR, so it is swallowed.
-        if (byte == LF && last_was_cr_) {
-            last_was_cr_ = false;
-            return;
-        }
-        last_was_cr_ = (byte == CR);
-        if (byte == CR) {
-            if (options_.line_ending == LineEnding::Lf) {
-                put(LF);
-            } else {
-                put(CR);
-                put(LF);
-            }
-            return;
-        }
-        put(byte);
+        translator_.translate(byte, [this](uint8_t out) { put(out); });
     }
 
     void put(uint8_t byte) {
@@ -165,10 +137,10 @@ private:
 
     Options options_;
     CentronicsReceiver receiver_;
+    LineEndingTranslator translator_;  // sink thread only
     std::ofstream file_;
     std::atomic<uint64_t> bytes_written_{0};
     std::atomic<bool> stop_{false};
-    bool last_was_cr_ = false;  // sink thread only
     std::thread sink_thread_;
 };
 

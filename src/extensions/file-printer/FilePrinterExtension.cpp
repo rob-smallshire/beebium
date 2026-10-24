@@ -20,7 +20,6 @@
 #include <beebium/extension/ExtensionContext.hpp>
 #include <beebium/extension/PrinterPort.hpp>
 
-#include <charconv>
 #include <cstddef>
 #include <iostream>
 #include <memory>
@@ -50,27 +49,9 @@ void FilePrinterExtension::init(ExtensionContext& ctx) {
     }
     options.path = path;
 
-    const std::string line_ending = std::string(config_value("line_ending").value_or("raw"));
-    if (line_ending == "raw") {
-        options.line_ending = printer::LineEnding::Raw;
-    } else if (line_ending == "lf") {
-        options.line_ending = printer::LineEnding::Lf;
-    } else if (line_ending == "crlf") {
-        options.line_ending = printer::LineEnding::CrLf;
-    } else {
-        throw std::runtime_error("file-printer: unknown line_ending '" + line_ending +
-                                 "' (expected 'raw', 'lf' or 'crlf')");
-    }
-
-    if (auto value = config_value("buffer"); value && !value->empty()) {
-        std::size_t parsed = 0;
-        auto [ptr, ec] = std::from_chars(value->data(), value->data() + value->size(), parsed);
-        if (ec != std::errc{} || ptr != value->data() + value->size() || parsed == 0) {
-            throw std::runtime_error("file-printer: buffer must be a positive integer, got '" +
-                                     std::string(*value) + "'");
-        }
-        options.buffer = parsed;
-    }
+    options.line_ending = printer::parse_line_ending_option("file-printer",
+                                                            config_value("line_ending"));
+    options.buffer = printer::parse_buffer_option("file-printer", config_value("buffer"));
 
     options.online = config_bool("online", true);
     options.on_activity = [this] { ui_.mark_dirty(); };
