@@ -1156,9 +1156,24 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         // holds is extracted for the extension (ReferenceContainer::materialize).
         const auto container = config.launch.reference_container();
         for (const auto& p : manifest->parameters) {
-            if (p.type != "filepath") continue;
+            if (!is_path_type(p.type)) continue;
             auto it = inst.config.find(p.key);
             if (it == inst.config.end() || it->second.empty()) continue;
+            if (p.type == "dirpath") {
+                // A directory the extension writes into is never searched for
+                // or extracted, but naming a file there cannot work, so it is
+                // refused here with the parameter named rather than by the
+                // extension as it starts.
+                std::error_code ec;
+                const std::filesystem::path dirpath(it->second);
+                if (std::filesystem::exists(dirpath, ec) &&
+                    !std::filesystem::is_directory(dirpath, ec)) {
+                    std::cerr << "Error: " << inst.name << " " << p.key << " '" << it->second
+                              << "' is a file, not a directory\n";
+                    return {nullptr, ExitCode::CONFIG};
+                }
+                continue;
+            }
             if (!p.media.empty()) {
                 try {
                     it->second = beebium::server::DiscPaths::resolve_disc_image(

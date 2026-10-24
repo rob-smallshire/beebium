@@ -84,6 +84,11 @@ public:
         , device_(*this)
         , translator_(options_.line_ending) {
         std::error_code ec;
+        if (std::filesystem::exists(options_.dirpath, ec) &&
+            !std::filesystem::is_directory(options_.dirpath, ec)) {
+            throw std::runtime_error("job-file-printer: '" + options_.dirpath.string() +
+                                     "' is a file, not a directory");
+        }
         std::filesystem::create_directories(options_.dirpath, ec);
         if (!std::filesystem::is_directory(options_.dirpath)) {
             throw std::runtime_error("job-file-printer: cannot create directory '" +

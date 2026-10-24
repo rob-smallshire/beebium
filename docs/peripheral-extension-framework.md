@@ -162,10 +162,13 @@ Parameter schema fields:
   `label` and a `description`)
 - `description` -- one line of human-readable description (used in help, error
   messages and forms)
-- `type` -- `string`, `integer`, `boolean`, or `filepath` (a file path,
+- `type` -- `string`, `integer`, `boolean`, `filepath` (a file path,
   resolved by the server before the extension is configured, by the rule in
   [preset-schema.md](preset-schema.md#file-references); the extension is given
-  an absolute path, or a bare value it owns)
+  an absolute path, or a bare value it owns), or `dirpath` (a directory path,
+  anchored in the same way but never searched for or extracted from a preset
+  archive; a value naming an existing file is refused before the machine
+  starts, and a configuration UI offers a directory chooser)
 - `position` -- positional index (0, 1, ...); omit or -1 for keyword-only
 - `required` -- whether the parameter must be provided (default: false)
 - `default` -- default value if not provided

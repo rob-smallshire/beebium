@@ -247,7 +247,7 @@ inline std::vector<Entry> make_entries() {
         m.extension_kind = "peripheral";
         m.attaches_to = {"printer-port"};
         m.parameters.push_back(
-            {"directory", "filepath", "directory to write job files into; created if missing",
+            {"directory", "dirpath", "directory to write job files into; created if missing",
              -1, true, false, ""});
         m.parameters.push_back(
             {"idle", "integer",

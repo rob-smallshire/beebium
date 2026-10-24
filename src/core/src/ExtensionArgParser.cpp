@@ -68,7 +68,7 @@ bool validate_type(std::string_view type, std::string_view value) {
     if (type == "boolean") {
         return value == "true" || value == "false" || value == "1" || value == "0";
     }
-    // "string" and "filepath" accept any value
+    // "string", "filepath" and "dirpath" accept any value
     return true;
 }
 
@@ -86,6 +86,7 @@ std::string type_description(std::string_view type) {
     if (type == "integer") return "an integer";
     if (type == "boolean") return "a boolean (true/false)";
     if (type == "filepath") return "a file path";
+    if (type == "dirpath") return "a directory path";
     return "a string";
 }
 

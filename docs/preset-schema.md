@@ -112,7 +112,8 @@ same as leaving the key out, so a `resolve-preset` document, which writes
 
 A preset refers to files in four places: floppy images, sideways ROM and RAM
 images, the MOS, and extension parameters whose manifest type is `filepath`
-(a hard-disc image, a coprocessor ROM, AUN's `map-file`). Every one of them,
+(a hard-disc image, a coprocessor ROM, AUN's `map-file`) or `dirpath`
+(job-file-printer's `directory`). Every one of them,
 and every file named on the command line, is resolved by one rule. A
 reference is resolved from where it is written, its **container**: a preset's
 archive or directory (or the directory holding a lone preset document) for a
@@ -160,6 +161,12 @@ names a **location** the extension owns and may create (AUN's `map-file`), not a
 resource: rules 2-4 apply, but it is never searched for, so a file that does
 not exist yet is not an error, and a bare value is the extension's own (such
 as `map-file: "none"`).
+
+A `dirpath` parameter names a directory the extension owns and may create,
+such as job-file-printer's `directory`. It is anchored as a location
+`filepath` is, never searched for and never extracted from a preset
+archive. A value that names an existing file is refused before the machine
+starts, with the parameter named.
 
 The reference is kept as written. A bare name stays bare in `resolve-preset`'s
 output, so a preset and the files beside it can move together; a relative
@@ -329,7 +336,7 @@ object item is located at the field
 item is located at the item (`/extensions/<index>/config/<key>/<item>`), since
 a string has no field to point into. An Econet transport's are under
 `/econet/transport/parameters/` instead. `resolve-preset` writes each item in
-the form the preset gave it. A `filepath` parameter is resolved as in
+the form the preset gave it. A `filepath` or `dirpath` parameter is resolved as in
 [File references](#file-references).
 
 ### Attachment

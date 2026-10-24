@@ -3569,6 +3569,33 @@ TEST_CASE("describe-extension: the AUN map and subnet describe their items' fiel
     }
 }
 
+TEST_CASE("describe-extension: job-file-printer's directory is a dirpath",
+          "[integration][extension][dirpath]") {
+    auto result = run_command(EXECUTABLE + " describe-extension job-file-printer --json");
+    REQUIRE(result.exit_code == 0);
+    const auto manifest = nlohmann::json::parse(result.stdout_output);
+    const auto& parameters = manifest.at("parameters");
+    const auto directory = std::find_if(parameters.begin(), parameters.end(), [](const auto& p) {
+        return p.at("key") == "directory";
+    });
+    REQUIRE(directory != parameters.end());
+    CHECK(directory->at("type") == "dirpath");
+}
+
+TEST_CASE("start: a file given for a directory parameter is refused before the machine starts",
+          "[integration][extension][dirpath]") {
+    beebium::test::ScopedTempDir temp_dir("beebium-dirpath-");
+    const auto file_filepath = temp_dir / "not-a-directory";
+    std::ofstream(file_filepath) << "x";
+
+    auto result = run_command(EXECUTABLE + " start --job-file-printer \"directory=" +
+                              file_filepath.string() + "\" --port 0");
+    CHECK(result.exit_code == 78);
+    INFO(result.stderr_output);
+    CHECK(result.stderr_output.find("job-file-printer directory '" + file_filepath.string() +
+                                    "' is a file, not a directory") != std::string::npos);
+}
+
 TEST_CASE("start: a malformed AUN map item on the command line is refused before launch",
           "[integration][list-item]") {
     auto result = run_command(EXECUTABLE + " start --aun map=broken@entry --station 32"

@@ -55,6 +55,13 @@ struct ParameterField {
     std::vector<ParameterChoice> choices;
 };
 
+// A parameter whose value names a location on the host: a file ("filepath")
+// or a directory ("dirpath"). A relative one is anchored where it was written
+// (the preset's directory, or the working directory for the command line).
+inline bool is_path_type(std::string_view type) {
+    return type == "filepath" || type == "dirpath";
+}
+
 // Schema for one extension parameter.
 struct ParameterSchema {
     ParameterSchema() = default;
@@ -68,7 +75,7 @@ struct ParameterSchema {
           default_value(std::move(default_value_)) {}
 
     std::string key;
-    std::string type;           // "string", "integer", "boolean", "filepath"
+    std::string type;           // "string", "integer", "boolean", "filepath", "dirpath"
     std::string description;
     int position = -1;          // -1 = keyword-only; 0, 1, 2, ... = positional order
     bool required = false;

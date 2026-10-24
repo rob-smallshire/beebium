@@ -365,7 +365,7 @@ std::string instance_parameter_pointer(const Instance& inst, const std::string& 
 // required parameters and types checked, and a single value for a list
 // parameter made a one-element list. The keys the preset gave become the
 // instance's explicit_keys. An extension name no manifest has is an error.
-// A relative path the preset gives for a "filepath" parameter is resolved
+// A relative path the preset gives for a "filepath" or "dirpath" parameter is resolved
 // against the preset's directory (anchor_reference), as its
 // floppy images are; a bare name is left for the extension's own search.
 //
@@ -404,7 +404,7 @@ std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& c
             const auto preset_dirpath = config.launch.preset->container().dirpath();
             for (const auto& p : manifest->parameters) {
                 auto it = inst.config.find(p.key);
-                if (p.type == "filepath" && it != inst.config.end() &&
+                if (is_path_type(p.type) && it != inst.config.end() &&
                     inst.explicit_keys.count(p.key) != 0) {
                     it->second = anchor_reference(it->second, preset_dirpath);
                 }

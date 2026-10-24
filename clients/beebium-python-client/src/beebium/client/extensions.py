@@ -113,7 +113,7 @@ class ParameterSchemaInfo:
     """One configurable parameter from an extension's manifest schema."""
 
     key: str
-    # "string", "integer", "boolean" or "filepath".
+    # "string", "integer", "boolean", "filepath" or "dirpath".
     type: str
     description: str
     # Positional index for CLI-style args; -1 means keyword-only.

@@ -2582,6 +2582,39 @@ TEST_CASE("parse_start_arguments: a preset's relative file path parameter resolv
           (dir.path() / "maps" / "aun-map.json").lexically_normal().string());
 }
 
+TEST_CASE("parse_start_arguments: a preset's relative directory path parameter resolves from the preset",
+          "[cli][parse_start_arguments][preset][extensions][dirpath]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "extensions": [ { "name": "job-file-printer",
+                          "config": { "directory": "print/jobs" } } ]
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    const auto* inst = find_instance(config, "job-file-printer");
+    REQUIRE(inst != nullptr);
+    CHECK(inst->config.at("directory") ==
+          (dir.path() / "print" / "jobs").lexically_normal().string());
+}
+
+TEST_CASE("parse_start_arguments: a relative directory path option resolves from the working directory",
+          "[cli][parse_start_arguments][extensions][dirpath]") {
+    ArgvHelper args{"beebium", "start", "--job-file-printer", "directory=print/jobs"};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    const auto* inst = find_instance(config, "job-file-printer");
+    REQUIRE(inst != nullptr);
+    CHECK(inst->config.at("directory") ==
+          (std::filesystem::current_path() / "print" / "jobs").lexically_normal().string());
+}
+
 TEST_CASE("parse_start_arguments: a preset's bare file name parameter is left as given",
           "[cli][parse_start_arguments][preset][extensions]") {
     beebium::test::ScopedTempDir dir("beebium-preset-ext-");
