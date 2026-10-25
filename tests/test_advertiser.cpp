@@ -177,12 +177,16 @@ class ScriptedAdvertiser final : public Advertiser {
 public:
     std::string refuse;  // non-empty: begin() fails for this reason
 
+    // As a platform callback does: nothing once withdrawn, since withdraw()
+    // waits for the callback that ends the registration.
     void complete(const std::string& actual_name) {
+        if (withdrawn_) return;
         advertising_ = true;
         name_ = actual_name;
         registered(actual_name);
     }
     void fail(const std::string& reason) {
+        if (withdrawn_) return;
         advertising_ = false;
         registration_failed(reason);
     }
@@ -193,12 +197,17 @@ public:
     }
 
 private:
-    std::string begin(const ServiceInfo&) override { return refuse; }
+    std::string begin(const ServiceInfo&) override {
+        withdrawn_ = false;
+        return refuse;
+    }
     void withdraw() override {
+        withdrawn_ = true;
         advertising_ = false;
         name_.clear();
     }
 
+    bool withdrawn_ = false;
     bool advertising_ = false;
     std::string name_;
 };
@@ -283,7 +292,9 @@ TEST_CASE("An advertiser reports what it does", "[advertiser]") {
 
     SECTION("stopped before the registration completed") {
         advertiser.stop();
+        advertiser.complete("BBC Model B");  // too late: withdrawn
         CHECK(report.taken().empty());
+        CHECK_FALSE(advertiser.state().advertising);
     }
 
     SECTION("the registration failed") {

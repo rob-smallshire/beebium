@@ -19,7 +19,8 @@
 #include <windows.h>
 #include <windns.h>
 
-#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
@@ -100,7 +101,7 @@ public:
         std::lock_guard lock(mutex_);
         return AdvertiserState{
             .available = true,
-            .advertising = registered_.load(),
+            .advertising = phase_ == Phase::Registered,
             .actual_name = actual_name_,
             .unavailable_reason = {},
         };
@@ -177,30 +178,66 @@ private:
         // Initialize cancel structure
         ZeroMemory(&cancel_, sizeof(cancel_));
 
+        // Pending before the call: the callback can run before it returns.
+        {
+            std::lock_guard lock(mutex_);
+            phase_ = Phase::Pending;
+        }
         DWORD status = DnsServiceRegister(&request_, &cancel_);
         MDNS_TRACE("DnsServiceRegister(%ls) -> status=%lu (%s)",
                    instance_name_wide_.c_str(),
                    static_cast<unsigned long>(status),
                    status == DNS_REQUEST_PENDING ? "PENDING" : "error");
         if (status != DNS_REQUEST_PENDING) {
+            std::lock_guard lock(mutex_);
+            phase_ = Phase::Idle;
             return status_error(status);
         }
 
         return {};
     }
 
+    // Cancel a pending registration or deregister a completed one, and wait
+    // for the callback that ends it, so none runs once this returns.
     void withdraw() override {
-        // Deregister if registered
-        if (registered_.load()) {
-            DnsServiceDeRegister(&request_, nullptr);
+        std::unique_lock lock(mutex_);
+        if (phase_ == Phase::Pending) {
+            phase_ = Phase::Cancelling;
+            lock.unlock();
+            const DWORD cancel = DnsServiceRegisterCancel(&cancel_);
+            MDNS_TRACE("DnsServiceRegisterCancel -> status=%lu",
+                       static_cast<unsigned long>(cancel));
+            lock.lock();
+            const auto settled = [this] { return phase_ != Phase::Cancelling; };
+            if (cancel == ERROR_SUCCESS) {
+                // Whether a cancelled registration still calls back is not
+                // documented (a cancelled browse does, with ERROR_CANCELLED),
+                // so this wait is bounded. A cancel that failed found the
+                // registration completing, and its callback always comes.
+                if (!phase_changed_.wait_for(lock, kCancelCallbackWait, settled)) {
+                    phase_ = Phase::Idle;
+                }
+            } else {
+                phase_changed_.wait(lock, settled);
+            }
+            // A registration that completed as it was cancelled is Registered
+            // now, and deregistered below.
         }
-
-        // Reset state
-        registered_ = false;
-        {
-            std::lock_guard lock(mutex_);
-            actual_name_.clear();
+        if (phase_ == Phase::Registered) {
+            phase_ = Phase::Deregistering;
+            lock.unlock();
+            const DWORD status = DnsServiceDeRegister(&request_, nullptr);
+            MDNS_TRACE("DnsServiceDeRegister -> status=%lu",
+                       static_cast<unsigned long>(status));
+            lock.lock();
+            if (status == DNS_REQUEST_PENDING) {
+                // The deregistration completes by calling register_callback.
+                phase_changed_.wait(lock, [this] { return phase_ != Phase::Deregistering; });
+            }
         }
+        phase_ = Phase::Idle;
+        actual_name_.clear();
+        lock.unlock();
 
         // Clear stored strings
         instance_name_wide_.clear();
@@ -214,7 +251,6 @@ private:
     DNS_SERVICE_INSTANCE service_instance_{};
     DNS_SERVICE_REGISTER_REQUEST request_{};
     DNS_SERVICE_CANCEL cancel_{};
-    std::atomic<bool> registered_{false};
 
     // String storage (must outlive registration)
     std::wstring instance_name_wide_;
@@ -223,8 +259,17 @@ private:
     std::vector<PWSTR> txt_key_ptrs_;
     std::vector<PWSTR> txt_value_ptrs_;
 
+    // Where the registration is. register_callback reports a registration's
+    // completion and, called again by DnsServiceDeRegister, a deregistration's
+    // too; the phase tells it which.
+    enum class Phase { Idle, Pending, Registered, Cancelling, Deregistering };
+
+    static constexpr std::chrono::seconds kCancelCallbackWait{2};
+
     // Thread-safe state access
     mutable std::mutex mutex_;
+    std::condition_variable phase_changed_;
+    Phase phase_ = Phase::Idle;
     ServiceInfo info_;
     std::string actual_name_;
 
@@ -235,26 +280,41 @@ private:
     ) {
         auto* self = static_cast<WindowsAdvertiser*>(context);
         MDNS_TRACE("register_callback status=%lu", static_cast<unsigned long>(status));
+        const bool succeeded = status == ERROR_SUCCESS && instance != nullptr;
 
-        if (status == ERROR_SUCCESS && instance != nullptr) {
-            self->registered_ = true;
-
-            // Extract actual name (may differ due to collision)
-            std::string actual_name;
-            {
-                std::lock_guard lock(self->mutex_);
-                if (instance->pszInstanceName != nullptr) {
-                    std::wstring full_name(instance->pszInstanceName);
-                    self->actual_name_ = to_utf8(extract_instance_name(full_name));
+        {
+            // Held until done with self: withdraw() returns, and the
+            // advertiser may be destroyed, once it can take the lock and sees
+            // the phase settled.
+            std::lock_guard lock(self->mutex_);
+            switch (self->phase_) {
+            case Phase::Pending:
+                if (succeeded) {
+                    // The name may differ from the one asked for after a clash.
+                    self->phase_ = Phase::Registered;
+                    self->actual_name_ =
+                        instance->pszInstanceName != nullptr
+                            ? to_utf8(extract_instance_name(instance->pszInstanceName))
+                            : self->info_.instance_name;
+                    self->registered(self->actual_name_);
                 } else {
-                    self->actual_name_ = self->info_.instance_name;
+                    self->phase_ = Phase::Idle;
+                    self->registration_failed(status_error(status));
                 }
-                actual_name = self->actual_name_;
+                break;
+            case Phase::Cancelling:
+                // Being withdrawn, so not reported; one that completed anyway
+                // is deregistered by withdraw().
+                self->phase_ = succeeded ? Phase::Registered : Phase::Idle;
+                break;
+            case Phase::Deregistering:
+                self->phase_ = Phase::Idle;
+                break;
+            case Phase::Idle:
+            case Phase::Registered:
+                break;  // nothing waits for this call
             }
-            self->registered(actual_name);
-        } else {
-            self->registered_ = false;
-            self->registration_failed(status_error(status));
+            self->phase_changed_.notify_all();
         }
 
         // Free the instance returned by the callback

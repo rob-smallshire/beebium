@@ -371,7 +371,7 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     // discover us without an explicit --aun map= entry (unless discovery is
     // browse/off, which do not publish). Failure to start (e.g. mDNS
     // unavailable on this platform) is non-fatal -- the transport still works
-    // for explicitly-mapped peers.
+    // for explicitly-mapped peers -- and the advertiser says why on stderr.
     //
     // machine_uuid is injected by ServerMain so the announcement's
     // impl-identity TXT record matches the same UUID this server
@@ -386,10 +386,7 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
         if (!discovery_service_type_.empty()) {
             announcer_->set_service_type(discovery_service_type_);
         }
-        if (!announcer_->start()) {
-            std::cerr << "AUN extension: mDNS announcement unavailable -- "
-                         "discovery disabled\n";
-        }
+        announcer_->start();
     }
 
     // Subscribe to peer announcements published by other AUN-capable
