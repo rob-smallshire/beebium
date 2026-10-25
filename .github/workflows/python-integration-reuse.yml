@@ -21,7 +21,7 @@ on:
         default: macos-arm64
         options:
           - macos-arm64
-          - macos-x86_64
+          # macos-x86_64 suspended until a self-hosted Intel runner exists (#223).
           - linux
           - windows
       pytest_args:

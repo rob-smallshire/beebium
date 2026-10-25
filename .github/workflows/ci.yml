@@ -183,6 +183,8 @@ jobs:
 
   server-macos-x86_64:
     name: Build and Test Server (macOS x86_64)
+    # Intel macOS suspended until a self-hosted Intel runner exists (#223); its three dependents skip through needs.
+    if: false
     runs-on: macos-15-intel
     needs: preflight
 
