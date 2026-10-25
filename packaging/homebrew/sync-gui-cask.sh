@@ -9,10 +9,11 @@
 # Example:
 #   packaging/homebrew/sync-gui-cask.sh 0.2.0 ~/Code/homebrew-beebium
 #
-# It downloads BOTH signed+notarized DMG assets for v<version>
-# (Beebium-<version>-macos-{arm64,x86_64}.dmg), computes their sha256s, writes the
-# cask with the real urls implied by the version + both hashes into the tap's
-# Casks/ directory, and leaves it staged for the maintainer to commit and push.
+# It downloads the signed+notarized DMG asset for v<version>
+# (Beebium-<version>-macos-arm64.dmg), computes its sha256, writes the cask with
+# the real url implied by the version + the hash into the tap's Casks/ directory,
+# and leaves it staged for the maintainer to commit and push. arm64 only while
+# Intel macOS is suspended until a self-hosted Intel runner exists (#223).
 #
 # TRANSITION: releases cut BEFORE the signed-DMG build carry no DMG assets. When
 # the DMGs are absent this script is a clean NO-OP (exit 0 with a clear message),
@@ -36,7 +37,6 @@ fi
 
 base_url="https://github.com/rob-smallshire/beebium/releases/download/v${version}"
 url_arm="${base_url}/Beebium-${version}-macos-arm64.dmg"
-url_intel="${base_url}/Beebium-${version}-macos-x86_64.dmg"
 
 http_code() { curl -s -o /dev/null -w '%{http_code}' -L "$1"; }
 
@@ -64,17 +64,13 @@ sha_of() {
 echo "Fetching ${url_arm} ..."
 sha_arm="$(sha_of "${url_arm}")"
 echo "  arm64  sha256 = ${sha_arm}"
-echo "Fetching ${url_intel} ..."
-sha_intel="$(sha_of "${url_intel}")"
-echo "  x86_64 sha256 = ${sha_intel}"
 
-# Produce the pinned cask from the canonical copy: bump the version, and swap the
-# two placeholder hashes in place (preserving the arm:/intel: alignment).
+# Produce the pinned cask from the canonical copy: bump the version, and swap
+# the placeholder hash.
 pinned="$(
   sed \
     -e "s|^  version .*|  version \"${version}\"|" \
-    -e "s|\(arm:[[:space:]]*\)\"[0-9a-f]*\"|\1\"${sha_arm}\"|" \
-    -e "s|\(intel:[[:space:]]*\)\"[0-9a-f]*\"|\1\"${sha_intel}\"|" \
+    -e "s|^  sha256 \"[0-9a-f]*\"|  sha256 \"${sha_arm}\"|" \
     "${cask_filepath}"
 )"
 

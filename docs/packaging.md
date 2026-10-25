@@ -14,9 +14,9 @@ the macOS `.app`, see [macOS App Packaging](macos-app-packaging.md).
 | Component | Channel | Status |
 |-----------|---------|--------|
 | Server (headless core) | Self-contained `.deb` (apt) + `.tar.gz` (everything else) | **Done** (Linux, both arches) |
-| Server (macOS) | Homebrew tap `rob-smallshire/homebrew-beebium`, formula `beebium-server` | **Done** (arm64 CI-gated; Intel best-effort); tap pinned to each release automatically on publish |
+| Server (macOS) | Homebrew tap `rob-smallshire/homebrew-beebium`, formula `beebium-server` | **Done** (arm64 CI-gated; the formula is arm64-only); tap pinned to each release automatically on publish |
 | Server (Windows) | Self-contained `.zip` (built + smoke-tested in CI, attached to the release) + Scoop bucket + WinGet | **Done** (`.zip` in CI/release); Scoop bucket + WinGet pending |
-| App (macOS GUI) | Signed + notarized per-arch DMG (release asset) + Homebrew cask `beebium-gui` | **Done** (cask + DMG); Developer ID signed/notarized, cask synced automatically on publish; needs macOS 13+ |
+| App (macOS GUI) | Signed + notarized per-arch DMG (release asset) + Homebrew cask `beebium-gui` | **Done** (cask + DMG; arm64 only while Intel macOS is suspended, [#223](https://github.com/rob-smallshire/beebium/issues/223)); Developer ID signed/notarized, cask synced automatically on publish; needs macOS 13+ |
 | Python client | PyPI (`beebium`) | Planned |
 | TypeScript client | npm (`@beebium/client`) | Planned |
 
@@ -683,6 +683,10 @@ deployment floors the bundle build sets — see below); and Windows uses
 `.exe`, the plugin DLLs sit beside the exes, and there is no `lib/` —
 `build_wheel.py` preserves that exe-relative layout).
 
+While Intel macOS is suspended ([#223](https://github.com/rob-smallshire/beebium/issues/223)) the `macosx_12_0_x86_64` wheel is
+neither built nor verified: `release.yml` builds and verifies four wheels, and
+the `macos-15-intel` leg of `verify-server-wheels` is out.
+
 In `release.yml`:
 
 - **`server-wheels`** (needs `linux`, `windows` and `macos-bundle`) downloads the
@@ -746,10 +750,13 @@ runs on PRs that touch the formula or the build system, plus on demand.
 The Homebrew formula is **arm64 only**. Homebrew ships no Intel macOS bottles
 for the formula's grpc, protobuf and openssl@3 dependencies (only Apple Silicon
 and Linux), so on an Intel Mac `brew install` would have to build the whole gRPC
-stack from source. Intel Mac users take the self-contained
+stack from source. Intel Mac users would take the self-contained
 `beebium-server-<version>-macos-x86_64.tar.gz`, the `beebium-server` wheel, or
-the `macos-x86_64` DMG instead; `release.yml` builds all three on the
-`macos-15-intel` runner, where `ci.yml` also builds and tests the server.
+the `macos-x86_64` DMG instead, but **Intel macOS is suspended**: the hosted
+`macos-15-intel` runner became too slow to finish a server build, so no Intel
+bundle, tarball, wheel or DMG is built or released, and the `ci.yml` Intel lanes
+are off, until Intel Macs run as self-hosted runners ([#223](https://github.com/rob-smallshire/beebium/issues/223), which lists
+every spot to restore).
 
 `.github/workflows/windows-package.yml` builds the static-md `.zip` on
 `windows-2022`, runs the `dumpbin` self-containment gate, and — on a separate

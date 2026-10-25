@@ -55,7 +55,7 @@ jobs:
   macos-formula:
     uses: ./.github/workflows/macos-package.yml
 
-  # The self-contained macOS bundles (arm64 + x86_64), for the Release tarballs
+  # The self-contained macOS bundles (arm64; x86_64 suspended, #223), for the Release tarballs
   # and the macOS server wheels. Separate from the Homebrew formula job.
   macos-bundle:
     uses: ./.github/workflows/macos-bundle.yml
@@ -112,8 +112,9 @@ jobs:
             done
           }
           dmgs=(_dmgs/Beebium-*.dmg)
-          if [ "${#dmgs[@]}" -ne 2 ]; then
-            echo "::error::expected 2 DMGs, found ${#dmgs[@]}: ${dmgs[*]:-none}"; exit 1
+          # One DMG (arm64) while Intel macOS is suspended (#223).
+          if [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "::error::expected 1 DMG, found ${#dmgs[@]}: ${dmgs[*]:-none}"; exit 1
           fi
           for dmg in "${dmgs[@]}"; do
             echo "== ${dmg} =="
@@ -162,7 +163,7 @@ jobs:
           python build_wheel.py "${B}/beebium-server-${V}-linux-amd64.tar.gz"  manylinux_2_36_x86_64
           python build_wheel.py "${B}/beebium-server-${V}-linux-arm64.tar.gz"  manylinux_2_36_aarch64
           python build_wheel.py "${B}/beebium-server-${V}-macos-arm64.tar.gz"  macosx_11_0_arm64
-          python build_wheel.py "${B}/beebium-server-${V}-macos-x86_64.tar.gz" macosx_12_0_x86_64
+          # macosx_12_0_x86_64 suspended until a self-hosted Intel runner exists (#223).
           python build_wheel.py "${B}/beebium-server-${V}-windows-x64.zip"     win_amd64
           ls -l dist
 
@@ -174,11 +175,11 @@ jobs:
         run: |
           set -euo pipefail
           V="$(grep -E '^current_version' "${GITHUB_WORKSPACE}/.bumpversion.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          # No macosx_12_0_x86_64 wheel while Intel macOS is suspended (#223).
           expected="$(printf '%s\n' \
             "beebium_server-${V}-py3-none-manylinux_2_36_x86_64.whl" \
             "beebium_server-${V}-py3-none-manylinux_2_36_aarch64.whl" \
             "beebium_server-${V}-py3-none-macosx_11_0_arm64.whl" \
-            "beebium_server-${V}-py3-none-macosx_12_0_x86_64.whl" \
             "beebium_server-${V}-py3-none-win_amd64.whl" | sort)"
           actual="$(ls -1 *.whl | sort)"
           if [ "${expected}" != "${actual}" ]; then
@@ -222,9 +223,7 @@ jobs:
           - arch: macos-arm64
             runner: macos-14
             tag: macosx_11_0_arm64
-          - arch: macos-x86_64
-            runner: macos-15-intel
-            tag: macosx_12_0_x86_64
+          # macos-x86_64 suspended until a self-hosted Intel runner exists (#223).
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v8.0.0
@@ -447,18 +446,17 @@ jobs:
           cd _artifacts
 
           # 1. Exactly the expected asset set -- no missing, no extras, no dupes.
+          # The macos-x86_64 tarball and DMG are suspended until a self-hosted Intel runner exists (#223).
           expected="$(printf '%s\n' \
             "beebium-server-${V}-linux-amd64.tar.gz" \
             "beebium-server-${V}-linux-arm64.tar.gz" \
             "beebium-server-${V}-macos-arm64.tar.gz" \
-            "beebium-server-${V}-macos-x86_64.tar.gz" \
             "beebium-server-${V}-windows-x64.zip" \
             "beebium-server_${V}_amd64.deb" \
             "beebium-server_${V}_arm64.deb" \
             "beebium-server-${V}-1.x86_64.rpm" \
             "beebium-server-${V}-1.aarch64.rpm" \
-            "Beebium-${V}-macos-arm64.dmg" \
-            "Beebium-${V}-macos-x86_64.dmg" | sort)"
+            "Beebium-${V}-macos-arm64.dmg" | sort)"
           actual="$(ls -1 | sort)"
           if [ "${expected}" != "${actual}" ]; then
             echo "::error::published asset set mismatch"
@@ -468,7 +466,8 @@ jobs:
 
           # 2. Each relocatable .tar.gz is a single top-level directory named for
           #    its os+arch -- NOT /opt, and not more than one entry.
-          for osarch in linux-amd64 linux-arm64 macos-arm64 macos-x86_64; do
+          # macos-x86_64 is suspended (#223).
+          for osarch in linux-amd64 linux-arm64 macos-arm64; do
             t="beebium-server-${V}-${osarch}.tar.gz"
             tops="$(tar -tzf "${t}" | cut -d/ -f1 | sort -u)"
             if [ "${tops}" != "beebium-server-${V}-${osarch}" ]; then

@@ -1,4 +1,5 @@
-# Build the self-contained macOS server bundles (arm64 + x86_64).
+# Build the self-contained macOS server bundles (arm64; x86_64 suspended until a
+# self-hosted Intel runner exists, #223).
 #
 # Like the Linux/Windows bundles this is a from-source static build
 # (gRPC/protobuf/abseil via the *-osx-static triplets), so it is expensive and
@@ -40,14 +41,8 @@ jobs:
             # LC_BUILD_VERSION minos from this link flag regardless of the (warm-
             # cached) static deps' own object minos, so the floor is honest.
             deployment_target: "11.0"
-          - arch: x86_64
-            runner: macos-15-intel
-            triplet: x64-osx-static
-            cache_arch: x64
-            # 12.0 (Monterey) is a defensible modern Intel floor: Catalina/Big Sur
-            # are past their support window, and it keeps the wheel's reach broad
-            # without claiming an OS we cannot reason about.
-            deployment_target: "12.0"
+          # x86_64 (macos-15-intel, x64-osx-static, cache_arch x64, deployment
+          # target 12.0) suspended until a self-hosted Intel runner exists (#223).
 
     env:
       VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}

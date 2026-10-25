@@ -181,9 +181,17 @@ jobs:
           else
             bash "${cask_sync_script}" "${VERSION}" _tap
             if [ -f "${cask_filepath}" ] && grep -q "version \"${VERSION}\"" "${cask_filepath}"; then
-              # Publish-boundary: both per-arch hashes present and non-placeholder.
-              arm_sha="$(sed -n -E 's/.*arm:[[:space:]]*"([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"
-              intel_sha="$(sed -n -E 's/.*intel:[[:space:]]*"([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"
+              # Publish-boundary: every hash the cask carries is present and
+              # non-placeholder. While Intel macOS is suspended (#223) the cask
+              # has a single arm64 `sha256 "..."`; a release cut before that has
+              # the arm:/intel: pair, so check whichever form is there.
+              if grep -q 'intel:' "${cask_filepath}"; then
+                arm_sha="$(sed -n -E 's/.*arm:[[:space:]]*"([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"
+                intel_sha="$(sed -n -E 's/.*intel:[[:space:]]*"([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"
+              else
+                arm_sha="$(sed -n -E 's/^  sha256 "([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"
+                intel_sha="${arm_sha}"
+              fi
               for s in "${arm_sha}" "${intel_sha}"; do
                 case "${s}" in
                   ""|"${zeros}"|1111111111111111111111111111111111111111111111111111111111111111)

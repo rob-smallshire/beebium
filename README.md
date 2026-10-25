@@ -40,7 +40,7 @@ The complete emulator — the app, the servers, the ROMs, presets and extensions
 
 ### The macOS app
 
-The full BBC Micro emulator in a single download. Grab the DMG for your Mac from the [latest release](https://github.com/rob-smallshire/beebium/releases/latest), open it, and drag **Beebium** into your Applications folder — there are separate builds for Apple Silicon (`macos-arm64`) and Intel (`macos-x86_64`). Or install it with Homebrew:
+The full BBC Micro emulator in a single download. Grab the DMG for your Mac from the [latest release](https://github.com/rob-smallshire/beebium/releases/latest), open it, and drag **Beebium** into your Applications folder — it is built for Apple Silicon (`macos-arm64`); Intel builds are suspended until a self-hosted Intel runner exists ([#223](https://github.com/rob-smallshire/beebium/issues/223)). Or install it with Homebrew:
 
 ```bash
 brew install --cask rob-smallshire/beebium/beebium-gui
@@ -56,7 +56,7 @@ Drive Beebium from the **Python** or **TypeScript** client, from **CI**, or from
 
 - **Any platform (Python)** — `pip install beebium beebium-server` (`beebium` is the client library; `beebium-server` ships the servers)
 - **Linux** — self-contained `.deb` (Debian / Ubuntu / Raspberry Pi OS) and `.rpm` (Fedora / RHEL / openSUSE) for `amd64` and `arm64`, or a `.tar.gz` for any distro
-- **macOS** — `brew install rob-smallshire/beebium/beebium-server` on Apple Silicon, or a self-contained tarball (Apple Silicon or Intel)
+- **macOS** — `brew install rob-smallshire/beebium/beebium-server` on Apple Silicon, or a self-contained tarball (Apple Silicon; Intel is suspended, [#223](https://github.com/rob-smallshire/beebium/issues/223))
 - **Windows** — `scoop bucket add beebium https://github.com/rob-smallshire/scoop-beebium` then `scoop install beebium-server`, or a self-contained zip
 
 Direct download links for every package are on the [releases page](https://github.com/rob-smallshire/beebium/releases/latest).

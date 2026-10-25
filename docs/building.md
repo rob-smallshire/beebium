@@ -243,17 +243,17 @@ GitHub Actions builds and tests across all platforms. See `.github/workflows/ci.
 
 **Server builds:**
 - `server-macos-arm64`: Server for Apple Silicon
-- `server-macos-x86_64`: Server for Intel
+- `server-macos-x86_64`: Server for Intel (suspended, #223)
 - `server-linux`: Server for Linux
 - `server-windows`: Server for Windows
 
 **GUI client builds:**
 - `gui-client-macos-arm64`: Client for Apple Silicon
-- `gui-client-macos-x86_64`: Client for Intel
+- `gui-client-macos-x86_64`: Client for Intel (suspended, #223)
 
 **Client integration tests:**
-- `typescript-client`, `typescript-integration-linux`, `typescript-integration-macos-arm64`, `typescript-integration-macos-x86_64`
-- `python-client`, `python-integration-linux`, `python-integration-windows`, `python-integration-macos-arm64`, `python-integration-macos-x86_64`
+- `typescript-client`, `typescript-integration-linux`, `typescript-integration-macos-arm64`, `typescript-integration-macos-x86_64` (suspended, #223)
+- `python-client`, `python-integration-linux`, `python-integration-windows`, `python-integration-macos-arm64`, `python-integration-macos-x86_64` (suspended, #223)
 
 ## Deployment
 

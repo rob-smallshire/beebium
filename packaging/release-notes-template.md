@@ -7,7 +7,7 @@ The full BBC Micro emulator, ready to run. The app, the emulator servers, the RO
 Download, open the DMG, drag **Beebium** into your Applications folder, and launch it.
 
 - **Apple Silicon** (M1/M2/M3 and later): [Beebium-@@V@@-macos-arm64.dmg](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/Beebium-@@V@@-macos-arm64.dmg)
-- **Intel**: [Beebium-@@V@@-macos-x86_64.dmg](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/Beebium-@@V@@-macos-x86_64.dmg)
+- **Intel**: not in this release; Intel macOS builds are suspended until a self-hosted Intel runner exists ([#223](https://github.com/rob-smallshire/beebium/issues/223)).
 
 Or install with Homebrew:
 
@@ -47,7 +47,7 @@ Self-contained for `amd64` and `arm64` — no gRPC/protobuf to install.
 brew install rob-smallshire/beebium/beebium-server
 ```
 
-Or a self-contained tarball: [arm64](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server-@@V@@-macos-arm64.tar.gz) · [x86_64](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server-@@V@@-macos-x86_64.tar.gz).
+Or a self-contained tarball: [arm64](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server-@@V@@-macos-arm64.tar.gz).
 
 ### Windows
 
