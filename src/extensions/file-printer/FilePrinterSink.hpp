@@ -112,7 +112,8 @@ private:
         }
     }
 
-    // Write `first` and everything else queued, then flush once.
+    // Write `first` and everything else queued, then flush once. The bytes
+    // count as written only once the flush has put them in the file.
     void drain_from(uint8_t first) {
         write_translated(first);
         uint8_t byte = 0;
@@ -120,6 +121,8 @@ private:
             write_translated(byte);
         }
         file_.flush();
+        bytes_written_.fetch_add(unflushed_bytes_, std::memory_order_relaxed);
+        unflushed_bytes_ = 0;
         if (options_.on_activity) {
             options_.on_activity();
         }
@@ -131,13 +134,14 @@ private:
 
     void put(uint8_t byte) {
         file_.put(static_cast<char>(byte));
-        bytes_written_.fetch_add(1, std::memory_order_relaxed);
+        ++unflushed_bytes_;
     }
 
     Options options_;
     CentronicsReceiver receiver_;
     LineEndingTranslator translator_;  // sink thread only
     std::ofstream file_;
+    uint64_t unflushed_bytes_ = 0;     // sink thread only
     std::atomic<uint64_t> bytes_written_{0};
     std::atomic<bool> stop_{false};
     std::thread sink_thread_;

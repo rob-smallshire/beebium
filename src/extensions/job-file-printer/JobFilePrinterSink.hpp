@@ -208,7 +208,8 @@ private:
         close_job();
     }
 
-    // Write `first` and everything else queued, then flush once.
+    // Write `first` and everything else queued, then flush once. The bytes
+    // count as written only once a flush or a close has put them in the file.
     void drain_from(uint8_t first) {
         write_byte(first);
         uint8_t byte = 0;
@@ -217,6 +218,7 @@ private:
         }
         if (job_open_) {
             file_.flush();
+            count_flushed_bytes();
         }
         if (options_.on_activity) {
             options_.on_activity();
@@ -248,10 +250,15 @@ private:
         }
         translator_.translate(byte, [this](uint8_t out) {
             file_.put(static_cast<char>(out));
-            bytes_in_job_.fetch_add(1, std::memory_order_relaxed);
-            total_bytes_.fetch_add(1, std::memory_order_relaxed);
+            ++unflushed_bytes_;
         });
         ++bytes_dequeued_;
+    }
+
+    void count_flushed_bytes() {
+        bytes_in_job_.fetch_add(unflushed_bytes_, std::memory_order_relaxed);
+        total_bytes_.fetch_add(unflushed_bytes_, std::memory_order_relaxed);
+        unflushed_bytes_ = 0;
     }
 
     void open_job() {
@@ -290,6 +297,7 @@ private:
         }
         file_.close();
         file_.clear();
+        count_flushed_bytes();
         bytes_in_job_.store(0, std::memory_order_relaxed);
         jobs_completed_.fetch_add(1, std::memory_order_relaxed);
         return true;
@@ -307,6 +315,7 @@ private:
     std::ofstream file_;
     bool job_open_ = false;
     uint64_t bytes_dequeued_ = 0;
+    uint64_t unflushed_bytes_ = 0;  // written to file_ but not yet flushed
 
     mutable std::mutex job_filepath_mutex_;
     std::filesystem::path job_filepath_;  // empty between jobs
