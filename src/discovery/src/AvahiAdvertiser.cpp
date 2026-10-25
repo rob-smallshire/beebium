@@ -26,6 +26,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <string>
 
 namespace beebium::discovery {
 
@@ -53,6 +54,7 @@ struct AvahiApi {
 
     decltype(&avahi_client_new) client_new;
     decltype(&avahi_client_free) client_free;
+    decltype(&avahi_client_errno) client_errno;
 
     decltype(&avahi_entry_group_new) entry_group_new;
     decltype(&avahi_entry_group_add_service_strlst) entry_group_add_service_strlst;
@@ -66,6 +68,7 @@ struct AvahiApi {
 
     decltype(&avahi_alternative_service_name) alternative_service_name;
     decltype(&avahi_free) free;
+    decltype(&avahi_strerror) strerror;
 };
 
 /// Resolve the Avahi symbol table once. Returns nullptr if libavahi-client is
@@ -97,6 +100,7 @@ const AvahiApi* load_avahi_api() {
         BEEBIUM_LOAD_AVAHI_SYM(threaded_poll_quit, "avahi_threaded_poll_quit");
         BEEBIUM_LOAD_AVAHI_SYM(client_new, "avahi_client_new");
         BEEBIUM_LOAD_AVAHI_SYM(client_free, "avahi_client_free");
+        BEEBIUM_LOAD_AVAHI_SYM(client_errno, "avahi_client_errno");
         BEEBIUM_LOAD_AVAHI_SYM(entry_group_new, "avahi_entry_group_new");
         BEEBIUM_LOAD_AVAHI_SYM(entry_group_add_service_strlst,
                                "avahi_entry_group_add_service_strlst");
@@ -109,6 +113,7 @@ const AvahiApi* load_avahi_api() {
         BEEBIUM_LOAD_AVAHI_SYM(alternative_service_name,
                                "avahi_alternative_service_name");
         BEEBIUM_LOAD_AVAHI_SYM(free, "avahi_free");
+        BEEBIUM_LOAD_AVAHI_SYM(strerror, "avahi_strerror");
 
 #undef BEEBIUM_LOAD_AVAHI_SYM
 
@@ -137,13 +142,27 @@ public:
 
     ~AvahiAdvertiser() override { stop(); }
 
-    bool start(const ServiceInfo& info) override {
-        // Stop any existing advertisement.
-        stop();
+    AdvertiserState state() const override {
+        std::lock_guard lock(mutex_);
+        return AdvertiserState{
+            .available = (api_ != nullptr),
+            .advertising = established_.load(),
+            .actual_name = actual_name_,
+            .unavailable_reason = api_ ? std::string() : kUnavailableReason,
+        };
+    }
 
+private:
+    static constexpr const char* kUnavailableReason = "avahi client library not found";
+
+    std::string avahi_error(int error) const {
+        return std::string("registration failed (") + api_->strerror(error) + ")";
+    }
+
+    std::string begin(const ServiceInfo& info) override {
         if (!api_) {
             // libavahi-client is not installed; advertisement is unavailable.
-            return false;
+            return kUnavailableReason;
         }
 
         {
@@ -154,7 +173,7 @@ public:
 
         threaded_poll_ = api_->threaded_poll_new();
         if (!threaded_poll_) {
-            return false;
+            return "registration failed (cannot create the avahi poll)";
         }
 
         // AVAHI_CLIENT_NO_FAIL lets the client wait for the daemon rather than
@@ -171,7 +190,7 @@ public:
         if (!client_) {
             api_->threaded_poll_free(threaded_poll_);
             threaded_poll_ = nullptr;
-            return false;
+            return avahi_error(error);
         }
 
         if (api_->threaded_poll_start(threaded_poll_) < 0) {
@@ -179,13 +198,13 @@ public:
             client_ = nullptr;
             api_->threaded_poll_free(threaded_poll_);
             threaded_poll_ = nullptr;
-            return false;
+            return "registration failed (cannot start the avahi poll)";
         }
 
-        return true;
+        return {};
     }
 
-    void stop() override {
+    void withdraw() override {
         if (!api_) {
             return;
         }
@@ -214,16 +233,6 @@ public:
         }
     }
 
-    AdvertiserState state() const override {
-        std::lock_guard lock(mutex_);
-        return AdvertiserState{
-            .available = (api_ != nullptr),
-            .advertising = established_.load(),
-            .actual_name = actual_name_,
-        };
-    }
-
-private:
     const AvahiApi* api_ = nullptr;
     AvahiThreadedPoll* threaded_poll_ = nullptr;
     AvahiClient* client_ = nullptr;
@@ -240,6 +249,7 @@ private:
         if (!group_) {
             group_ = api_->entry_group_new(client, entry_group_callback, this);
             if (!group_) {
+                registration_failed(avahi_error(api_->client_errno(client)));
                 api_->threaded_poll_quit(threaded_poll_);
                 return;
             }
@@ -281,11 +291,13 @@ private:
                 create_services(client);
                 return;
             }
+            registration_failed(avahi_error(ret));
             api_->threaded_poll_quit(threaded_poll_);
             return;
         }
 
-        if (api_->entry_group_commit(group_) < 0) {
+        if (int commit = api_->entry_group_commit(group_); commit < 0) {
+            registration_failed(avahi_error(commit));
             api_->threaded_poll_quit(threaded_poll_);
         }
     }
@@ -319,8 +331,15 @@ private:
             self->established_ = false;
             break;
 
+        case AVAHI_CLIENT_CONNECTING:
+            // AVAHI_CLIENT_NO_FAIL: the client waits for the daemon and
+            // publishes once it reaches S_RUNNING.
+            self->registration_failed("avahi-daemon not running");
+            break;
+
         case AVAHI_CLIENT_FAILURE:
             self->established_ = false;
+            self->registration_failed(self->avahi_error(self->api_->client_errno(client)));
             self->api_->threaded_poll_quit(self->threaded_poll_);
             break;
 
@@ -335,9 +354,16 @@ private:
         auto* self = static_cast<AvahiAdvertiser*>(userdata);
 
         switch (state) {
-        case AVAHI_ENTRY_GROUP_ESTABLISHED:
+        case AVAHI_ENTRY_GROUP_ESTABLISHED: {
             self->established_ = true;
+            std::string name;
+            {
+                std::lock_guard lock(self->mutex_);
+                name = self->actual_name_;
+            }
+            self->registered(name);
             break;
+        }
 
         case AVAHI_ENTRY_GROUP_COLLISION:
             // Another host claimed our instance name; pick an alternative and
@@ -349,6 +375,8 @@ private:
 
         case AVAHI_ENTRY_GROUP_FAILURE:
             self->established_ = false;
+            self->registration_failed(
+                self->avahi_error(self->api_->client_errno(self->client_)));
             self->api_->threaded_poll_quit(self->threaded_poll_);
             break;
 

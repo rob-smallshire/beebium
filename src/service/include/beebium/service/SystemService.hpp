@@ -569,9 +569,9 @@ discovery::ServiceInfo SystemServiceImpl<MachineType>::build_service_info() {
 // Re-announce this machine under the name it now has.
 //
 // A machine's name is its mDNS service instance name, and an instance cannot
-// be renamed in place: the old registration has to go and a new one take its
-// place. Peers therefore see the machine disappear and reappear, which is the
-// honest description of what happened to its name.
+// be renamed in place: start() withdraws the old registration and makes a new
+// one in its place. Peers therefore see the machine disappear and reappear,
+// which is the honest description of what happened to its name.
 //
 // Only when already advertising. Renaming a machine whose advertisement the
 // user turned off must not turn it back on.
@@ -580,7 +580,6 @@ void SystemServiceImpl<MachineType>::republish_advertisement_locked() {
     if (!advertiser_ || !advertiser_->state().advertising) {
         return;
     }
-    advertiser_->stop();
     advertiser_->start(build_service_info());
 }
 

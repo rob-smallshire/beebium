@@ -14,30 +14,38 @@
 
 namespace beebium::discovery {
 
-/// Null implementation of Advertiser for platforms without mDNS support.
+namespace {
+
+/// An advertiser for a platform or host without a working mDNS responder.
 ///
-/// Always reports available=false and advertising=false. All operations
-/// are no-ops. Used as a fallback when platform-specific mDNS APIs are
-/// not available.
+/// Always reports available=false, with the reason, and advertising=false.
+/// start() reports the reason and fails; stop() has nothing to withdraw.
 class NullAdvertiser final : public Advertiser {
 public:
-    bool start(const ServiceInfo& /*info*/) override {
-        // mDNS not available on this platform
-        return false;
-    }
-
-    void stop() override {
-        // Nothing to do
-    }
+    explicit NullAdvertiser(std::string reason) : reason_(std::move(reason)) {}
 
     AdvertiserState state() const override {
         return AdvertiserState{
             .available = false,
             .advertising = false,
             .actual_name = {},
+            .unavailable_reason = reason_,
         };
     }
+
+private:
+    std::string begin(const ServiceInfo& /*info*/) override { return reason_; }
+
+    void withdraw() override {}
+
+    std::string reason_;
 };
+
+}  // namespace
+
+std::unique_ptr<Advertiser> make_null_advertiser(std::string reason) {
+    return std::make_unique<NullAdvertiser>(std::move(reason));
+}
 
 // Factory function implementation for platforms without native mDNS.
 // This is overridden by platform-specific implementations when available.
@@ -45,7 +53,7 @@ public:
     !defined(BEEBIUM_HAS_WINDOWS_MDNS)
 
 std::unique_ptr<Advertiser> create_advertiser() {
-    return std::make_unique<NullAdvertiser>();
+    return make_null_advertiser("no mDNS support in this build");
 }
 
 #endif

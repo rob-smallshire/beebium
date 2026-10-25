@@ -7,6 +7,7 @@
 # - Linux: Avahi (libavahi-client, loaded at runtime via dlopen)
 
 add_library(beebium_discovery STATIC
+    src/Advertiser.cpp
     src/NullAdvertiser.cpp
     src/NullBrowser.cpp
 )

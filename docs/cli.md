@@ -335,9 +335,30 @@ instance name is the machine's name (see [Machine Name and
 Description](#machine-name-and-description)), re-announced when it changes: a
 rename, or a Save that gives the machine a document.
 
+The server says on stderr what the advertisement did, one line per event,
+prefixed `mdns:`:
+
+- `mdns: advertising "BBC Model B" as _beebium._tcp on port 48875` when the
+  registration completes. The name is the one the responder registered, which
+  may differ from the machine's name after a clash (" (2)" with Bonjour, " #2"
+  with Avahi); a line ending `, in place of "<old name>"` means the
+  advertisement replaced one under another name, after a rename or a clash.
+- `mdns: no longer advertising "BBC Model B" as _beebium._tcp` when it is
+  withdrawn: at shutdown, or when `SetAdvertisement` turns it off.
+- `mdns: cannot advertise "BBC Model B" as _beebium._tcp: <reason>` when it
+  cannot be made: `avahi client library not found`, `avahi-daemon not running`
+  (the server keeps waiting, and the `advertising` line follows if the daemon
+  starts), `bonjour not available`, `no mDNS support in this build`, or the
+  responder's error, e.g. `registration failed (dns-sd error -65548)`. The
+  machine keeps running.
+
+The AUN transport's `_aun._udp` announcement reports the same way, with its own
+type in the line (see [networking.md](networking.md)). Without `--advertise`
+(and no `SetAdvertisement`) the server says nothing about `_beebium._tcp`.
+
 Platform support: macOS (Bonjour) and Windows (Win32 DNS-SD) are built in; Linux
-uses Avahi, which is loaded at runtime, so a running `avahi-daemon` is required
-and the flag becomes a silent no-op where Avahi is absent. See
+uses Avahi, which is loaded at runtime, so a running `avahi-daemon` is required;
+where Avahi is absent the flag advertises nothing and says why. See
 [networking.md](networking.md) and
 [plans/service-advertisement.md](plans/service-advertisement.md) for details.
 

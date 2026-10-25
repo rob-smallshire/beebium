@@ -14,8 +14,10 @@
 #define BEEBIUM_DISCOVERY_ADVERTISER_HPP
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace beebium::discovery {
@@ -50,7 +52,19 @@ struct AdvertiserState {
     /// The actual registered name. May differ from requested instance_name
     /// if DNS-SD resolved a name collision (e.g., "Machine" -> "Machine (2)").
     std::string actual_name;
+
+    /// When not available, why not, e.g. "avahi client library not found".
+    std::string unavailable_reason;
 };
+
+/// Receives one line, without its newline, for each thing an advertiser does
+/// on the network: a registration completed (under the name the responder
+/// gave it), a registration that could not be made or failed, and a
+/// withdrawal. Called on whichever thread the event happened on.
+using AdvertiserReporter = std::function<void(const std::string& line)>;
+
+/// The reporter a server uses: writes the line to stderr.
+void report_to_stderr(const std::string& line);
 
 /// Interface for DNS-SD service advertisement.
 ///
@@ -61,6 +75,10 @@ struct AdvertiserState {
 ///
 /// Use create_advertiser() to get the appropriate implementation for the
 /// current platform, or NullAdvertiser if mDNS is unavailable.
+///
+/// The advertiser says what it did through its reporter, if it has one; an
+/// implementation calls registered() and registration_failed() from its
+/// registration callback and the base class words the lines.
 class Advertiser {
 public:
     virtual ~Advertiser() = default;
@@ -68,18 +86,23 @@ public:
     /// Start advertising the service.
     ///
     /// @param info Service information to advertise.
-    /// @return true if advertisement started successfully, false if mDNS is
-    ///         unavailable or registration failed.
+    /// @return true if registration began, false if mDNS is unavailable or
+    ///         the registration could not be made. Registration completes
+    ///         asynchronously; state().advertising says when it has.
     ///
-    /// If already advertising, stops the current advertisement and starts
-    /// a new one with the updated info.
-    virtual bool start(const ServiceInfo& info) = 0;
+    /// If already advertising, replaces the current advertisement with one
+    /// for the updated info.
+    bool start(const ServiceInfo& info);
 
     /// Stop advertising. Safe to call if not currently advertising.
-    virtual void stop() = 0;
+    void stop();
 
     /// Get current advertiser state.
     virtual AdvertiserState state() const = 0;
+
+    /// Report what the advertiser does to `reporter`. Without one it is
+    /// silent.
+    void set_reporter(AdvertiserReporter reporter);
 
     // Non-copyable
     Advertiser(const Advertiser&) = delete;
@@ -87,7 +110,36 @@ public:
 
 protected:
     Advertiser() = default;
+
+    /// Begin registering `info`; nothing is registered when this is called.
+    /// Returns empty when registration has begun, or why it could not.
+    virtual std::string begin(const ServiceInfo& info) = 0;
+
+    /// Withdraw the registration, if any, and return once no registration
+    /// callback can still run.
+    virtual void withdraw() = 0;
+
+    /// From the registration callback: registered under `actual_name`, which
+    /// the responder may have changed from the name asked for.
+    void registered(const std::string& actual_name);
+
+    /// From the registration callback: the registration failed, or cannot
+    /// complete for now, for `reason`.
+    void registration_failed(const std::string& reason);
+
+private:
+    void report(const std::string& line) const;  // with mutex_ held
+
+    mutable std::mutex mutex_;
+    AdvertiserReporter reporter_;
+    ServiceInfo info_;              // as last started
+    std::string registered_name_;   // empty until registered
+    std::string replacing_name_;    // the registration a start() replaced
 };
+
+/// An advertiser that cannot advertise, for `reason`: state().available is
+/// false and start() reports the reason and returns false.
+std::unique_ptr<Advertiser> make_null_advertiser(std::string reason);
 
 /// Create a platform-appropriate advertiser.
 ///

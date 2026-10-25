@@ -96,10 +96,23 @@ public:
 
     ~WindowsAdvertiser() override { stop(); }
 
-    bool start(const ServiceInfo& info) override {
-        // Stop any existing advertisement
-        stop();
+    AdvertiserState state() const override {
+        std::lock_guard lock(mutex_);
+        return AdvertiserState{
+            .available = true,
+            .advertising = registered_.load(),
+            .actual_name = actual_name_,
+            .unavailable_reason = {},
+        };
+    }
 
+private:
+    static std::string status_error(DWORD status) {
+        return "registration failed (DnsServiceRegister status " +
+               std::to_string(static_cast<unsigned long>(status)) + ")";
+    }
+
+    std::string begin(const ServiceInfo& info) override {
         // Store info for state reporting
         {
             std::lock_guard lock(mutex_);
@@ -170,13 +183,13 @@ public:
                    static_cast<unsigned long>(status),
                    status == DNS_REQUEST_PENDING ? "PENDING" : "error");
         if (status != DNS_REQUEST_PENDING) {
-            return false;
+            return status_error(status);
         }
 
-        return true;
+        return {};
     }
 
-    void stop() override {
+    void withdraw() override {
         // Deregister if registered
         if (registered_.load()) {
             DnsServiceDeRegister(&request_, nullptr);
@@ -197,16 +210,6 @@ public:
         txt_value_ptrs_.clear();
     }
 
-    AdvertiserState state() const override {
-        std::lock_guard lock(mutex_);
-        return AdvertiserState{
-            .available = true,
-            .advertising = registered_.load(),
-            .actual_name = actual_name_,
-        };
-    }
-
-private:
     // Registration state
     DNS_SERVICE_INSTANCE service_instance_{};
     DNS_SERVICE_REGISTER_REQUEST request_{};
@@ -237,14 +240,21 @@ private:
             self->registered_ = true;
 
             // Extract actual name (may differ due to collision)
-            if (instance->pszInstanceName != nullptr) {
-                std::wstring full_name(instance->pszInstanceName);
-                std::wstring instance_name = extract_instance_name(full_name);
+            std::string actual_name;
+            {
                 std::lock_guard lock(self->mutex_);
-                self->actual_name_ = to_utf8(instance_name);
+                if (instance->pszInstanceName != nullptr) {
+                    std::wstring full_name(instance->pszInstanceName);
+                    self->actual_name_ = to_utf8(extract_instance_name(full_name));
+                } else {
+                    self->actual_name_ = self->info_.instance_name;
+                }
+                actual_name = self->actual_name_;
             }
+            self->registered(actual_name);
         } else {
             self->registered_ = false;
+            self->registration_failed(status_error(status));
         }
 
         // Free the instance returned by the callback

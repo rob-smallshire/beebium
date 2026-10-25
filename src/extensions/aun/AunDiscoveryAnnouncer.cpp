@@ -25,6 +25,14 @@ std::int64_t now_unix_seconds() {
         .count();
 }
 
+// The platform advertiser, saying on stderr what it does, as the machine's
+// own does. An injected advertiser is the caller's to configure.
+std::unique_ptr<discovery::Advertiser> platform_advertiser() {
+    auto advertiser = discovery::create_advertiser();
+    advertiser->set_reporter(discovery::report_to_stderr);
+    return advertiser;
+}
+
 }  // namespace
 
 AunDiscoveryAnnouncer::AunDiscoveryAnnouncer(
@@ -42,8 +50,7 @@ AunDiscoveryAnnouncer::AunDiscoveryAnnouncer(
     , impl_version_(std::move(impl_version))
     , impl_identity_(std::move(impl_identity))
     , since_(now_unix_seconds())
-    , advertiser_(advertiser ? std::move(advertiser)
-                             : discovery::create_advertiser()) {}
+    , advertiser_(advertiser ? std::move(advertiser) : platform_advertiser()) {}
 
 AunDiscoveryAnnouncer::~AunDiscoveryAnnouncer() {
     stop();

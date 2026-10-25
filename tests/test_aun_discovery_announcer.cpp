@@ -41,31 +41,32 @@ class FakeAdvertiser final : public Advertiser {
 public:
     explicit FakeAdvertiser(FakeState* s) : s_(s) {}
 
-    bool start(const ServiceInfo& info) override {
-        s_->last_info = info;
-        s_->start_count++;
-        if (s_->fail_start) {
-            s_->advertising = false;
-            return false;
-        }
-        s_->advertising = true;
-        return true;
-    }
-
-    void stop() override {
-        s_->stop_count++;
-        s_->advertising = false;
-    }
-
     AdvertiserState state() const override {
         return AdvertiserState{
             .available = true,
             .advertising = s_->advertising,
             .actual_name = "captured",
+            .unavailable_reason = {},
         };
     }
 
 private:
+    std::string begin(const ServiceInfo& info) override {
+        s_->last_info = info;
+        s_->start_count++;
+        if (s_->fail_start) {
+            s_->advertising = false;
+            return "refused";
+        }
+        s_->advertising = true;
+        return {};
+    }
+
+    void withdraw() override {
+        s_->stop_count++;
+        s_->advertising = false;
+    }
+
     FakeState* s_;
 };
 

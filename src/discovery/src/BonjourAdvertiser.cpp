@@ -26,6 +26,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <string>
 #include <thread>
 
 namespace beebium::discovery {
@@ -40,13 +41,28 @@ public:
 
     ~BonjourAdvertiser() override { stop(); }
 
-    bool start(const ServiceInfo& info) override {
-        // Stop any existing advertisement
-        stop();
+    AdvertiserState state() const override {
+        std::lock_guard lock(mutex_);
+        const bool available = dnssd_api() != nullptr;
+        return AdvertiserState{
+            .available = available,
+            .advertising = registered_.load(),
+            .actual_name = actual_name_,
+            .unavailable_reason = available ? std::string() : kUnavailableReason,
+        };
+    }
 
+private:
+    static constexpr const char* kUnavailableReason = "bonjour not available";
+
+    static std::string dnssd_error(DNSServiceErrorType err) {
+        return "registration failed (dns-sd error " + std::to_string(err) + ")";
+    }
+
+    std::string begin(const ServiceInfo& info) override {
         const DnssdApi* dnssd = dnssd_api();
         if (!dnssd) {
-            return false;  // DNS-SD runtime not available
+            return kUnavailableReason;  // DNS-SD runtime not available
         }
 
         // Store info for state reporting
@@ -96,17 +112,17 @@ public:
 
         if (err != kDNSServiceErr_NoError) {
             service_ref_ = nullptr;
-            return false;
+            return dnssd_error(err);
         }
 
         // Start event loop thread
         running_ = true;
         event_thread_ = std::thread([this] { event_loop(); });
 
-        return true;
+        return {};
     }
 
-    void stop() override {
+    void withdraw() override {
         // Signal the event loop to stop, then JOIN the event thread before
         // touching service_ref_. The event thread may be inside
         // DNSServiceProcessResult on service_ref_; deallocating a DNSServiceRef
@@ -143,16 +159,6 @@ public:
 #endif
     }
 
-    AdvertiserState state() const override {
-        std::lock_guard lock(mutex_);
-        return AdvertiserState{
-            .available = true,  // Bonjour is always available on macOS
-            .advertising = registered_.load(),
-            .actual_name = actual_name_,
-        };
-    }
-
-private:
     DNSServiceRef service_ref_ = nullptr;
     std::atomic<bool> registered_{false};
     std::atomic<bool> running_{false};
@@ -213,10 +219,14 @@ private:
             self->registered_ = true;
             // The name may differ from what we requested if there was a
             // collision (DNS-SD appends " (2)", " (3)", etc.)
-            std::lock_guard lock(self->mutex_);
-            self->actual_name_ = name;
+            {
+                std::lock_guard lock(self->mutex_);
+                self->actual_name_ = name;
+            }
+            self->registered(name);
         } else {
             self->registered_ = false;
+            self->registration_failed(dnssd_error(errorCode));
         }
     }
 };

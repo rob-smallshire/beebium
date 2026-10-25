@@ -16,8 +16,11 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 using namespace beebium::discovery;
 
@@ -148,6 +151,160 @@ TEST_CASE("Advertiser start when unavailable returns false", "[advertiser]") {
     }
 }
 
+namespace {
+
+// Collects an advertiser's report lines; the callback may run on another
+// thread.
+struct ReportLines {
+    std::mutex mutex;
+    std::vector<std::string> lines;
+
+    AdvertiserReporter reporter() {
+        return [this](const std::string& line) {
+            std::lock_guard lock(mutex);
+            lines.push_back(line);
+        };
+    }
+
+    std::vector<std::string> taken() {
+        std::lock_guard lock(mutex);
+        return std::exchange(lines, {});
+    }
+};
+
+// An advertiser whose registration callback the test fires by hand.
+class ScriptedAdvertiser final : public Advertiser {
+public:
+    std::string refuse;  // non-empty: begin() fails for this reason
+
+    void complete(const std::string& actual_name) {
+        advertising_ = true;
+        name_ = actual_name;
+        registered(actual_name);
+    }
+    void fail(const std::string& reason) {
+        advertising_ = false;
+        registration_failed(reason);
+    }
+
+    AdvertiserState state() const override {
+        return AdvertiserState{.available = true, .advertising = advertising_,
+                               .actual_name = name_, .unavailable_reason = {}};
+    }
+
+private:
+    std::string begin(const ServiceInfo&) override { return refuse; }
+    void withdraw() override {
+        advertising_ = false;
+        name_.clear();
+    }
+
+    bool advertising_ = false;
+    std::string name_;
+};
+
+ServiceInfo machine_info(const std::string& name) {
+    ServiceInfo info;
+    info.instance_name = name;
+    info.service_type = "_beebium._tcp";
+    info.port = 50051;
+    return info;
+}
+
+}  // namespace
+
+TEST_CASE("A null advertiser says why it cannot advertise", "[advertiser]") {
+    ReportLines report;  // outlives the advertiser, which reports as it goes
+    auto advertiser = make_null_advertiser("avahi client library not found");
+    advertiser->set_reporter(report.reporter());
+
+    auto state = advertiser->state();
+    CHECK_FALSE(state.available);
+    CHECK(state.unavailable_reason == "avahi client library not found");
+
+    CHECK_FALSE(advertiser->start(machine_info("BBC Model B")));
+    CHECK(report.taken() ==
+          std::vector<std::string>{"mdns: cannot advertise \"BBC Model B\" as _beebium._tcp: "
+                                   "avahi client library not found"});
+
+    advertiser->stop();
+    CHECK(report.taken().empty());  // nothing was advertised
+}
+
+TEST_CASE("An advertiser without a reporter is silent", "[advertiser]") {
+    auto advertiser = make_null_advertiser("no responder");
+    CHECK_FALSE(advertiser->start(machine_info("BBC Model B")));
+    advertiser->stop();
+}
+
+TEST_CASE("An advertiser reports what it does", "[advertiser]") {
+    ReportLines report;
+    ScriptedAdvertiser advertiser;
+    advertiser.set_reporter(report.reporter());
+
+    REQUIRE(advertiser.start(machine_info("BBC Model B")));
+    CHECK(report.taken().empty());  // registration has only begun
+
+    SECTION("registered, under the name the responder gave it") {
+        advertiser.complete("BBC Model B (2)");
+        CHECK(report.taken() == std::vector<std::string>{
+                  "mdns: advertising \"BBC Model B (2)\" as _beebium._tcp on port 50051"});
+    }
+
+    SECTION("renamed by the responder after a clash") {
+        advertiser.complete("BBC Model B");
+        report.taken();
+        advertiser.complete("BBC Model B #2");
+        CHECK(report.taken() == std::vector<std::string>{
+                  "mdns: advertising \"BBC Model B #2\" as _beebium._tcp on port 50051, "
+                  "in place of \"BBC Model B\""});
+    }
+
+    SECTION("re-registered under a new name") {
+        advertiser.complete("BBC Model B");
+        report.taken();
+        REQUIRE(advertiser.start(machine_info("Games Machine")));
+        CHECK(report.taken().empty());
+        advertiser.complete("Games Machine");
+        CHECK(report.taken() == std::vector<std::string>{
+                  "mdns: advertising \"Games Machine\" as _beebium._tcp on port 50051, "
+                  "in place of \"BBC Model B\""});
+    }
+
+    SECTION("withdrawn") {
+        advertiser.complete("BBC Model B");
+        report.taken();
+        advertiser.stop();
+        CHECK(report.taken() == std::vector<std::string>{
+                  "mdns: no longer advertising \"BBC Model B\" as _beebium._tcp"});
+        advertiser.stop();
+        CHECK(report.taken().empty());
+    }
+
+    SECTION("stopped before the registration completed") {
+        advertiser.stop();
+        CHECK(report.taken().empty());
+    }
+
+    SECTION("the registration failed") {
+        advertiser.fail("registration failed (dns-sd error -65548)");
+        CHECK(report.taken() == std::vector<std::string>{
+                  "mdns: cannot advertise \"BBC Model B\" as _beebium._tcp: "
+                  "registration failed (dns-sd error -65548)"});
+    }
+
+    SECTION("a replacement that cannot be made withdraws the old name") {
+        advertiser.complete("BBC Model B");
+        report.taken();
+        advertiser.refuse = "registration failed (dns-sd error -65540)";
+        CHECK_FALSE(advertiser.start(machine_info("Games Machine")));
+        CHECK(report.taken() == std::vector<std::string>{
+                  "mdns: no longer advertising \"BBC Model B\" as _beebium._tcp",
+                  "mdns: cannot advertise \"Games Machine\" as _beebium._tcp: "
+                  "registration failed (dns-sd error -65540)"});
+    }
+}
+
 #ifdef __APPLE__
 TEST_CASE("BonjourAdvertiser is available on macOS", "[advertiser][macos]") {
     auto advertiser = create_advertiser();
@@ -207,6 +364,29 @@ TEST_CASE("BonjourAdvertiser can start and stop", "[advertiser][macos]") {
         REQUIRE(result);
         REQUIRE(wait_for_advertising(*advertiser));
     }
+}
+
+TEST_CASE("BonjourAdvertiser reports its registration and withdrawal",
+          "[advertiser][macos]") {
+    ReportLines report;
+    auto advertiser = create_advertiser();
+    advertiser->set_reporter(report.reporter());
+
+    ServiceInfo info;
+    info.instance_name = "Beebium Report Test";
+    info.service_type = "_beebium._tcp";
+    info.port = 48875;
+    REQUIRE(advertiser->start(info));
+    REQUIRE(wait_for_advertising(*advertiser));
+
+    // The responder may have renamed it; the line gives the name it has.
+    const std::string name = advertiser->state().actual_name;
+    CHECK(report.taken() == std::vector<std::string>{
+              "mdns: advertising \"" + name + "\" as _beebium._tcp on port 48875"});
+
+    advertiser->stop();
+    CHECK(report.taken() == std::vector<std::string>{
+              "mdns: no longer advertising \"" + name + "\" as _beebium._tcp"});
 }
 #endif
 

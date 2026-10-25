@@ -292,8 +292,11 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         return;
     }
 
-    // Create advertiser (platform-specific implementation)
+    // Create advertiser (platform-specific implementation). It only acts when
+    // advertising is asked for, by --advertise or SetAdvertisement, and says
+    // on stderr what it did then.
     impl_->advertiser = discovery::create_advertiser();
+    impl_->advertiser->set_reporter(discovery::report_to_stderr);
 
     // Create services
     // The SAA5050 fills the grid as it renders, so a client can read the MODE 7
