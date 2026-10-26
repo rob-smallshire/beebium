@@ -71,23 +71,36 @@ class OneMHzBusPort {
 public:
     uint8_t read(uint16_t offset);                    // MemoryMappedDevice interface
     void write(uint16_t offset, uint8_t value);       // MemoryMappedDevice interface
-    void claim_addresses(uint16_t base, uint16_t end, // register device for address range
+    void claim_addresses(uint16_t base, uint16_t end, // register device for FRED offsets
+                         OneMHzBusDevice& device);
+    void claim_jim_pages(uint8_t first_page,          // register device for JIM pages
+                         uint8_t last_page,
                          OneMHzBusDevice& device);
     void tick();                                       // tick all registered devices
     bool is_claimed(uint16_t offset) const;
+    bool is_jim_page_claimed(uint8_t page) const;
+    uint8_t jim_page() const;                          // the JIM paging register
 };
 
 // src/core/include/beebium/extension/OneMHzBusDevice.hpp
 
 struct OneMHzBusDevice {
     virtual ~OneMHzBusDevice() = default;
-    virtual uint8_t read(uint16_t offset) = 0;        // offset relative to 0xFC00
+    virtual uint8_t read(uint16_t offset) = 0;        // FRED offset relative to 0xFC00
     virtual void write(uint16_t offset, uint8_t value) = 0;
+    virtual uint8_t jim_read(uint8_t page, uint8_t offset);        // default 0xFF
+    virtual void jim_write(uint8_t page, uint8_t offset, uint8_t value);  // default: ignored
     virtual void tick() {}
 };
 ```
 
-The `offset` parameter in `OneMHzBusDevice` is relative to 0xFC00 (the start of the FRED page), matching what the MemoryMap's Region binding computes. FRED occupies offsets 0x0000-0x00FF; JIM occupies 0x0100-0x01FF. Unclaimed addresses return 0xFF on read (74LS245 transceiver behaviour).
+FRED and JIM are claimed differently, because the bus treats them differently:
+
+- **FRED** (0xFC00-0xFCFE). A device claims a contiguous range of offsets relative to 0xFC00 with `claim_addresses()`, and its `read()` / `write()` receive the same offsets, matching what the MemoryMap's Region binding computes. Offsets must lie in 0x0000-0x00FE.
+- **The JIM paging register** (0xFCFF) belongs to the port, not to any device, because every JIM-paged board on a real bus latches the same register. A write stores the extended page number; a read returns 0xFF, since no board drives the bus on a read of it. Nothing may claim offset 0x00FF. The register starts at 0xFF and is not cleared by reset.
+- **JIM** (0xFD00-0xFDFF). A device claims a contiguous range of extended page numbers with `claim_jim_pages()`, and an access to page 0xFD goes to whichever device claimed the current page, as `jim_read(page, offset)` / `jim_write(page, offset, value)` with `offset` 0x00-0xFF. Several JIM devices coexist on disjoint page ranges; the Music 5000 claims 0x30-0x3F and the Music 3000 0x50-0x5F. A device that decodes fewer page bits than eight (the Music 5000 ignores bit 0) claims every page it answers to and decodes within them itself.
+
+Unclaimed FRED addresses and unclaimed JIM pages return 0xFF on read (74LS245 transceiver behaviour) and ignore writes.
 
 Future port types (UserPort, AnaloguePort) will follow the same pattern: a port handle class and a device callback interface, added without changing existing code.
 
@@ -552,7 +565,9 @@ void MyExtension::write(uint16_t offset, uint8_t value) {
   or a plugin's entry point (see Creating a Plugin Extension)
 - In `init()`, claim addresses on the bus port via `ExtensionContext`
 - Addresses are offsets relative to 0xFC00, not absolute 16-bit addresses
-- `claim_addresses()` throws if the range overlaps with another device
+- `claim_addresses()` throws if the range overlaps with another device, or
+  reaches 0x00FF (the port's JIM paging register) or JIM; a JIM device claims
+  extended pages with `claim_jim_pages()` instead, which throws on overlap too
 
 ### 4. Add a Typed API (Optional)
 

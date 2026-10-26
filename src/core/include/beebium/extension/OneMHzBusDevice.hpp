@@ -21,14 +21,22 @@ namespace beebium {
 
 // Callback interface for devices attached to the 1 MHz bus (FRED/JIM region).
 //
-// The offset parameter is relative to 0xFC00 (the start of the FRED page),
-// matching the offset that MemoryMap's Region binding computes (addr - Base).
-// FRED occupies offsets 0x0000-0x00FF, JIM occupies 0x0100-0x01FF.
+// FRED: read() and write() receive an offset relative to 0xFC00, matching the
+// offset that MemoryMap's Region binding computes (addr - Base), for the FRED
+// offsets the device claimed with OneMHzBusPort::claim_addresses().
+//
+// JIM: the port owns the JIM paging register at 0xFCFF and routes an access to
+// page 0xFD to the device that claimed the current extended page with
+// OneMHzBusPort::claim_jim_pages(). jim_read() and jim_write() receive that
+// page number and the offset 0x00-0xFF within page 0xFD. The defaults model a
+// device that does not decode JIM: reads float (0xFF) and writes are ignored.
 struct BEEBIUM_EXT_API OneMHzBusDevice {
     virtual ~OneMHzBusDevice() = default;
 
     virtual uint8_t read(uint16_t offset) = 0;
     virtual void write(uint16_t offset, uint8_t value) = 0;
+    virtual uint8_t jim_read(uint8_t /*page*/, uint8_t /*offset*/) { return 0xFF; }
+    virtual void jim_write(uint8_t /*page*/, uint8_t /*offset*/, uint8_t /*value*/) {}
     virtual void tick() {}
 
     // IRQ support. Devices that generate interrupts override this to

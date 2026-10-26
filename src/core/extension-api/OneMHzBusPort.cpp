@@ -28,14 +28,16 @@ std::string to_hex(uint16_t value) {
 }  // anonymous namespace
 
 void OneMHzBusPort::claim_addresses(uint16_t base, uint16_t end, OneMHzBusDevice& device) {
-    if (base > end || end >= kSize) {
+    if (base > end || end >= kJimPagingRegisterOffset) {
         throw std::runtime_error(
-            "OneMHzBusPort: invalid address range 0x"
-            + to_hex(base) + "-0x" + to_hex(end));
+            "OneMHzBusPort: invalid FRED address range 0x"
+            + to_hex(base) + "-0x" + to_hex(end)
+            + " (FRED offsets 0x0000-0x00FE; the port owns the JIM paging"
+              " register at 0x00FF and JIM is claimed by page)");
     }
 
     for (uint16_t offset = base; offset <= end; ++offset) {
-        if (device_map_[offset] != nullptr) {
+        if (fred_map_[offset] != nullptr) {
             throw std::runtime_error(
                 "OneMHzBusPort: address 0x" + to_hex(offset)
                 + " already claimed");
@@ -43,9 +45,36 @@ void OneMHzBusPort::claim_addresses(uint16_t base, uint16_t end, OneMHzBusDevice
     }
 
     for (uint16_t offset = base; offset <= end; ++offset) {
-        device_map_[offset] = &device;
+        fred_map_[offset] = &device;
     }
 
+    add_tickable(device);
+}
+
+void OneMHzBusPort::claim_jim_pages(uint8_t first_page, uint8_t last_page,
+                                    OneMHzBusDevice& device) {
+    if (first_page > last_page) {
+        throw std::runtime_error(
+            "OneMHzBusPort: invalid JIM page range 0x"
+            + to_hex(first_page) + "-0x" + to_hex(last_page));
+    }
+
+    for (unsigned page = first_page; page <= last_page; ++page) {
+        if (jim_page_map_[page] != nullptr) {
+            throw std::runtime_error(
+                "OneMHzBusPort: JIM page 0x" + to_hex(static_cast<uint16_t>(page))
+                + " already claimed");
+        }
+    }
+
+    for (unsigned page = first_page; page <= last_page; ++page) {
+        jim_page_map_[page] = &device;
+    }
+
+    add_tickable(device);
+}
+
+void OneMHzBusPort::add_tickable(OneMHzBusDevice& device) {
     if (std::find(tickable_devices_.begin(), tickable_devices_.end(), &device)
             == tickable_devices_.end()) {
         tickable_devices_.push_back(&device);
