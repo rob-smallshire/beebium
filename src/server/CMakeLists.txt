@@ -498,6 +498,18 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
         --fdc acorn-1770 --sideways slot=1:type=rom:image=acorn-dfs_2_26.rom --tube-65c02)
 endif()
 
+# Hybrid Music 5000 preset: the disc Model B with the synthesiser on the
+# 1 MHz bus (JIM pages &30-&3F). The AMPLE software that drives it is the
+# user's own sideways ROM and discs, as for any add-on, so none is bundled.
+if(TARGET beebium_ext_hybrid_music_5000_plugin)
+    add_plugin_preset(beebium-model-b beebium_ext_hybrid_music_5000_plugin
+        "model-b-music-5000"
+        "Model B (Disc), Music 5000" "1986"
+        DESCRIPTION "32K Model B, 1770 DFS, Hybrid Music 5000 synthesiser"
+        --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom
+        --hybrid-music-5000)
+endif()
+
 # Econet-over-Piconet preset. Piconet is a plugin, so this uses add_plugin_preset
 # (depends on the plugin so it is deployed before create-preset resolves
 # --piconet). No device_path is baked in: the extension discovers the connected
