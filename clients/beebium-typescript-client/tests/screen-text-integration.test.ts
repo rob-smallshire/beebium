@@ -168,10 +168,24 @@ describe("screenText teletext repertoire", () => {
     const DIVERGENT = "[]^~";
     const AS_DISPLAYED = "←→↑÷";
 
+    /**
+     * Print the divergent codes and wait for BASIC to come back to its prompt.
+     *
+     * The codes appear on the screen as soon as the command line is being
+     * echoed, so waiting for them alone returns while the guest is still
+     * typing. Waiting for the command, its output and the next prompt in turn
+     * returns a screen that stays put, so a test that reads it twice reads the
+     * same screen both times.
+     */
     async function printDivergent(): Promise<Beebium> {
         const bbc = await launchAtPrompt();
-        await bbc.keyboard.type(`PRINT "${DIVERGENT}"\r`);
-        await waitFor(bbc, (text) => text.includes(DIVERGENT));
+        const command = `PRINT "${DIVERGENT}"`;
+        await bbc.keyboard.type(`${command}\r`);
+        await waitFor(bbc, (text) => {
+            const lines = text.split("\n").map((line) => line.trimEnd());
+            const at = lines.indexOf(`>${command}`);
+            return at >= 0 && lines[at + 1] === DIVERGENT && lines[at + 2] === ">";
+        });
         return bbc;
     }
 
