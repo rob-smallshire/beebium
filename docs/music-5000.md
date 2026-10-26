@@ -239,9 +239,46 @@ something differently from some or all of them:
 |--------|---------|
 | `model-b-music-5000` | Model B, 1770 DFS, Music 5000 |
 | `model-b-music-5000-scsi` | The same with ADFS and the Acorn SCSI host adapter: two devices on the 1 MHz bus |
+| `model-b-plus-128k-music-5000` | B+ 128K, Music 5000, and AMPLE: the AMPLE Nucleus ROM in slot 4, its Help File ROM in slot 5, the Music 5000 System Disk in drive 0, Amplinex 001 and 002 in drive 1. Boots straight into AMPLE Studio 5000 |
 
-AMPLE, the software that drives the synthesiser, is the user's own sideways
-ROM and discs, as for any add-on; no preset bundles it.
+The first two leave AMPLE, the software that drives the synthesiser, to the
+user's own ROM and discs. The B+ 128K preset carries it: the Music 5000 System
+Disk and Amplinex 001/002 from Colin Fraser's Hybrid Music System page,
+bundled by the project owner's decision, with the two ROM images extracted
+from the system disc. Each machine works on its own copies of the discs, so
+nothing it saves touches the masters. The system disc's `!BOOT` is AMPLE
+Studio's own `runner` script without the Music 4000 module, and its boot
+option is `*EXEC`, so power-on (or Shift-Break) goes straight to the Studio
+5000 main menu. `packaging/discs/music5000-parts/PROVENANCE.md` gives the
+source of each disc and every change made to it.
+
+## Checking against the real software
+
+In the B+ 128K preset, TAB at the Studio 5000 main menu opens AMPLE's command
+line, and `"pavane" LOAD RUN` plays the system disc's Pavane (Faure,
+programmed by David Reed). The system disc also has `concert`, `ppach`,
+`rmix1`, `rmix2`, `kins1` and `kins2`. On Amplinex 001 in drive 1 the pieces
+are `ALIEN`, `AMPLINX`, `BYSTAND`, `CONCERT` and `TOBLIN`, loaded the same way
+as `":1.TOBLIN" LOAD RUN`. Amplinex 002 is drive 3. Files such as `VIOLA4`,
+`BELL4` and `CLARIN` are instrument definitions and play nothing on their own.
+
+`clients/beebium-python-client/tests/test_music5000_ample.py` does this in
+about 15 s. It boots the preset to the menu, plays Pavane, and checks the
+Music 5000's audio field:
+
+- silent before the piece;
+- loud while it plays: RMS 126 of 32767 measured, peak 657;
+- zero-centred and unclipped;
+- with 0.025 % of its power above 5 kHz.
+
+To listen, `clients/beebium-python-client/examples/record_audio.py` records a
+machine's audio to a WAV file:
+
+```bash
+uv run python examples/record_audio.py --preset model-b-plus-128k-music-5000 \
+    --expect "Studio 5000 Main Menu" --type '\t"pavane" LOAD RUN' \
+    --expect Pavane --seconds 30 --out pavane.wav
+```
 
 ## A worked example
 
