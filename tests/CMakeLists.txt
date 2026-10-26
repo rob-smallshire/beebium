@@ -107,7 +107,6 @@ target_compile_definitions(test_cli_arg_parsers PRIVATE
 )
 target_link_libraries(test_cli_arg_parsers PRIVATE
     beebium_server_headers
-    beebium_core
     beebium_service
     Catch2::Catch2WithMain
 )
@@ -1791,7 +1790,6 @@ if(BEEBIUM_BUILD_SERVICE)
     # symbol export / force-load is needed -- plugins no longer host gRPC
     # services or resolve a host-side runtime.
     target_link_libraries(test_plugin_loader PRIVATE
-        beebium_core
         beebium_service
         Catch2::Catch2WithMain
     )
@@ -1851,7 +1849,6 @@ if(BEEBIUM_BUILD_SERVICE)
     # extension ABI from the linked beebium_extension_api dylib, so no host
     # symbol export / force-load is needed.
     target_link_libraries(test_scsi_plugin_shutdown PRIVATE
-        beebium_core
         beebium_service
         Catch2::Catch2WithMain
     )
