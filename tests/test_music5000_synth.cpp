@@ -534,3 +534,121 @@ TEST_CASE("Music5000Synth reset clears INDEX (1.5)", "[music5000][synth][modulat
     synth.reset();
     REQUIRE_FALSE(synth.index());
 }
+
+namespace {
+
+struct Stereo {
+    int32_t left;
+    int32_t right;
+};
+
+Stereo render_stereo(Music5000Synth& synth) {
+    Stereo out{};
+    synth.render_frame(out.left, out.right);
+    return out;
+}
+
+// One channel at full scale: a positive sample of magnitude 0x7F with
+// amplitude 0x80 gives code 0x7F (0xFF + 0x80 = 0x17F, bit 7 flipped).
+Music5000Synth full_scale_channel(uint8_t control) {
+    Music5000Synth synth;
+    fill_wave(synth, 0, 0xFF);
+    set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x80);
+    set_register(synth, 0, Music5000Synth::kControlRow, control);
+    set_frequency(synth, 0, 0x800000);
+    render_stereo(synth);  // no wrap yet
+    return synth;
+}
+
+}  // namespace
+
+TEST_CASE("Music5000Synth stereo slot counts follow the position counter (6)",
+          "[music5000][synth][stereo]") {
+    for (uint8_t p = 0; p < 16; ++p) {
+        INFO("position " << int(p));
+        const int expected_left = p < 8 ? 0 : p <= 10 ? 6 : 16 - p;
+        REQUIRE(Music5000Synth::left_slots(p) == expected_left);
+    }
+}
+
+TEST_CASE("Music5000Synth splits a channel between the sides by slots (6, 7.1)",
+          "[music5000][synth][stereo]") {
+    // Full scale: encode 8159 on the left, decode 8031 on the right, each
+    // times its slots / 6, rounded half away from zero.
+    struct Case { uint8_t position; int32_t left; int32_t right; };
+    constexpr std::array<Case, 9> cases = {{
+        {0, 0, 8031},       // all right
+        {7, 0, 8031},
+        {8, 8159, 0},       // all left
+        {10, 8159, 0},
+        {11, 6799, 1339},   // 8159 x 5/6 = 6799.17; 8031 x 1/6 = 1338.5
+        {12, 5439, 2677},   // 5439.33; 2677
+        {13, 4080, 4016},   // centre: 4079.5; 4015.5
+        {14, 2720, 5354},   // 2719.67; 5354
+        {15, 1360, 6693},   // 1359.83; 6692.5
+    }};
+    for (const auto& c : cases) {
+        INFO("position " << int(c.position));
+        Music5000Synth synth = full_scale_channel(c.position);
+        const Stereo out = render_stereo(synth);  // wraps: amplitude latched
+        REQUIRE(out.left == c.left);
+        REQUIRE(out.right == c.right);
+    }
+}
+
+TEST_CASE("Music5000Synth left side carries the encode half step (7.1)",
+          "[music5000][synth][stereo]") {
+    // Code 0 (0xC0 + 0x40 = 0x100): the gate is open, so the left side's
+    // encode current is 1 while the right side's decode current is 0.
+    Music5000Synth synth;
+    fill_wave(synth, 0, 0xC0);
+    set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x40);
+    set_frequency(synth, 0, 0x800000);
+
+    SECTION("left") {
+        set_register(synth, 0, Music5000Synth::kControlRow, 0x08);
+        render_stereo(synth);
+        const Stereo out = render_stereo(synth);
+        REQUIRE(out.left == 1);
+        REQUIRE(out.right == 0);
+    }
+
+    SECTION("right") {
+        render_stereo(synth);
+        const Stereo out = render_stereo(synth);
+        REQUIRE(out.left == 0);
+        REQUIRE(out.right == 0);
+    }
+}
+
+TEST_CASE("Music5000Synth sums channels on each side", "[music5000][synth][stereo]") {
+    // Two channels, code 0x10 each (encode 35, decode 33): counter 0 hard left,
+    // counter 2 hard right and inverted.
+    Music5000Synth synth;
+    fill_wave(synth, 0, 0xC0);
+    for (std::size_t k : {std::size_t{0}, std::size_t{2}}) {
+        set_register(synth, k, Music5000Synth::kAmplitudeRow, 0x50);
+        set_frequency(synth, k, 0x800000);
+    }
+    set_register(synth, 0, Music5000Synth::kControlRow, 0x08);
+    set_register(synth, 2, Music5000Synth::kControlRow, 0x10);
+    render_stereo(synth);
+    const Stereo out = render_stereo(synth);
+    REQUIRE(out.left == 35);
+    REQUIRE(out.right == -33);
+}
+
+TEST_CASE("Music5000Synth sixteen channels in phase reach sixteen times full scale",
+          "[music5000][synth][stereo]") {
+    Music5000Synth synth;
+    fill_wave(synth, 0, 0xFF);
+    for (std::size_t k = 0; k < 16; ++k) {
+        set_register(synth, k, Music5000Synth::kAmplitudeRow, 0x80);
+        set_register(synth, k, Music5000Synth::kControlRow, 0x08);
+        set_frequency(synth, k, 0x800000);
+    }
+    render_stereo(synth);
+    const Stereo out = render_stereo(synth);
+    REQUIRE(out.left == 16 * 8159);
+    REQUIRE(out.right == 0);
+}

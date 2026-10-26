@@ -16,6 +16,16 @@
 
 namespace beebium {
 
+namespace {
+
+// A side's frame total over six slots, as DAC current units, rounded half
+// away from zero.
+int32_t per_six_slots(int32_t total) {
+    return total >= 0 ? (total + 3) / 6 : -((-total + 3) / 6);
+}
+
+}  // namespace
+
 void Music5000Synth::reset() {
     // While CRST_n is low the main RAM is written with zero in every slot,
     // and the sequencer only addresses the normal bank (INDEX is cleared).
@@ -58,7 +68,10 @@ bool Music5000Synth::advance_phase(std::size_t k) {
 }
 
 void Music5000Synth::render_frame(int32_t& left, int32_t& right) {
-    int32_t right_sum = 0;
+    // Each side accumulates current x slots; the six-slot average is taken
+    // once per frame.
+    int32_t left_total = 0;
+    int32_t right_total = 0;
 
     for (std::size_t k = 0; k < kChannelCount; ++k) {
         const bool wrap = advance_phase(k);
@@ -101,13 +114,21 @@ void Music5000Synth::render_frame(int32_t& left, int32_t& right) {
         // The sign reaching the DAC is the sample's, inverted by control
         // bit 4 (6).
         const bool invert = (control & 0x10) != 0;
+        const int32_t sign = (positive != invert) ? 1 : -1;
         const uint8_t code = sum & 0x7F;
-        const int32_t current = decode_current(code);
-        right_sum += (positive != invert) ? current : -current;
+
+        // The DAC holds the code for six slots, each steered left (encode
+        // mode, half a step more current) or right (decode mode) by the
+        // position counter (6, 7.1). The time-slicing within the channel
+        // time is above the audio band after the output filter, so the model
+        // keeps only each side's share.
+        const int left_count = left_slots(control & 0x0F);
+        left_total += sign * encode_current(code) * left_count;
+        right_total += sign * decode_current(code) * (6 - left_count);
     }
 
-    left = 0;
-    right = right_sum;
+    left = per_six_slots(left_total);
+    right = per_six_slots(right_total);
 }
 
 }  // namespace beebium

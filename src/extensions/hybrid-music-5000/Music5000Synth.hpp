@@ -78,6 +78,15 @@ public:
         return (int32_t{1} << chord) * (2 * step + 34) - 33;
     }
 
+    // Of the six slots a channel drives the DAC, how many go to the left for
+    // stereo position p (control bits 3-0): IC24 counts up from p while its
+    // top bit (E/D) is set, so 0-7 are all right, 8-10 all left, and 11-15
+    // left 5..1 (6). The rest go to the right.
+    static constexpr int left_slots(uint8_t position) {
+        constexpr int kLeftSlots[16] = {0, 0, 0, 0, 0, 0, 0, 0, 6, 6, 6, 5, 4, 3, 2, 1};
+        return kLeftSlots[position & 0x0F];
+    }
+
     // The register column read by channel counter value k (0-15). The DSP
     // visits the columns in the order 0, 8, 1, 9, ..., 7, 15 (1.3).
     static constexpr std::size_t column_for_counter(std::size_t k) {
