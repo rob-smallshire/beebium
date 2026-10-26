@@ -557,6 +557,35 @@ devices present on the host with friendly names: the `/dev/usb/lp*` and
 `/dev/lp*` nodes on Linux, the USB printer interface paths on Windows. It
 only lists; it chooses nothing.
 
+#### Music 5000
+
+The `hybrid-music-5000` plugin is the Hybrid Music 5000 synthesiser on the
+1 MHz bus: sixteen channels of wavetable sound, written by the software that
+drives it (AMPLE, the user's own sideways ROM and discs) through the JIM
+paging register at `&FCFF` and page `&FD`. The board is write-only. Its sound
+reaches clients as audio field 2, after the board's own analogue output
+filter, alongside the SN76489's fields; `GetAudioFormat` describes it.
+A second instance with `unit=music-3000` is the Music 3000 expander, with its
+own sixteen channels in field 3. The presets `model-b-music-5000` and
+`model-b-music-5000-scsi` (with the Acorn SCSI host adapter too) start from
+the disc Model B. `describe-extension hybrid-music-5000` prints the same list.
+
+```bash
+beebium-model-b --preset model-b-music-5000
+beebium-model-b --preset model-b-disc --hybrid-music-5000
+beebium-model-b --hybrid-music-5000 --hybrid-music-5000 unit=music-3000
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--hybrid-music-5000 [unit=...]` | (omitted = no synthesiser) | Fit a Music 5000 (or, with `unit=music-3000`, a Music 3000 expander) to the 1 MHz bus. |
+
+`--hybrid-music-5000` parameters (colon-separated, the generic extension grammar):
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `unit=music-5000\|music-3000` | `music-5000` | `music-5000`: JIM pages `&30`-`&3F`, audio field 2. `music-3000`: pages `&50`-`&5F`, audio field 3. One of each may be fitted. |
+
 #### Startup Control
 
 | Option | Description |

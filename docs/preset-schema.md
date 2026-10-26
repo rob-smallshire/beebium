@@ -402,6 +402,17 @@ A SCSI hard disc, then, is two entries: the adapter and the disc.
 ]
 ```
 
+Two instances of one extension are told apart by their parameters. A Music
+5000 with its Music 3000 expander is the `hybrid-music-5000` extension twice,
+the second with `unit` `music-3000`:
+
+```json
+"extensions": [
+  { "name": "hybrid-music-5000" },
+  { "name": "hybrid-music-5000", "config": { "unit": "music-3000" } }
+]
+```
+
 ## Which models accept what
 
 All models accept the machine settings, the sideways bank, Econet and the
