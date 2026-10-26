@@ -206,9 +206,14 @@ bank = INDEX selected for it:
 5. DAC code. sum = sample_magnitude + stored_amp (8-bit, with the sign
    bit of the sample in bit 7 of the A operand as on the board). The
    gate opens only if bit 7 of the sum differs from the sample's sign
-   bit. Open: code = sum[6:0] = chord sum[6:4], step sum[3:0]; linear
-   value = `2^chord * (2 * step + 33) - 33` (0..8031); sign from the
-   sample's sign XOR the control register's invert bit. Shut: zero.
+   bit. Open: code = sum[6:0] = chord sum[6:4], step sum[3:0]; sign
+   from the sample's sign XOR the control register's invert bit. Shut:
+   zero. The linear value depends on the side, because the chopper
+   drives the right output in the AM6070's decode mode and the left in
+   its encode mode, which adds a half step (`hardware-model.md` 7.1,
+   from the datasheet): right = `2^chord * (2 * step + 33) - 33`
+   (0..8031); left = `2^chord * (2 * step + 34) - 33` (1..8159). Every
+   surveyed emulator uses the decode law for both sides.
 6. Stereo. Position p = control bits 3-0. Left slots and right slots are
    the table in `hardware-model.md` section 6 (0-7: right 6; 8-10: left
    6; 11-15: left 5..1, right 1..5). Contribution to each side is
@@ -220,9 +225,9 @@ bank = INDEX selected for it:
    column r+1 within each group of eight, with 7 to 0 and 15 to 8 across
    the frame boundary.
 
-The frame's two sums (signed, up to 16 * 8031 * 6 / 6 in magnitude) are
-the DAC current for left and right, in units where 8031 is one
-full-scale channel.
+The frame's two sums (signed, up to 16 * 8159 in magnitude on the left
+and 16 * 8031 on the right) are the DAC current for left and right, in
+units where 8159 (the encode-mode full scale) is one full-scale channel.
 
 ### 3.4 Analogue path
 
@@ -239,11 +244,14 @@ Applied per side, per 46875 Hz sample, in this order:
    the schematic reading changes one place. The target response is the
    appendix table: -3 dB at 2115 Hz, -6 dB at 2933 Hz, -62 dB at
    Nyquist. Double precision state.
-2. **Level.** Full scale: sixteen channels in phase on one side (the
-   hardware's 1.6 V peak) maps to int16 full scale, so one channel at
-   full amplitude is about 1/16 of full scale, as on the hardware. No
-   automatic gain, no clipping logic beyond the int16 clamp, which
-   cannot trigger at this mapping.
+2. **Level.** Full scale: sixteen channels in phase on the left side,
+   16 * 8159 units (the hardware's 1.63 V peak), maps to int16 full
+   scale, so one channel at full amplitude is about 1/16 of full scale,
+   as on the hardware, and the right side peaks 1.6% lower as it does
+   on the hardware. No automatic gain, no clipping logic beyond the
+   int16 clamp, which cannot trigger at this mapping. The board's
+   outputs sink current, so its absolute polarity is inverted; the
+   model does not invert, which is inaudible.
 3. **Resampling to 48000 Hz.** Ratio 128/125. A polyphase FIR
    interpolator: upsample by 128, windowed-sinc low-pass (Kaiser, stop
    band at 23.4 kHz, at least 80 dB attenuation), decimate by 125. The
@@ -354,15 +362,16 @@ filed when M0 lands with the final `AudioFormat` shape.
 - BREAK resets the synthesiser: the bus NRST line is asserted on BREAK
   (Advanced User Guide).
 - Power-on RAM contents: zero, documented.
-- Level mapping: sixteen channels in phase = int16 full scale.
+- Level mapping: sixteen channels in phase on the left (encode-mode
+  full scale, 16 * 8159) = int16 full scale.
+- Left and right code laws differ by the encode-mode half step (AM6070
+  datasheet, 2026-10-26); the model applies each side's law.
 - Music 3000 = second instance, parameter `unit`.
 - No indicators, no filter bypass in the product.
 
 ## 8. Open
 
-- `hardware-model.md` OPEN items 1, 3, 4, 5 and 7 stand. None blocks
+- `hardware-model.md` OPEN items 1, 3, 4 and 7 stand. None blocks
   M0-M2. Item 4 (the modulation pairing at the wraps) is pinned by a
   test on the derived behaviour and revisited if a recording contradicts
-  it.
-- Whether the AM6070 datasheet is obtainable to confirm the code law
-  and the E/D sense (left/right assignment). Rob may have one.
+  it. Item 5 was resolved from the AM6070 datasheet on 2026-10-26.
