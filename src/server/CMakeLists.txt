@@ -509,6 +509,22 @@ if(TARGET beebium_ext_hybrid_music_5000_plugin)
         --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom
         --hybrid-music-5000)
 endif()
+# The same with the Acorn SCSI host adapter, so two devices share the 1 MHz
+# bus in a shipped preset: the adapter at &FC40-&FC43, the synthesiser on JIM.
+# ADFS 1.30 sits below DFS (slot 13 under 14), so DFS stays the default filing
+# system and the machine boots without a hard disc; attach one with
+# --scsi-hdd to use ADFS.
+if(TARGET beebium_ext_hybrid_music_5000_plugin AND TARGET beebium_ext_acorn_scsi_plugin)
+    add_plugin_preset(beebium-model-b beebium_ext_hybrid_music_5000_plugin
+        "model-b-music-5000-scsi"
+        "Model B (Disc), Music 5000, SCSI" "1986"
+        DESCRIPTION "32K Model B, 1770 DFS, ADFS, Hybrid Music 5000 and Acorn SCSI host adapter"
+        --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom
+        --sideways slot=13:type=rom:image=acorn-adfs_1_30.rom
+        --hybrid-music-5000
+        --acorn-scsi
+        EXTRA_DEPENDS beebium_ext_acorn_scsi_plugin)
+endif()
 
 # Econet-over-Piconet preset. Piconet is a plugin, so this uses add_plugin_preset
 # (depends on the plugin so it is deployed before create-preset resolves
