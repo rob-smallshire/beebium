@@ -366,12 +366,20 @@ carry registers by name. All addresses in the debug path are 32-bit and are
 bounded by the descriptor's `address_bits`. Cross-processor stops are wired
 server-side: a host breakpoint with `stop_counterpart` pauses the
 coprocessor through `Coprocessor::pause()`, a coprocessor breakpoint pauses
-the host.
+the host. Cross-processor runs are too: the host's `Run` with
+`run_counterpart` runs the coprocessor, through its debugger so its event
+stream reports the run, before the host can advance a cycle, so the two
+start together in one operation (#228). With the host already running it
+runs a stopped coprocessor alone, and fails as already running only when
+both run. It is refused when no coprocessor with a debugger is attached, and
+on `CoprocessorDebuggerControl`, whose processor has no counterpart to run.
 
 The coprocessor runs on the host's emulation thread and advances only while
 the host runs, so `CoprocessorDebuggerControl.Run` with the host stopped would
 wait forever: it is refused, with an error saying the host is stopped and
-naming `TubeSystem.run()`, which runs the host and then the coprocessor (#204).
+naming `TubeSystem.run()` (#204). `TubeSystem.run()` is one host `Run` with
+`run_counterpart`, so a short host run cannot stop the host between the two
+resumes and leave the coprocessor's `Run` refused.
 Stepping needs no running host: `StepInstruction` executes one whole
 coprocessor instruction whatever breakpoints it carries, as on the host. The
 clients' run-state tables have a coprocessor table to match.
@@ -417,7 +425,7 @@ exported interfaces; it has no compiled-in knowledge of any coprocessor.
 |---|---|
 | `test_tube_ula_vectors` | The ULA against the period pin-level vectors, 116 assertions. Fixed oracle; do not edit. |
 | `test_tube_ula`, `test_tube_socket`, `test_tube_inspection` | ULA register semantics; socket dispatch; identical `GetTubeState` through an installed backend and the socket's own ULA. |
-| `test_coprocessor_clock`, `test_coprocessor_runner`, `test_coprocessor_cpu`, `test_coprocessor_memory_map`, `test_coprocessor_extension`, `test_coprocessor_debug_target` | Exact ratio conversion; the runner's `run_until`, pause and reset semantics; the CPU wrapper and memory map; the extension install path and cross-processor stop; the debugger driven through the interface. |
+| `test_coprocessor_clock`, `test_coprocessor_runner`, `test_coprocessor_cpu`, `test_coprocessor_memory_map`, `test_coprocessor_extension`, `test_coprocessor_debug_target` | Exact ratio conversion; the runner's `run_until`, pause and reset semantics; the CPU wrapper and memory map; the extension install path, cross-processor stop and `run_counterpart`; the debugger driven through the interface. |
 | `test_coprocessor_skew` | The skew contract across a full boot and the CE2023 load; that batching happens; interrupt latency within the bound; pause and single-step sync; exact ratio from an arbitrary install time. |
 | `test_boot_tube`, `test_coprocessor_boot` | Both coprocessors boot to their banners and the BASIC prompt; the 65C102 runs exactly twice the host's cycles. |
 | `test_tube_ce2023_trace` | Chuckie Egg 2023 loads. |

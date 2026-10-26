@@ -1729,6 +1729,7 @@ if(BEEBIUM_BUILD_SERVICE)
     # Server-facing coprocessor wiring through the abstract interfaces
     add_executable(test_coprocessor_extension test_coprocessor_extension.cpp)
     target_link_libraries(test_coprocessor_extension PRIVATE
+        beebium_server_headers
         beebium_service
         Catch2::Catch2WithMain
     )

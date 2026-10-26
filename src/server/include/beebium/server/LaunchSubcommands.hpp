@@ -284,6 +284,35 @@ public:
                         config.launch.advertise, shutdown_policy_config, std::move(shutdown_callback),
                         extension_services, &am.transport_registry);
 
+            // Wire cross-processor debugger stop and run entirely server-side,
+            // before the port is printed, so a client's first Run with
+            // run_counterpart finds the coprocessor wired. Stop detection lives
+            // in the two DebuggerControlServiceImpl instances the server owns
+            // (the host's and the coprocessor's), so each one's counterpart
+            // callback pauses the other processor through the abstract
+            // interface.
+            if (coprocessor_ext) {
+                if (auto* cop = coprocessor_ext->coprocessor()) {
+                    // Host breakpoint with stop_counterpart -> pause coprocessor.
+                    server.debugger_service().set_counterpart_stop_callback(
+                        [cop] { cop->pause(); });
+                }
+                // Coprocessor breakpoint with stop_counterpart -> pause host.
+                // Only when a debugger was created for its family; without one
+                // there is no impl to detect the breakpoint.
+                if (coprocessor_debugger_impl) {
+                    coprocessor_debugger_impl->set_counterpart_stop_callback(
+                        [&machine] { machine.pause(); });
+                    // Host Run with run_counterpart -> run the coprocessor
+                    // first, through its debugger, so its stream sees it run.
+                    auto* cop_debugger = coprocessor_debugger_impl.get();
+                    server.debugger_service().set_counterpart_run_callback(
+                        [cop_debugger](bool stop_at_current) {
+                            return cop_debugger->run_as_counterpart(stop_at_current);
+                        });
+                }
+            }
+
             // Print actual bound port (important when port 0 was requested for dynamic allocation)
             // Flush immediately so clients parsing stdout can detect the port before we block
             std::cout << "Listening on port " << server.port() << std::endl;
@@ -318,26 +347,6 @@ public:
                 server.debugger_service().end_startup_selection();
                 if (exit_code) {
                     return *exit_code;
-                }
-            }
-
-            // Wire cross-processor debugger stop entirely server-side. Stop
-            // detection lives in the two DebuggerControlServiceImpl instances
-            // the server owns (the host's and the coprocessor's), so each one's
-            // counterpart callback pauses the other processor through the
-            // abstract interface.
-            if (coprocessor_ext) {
-                if (auto* cop = coprocessor_ext->coprocessor()) {
-                    // Host breakpoint with stop_counterpart -> pause coprocessor.
-                    server.debugger_service().set_counterpart_stop_callback(
-                        [cop] { cop->pause(); });
-                }
-                // Coprocessor breakpoint with stop_counterpart -> pause host.
-                // Only when a debugger was created for its family; without one
-                // there is no impl to detect the breakpoint.
-                if (coprocessor_debugger_impl) {
-                    coprocessor_debugger_impl->set_counterpart_stop_callback(
-                        [&machine] { machine.pause(); });
                 }
             }
 

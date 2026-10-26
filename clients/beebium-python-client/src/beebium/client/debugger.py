@@ -304,7 +304,7 @@ class Debugger:
         response = self._stub.GetState(debugger_pb2.Empty())
         return _to_execution_state(response)
 
-    def run(self, *, stop_at_current: bool = False) -> None:
+    def run(self, *, stop_at_current: bool = False, run_counterpart: bool = False) -> None:
         """Resume execution.
 
         Resumes as a debugger's continue does: a breakpoint at the instruction
@@ -312,7 +312,12 @@ class Debugger:
         not reported again for that instruction -- so the run stops at its
         next hit, not where it already is.
 
-        Requires: a stopped machine.
+        A coprocessor runs only while its host does, so its ``run()`` with the
+        host stopped is refused. To run both, call :meth:`TubeSystem.run`, or
+        this method on the host with ``run_counterpart``: one operation, so a
+        short host run cannot stop the host before the coprocessor runs.
+
+        Requires: a stopped machine; with run_counterpart, it or the coprocessor stopped.
         Leaves the machine: RUNNING.
         Coprocessor requires: a stopped coprocessor and a running host.
         Leaves the coprocessor: RUNNING.
@@ -321,11 +326,19 @@ class Debugger:
             stop_at_current: Evaluate the breakpoints at the current
                 instruction instead, so one there stops the machine again at
                 once without running anything.
+            run_counterpart: Host only: also run the Tube coprocessor, which
+                the server runs before the host can advance, so the two start
+                together in one operation. Refused on the coprocessor, and on
+                a host with no coprocessor attached.
 
         Raises:
             DebuggerError: If the operation fails.
         """
-        response = self._stub.Run(debugger_pb2.RunRequest(stop_at_current=stop_at_current))
+        response = self._stub.Run(
+            debugger_pb2.RunRequest(
+                stop_at_current=stop_at_current, run_counterpart=run_counterpart
+            )
+        )
         if not response.success:
             raise DebuggerError(f"Failed to start execution: {response.error}")
 

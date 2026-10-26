@@ -191,6 +191,7 @@ class RunRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     STOP_AT_CURRENT_FIELD_NUMBER: _builtins.int
+    RUN_COUNTERPART_FIELD_NUMBER: _builtins.int
     stop_at_current: _builtins.bool
     """Run resumes as a debugger's continue does: it steps over the
     breakpoints at the instruction the CPU is stopped on. They stay
@@ -199,14 +200,23 @@ class RunRequest(_message.Message):
     them instead, so one there stops the CPU again at once: a run to an
     address the CPU may already be at, which counts arriving there.
     """
+    run_counterpart: _builtins.bool
+    """The host's Run only: also run the Tube coprocessor, resumed before the
+    host can advance a cycle, so the two start together in one operation
+    (the run-side mirror of a breakpoint's stop_counterpart). With the host
+    already running it runs a stopped coprocessor alone; Run then fails as
+    already running only when both are. Refused when no coprocessor with a
+    debugger is attached, and on the CoprocessorDebuggerControl service.
+    """
     def __init__(
         self,
         *,
         stop_at_current: _builtins.bool = ...,
+        run_counterpart: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["stop_at_current", b"stop_at_current"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["run_counterpart", b"run_counterpart", "stop_at_current", b"stop_at_current"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

@@ -233,6 +233,7 @@ private:
     void note_step_end();
     void enqueue_event(StopReason reason, const WatchpointHitInfo& watchpoint_hit);
     void signal_counterpart_stop();
+    void resume_locked(bool stop_at_current);
 
 public:
     // Set a callback invoked when a breakpoint/watchpoint with
@@ -242,6 +243,20 @@ public:
     void set_counterpart_stop_callback(CounterpartStopCallback cb) {
         counterpart_stop_cb_ = std::move(cb);
     }
+
+    // Set a callback a Run with run_counterpart invokes, before it resumes
+    // this processor, to run the counterpart. It returns whether the
+    // counterpart was stopped and now runs. The server wires the host's to
+    // the coprocessor debugger's run_as_counterpart; with none set, a Run
+    // with run_counterpart is refused.
+    using CounterpartRunCallback = std::function<bool(bool stop_at_current)>;
+    void set_counterpart_run_callback(CounterpartRunCallback cb) {
+        counterpart_run_cb_ = std::move(cb);
+    }
+
+    // Run this processor if it is stopped, as Run does, on behalf of its
+    // counterpart's Run with run_counterpart. Returns whether it was stopped.
+    bool run_as_counterpart(bool stop_at_current);
 
     // Launch-path coordination for --station auto (issue #67). The station
     // selection (an mDNS browse of up to a few seconds) runs AFTER the gRPC
@@ -314,6 +329,7 @@ private:
     }
 
     CounterpartStopCallback counterpart_stop_cb_;
+    CounterpartRunCallback counterpart_run_cb_;
 
     // Two mutexes with a strict lock order: control_mutex_ -> (with_execution_stopped)
     // -> mutex_.
@@ -648,17 +664,47 @@ grpc::Status DebuggerControlServiceImpl::Run(
         });
     }
 
+    // The counterpart runs first, with none of this debugger's locks held (its
+    // own Stop may be waiting on this processor's emulation thread, which a
+    // hit callback holding mutex_ would block), so it is running before this
+    // processor can advance a cycle. A coprocessor runs only while its host
+    // does, so running it first while the host is stopped is harmless.
+    bool counterpart_resumed = false;
+    if (request->run_counterpart()) {
+        if (!counterpart_run_cb_) {
+            response->set_success(false);
+            response->set_error("no coprocessor is attached, so there is no counterpart to run");
+            return grpc::Status::OK;
+        }
+        counterpart_resumed = counterpart_run_cb_(request->stop_at_current());
+    }
+
     // Execution-state change: serialise with entry mutations (see the mutex
     // ordering note) so a resume cannot slip into a mutation's pause window.
     std::lock_guard<std::mutex> ctrl(control_mutex_);
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!machine_.is_paused()) {
-        response->set_success(false);
-        response->set_error("already running");
+        response->set_success(counterpart_resumed);
+        if (!counterpart_resumed) response->set_error("already running");
         return grpc::Status::OK;
     }
 
+    resume_locked(request->stop_at_current());
+    response->set_success(true);
+    return grpc::Status::OK;
+}
+
+bool DebuggerControlServiceImpl::run_as_counterpart(bool stop_at_current) {
+    std::lock_guard<std::mutex> ctrl(control_mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!machine_.is_paused()) return false;
+    resume_locked(stop_at_current);
+    return true;
+}
+
+// Resume a paused processor. control_mutex_ and mutex_ are held.
+void DebuggerControlServiceImpl::resume_locked(bool stop_at_current) {
     halt_reason_.clear();
     // Enqueue the "running" event BEFORE resuming, so it's in the queue
     // before any breakpoint stop event that might fire immediately.
@@ -672,10 +718,8 @@ grpc::Status DebuggerControlServiceImpl::Run(
         event_queue_.enqueue(std::move(evt));
         notify_subscribers();
     }
-    if (!request->stop_at_current()) machine_.step_over_breakpoints_once();
+    if (!stop_at_current) machine_.step_over_breakpoints_once();
     machine_.resume();
-    response->set_success(true);
-    return grpc::Status::OK;
 }
 
 grpc::Status DebuggerControlServiceImpl::Stop(

@@ -44,15 +44,17 @@ export class TubeSystem {
     }
 
     /**
-     * Run both processors: the host first, since the coprocessor advances
-     * only while the host runs. Ensures both are running afterwards.
+     * Run both processors, in one host run with `runCounterpart`: the server
+     * runs the coprocessor before the host can advance, so a short host run
+     * cannot stop the host between two resumes and leave the coprocessor's
+     * refused. Does nothing when both already run.
      *
      * Requires: any run state.
      * Leaves the machine: RUNNING.
      */
     async run(): Promise<void> {
-        if (!await this.host.debugger.isRunning()) await this.host.debugger.run();
-        if (!await this.coprocessor.debugger.isRunning()) await this.coprocessor.debugger.run();
+        if (await this.host.debugger.isRunning() && await this.coprocessor.debugger.isRunning()) return;
+        await this.host.debugger.run({ runCounterpart: true });
     }
 
     /**

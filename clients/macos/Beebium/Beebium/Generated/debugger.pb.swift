@@ -251,6 +251,14 @@ struct Beebium_RunRequest: Sendable {
   /// address the CPU may already be at, which counts arriving there.
   var stopAtCurrent: Bool = false
 
+  /// The host's Run only: also run the Tube coprocessor, resumed before the
+  /// host can advance a cycle, so the two start together in one operation
+  /// (the run-side mirror of a breakpoint's stop_counterpart). With the host
+  /// already running it runs a stopped coprocessor alone; Run then fails as
+  /// already running only when both are. Refused when no coprocessor with a
+  /// debugger is attached, and on the CoprocessorDebuggerControl service.
+  var runCounterpart: Bool = false
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -1949,7 +1957,7 @@ extension Beebium_ExecutionState: SwiftProtobuf.Message, SwiftProtobuf._MessageI
 
 extension Beebium_RunRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".RunRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}stop_at_current\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}stop_at_current\0\u{3}run_counterpart\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1958,6 +1966,7 @@ extension Beebium_RunRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularBoolField(value: &self.stopAtCurrent) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.runCounterpart) }()
       default: break
       }
     }
@@ -1967,11 +1976,15 @@ extension Beebium_RunRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if self.stopAtCurrent != false {
       try visitor.visitSingularBoolField(value: self.stopAtCurrent, fieldNumber: 1)
     }
+    if self.runCounterpart != false {
+      try visitor.visitSingularBoolField(value: self.runCounterpart, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_RunRequest, rhs: Beebium_RunRequest) -> Bool {
     if lhs.stopAtCurrent != rhs.stopAtCurrent {return false}
+    if lhs.runCounterpart != rhs.runCounterpart {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

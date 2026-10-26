@@ -97,11 +97,21 @@ class TestTubeSystem:
         assert not system.run_until_or_timeout(lambda: False, 0.05, chunk_seconds=0.01)
         assert system.coprocessor.debugger.is_stopped
 
+    def test_run_runs_a_stopped_coprocessor_under_a_running_host(self, system: TubeSystem) -> None:
+        system.host.debugger.run()
+        system.run()
+        assert system.coprocessor.debugger.is_running
+
 
 class TestTheCoprocessorDebugger:
     def test_a_run_with_the_host_stopped_is_refused(self, system: TubeSystem) -> None:
         with pytest.raises(DebuggerError, match=r"the host is stopped.*TubeSystem\.run\(\)"):
             system.coprocessor.debugger.run()
+        assert system.coprocessor.debugger.is_stopped
+
+    def test_a_run_with_run_counterpart_is_refused(self, system: TubeSystem) -> None:
+        with pytest.raises(DebuggerError, match="run_counterpart applies to the host's Run"):
+            system.coprocessor.debugger.run(run_counterpart=True)
         assert system.coprocessor.debugger.is_stopped
 
     def test_a_run_to_with_the_host_stopped_is_refused(self, system: TubeSystem) -> None:

@@ -244,7 +244,7 @@ stopped, is in each method's JSDoc as two lines, `Requires: ...` and
 | `Beebium.runForEmulatedSeconds` | any run state | STOPPED |
 | `Beebium.runUntilOrTimeout` | any run state | STOPPED |
 | `Beebium.runFields` | any run state | STOPPED |
-| `Debugger.run` | a stopped machine | RUNNING |
+| `Debugger.run` | a stopped machine; with runCounterpart, it or the coprocessor stopped | RUNNING |
 | `Debugger.stop` | any run state | STOPPED |
 | `Debugger.reset` | any run state | STOPPED |
 | `Debugger.step` | a stopped machine | STOPPED |
@@ -275,7 +275,9 @@ lines, `Coprocessor requires: ...` and `Leaves the coprocessor: ...`, which this
 table collects (`tests/run-state-docs.test.ts` keeps them in step). A
 coprocessor call never changes whether the host runs. A coprocessor `run()`
 with the host stopped is refused: the server says the host is stopped and names
-`TubeSystem.run()`, which runs the host first and then the coprocessor.
+`TubeSystem.run()`, which runs both in one host `run({ runCounterpart: true })`:
+the server runs the coprocessor before the host can advance, so a short run
+cannot stop the host in between.
 
 | Call | Requires | Leaves the coprocessor |
 |---|---|---|

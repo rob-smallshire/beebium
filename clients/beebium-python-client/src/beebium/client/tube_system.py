@@ -81,11 +81,17 @@ class TubeSystem:
     def run(self) -> None:
         """Run both processors.
 
+        One host ``Run`` with ``run_counterpart``: the server runs the
+        coprocessor before the host can advance, so a short host run cannot
+        stop the host between two resumes and leave the coprocessor's refused.
+        Does nothing when both already run.
+
         Requires: any run state.
         Leaves the machine: RUNNING.
         """
-        self._host.debugger.ensure_running()
-        self._coprocessor.debugger.ensure_running()
+        if self._host.debugger.is_running and self._coprocessor.debugger.is_running:
+            return
+        self._host.debugger.run(run_counterpart=True)
 
     def stop(self) -> None:
         """Stop both processors.

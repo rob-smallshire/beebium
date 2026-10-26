@@ -35,7 +35,9 @@ namespace beebium {
 //
 // The coprocessor runs on the host's emulation thread and advances only while
 // the host runs, so a Run with the host stopped would wait forever: the
-// adapter refuses it (#204). `host_running` says whether the host runs.
+// adapter refuses it (#204). `host_running` says whether the host runs. A
+// Run with run_counterpart belongs to the host, which runs this coprocessor
+// with itself in one operation (#228), so the adapter refuses that too.
 
 class CoprocessorDebuggerAdapter final : public CoprocessorDebuggerControl::Service {
 public:
@@ -43,6 +45,11 @@ public:
     static constexpr const char* HOST_STOPPED_ERROR =
         "the host is stopped, and the coprocessor only advances while the host "
         "runs; run both with TubeSystem.run(), or run the host first";
+
+    // The message a Run with run_counterpart fails with.
+    static constexpr const char* RUN_COUNTERPART_ERROR =
+        "run_counterpart applies to the host's Run, which runs the coprocessor "
+        "with it; the coprocessor has no counterpart to run";
 
     CoprocessorDebuggerAdapter(service::DebuggerControlServiceImpl& impl,
                                std::function<bool()> host_running)
@@ -64,6 +71,11 @@ public:
 
     grpc::Status Run(grpc::ServerContext* ctx, const RunRequest* req, RunResponse* resp) override
     {
+        if (req->run_counterpart()) {
+            resp->set_success(false);
+            resp->set_error(RUN_COUNTERPART_ERROR);
+            return grpc::Status::OK;
+        }
         if (!host_running_()) {
             resp->set_success(false);
             resp->set_error(HOST_STOPPED_ERROR);

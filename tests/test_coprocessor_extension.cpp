@@ -14,13 +14,15 @@
 // the abstract interfaces: a stub CoprocessorExtension installs its coprocessor
 // and backend into the TubeSocket; a debug target of an unserved CPU family is
 // rejected by the same dynamic_cast the server uses (so the server would carry
-// on without a debugger); and the server's cross-processor stop wiring pauses
-// each processor when the other hits a stop_counterpart breakpoint.
+// on without a debugger); the server's cross-processor stop wiring pauses
+// each processor when the other hits a stop_counterpart breakpoint; and a
+// host Run with run_counterpart runs both in one call.
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <beebium/extension/CoprocessorExtension.hpp>
 #include <beebium/extension/CpuDebugTarget.hpp>
+#include <beebium/server/CoprocessorDebuggerAdapter.hpp>
 #include <beebium/service/DebuggerService.hpp>
 #include <beebium/tube/Coprocessor.hpp>
 #include <beebium/tube/CoprocessorRunner.hpp>
@@ -180,5 +182,70 @@ TEST_CASE("CoprocessorExtension: cross-processor stop is wired both ways server-
         REQUIRE_FALSE(host.is_paused());
         step_until(cop, [&] { return host.is_paused(); });
         CHECK(host.is_paused());
+    }
+}
+
+TEST_CASE("CoprocessorExtension: a host Run with run_counterpart runs both processors in one call",
+          "[coprocessor][extension]") {
+    // As for the stop wiring, two runners stand in for host and coprocessor.
+    // The server wires the host debugger's counterpart run to the coprocessor
+    // debugger, so the coprocessor runs before the host can advance (#228).
+    TubeUla host_ula, cop_ula;
+    auto rom = make_nop_rom();
+    CoprocessorRunner host(host_ula, rom);
+    CoprocessorRunner cop(cop_ula, rom);
+    host.reset();
+    cop.reset();
+
+    service::DebuggerControlServiceImpl host_impl(host);
+    service::DebuggerControlServiceImpl cop_impl(cop);
+    host_impl.set_counterpart_run_callback(
+        [&](bool stop_at_current) { return cop_impl.run_as_counterpart(stop_at_current); });
+
+    RunRequest run_both;
+    run_both.set_run_counterpart(true);
+    RunResponse resp;
+
+    SECTION("both stopped: one call runs both") {
+        host.pause();
+        cop.pause();
+        REQUIRE(host_impl.Run(nullptr, &run_both, &resp).ok());
+        CHECK(resp.success());
+        CHECK_FALSE(host.is_paused());
+        CHECK_FALSE(cop.is_paused());
+    }
+
+    SECTION("host running, coprocessor stopped: the call runs the coprocessor") {
+        cop.pause();
+        REQUIRE(host_impl.Run(nullptr, &run_both, &resp).ok());
+        CHECK(resp.success());
+        CHECK_FALSE(cop.is_paused());
+    }
+
+    SECTION("both running: the call fails as already running") {
+        REQUIRE(host_impl.Run(nullptr, &run_both, &resp).ok());
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "already running");
+    }
+
+    SECTION("no coprocessor wired: the call is refused and the host stays stopped") {
+        TubeUla lone_ula;
+        CoprocessorRunner lone(lone_ula, rom);
+        lone.reset();
+        lone.pause();
+        service::DebuggerControlServiceImpl lone_impl(lone);
+        REQUIRE(lone_impl.Run(nullptr, &run_both, &resp).ok());
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "no coprocessor is attached, so there is no counterpart to run");
+        CHECK(lone.is_paused());
+    }
+
+    SECTION("the coprocessor's debugger service refuses run_counterpart") {
+        cop.pause();
+        CoprocessorDebuggerAdapter adapter(cop_impl, [] { return true; });
+        REQUIRE(adapter.Run(nullptr, &run_both, &resp).ok());
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == CoprocessorDebuggerAdapter::RUN_COUNTERPART_ERROR);
+        CHECK(cop.is_paused());
     }
 }

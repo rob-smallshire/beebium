@@ -121,6 +121,13 @@ message RunRequest {
     // them instead, so one there stops the CPU again at once: a run to an
     // address the CPU may already be at, which counts arriving there.
     bool stop_at_current = 1;
+    // The host's Run only: also run the Tube coprocessor, resumed before the
+    // host can advance a cycle, so the two start together in one operation
+    // (the run-side mirror of a breakpoint's stop_counterpart). With the host
+    // already running it runs a stopped coprocessor alone; Run then fails as
+    // already running only when both are. Refused when no coprocessor with a
+    // debugger is attached, and on the CoprocessorDebuggerControl service.
+    bool run_counterpart = 2;
 }
 
 message RunResponse {

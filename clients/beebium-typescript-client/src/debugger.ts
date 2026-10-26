@@ -183,16 +183,29 @@ export class Debugger {
      * Pass `stopAtCurrent: true` to evaluate it instead, so one there stops the
      * machine again at once.
      *
-     * Requires: a stopped machine.
+     * A coprocessor runs only while its host does, so its `run()` with the host
+     * stopped is refused. Pass `runCounterpart: true` on the host to run the
+     * Tube coprocessor too, in one operation: the server runs it before the
+     * host can advance, so a short host run cannot stop the host before the
+     * coprocessor runs. `TubeSystem.run()` does this. It is refused on the
+     * coprocessor, and on a host with no coprocessor attached.
+     *
+     * Requires: a stopped machine; with runCounterpart, it or the coprocessor stopped.
      * Leaves the machine: RUNNING.
      * Coprocessor requires: a stopped coprocessor and a running host.
      * Leaves the coprocessor: RUNNING.
      */
-    async run(options?: { stopAtCurrent?: boolean }): Promise<void> {
-        const response = await promisify<{ stopAtCurrent: boolean }, { success: boolean; error: string }>(
+    async run(options?: { stopAtCurrent?: boolean; runCounterpart?: boolean }): Promise<void> {
+        const response = await promisify<
+            { stopAtCurrent: boolean; runCounterpart: boolean },
+            { success: boolean; error: string }
+        >(
             this.stub as unknown as Record<string, Function>,
             "run",
-            { stopAtCurrent: options?.stopAtCurrent ?? false },
+            {
+                stopAtCurrent: options?.stopAtCurrent ?? false,
+                runCounterpart: options?.runCounterpart ?? false,
+            },
         );
         if (!response.success) {
             throw new DebuggerError(`run failed: ${response.error}`);

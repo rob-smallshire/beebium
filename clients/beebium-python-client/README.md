@@ -221,7 +221,7 @@ sets breakpoints or watchpoints before `bbc.debugger.run()`.
 | `Beebium.run_for_emulated_seconds` | any run state | STOPPED |
 | `Beebium.run_until_or_timeout` | any run state | STOPPED |
 | `Beebium.run_fields` | any run state | STOPPED |
-| `Debugger.run` | a stopped machine | RUNNING |
+| `Debugger.run` | a stopped machine; with run_counterpart, it or the coprocessor stopped | RUNNING |
 | `Debugger.stop` | any run state | STOPPED |
 | `Debugger.reset` | any run state | STOPPED |
 | `Debugger.step` | a stopped machine | STOPPED |
@@ -258,7 +258,8 @@ lines, `Coprocessor requires: ...` and `Leaves the coprocessor: ...`, which this
 table collects (a test keeps them in step). A coprocessor call never changes
 whether the host runs. A coprocessor `run()` with the host stopped is refused:
 the server says the host is stopped and names `TubeSystem.run()`, which runs
-the host first and then the coprocessor. So `run_to`, `measure` and the other
+both in one host `run(run_counterpart=True)`: the server runs the coprocessor
+before the host can advance, so a short run cannot stop the host in between. So `run_to`, `measure` and the other
 run-to methods need the host running; stepping does not.
 
 | Call | Requires | Leaves the coprocessor |
