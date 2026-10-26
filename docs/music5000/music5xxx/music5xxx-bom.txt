@@ -1,0 +1,110 @@
+                                                 music5xxx
+
+                                    Music5xxx PCB BOM
+
+
+
+Quantity Designation       Designator                                 Notes
+
+Resistors
+   16     1K               R1, R2, R3, R4, R5, R6, R7, R8, R9, R13, Standard 1% metal film through hole
+                           R15, R21, R25, R27, R33, R38             resistors
+   1     4K7               R37
+   21    15K               R10, R11, R12, R14, R16, R17, R18,
+                           R19, R20, R22, R23, R24, R26, R28,
+                           R29, R30, R31, R32, R34, R35, R36
+    1    1Kx8              RP1                                      9 pin resistor array, commoned
+
+
+Capacitors
+   5     0.1uF             C5, C6, C10, C40, C41                  Ceramic: 2.5mm lead pitch
+   8     1n                C15, C16, C17, C18, C21, C22, C23, C24 Film: 5mm lead pitch
+
+   23    22nF              C7, C8, C12, C13, C14, C19, C20, C25, Film: 5mm lead pitch
+                           C26, C27, C28, C29, C30, C31, C32,
+                           C33, C34, C35, C36, C37, C38, C42, C43
+
+    4    10uF              C1, C2, C11, C39                           Electrolytic 2.5mm lead pitch
+    2    2200uF            C3, C4                                     Electrolytic 7.5mm lead pitch
+                           Note: C9 (33pf, C44, C45 (220nF) not fitted
+
+
+Diodes
+    6    1N4001            D5, D6, D3, D4, D2, D1                     DO41
+    1    PWR               D7                                         3mm LED
+    1    12V Zener Diode   ZD1                                        DO35
+
+
+Integrated Circuits
+    1     74HCT00          IC14
+    1     74F04            IC5
+    3     74HCT08          IC2, IC7, IC8
+    1     74HCT30          IC33
+    3     74HCT32          IC4, IC30, IC35
+    2     74HCT74          IC33, IC33
+    1     74HCT86          IC15
+    1     74HCT138         IC10
+    4     74HCT163         IC19, IC20, IC21, IC24
+    2     74HCT173         IC15, IC31
+    1     74HCT244         IC17
+    2     74HCT257         IC18, IC23
+    2     74HCT283         IC6, IC11
+    7     74HCT374         IC12, IC13, IC16, IC26, IC27, IC29, IC32
+    1     74HCT393         IC9
+    2     TL072            IC37, IC38
+    1     AM6070D          IC36
+    1     R-78E5.0-1.0     IC1                                      DC-DC converter - 1A, 7805 pinout
+                                                                    switching module
+    1    LM7815            IC39                                     +15V Voltage regulator
+    1    LM7915            IC40                                     -15V Voltage regulator
+    2    AM9128-10         IC22, IC28                               Memory IC
+
+                                                    Page 1
+                                              music5xxx
+
+
+
+IC Sockets
+    2    8 Way            7.62mm wide
+    13   14 Way           7.62mm wide
+    11   16 Way           7.62mm wide
+    1    18 Way           7.62mm wide
+    8    20 Way           7.62mm wide
+    2    24 Way           Wide 15.24mm
+
+
+Connectors - Molex KK/JST XH or similar
+   2                     J2, J3                                 2 way
+   1                     J1, J4                                 3 way
+   1                     J5, J6                                 4 way - optional if using audio jack
+                                                                only
+
+
+1Mhz Bus connectors
+   1    1MHzBus1          J11                                   34 way (2x17) 2.54mm Straight IDC
+                                                                Header (use if connecting
+                                                                extender/midi)
+   1     1MHzBus2         J12                                   34 way (2x17) 2.54mm Angled IDC
+                                                                Header for 1Mhz Bus connection
+                          IDC plugs for 1Mhz bus connection
+                          34 way ribbon cable for 1Mz bus
+                          connection
+
+
+Jack sockets
+   1     FCR1295          J7                                    Cliff FCR1295 stereo jack socket PCB
+                                                                mount
+   1     2.1mm panel      Not on PCB                            Or suitable panel mount socket for
+         mount socket                                           15V AC connection
+
+
+Misc
+   1     12 Mhz Crystal   X1                                    Crystal HC49 Through hole
+   1     Ferrite          FB1                                   Or use wire link. Ferrite helps isolate
+                                                                switcher supply noise.
+   13                     15mm hex standoffs, M3, male-female   Used for stacking boards
+
+
+
+
+                                                Page 2
