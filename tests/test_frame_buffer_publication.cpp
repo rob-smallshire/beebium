@@ -68,9 +68,15 @@ TEST_CASE("FrameBuffer publishes a frame's metadata with its pixels and version"
     FrameBuffer frame_buffer(nullptr, kWidth, kHeight);
     constexpr uint64_t kFrames = 20000;
 
+    // The reading must overlap the publishing for the test to mean anything,
+    // and a loaded machine can leave the reader unscheduled until a fixed run
+    // of frames is over. So publish at least kFrames, and go on publishing
+    // until the reader has taken a good number of readings while it was.
+    constexpr uint64_t kMinimumReadings = 1000;
+    std::atomic<uint64_t> readings{0};
     std::atomic<bool> done{false};
     std::thread renderer([&]() {
-        for (uint64_t n = 1; n <= kFrames; ++n) {
+        for (uint64_t n = 1; n <= kFrames || readings.load() < kMinimumReadings; ++n) {
             publish_frame(frame_buffer, n);
         }
         done = true;
@@ -78,7 +84,6 @@ TEST_CASE("FrameBuffer publishes a frame's metadata with its pixels and version"
 
     // Read flat out while frames are published, and count every reading whose
     // parts disagree about which frame they belong to.
-    uint64_t readings = 0;
     uint64_t incoherent = 0;
     FrameMetadata meta;
     std::vector<uint32_t> pixels(frame_buffer.capacity_pixels());
@@ -94,8 +99,8 @@ TEST_CASE("FrameBuffer publishes a frame's metadata with its pixels and version"
     }
     renderer.join();
 
-    INFO(readings << " readings while " << kFrames << " frames were published");
-    REQUIRE(readings > 0);
+    INFO(readings.load() << " readings while frames were published");
+    REQUIRE(readings.load() >= kMinimumReadings);
     CHECK(incoherent == 0);
 }
 
