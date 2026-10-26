@@ -22,7 +22,7 @@ Moreover, this architecture also facilitates native GUIs with first-class host p
 ### Key Features
 
 - **Cycle-accurate 6502 emulation** — NMOS and CMOS variants supported
-- **Four machine variants** — Model B, B+, B+ 128K, and Model B with a ROM/RAM board
+- **Seven machine variants** — Model B, B+, B+ 128K, and Model B with the notional ROM/RAM, ATPL Sidewise, Watford ROM/RAM and Integra-B boards
 - **Floppy disc support** — SSD and DSD (DFS), ADFS (`.adf`/`.adl`/`.adm`/`.ads`) and HFE flux-level images, all with read/write
 - **Pluggable peripherals** — each a loadable extension:
   - *Coprocessors* — Acorn 65C02 (3 MHz) and 65C102 (4 MHz) second processors

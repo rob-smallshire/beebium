@@ -129,7 +129,7 @@ beebium/
 │   │   ├── main_model_b_plus.cpp
 │   │   └── main_model_b_*.cpp
 │   ├── discovery/               # Service advertisement and browse (Bonjour/Avahi/mDNS)
-│   └── extensions/              # Plugins: Econet transports (aun, piconet), SCSI, serial, coprocessors
+│   └── extensions/              # Plugins: Econet transports (aun, piconet), SCSI, serial, coprocessors, Music 5000
 ├── clients/
 │   ├── macos/                   # Swift/Metal frontend
 │   │   └── Beebium/
@@ -256,6 +256,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 - `frontend-sleep-wake.md` - How a front-end survives host sleep: present-on-frame for display sleep, and a platform-abstracted wake signal driving active reconnect for full system sleep; for future front-ends
 - `indicators.md` - LED status indicators
 - `printer-port.md` - The parallel printer port as built: the hardware and the MOS driver, `PrinterPortDevice` and the `CentronicsReceiver` handshake, busy versus offline, and the four sinks (`file-printer`, `job-file-printer`, `tcp-printer` over raw TCP 9100, `host-parallel-printer` on the host's lp device) with field notes on network printers and USB-to-IEEE 1284 adapters
+- `music-5000.md` - The Hybrid Music 5000 / 3000 synthesiser as built: JIM paging on the 1 MHz bus, the register map and the sixteen-channel DSP modelled from the original schematic and the AM6070 datasheet, the fourth-order analogue output filter and the 46875 to 48000 Hz resampler, the audio frame field it fills, presets, and the known simplifications; `docs/music5000/` holds the reference material and `hardware-model.md`, the normative register-transfer description
 - `sideways-slots.md` - Sideways ROM/RAM topology, validation rules, motherboard links
 - `deployment.md` - Installed layout and runtime ROM/preset discovery
 - `preset-schema.md` - The preset file format: every key, path resolution, which models accept what, CLI-over-preset precedence, resolve-preset and describe-preset-schema
@@ -315,6 +316,7 @@ Complete transcripts of BBC Micro documentation:
 - Video ULA with all display modes (0-7)
 - SN76489 sound chip
 - Intel 8271 and WD1770 disc controllers with SSD/DSD/HFE support
+- Hybrid Music 5000 / 3000 synthesiser on the 1 MHz bus (plugin `hybrid-music-5000`), with the board's analogue output filter; JIM paging is owned by the bus port so several 1 MHz bus devices coexist
 - Keyboard matrix with type-ahead
 - Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger
 - gRPC service layer (17 services)
