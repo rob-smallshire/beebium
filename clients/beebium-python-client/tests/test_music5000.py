@@ -17,15 +17,12 @@ synthesiser's JIM paging register (&FCFF) and RAM (&FD00-&FDFF) as AMPLE would:
 a square wave into wave 0 and one channel at 440 Hz. The test captures the
 machine's audio and finds the tone in the Music 5000's frame field. Frequencies
 are measured from the 48 kHz sample stream itself, which is emulated time;
-every wait polls the guest's screen, never the wall clock alone.
+every wait polls the guest's screen (Beebium.expect), never the wall clock alone.
 """
 
 from __future__ import annotations
 
 import struct
-import time
-
-import pytest
 
 from beebium.client import Beebium
 from beebium.client.audio import SourceEncoding
@@ -40,21 +37,6 @@ EXPECTED_HZ = FREQ * 46875 / 2**24
 
 MARKER_EXPR = '"DO"+"NE"'
 MARKER = "DONE"
-
-
-def _screen(bbc: Beebium) -> str:
-    text = bbc.video.screen_text().text
-    return "\n".join(text) if isinstance(text, list) else text
-
-
-def _wait_until(condition, description: str, timeout: float = TIMEOUT) -> None:
-    """Poll `condition` until it holds, rather than sleeping blind."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if condition():
-            return
-        time.sleep(0.05)
-    pytest.fail(f"timed out waiting for {description}")
 
 
 def _type_line(bbc: Beebium, line: str) -> None:
@@ -78,7 +60,7 @@ def _set_up_tone(bbc: Beebium, page_nibble: int) -> None:
         f"?&FD00=&{FREQ & 0xFF:02X}:?&FD10=&{(FREQ >> 8) & 0xFF:02X}:"
         f"?&FD20=&{FREQ >> 16:02X}:PRINT {MARKER_EXPR}",
     )
-    _wait_until(lambda: MARKER in _screen(bbc), "the registers to be written")
+    bbc.expect(MARKER, timeout=TIMEOUT)
 
 
 def _capture(bbc: Beebium, sample_count: int) -> tuple[list[tuple[int, ...]], int]:

@@ -557,6 +557,36 @@ devices present on the host with friendly names: the `/dev/usb/lp*` and
 `/dev/lp*` nodes on Linux, the USB printer interface paths on Windows. It
 only lists; it chooses nothing.
 
+#### SCSI Hard Discs
+
+The `acorn-scsi` plugin is the Acorn SCSI host adapter on the 1 MHz bus,
+its registers at `&FC40`-`&FC43` (FRED offsets `0x40`-`0x43`); ADFS drives
+it. It takes no parameters. It provides the `scsi` attachment point, which
+the discs plug into: each `--scsi-hdd` is one `scsi-hard-disc` instance, a
+hard disc kept in a pair of image files (`.dat` and `.dsc`).
+`describe-extension acorn-scsi` and `describe-extension scsi-hdd` print the
+parameters. See [hard-disc-comparison.md](hard-disc-comparison.md) for the
+adapter's register interface and [disc-subsystem.md](disc-subsystem.md) for
+how the image is written back.
+
+```bash
+beebium-model-b --acorn-scsi --scsi-hdd image=adfs.dat
+beebium-model-b --acorn-scsi --scsi-hdd scsi-id=0:image=boot.dat --scsi-hdd scsi-id=1:image=data.dat
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--acorn-scsi` | (omitted = no adapter) | Fit the Acorn SCSI host adapter to the 1 MHz bus. |
+| `--scsi-hdd image=<file>[:key=value...]` | (omitted = no disc) | Attach a SCSI hard disc to the adapter. |
+
+`--scsi-hdd` parameters (colon-separated, the generic extension grammar):
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `image=<file>` | required | The disc's `.dat` image; its `.dsc` geometry file sits beside it. |
+| `scsi-id=<0-7>` | `0` | The disc's SCSI target ID. |
+| `adapter-id=<id>` | (the only adapter) | Which adapter the disc attaches to, when more than one is fitted. |
+
 #### Music 5000
 
 The `hybrid-music-5000` plugin is the Hybrid Music 5000 synthesiser on the
