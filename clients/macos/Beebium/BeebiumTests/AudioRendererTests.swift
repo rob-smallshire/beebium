@@ -249,7 +249,69 @@ final class AudioRendererTests: XCTestCase {
         XCTAssertEqual(peak(right), 0, accuracy: 1e-7)
     }
 
+    // The extension ring is drained in lockstep from the first callback, before
+    // the bipolar flags arrive from the format; when the flags are set later the
+    // mix uses the frame written at the SAME index as the SN frame, with no
+    // offset. (A read gated on the flags would leave an undrained backlog and
+    // pair SN frame i with ext frame i+N for the rest of the session.)
+    func testExtensionRingStaysAlignedWhenFlagsArriveAfterChunks() {
+        let chunk = 4096
+        let capacity = AudioPreRoll.capacityFrames(sampleRate: 48000)
+        let ring = AudioRingBuffer(capacity: capacity)
+        let ext = AudioRingBuffer(capacity: capacity)
+        let renderer = AudioRenderer(ringBuffer: ring, extRingBuffer: ext,
+                                     sampleRate: 48000, maxFrameCount: chunk)
+        // Flags NOT set yet: a stream can deliver chunks before the format does.
+
+        // SN silent; ext field 2 left = the frame's absolute index (distinct per
+        // frame), so a one-callback offset would be plainly visible.
+        let count = chunk * 4
+        var snFrames = [UInt64](repeating: 0, count: count)
+        var extFrames = [UInt64](repeating: 0, count: count)
+        for i in 0..<count {
+            extFrames[i] = UInt64(UInt32(UInt16(bitPattern: Int16(i))))   // i < 16384 < Int16.max
+        }
+        XCTAssertEqual(snFrames.withUnsafeBufferPointer { ring.write($0.baseAddress!, count: count) }, count)
+        XCTAssertEqual(extFrames.withUnsafeBufferPointer { ext.write($0.baseAddress!, count: count) }, count)
+
+        // Callback 1, flags still unset: the ext ring must drain in lockstep (so
+        // it advances with the SN ring) but nothing is mixed yet.
+        var l1 = [Float](repeating: 1, count: chunk)
+        var r1 = [Float](repeating: 1, count: chunk)
+        _ = l1.withUnsafeMutableBufferPointer { lb in r1.withUnsafeMutableBufferPointer { rb in
+            renderer.render(frameCount: chunk, leftBuffer: lb.baseAddress!, rightBuffer: rb.baseAddress!) } }
+        XCTAssertEqual(peak(l1), 0, accuracy: 1e-7, "mixed before the flags were set")
+
+        // The format arrives: field 2 is a bipolar stereo source.
+        renderer.setExtensionBipolarSlots(field2: true, field3: false)
+
+        // Callback 2 starts at absolute frame 4096 (callback 1 drained 4096 from
+        // BOTH rings). Its first output sample must be the mix of ext[4096].
+        var l2 = [Float](repeating: 0, count: chunk)
+        var r2 = [Float](repeating: 0, count: chunk)
+        _ = l2.withUnsafeMutableBufferPointer { lb in r2.withUnsafeMutableBufferPointer { rb in
+            renderer.render(frameCount: chunk, leftBuffer: lb.baseAddress!, rightBuffer: rb.baseAddress!) } }
+
+        let expected = Float(4096) / AudioRenderer.musicFullScale * AudioRenderer.musicMixGain
+        XCTAssertEqual(l2.first!, expected, accuracy: 1e-4,
+                       "ext ring misaligned: first sample is not ext[4096]")
+        XCTAssertGreaterThan(l2.first!, 0.05, "looks like ext[0]: the backlog was not drained")
+    }
+
     // MARK: - Mixer channel listing
+
+    // The mixer shows only groups the per-channel controls drive (the SN76489 on
+    // fields 0 and 1); a Music 5000 group on field 2 is hidden -- no dead sliders.
+    func testShownGroupIDsHidesExtensionSourceGroups() {
+        let sources = [
+            AudioSourceInfo(id: 0, name: "SN76489", channelNames: ["1", "2"], groupId: 1),
+            AudioSourceInfo(id: 1, name: "SN76489", channelNames: ["3", "0"], groupId: 1),
+            AudioSourceInfo(id: 2, name: "Music 5000", channelNames: ["Left", "Right"], groupId: 2),
+        ]
+        let shown = AudioSourceInfo.shownGroupIDs(sources: sources, snFieldCount: 2)
+        XCTAssertEqual(shown, [1])
+        XCTAssertFalse(shown.contains(2))
+    }
 
     // The SN76489 is described as two sources sharing one group. The mixer maps
     // each channel to a mixer channel index by concatenating the group's sources

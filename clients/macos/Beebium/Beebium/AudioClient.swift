@@ -56,6 +56,18 @@ struct AudioSourceInfo: Identifiable {
                 return a != b ? a < b : lhs.0 < rhs.0
             }
     }
+
+    /// The group ids the mixer shows: those owning a source on the fields the
+    /// renderer's per-channel sliders and pan actually drive -- the SN76489, on
+    /// source fields 0 and 1. A source on a later field (a Music 5000 on field 2,
+    /// a Music 3000 on field 3) has no per-channel client control -- the master
+    /// volume governs it -- so its group is not shown, rather than shipping dead
+    /// sliders. The client does not know what those sources are; it hides them
+    /// generically by field. `snFieldCount` is the number of leading source
+    /// fields the SN path owns (2). Pure.
+    static func shownGroupIDs(sources: [AudioSourceInfo], snFieldCount: Int) -> Set<UInt32> {
+        Set(sources.filter { $0.id < UInt32(snFieldCount) }.map { $0.groupId })
+    }
 }
 
 /// Channel group information for UI organization

@@ -264,16 +264,27 @@ final class AudioRenderer: @unchecked Sendable {
             preRoll.noteUnderrun()
         }
 
-        // Pull the matching extension frames (fields past the SN76489's two) in
-        // lockstep: the two ring buffers share capacity and are always written
-        // and read with identical counts, so frame i lines up in both and the
-        // extension read returns the same number of frames the SN read did.
+        // Drain the extension ring in lockstep with every SN read whenever the
+        // ring exists, independent of whether a field is currently mixed. The two
+        // rings must advance by the same count from the very first callback: the
+        // audio format (which sets the bipolar flags) is fetched on the main
+        // thread and chunks can arrive before it does, so gating the READ on a
+        // flag would let the ext ring build a backlog of N frames that is never
+        // drained, pairing SN frame i with ext frame i+N for the rest of the
+        // session. The read condition here is fixed at construction
+        // (extRingBuffer != nil), so it cannot miss that window; mixing is gated
+        // separately, on the flags.
+        //
+        // Both rings share capacity and are always written and read with
+        // identical counts, so their fill is always equal; an overflow therefore
+        // drops the same number of frames from each (AudioRingBuffer.write caps
+        // writes at the free space, equal in both) and cannot desynchronise them.
         let slot0Bipolar = extSlot0Bipolar.load(ordering: .relaxed)
         let slot1Bipolar = extSlot1Bipolar.load(ordering: .relaxed)
-        let haveExt = extRingBuffer != nil && (slot0Bipolar || slot1Bipolar)
-        if haveExt && framesToPull > 0 {
-            _ = extRingBuffer!.read(&extPacked, count: framesToPull)
+        if let extRingBuffer, framesToPull > 0 {
+            _ = extRingBuffer.read(&extPacked, count: framesToPull)
         }
+        let mixExt = slot0Bipolar || slot1Bipolar
 
         // Check mute state
         let isMuted = atomicMuted.load(ordering: .relaxed)
@@ -328,7 +339,7 @@ final class AudioRenderer: @unchecked Sendable {
                 // so they are summed at the fixed music ratio with no DC-removal
                 // high-pass and route left/right directly. The master volume and
                 // limiter below apply to the whole mix.
-                if haveExt {
+                if mixExt {
                     let ext = extPacked[i]
                     if slot0Bipolar {
                         let field = UInt32(truncatingIfNeeded: ext)

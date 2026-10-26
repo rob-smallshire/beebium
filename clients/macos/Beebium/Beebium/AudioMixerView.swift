@@ -76,8 +76,11 @@ struct AudioMixerView: View {
                 Divider()
                     .padding(.horizontal, 12)
 
-                // Channel groups
-                ForEach(audioClient.groups) { group in
+                // Channel groups the per-channel controls drive (the SN76489).
+                // Extension sources (a Music 5000) have no per-channel control --
+                // the master volume governs them -- so their groups are hidden
+                // rather than shown as dead sliders.
+                ForEach(shownGroups) { group in
                     groupSection(group)
                 }
 
@@ -146,6 +149,13 @@ struct AudioMixerView: View {
     }
 
     // MARK: - Group Section
+
+    /// The groups to show: only those the renderer's per-channel controls drive
+    /// (the SN76489, on source fields 0 and 1). See AudioSourceInfo.shownGroupIDs.
+    private var shownGroups: [ChannelGroupInfo] {
+        let ids = AudioSourceInfo.shownGroupIDs(sources: audioClient.sources, snFieldCount: 2)
+        return audioClient.groups.filter { ids.contains($0.id) }
+    }
 
     private func groupSection(_ group: ChannelGroupInfo) -> some View {
         VStack(alignment: .leading, spacing: 8) {
