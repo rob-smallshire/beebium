@@ -13,6 +13,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include "../PixelBatch.hpp"
 
@@ -76,7 +77,7 @@ public:
             const bool flash_changed = ((control_ ^ value) & CTRL_FLASH) != 0;
             control_ = value;
             if (flash_changed) {
-                for (size_t index = 0; index < palette_.size(); ++index) {
+                for (std::size_t index = 0; index < palette_.size(); ++index) {
                     output_palette_[index] = output_colour(palette_[index]);
                 }
             }
