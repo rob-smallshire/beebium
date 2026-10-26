@@ -223,7 +223,9 @@ a volume-0 square keeps unit AC amplitude).
 ### Extension Sources (indices 2 and 3)
 
 Fields 2 and 3 belong to sound sources added by extensions, such as the
-Music 5000 (field 2) and Music 3000 (field 3). Frames are built by an
+Music 5000 (field 2) and Music 3000 (field 3); see `docs/music-5000.md` for
+that source, a bipolar stereo pair already through the board's analogue
+output filter and resampled to 48 kHz. Frames are built by an
 `AudioFrameAssembler` owned by the hardware policy:
 
 - The SN76489 sets the frame rate. Each of its output samples completes a

@@ -30,6 +30,7 @@ Moreover, this architecture also facilitates native GUIs with first-class host p
   - *Econet transports* — AUN over UDP, and Piconet bridging to real Econet hardware
   - *Storage* — Acorn SCSI host adapter and SCSI hard-disc targets
   - *Real-time clock* — Acorn user-port RTC module
+  - *Sound* -- Hybrid Music 5000 synthesiser and Music 3000 expander on the 1 MHz bus, with the board's own analogue output filter ([docs/music-5000.md](docs/music-5000.md))
 - **Headless core** — deterministic, UI-free emulation server
 - **Process separation** — core and frontends communicate via gRPC
 - **Platform-native frontends** — native UI using Cocoa and Metal on macOS
@@ -162,6 +163,7 @@ Component and subsystem documentation lives in [`docs/`](docs/). Some entry poin
 - [Deployment and resource discovery](docs/deployment.md) — installed layout; how a server finds ROMs and presets
 - [Packaging and distribution](docs/packaging.md) — the self-contained server bundles and how they are built
 - [gRPC server interface](docs/grpc-server.md) — the service API
+- [The Music 5000](docs/music-5000.md) -- the Hybrid Music 5000 / 3000 synthesiser extension; reference material in [docs/music5000/](docs/music5000/)
 - [Adding a coprocessor](docs/coprocessor-extension-guide.md) — writing a new second-processor extension
 - [Versioning and compatibility](docs/versioning-and-compatibility.md) — release versioning and the protocol handshake
 
