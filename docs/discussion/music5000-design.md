@@ -114,9 +114,9 @@ zeroes fields 2 and 3 (`Sn76489.cpp:217-223`). Two steps:
   pushes it. No behaviour change; the SN76489 tests keep passing.
 - **Add `AudioSourcePort`.** A port handle reachable through
   `ExtensionContext::get<AudioSourcePort>()`, offered by every machine
-  that has an audio buffer. An extension registers one `AudioSource`
+  that has an audio buffer. An extension registers one `AudioFieldSource`
   per frame field it needs, naming the field index it wants (2 for the
-  Music 5000, 3 for the Music 3000) and supplying the `AudioSource`
+  Music 5000, 3 for the Music 3000) and supplying the `AudioFieldInfo`
   metadata (name, encoding, channel names, group, and a new `bipolar`
   flag). Registration fails if the field is taken. The assembler, when
   it builds a frame, calls `uint32_t take_field()` on each registered
@@ -262,7 +262,7 @@ Applied per side, per 46875 Hz sample, in this order:
    design and its measured passband ripple and stop-band attenuation
    are recorded in the component doc.
 4. **Hand-off.** Each 48 kHz stereo pair goes into the device's
-   `AudioSource` as a `pack_2x16bit(left, right)` field, taken by the
+   `AudioFieldSource` as a `pack_2x16bit(left, right)` field, taken by the
    frame assembler on the next frame. A ring of 16 entries absorbs the
    phase difference between the two exact clocks; it can neither
    overflow nor underrun in steady state, and the assembler repeats the
