@@ -1,0 +1,346 @@
+Retro Kit: Hybrid Music 5000 Synthesiser
+========================================
+
+Provenance
+----------
+
+Source:      https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-5000-Synthesiser/index.html
+Fetched:     2026-10-26
+Author:      Paul Vernon (Retro Kit); page footer "(c) Retro Kit, 2011 -
+             2022". Contributors credited on the page include Chris
+             Jordan (of Hybrid Software).
+Capture:     Page text verbatim apart from 7-bit ASCII conversion and
+             rewrapping; site navigation and footer dropped; relative
+             links made absolute and shown in [brackets] or on the line
+             after a resource title. Photographs not captured.
+
+Already in this directory, by hand, from this page's resource list:
+Hybrid_Music5000UG.pdf (User Guide), HybridMusic5000-UserGuide-Errata.pdf,
+HybridMusic5000-UserGuide-Addendum.pdf, and "Hybrid Technology HT Music
+Synthesiser - Schematic.pdf" (byte-identical to the "Hybrid Music 5000
+Schematic" link below, checked 2026-10-26). The other linked documents
+were looked at and not captured: the Installation Guide (Issue 2) and
+the "Universal programmers info" sheet are scanned user-level leaflets
+with no hardware or register detail; the rest are brochures, price
+lists, letters and worksheets.
+
+Page
+----
+
+Hybrid Music 5000 Synthesiser
+
+The Hybrid Music 5000 Synthesiser was the heart of a suite of hardware
+and software components that turned a BBC Micro into a fully fledged
+synthesiser and sequencer. The entire suite consisted of the Music 1000
+[https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-1000-Amplifier/index.html]
+which was an audio amplifier, the Music 2000
+[https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-2000-Interface/index.html]
+which was a MIDI interface, the Music 3000
+[https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-3000-Expander/index.html]
+which added more voices to the Music 5000, the Music 4000
+[https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-4000-Keyboard/index.html]
+which was a 4-octave keyboard, the Music 5000 which provided the
+synthesiser functionality and the rare Music 6000
+[https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-6000-Sensor/index.html]
+which allowed users to interact with the Hybrid system using their
+entire body.
+
+The Music 5000 Synthesiser itself was a tweaked version of the Acorn
+Music 500 Synthesiser which was effectively a re-badged device from
+Hybrid Technology Ltd. The Music 500 and Music 5000 were almost
+identical and the Music 500 could be "upgraded" to become a Music 5000
+by cutting a track and adding a resistor to the PCB. The software for
+the Music 500 and Music 5000 however is quite different.
+
+I received my Music 5000 from David Moore who has an almost complete set
+of Hybrid equipment, only missing the Music 3000. This particular Music
+5000 was faulty and very quickly produced random noise instead of the
+musical voices that are well known to many people. You can hear how the
+Music 5000 sounded when I first received it by listening to an MP3
+recording here
+[https://www.retro-kit.co.uk/user/custom/stardot/hybrid5000-borked-early.mp3].
+
+As you can hear from the recording, the audio output from the Music 5000
+started off bad and ended up within a couple of minutes of being powered
+on as being simple noise.
+
+Sadly, my diagnostic skills are lacking when it comes to chasing down a
+fault like this and so I shipped it off to Mark Haysman of Retroclinic
+[http://www.retroclinic.com/] who was able to diagnose the fault an
+repair the Music 5000 restoring it to its full glory. The track used for
+testing was "In Concert" by Pilgrim Beart
+[https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/audio/InConcert-PilgrimBeart.mp3].
+
+Other variants of the Music 5000
+
+Music 500
+
+The Music 500 was designed by Hybrid, manufactured by an Acorn
+contractor and sold by Acorn as a music synthesiser add on for the BBC
+Micro. Marketing of the Music 500 by Acornsoft was limited due to
+disputes between Hybrid and Acorn over the invention of Shadow Ram for
+which Hybrid had a patent. This ultimately led to Acorn selling their
+stock of Music 500's back to Hybrid at 10% of the market value, enabling
+the creation and production of the Hybrid Music 5000.
+
+Internally the Music 500 is identical to the Music 87. Both the Music 87
+Synthesiser and the Music 500 won't work with the Acorn BBC Master
+microcomputer without a slight modification to the PCB involving a track
+cut and extra resistor. It is this track cut and resistor that
+electronically distinguishes the Music 500 from the Music 5000 hardware.
+
+Music 87 Synthesiser
+
+Originally marketed by Peartree Computers as the "Music 7000" and
+advertised in several magazines as such, Peartree Computers got into
+some hot water with Hybrid over the naming of the device. Hybrid and
+Peartree eventually came to a solution where Hybrid allowed Peartree
+Computers to re-badge the Music 500 module which they then sold under
+the name of "Music 87 Synthesiser". The software that was supplied with
+the Music 87 was the differentiating factor between it and the Music 500
+and it was very different to the software supplied with the Music 500
+and Music 5000 which were the official Hybrid offerings.
+
+After the change in branding by Peartree Computers, Hybrid restricted
+all use of the "thousand" series numbers to official Hybrid hardware and
+software.
+
+Beeb@30
+
+For the Beeb@30 event in March 2012, Dave Moore asked me to prepare his
+Hybrid modules for demonstration and we eventually used his the Music
+1000, 4000, 5000, and 6000 to demonstrate the system. The Music 2000 was
+also on display on the day. As you can see from the photo below, the
+Music 6000 has a flexible gooseneck mount with a piezoelectric
+transducer mounted on the end. This is the only Hybrid device other than
+the Music 4000 that does not connect to the BBC Micro via the 1MHz bus,
+instead, connecting to the BBC Micro's Analogue port.
+
+Translate this site
+
+Hybrid 5000 Resources
+
+Hybrid Music 5000 User Guide
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/HybridMusic5000-UserGuide.pdf
+
+Hybrid Music 5000 User Guide Errata
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/HybridMusic5000-UserGuide-Errata.pdf
+
+Hybrid Music 5000 User Guide Addendum
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/HybridMusic5000-UserGuide-Addendum.pdf
+
+Hybrid Music 5000 Installation Guide Iss. 2
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Music-5000-Installation-Guide.pdf
+
+Hybrid Music System Worksheets
+
+[https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Hybrid-Music-System-Worksheets.pdf]
+
+Worksheets on composing by Alistair Johnson
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/compose.zip
+
+Further Worksheets by Alistair Johnson
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/waveforms-500.zip
+
+Ample Nucleus Worksheets
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/NucleusWords.zip
+
+Announcements and Letters
+
+Hybrid Music 5000 Announcement 8 Jul '86
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Music-5000-Synthesiser-announcement-08Jul1986.pdf
+
+Hybrid Music 5000 Announcement 24 Jul '86
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Music-5000-Synthesiser-announcement-24Jul1986.pdf
+
+Letter from Hybrid Technology
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/HybridMusicSystem-letter-Jan93.pdf
+
+Sales leaflets and information
+
+Hybrid Music 5000 brochure one
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/hybrid-5000.pdf
+
+Hybrid Music 5000 brochure two
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Music-5000-Synthesiser-Universal-brochure-2.pdf
+
+Hybrid Music 5000 Junior sales info
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Music-5000-Synthesiser-Junior-brochure.pdf
+
+Hybrid Music 5000 Universal programmers info
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/hybrid-universal-programmers.pdf
+
+Hybrid Music Publisher sales info
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/hybrid-publisher.pdf
+
+Hybrid Toolbox and Nucleus sales info
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/hybrid-toolbox-nucleus.pdf
+
+Hardware information
+
+Hybrid Music 5000 Schematic
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/HybridTechnologyHTMusicSynthesiser-Schematic.pdf
+
+Other links
+
+FPGA Hybrid Music 5000 (WIP)
+    https://github.com/hoglet67/Music5000
+
+BBC Micro Emulator with Music 5000 support
+    http://darrenizzard.com/index.php/2015/08/24/beech-a-bbc-micro-emulator/
+
+Inside Hybrid's Music 5000
+    http://archive.retro-kit.co.uk/bbc.nvg.org/sw/Hybrid/Inside%20Hybrid's%20Music%205000/INSIDE%20HYBRID'S%20MUSIC%205000.htm
+
+Hybrid Music System
+
+The Hybrid Music System
+    https://www.retro-kit.co.uk/Hybrid-Music-System/index.html
+
+Hybrid Music System brochure
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Hybrid-Music-System-brochure.pdf
+
+Hybrid Music System advert (photocopy)
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Hybrid-Music-System-advertisment-copy.pdf
+
+Hybrid Music 1000 Amplifier
+    https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-1000-Amplifier/index.html
+
+Hybrid Music 2000 Interface
+    https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-2000-Interface/index.html
+
+Hybrid Music 3000 Expander
+    https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-3000-Expander/index.html
+
+Hybrid Music 4000 Keyboard
+    https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-4000-Keyboard/index.html
+
+Hybrid Music 5000 Synthesiser
+    https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-5000-Synthesiser/index.html
+
+Hybrid Music 6000 Sensor
+    https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-6000-Sensor/index.html
+
+AMPLE ssd archive
+
+The Retro-Kit AMPLE archive
+    https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-System-Music-Archive/index.html
+
+Related hardware
+
+Microvitec Touchtech 501
+    https://www.retro-kit.co.uk/page.cfm/content/Microvitec-Touchtech-501/index.html
+
+Other Hybrid resources
+
+Hybrid Music System Manuals
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/HybridMusicSystemManuals.zip
+
+Random Access to the Time Domain in the AMPLE language
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/random-access-to-the-time-domain-in-the-ample-language.pdf
+
+Hybrid Music system - new modules
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/hybrid-sales-letter.pdf
+
+Pricelists
+
+Hybrid Music system - Pricelist 1988
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/hybrid-pricelist-1.pdf
+
+Hybrid Music system - Pricelist Nov '88
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/hybrid-pricelist-2.pdf
+
+Hybrid Music system - Pricelist 1990
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/hybrid-pricelist-4.pdf
+
+Hybrid Music system - Pricelist 1991
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/HybridMusic-Pricelist.pdf
+
+Hybrid Music system - Pricelist 1992
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/hybrid-pricelist-3.pdf
+
+Third party leaflets
+
+Aries Computers Music 500 Synthesiser brochure
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Aries-Computers-Music-500-Synthesiser-brochure.pdf
+
+Peartree Computers Music 5000 brochure
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/System/Music-5000-Synthesiser-Peartree-brochure.pdf
+
+Play Performance Tutor
+    https://www.retro-kit.co.uk/user/custom/Acorn/3rdParty/Hybrid/documents/scans/play.pdf
+
+Hybrid System Links
+
+Colin Fraser's Hybrid resources
+    http://www.colinfraser.com/m5000/m5000.htm
+
+Chris Whyteheads Hybrid pages
+    http://chrisacorns.computinghistory.org.uk/8bit_Upgrades/Hybrid_Music5000.html
+
+Zaonce - AMPLE archive
+    http://www.zaonce.com/stuff/ample.shtml
+
+The Amplinex archive (Tumblr)
+    http://amplinex.tumblr.com/
+
+The Amplinex archive (Google)
+    https://sites.google.com/site/amplinexarchive/home
+
+Joel's AMPLE recordings (Mirror site [http://archive.retro-kit.co.uk/www.joel.co.uk/ample/])
+    http://www.joel.co.uk/ample/
+
+8-bit software - gallery
+    http://8bs.com/seemusic.htm
+
+8-bit software - downloads
+    http://8bs.com/cgi-bin/catalogue/catalogue2.cgi
+
+Acorn Kit
+
+All my Acorn kit
+    https://www.retro-kit.co.uk/page.cfm/content/Acorn-Computers-Ltd/index.html
+
+8-bit Acorns
+    https://www.retro-kit.co.uk/page.cfm/content/Acorn-Computers-Ltd/index.html#8bit
+
+32-bit Acorns
+    https://www.retro-kit.co.uk/page.cfm/content/Acorn-Computers-Ltd/index.html#32bit
+
+About the Archive
+
+This Hybrid Music System archive attempts to bring together a host of
+different sources into one place making it hopefully the definitive
+archive for the Hybrid Music System.
+
+The archive is comprised of information I've collated from my own Hybrid
+Music System collection and other sites on the internet.
+
+Contributors
+
+There have been many contributors to this archive, either directly or
+indirectly including but not limited to:
+
+Chris Jordan (of Hybrid Software)
+
+Paul Vernon (Me)
+
+Paul1e
+[https://stardot.org.uk/forums/memberlist.php?mode=viewprofile&u=9577]
+who maintains and contributes to an Ample preservation thread on the
+stardot forums
+[https://stardot.org.uk/forums/viewtopic.php?f=32&t=15850].
+
+Colin Fraser
+    http://www.colinfraser.com/m5000/m5000.htm
+
+Kevin Doyle
+
+Mark Haysman of Retroclinic
+    http://www.retroclinic.com/
+
+Chris Whytehead
+    http://chrisacorns.computinghistory.org.uk/8bit_Upgrades/Hybrid_Music5000.html
+
+Everyone on Stardot who run Hybrid Music Systems
+    https://stardot.org.uk/forums/search.php?keywords=Hybrid+Music
