@@ -220,10 +220,26 @@ stay within range. DC removal and any final scaling are the consumer's job
 (the macOS renderer high-passes at 10 Hz and normalises by half full-scale, so
 a volume-0 square keeps unit AC amplitude).
 
-### Future Sources (reserved)
+### Extension Sources (indices 2 and 3)
 
-- Index 2: 1 MHz bus audio (Music 5000)
-- Index 3: Reserved
+Fields 2 and 3 belong to sound sources added by extensions, such as the
+Music 5000 (field 2) and Music 3000 (field 3). Frames are built by an
+`AudioFrameAssembler` owned by the hardware policy:
+
+- The SN76489 sets the frame rate. Each of its output samples completes a
+  frame, supplying fields 0 and 1.
+- For each further field, the assembler asks the `AudioFieldSource` registered on
+  the machine's `AudioSourcePort` for its value, once per frame. A field with
+  no source is 0.
+
+An extension reaches the port through `ExtensionContext::get<AudioSourcePort>()`
+during `init()`. It registers its source for a field index, together with the
+field's metadata: name, encoding, channel names, group, and whether the
+source is bipolar. A taken index throws.
+
+A source with no new sample ready returns its previous value, as a DAC holds
+its output. Sources are not asked for values while audio output is disabled.
+Everything runs on the emulation thread.
 
 ## AudioBuffer
 

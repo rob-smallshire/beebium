@@ -202,6 +202,7 @@ add_library(beebium_extension_api SHARED
     ExtensionContext.cpp
     IndicatorFilter.cpp
     OneMHzBusPort.cpp
+    AudioSourcePort.cpp
     EconetTransportExtension.cpp
     CpuDebugTarget.cpp
     CoprocessorExtension.cpp

@@ -102,6 +102,8 @@ FRED and JIM are claimed differently, because the bus treats them differently:
 
 Unclaimed FRED addresses and unclaimed JIM pages return 0xFF on read (74LS245 transceiver behaviour) and ignore writes.
 
+`AudioSourcePort` (`src/core/include/beebium/extension/AudioSourcePort.hpp`) follows the same pattern for sound: the hardware policy owns the port, and an extension implements `AudioFieldSource::take_field()` and registers it for one field of the machine's audio frames with `register_source(field_index, source, info)`. Fields 0 and 1 belong to the SN76489; a taken index throws. See `docs/sound-subsystem.md`.
+
 Future port types (UserPort, AnaloguePort) will follow the same pattern: a port handle class and a device callback interface, added without changing existing code.
 
 Where one chip serves two connectors, the hardware owns a composite `ViaPeripheral` and the port handles front its halves. The User VIA is the case in point: `UserViaPeripheral` is installed on the VIA once by the hardware policy, `UserPort::attach()` places a `UserPortDevice` on its Port B / CB1 / CB2 half, and Port A / CA1 / CA2 are reserved for the printer port.

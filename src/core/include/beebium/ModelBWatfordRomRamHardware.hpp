@@ -176,8 +176,14 @@ public:
     // Audio output buffer (optional - only created if audio output is enabled)
     std::optional<AudioBuffer> audio_buffer;
 
+    // Sound sources added by extensions (fields 2 and 3 of each audio frame)
+
+    AudioSourcePort audio_sources;
+
+
     // Builds each audio frame from its sources into audio_buffer, when enabled
-    AudioFrameAssembler audio_frames;
+
+    AudioFrameAssembler audio_frames{audio_sources};
 
     // Hardware indicators (LEDs) - must be declared before SystemViaPeripheral
     Indicators indicators;
@@ -513,6 +519,8 @@ public:
     }
 
     OneMHzBusPort& one_mhz_bus() { return one_mhz_bus_; }
+
+    AudioSourcePort& audio_source_port() { return audio_sources; }
 
     UserPort& user_port() { return user_port_; }
     PrinterPort& printer_port() { return printer_port_; }

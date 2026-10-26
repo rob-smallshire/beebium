@@ -342,6 +342,11 @@ add_executable(test_audio_frame_assembler test_audio_frame_assembler.cpp)
 target_link_libraries(test_audio_frame_assembler PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_audio_frame_assembler)
 
+# Audio source port (extension sound sources in the audio frames)
+add_executable(test_audio_source_port test_audio_source_port.cpp)
+target_link_libraries(test_audio_source_port PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_audio_source_port)
+
 # Extension registry tests
 add_executable(test_extension_registry test_extension_registry.cpp)
 target_link_libraries(test_extension_registry PRIVATE beebium_ext_test_scratch_ram beebium_core Catch2::Catch2WithMain)
