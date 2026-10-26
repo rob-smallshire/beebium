@@ -1,0 +1,29 @@
+{
+    "name": "hybrid-music-5000",
+    "display_name": "Hybrid Music 5000",
+    "description": "The Hybrid Music 5000 synthesiser, or its Music 3000 expander, which adds sixteen channels of digital sound on the 1 MHz bus.",
+    "library": "hybrid-music-5000",
+    "attaches_to": ["1mhz-bus"],
+    "cli": "hybrid-music-5000",
+    "parameters": [
+        {
+            "key": "unit",
+            "label": "Unit",
+            "type": "string",
+            "description": "Which board this is: the synthesiser itself, or the expander that adds a second set of channels.",
+            "default": "music-5000",
+            "choices": [
+                {
+                    "value": "music-5000",
+                    "label": "Music 5000 synthesiser",
+                    "description": "Answers to JIM pages &30-&3F; its sound is audio field 2."
+                },
+                {
+                    "value": "music-3000",
+                    "label": "Music 3000 expander",
+                    "description": "Answers to JIM pages &50-&5F; its sound is audio field 3."
+                }
+            ]
+        }
+    ]
+}

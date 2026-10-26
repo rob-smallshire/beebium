@@ -352,6 +352,11 @@ add_executable(test_music5000_synth test_music5000_synth.cpp)
 target_link_libraries(test_music5000_synth PRIVATE beebium_music5000_core Catch2::Catch2WithMain)
 catch_discover_tests(test_music5000_synth)
 
+# The hybrid-music-5000 extension on a machine
+add_executable(test_music5000_extension test_music5000_extension.cpp)
+target_link_libraries(test_music5000_extension PRIVATE beebium_ext_hybrid_music_5000 beebium_ext_acorn_scsi beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_music5000_extension)
+
 # Extension registry tests
 add_executable(test_extension_registry test_extension_registry.cpp)
 target_link_libraries(test_extension_registry PRIVATE beebium_ext_test_scratch_ram beebium_core Catch2::Catch2WithMain)

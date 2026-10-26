@@ -325,6 +325,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_rfc2217_server_plugin
         beebium_ext_tcp_printer_plugin
         beebium_ext_host_parallel_printer_plugin
+        beebium_ext_hybrid_music_5000_plugin
     )
 endif()
 add_custom_target(beebium-servers DEPENDS ${BEEBIUM_SERVERS_DEPS})
