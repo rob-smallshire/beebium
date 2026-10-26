@@ -97,6 +97,10 @@ public:
     // Invalidates the IRQ cache since device state may have changed.
     void tick();
 
+    // Assert the bus's NRST line: reset every registered device. The JIM
+    // paging register is not cleared, as on the real bus.
+    void reset(ResetCause cause);
+
     // Query whether any device has claimed the given FRED offset.
     bool is_claimed(uint16_t offset) const {
         return offset < kJimPagingRegisterOffset && fred_map_[offset] != nullptr;

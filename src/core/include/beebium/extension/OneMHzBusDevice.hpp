@@ -14,6 +14,7 @@
 #define BEEBIUM_EXTENSION_ONE_MHZ_BUS_DEVICE_HPP
 
 #include "Export.hpp"
+#include "../ResetCause.hpp"
 
 #include <cstdint>
 
@@ -38,6 +39,11 @@ struct BEEBIUM_EXT_API OneMHzBusDevice {
     virtual uint8_t jim_read(uint8_t /*page*/, uint8_t /*offset*/) { return 0xFF; }
     virtual void jim_write(uint8_t /*page*/, uint8_t /*offset*/, uint8_t /*value*/) {}
     virtual void tick() {}
+
+    // The bus's NRST line, asserted on power-up and on BREAK (Advanced User
+    // Guide, the one megahertz bus, NRST pin 14). Devices that need no reset
+    // ignore it.
+    virtual void reset(ResetCause /*cause*/) {}
 
     // IRQ support. Devices that generate interrupts override this to
     // return true when their IRQ line is asserted. The OneMHzBusPort

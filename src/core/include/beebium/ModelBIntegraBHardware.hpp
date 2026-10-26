@@ -522,6 +522,7 @@ public:
         addressable_latch.reset();
         reset_board_latches();
         disc_socket.reset(ResetCause::PowerOn);
+        one_mhz_bus_.reset(ResetCause::PowerOn);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();
@@ -538,6 +539,7 @@ public:
         addressable_latch.reset();
         reset_board_latches();
         disc_socket.reset(ResetCause::Break);
+        one_mhz_bus_.reset(ResetCause::Break);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();

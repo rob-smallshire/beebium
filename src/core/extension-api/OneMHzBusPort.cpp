@@ -88,6 +88,13 @@ void OneMHzBusPort::tick() {
     irq_dirty_ = true;
 }
 
+void OneMHzBusPort::reset(ResetCause cause) {
+    for (auto* dev : tickable_devices_) {
+        dev->reset(cause);
+    }
+    irq_dirty_ = true;
+}
+
 bool OneMHzBusPort::irq_pending() const {
     if (irq_dirty_) {
         cached_irq_ = false;

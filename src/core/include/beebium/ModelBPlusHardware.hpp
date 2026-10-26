@@ -597,6 +597,7 @@ public:
         acccon_ = 0;
         vdu_latch_ = false;
         disc_controller.reset();
+        one_mhz_bus_.reset(ResetCause::PowerOn);
         disc_control_ = 0;
         disc_drive_0.set_selected(false);
         disc_drive_1.set_selected(false);
@@ -620,6 +621,7 @@ public:
         sound_chip.reset();
         addressable_latch.reset();
         disc_controller.reset();
+        one_mhz_bus_.reset(ResetCause::Break);
         disc_control_ = 0;
         disc_drive_0.set_selected(false);
         disc_drive_1.set_selected(false);

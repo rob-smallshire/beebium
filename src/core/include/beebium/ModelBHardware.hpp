@@ -388,6 +388,7 @@ public:
         addressable_latch.reset();
         sideways.select_bank(0);
         disc_socket.reset(ResetCause::PowerOn);
+        one_mhz_bus_.reset(ResetCause::PowerOn);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();
@@ -407,6 +408,7 @@ public:
         sound_chip.reset();
         addressable_latch.reset();
         disc_socket.reset(ResetCause::Break);
+        one_mhz_bus_.reset(ResetCause::Break);
         econet_socket.reset();
         serial_socket.reset();
         tube_socket.reset();
