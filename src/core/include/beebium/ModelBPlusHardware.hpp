@@ -19,6 +19,7 @@
 #include "extension/SerialPort.hpp"
 #include "AddressableLatch.hpp"
 #include "AudioBuffer.hpp"
+#include "AudioFrameAssembler.hpp"
 #include "BankBinding.hpp"
 #include "ClockTypes.hpp"
 #include "IrqAggregator.hpp"
@@ -223,6 +224,9 @@ public:
 
     // Audio output buffer (optional - only created if audio output is enabled)
     std::optional<AudioBuffer> audio_buffer;
+
+    // Builds each audio frame from its sources into audio_buffer, when enabled
+    AudioFrameAssembler audio_frames;
 
     // Hardware indicators (LEDs, motors) - must be declared before components that use them
     Indicators indicators;
@@ -653,10 +657,12 @@ public:
         if (!audio_buffer) {
             audio_buffer.emplace(capacity);
         }
+        audio_frames.attach(&*audio_buffer);
     }
 
     // Disable audio output and free buffer memory
     void disable_audio_output() {
+        audio_frames.attach(nullptr);
         audio_buffer.reset();
     }
 

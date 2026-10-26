@@ -18,8 +18,8 @@
 namespace beebium {
 
 // Forward declarations
-struct AudioSample;
 class AudioBuffer;
+class AudioFrameAssembler;
 
 // SN76489 Programmable Sound Generator
 //
@@ -70,7 +70,12 @@ public:
     // internally to get 250 kHz. The emulator achieves the same 250 kHz by
     // being called at 2 MHz and using a phase accumulator to divide by 8.
     //
-    // Generates samples at 48 kHz via sample accumulator.
+    // Generates samples at 48 kHz via sample accumulator, each completing a
+    // frame in the assembler (fields 0 and 1).
+    void tick(AudioFrameAssembler& frames);
+
+    // As above, pushing frames straight to a buffer with fields 2 and 3
+    // silent.
     void tick(AudioBuffer& buffer);
 
     // Reset to power-on state

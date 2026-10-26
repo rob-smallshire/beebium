@@ -337,6 +337,11 @@ add_executable(test_one_mhz_bus_reset test_one_mhz_bus_reset.cpp)
 target_link_libraries(test_one_mhz_bus_reset PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_one_mhz_bus_reset)
 
+# Audio frame assembly (the sources of each AudioBuffer frame)
+add_executable(test_audio_frame_assembler test_audio_frame_assembler.cpp)
+target_link_libraries(test_audio_frame_assembler PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_audio_frame_assembler)
+
 # Extension registry tests
 add_executable(test_extension_registry test_extension_registry.cpp)
 target_link_libraries(test_extension_registry PRIVATE beebium_ext_test_scratch_ram beebium_core Catch2::Catch2WithMain)

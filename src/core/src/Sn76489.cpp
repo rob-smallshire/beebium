@@ -12,6 +12,7 @@
 
 #include "beebium/devices/Sn76489.hpp"
 #include "beebium/AudioBuffer.hpp"
+#include "beebium/AudioFrameAssembler.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -175,6 +176,11 @@ void Sn76489::write(uint8_t data) {
 }
 
 void Sn76489::tick(AudioBuffer& buffer) {
+    AudioFrameAssembler frames(buffer);
+    tick(frames);
+}
+
+void Sn76489::tick(AudioFrameAssembler& frames) {
     // Phase accumulator: tick at 250 kHz from 2 MHz input
     phase_accumulator_ += phase_increment_;
 
@@ -202,7 +208,6 @@ void Sn76489::tick(AudioBuffer& buffer) {
     }
 
     const double leftover = decim_count_ - decim_ratio_;
-    AudioSample sample;
     int16_t out[kAudioChannels];
     for (int c = 0; c < kAudioChannels; ++c) {
         double value = (decim_acc_[c] + (1.0 - leftover) * filtered[c]) / decim_ratio_;
@@ -215,12 +220,9 @@ void Sn76489::tick(AudioBuffer& buffer) {
     }
     decim_count_ = leftover;
 
-    // Two 2x16 source fields: field 0 = (tone0, tone1), field 1 = (tone2, noise).
-    sample.pack_2x16bit(0, out[0], out[1]);
-    sample.pack_2x16bit(1, out[2], out[3]);
-    sample.sources[2] = 0;
-    sample.sources[3] = 0;
-    buffer.push(sample);
+    // Two 2x16 fields: (tone0, tone1) and (tone2, noise).
+    frames.push_frame(AudioSample::field_2x16bit(out[0], out[1]),
+                      AudioSample::field_2x16bit(out[2], out[3]));
 }
 
 void Sn76489::update_250khz_state() {

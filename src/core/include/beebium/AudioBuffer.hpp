@@ -55,13 +55,16 @@ struct AudioSample {
         pack_4x8bit_signed(index, ch0, ch1, ch2, ch3);
     }
 
+    // One 32-bit field holding 2 × 16-bit signed channels: the first (left)
+    // in the low half, the second (right) in the high half.
+    static constexpr uint32_t field_2x16bit(int16_t left, int16_t right) {
+        return (static_cast<uint32_t>(static_cast<uint16_t>(right)) << 16) |
+               static_cast<uint32_t>(static_cast<uint16_t>(left));
+    }
+
     // Pack 2 × 16-bit signed channels (for stereo sources)
     void pack_2x16bit(size_t index, int16_t left, int16_t right) {
-        uint16_t u_left = static_cast<uint16_t>(left);
-        uint16_t u_right = static_cast<uint16_t>(right);
-
-        sources[index] = (static_cast<uint32_t>(u_right) << 16) |
-                        static_cast<uint32_t>(u_left);
+        sources[index] = field_2x16bit(left, right);
     }
 
     // Pack 1 × 32-bit signed channel

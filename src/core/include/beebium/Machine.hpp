@@ -318,7 +318,7 @@ public:
         // Tick sound chip at 2 MHz if audio output is enabled (stretch cycles
         // tick it in tick_stretch_cycle)
         if (state_.memory.audio_buffer) {
-            state_.memory.sound_chip.tick(state_.memory.audio_buffer.value());
+            state_.memory.sound_chip.tick(state_.memory.audio_frames);
         }
 
         // Tick the type-ahead queue to process queued keystrokes
@@ -1098,7 +1098,7 @@ private:
         // emulated second, however much of the time the CPU spends on the 1MHz
         // bus (#126).
         if (state_.memory.audio_buffer) {
-            state_.memory.sound_chip.tick(state_.memory.audio_buffer.value());
+            state_.memory.sound_chip.tick(state_.memory.audio_frames);
         }
 
         // The disc controller runs on the 1MHz bus and must be ticked during
