@@ -228,12 +228,13 @@ The SCSI/IDE controller uses only FRED page addresses:
 | 0xFC08-0xFC0F | Acorn Speech chip (TMS5220) |
 | 0xFC10-0xFC13 | Teletext adapter |
 | 0xFC18-0xFC1F | IEEE-488 |
-| 0xFC20-0xFC27 | Music 5000 / BeebOPL |
+| 0xFC20-0xFC27 | BeebOPL |
 | 0xFC28-0xFC2F | Joystick (some boards) |
 | 0xFC30-0xFC3F | Rombox / User |
 | **0xFC40-0xFC47** | **Hard disc (SCSI or IDE)** |
 | 0xFC48-0xFC4F | Reserved |
 | 0xFCF8-0xFCFF | Opus Challenger disc controller |
+| 0xFCFF | JIM paging register, shared by every JIM-paged device (Music 5000/3000 use pages 0x3x and 0x5x of JIM, 0xFD00-0xFDFF; they claim nothing else in FRED) |
 
 JIM (0xFD00-0xFDFF) is used as a 256-byte data window by some peripherals (e.g. Opus Challenger's sideways RAM), but the standard SCSI/IDE controllers do not use it -- all data transfer happens byte-by-byte through the data register at 0xFC40.
 
@@ -337,7 +338,7 @@ Pi1MHz emulates many 1 MHz bus devices concurrently:
 | Hard disc (SCSI) | 0xFC40-0xFC44 | BeebSCSI-derived |
 | Expansion RAM (JIM) | 0xFCFD-0xFCFF | Up to 992 MB on Pi 3B+ |
 | Expansion RAM (byte) | 0xFC00-0xFC03 | 16 MB byte-mode |
-| Music 5000/3000 | 0xFC4x | Audio synthesis |
+| Music 5000/3000 | 0xFCFF paging, JIM pages 0x3x / 0x5x | Audio synthesis; register RAM behind the JIM window, not in FRED |
 | SD card/FAT access | 0xFCD6 | File I/O buffer |
 | Framebuffer | 0xFCA0 | HDMI video output |
 
