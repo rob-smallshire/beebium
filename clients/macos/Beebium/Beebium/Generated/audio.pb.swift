@@ -28,7 +28,12 @@ enum Beebium_SourceEncoding: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// 4 × int8 channels, zero-centered (legacy)
   case encoding4X8BitSigned // = 0
 
-  /// 2 × int16 channels (e.g., Music 5000 stereo)
+  /// 2 x int16 channels (e.g. Music 5000 stereo). The SN76489 uses two such
+  /// fields: source 0 = (tone0, tone1), source 1 = (tone2, noise). Its samples
+  /// are unipolar (0 = silence); a single channel's full-scale high level is
+  /// 16384 (Sn76489::FULL_SCALE), leaving headroom for the anti-alias filter's
+  /// overshoot (~11%) and for summing the three tone channels. DC removal and
+  /// any final scaling are the consumer's responsibility.
   case encoding2X16BitSigned // = 1
 
   /// 1 × int32 channel (high-quality)
@@ -37,7 +42,9 @@ enum Beebium_SourceEncoding: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// Unused/silent source
   case encodingSilence // = 3
 
-  /// 4 × uint8 channels, DC bias pre-applied (SN76489)
+  /// 4 x uint8 channels, unipolar (0 = silence). Unused by any current source
+  /// (the SN76489 uses two ENCODING_2X16BIT_SIGNED fields). The wire enum value
+  /// is retained and never reused.
   case encoding4X8BitUnsigned // = 4
   case UNRECOGNIZED(Int)
 
@@ -96,13 +103,16 @@ struct Beebium_AudioChunk: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// Chunk sequence number (for drop detection)
+  /// Produced index of this chunk's first sample: delivered plus dropped so
+  /// far. A consumer that sees it jump beyond the previous chunk's first index
+  /// plus that chunk's sample_count has detected dropped samples. The drop
+  /// total is exact; a drop is attributed to the first chunk read after it.
   var sequence: UInt64 = 0
 
   /// Number of samples in this chunk
   var sampleCount: UInt32 = 0
 
-  /// Emulation cycle at start of chunk (reserved)
+  /// Reserved (zero).
   var cycleCount: UInt64 = 0
 
   /// Packed sample data: sample_count × source_count × 4 bytes
@@ -135,6 +145,13 @@ struct Beebium_AudioSource: Sendable {
 
   /// Channel group ID (0 = ungrouped)
   var groupID: UInt32 = 0
+
+  /// True when every channel in the field is signed and zero is silence (e.g.
+  /// the Music 5000), so it can be mixed as it stands. False for a unipolar
+  /// source whose zero is not the AC midpoint and whose DC the consumer must
+  /// remove before mixing (the SN76489, see ENCODING_2X16BIT_SIGNED), and for
+  /// a silent field.
+  var bipolar: Bool = false
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -174,6 +191,10 @@ struct Beebium_GetAudioFormatRequest: Sendable {
   init() {}
 }
 
+/// Describes the frame fields of this machine's audio. The sources are those of
+/// the SN76489 and of any attached extension that adds sound (e.g. the Music
+/// 5000); fields with no source are ENCODING_SILENCE. The set of extensions is
+/// fixed for the life of a server, so the format does not change while it runs.
 struct Beebium_AudioFormat: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -185,7 +206,7 @@ struct Beebium_AudioFormat: Sendable {
   /// Number of 32-bit fields per sample
   var sourceCount: UInt32 = 0
 
-  /// Metadata for each active source
+  /// Metadata for each field
   var sources: [Beebium_AudioSource] = []
 
   /// Channel group definitions
@@ -281,7 +302,7 @@ extension Beebium_AudioChunk: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 
 extension Beebium_AudioSource: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".AudioSource"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}source_index\0\u{3}source_name\0\u{1}encoding\0\u{3}channel_names\0\u{3}group_id\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}source_index\0\u{3}source_name\0\u{1}encoding\0\u{3}channel_names\0\u{3}group_id\0\u{1}bipolar\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -294,6 +315,7 @@ extension Beebium_AudioSource: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       case 3: try { try decoder.decodeSingularEnumField(value: &self.encoding) }()
       case 4: try { try decoder.decodeRepeatedStringField(value: &self.channelNames) }()
       case 5: try { try decoder.decodeSingularUInt32Field(value: &self.groupID) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.bipolar) }()
       default: break
       }
     }
@@ -315,6 +337,9 @@ extension Beebium_AudioSource: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if self.groupID != 0 {
       try visitor.visitSingularUInt32Field(value: self.groupID, fieldNumber: 5)
     }
+    if self.bipolar != false {
+      try visitor.visitSingularBoolField(value: self.bipolar, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -324,6 +349,7 @@ extension Beebium_AudioSource: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if lhs.encoding != rhs.encoding {return false}
     if lhs.channelNames != rhs.channelNames {return false}
     if lhs.groupID != rhs.groupID {return false}
+    if lhs.bipolar != rhs.bipolar {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

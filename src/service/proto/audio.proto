@@ -57,6 +57,12 @@ message AudioSource {
     // "0" (noise), "1", "2", "3" (tones) - matches BBC BASIC SOUND command
     repeated string channel_names = 4;
     uint32 group_id = 5;          // Channel group ID (0 = ungrouped)
+    // True when every channel in the field is signed and zero is silence (e.g.
+    // the Music 5000), so it can be mixed as it stands. False for a unipolar
+    // source whose zero is not the AC midpoint and whose DC the consumer must
+    // remove before mixing (the SN76489, see ENCODING_2X16BIT_SIGNED), and for
+    // a silent field.
+    bool bipolar = 6;
 }
 
 // Channel group for organizing related audio sources in UI
@@ -69,10 +75,14 @@ message ChannelGroup {
 
 message GetAudioFormatRequest {}
 
+// Describes the frame fields of this machine's audio. The sources are those of
+// the SN76489 and of any attached extension that adds sound (e.g. the Music
+// 5000); fields with no source are ENCODING_SILENCE. The set of extensions is
+// fixed for the life of a server, so the format does not change while it runs.
 message AudioFormat {
     uint32 sample_rate = 1;       // Output sample rate (48000 Hz)
     uint32 source_count = 2;      // Number of 32-bit fields per sample
-    repeated AudioSource sources = 3;     // Metadata for each active source
+    repeated AudioSource sources = 3;     // Metadata for each field
     repeated ChannelGroup groups = 4;     // Channel group definitions
 }
 

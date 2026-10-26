@@ -21,6 +21,7 @@
 #include "beebium/Machines.hpp"
 #include "beebium/service/Server.hpp"
 #include "beebium/AudioBuffer.hpp"
+#include "beebium/extension/AudioSourcePort.hpp"
 
 #include "audio.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
@@ -93,41 +94,107 @@ private:
 
 } // anonymous namespace
 
-TEST_CASE("AudioService GetAudioFormat returns correct metadata", "[grpc][audio]") {
-    AudioTestFixture fixture;
+namespace {
 
+// The format a Model B with no sound extensions reports, built field by field
+// as the AudioService built it before the format came from the audio source
+// port: the SN76489's two fields, then two silent fields (which now have no
+// name). Every field is set explicitly, so a comparison of the serialized
+// messages pins the format byte for byte.
+beebium::AudioFormat expected_sn76489_only_format() {
+    beebium::AudioFormat format;
+    format.set_sample_rate(48000);
+    format.set_source_count(beebium::AudioSample::MAX_SOURCES);
+
+    auto* group = format.add_groups();
+    group->set_group_id(1);
+    group->set_group_name("Internal Sound");
+    group->set_description("BBC Micro built-in SN76489 sound chip");
+    group->set_color("#FF6B35");
+
+    auto* sn_lo = format.add_sources();  // (tone0, tone1), MOS channels 1 and 2
+    sn_lo->set_source_index(0);
+    sn_lo->set_source_name("SN76489");
+    sn_lo->set_encoding(beebium::ENCODING_2X16BIT_SIGNED);
+    sn_lo->add_channel_names("1");
+    sn_lo->add_channel_names("2");
+    sn_lo->set_group_id(1);
+
+    auto* sn_hi = format.add_sources();  // (tone2, noise), MOS channels 3 and 0
+    sn_hi->set_source_index(1);
+    sn_hi->set_source_name("SN76489");
+    sn_hi->set_encoding(beebium::ENCODING_2X16BIT_SIGNED);
+    sn_hi->add_channel_names("3");
+    sn_hi->add_channel_names("0");
+    sn_hi->set_group_id(1);
+
+    for (uint32_t field = 2; field < beebium::AudioSample::MAX_SOURCES; ++field) {
+        auto* silent = format.add_sources();
+        silent->set_source_index(field);
+        silent->set_encoding(beebium::ENCODING_SILENCE);
+        silent->set_group_id(0);
+    }
+    return format;
+}
+
+beebium::AudioFormat get_audio_format(AudioTestFixture& fixture) {
     grpc::ClientContext context;
     beebium::GetAudioFormatRequest request;
     beebium::AudioFormat response;
-
     auto status = fixture.stub().GetAudioFormat(&context, request, &response);
-
     REQUIRE(status.ok());
-    CHECK(response.sample_rate() == 48000);
-    CHECK(response.source_count() == beebium::AudioSample::MAX_SOURCES);
+    return response;
+}
 
-    // Verify SN76489 source metadata: two 2x16 fields, MOS SOUND numbering.
-    REQUIRE(response.sources_size() >= 2);
-    auto& sn_lo = response.sources(0);
-    CHECK(sn_lo.source_index() == 0);
-    CHECK(sn_lo.source_name() == "SN76489");
-    CHECK(sn_lo.encoding() == beebium::ENCODING_2X16BIT_SIGNED);
-    REQUIRE(sn_lo.channel_names_size() == 2);
-    CHECK(sn_lo.channel_names(0) == "1");  // Tone0 = MOS channel 1
-    CHECK(sn_lo.channel_names(1) == "2");  // Tone1 = MOS channel 2
-    auto& sn_hi = response.sources(1);
-    CHECK(sn_hi.source_index() == 1);
-    CHECK(sn_hi.source_name() == "SN76489");
-    CHECK(sn_hi.encoding() == beebium::ENCODING_2X16BIT_SIGNED);
-    REQUIRE(sn_hi.channel_names_size() == 2);
-    CHECK(sn_hi.channel_names(0) == "3");  // Tone2 = MOS channel 3
-    CHECK(sn_hi.channel_names(1) == "0");  // Noise = MOS channel 0
+struct ConstantSource : beebium::AudioFieldSource {
+    uint32_t take_field() override { return 0; }
+};
 
-    // Verify channel group
-    REQUIRE(response.groups_size() >= 1);
-    auto& group = response.groups(0);
-    CHECK(group.group_id() == 1);
-    CHECK(group.group_name() == "Internal Sound");
+}  // namespace
+
+TEST_CASE("AudioService GetAudioFormat describes the SN76489 as before", "[grpc][audio]") {
+    AudioTestFixture fixture;
+
+    beebium::AudioFormat response = get_audio_format(fixture);
+    beebium::AudioFormat expected = expected_sn76489_only_format();
+
+    CHECK(response.DebugString() == expected.DebugString());
+    CHECK(response.SerializeAsString() == expected.SerializeAsString());
+    // The SN76489 is unipolar: its consumer removes the DC.
+    CHECK_FALSE(response.sources(0).bipolar());
+    CHECK_FALSE(response.sources(1).bipolar());
+}
+
+TEST_CASE("AudioService GetAudioFormat describes an extension's sound source", "[grpc][audio]") {
+    AudioTestFixture fixture;
+
+    ConstantSource source;
+    beebium::AudioFieldInfo info;
+    info.name = "Music5000";
+    info.encoding = beebium::AudioFieldEncoding::Signed2x16;
+    info.channel_names = {"L", "R"};
+    info.group_name = "Music 5000";
+    info.group_description = "Hybrid Music 5000 synthesiser";
+    info.bipolar = true;
+    fixture.machine().state().memory.audio_source_port().register_source(2, source, info);
+
+    beebium::AudioFormat response = get_audio_format(fixture);
+    beebium::AudioFormat expected = expected_sn76489_only_format();
+
+    auto* group = expected.add_groups();
+    group->set_group_id(2);
+    group->set_group_name("Music 5000");
+    group->set_description("Hybrid Music 5000 synthesiser");
+    auto* music5000 = expected.mutable_sources(2);
+    music5000->set_source_name("Music5000");
+    music5000->set_encoding(beebium::ENCODING_2X16BIT_SIGNED);
+    music5000->add_channel_names("L");
+    music5000->add_channel_names("R");
+    music5000->set_group_id(2);
+    music5000->set_bipolar(true);
+
+    CHECK(response.DebugString() == expected.DebugString());
+    CHECK(response.SerializeAsString() == expected.SerializeAsString());
 }
 
 // Note: GetChannelStates moved to DebuggerControl.GetSoundChipState in debugger.proto

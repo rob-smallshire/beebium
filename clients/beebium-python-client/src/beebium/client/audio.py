@@ -52,6 +52,10 @@ class AudioSource:
     encoding: SourceEncoding
     channel_names: tuple[str, ...]  # MOS SOUND channel numbering: "0" (noise), "1".."3"
     group_id: int  # channel group (0 = ungrouped)
+    # True when the field's channels are signed with zero as silence (e.g. the
+    # Music 5000); False for a unipolar source whose DC must be removed before
+    # mixing (the SN76489), and for a silent field.
+    bipolar: bool = False
 
 
 @dataclass(frozen=True)
@@ -95,6 +99,7 @@ def _audio_source_from_proto(proto: audio_pb2.AudioSource) -> AudioSource:
         encoding=SourceEncoding(proto.encoding),
         channel_names=tuple(proto.channel_names),
         group_id=proto.group_id,
+        bipolar=proto.bipolar,
     )
 
 

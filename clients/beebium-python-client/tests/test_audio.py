@@ -61,6 +61,29 @@ def test_audio_format_from_proto_maps_sources_and_encoding():
     assert source.encoding is SourceEncoding.ENCODING_2X16BIT_SIGNED
     assert source.channel_names == ("1", "2")
     assert fmt.sources[1].channel_names == ("3", "0")
+    assert source.bipolar is False
+
+
+def test_format_from_proto_carries_bipolar():
+    proto = audio_pb2.AudioFormat(
+        sample_rate=48000,
+        source_count=4,
+        sources=[
+            audio_pb2.AudioSource(
+                source_index=2,
+                source_name="Music5000",
+                encoding=audio_pb2.ENCODING_2X16BIT_SIGNED,
+                channel_names=["L", "R"],
+                group_id=2,
+                bipolar=True,
+            ),
+            audio_pb2.AudioSource(source_index=3, encoding=audio_pb2.ENCODING_SILENCE),
+        ],
+    )
+    fmt = _audio_format_from_proto(proto)
+    assert fmt.sources[0].bipolar is True
+    assert fmt.sources[1].bipolar is False
+    assert fmt.sources[1].source_name == ""
 
 
 # --------------------------------------------------------------------------

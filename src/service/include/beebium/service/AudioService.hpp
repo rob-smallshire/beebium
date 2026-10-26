@@ -15,9 +15,14 @@
 
 #include "audio.grpc.pb.h"
 #include "beebium/AudioBuffer.hpp"
+#include "beebium/extension/AudioSourcePort.hpp"
 #include "beebium/devices/Sn76489.hpp"
 #include <grpcpp/grpcpp.h>
+#include <algorithm>
+#include <string>
 #include <thread>
+#include <type_traits>
+#include <vector>
 #include <chrono>
 
 namespace beebium {
@@ -89,7 +94,6 @@ grpc::Status AudioServiceImpl<MachineType>::SubscribeAudio(
             chunk.set_cycle_count(0);
 
             // Pack samples into bytes: each sample is N × 32-bit fields
-            // For now, just source 0 (SN76489) is active
             std::string sample_data;
             sample_data.reserve(count * AudioSample::MAX_SOURCES * sizeof(uint32_t));
 
@@ -119,52 +123,75 @@ grpc::Status AudioServiceImpl<MachineType>::SubscribeAudio(
     return grpc::Status::OK;
 }
 
+// The proto encoding of a frame field.
+inline SourceEncoding to_proto_encoding(AudioFieldEncoding encoding) {
+    switch (encoding) {
+        case AudioFieldEncoding::Signed4x8:   return ENCODING_4X8BIT_SIGNED;
+        case AudioFieldEncoding::Signed2x16:  return ENCODING_2X16BIT_SIGNED;
+        case AudioFieldEncoding::Signed1x32:  return ENCODING_1X32BIT_SIGNED;
+        case AudioFieldEncoding::Unsigned4x8: return ENCODING_4X8BIT_UNSIGNED;
+    }
+    return ENCODING_SILENCE;
+}
+
+// Describe every frame field from the machine's audio source port: the
+// SN76489's two fields, any extension's, and silence for the rest. Groups are
+// numbered from 1 in order of first appearance; a source with no group name
+// is ungrouped (0).
+inline void describe_audio_format(const AudioSourcePort& port, uint32_t sample_rate,
+                                  AudioFormat* response) {
+    response->set_sample_rate(sample_rate);
+    response->set_source_count(static_cast<uint32_t>(AudioSourcePort::kFieldCount));
+
+    std::vector<std::string> group_names;
+    for (std::size_t field = 0; field < AudioSourcePort::kFieldCount; ++field) {
+        auto* source = response->add_sources();
+        source->set_source_index(static_cast<uint32_t>(field));
+
+        const AudioFieldInfo* info = port.field_info(field);
+        if (!info) {
+            source->set_encoding(ENCODING_SILENCE);
+            source->set_group_id(0);
+            continue;
+        }
+
+        source->set_source_name(info->name);
+        source->set_encoding(to_proto_encoding(info->encoding));
+        for (const auto& channel_name : info->channel_names) {
+            source->add_channel_names(channel_name);
+        }
+        source->set_bipolar(info->bipolar);
+
+        uint32_t group_id = 0;
+        if (!info->group_name.empty()) {
+            auto it = std::find(group_names.begin(), group_names.end(), info->group_name);
+            if (it == group_names.end()) {
+                group_names.push_back(info->group_name);
+                auto* group = response->add_groups();
+                group->set_group_id(static_cast<uint32_t>(group_names.size()));
+                group->set_group_name(info->group_name);
+                group->set_description(info->group_description);
+                group->set_color(info->group_color);
+                group_id = static_cast<uint32_t>(group_names.size());
+            } else {
+                group_id = static_cast<uint32_t>(it - group_names.begin()) + 1;
+            }
+        }
+        source->set_group_id(group_id);
+    }
+}
+
 template<typename MachineType>
 grpc::Status AudioServiceImpl<MachineType>::GetAudioFormat(
     grpc::ServerContext* /*context*/,
     const GetAudioFormatRequest* /*request*/,
     AudioFormat* response) {
 
-    response->set_sample_rate(SAMPLE_RATE);
-    response->set_source_count(AudioSample::MAX_SOURCES);
-
-    // Define channel group for internal sound
-    auto* internal_group = response->add_groups();
-    internal_group->set_group_id(1);
-    internal_group->set_group_name("Internal Sound");
-    internal_group->set_description("BBC Micro built-in SN76489 sound chip");
-    internal_group->set_color("#FF6B35");  // Orange
-
-    // SN76489 occupies two source fields, each two signed 16-bit channels.
-    // pack_2x16bit stores the first (left) channel in the low half and the
-    // second (right) in the high half. Channel names use MOS SOUND numbering.
-    // Field 0 = (tone0, tone1).
-    auto* sn_lo = response->add_sources();
-    sn_lo->set_source_index(0);
-    sn_lo->set_source_name("SN76489");
-    sn_lo->set_encoding(ENCODING_2X16BIT_SIGNED);
-    sn_lo->add_channel_names("1");  // Tone0 = MOS channel 1
-    sn_lo->add_channel_names("2");  // Tone1 = MOS channel 2
-    sn_lo->set_group_id(1);
-
-    // Field 1 = (tone2, noise).
-    auto* sn_hi = response->add_sources();
-    sn_hi->set_source_index(1);
-    sn_hi->set_source_name("SN76489");
-    sn_hi->set_encoding(ENCODING_2X16BIT_SIGNED);
-    sn_hi->add_channel_names("3");  // Tone2 = MOS channel 3
-    sn_hi->add_channel_names("0");  // Noise = MOS channel 0
-    sn_hi->set_group_id(1);
-
-    // Reserved sources (silent for now)
-    for (size_t i = 2; i < AudioSample::MAX_SOURCES; ++i) {
-        auto* reserved = response->add_sources();
-        reserved->set_source_index(static_cast<uint32_t>(i));
-        reserved->set_source_name("Reserved");
-        reserved->set_encoding(ENCODING_SILENCE);
-        reserved->set_group_id(0);  // Ungrouped
+    if constexpr (HasAudioSourcePort<std::remove_reference_t<decltype(machine_.state().memory)>>) {
+        describe_audio_format(machine_.state().memory.audio_source_port(), SAMPLE_RATE, response);
+    } else {
+        describe_audio_format(AudioSourcePort{}, SAMPLE_RATE, response);
     }
-
     return grpc::Status::OK;
 }
 

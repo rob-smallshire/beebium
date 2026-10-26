@@ -36,27 +36,27 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61udio.proto\x12\x07\x62\x65\x65\x62ium\"+\n\x15SubscribeAudioRequest\x12\x12\n\nchunk_size\x18\x01 \x01(\r\"Z\n\nAudioChunk\x12\x10\n\x08sequence\x18\x01 \x01(\x04\x12\x14\n\x0csample_count\x18\x02 \x01(\r\x12\x13\n\x0b\x63ycle_count\x18\x03 \x01(\x04\x12\x0f\n\x07samples\x18\x04 \x01(\x0c\"\x8c\x01\n\x0b\x41udioSource\x12\x14\n\x0csource_index\x18\x01 \x01(\r\x12\x13\n\x0bsource_name\x18\x02 \x01(\t\x12)\n\x08\x65ncoding\x18\x03 \x01(\x0e\x32\x17.beebium.SourceEncoding\x12\x15\n\rchannel_names\x18\x04 \x03(\t\x12\x10\n\x08group_id\x18\x05 \x01(\r\"X\n\x0c\x43hannelGroup\x12\x10\n\x08group_id\x18\x01 \x01(\r\x12\x12\n\ngroup_name\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\r\n\x05\x63olor\x18\x04 \x01(\t\"\x17\n\x15GetAudioFormatRequest\"\x86\x01\n\x0b\x41udioFormat\x12\x13\n\x0bsample_rate\x18\x01 \x01(\r\x12\x14\n\x0csource_count\x18\x02 \x01(\r\x12%\n\x07sources\x18\x03 \x03(\x0b\x32\x14.beebium.AudioSource\x12%\n\x06groups\x18\x04 \x03(\x0b\x32\x15.beebium.ChannelGroup*\x9a\x01\n\x0eSourceEncoding\x12\x1a\n\x16\x45NCODING_4X8BIT_SIGNED\x10\x00\x12\x1b\n\x17\x45NCODING_2X16BIT_SIGNED\x10\x01\x12\x1b\n\x17\x45NCODING_1X32BIT_SIGNED\x10\x02\x12\x14\n\x10\x45NCODING_SILENCE\x10\x03\x12\x1c\n\x18\x45NCODING_4X8BIT_UNSIGNED\x10\x04\x32\x9f\x01\n\x0c\x41udioService\x12G\n\x0eSubscribeAudio\x12\x1e.beebium.SubscribeAudioRequest\x1a\x13.beebium.AudioChunk0\x01\x12\x46\n\x0eGetAudioFormat\x12\x1e.beebium.GetAudioFormatRequest\x1a\x14.beebium.AudioFormatb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61udio.proto\x12\x07\x62\x65\x65\x62ium\"+\n\x15SubscribeAudioRequest\x12\x12\n\nchunk_size\x18\x01 \x01(\r\"Z\n\nAudioChunk\x12\x10\n\x08sequence\x18\x01 \x01(\x04\x12\x14\n\x0csample_count\x18\x02 \x01(\r\x12\x13\n\x0b\x63ycle_count\x18\x03 \x01(\x04\x12\x0f\n\x07samples\x18\x04 \x01(\x0c\"\x9d\x01\n\x0b\x41udioSource\x12\x14\n\x0csource_index\x18\x01 \x01(\r\x12\x13\n\x0bsource_name\x18\x02 \x01(\t\x12)\n\x08\x65ncoding\x18\x03 \x01(\x0e\x32\x17.beebium.SourceEncoding\x12\x15\n\rchannel_names\x18\x04 \x03(\t\x12\x10\n\x08group_id\x18\x05 \x01(\r\x12\x0f\n\x07\x62ipolar\x18\x06 \x01(\x08\"X\n\x0c\x43hannelGroup\x12\x10\n\x08group_id\x18\x01 \x01(\r\x12\x12\n\ngroup_name\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\r\n\x05\x63olor\x18\x04 \x01(\t\"\x17\n\x15GetAudioFormatRequest\"\x86\x01\n\x0b\x41udioFormat\x12\x13\n\x0bsample_rate\x18\x01 \x01(\r\x12\x14\n\x0csource_count\x18\x02 \x01(\r\x12%\n\x07sources\x18\x03 \x03(\x0b\x32\x14.beebium.AudioSource\x12%\n\x06groups\x18\x04 \x03(\x0b\x32\x15.beebium.ChannelGroup*\x9a\x01\n\x0eSourceEncoding\x12\x1a\n\x16\x45NCODING_4X8BIT_SIGNED\x10\x00\x12\x1b\n\x17\x45NCODING_2X16BIT_SIGNED\x10\x01\x12\x1b\n\x17\x45NCODING_1X32BIT_SIGNED\x10\x02\x12\x14\n\x10\x45NCODING_SILENCE\x10\x03\x12\x1c\n\x18\x45NCODING_4X8BIT_UNSIGNED\x10\x04\x32\x9f\x01\n\x0c\x41udioService\x12G\n\x0eSubscribeAudio\x12\x1e.beebium.SubscribeAudioRequest\x1a\x13.beebium.AudioChunk0\x01\x12\x46\n\x0eGetAudioFormat\x12\x1e.beebium.GetAudioFormatRequest\x1a\x14.beebium.AudioFormatb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'audio_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SOURCEENCODING']._serialized_start=557
-  _globals['_SOURCEENCODING']._serialized_end=711
+  _globals['_SOURCEENCODING']._serialized_start=574
+  _globals['_SOURCEENCODING']._serialized_end=728
   _globals['_SUBSCRIBEAUDIOREQUEST']._serialized_start=24
   _globals['_SUBSCRIBEAUDIOREQUEST']._serialized_end=67
   _globals['_AUDIOCHUNK']._serialized_start=69
   _globals['_AUDIOCHUNK']._serialized_end=159
   _globals['_AUDIOSOURCE']._serialized_start=162
-  _globals['_AUDIOSOURCE']._serialized_end=302
-  _globals['_CHANNELGROUP']._serialized_start=304
-  _globals['_CHANNELGROUP']._serialized_end=392
-  _globals['_GETAUDIOFORMATREQUEST']._serialized_start=394
-  _globals['_GETAUDIOFORMATREQUEST']._serialized_end=417
-  _globals['_AUDIOFORMAT']._serialized_start=420
-  _globals['_AUDIOFORMAT']._serialized_end=554
-  _globals['_AUDIOSERVICE']._serialized_start=714
-  _globals['_AUDIOSERVICE']._serialized_end=873
+  _globals['_AUDIOSOURCE']._serialized_end=319
+  _globals['_CHANNELGROUP']._serialized_start=321
+  _globals['_CHANNELGROUP']._serialized_end=409
+  _globals['_GETAUDIOFORMATREQUEST']._serialized_start=411
+  _globals['_GETAUDIOFORMATREQUEST']._serialized_end=434
+  _globals['_AUDIOFORMAT']._serialized_start=437
+  _globals['_AUDIOFORMAT']._serialized_end=571
+  _globals['_AUDIOSERVICE']._serialized_start=731
+  _globals['_AUDIOSERVICE']._serialized_end=890
 # @@protoc_insertion_point(module_scope)

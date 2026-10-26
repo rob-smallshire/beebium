@@ -149,6 +149,7 @@ class AudioSource(_message.Message):
     ENCODING_FIELD_NUMBER: _builtins.int
     CHANNEL_NAMES_FIELD_NUMBER: _builtins.int
     GROUP_ID_FIELD_NUMBER: _builtins.int
+    BIPOLAR_FIELD_NUMBER: _builtins.int
     source_index: _builtins.int
     """Index into sample sources array"""
     source_name: _builtins.str
@@ -157,6 +158,13 @@ class AudioSource(_message.Message):
     """How the 32-bit field is subdivided"""
     group_id: _builtins.int
     """Channel group ID (0 = ungrouped)"""
+    bipolar: _builtins.bool
+    """True when every channel in the field is signed and zero is silence (e.g.
+    the Music 5000), so it can be mixed as it stands. False for a unipolar
+    source whose zero is not the AC midpoint and whose DC the consumer must
+    remove before mixing (the SN76489, see ENCODING_2X16BIT_SIGNED), and for
+    a silent field.
+    """
     @_builtins.property
     def channel_names(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """Sub-channel labels using MOS SOUND channel numbering:
@@ -171,10 +179,11 @@ class AudioSource(_message.Message):
         encoding: Global___SourceEncoding.ValueType = ...,
         channel_names: _abc.Iterable[_builtins.str] | None = ...,
         group_id: _builtins.int = ...,
+        bipolar: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["channel_names", b"channel_names", "encoding", b"encoding", "group_id", b"group_id", "source_index", b"source_index", "source_name", b"source_name"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bipolar", b"bipolar", "channel_names", b"channel_names", "encoding", b"encoding", "group_id", b"group_id", "source_index", b"source_index", "source_name", b"source_name"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -231,6 +240,12 @@ Global___GetAudioFormatRequest: _TypeAlias = GetAudioFormatRequest  # noqa: Y015
 
 @_typing.final
 class AudioFormat(_message.Message):
+    """Describes the frame fields of this machine's audio. The sources are those of
+    the SN76489 and of any attached extension that adds sound (e.g. the Music
+    5000); fields with no source are ENCODING_SILENCE. The set of extensions is
+    fixed for the life of a server, so the format does not change while it runs.
+    """
+
     DESCRIPTOR: _descriptor.Descriptor
 
     SAMPLE_RATE_FIELD_NUMBER: _builtins.int
@@ -243,7 +258,7 @@ class AudioFormat(_message.Message):
     """Number of 32-bit fields per sample"""
     @_builtins.property
     def sources(self) -> _containers.RepeatedCompositeFieldContainer[Global___AudioSource]:
-        """Metadata for each active source"""
+        """Metadata for each field"""
 
     @_builtins.property
     def groups(self) -> _containers.RepeatedCompositeFieldContainer[Global___ChannelGroup]:
