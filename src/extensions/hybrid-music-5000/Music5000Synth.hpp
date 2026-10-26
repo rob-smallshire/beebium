@@ -58,8 +58,25 @@ public:
     void reset();
 
     // Compute one 46875 Hz sample: all sixteen channel counter values in
-    // order (one frame of the sequencer, 2).
+    // order (one frame of the sequencer, 2). The results are the DAC current
+    // on each side, in units where one channel at full scale on the left
+    // (encode) side is 8159 (7.1).
     void render_frame(int32_t& left, int32_t& right);
+
+    // The AM6070's current for a 7-bit code (chord in bits 6-4, step in bits
+    // 3-0), in its normalised units. Decode (E/D = 0, the right side):
+    // 2^C (2S + 33) - 33, 0..8031. Encode (E/D = 1, the left side) adds half
+    // a step: 2^C (2S + 34) - 33, 1..8159 (7.1).
+    static constexpr int32_t decode_current(uint8_t code) {
+        const int32_t chord = (code >> 4) & 0x07;
+        const int32_t step = code & 0x0F;
+        return (int32_t{1} << chord) * (2 * step + 33) - 33;
+    }
+    static constexpr int32_t encode_current(uint8_t code) {
+        const int32_t chord = (code >> 4) & 0x07;
+        const int32_t step = code & 0x0F;
+        return (int32_t{1} << chord) * (2 * step + 34) - 33;
+    }
 
     // The register column read by channel counter value k (0-15). The DSP
     // visits the columns in the order 0, 8, 1, 9, ..., 7, 15 (1.3).
@@ -79,6 +96,8 @@ public:
     // carried out of bit 23.
     uint32_t phase(std::size_t k) const { return phase_[k]; }
     bool wrapped(std::size_t k) const { return wrapped_[k]; }
+    // The amplitude the DAC add uses for channel counter value k.
+    uint8_t stored_amplitude(std::size_t k) const { return stored_amplitude_[k]; }
 
 private:
     // Register access for one counter value in the bank INDEX selects.
@@ -97,6 +116,8 @@ private:
     // The phase RAM (IC22): per channel counter value, a 24-bit phase.
     std::array<uint32_t, kChannelCount> phase_{};
     std::array<bool, kChannelCount> wrapped_{};
+    // Phase RAM byte 3: the amplitude latched at the last wrap (4).
+    std::array<uint8_t, kChannelCount> stored_amplitude_{};
 
     // The INDEX flip-flop (IC3a): selects the alternate bank for every
     // register read of a channel (5).

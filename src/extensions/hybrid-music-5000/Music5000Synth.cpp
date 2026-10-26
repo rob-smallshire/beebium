@@ -54,11 +54,45 @@ bool Music5000Synth::advance_phase(std::size_t k) {
 }
 
 void Music5000Synth::render_frame(int32_t& left, int32_t& right) {
-    left = 0;
-    right = 0;
+    int32_t right_sum = 0;
+
     for (std::size_t k = 0; k < kChannelCount; ++k) {
-        wrapped_[k] = advance_phase(k);
+        const bool wrap = advance_phase(k);
+        wrapped_[k] = wrap;
+
+        // Slot 6: the wave address is the wave select's upper nibble and
+        // bits 7-1 of the new phase-high byte (2).
+        const uint8_t wave = reg(k, kWaveSelectRow) >> 4;
+        const uint8_t sample = ram_[static_cast<std::size_t>(wave) << 7
+                                    | ((phase_[k] >> 17) & 0x7F)];
+
+        // Slot 7: on a wrap the amplitude register is written into phase RAM
+        // byte 3, and the latch feeding the adder captures it, so a new
+        // amplitude applies from the wrapping sample on (4).
+        if (wrap) {
+            stored_amplitude_[k] = reg(k, kAmplitudeRow);
+        }
+
+        // Slot 0: an 8-bit add of the log sample (sign in bit 7, 1 is
+        // positive) and the stored amplitude. The DAC registers load only if
+        // the add flipped bit 7; otherwise the channel is silent (4).
+        const uint8_t sum = static_cast<uint8_t>(sample + stored_amplitude_[k]);
+        const bool positive = (sample & 0x80) != 0;
+        if (((sum ^ sample) & 0x80) == 0) {
+            continue;
+        }
+
+        // The sign reaching the DAC is the sample's, inverted by control
+        // bit 4 (6).
+        const uint8_t control = reg(k, kControlRow);
+        const bool invert = (control & 0x10) != 0;
+        const uint8_t code = sum & 0x7F;
+        const int32_t current = decode_current(code);
+        right_sum += (positive != invert) ? current : -current;
     }
+
+    left = 0;
+    right = right_sum;
 }
 
 }  // namespace beebium

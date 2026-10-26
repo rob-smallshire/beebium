@@ -245,3 +245,165 @@ TEST_CASE("Music5000Synth reset zeroes the wave byte each channel addresses (1.5
     // The phase RAM is untouched.
     REQUIRE(synth.phase(0) == 0x460001);
 }
+
+namespace {
+
+void set_register(Music5000Synth& synth, std::size_t k, uint16_t row, uint8_t value) {
+    poke(synth, Music5000Synth::register_address(Music5000Synth::kNormalBank, row,
+                                                 Music5000Synth::column_for_counter(k)),
+         value);
+}
+
+// Fill every byte of a wave table with one sample value.
+void fill_wave(Music5000Synth& synth, uint8_t wave, uint8_t sample) {
+    for (uint16_t i = 0; i < 128; ++i) {
+        poke(synth, static_cast<uint16_t>(wave << 7 | i), sample);
+    }
+}
+
+int32_t render_right(Music5000Synth& synth) {
+    int32_t left = 0;
+    int32_t right = 0;
+    synth.render_frame(left, right);
+    return right;
+}
+
+}  // namespace
+
+TEST_CASE("Music5000Synth DAC current follows the AM6070's laws (7.1)",
+          "[music5000][synth][dac]") {
+    // Decode: datasheet Table 3. Encode: Table 4.
+    struct Point { uint8_t chord; uint8_t step; int32_t decode; int32_t encode; };
+    constexpr std::array<Point, 6> points = {{
+        {0, 0, 0, 1},
+        {0, 1, 2, 3},
+        {1, 0, 33, 35},
+        {3, 5, 311, 319},
+        {5, 10, 1663, 1695},
+        {7, 15, 8031, 8159},
+    }};
+    for (const auto& p : points) {
+        const uint8_t code = static_cast<uint8_t>(p.chord << 4 | p.step);
+        INFO("chord " << int(p.chord) << " step " << int(p.step));
+        REQUIRE(Music5000Synth::decode_current(code) == p.decode);
+        REQUIRE(Music5000Synth::encode_current(code) == p.encode);
+        // Encode is decode plus half a step (2^chord).
+        REQUIRE(Music5000Synth::encode_current(code)
+                == Music5000Synth::decode_current(code) + (1 << p.chord));
+    }
+}
+
+TEST_CASE("Music5000Synth amplitude takes effect at the first wrap after a write (4)",
+          "[music5000][synth][amplitude]") {
+    Music5000Synth synth;
+    fill_wave(synth, 0, 0xC0);  // positive, log magnitude 0x40
+    set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x50);
+    set_frequency(synth, 0, 0x800000);
+
+    // Frame 1: no wrap yet, the stored amplitude is still 0, and
+    // 0xC0 + 0x00 = 0xC0 leaves bit 7 unchanged: silent.
+    REQUIRE(render_right(synth) == 0);
+    REQUIRE(synth.stored_amplitude(0) == 0x00);
+
+    // Frame 2 wraps: 0x50 is latched and used on this very sample.
+    // 0xC0 + 0x50 = 0x110 -> 0x10: chord 1, step 0 -> 33.
+    REQUIRE(render_right(synth) == 33);
+    REQUIRE(synth.stored_amplitude(0) == 0x50);
+
+    // A new amplitude waits for the next wrap.
+    set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x60);
+    REQUIRE(render_right(synth) == 33);  // frame 3, no wrap
+    // Frame 4 wraps: 0xC0 + 0x60 = 0x120 -> 0x20: chord 2, step 0 -> 99.
+    REQUIRE(render_right(synth) == 99);
+}
+
+TEST_CASE("Music5000Synth gate shuts when the add does not flip bit 7 (4)",
+          "[music5000][synth][amplitude]") {
+    Music5000Synth synth;
+    set_frequency(synth, 0, 0x800000);
+
+    SECTION("positive sample, underflow") {
+        fill_wave(synth, 0, 0xC0);
+        set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x3F);
+        render_right(synth);
+        REQUIRE(render_right(synth) == 0);  // 0xC0 + 0x3F = 0xFF: shut
+    }
+
+    SECTION("positive sample, just open at code 0") {
+        fill_wave(synth, 0, 0xC0);
+        set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x40);
+        render_right(synth);
+        // 0xC0 + 0x40 = 0x100 -> 0x00: open, code 0, decode current 0.
+        REQUIRE(render_right(synth) == 0);
+        // One step louder: code 1 -> 2.
+        set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x41);
+        render_right(synth);
+        REQUIRE(render_right(synth) == 2);
+    }
+
+    SECTION("negative sample") {
+        fill_wave(synth, 0, 0x40);  // sign 0: negative, log magnitude 0x40
+        set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x50);
+        render_right(synth);
+        // 0x40 + 0x50 = 0x90: bit 7 flipped to 1, code 0x10 -> 33, negative.
+        REQUIRE(render_right(synth) == -33);
+    }
+
+    SECTION("negative sample, underflow") {
+        fill_wave(synth, 0, 0x20);
+        set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x50);
+        render_right(synth);
+        REQUIRE(render_right(synth) == 0);  // 0x20 + 0x50 = 0x70: shut
+    }
+
+    SECTION("amplitude bit 7 shuts the loud end") {
+        fill_wave(synth, 0, 0xF0);  // positive, magnitude 0x70
+        set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x90);
+        render_right(synth);
+        REQUIRE(render_right(synth) == 0);  // 0xF0 + 0x90 = 0x180 -> 0x80: shut
+    }
+}
+
+TEST_CASE("Music5000Synth control bit 4 inverts the sign (6)", "[music5000][synth][amplitude]") {
+    Music5000Synth synth;
+    fill_wave(synth, 0, 0xC0);
+    set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x50);
+    set_register(synth, 0, Music5000Synth::kControlRow, 0x10);
+    set_frequency(synth, 0, 0x800000);
+    render_right(synth);
+    REQUIRE(render_right(synth) == -33);
+}
+
+TEST_CASE("Music5000Synth reads the wave the select's upper nibble names at the new phase (2)",
+          "[music5000][synth][amplitude]") {
+    Music5000Synth synth;
+    set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x50);
+    set_register(synth, 0, Music5000Synth::kWaveSelectRow, 0x2F);  // wave 2; low nibble unused
+    // Wave 2: index 0 loud (code 0x20 -> 99), index 1 quieter (code 0x10 -> 33).
+    poke(synth, 0x100, 0xD0);
+    poke(synth, 0x101, 0xC0);
+    set_frequency(synth, 0, 0x800000);
+
+    render_right(synth);                 // phase 0x800000, no wrap, amplitude 0
+    REQUIRE(render_right(synth) == 99);  // wraps to phase 0: index 0
+    set_frequency(synth, 0, 0x020000);
+    REQUIRE(render_right(synth) == 33);  // phase 0x020000: index 1
+}
+
+TEST_CASE("Music5000Synth phase-set holds a constant level (3.2)", "[music5000][synth][amplitude]") {
+    Music5000Synth synth;
+    fill_wave(synth, 0, 0xC0);
+    set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x50);
+    set_frequency(synth, 0, 0x800000);
+    render_right(synth);
+    render_right(synth);  // the wrap latches the amplitude
+
+    // Phase-set parks the phase; the amplitude stays as latched and the
+    // channel keeps sounding the same sample.
+    set_frequency(synth, 0, 0x000001);
+    set_register(synth, 0, Music5000Synth::kAmplitudeRow, 0x00);
+    for (int i = 0; i < 100; ++i) {
+        REQUIRE(render_right(synth) == 33);
+    }
+    REQUIRE(synth.phase(0) == 0x000001);
+}
