@@ -345,7 +345,7 @@ public:
             // emulation loop is never entered: the machine was asked to stop
             // before it was ever asked to run. The Api wait state was entered
             // before the server announced itself.
-            if (handle_wait_mode(machine, config.launch.wait_mode)) {
+            if (handle_wait_mode(config.launch.wait_mode)) {
                 // Run main emulation loop (blocks until shutdown)
                 run_emulation_loop(machine, server, config);
             }

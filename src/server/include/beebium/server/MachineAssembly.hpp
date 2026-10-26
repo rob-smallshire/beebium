@@ -561,8 +561,7 @@ void enter_api_wait_state(MachineType& machine) {
 // server announces its port, so here it only remains waiting.
 // Returns false if a shutdown signal arrived while waiting, in which case the
 // caller must not start the emulation loop.
-template<typename MachineType>
-bool handle_wait_mode(MachineType& machine, WaitMode wait_mode) {
+inline bool handle_wait_mode(WaitMode wait_mode) {
     switch (wait_mode) {
         case WaitMode::Cli:
             // Wait for user to press RETURN before starting emulation
