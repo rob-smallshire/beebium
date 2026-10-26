@@ -357,6 +357,11 @@ add_executable(test_music5000_output_filter test_music5000_output_filter.cpp)
 target_link_libraries(test_music5000_output_filter PRIVATE beebium_music5000_core Catch2::Catch2WithMain)
 catch_discover_tests(test_music5000_output_filter)
 
+# Music 5000 46875 -> 48000 Hz resampler (no framework)
+add_executable(test_music5000_resampler test_music5000_resampler.cpp)
+target_link_libraries(test_music5000_resampler PRIVATE beebium_music5000_core Catch2::Catch2WithMain)
+catch_discover_tests(test_music5000_resampler)
+
 # The hybrid-music-5000 extension on a machine
 add_executable(test_music5000_extension test_music5000_extension.cpp)
 target_link_libraries(test_music5000_extension PRIVATE beebium_ext_hybrid_music_5000 beebium_ext_acorn_scsi beebium_core Catch2::Catch2WithMain)

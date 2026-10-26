@@ -5,6 +5,7 @@
 add_library(beebium_music5000_core STATIC
     Music5000Synth.cpp
     Music5000OutputFilter.cpp
+    Music5000Resampler.cpp
 )
 
 target_include_directories(beebium_music5000_core
