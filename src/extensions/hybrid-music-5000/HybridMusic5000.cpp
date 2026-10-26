@@ -15,6 +15,8 @@
 #include <beebium/AudioBuffer.hpp>
 #include <beebium/extension/OneMHzBusPort.hpp>
 
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
@@ -97,17 +99,67 @@ void HybridMusic5000::tick() {
         int32_t right = 0;
         synth_.render_frame(left, right);
         ++frames_rendered_;
-        latest_field_ = AudioSample::field_2x16bit(to_int16(left), to_int16(right));
+
+        // The analogue output filter, then 46875 to 48000 Hz. The two sides'
+        // resamplers run in lockstep, so their outputs pair up.
+        std::array<double, 2> left_out{};
+        std::array<double, 2> right_out{};
+        std::size_t left_count = 0;
+        std::size_t right_count = 0;
+        resamplers_[0].push(filters_[0].process(left),
+                            [&](double y) { left_out[left_count++] = y; });
+        resamplers_[1].push(filters_[1].process(right),
+                            [&](double y) { right_out[right_count++] = y; });
+        for (std::size_t i = 0; i < left_count; ++i) {
+            produce(AudioSample::field_2x16bit(to_int16(left_out[i]), to_int16(right_out[i])));
+        }
     }
 }
 
-int16_t HybridMusic5000::to_int16(int32_t current) {
-    const int64_t scaled = static_cast<int64_t>(current) * 32767;
-    const int64_t half = kFullScaleCurrent / 2;
-    int64_t value = scaled >= 0 ? (scaled + half) / kFullScaleCurrent
-                                : -((-scaled + half) / kFullScaleCurrent);
-    if (value > 32767) value = 32767;
-    if (value < -32768) value = -32768;
+void HybridMusic5000::produce(uint32_t field) {
+    if (ring_count_ == kRingSize) {
+        // Nobody has been taking samples (audio output disabled), or the
+        // consumer stalled: drop the oldest.
+        ring_read_ = (ring_read_ + 1) % kRingSize;
+        --ring_count_;
+        if (delivering_) {
+            ++overruns_;
+            delivering_ = false;  // re-prime on the next take
+        }
+    }
+    ring_[(ring_read_ + ring_count_) % kRingSize] = field;
+    ++ring_count_;
+    ++samples_produced_;
+}
+
+uint32_t HybridMusic5000::take_field() {
+    if (!delivering_) {
+        if (ring_count_ < kPrimeLevel) {
+            return last_field_;
+        }
+        // Start from the prime level, discarding anything older (a full
+        // ring left while audio output was disabled).
+        while (ring_count_ > kPrimeLevel) {
+            ring_read_ = (ring_read_ + 1) % kRingSize;
+            --ring_count_;
+        }
+        delivering_ = true;
+    }
+    if (ring_count_ == 0) {
+        ++underruns_;
+        delivering_ = false;
+        return last_field_;
+    }
+    last_field_ = ring_[ring_read_];
+    ring_read_ = (ring_read_ + 1) % kRingSize;
+    --ring_count_;
+    return last_field_;
+}
+
+int16_t HybridMusic5000::to_int16(double current) {
+    const double value = std::round(current * 32767.0 / kFullScaleCurrent);
+    if (value > 32767.0) return 32767;
+    if (value < -32768.0) return -32768;
     return static_cast<int16_t>(value);
 }
 

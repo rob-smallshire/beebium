@@ -13,6 +13,8 @@
 #ifndef BEEBIUM_EXTENSION_HYBRID_MUSIC_5000_HPP
 #define BEEBIUM_EXTENSION_HYBRID_MUSIC_5000_HPP
 
+#include "Music5000OutputFilter.hpp"
+#include "Music5000Resampler.hpp"
 #include "Music5000Synth.hpp"
 
 #include <beebium/extension/AudioSourcePort.hpp>
@@ -20,6 +22,8 @@
 #include <beebium/extension/OneMHzBusDevice.hpp>
 #include <beebium/extension/PeripheralExtension.hpp>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -33,8 +37,12 @@ namespace beebium {
 // The board answers to JIM pages 0x30-0x3F (Music 5000) or 0x50-0x5F (Music
 // 3000), chosen by the "unit" parameter, and is write-only. Its DSP
 // (Music5000Synth) runs at 46875 Hz, three samples for every 64 ticks of the
-// 1 MHz bus, and its output fills one field of the machine's audio frames:
-// field 2 for the Music 5000, field 3 for the Music 3000.
+// 1 MHz bus. Each sample goes, per side, through the analogue output filter
+// (Music5000OutputFilter), the level mapping, and the 46875 to 48000 Hz
+// resampler (Music5000Resampler), into a short ring that one field of the
+// machine's audio frames draws from: field 2 for the Music 5000, field 3 for
+// the Music 3000. Both clocks derive from the same 2 MHz, so the ring neither
+// fills nor empties in steady state.
 class HybridMusic5000 : public PeripheralExtension,
                         public OneMHzBusDevice,
                         public AudioFieldSource {
@@ -70,29 +78,54 @@ public:
     void tick() override;
     void reset(ResetCause /*cause*/) override { synth_.reset(); }
 
-    // AudioFieldSource: the latest sample, as a (left, right) 2 x int16 field.
-    //
-    // TEMPORARY (milestone M1): this holds the most recent 46875 Hz sample
-    // for each 48 kHz frame, nearest-sample, with no output filter. M2
-    // replaces it with the analogue output filter and a polyphase resampler.
-    uint32_t take_field() override { return latest_field_; }
+    // AudioFieldSource: the next 48 kHz sample, as a (left, right) 2 x int16
+    // field. With none ready (only at start-up) the last one is repeated, as
+    // the DAC and filter hold their output.
+    uint32_t take_field() override;
 
     // The unit the "unit" parameter selects ("music-5000" when absent).
     Unit unit() const;
 
     // DAC current units to int16 at the design level mapping.
-    static int16_t to_int16(int32_t current);
+    static int16_t to_int16(double current);
 
     // Inspection, for tests.
     const Music5000Synth& synth() const { return synth_; }
     uint64_t frames_rendered() const { return frames_rendered_; }
+    uint64_t samples_produced() const { return samples_produced_; }
+    // take_field() calls that found the ring empty once delivering, and
+    // samples overwritten in a full ring while delivering.
+    uint64_t underruns() const { return underruns_; }
+    uint64_t overruns() const { return overruns_; }
 
 private:
+    static constexpr std::size_t kRingSize = 16;
+    // Delivery starts (and restarts after an underrun) once this many samples
+    // are waiting, so the two 48 kHz clocks' small phase wander is absorbed.
+    static constexpr std::size_t kPrimeLevel = kRingSize / 2;
+
+    void produce(uint32_t field);
+
     Music5000Synth synth_;
     // 1 MHz ticks to 46875 Hz samples: add 3 per tick, one sample per 64.
     uint32_t tick_accumulator_ = 0;
     uint64_t frames_rendered_ = 0;
-    uint32_t latest_field_ = 0;
+
+    std::array<Music5000OutputFilter, 2> filters_{Music5000OutputFilter{Music5000Resampler::kInputRateHz},
+                                                  Music5000OutputFilter{Music5000Resampler::kInputRateHz}};
+    std::array<Music5000Resampler, 2> resamplers_{};
+
+    // 48 kHz fields waiting for the frame assembler. When it is not taking
+    // them (audio output disabled) the oldest are overwritten, and delivery
+    // resumes from the prime level.
+    std::array<uint32_t, kRingSize> ring_{};
+    std::size_t ring_read_ = 0;
+    std::size_t ring_count_ = 0;
+    uint32_t last_field_ = 0;
+    bool delivering_ = false;
+    uint64_t samples_produced_ = 0;
+    uint64_t underruns_ = 0;
+    uint64_t overruns_ = 0;
 };
 
 }  // namespace beebium
