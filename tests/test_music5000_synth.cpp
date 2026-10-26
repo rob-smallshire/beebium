@@ -407,3 +407,130 @@ TEST_CASE("Music5000Synth phase-set holds a constant level (3.2)", "[music5000][
     }
     REQUIRE(synth.phase(0) == 0x000001);
 }
+
+namespace {
+
+// Register a frequency in the alternate bank for a register column.
+void set_alternate_frequency(Music5000Synth& synth, std::size_t column, uint32_t freq) {
+    const uint16_t base = Music5000Synth::kAlternateBank;
+    poke(synth, Music5000Synth::register_address(base, Music5000Synth::kFreqLoRow, column),
+         static_cast<uint8_t>(freq));
+    poke(synth, Music5000Synth::register_address(base, Music5000Synth::kFreqMidRow, column),
+         static_cast<uint8_t>(freq >> 8));
+    poke(synth, Music5000Synth::register_address(base, Music5000Synth::kFreqHiRow, column),
+         static_cast<uint8_t>(freq >> 16));
+}
+
+void set_column_register(Music5000Synth& synth, std::size_t column, uint16_t row, uint8_t value) {
+    poke(synth, Music5000Synth::register_address(Music5000Synth::kNormalBank, row, column), value);
+}
+
+// Counter value whose register column is `column`.
+std::size_t counter_for_column(std::size_t column) {
+    return ((column & 7) << 1) | (column >> 3);
+}
+
+// Give every column a normal-bank frequency of 0x000100 and an alternate-bank
+// frequency of 0x000300, so a channel's phase step shows which bank it read.
+void mark_banks(Music5000Synth& synth) {
+    for (std::size_t column = 0; column < 16; ++column) {
+        set_frequency(synth, counter_for_column(column), 0x000100);
+        set_alternate_frequency(synth, column, 0x000300);
+    }
+}
+
+}  // namespace
+
+TEST_CASE("Music5000Synth column r modulates column r+1 (5)", "[music5000][synth][modulation]") {
+    Music5000Synth synth;
+    mark_banks(synth);
+    fill_wave(synth, 0, 0xC0);  // every channel reads a positive sample
+    set_column_register(synth, 0, Music5000Synth::kControlRow, 0x20);  // column 0 modulates
+
+    render(synth);
+
+    for (std::size_t column = 0; column < 16; ++column) {
+        INFO("column " << column);
+        const uint32_t expected = (column == 1) ? 0x000300 : 0x000100;
+        REQUIRE(synth.phase(counter_for_column(column)) == expected);
+    }
+}
+
+TEST_CASE("Music5000Synth column 7 modulates column 0 of the next sample (5)",
+          "[music5000][synth][modulation]") {
+    Music5000Synth synth;
+    mark_banks(synth);
+    fill_wave(synth, 0, 0xC0);
+    set_column_register(synth, 7, Music5000Synth::kControlRow, 0x20);
+
+    render(synth);
+    // Not column 8 in the same sample, as the existing emulators have it.
+    REQUIRE(synth.phase(counter_for_column(8)) == 0x000100);
+    REQUIRE(synth.phase(counter_for_column(0)) == 0x000100);
+
+    render(synth);
+    REQUIRE(synth.phase(counter_for_column(0)) == 0x000100 + 0x000300);
+    REQUIRE(synth.phase(counter_for_column(8)) == 0x000200);
+}
+
+TEST_CASE("Music5000Synth column 15 modulates column 8 of the next sample (5)",
+          "[music5000][synth][modulation]") {
+    Music5000Synth synth;
+    mark_banks(synth);
+    fill_wave(synth, 0, 0xC0);
+    set_column_register(synth, 15, Music5000Synth::kControlRow, 0x20);
+
+    render(synth);
+    render(synth);
+    REQUIRE(synth.phase(counter_for_column(8)) == 0x000100 + 0x000300);
+    REQUIRE(synth.phase(counter_for_column(0)) == 0x000200);
+    REQUIRE(synth.phase(counter_for_column(9)) == 0x000200);
+}
+
+TEST_CASE("Music5000Synth modulates on a positive sample or a wrap (5)",
+          "[music5000][synth][modulation]") {
+    Music5000Synth synth;
+    mark_banks(synth);
+    set_column_register(synth, 0, Music5000Synth::kControlRow, 0x20);
+    const std::size_t target = counter_for_column(1);
+
+    SECTION("a negative sample modulates only on its wrapping samples") {
+        fill_wave(synth, 0, 0x40);                   // negative everywhere
+        set_frequency(synth, counter_for_column(0), 0x800000);  // wraps every 2nd sample
+        render(synth);
+        REQUIRE(synth.phase(target) == 0x000100);            // no wrap: normal bank
+        render(synth);
+        REQUIRE(synth.phase(target) == 0x000100 + 0x000300); // wrap: alternate
+        render(synth);
+        REQUIRE(synth.phase(target) == 0x000500);
+        render(synth);
+        REQUIRE(synth.phase(target) == 0x000800);
+    }
+
+    SECTION("inversion does not change the sign modulation sees") {
+        fill_wave(synth, 0, 0xC0);
+        set_column_register(synth, 0, Music5000Synth::kControlRow, 0x30);
+        render(synth);
+        REQUIRE(synth.phase(target) == 0x000300);
+    }
+
+    SECTION("without control bit 5 nothing modulates") {
+        fill_wave(synth, 0, 0xC0);
+        set_column_register(synth, 0, Music5000Synth::kControlRow, 0x10);
+        render(synth);
+        REQUIRE(synth.phase(target) == 0x000100);
+    }
+}
+
+TEST_CASE("Music5000Synth reset clears INDEX (1.5)", "[music5000][synth][modulation][reset]") {
+    Music5000Synth synth;
+    mark_banks(synth);
+    fill_wave(synth, 0, 0xC0);
+    set_column_register(synth, 7, Music5000Synth::kControlRow, 0x20);
+    render(synth);
+    // Column 7 (counter 14) leaves INDEX set for counter 0 of the next sample.
+    REQUIRE(synth.index());
+
+    synth.reset();
+    REQUIRE_FALSE(synth.index());
+}

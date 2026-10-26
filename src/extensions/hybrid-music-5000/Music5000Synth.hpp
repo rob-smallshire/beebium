@@ -122,6 +122,11 @@ private:
     // The INDEX flip-flop (IC3a): selects the alternate bank for every
     // register read of a channel (5).
     bool index_ = false;
+
+    // The modulation result of the previous counter value, loaded into IC21
+    // during the current one and latched into INDEX at its end, so it selects
+    // the bank of the counter value after this one (5).
+    bool pending_index_ = false;
 };
 
 }  // namespace beebium

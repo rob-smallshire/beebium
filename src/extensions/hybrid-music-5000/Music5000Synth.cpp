@@ -22,6 +22,10 @@ void Music5000Synth::reset() {
     // The alternate bank is untouched (1.5).
     std::fill(ram_.begin() + kNormalBank, ram_.begin() + kAlternateBank, uint8_t{0});
     index_ = false;
+    // IC21 is not reset, but it is reloaded every channel time, and with the
+    // control registers zero it holds no modulation by the time the reset
+    // ends.
+    pending_index_ = false;
 
     // Slot 6 still addresses a wave byte, which is written with zero too.
     // Once the registers are zero the wave select is 0 and the frequency
@@ -73,18 +77,29 @@ void Music5000Synth::render_frame(int32_t& left, int32_t& right) {
             stored_amplitude_[k] = reg(k, kAmplitudeRow);
         }
 
+        const uint8_t control = reg(k, kControlRow);
+        const bool positive = (sample & 0x80) != 0;
+
+        // Modulation: control bit 5 AND (this sample wrapped OR is positive),
+        // taken before any inversion, selects the alternate bank for the
+        // counter value two on (IC21 latches it in the next channel time,
+        // IC3a at that time's end). With the column order that is register
+        // column r modulating column r+1, and columns 7 and 15 modulating
+        // columns 0 and 8 in the next sample (5).
+        const bool modulate = (control & 0x20) != 0 && (wrap || positive);
+        index_ = pending_index_;
+        pending_index_ = modulate;
+
         // Slot 0: an 8-bit add of the log sample (sign in bit 7, 1 is
         // positive) and the stored amplitude. The DAC registers load only if
         // the add flipped bit 7; otherwise the channel is silent (4).
         const uint8_t sum = static_cast<uint8_t>(sample + stored_amplitude_[k]);
-        const bool positive = (sample & 0x80) != 0;
         if (((sum ^ sample) & 0x80) == 0) {
             continue;
         }
 
         // The sign reaching the DAC is the sample's, inverted by control
         // bit 4 (6).
-        const uint8_t control = reg(k, kControlRow);
         const bool invert = (control & 0x10) != 0;
         const uint8_t code = sum & 0x7F;
         const int32_t current = decode_current(code);
