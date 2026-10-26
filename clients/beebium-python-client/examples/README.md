@@ -33,6 +33,7 @@ and `--server` falls back to `$BEEBIUM_SERVER` / `PATH`.
 | `basic_programs.py` | running a BASIC program and reading its output |
 | `video_capture.py` | display config + frame capture (PNG via `imaging` extra) |
 | `audio_streaming.py` | audio format + sample-chunk streaming |
+| `record_audio.py` | record a machine's audio to a WAV file: one field (the Music 5000's) or a mix of all (launches a preset; `--type`, `--expect`, `--seconds`) |
 | `disc_drives.py` | disc controller/drive status (`--image` to mount) |
 | `sideways_roms.py` | sideways ROM/RAM slot topology |
 | `device_inspection.py` | VIA/CRTC/Video ULA/sound/latch/indicators |
