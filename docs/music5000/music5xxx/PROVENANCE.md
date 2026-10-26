@@ -56,6 +56,19 @@ expense of unmasking some digital hash". The last one matters for
 judging the sound of recordings made on a clone: an original unit's
 reconstruction filter is more aggressive than this one.
 
+There are two more departures that the README does not spell out. Both
+come from the Stardot build thread (see `../stardot-key-points.md`):
+
+- The output filter's capacitors are 1n where the original has 3n3. The
+  original's second stage cuts off near 3.2 kHz; the clone's cuts off
+  near 16 kHz.
+- The clock-input RC network (R37, C44, C45) misreads a factory mod. The
+  original has 470R with 220pF to ground.
+
+For the analogue output, page 3 of the original schematic
+(`../Hybrid Technology HT Music Synthesiser - Schematic.pdf`) is the
+reference, not this one.
+
 Key parts: two AM9128-10 2Kx8 static RAMs (wave/register RAM and phase
 RAM, IC22 and IC28), an AM6070 companding DAC (IC36), 74x283 adders,
 74x163 counters and 74x374 latches.
