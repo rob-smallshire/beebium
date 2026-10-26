@@ -160,6 +160,65 @@ TEST_CASE("VideoUla Mode 0 pixel output (8 pixels per byte)", "[video_ula][pixel
     }
 }
 
+// A flashing physical colour 8 + c shows c while control bit 0 is clear and
+// 7 - c while it is set (flashing red-cyan is red, then cyan). The bit selects
+// the colour of every pixel output after it is written, so a program toggling
+// it during a frame changes the colours part way down the screen.
+TEST_CASE("VideoUla flash bit selects between a flashing colour's two colours",
+          "[video_ula][palette][flash]") {
+    VideoUla ula;
+    ula.reset();
+
+    constexpr uint8_t MODE0 = 0x1C;  // fast clock, 80 columns, flash bit clear
+    ula.write(0, MODE0);
+    // Byte &FF selects logical colour 15 for all eight pixels in MODE 0 (the
+    // shift register fills with ones), so entry 15 is the one under test.
+    ula.write(1, 0xFE);  // logical 15 -> flashing red-cyan (9 EOR 7 = &E)
+
+    auto emit = [&](uint8_t screen_byte) {
+        ula.byte(screen_byte, false);
+        PixelBatch batch;
+        ula.emit_pixels(batch);
+        return batch;
+    };
+    auto all_pixels_are = [](const PixelBatch& batch, VideoDataPixel colour) {
+        for (int i = 0; i < 8; ++i) {
+            if (!pixels_equal_rgb(batch.pixels.pixels[i], colour)) return false;
+        }
+        return true;
+    };
+
+    SECTION("flash bit clear shows the first colour") {
+        CHECK(all_pixels_are(emit(0xFF), bbc_colors::RED));
+    }
+
+    SECTION("flash bit set shows the second colour, from the very next pixels") {
+        CHECK(all_pixels_are(emit(0xFF), bbc_colors::RED));
+        ula.write(0, MODE0 | VideoUla::CTRL_FLASH);
+        CHECK(all_pixels_are(emit(0xFF), bbc_colors::CYAN));
+        ula.write(0, MODE0);
+        CHECK(all_pixels_are(emit(0xFF), bbc_colors::RED));
+    }
+
+    SECTION("a steady colour ignores the flash bit") {
+        ula.write(1, 0xF5);  // logical 15 -> green, steady (2 EOR 7 = 5)
+        CHECK(all_pixels_are(emit(0xFF), bbc_colors::GREEN));
+        ula.write(0, MODE0 | VideoUla::CTRL_FLASH);
+        CHECK(all_pixels_are(emit(0xFF), bbc_colors::GREEN));
+    }
+
+    SECTION("a palette write while the bit is set takes the second colour") {
+        ula.write(0, MODE0 | VideoUla::CTRL_FLASH);
+        ula.write(1, 0xFB);  // logical 15 -> flashing blue-yellow (12 EOR 7 = &B)
+        CHECK(all_pixels_are(emit(0xFF), bbc_colors::YELLOW));
+    }
+
+    SECTION("the stored physical colour keeps its flashing bit") {
+        ula.write(0, MODE0 | VideoUla::CTRL_FLASH);
+        CHECK(ula.palette(15) == 9);
+    }
+}
+
 TEST_CASE("VideoUla Mode 2 pixel output (2 pixels per byte, doubled to 8)", "[video_ula][pixels]") {
     VideoUla ula;
     ula.reset();

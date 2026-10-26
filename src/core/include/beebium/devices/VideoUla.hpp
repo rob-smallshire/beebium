@@ -68,11 +68,18 @@ public:
             // Physical color is XORed with 7 (per hardware design)
             uint8_t physical = (value & 0x0F) ^ 0x07;
             palette_[index] = physical;
-            // Update output palette with RGB values
-            output_palette_[index] = bbc_colors::PALETTE[physical & 0x07];
+            output_palette_[index] = output_colour(physical);
         } else {
-            // Control register
+            // Control register. Bit 0 picks which colour of each flashing
+            // colour is shown, so a change to it recolours the flashing entries
+            // from the next pixel output -- mid-frame if written mid-frame.
+            const bool flash_changed = ((control_ ^ value) & CTRL_FLASH) != 0;
             control_ = value;
+            if (flash_changed) {
+                for (size_t index = 0; index < palette_.size(); ++index) {
+                    output_palette_[index] = output_colour(palette_[index]);
+                }
+            }
         }
     }
 
@@ -194,7 +201,8 @@ public:
 
     uint8_t cursor_width_bits() const { return (control_ >> 5) & 0x07; }
 
-    // Palette access (returns physical color 0-7)
+    // Palette access: the physical colour as written, 0-15. Bit 3 marks a
+    // flashing colour; the colour shown is output_palette().
     uint8_t palette(uint8_t index) const {
         return (index < 16) ? palette_[index] : 0;
     }
@@ -238,6 +246,18 @@ public:
     }
 
 private:
+    // The colour a physical colour shows. Physical colours 8-15 flash: 8 + c
+    // shows c while control bit 0 is clear and 7 - c while it is set, so &09 is
+    // red, then cyan (the AUG's "flashing red-cyan"). Polarity as jsbeeb's ULA
+    // write handler and beebjit's render_get_display_color.
+    VideoDataPixel output_colour(uint8_t physical) const {
+        uint8_t colour = physical & 0x07;
+        if ((physical & 0x08) != 0 && flash_select()) {
+            colour ^= 0x07;
+        }
+        return bbc_colors::PALETTE[colour];
+    }
+
     // Extract logical color index from work byte using BBC bit interleaving
     // Bits 7,5,3,1 form the 4-bit color index
     uint8_t shift_pixel() {
