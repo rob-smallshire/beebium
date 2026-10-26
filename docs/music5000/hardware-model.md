@@ -250,9 +250,12 @@ model every emulator uses.
   held until a frequency is written and the phase wraps. B-Em's
   comment, "Real hardware clears 0x3E00 for 128 bytes and random
   waveform bytes depending on phaseRAM", agrees.
-- **OPEN (minor):** whether BREAK on each host machine asserts RST_n on
-  the 1 MHz bus connector, or only power-on reset does. This decides
-  whether BREAK silences the synthesiser.
+- **BREAK resets the board.** The Advanced User Guide describes NRST
+  (pin 14) as "an active low output from the system reset line", used
+  "to initialise peripherals whenever a power up or a BREAK causes a
+  reset" (`docs/manuals_text/Advanced_User_Guide/28_28._The_One_Megahertz_bus.md`).
+  So BREAK, as well as power-on, clears the normal register bank and
+  INDEX, and silences the synthesiser.
 
 ## 2. The sequencer (p2)
 
@@ -688,8 +691,9 @@ designators; all op-amps are TL072 (IC38 left, IC37 right) on +/-15 V.
    loads on reads too, from the floating bus, which is probably `&FF`
    and so deselects the board. The value depends on what else is on the
    bus (1.4). The FPGA and BeebEm both differ from the schematic here.
-2. **Whether BREAK asserts RST_n on the 1 MHz bus** on each host
-   machine, and so whether BREAK clears the normal register bank (1.5).
+2. **RESOLVED: BREAK asserts RST_n on the 1 MHz bus.** The Advanced
+   User Guide says NRST is asserted on power-up and on BREAK, so BREAK
+   clears the normal register bank and INDEX (1.5).
 3. **Music 3000 decode.** Which tracks change so that the board matches
    nibble 5 (8).
 4. **Verify the modulation pairing at columns 7 and 15** (to 0 and 8)
