@@ -164,6 +164,91 @@ final class AudioRendererTests: XCTestCase {
         }
     }
 
+    // MARK: - Bipolar extension field (Music 5000 / 3000)
+
+    // A bipolar 2x16 stereo field (a Music 5000 on field 2) is summed at the
+    // fixed music ratio, routed straight to left/right, with no DC-removal
+    // high-pass: a constant field renders as a constant with no settling tilt.
+    func testBipolarField2MixesAtMusicRatioWithoutDCRemoval() {
+        let chunk = 4096
+        let chunks = 3   // > the pre-roll's 120 ms (5760 frames) target, so it plays
+        let capacity = AudioPreRoll.capacityFrames(sampleRate: 48000)
+        let ring = AudioRingBuffer(capacity: capacity)
+        let ext = AudioRingBuffer(capacity: capacity)
+        let renderer = AudioRenderer(ringBuffer: ring, extRingBuffer: ext,
+                                     sampleRate: 48000, maxFrameCount: chunk)
+        renderer.setExtensionBipolarSlots(field2: true, field3: false)
+
+        // SN76489 silent; the Music 5000 field 2 holds a constant L/R. Field 2 is
+        // the low 32 bits of the extension frame: low int16 = left, high = right.
+        let left16: Int16 = 16384
+        let right16: Int16 = -16384
+        let field2 = UInt32(UInt16(bitPattern: left16)) | (UInt32(UInt16(bitPattern: right16)) << 16)
+        let extFrame = UInt64(field2)
+
+        let count = chunk * chunks
+        var snFrames = [UInt64](repeating: 0, count: count)
+        var extFrames = [UInt64](repeating: extFrame, count: count)
+        let w1 = snFrames.withUnsafeBufferPointer { ring.write($0.baseAddress!, count: count) }
+        let w2 = extFrames.withUnsafeBufferPointer { ext.write($0.baseAddress!, count: count) }
+        XCTAssertEqual(w1, count)
+        XCTAssertEqual(w2, count)
+
+        var lastLeft = [Float](repeating: 0, count: chunk)
+        var lastRight = [Float](repeating: 0, count: chunk)
+        for _ in 0..<chunks {
+            lastLeft = [Float](repeating: 0, count: chunk)
+            lastRight = [Float](repeating: 0, count: chunk)
+            let rendered = lastLeft.withUnsafeMutableBufferPointer { lb in
+                lastRight.withUnsafeMutableBufferPointer { rb in
+                    renderer.render(frameCount: chunk, leftBuffer: lb.baseAddress!, rightBuffer: rb.baseAddress!)
+                }
+            }
+            XCTAssertEqual(rendered, chunk)
+        }
+
+        // sample / musicFullScale * musicMixGain, no pan, master 1.0, below the
+        // limiter knee -- the identity. Constant from the first sample: no tilt.
+        let expectedLeft = Float(left16) / AudioRenderer.musicFullScale * AudioRenderer.musicMixGain
+        let expectedRight = Float(right16) / AudioRenderer.musicFullScale * AudioRenderer.musicMixGain
+        XCTAssertEqual(lastLeft.first!, expectedLeft, accuracy: 1e-5)
+        XCTAssertEqual(lastLeft.last!, expectedLeft, accuracy: 1e-5)
+        XCTAssertEqual(lastRight.first!, expectedRight, accuracy: 1e-5)
+        XCTAssertEqual(lastRight.last!, expectedRight, accuracy: 1e-5)
+    }
+
+    // With no bipolar slot set (an SN76489-only server, and every other test),
+    // frames written only to the SN ring buffer render exactly as before: a
+    // silent SN frame is silent even if an extension buffer exists but is unused.
+    func testExtensionBufferInertWhenNoBipolarSlot() {
+        let chunk = 4096
+        let chunks = 3
+        let capacity = AudioPreRoll.capacityFrames(sampleRate: 48000)
+        let ring = AudioRingBuffer(capacity: capacity)
+        let ext = AudioRingBuffer(capacity: capacity)
+        let renderer = AudioRenderer(ringBuffer: ring, extRingBuffer: ext,
+                                     sampleRate: 48000, maxFrameCount: chunk)
+        // No setExtensionBipolarSlots call: both slots stay false.
+
+        let count = chunk * chunks
+        var snFrames = [UInt64](repeating: 0, count: count)   // SN silent
+        _ = snFrames.withUnsafeBufferPointer { ring.write($0.baseAddress!, count: count) }
+
+        var left = [Float](repeating: 1, count: chunk)
+        var right = [Float](repeating: 1, count: chunk)
+        for _ in 0..<chunks {
+            left = [Float](repeating: 1, count: chunk)
+            right = [Float](repeating: 1, count: chunk)
+            _ = left.withUnsafeMutableBufferPointer { lb in
+                right.withUnsafeMutableBufferPointer { rb in
+                    renderer.render(frameCount: chunk, leftBuffer: lb.baseAddress!, rightBuffer: rb.baseAddress!)
+                }
+            }
+        }
+        XCTAssertEqual(peak(left), 0, accuracy: 1e-7)
+        XCTAssertEqual(peak(right), 0, accuracy: 1e-7)
+    }
+
     // MARK: - Mixer channel listing
 
     // The SN76489 is described as two sources sharing one group. The mixer maps
@@ -175,7 +260,7 @@ final class AudioRendererTests: XCTestCase {
         // Deliberately out of source-index order to prove the function sorts.
         let sources = [
             AudioSourceInfo(id: 1, name: "SN76489", channelNames: ["3", "0"], groupId: 1),
-            AudioSourceInfo(id: 3, name: "Reserved", channelNames: [], groupId: 0),
+            AudioSourceInfo(id: 3, name: "", channelNames: [], groupId: 0),
             AudioSourceInfo(id: 0, name: "SN76489", channelNames: ["1", "2"], groupId: 1),
         ]
 

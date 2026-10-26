@@ -28,6 +28,15 @@ import Atomics
 /// second, gentler client low-pass would only add passband droop and phase
 /// shift with no band-limiting benefit.
 ///
+/// Extension sources beyond the SN76489 (a Music 5000 on field 2, a Music 3000
+/// on field 3) ride a second ring buffer written in lockstep with the SN frames
+/// (see AudioClient). The server's audio format says, per field, whether it is a
+/// bipolar 2x16 signed stereo source: such a field is summed into the stereo mix
+/// at a fixed ratio (musicMixGain) with no DC removal -- its zero is already
+/// silence and the server's model includes the board's AC-coupled output filter.
+/// A server with only the SN76489 sets no bipolar slot, so this path is inert and
+/// the output is bit-identical to before.
+///
 /// Sample format: the backend emits unipolar signed 16-bit channels across two
 /// source fields. 0 is silence; a channel's full-scale high level is 16384. DC
 /// removal is the consumer's job -- the highpass strips the volume-dependent DC.
@@ -75,6 +84,22 @@ final class AudioRenderer: @unchecked Sendable {
     /// changes. tools/audio-analysis/client_chain.py models this chain and
     /// reports the peak for any gain.
     static let mixGain: Float = 0.2125
+
+    /// The int16 full scale of a bipolar (Music 5000 / 3000) channel: a sample
+    /// of +/-32768 is the source's maximum swing.
+    static let musicFullScale: Float = 32768.0
+
+    /// Fixed gain for a bipolar stereo (Music 5000 / 3000) field, applied to the
+    /// int16 sample normalised to +/-1.0 at full scale, before master volume.
+    ///
+    /// The Music 5000's digital full scale is its sixteen channels in phase --
+    /// the hardware's maximum, which real music rarely approaches. The SN76489's
+    /// four channels at full volume reach 4 x mixGain = 0.85 before panning.
+    /// Matching the Music's full scale to that same ceiling (0.85) puts a typical
+    /// AMPLE piece, which sits well below digital full scale, at a loudness
+    /// comparable to a typical BASIC SOUND on one or two SN76489 channels. The
+    /// master volume stays the only user trim.
+    static let musicMixGain: Float = 0.85
 
     /// Sample rate
     let sampleRate: Float
@@ -129,15 +154,32 @@ final class AudioRenderer: @unchecked Sendable {
 
     private let ringBuffer: AudioRingBuffer
 
+    /// Extension fields past the SN76489's two, written in lockstep with the SN
+    /// ring buffer (same capacity, identical write/read counts, so frame i lines
+    /// up in both). nil when the renderer has no extension path (every existing
+    /// test), in which case the output is exactly the SN76489 mix.
+    private let extRingBuffer: AudioRingBuffer?
+
+    /// Whether extension field 2 (slot 0, Music 5000) and field 3 (slot 1, Music
+    /// 3000) each carry a bipolar 2x16 signed stereo source to mix. Set from the
+    /// server's audio format on the main thread, read on the render thread; both
+    /// false until a format with a bipolar field arrives, so the extension path
+    /// stays inert for an SN76489-only server.
+    private let extSlot0Bipolar = ManagedAtomic<Bool>(false)
+    private let extSlot1Bipolar = ManagedAtomic<Bool>(false)
+
     // MARK: - Scratch Buffers (allocated once, reused)
 
     private var packedSamples: [UInt64]
+    private var extPacked: [UInt64]
     private let maxFrameCount: Int
 
     // MARK: - Initialization
 
-    init(ringBuffer: AudioRingBuffer, sampleRate: Float = 48000.0, maxFrameCount: Int = 1024) {
+    init(ringBuffer: AudioRingBuffer, extRingBuffer: AudioRingBuffer? = nil,
+         sampleRate: Float = 48000.0, maxFrameCount: Int = 1024) {
         self.ringBuffer = ringBuffer
+        self.extRingBuffer = extRingBuffer
         self.sampleRate = sampleRate
         self.maxFrameCount = maxFrameCount
         self.preRoll = AudioPreRoll(sampleRate: Int(sampleRate))
@@ -177,6 +219,18 @@ final class AudioRenderer: @unchecked Sendable {
 
         // Allocate scratch buffers
         packedSamples = [UInt64](repeating: 0, count: maxFrameCount)
+        extPacked = [UInt64](repeating: 0, count: maxFrameCount)
+    }
+
+    /// Describe the extension fields (those past the SN76489's two) from the
+    /// server's audio format: whether field 2 (slot 0, Music 5000) and field 3
+    /// (slot 1, Music 3000) are each a bipolar 2x16 signed stereo source to mix.
+    /// A silent or non-bipolar field is false and contributes nothing. Called on
+    /// the main thread before a stream begins; the format is fixed for the life
+    /// of the server.
+    func setExtensionBipolarSlots(field2: Bool, field3: Bool) {
+        extSlot0Bipolar.store(field2, ordering: .relaxed)
+        extSlot1Bipolar.store(field3, ordering: .relaxed)
     }
 
     // MARK: - Render Callback
@@ -208,6 +262,17 @@ final class AudioRenderer: @unchecked Sendable {
             : 0
         if framesToPull > 0 && samplesRead < framesToPull {
             preRoll.noteUnderrun()
+        }
+
+        // Pull the matching extension frames (fields past the SN76489's two) in
+        // lockstep: the two ring buffers share capacity and are always written
+        // and read with identical counts, so frame i lines up in both and the
+        // extension read returns the same number of frames the SN read did.
+        let slot0Bipolar = extSlot0Bipolar.load(ordering: .relaxed)
+        let slot1Bipolar = extSlot1Bipolar.load(ordering: .relaxed)
+        let haveExt = extRingBuffer != nil && (slot0Bipolar || slot1Bipolar)
+        if haveExt && framesToPull > 0 {
+            _ = extRingBuffer!.read(&extPacked, count: framesToPull)
         }
 
         // Check mute state
@@ -256,6 +321,25 @@ final class AudioRenderer: @unchecked Sendable {
 
                     left += sample * leftGain
                     right += sample * rightGain
+                }
+
+                // Mix the bipolar stereo extension fields (Music 5000 on field 2,
+                // Music 3000 on field 3). These are already AC (zero = silence),
+                // so they are summed at the fixed music ratio with no DC-removal
+                // high-pass and route left/right directly. The master volume and
+                // limiter below apply to the whole mix.
+                if haveExt {
+                    let ext = extPacked[i]
+                    if slot0Bipolar {
+                        let field = UInt32(truncatingIfNeeded: ext)
+                        left  += Float(Int16(truncatingIfNeeded: field)) / Self.musicFullScale * Self.musicMixGain
+                        right += Float(Int16(truncatingIfNeeded: field >> 16)) / Self.musicFullScale * Self.musicMixGain
+                    }
+                    if slot1Bipolar {
+                        let field = UInt32(truncatingIfNeeded: ext >> 32)
+                        left  += Float(Int16(truncatingIfNeeded: field)) / Self.musicFullScale * Self.musicMixGain
+                        right += Float(Int16(truncatingIfNeeded: field >> 16)) / Self.musicFullScale * Self.musicMixGain
+                    }
                 }
 
                 // Apply master volume

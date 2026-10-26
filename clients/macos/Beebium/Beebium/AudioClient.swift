@@ -104,8 +104,16 @@ final class AudioClient: ObservableObject, Disconnectable {
 
     // MARK: - Audio Pipeline Components
 
-    /// Ring buffer shared with audio renderer
+    /// Ring buffer shared with audio renderer: the SN76489's two source fields
+    /// (fields 0 and 1), one UInt64 frame each.
     let ringBuffer: AudioRingBuffer
+
+    /// Parallel ring buffer for the extension fields past the SN76489's two
+    /// (field 2 in the low half, field 3 in the high half of each UInt64 frame:
+    /// a Music 5000 and a Music 3000). Written and read in lockstep with
+    /// `ringBuffer` -- same capacity, identical counts -- so a frame lines up in
+    /// both. Empty for a server with only the SN76489.
+    let extRingBuffer: AudioRingBuffer
 
     /// Audio renderer (DSP pipeline)
     let renderer: AudioRenderer
@@ -132,8 +140,10 @@ final class AudioClient: ObservableObject, Disconnectable {
         // Size the ring buffer to the pre-roll's 500 ms envelope so the adaptive
         // target has room to climb to 480 ms under a starving host (#126). The
         // steady-state latency stays at the pre-roll's 120 ms floor.
-        ringBuffer = AudioRingBuffer(capacity: AudioPreRoll.capacityFrames(sampleRate: 48000))
-        renderer = AudioRenderer(ringBuffer: ringBuffer)
+        let capacity = AudioPreRoll.capacityFrames(sampleRate: 48000)
+        ringBuffer = AudioRingBuffer(capacity: capacity)
+        extRingBuffer = AudioRingBuffer(capacity: capacity)
+        renderer = AudioRenderer(ringBuffer: ringBuffer, extRingBuffer: extRingBuffer)
     }
 
     // MARK: - Connection Lifecycle
@@ -193,8 +203,9 @@ final class AudioClient: ObservableObject, Disconnectable {
         groups = []
         errorMessage = nil
 
-        // Reset ring buffer
+        // Reset ring buffers (both, so they stay in lockstep next session)
         ringBuffer.reset()
+        extRingBuffer.reset()
     }
 
     // MARK: - Audio Format and Streaming
@@ -225,11 +236,27 @@ final class AudioClient: ObservableObject, Disconnectable {
                 )
             }
 
+            // Which extension fields past the SN76489's two are bipolar 2x16
+            // signed stereo sources the renderer should mix: field 2 is slot 0 (a
+            // Music 5000), field 3 slot 1 (a Music 3000). The server is the single
+            // source of truth -- the client does not know what a Music 5000 is,
+            // only that a field is a bipolar stereo source.
+            func isBipolarStereo(fieldIndex: UInt32) -> Bool {
+                response.sources.contains {
+                    $0.sourceIndex == fieldIndex
+                        && $0.encoding == .encoding2X16BitSigned
+                        && $0.bipolar
+                }
+            }
+            let field2Bipolar = isBipolarStereo(fieldIndex: 2)
+            let field3Bipolar = isBipolarStereo(fieldIndex: 3)
+
             await MainActor.run {
                 self.sampleRate = response.sampleRate
                 self.sourceCount = response.sourceCount
                 self.sources = newSources
                 self.groups = newGroups
+                self.renderer.setExtensionBipolarSlots(field2: field2Bipolar, field3: field3Bipolar)
                 self.isLoaded = true
                 self.errorMessage = nil
             }
@@ -262,27 +289,49 @@ final class AudioClient: ObservableObject, Disconnectable {
     }
 
     private func handleAudioChunk(_ chunk: Beebium_AudioChunk) {
-        // The samples field contains: sample_count * source_count * 4 bytes.
-        // The SN76489 uses sources 0 and 1 (the first 8 bytes of each sample):
-        // source 0 = (tone0, tone1), source 1 = (tone2, noise), each two int16.
+        // samples = sample_count * source_count * 4 bytes, each sample N 32-bit
+        // fields. Fields 0 and 1 are the SN76489 (source 0 = tone0|tone1, source
+        // 1 = tone2|noise), packed low half first into one UInt64 for ringBuffer.
+        // Fields 2 and 3, when the server has them, are the extension sources
+        // (field 2 low half, field 3 high half of one UInt64) for extRingBuffer,
+        // written in lockstep. The renderer, told by GetAudioFormat which fields
+        // are bipolar, mixes them. Fields past 3 are not consumed by any source
+        // the protocol defines today.
         let data = chunk.samples
         let sampleCount = Int(chunk.sampleCount)
-        let sourceCount = Int(sourceCount)  // Usually 4
-        let bytesPerSample = sourceCount * 4  // 16 bytes per sample
+        let bytesPerSample = Int(sourceCount) * 4
+        if sampleCount == 0 { return }
 
-        // Extract sources 0 and 1 (8 contiguous bytes) from each sample.
-        var frameData = Data(capacity: sampleCount * 8)
-        data.withUnsafeBytes { rawBuffer in
-            let bytes = rawBuffer.bindMemory(to: UInt8.self)
+        let haveExt = bytesPerSample >= 12
+        var snFrames = [UInt64](repeating: 0, count: sampleCount)
+        var extFrames = haveExt ? [UInt64](repeating: 0, count: sampleCount) : []
+
+        data.withUnsafeBytes { raw in
+            let count = raw.count
             for i in 0..<sampleCount {
-                let offset = i * bytesPerSample
-                if offset + 8 <= bytes.count {
-                    frameData.append(contentsOf: bytes[offset..<offset + 8])
+                let base = i * bytesPerSample
+                if base + 8 <= count {
+                    snFrames[i] = raw.loadUnaligned(fromByteOffset: base, as: UInt64.self)
+                }
+                if haveExt {
+                    var ext: UInt64 = 0
+                    if base + 12 <= count {
+                        ext = UInt64(raw.loadUnaligned(fromByteOffset: base + 8, as: UInt32.self))
+                    }
+                    if base + 16 <= count {
+                        ext |= UInt64(raw.loadUnaligned(fromByteOffset: base + 12, as: UInt32.self)) << 32
+                    }
+                    extFrames[i] = ext
                 }
             }
         }
 
-        _ = ringBuffer.write(data: frameData)
+        // Write the SN frames, then the same count of extension frames, so the
+        // two buffers advance together and a frame lines up in both.
+        _ = snFrames.withUnsafeBufferPointer { ringBuffer.write($0.baseAddress!, count: sampleCount) }
+        if haveExt {
+            _ = extFrames.withUnsafeBufferPointer { extRingBuffer.write($0.baseAddress!, count: sampleCount) }
+        }
     }
 
     // MARK: - Volume Control Passthrough
