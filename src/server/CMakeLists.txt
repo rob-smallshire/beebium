@@ -24,7 +24,10 @@ file(MAKE_DIRECTORY ${PRESETS_OUTPUT_DIR})
 # so it ships inside the preset's archive and nowhere else.
 # l3fs-v1_26b is the auto-starting revision (see packaging/discs/build-l3fs-image.sh).
 set(BUNDLED_DISCS_SRC_DIR "${CMAKE_SOURCE_DIR}/discs/bundled")
-set(BUNDLED_DISC_IDS l3fs-v1_26b)
+# hybrid-music-5000-system-4 (the Music 5000 System Disk, adapted, with the
+# AMPLE ROMs extracted from it) and amplinex-001-002 are built by
+# packaging/discs/build-music5000-discs.sh.
+set(BUNDLED_DISC_IDS l3fs-v1_26b hybrid-music-5000-system-4 amplinex-001-002)
 
 # Set OUT_VAR to the committed tarball of each bundled disc that a preset's
 # create-preset arguments name. The preset carries the disc: its master is
@@ -524,6 +527,27 @@ if(TARGET beebium_ext_hybrid_music_5000_plugin AND TARGET beebium_ext_acorn_scsi
         --hybrid-music-5000
         --acorn-scsi
         EXTRA_DEPENDS beebium_ext_acorn_scsi_plugin)
+endif()
+
+# Music 5000 on the B+ 128K, ready for AMPLE: the AMPLE Nucleus ROM in slot 4
+# and its Help File ROM in slot 5 (both extracted from the bundled system
+# disc), the Music 5000 System Disk in drive 0 and Amplinex 001/002 in drive 1.
+# The system disc's !BOOT is AMPLE Studio's own runner script, so a power-on
+# (or Shift-)Break goes straight into Studio 5000; the B+ 128K's sideways RAM
+# banks stay free for AMPLE. The discs are bundled (copy-on-write per machine,
+# like the L3FS disc); see packaging/discs/music5000-parts/PROVENANCE.md.
+if(TARGET beebium_ext_hybrid_music_5000_plugin)
+    add_plugin_preset(beebium-model-b-plus-128k beebium_ext_hybrid_music_5000_plugin
+        "model-b-plus-128k-music-5000"
+        "B+ 128K, Music 5000" "1986"
+        DESCRIPTION "128K Model B+, Hybrid Music 5000, AMPLE Studio 5000 and Amplinex discs"
+        THUMBNAIL_DELAY 30
+        --auto-boot
+        --sideways slot=4:type=rom:image=hybrid-ample_1_00.rom
+        --sideways slot=5:type=rom:image=hybrid-anhf.rom
+        --floppy 0:hybrid-music-5000-system-4.ssd
+        --floppy 1:amplinex-001-002.dsd
+        --hybrid-music-5000)
 endif()
 
 # Econet-over-Piconet preset. Piconet is a plugin, so this uses add_plugin_preset
