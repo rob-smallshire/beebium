@@ -73,6 +73,11 @@ void Music5000Synth::render_frame(int32_t& left, int32_t& right) {
     int32_t left_total = 0;
     int32_t right_total = 0;
 
+    // Invariant: every register read for counter value k (frequency, wave
+    // select, amplitude, control) happens before index_ advances below. On
+    // the board INDEX changes only at a channel-time boundary, so all of a
+    // channel's reads come from one bank; reading a register after the
+    // advance would take it from the next channel's bank (5).
     for (std::size_t k = 0; k < kChannelCount; ++k) {
         const bool wrap = advance_phase(k);
         wrapped_[k] = wrap;
