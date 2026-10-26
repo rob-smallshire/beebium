@@ -22,6 +22,43 @@ void Music5000Synth::reset() {
     // The alternate bank is untouched (1.5).
     std::fill(ram_.begin() + kNormalBank, ram_.begin() + kAlternateBank, uint8_t{0});
     index_ = false;
+
+    // Slot 6 still addresses a wave byte, which is written with zero too.
+    // Once the registers are zero the wave select is 0 and the frequency
+    // adds nothing, so each channel zeroes wave 0 at its phase-high index
+    // (1.5).
+    for (std::size_t k = 0; k < kChannelCount; ++k) {
+        ram_[(phase_[k] >> 17) & 0x7F] = 0;
+    }
+}
+
+bool Music5000Synth::advance_phase(std::size_t k) {
+    const uint8_t freq_lo = reg(k, kFreqLoRow);
+    const uint32_t freq = static_cast<uint32_t>(freq_lo)
+                        | static_cast<uint32_t>(reg(k, kFreqMidRow)) << 8
+                        | static_cast<uint32_t>(reg(k, kFreqHiRow)) << 16;
+
+    // Freq lo bit 0 (latched by IC3b in slot 1) gates the phase off the
+    // adder's B input, so each byte is written with freq + 0: the phase is
+    // loaded with all 24 bits of the frequency, bit 0 included, and no byte
+    // carries (3.2).
+    if (freq_lo & 0x01) {
+        phase_[k] = freq;
+        return false;
+    }
+
+    // Otherwise all eight bits of freq lo reach the adder (3.2).
+    const uint32_t sum = phase_[k] + freq;
+    phase_[k] = sum & 0xFFFFFF;
+    return (sum >> 24) != 0;
+}
+
+void Music5000Synth::render_frame(int32_t& left, int32_t& right) {
+    left = 0;
+    right = 0;
+    for (std::size_t k = 0; k < kChannelCount; ++k) {
+        wrapped_[k] = advance_phase(k);
+    }
 }
 
 }  // namespace beebium

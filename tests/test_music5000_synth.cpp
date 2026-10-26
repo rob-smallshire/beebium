@@ -104,7 +104,144 @@ TEST_CASE("Music5000Synth reset zeroes the normal bank only (1.5)", "[music5000]
         INFO("address " << a);
         REQUIRE(ram[a] == 0xEE);
     }
-    REQUIRE(ram[0x000] == 0xEE);
+    // Wave bytes survive, except the one each channel's phase addresses
+    // (wave 0, index 0 here; see the wave-byte test below).
+    REQUIRE(ram[0x001] == 0xEE);
     REQUIRE(ram[0x6FF] == 0xEE);
     REQUIRE_FALSE(synth.index());
+}
+
+namespace {
+
+// Set channel counter value k's 24-bit frequency in the normal bank.
+void set_frequency(Music5000Synth& synth, std::size_t k, uint32_t freq) {
+    const std::size_t column = Music5000Synth::column_for_counter(k);
+    const uint16_t base = Music5000Synth::kNormalBank;
+    poke(synth, Music5000Synth::register_address(base, Music5000Synth::kFreqLoRow, column),
+         static_cast<uint8_t>(freq));
+    poke(synth, Music5000Synth::register_address(base, Music5000Synth::kFreqMidRow, column),
+         static_cast<uint8_t>(freq >> 8));
+    poke(synth, Music5000Synth::register_address(base, Music5000Synth::kFreqHiRow, column),
+         static_cast<uint8_t>(freq >> 16));
+}
+
+void render(Music5000Synth& synth, int frames = 1) {
+    int32_t left = 0;
+    int32_t right = 0;
+    for (int i = 0; i < frames; ++i) {
+        synth.render_frame(left, right);
+    }
+}
+
+}  // namespace
+
+TEST_CASE("Music5000Synth accumulates a 24-bit phase per sample (3.1)",
+          "[music5000][synth][phase]") {
+    Music5000Synth synth;
+    set_frequency(synth, 0, 0x000100);
+
+    render(synth);
+    REQUIRE(synth.phase(0) == 0x000100);
+    REQUIRE_FALSE(synth.wrapped(0));
+
+    render(synth, 9);
+    REQUIRE(synth.phase(0) == 0x000A00);
+
+    // Channels without a frequency keep their phase.
+    REQUIRE(synth.phase(1) == 0);
+}
+
+TEST_CASE("Music5000Synth carries between phase bytes (3.1)", "[music5000][synth][phase]") {
+    Music5000Synth synth;
+    set_frequency(synth, 2, 0x00FFFE);  // bit 0 clear: an add, not a load
+    render(synth);
+    REQUIRE(synth.phase(2) == 0x00FFFE);
+
+    set_frequency(synth, 2, 0x000002);
+    render(synth);
+    REQUIRE(synth.phase(2) == 0x010000);
+}
+
+TEST_CASE("Music5000Synth wraps when the phase carries out of bit 23 (3.1)",
+          "[music5000][synth][phase]") {
+    Music5000Synth synth;
+    set_frequency(synth, 0, 0x800000);
+
+    render(synth);
+    REQUIRE(synth.phase(0) == 0x800000);
+    REQUIRE_FALSE(synth.wrapped(0));
+
+    render(synth);
+    REQUIRE(synth.phase(0) == 0x000000);
+    REQUIRE(synth.wrapped(0));
+
+    render(synth);
+    REQUIRE_FALSE(synth.wrapped(0));
+}
+
+TEST_CASE("Music5000Synth reads the frequency of the counter's column (1.3)",
+          "[music5000][synth][phase]") {
+    // Column 8 is read by counter value 1, column 1 by counter value 2.
+    Music5000Synth synth;
+    poke(synth, Music5000Synth::register_address(Music5000Synth::kNormalBank,
+                                                 Music5000Synth::kFreqMidRow, 8), 0x02);
+    poke(synth, Music5000Synth::register_address(Music5000Synth::kNormalBank,
+                                                 Music5000Synth::kFreqMidRow, 1), 0x03);
+    render(synth);
+    REQUIRE(synth.phase(1) == 0x000200);
+    REQUIRE(synth.phase(2) == 0x000300);
+    REQUIRE(synth.phase(8) == 0);
+}
+
+TEST_CASE("Music5000Synth phase-set loads the frequency and never wraps (3.2)",
+          "[music5000][synth][phase]") {
+    Music5000Synth synth;
+
+    SECTION("all 24 bits, bit 0 included") {
+        set_frequency(synth, 3, 0x123457);
+        render(synth, 5);
+        REQUIRE(synth.phase(3) == 0x123457);
+        REQUIRE_FALSE(synth.wrapped(3));
+    }
+
+    SECTION("even at full scale") {
+        set_frequency(synth, 3, 0xFFFFFF);
+        render(synth, 3);
+        REQUIRE(synth.phase(3) == 0xFFFFFF);
+        REQUIRE_FALSE(synth.wrapped(3));
+    }
+
+    SECTION("and the phase runs on from there once the bit is cleared") {
+        set_frequency(synth, 3, 0x7FFF01);
+        render(synth);
+        set_frequency(synth, 3, 0x800000);
+        render(synth);
+        REQUIRE(synth.phase(3) == 0xFFFF01);
+        render(synth);
+        REQUIRE(synth.phase(3) == 0x7FFF01);
+        REQUIRE(synth.wrapped(3));
+    }
+}
+
+TEST_CASE("Music5000Synth reset zeroes the wave byte each channel addresses (1.5)",
+          "[music5000][synth][reset]") {
+    Music5000Synth synth;
+    for (uint16_t a = 0x000; a < 0x700; ++a) {
+        poke(synth, a, 0xEE);
+    }
+    // Counter value 0 parks at phase 0x460001 (phase-set); the others stay at
+    // phase 0.
+    set_frequency(synth, 0, 0x460001);
+    render(synth);
+
+    synth.reset();
+
+    auto ram = synth.ram();
+    REQUIRE(ram[0x023] == 0x00);  // wave 0, index 0x46 >> 1
+    REQUIRE(ram[0x000] == 0x00);  // wave 0, index 0 (the other fifteen)
+    REQUIRE(ram[0x001] == 0xEE);
+    REQUIRE(ram[0x022] == 0xEE);
+    REQUIRE(ram[0x0A3] == 0xEE);  // wave 1 is untouched
+    // The phase RAM is untouched.
+    REQUIRE(synth.phase(0) == 0x460001);
 }
