@@ -53,6 +53,7 @@ implementations disagree. The schematic settles them as follows.
 | Amplitude timing | Latched through the phase RAM, and changes only at a phase wrap. | 4 |
 | Modulation pairing | Register column r modulates column r+1 within each group of 8, with 7 wrapping to 0 and 15 to 8. The emulators' i to i+1 is right except at those two wraps. | 5 |
 | Stereo | Time-sliced over 6 slots per channel; equivalent to the weights 6/6..1/6 used by the emulators. | 6 |
+| DAC law per side | Right (decode): 2^C (2S + 33) - 33. Left (encode): half a step more, 2^C (2S + 34) - 33. Every emulator uses the decode law for both sides. | 7.1 |
 | Output filter | 4th order: a pole pair at 3215 Hz (Q 0.667) plus real poles at 3215 Hz and 7717 Hz. -3 dB at 2.1 kHz, -6 dB at 2.9 kHz. | 7, appendix |
 
 ## 1. Address decoding and the host interface (p1)
@@ -523,8 +524,12 @@ means the register row whose address was issued two slots earlier.
   - E/D high sends current to IOE+/IOE-, which go to L+/L-;
   - E/D low sends it to IOD+/IOD-, which go to R+/R-.
 
-  The E/D sense is from the DAC-76 datasheet as summarised in MAME's
-  `dac76.h`: "E/D low: output on IOD".
+  This is the datasheet's sense: pin 1 is "Encode/decode select:
+  1 = encode", and pins 14-17 are "Encoder out" when E/D = 1 and
+  "Decoder out" when E/D = 0 (`AM6070-uLaw-DAC.pdf`, PDF page 1,
+  printed 3-43, connection diagram D-18-1). The left side is therefore
+  the chip's encode mode and the right side its decode mode, and the two
+  laws differ by half a step (7.1).
 
 | p | Left slots | Right slots |
 |---|------------|-------------|
@@ -552,23 +557,80 @@ means the register row whose address was issued two slots earlier.
 
 ### 7.1 The AM6070 (IC36, p2)
 
-- **Supplies.** V+ (pin 18) is +15 V; V- (pin 13) is -15 V; VLC
-  (pin 10) is grounded.
+The figures here are from the AM6070 datasheet, `AM6070-uLaw-DAC.pdf`
+in this directory: AMD, "Am6070 Companding D-to-A Converter for Control
+Systems", 11 pages, printed pages 3-43 to 3-53. It was placed by hand by
+Rob and is not committed. Page references give the PDF page and, in
+brackets, the printed page.
+
+- **Supplies.** V+ (pin 18) is +15 V; V- (pin 13) is -15 V.
+- **Logic threshold.** VLC (pin 10, "threshold control") is grounded.
+  The datasheet says VLC sits 1.4 V below the wanted logic threshold and
+  "for TTL-driven logic inputs, the VLC input should be grounded"
+  (p7 [3-49]), which is how the LS-driven inputs here are wired.
 - **Reference.** A 12 V zener ZD1 is fed from +15 V by R9 (1K0).
   - R10 (15K) runs from the zener to a node decoupled to ground by C12
     (22 nF). R11 (15K) runs from that node to VR+ (pin 11).
   - VR- (pin 12) goes to ground through R12 (15K).
-  - With VR+ held near ground by the reference amplifier,
-    Iref = 12 V / 30K = **0.40 mA**.
-- **Code to current.** The DAC-76 / AM6070 has a full-scale output
-  current of 3.8 x Iref, so **I_FS is about 1.52 mA**. (The datasheet is
-  not in the repo; these figures are the datasheet's as quoted in MAME's
-  `dac76.h`.) The output for chord C and step S is proportional to
-  `2^C (2S + 33) - 33`, which runs from 0 to 8031 at full scale. All the
-  implementations surveyed use this same curve.
+  - The reference amplifier holds VR+ at VR-, which is near ground: the
+    reference bias current is 1 uA typical, 4 uA maximum (p2 [3-44]),
+    i.e. 15 to 60 mV across R12. So Iref = VREF / RREF+ =
+    12 V / 30K = **0.40 mA** (p5 [3-47], Figure 1: "IREF = VREF/RREF").
+    This is inside the recommended 0.1 to 1.0 mA (p7 [3-49]).
+  - Splitting RREF+ in two with the junction decoupled to ground is the
+    datasheet's own recommendation ("bypassed to ground with a capacitor
+    of 0.01 uF", p7 [3-49]); the Music 5000 uses 22 nF. The datasheet
+    suggests RREF- about equal to RREF+ to cancel the reference
+    amplifier's offset current; here it is 15K against 30K, which costs
+    only a small fixed gain error.
+- **Full-scale current.** "IFS = 3.8 IREF" (p7 [3-49]). At the ideal
+  IREF of 528 uA the full-scale decode and encode currents are 2007.75
+  and 2039.75 uA (p7 [3-49]; Table 1, p4 [3-46]). Here, with Iref =
+  0.40 mA, **decode full scale is 1.521 mA and encode full scale
+  1.545 mA**.
+- **Code bit order.** SB (pin 2, "sign bit input: 1 = positive"); B1-B3
+  (pins 3-5) the chord bits, B1 most significant; B4-B7 (pins 6-9) the
+  step bits, B4 most significant (p1 [3-43], connection diagram). This
+  is the order section 6 wires: chord = SUM6..4, step = SUM3..0.
+- **Decode law** (E/D = 0, the right side). In units where full scale is
+  8031, the current for chord C and step S is
+
+      D(C, S) = 2^C (2S + 33) - 33
+
+  Table 3, p8 [3-50], "Normalized Decoder Output", gives it as
+  `2(2^C(S + 16.5) - 16.5)`, and its entries run from 0 to 8031. In
+  absolute terms it is D x IFS / 8031; Table 1 (p4 [3-46]) lists the
+  same values in uA at IREF = 528 uA, from 0 to 2007.75. Every
+  implementation surveyed uses this law, for both sides.
+- **Encode law** (E/D = 1, the left side). In encode mode "an offset
+  current equal to a half step in each chord" is "automatically added to
+  the IOE output through the internal chip design" (p5-p6 [3-47,
+  3-48], "IEN"). The electrical characteristics give IEN as 1/2 step
+  typical, 3/8 to 5/8 (p2 [3-44]). Table 4, p8 [3-50], "Normalized
+  Encode Level", gives `2[2^C(S + 17) - 16.5]`, i.e.
+
+      E(C, S) = 2^C (2S + 34) - 33 = D(C, S) + 2^C
+
+  This runs from 1 at code 0 to 8159 at full scale. **The left channel
+  therefore receives half a step more magnitude than the right for the
+  same code**: +1 unit at chord 0, +128 units (1.6 %) at chord 7. A
+  gate-open sample with magnitude code 0 on the left gives 1 unit, not
+  0. Silent slots are unaffected: in slots 7 and 0 the DAC registers
+  and the position counter are cleared, so E/D = 0 and the code is 0.
 - **Outputs.** IOE+ (pin 14) is L+, IOE- (pin 15) is L-, IOD+ (pin 16)
   is R+, and IOD- (pin 17) is R-. The sign bit selects which terminal of
-  the pair carries the current.
+  the pair carries the current (p1 [3-43]).
+- **Polarity.** The outputs *sink* current: "if the SB input is a logic
+  1, sink current appears at the amplifier's negative input" (p6
+  [3-48], "Additional Considerations"). Here the current is drawn out of
+  the 1K0 I-to-V node, so a positive code (SB = 1) on the + terminal
+  drives that node negative, and through stage 1's non-inverting path
+  the output goes negative. The board's absolute polarity is inverted
+  (the same on both sides). This is inaudible but is recorded for
+  anyone comparing waveforms.
+- **Compliance.** The negative output compliance is
+  VOC(-) = V- + 2 x IREF x 1.5K + 8.4 V (p7 [3-49]), about -5.4 V here.
+  The I-to-V nodes swing to at most about -1.5 V, well inside it.
 
 ### 7.2 The output stages (p3)
 
@@ -609,10 +671,12 @@ designators; all op-amps are TL072 (IC38 left, IC37 right) on +/-15 V.
   same. DC transimpedance is 1406 V/A; -3 dB is at 2115 Hz and -6 dB at
   2933 Hz (appendix).
 - **Output levels.** At low frequency, one channel at full scale on one
-  side contributes 1406 ohm x 1.52 mA x 6/128 = **0.10 V**. Sixteen
-  channels in phase on one side give **1.60 V peak**. That is why the
-  article calls the level "quite low in normal use". These use the
-  quoted 3.8 x Iref and ideal op-amps.
+  side contributes 1406 ohm x I_FS x 6/128. That is **0.100 V** on the
+  right (decode, 1.521 mA) and **0.102 V** on the left (encode,
+  1.545 mA). Sixteen channels in phase on one side give **1.60 V peak**
+  right and **1.63 V peak** left. That is why the article calls the
+  level "quite low in normal use". These figures assume ideal op-amps
+  and the datasheet's IFS = 3.8 IREF (7.1).
 
 ## 8. Music 3000 and Music 500 variants
 
@@ -699,10 +763,15 @@ designators; all op-amps are TL072 (IC38 left, IC37 right) on +/-15 V.
 4. **Verify the modulation pairing at columns 7 and 15** (to 0 and 8)
    against an FPGA simulation or a recording (5). Derived, and believed
    right.
-5. **AM6070 datasheet.** Confirm I_FS = 3.8 x Iref, the E/D sense and
-   the code law from the datasheet itself, rather than MAME's quotation
-   (6, 7.1). Only absolute level and the left/right assignment depend
-   on it.
+5. **RESOLVED from the AM6070 datasheet** (`AM6070-uLaw-DAC.pdf`):
+   - IFS = 3.8 IREF is confirmed.
+   - E/D = 1 is encode, on IOE, which is the left side.
+   - The decode law 2^C (2S + 33) - 33 and the bit order (B1 = chord
+     MSB, B4 = step MSB, SB = 1 positive) are confirmed.
+   - VLC grounded means TTL thresholds, and Iref = 12 V / 30K.
+
+   One correction to every implementation surveyed: the left (encode)
+   side carries an extra half step, E = D + 2^C (7.1).
 6. **Write capture on the rising edge of 1MHzE**, and the Music 500 to
    5000 E-delay mod (8). Electrical only; it does not affect the
    emulation.
