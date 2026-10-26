@@ -76,12 +76,12 @@ struct AudioMixerView: View {
                 Divider()
                     .padding(.horizontal, 12)
 
-                // Channel groups the per-channel controls drive (the SN76489).
-                // Extension sources (a Music 5000) have no per-channel control --
-                // the master volume governs them -- so their groups are hidden
-                // rather than shown as dead sliders.
-                ForEach(shownGroups) { group in
-                    groupSection(group)
+                // One section per audio group the server reports, in format
+                // order, each with its own sub-master. The SN76489 group keeps
+                // its per-channel sliders beneath its sub-master; the extension
+                // stereo groups (Music 5000 / 3000) show the sub-master only.
+                ForEach(sidebarGroups) { item in
+                    groupSection(item)
                 }
 
                 bufferHealthLine
@@ -150,31 +150,56 @@ struct AudioMixerView: View {
 
     // MARK: - Group Section
 
-    /// The groups to show: only those the renderer's per-channel controls drive
-    /// (the SN76489, on source fields 0 and 1). See AudioSourceInfo.shownGroupIDs.
-    private var shownGroups: [ChannelGroupInfo] {
-        let ids = AudioSourceInfo.shownGroupIDs(sources: audioClient.sources, snFieldCount: 2)
-        return audioClient.groups.filter { ids.contains($0.id) }
+    /// Every group the server reports, in the format's order, each flagged with
+    /// whether it has per-channel controls. See AudioSourceInfo.groupsForSidebar.
+    private var sidebarGroups: [SidebarGroup] {
+        AudioSourceInfo.groupsForSidebar(groups: audioClient.groups,
+                                         sources: audioClient.sources, snFieldCount: 2)
     }
 
-    private func groupSection(_ group: ChannelGroupInfo) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Group header
+    private func groupSection(_ item: SidebarGroup) -> some View {
+        let group = item.group
+        return VStack(alignment: .leading, spacing: 8) {
+            // Group header with its own mute.
             HStack {
                 Text(group.name)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.secondary)
                 Spacer()
+                groupMuteButton(group.id)
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
 
-            // Channels in this group
-            ForEach(channelsInGroup(group.id), id: \.0) { index, name in
-                channelRow(index: index, name: name)
+            // Group sub-master, applied before the master to every channel of the
+            // group. Greyed when the group or the master is muted.
+            VolumeSlider(
+                value: mixerState.groupVolumeBinding(for: group.id),
+                isMuted: mixerState.isGroupMuted(group.id) || mixerState.isMuted
+            )
+            .padding(.horizontal, 12)
+
+            // Per-channel sliders beneath the sub-master (the SN76489 only).
+            if item.hasChannelControls {
+                ForEach(channelsInGroup(group.id), id: \.0) { index, name in
+                    channelRow(index: index, name: name)
+                }
             }
         }
+    }
+
+    private func groupMuteButton(_ groupId: UInt32) -> some View {
+        let muted = mixerState.isGroupMuted(groupId)
+        return Button {
+            mixerState.toggleGroupMute(groupId)
+        } label: {
+            Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .font(.system(size: 13))
+                .foregroundColor(muted ? .red : .primary.opacity(0.6))
+        }
+        .buttonStyle(.borderless)
+        .help(muted ? "Unmute group" : "Mute group")
     }
 
     private func channelsInGroup(_ groupId: UInt32) -> [(Int, String)] {

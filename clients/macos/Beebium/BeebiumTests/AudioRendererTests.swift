@@ -75,7 +75,8 @@ final class AudioRendererTests: XCTestCase {
     // channels, all in phase and centre-panned at master volume 1.0, and return
     // the output after the 10 Hz high-pass has settled from the onset (which
     // briefly doubles the AC swing as it removes the unipolar DC).
-    private func renderSquare(onChannels channels: Set<Int>, frequencyHz: Int) -> (left: [Float], right: [Float]) {
+    private func renderSquare(onChannels channels: Set<Int>, frequencyHz: Int,
+                              snGroupVolume: Float = 1.0) -> (left: [Float], right: [Float]) {
         let sampleRate = 48000
         let chunk = 4096
         let settleChunks = 3       // 0.26 s, many time constants of the 10 Hz high-pass
@@ -83,6 +84,7 @@ final class AudioRendererTests: XCTestCase {
         let halfPeriod = sampleRate / (2 * frequencyHz)
         let ring = AudioRingBuffer(capacity: chunk * 2)
         let renderer = AudioRenderer(ringBuffer: ring, sampleRate: Float(sampleRate), maxFrameCount: chunk)
+        renderer.setSnGroupVolume(snGroupVolume)
 
         var measuredLeft: [Float] = []
         var measuredRight: [Float] = []
@@ -300,17 +302,80 @@ final class AudioRendererTests: XCTestCase {
 
     // MARK: - Mixer channel listing
 
-    // The mixer shows only groups the per-channel controls drive (the SN76489 on
-    // fields 0 and 1); a Music 5000 group on field 2 is hidden -- no dead sliders.
-    func testShownGroupIDsHidesExtensionSourceGroups() {
+    // MARK: - Group sub-masters (#230)
+
+    // The SN76489 group sub-master scales all four channels; at 0.5 (exponential
+    // -> 0.1) the output is one tenth, sample for sample. The master is untouched.
+    func testSnGroupSubmasterScalesAllChannels() {
+        let base = renderSquare(onChannels: [0, 1, 2, 3], frequencyHz: 1000)
+        let scaled = renderSquare(onChannels: [0, 1, 2, 3], frequencyHz: 1000, snGroupVolume: 0.5)
+        let ratio = peak(scaled.left) / peak(base.left)
+        XCTAssertEqual(ratio, 0.1, accuracy: 0.005)   // linearToExponential(0.5) = 10^-1
+        XCTAssertEqual(peak(scaled.right) / peak(base.right), 0.1, accuracy: 0.005)
+    }
+
+    // Render a constant bipolar field 2 and return the settled last-callback first
+    // sample per side, at the given Music-group sub-master (slot 0).
+    private func renderConstantField2(left16: Int16, right16: Int16,
+                                      groupVolume: Float) -> (left: Float, right: Float) {
+        let chunk = 4096, chunks = 3
+        let capacity = AudioPreRoll.capacityFrames(sampleRate: 48000)
+        let ring = AudioRingBuffer(capacity: capacity)
+        let ext = AudioRingBuffer(capacity: capacity)
+        let renderer = AudioRenderer(ringBuffer: ring, extRingBuffer: ext,
+                                     sampleRate: 48000, maxFrameCount: chunk)
+        renderer.setExtensionBipolarSlots(field2: true, field3: false)
+        renderer.setExtGroupVolume(slot: 0, volume: groupVolume)
+
+        let field2 = UInt32(UInt16(bitPattern: left16)) | (UInt32(UInt16(bitPattern: right16)) << 16)
+        let count = chunk * chunks
+        var sn = [UInt64](repeating: 0, count: count)
+        var ex = [UInt64](repeating: UInt64(field2), count: count)
+        _ = sn.withUnsafeBufferPointer { ring.write($0.baseAddress!, count: count) }
+        _ = ex.withUnsafeBufferPointer { ext.write($0.baseAddress!, count: count) }
+        var l = [Float](repeating: 0, count: chunk)
+        var r = [Float](repeating: 0, count: chunk)
+        for _ in 0..<chunks {
+            l = [Float](repeating: 0, count: chunk); r = [Float](repeating: 0, count: chunk)
+            _ = l.withUnsafeMutableBufferPointer { lb in r.withUnsafeMutableBufferPointer { rb in
+                renderer.render(frameCount: chunk, leftBuffer: lb.baseAddress!, rightBuffer: rb.baseAddress!) } }
+        }
+        return (l.first!, r.first!)
+    }
+
+    // The Music-group sub-master scales field 2; at 0.5 the output is one tenth.
+    func testMusicGroupSubmasterScalesField2() {
+        let unity = renderConstantField2(left16: 16384, right16: -16384, groupVolume: 1.0)
+        let half = renderConstantField2(left16: 16384, right16: -16384, groupVolume: 0.5)
+        XCTAssertEqual(half.left / unity.left, 0.1, accuracy: 0.005)
+        XCTAssertEqual(half.right / unity.right, 0.1, accuracy: 0.005)
+    }
+
+    // Defaults reproduce the pre-#230 mix: with the group sub-masters untouched
+    // (unity), the SN level and the Music ratio are exactly as before.
+    func testGroupDefaultsReproducePreviousMix() {
+        let sn = renderSquare(onChannels: [0], frequencyHz: 1000)
+        XCTAssertEqual(peak(sn.left), 0.1535, accuracy: 0.0005)   // the pre-#230 constant
+        let music = renderConstantField2(left16: 16384, right16: -16384, groupVolume: 1.0)
+        let expected = Float(16384) / AudioRenderer.musicFullScale * AudioRenderer.musicMixGain
+        XCTAssertEqual(music.left, expected, accuracy: 1e-5)
+    }
+
+    // The sidebar lists every group in the format's order; only the SN76489 group
+    // (owning fields 0/1) carries per-channel controls.
+    func testGroupsForSidebarFollowsFormatOrderAndFlags() {
+        let groups = [
+            ChannelGroupInfo(id: 1, name: "Internal Sound", description: "", color: ""),
+            ChannelGroupInfo(id: 2, name: "Music 5000", description: "", color: ""),
+        ]
         let sources = [
             AudioSourceInfo(id: 0, name: "SN76489", channelNames: ["1", "2"], groupId: 1),
             AudioSourceInfo(id: 1, name: "SN76489", channelNames: ["3", "0"], groupId: 1),
-            AudioSourceInfo(id: 2, name: "Music 5000", channelNames: ["Left", "Right"], groupId: 2),
+            AudioSourceInfo(id: 2, name: "Music5000", channelNames: ["Left", "Right"], groupId: 2),
         ]
-        let shown = AudioSourceInfo.shownGroupIDs(sources: sources, snFieldCount: 2)
-        XCTAssertEqual(shown, [1])
-        XCTAssertFalse(shown.contains(2))
+        let sidebar = AudioSourceInfo.groupsForSidebar(groups: groups, sources: sources, snFieldCount: 2)
+        XCTAssertEqual(sidebar.map { $0.group.id }, [1, 2])          // format order
+        XCTAssertEqual(sidebar.map { $0.hasChannelControls }, [true, false])
     }
 
     // The SN76489 is described as two sources sharing one group. The mixer maps

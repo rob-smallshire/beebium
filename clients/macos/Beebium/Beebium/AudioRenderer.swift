@@ -134,6 +134,24 @@ final class AudioRenderer: @unchecked Sendable {
 
     private var atomicPanPositions: [ManagedAtomic<UInt32>]
 
+    // MARK: - Group sub-master volumes (atomic)
+
+    /// Per-group sub-master gain and mute, applied to every channel of a group
+    /// before the master. There are three groups in the protocol today: the
+    /// SN76489 (fields 0/1), and the two extension stereo fields -- field 2
+    /// (slot 0, Music 5000) and field 3 (slot 1, Music 3000) -- each its own
+    /// group. All default to 1.0 / not-muted, so the mix is bit-identical to the
+    /// master-only path until a sub-master is moved. The UI maps a ChannelGroup
+    /// to one of these via the audio format (AudioClient.setGroupVolume).
+    private let atomicSnGroupVolume = ManagedAtomic<UInt32>(floatToUInt32(1.0))
+    private let atomicSnGroupMuted = ManagedAtomic<Bool>(false)
+    private let atomicExtGroupVolumes: [ManagedAtomic<UInt32>] = [
+        ManagedAtomic<UInt32>(floatToUInt32(1.0)), ManagedAtomic<UInt32>(floatToUInt32(1.0)),
+    ]
+    private let atomicExtGroupMuted: [ManagedAtomic<Bool>] = [
+        ManagedAtomic<Bool>(false), ManagedAtomic<Bool>(false),
+    ]
+
     // MARK: - Level Metering
 
     /// Per-channel meter state
@@ -233,6 +251,31 @@ final class AudioRenderer: @unchecked Sendable {
         extSlot1Bipolar.store(field3, ordering: .relaxed)
     }
 
+    // MARK: - Group sub-master control (called from main thread)
+
+    /// Set the SN76489 group's sub-master volume (0.0 to 1.0, linear slider).
+    func setSnGroupVolume(_ volume: Float) {
+        atomicSnGroupVolume.store(floatToUInt32(volume.clamped(to: 0...1)), ordering: .relaxed)
+    }
+
+    /// Mute or unmute the SN76489 group.
+    func setSnGroupMuted(_ muted: Bool) {
+        atomicSnGroupMuted.store(muted, ordering: .relaxed)
+    }
+
+    /// Set an extension field group's sub-master volume. slot 0 = field 2 (Music
+    /// 5000), slot 1 = field 3 (Music 3000).
+    func setExtGroupVolume(slot: Int, volume: Float) {
+        guard slot >= 0 && slot < atomicExtGroupVolumes.count else { return }
+        atomicExtGroupVolumes[slot].store(floatToUInt32(volume.clamped(to: 0...1)), ordering: .relaxed)
+    }
+
+    /// Mute or unmute an extension field group (slot 0 = field 2, slot 1 = field 3).
+    func setExtGroupMuted(slot: Int, muted: Bool) {
+        guard slot >= 0 && slot < atomicExtGroupMuted.count else { return }
+        atomicExtGroupMuted[slot].store(muted, ordering: .relaxed)
+    }
+
     // MARK: - Render Callback
 
     /// Render audio samples for AVAudioSourceNode.
@@ -299,6 +342,18 @@ final class AudioRenderer: @unchecked Sendable {
             panPositions[i] = uint32ToFloat(atomicPanPositions[i].load(ordering: .relaxed))
         }
 
+        // Group sub-masters: a muted group contributes nothing, else its volume
+        // scaled like the master. All default to 1.0 (unity) so the mix is
+        // unchanged until a slider moves. The SN group gain multiplies with each
+        // SN channel's own volume; each extension field's group gain multiplies
+        // with musicMixGain.
+        let snGroupGain = atomicSnGroupMuted.load(ordering: .relaxed)
+            ? 0 : linearToExponential(uint32ToFloat(atomicSnGroupVolume.load(ordering: .relaxed)))
+        let ext0GroupGain = atomicExtGroupMuted[0].load(ordering: .relaxed)
+            ? 0 : linearToExponential(uint32ToFloat(atomicExtGroupVolumes[0].load(ordering: .relaxed)))
+        let ext1GroupGain = atomicExtGroupMuted[1].load(ordering: .relaxed)
+            ? 0 : linearToExponential(uint32ToFloat(atomicExtGroupVolumes[1].load(ordering: .relaxed)))
+
         // Process samples
         for i in 0..<framesToRender {
             var left: Float = 0
@@ -322,8 +377,9 @@ final class AudioRenderer: @unchecked Sendable {
                     // Update meter
                     updateMeter(channel: ch, sample: sample)
 
-                    // Apply per-channel volume and the fixed mix gain
-                    sample *= channelVolumes[ch] * Self.mixGain
+                    // Apply per-channel volume, the fixed mix gain, and the
+                    // SN76489 group sub-master.
+                    sample *= channelVolumes[ch] * Self.mixGain * snGroupGain
 
                     // Apply pan to stereo (constant-power panning)
                     let pan = panPositions[ch]
@@ -343,13 +399,13 @@ final class AudioRenderer: @unchecked Sendable {
                     let ext = extPacked[i]
                     if slot0Bipolar {
                         let field = UInt32(truncatingIfNeeded: ext)
-                        left  += Float(Int16(truncatingIfNeeded: field)) / Self.musicFullScale * Self.musicMixGain
-                        right += Float(Int16(truncatingIfNeeded: field >> 16)) / Self.musicFullScale * Self.musicMixGain
+                        left  += Float(Int16(truncatingIfNeeded: field)) / Self.musicFullScale * Self.musicMixGain * ext0GroupGain
+                        right += Float(Int16(truncatingIfNeeded: field >> 16)) / Self.musicFullScale * Self.musicMixGain * ext0GroupGain
                     }
                     if slot1Bipolar {
                         let field = UInt32(truncatingIfNeeded: ext >> 32)
-                        left  += Float(Int16(truncatingIfNeeded: field)) / Self.musicFullScale * Self.musicMixGain
-                        right += Float(Int16(truncatingIfNeeded: field >> 16)) / Self.musicFullScale * Self.musicMixGain
+                        left  += Float(Int16(truncatingIfNeeded: field)) / Self.musicFullScale * Self.musicMixGain * ext1GroupGain
+                        right += Float(Int16(truncatingIfNeeded: field >> 16)) / Self.musicFullScale * Self.musicMixGain * ext1GroupGain
                     }
                 }
 

@@ -12,6 +12,7 @@
 
 import Foundation
 import Combine
+import SwiftUI
 
 /// Observable state for the audio mixer UI.
 ///
@@ -43,9 +44,34 @@ final class AudioMixerState: ObservableObject {
 
     // MARK: - Group Volumes
 
-    /// Per-group volumes (groupId -> volume)
+    /// Per-group sub-master volumes (groupId -> 0.0...1.0). A group absent from
+    /// the map is at the 1.0 default. Each is applied to every channel of its
+    /// group before the master (see AudioRenderer).
     @Published var groupVolumes: [UInt32: Float] = [:] {
         didSet { updateGroupVolumes() }
+    }
+
+    /// Per-group mute (groupId -> muted). Absent means not muted.
+    @Published var groupMuted: [UInt32: Bool] = [:] {
+        didSet { updateGroupMutes() }
+    }
+
+    /// Binding to a group's sub-master volume, defaulting to 1.0 when unset.
+    func groupVolumeBinding(for groupId: UInt32) -> Binding<Float> {
+        Binding(
+            get: { self.groupVolumes[groupId] ?? 1.0 },
+            set: { self.groupVolumes[groupId] = $0 }
+        )
+    }
+
+    /// Whether a group is muted (false when unset).
+    func isGroupMuted(_ groupId: UInt32) -> Bool {
+        groupMuted[groupId] ?? false
+    }
+
+    /// Toggle a group's mute.
+    func toggleGroupMute(_ groupId: UInt32) {
+        groupMuted[groupId] = !isGroupMuted(groupId)
     }
 
     // MARK: - Per-Channel Pan (backend only, no UI)
@@ -85,8 +111,8 @@ final class AudioMixerState: ObservableObject {
     // MARK: - Initialization
 
     init() {
-        // Initialize with default group (Internal Sound)
-        groupVolumes[1] = 1.0
+        // Groups and their sub-masters come from the audio format; absent entries
+        // are at the 1.0 / not-muted default, so nothing is hard-coded here.
     }
 
     // MARK: - Meter Updates
@@ -133,9 +159,17 @@ final class AudioMixerState: ObservableObject {
     }
 
     private func updateGroupVolumes() {
-        // Group volumes can be used to scale channel volumes
-        // For now, we apply group volume as a multiplier when setting channel volumes
-        // This is a simple approach; more sophisticated mixing could be added later
+        guard let client = audioClient else { return }
+        for (groupId, volume) in groupVolumes {
+            client.setGroupVolume(groupId: groupId, volume: volume)
+        }
+    }
+
+    private func updateGroupMutes() {
+        guard let client = audioClient else { return }
+        for (groupId, muted) in groupMuted {
+            client.setGroupMuted(groupId: groupId, muted: muted)
+        }
     }
 
     private func updatePanPositions() {
@@ -157,6 +191,14 @@ final class AudioMixerState: ObservableObject {
 
         for (index, pan) in panPositions.enumerated() {
             client.setPanPosition(index, pan: pan)
+        }
+
+        for (groupId, volume) in groupVolumes {
+            client.setGroupVolume(groupId: groupId, volume: volume)
+        }
+
+        for (groupId, muted) in groupMuted {
+            client.setGroupMuted(groupId: groupId, muted: muted)
         }
     }
 

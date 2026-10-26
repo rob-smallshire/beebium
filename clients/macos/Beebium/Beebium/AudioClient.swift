@@ -57,17 +57,26 @@ struct AudioSourceInfo: Identifiable {
             }
     }
 
-    /// The group ids the mixer shows: those owning a source on the fields the
-    /// renderer's per-channel sliders and pan actually drive -- the SN76489, on
-    /// source fields 0 and 1. A source on a later field (a Music 5000 on field 2,
-    /// a Music 3000 on field 3) has no per-channel client control -- the master
-    /// volume governs it -- so its group is not shown, rather than shipping dead
-    /// sliders. The client does not know what those sources are; it hides them
-    /// generically by field. `snFieldCount` is the number of leading source
-    /// fields the SN path owns (2). Pure.
-    static func shownGroupIDs(sources: [AudioSourceInfo], snFieldCount: Int) -> Set<UInt32> {
-        Set(sources.filter { $0.id < UInt32(snFieldCount) }.map { $0.groupId })
+    /// The sidebar's group rows, in the audio format's group order. Every group
+    /// the server reports is shown, each with its own sub-master; a group has
+    /// per-channel controls only when it owns a source on one of the first
+    /// `snFieldCount` fields -- the SN76489 (fields 0 and 1), whose channels the
+    /// renderer drives individually. The extension stereo groups (a Music 5000 on
+    /// field 2, a Music 3000 on field 3) show the sub-master only. The client does
+    /// not know what those sources are; it classifies generically by field. Pure.
+    static func groupsForSidebar(groups: [ChannelGroupInfo], sources: [AudioSourceInfo],
+                                 snFieldCount: Int) -> [SidebarGroup] {
+        let channelGroupIDs = Set(sources.filter { $0.id < UInt32(snFieldCount) }.map { $0.groupId })
+        return groups.map { SidebarGroup(group: $0, hasChannelControls: channelGroupIDs.contains($0.id)) }
     }
+}
+
+/// One group row in the Sound sidebar: the group and whether it has per-channel
+/// controls (only the SN76489). Built by `AudioSourceInfo.groupsForSidebar`.
+struct SidebarGroup: Identifiable {
+    let group: ChannelGroupInfo
+    let hasChannelControls: Bool
+    var id: UInt32 { group.id }
 }
 
 /// Channel group information for UI organization
@@ -356,6 +365,35 @@ final class AudioClient: ObservableObject, Disconnectable {
     /// Set per-channel volume (0.0 to 1.0)
     func setChannelVolume(_ channel: Int, volume: Float) {
         renderer.setChannelVolume(channel, volume: volume)
+    }
+
+    /// Set a channel group's sub-master volume (0.0 to 1.0). The group is mapped
+    /// to the renderer's group gains via the audio format: the SN76489 (fields
+    /// 0/1) is one group; field 2 and field 3 are groups of their own. A group
+    /// could own more than one field, so every matching target is set.
+    func setGroupVolume(groupId: UInt32, volume: Float) {
+        if sources.contains(where: { $0.id < 2 && $0.groupId == groupId }) {
+            renderer.setSnGroupVolume(volume)
+        }
+        if sources.contains(where: { $0.id == 2 && $0.groupId == groupId }) {
+            renderer.setExtGroupVolume(slot: 0, volume: volume)
+        }
+        if sources.contains(where: { $0.id == 3 && $0.groupId == groupId }) {
+            renderer.setExtGroupVolume(slot: 1, volume: volume)
+        }
+    }
+
+    /// Mute or unmute a channel group (same mapping as setGroupVolume).
+    func setGroupMuted(groupId: UInt32, muted: Bool) {
+        if sources.contains(where: { $0.id < 2 && $0.groupId == groupId }) {
+            renderer.setSnGroupMuted(muted)
+        }
+        if sources.contains(where: { $0.id == 2 && $0.groupId == groupId }) {
+            renderer.setExtGroupMuted(slot: 0, muted: muted)
+        }
+        if sources.contains(where: { $0.id == 3 && $0.groupId == groupId }) {
+            renderer.setExtGroupMuted(slot: 1, muted: muted)
+        }
     }
 
     /// Set mute state
