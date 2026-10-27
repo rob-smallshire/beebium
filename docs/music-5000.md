@@ -4,13 +4,17 @@ The Hybrid Music 5000 synthesiser, and its Music 3000 expander, as Beebium
 builds them: a plugin on the 1 MHz bus whose sound joins the machine's audio
 stream beside the SN76489's.
 
-This is the component doc. The normative description of the real board is
+This is the component doc, as built: the hardware in brief, how the
+synthesiser is integrated into Beebium as a plugin on the 1 MHz bus and a
+source of audio frames, how to configure it, what the model computes, and
+where the code and tests are. The normative description of the real board is
 `docs/music5000/hardware-model.md`, written from the original schematic and
 the AM6070 datasheet; the reference material it rests on, and the survey of
-existing emulators, are in `docs/music5000/`. The design is
-`docs/discussion/music5000-design.md`. Companions: the extension framework
-(`docs/peripheral-extension-framework.md`) for the bus claims and the audio
-source port, and `docs/sound-subsystem.md` for the audio frames.
+existing emulators, are in `docs/music5000/`. The design, with the decisions
+and the reasons for them, is `docs/discussion/music5000-design.md`.
+Companions: the extension framework (`docs/peripheral-extension-framework.md`)
+for the bus claims and the audio source port, and `docs/sound-subsystem.md`
+for the audio frames.
 
 ## The hardware
 
@@ -61,33 +65,191 @@ stereo position. Two op-amp stages filter each side: a fourth-order low
 pass. `docs/music5000/hardware-model.md` traces every step to the ICs and
 nets of the schematic.
 
+## Architecture
+
+The synthesiser lives in the server process, in the plugin
+`hybrid-music-5000`, and nowhere else: clients never see registers or wave
+tables, only the finished sound as one field of the machine's audio frames.
+The path from the 6502 to a client's speaker:
+
+```
+6502 write to &FCFF / &FDxx
+  |
+  v
+OneMHzBusPort (core; owns the JIM paging register, routes page+offset)
+  |  jim_write(page, offset, value)          tick() at 1 MHz      reset(NRST)
+  v
+HybridMusic5000 (plugin: PeripheralExtension + OneMHzBusDevice + AudioFieldSource)
+  |  3 ticks in 64 -> one 46875 Hz sample
+  v
+Music5000Synth  -> per side: Music5000OutputFilter -> level -> Music5000Resampler
+  |  48 kHz (left, right) int16 pairs into a 16-entry ring
+  v
+AudioFrameAssembler (core; the SN76489 clocks it) ... take_field() once per frame
+  |  AudioSample { field 0, field 1 = SN76489; field 2 = Music 5000; field 3 = Music 3000 }
+  v
+AudioService (gRPC): SubscribeAudio streams chunks of frames; GetAudioFormat describes each field
+  |
+  v
+Clients: macOS mixes the field into its stereo output with a sub-master;
+         Python and TypeScript decode fields generically
+```
+
+Everything above the gRPC boundary runs on the emulation thread, in
+emulated time: the bus ticks the extension, the extension renders, the
+assembler takes. Nothing in the plugin has a thread, a timer or a lock.
+
+The plugin itself is three independent pieces and one class that wires them
+to the framework:
+
+| Piece | File (in `src/extensions/hybrid-music-5000/`) | Role |
+|-------|-----------------------------------------------|------|
+| `Music5000Synth` | `Music5000Synth.{hpp,cpp}` | The board's RAM, phase RAM, sequencer and DAC laws: the register-transfer model of `hardware-model.md`. Input: writes by page and offset; output: one (left, right) current pair per 46875 Hz sample |
+| `Music5000OutputFilter` | `Music5000OutputFilter.{hpp,cpp}` | The fourth-order analogue network of schematic page 3 as a digital filter at 46875 Hz, one instance per side |
+| `Music5000Resampler` | `Music5000Resampler.{hpp,cpp}` | 46875 to 48000 Hz, one instance per side |
+| `HybridMusic5000` | `HybridMusic5000.{hpp,cpp}`, `plugin_entry.cpp`, `manifest.json` | The extension: claims the bus, registers the audio field, drives the three pieces from the bus tick, holds the delivery ring |
+
+The three pieces have no Beebium dependencies and are tested in isolation.
+
+### The framework it rests on
+
+The Music 5000 is the first 1 MHz bus device that uses JIM and the first
+extension that makes sound, so four things were added to the core before the
+device was written (design section 2, "refactor first"). They are general,
+not Music 5000 specific:
+
+- **JIM paging belongs to the bus port.** `OneMHzBusPort` owns the paging
+  register at `&FCFF` and routes every access to `&FD00`-`&FDFF` to the
+  device that claimed the current page, via `claim_jim_pages(first, last)`
+  and `jim_read` / `jim_write(page, offset, value)`. FRED claims
+  (`claim_addresses`) are unchanged, so FRED and JIM devices coexist: the
+  Acorn SCSI host adapter at `&FC40` and the Music 5000 on pages `&30`-`&3F`
+  share one bus. The register is not cleared by reset, as on the real bus.
+- **Reset reaches the bus.** `OneMHzBusDevice::reset(ResetCause)` is called
+  on power-on and on BREAK from every hardware policy, standing in for the
+  bus's NRST line (Advanced User Guide, pin 14).
+- **An audio source port.** `AudioSourcePort`, owned by the hardware policy
+  beside the SN76489, lets an extension register an `AudioFieldSource` for
+  one of the frame's four 32-bit fields, with an `AudioFieldInfo` (name,
+  encoding, channel names, group, bipolar). `AudioFrameAssembler`, extracted
+  from the SN76489, completes a frame on each SN76489 output sample and asks
+  each registered source for its field once per frame.
+- **The audio format is dynamic.** `GetAudioFormat` is built from the port
+  at call time (`describe_audio_format`), so a machine with the synthesiser
+  describes three fields and one without describes two, and the format
+  gained `bool bipolar` per source. That changed the protocol fingerprint.
+
+These raised the plugin ABI to 9; every plugin in the tree is built against
+it.
+
+### The plugin
+
+`manifest.json` declares the extension: name `hybrid-music-5000`, library
+`hybrid-music-5000`, attaches to `1mhz-bus`, CLI stem `hybrid-music-5000`,
+and one parameter, `unit`, a string with two choices:
+
+| `unit` | JIM pages | Audio frame field | Source name | Group |
+|--------|-----------|-------------------|-------------|-------|
+| `music-5000` (default) | `&30`-`&3F` | 2 | `Music5000` | "Music 5000" |
+| `music-3000` | `&50`-`&5F` | 3 | `Music3000` | "Music 3000" |
+
+A machine with both boards lists the extension twice, once per unit. The
+unit is read from the instance's configuration at `init`; any other value
+is an error at launch.
+
+`HybridMusic5000` implements three framework interfaces:
+
+- **`PeripheralExtension`**: the manifest, `attaches_to()` (`1mhz-bus`),
+  `init(ExtensionContext&)` and `shutdown()`.
+- **`OneMHzBusDevice`**: `jim_write` goes straight to the synth's RAM;
+  `jim_read` keeps the port's floating `&FF`, as the board never drives the
+  data bus; `read`/`write` (FRED) are unused; `tick()` is the 1 MHz clock;
+  `reset()` zeroes the normal register bank and the bank-select flip-flop as
+  NRST does. It raises no interrupt.
+- **`AudioFieldSource`**: `take_field()` returns the next 48 kHz
+  (left, right) pair packed as the field's 32 bits.
+
+Its life, in order:
+
+1. The server's plugin loader finds the shared library on the extension
+   search path, checks its ABI version and calls `beebium_create_extension`
+   (`plugin_entry.cpp`), which constructs the object and hands it the
+   manifest.
+2. The machine assembly resolves `1mhz-bus`, applies the instance's
+   parameters, and calls `init`. `init` claims the unit's pages on
+   `ExtensionContext::get<OneMHzBusPort>()` and, if the machine has audio
+   output (`ctx.has<AudioSourcePort>()`), registers itself for the unit's
+   field with its `AudioFieldInfo`. A machine without audio output gets a
+   silent but otherwise working board.
+3. From then on the port ticks it at 1 MHz from the machine's main loop.
+   Every 64 ticks it accumulates 3, and each time the accumulator passes 64
+   it renders one sample: the synth gives a (left, right) current pair, each
+   side goes through its filter, the level mapping and its resampler, and
+   each 48 kHz output pair is pushed into the ring. The two resamplers run in
+   lockstep, so their outputs pair up.
+4. The assembler calls `take_field()` once per frame. The ring is primed to 8
+   before delivery starts; on an underrun it hands back the last field and
+   re-primes; on an overflow (nobody taking, which is audio output disabled)
+   the oldest is dropped and delivery re-primes when it resumes.
+5. `reset` on BREAK clears the registers as the board does; the ring and the
+   filters are left alone, as the analogue path is.
+6. `shutdown` has nothing to release; the loader never unloads the library.
+
+### Where the bus clock comes from
+
+The bus port is ticked from the machine's 1 MHz poll, so the synthesiser
+advances in emulated time regardless of host speed, pause, or single-step.
+The 46875 Hz sample clock is 3/64 of it exactly, and the resampler's 128/125
+ratio is exact in integer arithmetic, so over any run the number of 48 kHz
+samples the plugin produces equals the number of frames the SN76489 clocks,
+to within the ring's prime level. There is no drift to correct and no
+resampling by wall-clock.
+
+## Configuring it
+
+### Command line
+
+Any 1 MHz bus machine takes the board as an extension option:
+
+```bash
+# A Model B with a Music 5000; the user supplies the AMPLE ROM and discs.
+beebium-model-b --preset model-b-disc --hybrid-music-5000
+
+# Both boards: a Music 5000 and a Music 3000 expander.
+beebium-model-b --hybrid-music-5000 --hybrid-music-5000 unit=music-3000
+
+# The shipped preset: B+ 128K, AMPLE fitted, booting into Studio 5000.
+beebium-model-b-plus-128k --preset model-b-plus-128k-music-5000
+```
+
+The option follows the generic extension grammar (`docs/cli.md`,
+Extensions): the stem, then `key=value` parameters. `unit` is the only
+parameter. `describe-extension hybrid-music-5000` prints the schema, and
+`list-extensions` and `start --help` list it with the others.
+
+### Presets and the Configurator
+
+In a preset file the board is an entry in `extensions` with
+`"name": "hybrid-music-5000"` and, optionally, `"config": {"unit":
+"music-3000"}`; `docs/preset-schema.md` has the form. The shipped preset is
+generated from `src/server/CMakeLists.txt` with `add_plugin_preset`, which
+depends on the plugin target so the plugin is deployed before the preset is
+resolved, and carries its discs (next section).
+
+The macOS New Machine dialog offers the board under the `1mhz-bus`
+attachment point like any other extension, and the running machine's
+Configurator shows the `unit` choice from the manifest. Nothing about the
+synthesiser is configurable at run time: the board has no switches, and its
+sound level is a mixer matter in the client.
+
+### What is not configurable
+
+There is no option for the output filter, the level mapping or the
+resampler: they model the board's analogue path and its fixed clock. A user
+who wants the sound of a clone with a gentler filter does not get it here
+(see `docs/music5000/music5xxx-notes.md`); the model is the original.
+
 ## What Beebium models
-
-### The extension
-
-`hybrid-music-5000` is a plugin attaching to `1mhz-bus`. Its one parameter,
-`unit`, chooses the board:
-
-| `unit` | JIM pages | Audio frame field |
-|--------|-----------|-------------------|
-| `music-5000` (default) | `&30`-`&3F` | 2 |
-| `music-3000` | `&50`-`&5F` | 3 |
-
-A machine with both lists the extension twice. Each instance claims its
-pages through `OneMHzBusPort::claim_jim_pages()` (the port owns `&FCFF`, so
-several JIM devices, and FRED devices such as the SCSI host adapter, share
-the bus; `tests/test_music5000_extension.cpp` runs it beside the Acorn SCSI
-host adapter), takes host writes immediately, leaves reads floating, and is
-reset by power-on and BREAK, which zero the normal register bank and the
-bank-select flip-flop as the board's NRST line does.
-
-The extension registers a bipolar 2 x int16 source on the machine's
-`AudioSourcePort`, so `GetAudioFormat` describes its field as `Music5000`
-(or `Music3000`), channels Left and Right, in its own group.
-
-The pieces are separate, with no Beebium dependencies, so each is tested on
-its own: `Music5000Synth` (the DSP), `Music5000OutputFilter` and
-`Music5000Resampler`, all in `src/extensions/hybrid-music-5000/`.
 
 ### The DSP, per sample
 
@@ -298,11 +460,54 @@ stream itself.
 
 ## Clients
 
-`GetAudioFormat` describes each field with its encoding and a `bipolar`
-flag: the Music 5000's field is bipolar (signed, zero is silence), the
-SN76489's are not. The Python client decodes fields generically. Playback
-in the macOS client, which must honour the format rather than assume the
-SN76489's layout, is issue #229.
+`GetAudioFormat` describes each field with its encoding, channel names,
+group and a `bipolar` flag: the Music 5000's field is bipolar (signed, zero
+is silence, already through the board's AC-coupled output), the SN76489's
+are not (unipolar, the client removes DC). A client that reads the format
+needs nothing Music 5000 specific.
+
+- **macOS** (`AudioClient.swift`, `AudioRenderer.swift`,
+  `AudioMixerState.swift`, `AudioMixerView.swift`; #229, #230). The frame
+  stream is split on arrival: fields 0 and 1 go to the SN76489 ring as
+  before, and fields 2 and 3 to a second ring written in lockstep with it, so
+  the two never drift apart and a stall in one is a stall in both. The
+  renderer drains both rings every callback. A field the format marks
+  bipolar 2 x int16 is summed into the stereo output at a fixed ratio,
+  `musicMixGain` 0.85, with no DC removal; a server with no such field leaves
+  the path inert and the output bit-identical to a machine without the
+  board. The Sound sidebar shows one section per channel group the format
+  reports, each with its own sub-master and mute under the master: the
+  SN76489's, and a "Music 5000" (and "Music 3000") section when fitted. All
+  sub-masters default to 1.0.
+- **Python** (`beebium.client.audio`). `AudioFormat` carries `bipolar` per
+  `AudioSource`; each `AudioChunk` unpacks its fields by their encodings, so
+  a 2 x int16 field arrives as (left, right) int16 pairs.
+  `examples/record_audio.py` records any field, or the mix, to a WAV file.
+- **TypeScript**. Regenerated stubs carry the new field; no client logic
+  depends on it.
+
+Clients mix; they never change the sound. The server's field is the board's
+output, and a client's gain, mute and sub-master are the user's amplifier.
+
+## Source layout and tests
+
+| Layer | Code | Tests |
+|-------|------|-------|
+| Bus port, JIM paging, reset | `src/core/include/beebium/extension/OneMHzBusPort.hpp`, `OneMHzBusDevice.hpp`, `src/core/extension-api/OneMHzBusPort.cpp` | `tests/test_one_mhz_bus_port.cpp`: FRED and JIM claims, overlap rejection, routing by the current page, floating unclaimed pages, two JIM devices, FRED and JIM coexisting, one tick per device. `tests/test_one_mhz_bus_reset.cpp`: reset reaches every device once, and from every hardware policy |
+| Audio source port and frame assembly | `src/core/include/beebium/extension/AudioSourcePort.hpp`, `src/core/extension-api/AudioSourcePort.cpp`, `src/core/include/beebium/AudioFrameAssembler.hpp` | `tests/test_audio_source_port.cpp`, `tests/test_audio_frame_assembler.cpp` |
+| Dynamic audio format | `src/service/include/beebium/service/AudioService.hpp` (`describe_audio_format`), `src/service/proto/audio.proto` | `tests/test_grpc_audio.cpp`, `clients/beebium-python-client/tests/test_audio.py` |
+| Synth core | `src/extensions/hybrid-music-5000/Music5000Synth.{hpp,cpp}` | `tests/test_music5000_synth.cpp`, each case tagged with the `hardware-model.md` section it pins: page decoding, column order, 24-bit phase and wrap, phase-set, wave lookup, amplitude latched at the wrap, gate, both DAC laws and the left half step, inversion, stereo slots, the three modulation pairings, reset, and the sixteen-channel full-scale sum |
+| Output filter | `Music5000OutputFilter.{hpp,cpp}` | `tests/test_music5000_output_filter.cpp`: the analogue response across the band, the -3 and -6 dB points, unity DC gain, no peaking, minimum-phase zeros, determinism |
+| Resampler | `Music5000Resampler.{hpp,cpp}` | `tests/test_music5000_resampler.cpp`: exactly 128 outputs per 125 inputs without drift, unity DC gain, group delay, a clean 1 kHz tone |
+| Extension | `HybridMusic5000.{hpp,cpp}`, `plugin_entry.cpp`, `manifest.json`, `CMakeLists.txt` | `tests/test_music5000_extension.cpp`: writes through pages `&30`-`&3F`, 46875 samples per emulated second, reset on power-on and BREAK, the two units and the SCSI adapter sharing the bus, an unknown unit rejected, the level mapping, 48000 samples per second without repeats, a 1 kHz tone end to end |
+| Machine, from BASIC | | `clients/beebium-python-client/tests/test_music5000.py`: the format describes the board, 440 Hz written through JIM plays in field 2, a Music 3000 plays in field 3 |
+| Machine, from AMPLE | preset `model-b-plus-128k-music-5000`, `discs/bundled/*.tar.xz`, `packaging/discs/build-music5000-discs.sh` | `clients/beebium-python-client/tests/test_music5000_ample.py`: boots to Studio 5000, plays Pavane, measures field 2 |
+| macOS client | `clients/macos/Beebium/Beebium/Audio*.swift` | `clients/macos/Beebium/BeebiumTests/AudioRendererTests.swift`: lockstep rings, bipolar mix, sub-masters |
+| Installed tree | `cmake/InstallSmokeTest.cmake`, `scripts/smoke-installed-tree.sh`, `packaging/homebrew/test-formula.sh`, `.github/workflows/windows-package.yml` | each expects the `hybrid-music-5000` plugin to be present and loadable |
+
+The plugin is built as a shared library by `src/extensions/CMakeLists.txt`,
+installed beside the other extensions, and listed in every packaging smoke
+test, so a bundle missing it fails before release.
 
 ## Open items
 
