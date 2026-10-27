@@ -90,13 +90,18 @@ and in two effects of oaknut writing the image:
 
 ### The ROM images
 
-Copied byte for byte from the original disc with `oaknut-disc get
-<image>:<file> <rom> --meta-format none`:
+Copied from the original disc with `oaknut-disc get <image>:<file> <rom>
+--meta-format none`:
 
 | Bundled as | From | Size | ROM type byte | Title |
 |------------|------|------|---------------|-------|
 | `hybrid-ample_1_00.rom` | `R.AMPLE` (load and exec `&8000`) | 16384 | `&C2` (service and language) | `AMPLE`; reports "AMPLE Nucleus V1.00 (C) 1986 Hybrid Technology" |
-| `hybrid-anhf.rom` | `$.ANHF` | 16383 | `&82` (service) | `ANHF` (the AMPLE Nucleus Help File) |
+| `hybrid-anhf.rom` | `$.ANHF`, 16383 bytes, plus one `&FF` | 16384 | `&82` (service) | `ANHF` (the AMPLE Nucleus Help File) |
+
+`hybrid-ample_1_00.rom` is the file byte for byte. `$.ANHF` was saved as
+`&3FFF` bytes, one short of the 16 KiB EPROM, so the build appends one `&FF`
+(an erased EPROM byte) to make `hybrid-anhf.rom` a full 16 KiB image; a
+short image draws a warning when it is fitted.
 
 Colin Fraser describes the AMPLE image as a "patched ROM image"; what the
 patch is, is not documented there.

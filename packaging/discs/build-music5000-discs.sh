@@ -7,7 +7,8 @@
 #   discs/bundled/hybrid-music-5000-system-4.tar.xz
 #       hybrid-music-5000-system-4.ssd   the Music 5000 System Disk, adapted
 #       hybrid-ample_1_00.rom            the AMPLE Nucleus 1.00 ROM, from it
-#       hybrid-anhf.rom                  the AMPLE Nucleus Help File ROM, from it
+#       hybrid-anhf.rom                  the AMPLE Nucleus Help File ROM, from it,
+#                                        padded to 16 KiB
 #   discs/bundled/amplinex-001-002.tar.xz
 #       amplinex-001-002.dsd             Amplinex 001 and 002, unchanged
 #
@@ -29,7 +30,9 @@
 #   2. The boot option is set to 3 (*EXEC), so Shift-Break runs it (the
 #      original is 0, so Shift-Break does nothing).
 #
-# The ROM images are extracted from the disc, not changed.
+# The ROM images are extracted from the disc. The AMPLE ROM is unchanged. The
+# Help File ROM was saved as &3FFF bytes, one short of its 16 KiB EPROM, so
+# it is padded with one &FF, an erased EPROM byte.
 #
 # DETERMINISM: oaknut is pinned to exact versions, the ROM images are copied
 # byte for byte, and each tarball is written with numeric owner 0, empty user
@@ -96,6 +99,12 @@ build() {
     # The ROM images, byte for byte from the original disc.
     "${OAKNUT[@]}" get "$ssd_filepath:R.AMPLE" "$work_dirpath/$AMPLE_ROM_FILENAME" --meta-format none
     "${OAKNUT[@]}" get "$ssd_filepath:\$.ANHF" "$work_dirpath/$ANHF_ROM_FILENAME" --meta-format none
+    python3 -I -c '
+import sys
+data = open(sys.argv[1], "rb").read()
+assert len(data) == 16383, f"ANHF is {len(data)} bytes, expected 16383"
+open(sys.argv[1], "wb").write(data + b"\xff")
+' "$work_dirpath/$ANHF_ROM_FILENAME"
 
     # !BOOT := runner without the Music 4000 module, run by *EXEC.
     "${OAKNUT[@]}" cat "$ssd_filepath:\$.runner" > "$work_dirpath/runner"
