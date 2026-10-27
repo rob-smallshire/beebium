@@ -591,17 +591,19 @@ beebium-model-b --acorn-scsi --scsi-hdd scsi-id=0:image=boot.dat --scsi-hdd scsi
 
 The `hybrid-music-5000` plugin is the Hybrid Music 5000 synthesiser on the
 1 MHz bus: sixteen channels of wavetable sound, written by the software that
-drives it (AMPLE, the user's own sideways ROM and discs) through the JIM
+drives it (AMPLE) through the JIM
 paging register at `&FCFF` and page `&FD`. The board is write-only. Its sound
 reaches clients as audio field 2, after the board's own analogue output
 filter, alongside the SN76489's fields; `GetAudioFormat` describes it.
 A second instance with `unit=music-3000` is the Music 3000 expander, with its
-own sixteen channels in field 3. The presets `model-b-music-5000` and
-`model-b-music-5000-scsi` (with the Acorn SCSI host adapter too) start from
-the disc Model B. `describe-extension hybrid-music-5000` prints the same list.
+own sixteen channels in field 3. The preset `model-b-plus-128k-music-5000`
+is a B+ 128K with AMPLE fitted and its discs in the drives, booting into
+AMPLE Studio 5000 (see [Music 5000](music-5000.md)). To fit the board to
+another machine, with your own AMPLE ROM and discs, give the option on its
+own. `describe-extension hybrid-music-5000` prints the same list.
 
 ```bash
-beebium-model-b --preset model-b-music-5000
+beebium-model-b-plus-128k --preset model-b-plus-128k-music-5000
 beebium-model-b --preset model-b-disc --hybrid-music-5000
 beebium-model-b --hybrid-music-5000 --hybrid-music-5000 unit=music-3000
 ```

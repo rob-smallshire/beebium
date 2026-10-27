@@ -76,7 +76,8 @@ nets of the schematic.
 A machine with both lists the extension twice. Each instance claims its
 pages through `OneMHzBusPort::claim_jim_pages()` (the port owns `&FCFF`, so
 several JIM devices, and FRED devices such as the SCSI host adapter, share
-the bus), takes host writes immediately, leaves reads floating, and is
+the bus; `tests/test_music5000_extension.cpp` runs it beside the Acorn SCSI
+host adapter), takes host writes immediately, leaves reads floating, and is
 reset by power-on and BREAK, which zero the normal register bank and the
 bank-select flip-flop as the board's NRST line does.
 
@@ -237,16 +238,15 @@ something differently from some or all of them:
 
 | Preset | Machine |
 |--------|---------|
-| `model-b-music-5000` | Model B, 1770 DFS, Music 5000 |
-| `model-b-music-5000-scsi` | The same with ADFS and the Acorn SCSI host adapter: two devices on the 1 MHz bus |
 | `model-b-plus-128k-music-5000` | B+ 128K, Music 5000, and AMPLE: the AMPLE Nucleus ROM in slot 4, its Help File ROM in slot 5, the Music 5000 System Disk in drive 0, Amplinex 001 and 002 in drive 1. Boots straight into AMPLE Studio 5000 |
 
-The first two leave AMPLE, the software that drives the synthesiser, to the
-user's own ROM and discs. The B+ 128K preset carries it: the Music 5000 System
-Disk and Amplinex 001/002 from Colin Fraser's Hybrid Music System page,
-bundled by the project owner's decision, with the two ROM images extracted
-from the system disc. Each machine works on its own copies of the discs, so
-nothing it saves touches the masters. The system disc's `!BOOT` is AMPLE
+The preset carries AMPLE, the software that drives the synthesiser: the Music
+5000 System Disk and Amplinex 001/002 from Colin Fraser's Hybrid Music System
+page, bundled by the project owner's decision, with the two ROM images
+extracted from the system disc. Each machine works on its own copies of the
+discs, so nothing it saves touches the masters. To fit the board to another
+machine with your own AMPLE ROM and discs, give `--hybrid-music-5000` on its
+own (see `docs/cli.md`). The system disc's `!BOOT` is AMPLE
 Studio's own `runner` script without the Music 4000 module, and its boot
 option is `*EXEC`, so power-on (or Shift-Break) goes straight to the Studio
 5000 main menu. `packaging/discs/music5000-parts/PROVENANCE.md` gives the

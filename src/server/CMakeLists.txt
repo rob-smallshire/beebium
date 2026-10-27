@@ -501,35 +501,8 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
         --fdc acorn-1770 --sideways slot=1:type=rom:image=acorn-dfs_2_26.rom --tube-65c02)
 endif()
 
-# Hybrid Music 5000 preset: the disc Model B with the synthesiser on the
-# 1 MHz bus (JIM pages &30-&3F). The AMPLE software that drives it is the
-# user's own sideways ROM and discs, as for any add-on, so none is bundled.
-if(TARGET beebium_ext_hybrid_music_5000_plugin)
-    add_plugin_preset(beebium-model-b beebium_ext_hybrid_music_5000_plugin
-        "model-b-music-5000"
-        "Model B (Disc), Music 5000" "1986"
-        DESCRIPTION "32K Model B, 1770 DFS, Hybrid Music 5000 synthesiser"
-        --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom
-        --hybrid-music-5000)
-endif()
-# The same with the Acorn SCSI host adapter, so two devices share the 1 MHz
-# bus in a shipped preset: the adapter at &FC40-&FC43, the synthesiser on JIM.
-# ADFS 1.30 sits below DFS (slot 13 under 14), so DFS stays the default filing
-# system and the machine boots without a hard disc; attach one with
-# --scsi-hdd to use ADFS.
-if(TARGET beebium_ext_hybrid_music_5000_plugin AND TARGET beebium_ext_acorn_scsi_plugin)
-    add_plugin_preset(beebium-model-b beebium_ext_hybrid_music_5000_plugin
-        "model-b-music-5000-scsi"
-        "Model B (Disc), Music 5000, SCSI" "1986"
-        DESCRIPTION "32K Model B, 1770 DFS, ADFS, Hybrid Music 5000 and Acorn SCSI host adapter"
-        --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom
-        --sideways slot=13:type=rom:image=acorn-adfs_1_30.rom
-        --hybrid-music-5000
-        --acorn-scsi
-        EXTRA_DEPENDS beebium_ext_acorn_scsi_plugin)
-endif()
-
-# Music 5000 on the B+ 128K, ready for AMPLE: the AMPLE Nucleus ROM in slot 4
+# The Hybrid Music 5000 preset: a B+ 128K with the synthesiser on the 1 MHz
+# bus (JIM pages &30-&3F), ready for AMPLE. The AMPLE Nucleus ROM is in slot 4
 # and its Help File ROM in slot 5 (both extracted from the bundled system
 # disc), the Music 5000 System Disk in drive 0 and Amplinex 001/002 in drive 1.
 # The system disc's !BOOT is AMPLE Studio's own runner script, so a power-on
