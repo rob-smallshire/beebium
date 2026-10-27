@@ -63,11 +63,20 @@ sed \
   -e "s|^  sha256 .*|  sha256 \"${sha256}\"|" \
   "${formula_filepath}" > "${tap_repo_dirpath}/Formula/beebium-server.rb"
 
+# Since 2026-10-27 Homebrew refuses to load a formula from an untrusted
+# non-official tap, so trust the throwaway tap before anything loads from it
+# (guarded: older Homebrew has no `brew trust`). The entry lives in the user's
+# ~/.homebrew/trust.json, not in the tap, so cleanup removes it again.
+if brew trust --help >/dev/null 2>&1; then
+  brew trust beebium/formula-test
+fi
+
 installed_by_script=0
 cleanup() {
   if [ "${installed_by_script}" = "1" ]; then
     brew uninstall --force beebium-server >/dev/null 2>&1 || true
   fi
+  brew untrust --tap beebium/formula-test >/dev/null 2>&1 || true
   brew untap beebium/formula-test >/dev/null 2>&1 || true
   rm -rf "${work_dirpath}"
 }
