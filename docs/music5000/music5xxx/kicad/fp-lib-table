@@ -1,3 +1,0 @@
-(fp_lib_table
-  (lib (name musix5xxx-custom)(type KiCad)(uri ${KIPRJMOD}/library/musix5xxx-custom.pretty)(options "")(descr ""))
-)

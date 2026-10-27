@@ -33,7 +33,7 @@ own provenance note.
 | File | Source | Author / publisher | Notes |
 |------|--------|--------------------|-------|
 | `eti-inside-hybrids-music-5000.txt`, `eti/` | http://www.colinfraser.com/m5000/m5-eti.htm | Chris Jordan, in ETI (c. 1986-87); transcribed to HTML by Colin Fraser | Architecture of the DSP. Text verbatim, figures transcribed by hand, plus notes on its inconsistent timing figures |
-| `music5xxx/` | https://github.com/jlprojects/music5xxx (commit 1a209d9e) | J Lane, 2019; CC BY-SA 4.0 | Clone PCB: schematic PDF, KiCad sources, BOM. Departs from the original in places; see `music5xxx/PROVENANCE.md` |
+| `music5xxx-notes.md` | https://github.com/jlprojects/music5xxx (commit 1a209d9e) | (ours), on J Lane's 2019 clone PCB (CC BY-SA 4.0, not captured here) | What the clone repository holds and where it departs from the original |
 | `stardot-key-points.md` | https://stardot.org.uk/forums/viewtopic.php?t=25687 and https://stardot.org.uk/forums/viewtopic.php?t=16895 | Threads opened by CHRISJJ (Chris Jordan), 2022-10-17, and jasonl (J Lane), 2019-04-10 | A summary, not a capture: the designer's points on emulation quality and the output filter, and the clone's departures, with post dates and links |
 | `retro-kit-hybrid-music-5000.txt` | https://www.retro-kit.co.uk/page.cfm/content/Hybrid-Music-5000-Synthesiser/index.html | Paul Vernon, Retro Kit | Background on the Music 500/5000/87 variants; resource list |
 | `emulator-survey.md` | local source trees and https://github.com/hoglet67/Music5000 | (ours) | Which emulators implement it, licences, lineage, where their models disagree |

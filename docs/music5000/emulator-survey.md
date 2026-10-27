@@ -141,5 +141,6 @@ by reading.
   any test tune, with the caveat that it shares its model with Pi1MHz
   and MAME, so agreement among those three is one vote, not three.
 - **Schematics.** The original (`Hybrid Technology HT Music Synthesiser
-  - Schematic.pdf`, here by hand) and the clone (`music5xxx/`, CC BY-SA
-  4.0; known departures in its `PROVENANCE.md`).
+  - Schematic.pdf`, here by hand) and the clone
+  (https://github.com/jlprojects/music5xxx, CC BY-SA 4.0, not captured
+  here; known departures in `music5xxx-notes.md`).

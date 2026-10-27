@@ -11,7 +11,7 @@ link to the post. Posts belong to their authors; read them at the links.
   its User Guide) on 2022-10-17. 30 posts, the last on 2023-10-08.
 - **t=16895** "Music 5000 clone in Kicad - Work in progress",
   https://stardot.org.uk/forums/viewtopic.php?t=16895. Opened by jasonl
-  (J Lane, author of the clone in `music5xxx/`) on 2019-04-10. 116
+  (J Lane, author of the clone; see `music5xxx-notes.md`) on 2019-04-10. 116
   posts, the last on 2026-06-13.
 
 Post links have the form
@@ -95,7 +95,7 @@ Chris Jordan's technical points. An emulation has to answer to these.
 - **The clone's filter.** 2019-04-27, jasonl, t=16895 p235383: the
   original filter (15K, 3n3) cuts off near 3.2 kHz. He changed the
   capacitors to 1n for a cut-off near 16 kHz, which is the
-  `music5xxx/` schematic as published.
+  clone schematic as published (see `music5xxx-notes.md`).
 - **The clone's clock-input network.** 2020-08-07, eelco108, t=16895
   p282670 and p282674, confirmed in p330481: the clone's R37 (4K7 in
   series with the 1 MHz bus clock feeding E) misreads a factory mod.
