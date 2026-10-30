@@ -44,17 +44,17 @@ AND gates; IC14 is NAND; IC4, IC30 and IC35 are OR; IC15 is XOR.
 `emulator-survey.md` lists the behaviours on which the existing
 implementations disagree. The schematic settles them as follows.
 
-| Behaviour | The hardware | Section |
-|-----------|--------------|---------|
-| Reads | The board never drives the BBC data bus: write-only. A read of `&FCFF` still clocks the page register. | 1 |
-| Disable bit (freq lo bit 0) | Forces the adder's phase input to zero in the three phase slots, so the phase is loaded with the frequency. It is not zeroed. | 3 |
-| Freq lo width | All 8 bits reach the adder. | 3 |
-| Amplitude | 8-bit add in the log domain; output is gated off when the sign bit does not flip. | 4 |
-| Amplitude timing | Latched through the phase RAM, and changes only at a phase wrap. | 4 |
-| Modulation pairing | Register column r modulates column r+1 within each group of 8, with 7 wrapping to 0 and 15 to 8. The emulators' i to i+1 is right except at those two wraps. | 5 |
-| Stereo | Time-sliced over 6 slots per channel; equivalent to the weights 6/6..1/6 used by the emulators. | 6 |
-| DAC law per side | Right (decode): 2^C (2S + 33) - 33. Left (encode): half a step more, 2^C (2S + 34) - 33. Every emulator uses the decode law for both sides. | 7.1 |
-| Output filter | 4th order: a pole pair at 3215 Hz (Q 0.667) plus real poles at 3215 Hz and 7717 Hz. -3 dB at 2.1 kHz, -6 dB at 2.9 kHz. | 7, appendix |
+| Behaviour                   | The hardware                                                                                                                                                 | Section     |
+|-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|
+| Reads                       | The board never drives the BBC data bus: write-only. A read of `&FCFF` still clocks the page register.                                                       | 1           |
+| Disable bit (freq lo bit 0) | Forces the adder's phase input to zero in the three phase slots, so the phase is loaded with the frequency. It is not zeroed.                                | 3           |
+| Freq lo width               | All 8 bits reach the adder.                                                                                                                                  | 3           |
+| Amplitude                   | 8-bit add in the log domain; output is gated off when the sign bit does not flip.                                                                            | 4           |
+| Amplitude timing            | Latched through the phase RAM, and changes only at a phase wrap.                                                                                             | 4           |
+| Modulation pairing          | Register column r modulates column r+1 within each group of 8, with 7 wrapping to 0 and 15 to 8. The emulators' i to i+1 is right except at those two wraps. | 5           |
+| Stereo                      | Time-sliced over 6 slots per channel; equivalent to the weights 6/6..1/6 used by the emulators.                                                              | 6           |
+| DAC law per side            | Right (decode): 2^C (2S + 33) - 33. Left (encode): half a step more, 2^C (2S + 34) - 33. Every emulator uses the decode law for both sides.                  | 7.1         |
+| Output filter               | 4th order: a pole pair at 3215 Hz (Q 0.667) plus real poles at 3215 Hz and 7717 Hz. -3 dB at 2.1 kHz, -6 dB at 2.9 kHz.                                      | 7, appendix |
 
 ## 1. Address decoding and the host interface (p1)
 
