@@ -121,7 +121,11 @@ TEST_CASE("The Sound mode's controls set the mixer, and mutes grey their sliders
     sound.group_mute(0)->click();
     CHECK(audio.controls().group_muted[0].load());
     CHECK_FALSE(sound.group_slider(0)->isEnabled());
+    // The SN76489's channels are its group's: greyed with it.
+    CHECK_FALSE(sound.channel_slider(0)->isEnabled());
     CHECK(sound.master_slider()->isEnabled());
+    sound.group_mute(0)->click();
+    CHECK(sound.channel_slider(0)->isEnabled());
 
     sound.master_mute()->click();
     CHECK(audio.controls().muted.load());

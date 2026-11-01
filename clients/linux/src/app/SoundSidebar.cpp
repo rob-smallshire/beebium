@@ -244,9 +244,13 @@ void SoundSidebar::update_greying() {
         const bool muted = master_muted || audio_.controls().group_muted[g].load();
         groups_[g].slider->setEnabled(!muted);
     }
-    for (QSlider* channel : channels_) {
-        if (channel) {
-            channel->setEnabled(!master_muted);
+    // A channel belongs to its group: greyed with it as well as the master.
+    const AudioLayout& layout = audio_.layout();
+    for (std::size_t c = 0; c < channels_.size(); ++c) {
+        if (channels_[c] && c < layout.channels.size()) {
+            const std::size_t group = layout.channels[c].group;
+            channels_[c]->setEnabled(!master_muted &&
+                                     !audio_.controls().group_muted[group].load());
         }
     }
 }
