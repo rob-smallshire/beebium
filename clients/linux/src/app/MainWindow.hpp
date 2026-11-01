@@ -16,6 +16,8 @@
 #include <QMainWindow>
 #include <QRhiWidget>
 
+#include <functional>
+
 class QLabel;
 
 namespace beebium::linux_client {
@@ -47,6 +49,16 @@ public:
     // Connect this window to the server at host:port.
     void connect_to(const QString& endpoint);
 
+    // The whole client is quitting: a shared server this window launched is
+    // left running without asking (4.5).
+    void set_quitting(bool quitting) { quitting_ = quitting; }
+
+    // File > Save, Save As, Rename Machine (5.4, 5.7). `then` is told whether
+    // the machine was saved.
+    void save(std::function<void(bool saved)> then = {});
+    void save_as(std::function<void(bool saved)> then = {});
+    void rename();
+
 Q_SIGNALS:
     // File > Connect to Machine: the application shows its Connect dialog.
     void connect_requested();
@@ -65,12 +77,23 @@ private:
     void show_verdict();
     void build_menus();
 
+    // Closing, as client specification 4.5 decides it; closeEvent starts it
+    // and it ends by closing the window for real.
+    enum class ClosePhase { open, closing, closed };
+    void begin_close();
+    void decide_close(int client_count);
+    void shut_down_server();
+    void finish_close();
+
     MachineSession* session_;
     ConnectionRecovery* recovery_;
     DisplayWidget* display_;
     ConnectionOverlay* overlay_;
     QLabel* description_label_ = nullptr;
     ClientSettings* settings_ = nullptr;
+    QLabel* unsaved_label_ = nullptr;
+    ClosePhase close_phase_ = ClosePhase::open;
+    bool quitting_ = false;
 };
 
 }  // namespace beebium::linux_client

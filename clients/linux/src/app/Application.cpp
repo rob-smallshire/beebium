@@ -91,7 +91,7 @@ MainWindow* Application::open(const Endpoint& endpoint, const QString& machine_u
     windows_.emplace_back(window);
     connect(window, &MainWindow::connect_requested, this,
             [this, window] { show_connect_dialog(window); });
-    connect(window, &MainWindow::quit_requested, qApp, &QApplication::closeAllWindows);
+    connect(window, &MainWindow::quit_requested, this, &Application::quit_all);
     connect(window, &MainWindow::new_machine_requested, this, [this, window] { new_machine(window); });
     connect(window, &MainWindow::open_machine_requested, this, [this, window] { open_machine(window); });
     connect(window, &MainWindow::configure_requested, this, [this, window] { configure(window); });
@@ -134,6 +134,13 @@ bool Application::show_connect_dialog(QWidget* parent) {
     }
     open(*endpoint, dialog.machine_uuid());
     return true;
+}
+
+void Application::quit_all() {
+    for (MainWindow* window : windows()) {
+        window->set_quitting(true);
+        window->close();
+    }
 }
 
 std::optional<ServerLocation> Application::servers(QWidget* parent) {

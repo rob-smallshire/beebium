@@ -163,3 +163,7 @@ beebium_linux_add_test(test_machine_control QT
 beebium_linux_add_test(test_new_machine QT
     SOURCES test_new_machine.cpp
     LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_close_decision QT
+    SOURCES test_close_decision.cpp
+    LIBRARIES beebium_linux_app)

@@ -78,6 +78,10 @@ public:
     void on_window_opened(std::function<void(MainWindow&)> hook) { window_hook_ = std::move(hook); }
 
     std::vector<MainWindow*> windows() const;
+
+    // Quit: close every window as quitting, so only servers this client
+    // launched and alone uses are shut down (4.5).
+    void quit_all();
     ClientSettings& settings() { return settings_; }
 
 private:

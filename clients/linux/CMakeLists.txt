@@ -207,6 +207,7 @@ add_library(beebium_linux_app STATIC
     src/app/Application.cpp
     src/app/ApplicationInfo.cpp
     src/app/ClientSettings.cpp
+    src/app/CloseDecision.cpp
     src/app/ConnectDialog.cpp
     src/app/ConnectionOverlay.cpp
     src/app/ConnectionRecovery.cpp

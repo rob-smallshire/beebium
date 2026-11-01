@@ -123,7 +123,7 @@ int main(int argc, char* argv[]) {
     });
     if (parser.isSet(quit_option)) {
         QTimer::singleShot(parser.value(quit_option).toInt() * 1000, &client,
-                           [] { QApplication::closeAllWindows(); });
+                           [&client] { client.quit_all(); });
     }
     client.handle_arguments(arguments);
     return QApplication::exec();

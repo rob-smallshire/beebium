@@ -204,7 +204,10 @@ void MachineSession::on_status_event(unsigned generation,
                        event.status() == beebium::SERVER_STATUS_SHUTTING_DOWN);
     set_liveness(before);
 
-    template_media_written_ = event.template_media_written();
+    if (event.template_media_written() != template_media_written_) {
+        template_media_written_ = event.template_media_written();
+        Q_EMIT unsaved_changes_changed(template_media_written_);
+    }
 
     if (event.status() == beebium::SERVER_STATUS_IDENTITY_CHANGED && event.has_identity()) {
         machine_name_ = QString::fromStdString(event.identity().name());
@@ -331,7 +334,10 @@ void MachineSession::save(const QString& destination_dirpath, bool replace_exist
             if (saved.outcome.ok) {
                 machine_saved_ = true;
                 machine_dirpath_ = QString::fromStdString(saved.response.machine_dirpath());
-                template_media_written_ = false;
+                if (template_media_written_) {
+                    template_media_written_ = false;
+                    Q_EMIT unsaved_changes_changed(false);
+                }
             }
             Q_EMIT save_finished(saved.outcome);
         });

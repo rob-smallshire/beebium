@@ -151,6 +151,8 @@ Q_SIGNALS:
     void guest_ready();
     void machine_reset();
     void running_changed(bool running);
+    // A transient machine has (or no longer has) unsaved media (5.3).
+    void unsaved_changes_changed(bool unsaved);
     void run_finished(const beebium::linux_client::CallOutcome& outcome);
     void system_info_refreshed(int client_count);
     void save_finished(const beebium::linux_client::CallOutcome& outcome);

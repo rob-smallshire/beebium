@@ -14,6 +14,7 @@
 
 #include "app/ApplicationInfo.hpp"
 #include "app/ClientSettings.hpp"
+#include "app/CloseDecision.hpp"
 #include "app/ConnectionOverlay.hpp"
 #include "app/ConnectionRecovery.hpp"
 #include "app/DisplayWidget.hpp"
@@ -22,7 +23,15 @@
 
 #include <QAction>
 #include <QCloseEvent>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QInputDialog>
+#include <QPushButton>
+#include <QTimer>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -119,6 +128,17 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     // subtitle, so the description goes at the start of the status bar.
     description_label_ = new QLabel(this);
     statusBar()->addWidget(description_label_, 1);
+    // The unsaved-changes mark (5.3), beside rather than in the title, which
+    // is exactly the machine's name (5.7).
+    unsaved_label_ = new QLabel(tr("Unsaved changes"), this);
+    unsaved_label_->setToolTip(tr("This machine has written to its discs since it was launched; "
+                                  "save it to keep them."));
+    unsaved_label_->hide();
+    statusBar()->addPermanentWidget(unsaved_label_);
+    connect(session_, &MachineSession::unsaved_changes_changed, unsaved_label_,
+            [this](bool unsaved) {
+                unsaved_label_->setVisible(unsaved && !session_->machine_saved());
+            });
     connect(session_, &MachineSession::identity_changed, this,
             [this](const QString& name, const QString& description) {
                 setWindowTitle(name.isEmpty() ? QStringLiteral("Beebium") : name);
@@ -143,6 +163,20 @@ void MainWindow::build_menus() {
     QAction* connect_action = file->addAction(tr("&Connect to Machine..."));
     connect_action->setShortcut(QKeySequence(tr("Ctrl+Shift+O")));
     connect(connect_action, &QAction::triggered, this, &MainWindow::connect_requested);
+    file->addSeparator();
+    QAction* save_action = file->addAction(tr("&Save"));
+    save_action->setShortcut(QKeySequence::Save);
+    connect(save_action, &QAction::triggered, this, [this] { save(); });
+    QAction* save_as_action = file->addAction(tr("Save &As..."));
+    save_as_action->setShortcut(QKeySequence::SaveAs);
+    connect(save_as_action, &QAction::triggered, this, [this] { save_as(); });
+    QAction* rename_action = file->addAction(tr("&Rename Machine..."));
+    connect(rename_action, &QAction::triggered, this, &MainWindow::rename);
+    for (QAction* action : {save_action, save_as_action, rename_action}) {
+        action->setEnabled(false);
+        connect(session_, &MachineSession::connected_to_server, action,
+                [action] { action->setEnabled(true); });
+    }
     file->addSeparator();
     QAction* close_action = file->addAction(tr("C&lose Window"));
     close_action->setShortcut(QKeySequence::Close);
@@ -227,15 +261,240 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     return QMainWindow::eventFilter(watched, event);
 }
 
+void MainWindow::save(std::function<void(bool saved)> then) {
+    if (!session_->machine_saved()) {
+        // A transient machine has nowhere to save in place (5.4).
+        save_as(std::move(then));
+        return;
+    }
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(session_, &MachineSession::save_finished, this,
+                          [this, then, connection](const CallOutcome& outcome) {
+                              disconnect(*connection);
+                              if (!outcome.ok) {
+                                  ServerMessageDialog dialog(
+                                      tr("Could Not Save"),
+                                      tr("Beebium could not save %1.").arg(session_->machine_name()),
+                                      outcome.message, this);
+                                  dialog.exec();
+                              }
+                              if (then) {
+                                  then(outcome.ok);
+                              }
+                          });
+    session_->save(QString(), false);
+}
+
+void MainWindow::save_as(std::function<void(bool saved)> then) {
+    const QString suggested =
+        QDir(QDir::homePath()).filePath(machine_dirpath_for(session_->machine_name()));
+    const QString chosen = QFileDialog::getSaveFileName(
+        this, tr("Save Machine As"), suggested, tr("Beebium machines (*.beebium-machine)"),
+        nullptr, QFileDialog::DontConfirmOverwrite);
+    if (chosen.isEmpty()) {
+        if (then) {
+            then(false);
+        }
+        return;
+    }
+    const QString destination = machine_dirpath_for(chosen);
+    bool replace = false;
+    if (QFileInfo::exists(destination)) {
+        // Replaced only on the user's say-so; the server removes the old one
+        // once the new one is whole (5.4).
+        const auto answer = QMessageBox::question(
+            this, tr("Replace Machine"),
+            tr("%1 already exists. Replace it?").arg(QFileInfo(destination).fileName()),
+            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+        if (answer != QMessageBox::Yes) {
+            if (then) {
+                then(false);
+            }
+            return;
+        }
+        replace = true;
+    }
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(session_, &MachineSession::save_finished, this,
+                          [this, then, connection, destination](const CallOutcome& outcome) {
+                              disconnect(*connection);
+                              if (outcome.ok) {
+                                  unsaved_label_->hide();
+                              } else {
+                                  ServerMessageDialog dialog(
+                                      tr("Could Not Save"),
+                                      tr("Beebium could not save the machine to %1.").arg(destination),
+                                      outcome.message, this);
+                                  dialog.exec();
+                              }
+                              if (then) {
+                                  then(outcome.ok);
+                              }
+                          });
+    session_->save(destination, replace);
+}
+
+void MainWindow::rename() {
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("Rename Machine"), tr("Name:"),
+                                               QLineEdit::Normal, session_->machine_name(), &ok)
+                             .trimmed();
+    if (!ok || name.isEmpty() || name == session_->machine_name()) {
+        return;
+    }
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(session_, &MachineSession::name_set, this,
+                          [this, connection, name](const CallOutcome& outcome) {
+                              disconnect(*connection);
+                              if (!outcome.ok) {
+                                  ServerMessageDialog dialog(
+                                      tr("Could Not Rename"),
+                                      tr("Beebium could not rename the machine to %1.").arg(name),
+                                      outcome.message, this);
+                                  dialog.exec();
+                              }
+                          });
+    session_->set_name(name);
+}
+
 void MainWindow::closeEvent(QCloseEvent* event) {
-    // Recovery first, so nothing re-dials during teardown (4.4).
+    if (close_phase_ == ClosePhase::closed) {
+        event->accept();
+        return;
+    }
+    // Every close, the window manager's included, goes through the decision
+    // of 4.5, which may need the server's answer first.
+    event->ignore();
+    if (close_phase_ == ClosePhase::open) {
+        close_phase_ = ClosePhase::closing;
+        begin_close();
+    }
+}
+
+void MainWindow::begin_close() {
+    if (!session_->connected() || !is_live(recovery_->verdict()) ||
+        !session_->launched_server()) {
+        // Not ours, or not there to ask: the server is left as it is.
+        finish_close();
+        return;
+    }
+    // How many clients watch it: ours alone, or others too. Without an
+    // answer the server is left running rather than risk another client's.
+    auto answered = std::make_shared<bool>(false);
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(session_, &MachineSession::system_info_refreshed, this,
+                          [this, answered, connection](int client_count) {
+                              disconnect(*connection);
+                              *answered = true;
+                              decide_close(client_count);
+                          });
+    QTimer::singleShot(3000, this, [this, answered, connection] {
+        if (!*answered) {
+            disconnect(*connection);
+            finish_close();
+        }
+    });
+    session_->refresh_system_info();
+}
+
+void MainWindow::decide_close(int client_count) {
+    const CloseAction action = quitting_ ? quit_action(true, client_count)
+                                         : close_action(true, client_count);
+    if (action == CloseAction::disconnect) {
+        finish_close();
+        return;
+    }
+    if (action == CloseAction::ask) {
+        QMessageBox box(QMessageBox::Question, tr("Close Machine"),
+                        tr("%1 is also in use by another client.").arg(session_->machine_name()),
+                        QMessageBox::NoButton, this);
+        QPushButton* shut_down = box.addButton(tr("Shut Down"), QMessageBox::DestructiveRole);
+        QPushButton* leave = box.addButton(tr("Leave Running"), QMessageBox::AcceptRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(leave);
+        box.exec();
+        if (box.clickedButton() == leave) {
+            finish_close();
+        } else if (box.clickedButton() == shut_down) {
+            shut_down_server();
+        } else {
+            close_phase_ = ClosePhase::open;
+        }
+        return;
+    }
+    // Shutting it down. A transient machine's written media go with it
+    // unless saved first (4.5).
+    if (!session_->machine_saved() && session_->template_media_written()) {
+        const auto answer = QMessageBox::question(
+            this, tr("Save Machine"),
+            tr("%1 has written to its discs. Save it before closing?").arg(session_->machine_name()),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+        if (answer == QMessageBox::Cancel) {
+            close_phase_ = ClosePhase::open;
+            return;
+        }
+        if (answer == QMessageBox::Save) {
+            save_as([this](bool saved) {
+                if (saved) {
+                    shut_down_server();
+                } else {
+                    // Cancelling the save cancels the close.
+                    close_phase_ = ClosePhase::open;
+                }
+            });
+            return;
+        }
+    }
+    shut_down_server();
+}
+
+void MainWindow::shut_down_server() {
     recovery_->window_closing();
-    // Closing the window is dropping its connection (lifecycle-management.md
-    // section 4). Held keys are released first, and the key queue drains
-    // before the streams are cancelled, so nothing is left down on the machine.
+    display_->keyboard().detach();
+    const auto server = session_->launched_server();
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(session_, &MachineSession::shutdown_answered, this,
+                          [this, connection, server](const CallOutcome& outcome) {
+                              disconnect(*connection);
+                              session_->disconnect_from_server();
+                              if (!server) {
+                                  finish_close();
+                                  return;
+                              }
+                              if (!outcome.ok) {
+                                  // Ours to stop: the signal shuts it down
+                                  // gracefully too.
+                                  terminate_process(server->pid);
+                              }
+                              // Let it finish flushing its drives, without
+                              // holding up the GUI; then the window goes.
+                              auto* poll = new QTimer(this);
+                              auto waited = std::make_shared<QElapsedTimer>();
+                              waited->start();
+                              connect(poll, &QTimer::timeout, this, [this, poll, waited, server] {
+                                  if (process_alive(server->pid) && waited->elapsed() < 6000) {
+                                      return;
+                                  }
+                                  if (process_alive(server->pid)) {
+                                      terminate_process(server->pid);
+                                  }
+                                  poll->deleteLater();
+                                  finish_close();
+                              });
+                              poll->start(100);
+                          });
+    session_->request_shutdown();
+}
+
+void MainWindow::finish_close() {
+    // Recovery first, so nothing re-dials during teardown (4.4). Held keys
+    // are released and the key queue drains before the streams go, so
+    // nothing is left down on the machine.
+    recovery_->window_closing();
     display_->keyboard().detach();
     session_->disconnect_from_server();
-    event->accept();
+    close_phase_ = ClosePhase::closed;
+    close();
 }
 
 }  // namespace beebium::linux_client
