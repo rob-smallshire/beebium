@@ -54,6 +54,20 @@ TEST_CASE("Draining a recorder empties it", "[metrics]") {
     CHECK(recorder.drain().count == 0);
 }
 
+TEST_CASE("A histogram counts samples into buckets, the last open-ended", "[metrics]") {
+    CHECK(format_histogram({16.4, 16.7, 17.1, 20.0, 95.0}, 1.0, 40) ==
+          "[16,17):2 [17,18):1 [20,21):1 [39,inf):1");
+    CHECK(format_histogram({}, 1.0, 40).empty());
+    CHECK(format_histogram({-3.0}, 2.0, 4) == "[0,2):1");
+}
+
+TEST_CASE("Draining samples hands them over once", "[metrics]") {
+    IntervalRecorder recorder;
+    recorder.record(5.0);
+    CHECK(recorder.drain_samples() == std::vector<double>{5.0});
+    CHECK(recorder.drain_samples().empty());
+}
+
 TEST_CASE("A thread stat line yields its name and CPU ticks", "[metrics][cpu]") {
     const auto stat = parse_thread_stat(
         "1234 (bbm-video) S 1 1234 1234 0 -1 4194560 100 0 0 0 250 75 0 0 20 0 9 0 1 2 3");

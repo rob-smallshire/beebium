@@ -41,6 +41,9 @@ public:
     IntervalRecorder& receive_to_render() { return receive_to_render_; }
     IntervalRecorder& render_intervals() { return render_intervals_; }
 
+    // The host's Caps Lock as this window's platform reads it (7.3).
+    std::optional<bool> host_caps_lock() const { return host_locks_->caps_lock(); }
+
     // Key events typed into the display go to the machine through this.
     KeyboardInput& keyboard() { return keyboard_; }
 

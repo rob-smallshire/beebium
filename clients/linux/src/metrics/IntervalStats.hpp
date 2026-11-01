@@ -39,6 +39,12 @@ IntervalSummary summarise(std::vector<double> samples_ms);
 // One line: "n=.. mean=.. sd=.. min=.. p50=.. p95=.. p99=.. max=.. ms".
 std::string format_summary(const IntervalSummary& summary);
 
+// Counts per bucket of `bucket_ms` from zero, `bucket_count` buckets, the
+// last also taking everything beyond. One line, empty buckets left out:
+// "[16,17):3 [17,18):48 [40,inf):1".
+std::string format_histogram(const std::vector<double>& samples_ms, double bucket_ms,
+                             std::size_t bucket_count);
+
 // Durations recorded from one thread and summarised from another, for frame
 // pacing: frame inter-arrival times, receive-to-present latency.
 class IntervalRecorder {
@@ -48,15 +54,16 @@ public:
         samples_.push_back(milliseconds);
     }
 
-    // Summarise what was recorded since the last drain, and forget it.
-    IntervalSummary drain() {
+    // What was recorded since the last drain, forgotten here.
+    std::vector<double> drain_samples() {
         std::vector<double> taken;
-        {
-            std::lock_guard lock(mutex_);
-            taken.swap(samples_);
-        }
-        return summarise(std::move(taken));
+        std::lock_guard lock(mutex_);
+        taken.swap(samples_);
+        return taken;
     }
+
+    // Summarise what was recorded since the last drain, and forget it.
+    IntervalSummary drain() { return summarise(drain_samples()); }
 
 private:
     std::mutex mutex_;

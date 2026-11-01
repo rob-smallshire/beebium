@@ -16,6 +16,9 @@
 #include "app/MachineSession.hpp"
 #include "app/MainWindow.hpp"
 
+#include <QGuiApplication>
+#include <QScreen>
+
 #include <cstdio>
 
 namespace beebium::linux_client {
@@ -32,15 +35,29 @@ void SpikeMetrics::report() {
     auto& session = window_.session();
     auto& display = window_.display();
 
-    std::fprintf(stderr, "== %s\n", qPrintable(display.graphics_description()));
+    const QScreen* screen = display.screen();
+    const auto caps = display.host_caps_lock();
+    std::fprintf(stderr, "== %s | platform %s | screen %.2f Hz | drawable %dx%d | host caps %s\n",
+                 qPrintable(display.graphics_description()),
+                 qPrintable(QGuiApplication::platformName()),
+                 screen ? screen->refreshRate() : 0.0,
+                 static_cast<int>(display.width() * display.devicePixelRatio()),
+                 static_cast<int>(display.height() * display.devicePixelRatio()),
+                 caps ? (*caps ? "on" : "off") : "unknown");
     if (auto* video = session.video_stream()) {
         std::fprintf(stderr, "arrival interval    %s\n",
                      format_summary(video->arrival_intervals().drain()).c_str());
     }
+    const auto render_intervals = display.render_intervals().drain_samples();
+    const auto receive_to_render = display.receive_to_render().drain_samples();
     std::fprintf(stderr, "render interval     %s\n",
-                 format_summary(display.render_intervals().drain()).c_str());
+                 format_summary(summarise(render_intervals)).c_str());
+    std::fprintf(stderr, "  histogram (1 ms)  %s\n",
+                 format_histogram(render_intervals, 1.0, 60).c_str());
     std::fprintf(stderr, "receive to render   %s\n",
-                 format_summary(display.receive_to_render().drain()).c_str());
+                 format_summary(summarise(receive_to_render)).c_str());
+    std::fprintf(stderr, "  histogram (1 ms)  %s\n",
+                 format_histogram(receive_to_render, 1.0, 60).c_str());
 
     const std::uint64_t superseded = session.mailbox().superseded_count();
     std::fprintf(stderr, "frames dropped      %llu\n",
