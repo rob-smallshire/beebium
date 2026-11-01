@@ -616,6 +616,8 @@ public:
     std::string refuse;
     std::atomic<int> clears{0};
     std::atomic<int> typing_watchers{0};
+    // TypeQuickly reports the text as typed already: nothing pending.
+    std::atomic<bool> typed_at_once{false};
 
     void push_typing(std::optional<beebium::TypingStatus> status) {
         {
@@ -671,7 +673,8 @@ public:
         }
         typed.push_back(request->text());
         response->set_accepted(true);
-        response->set_pending_characters(static_cast<std::uint32_t>(request->text().size()));
+        response->set_pending_characters(
+            typed_at_once ? 0u : static_cast<std::uint32_t>(request->text().size()));
         return grpc::Status::OK;
     }
 

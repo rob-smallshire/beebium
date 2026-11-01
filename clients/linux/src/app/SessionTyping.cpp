@@ -132,10 +132,15 @@ void SessionTyping::paste(const QString& text) {
                 } else if (!response.accepted()) {
                     guard->finish({PasteOutcome::Result::refused,
                                    QString::fromStdString(response.error()), 0});
+                } else if (response.pending_characters() == 0) {
+                    // Typed already, within one status interval: no status
+                    // will show it pending, so none would show it draining.
+                    std::fprintf(stderr, "beebium: the paste has been typed\n");
+                    guard->finish({PasteOutcome::Result::typed, {}, 0});
                 } else {
                     std::fprintf(stderr, "beebium: pasting %u characters\n",
                                  response.pending_characters());
-                    guard->paste_seen_pending_ = response.pending_characters() > 0;
+                    guard->paste_seen_pending_ = true;
                 }
             },
             Qt::QueuedConnection);
