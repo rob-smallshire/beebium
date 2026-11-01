@@ -17,6 +17,7 @@
 #include "app/MachineSession.hpp"
 
 #include "FakeBeebiumServer.hpp"
+#include "beebium/host_identity/HostFingerprint.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -55,6 +56,11 @@ struct Observer {
 
 TEST_CASE("Connecting reports the machine's identity and that it shares our filesystem",
           "[session]") {
+    // A host that will not identify itself shares its filesystem with no
+    // server, rightly (client specification 3.2): nothing to show here.
+    if (beebium::host_identity::host_fingerprint().empty()) {
+        SKIP("this host has no machine-id, so no server can be known to share its filesystem");
+    }
     FakeServer server;
     MachineSession session;
     Observer observer(session);
