@@ -71,6 +71,7 @@ Section 3 states cross-cutting foundations that every later section assumes.
 | 3.2 | Local-server gating (path exchange) | Core |
 | 3.3 | Event-driven state, not polling | Core |
 | 3.4 | Error presentation registers | Core |
+| 3.5 | Client-only settings persist across sessions | Core |
 | 4.1 | Connecting and discovery | Core |
 | 4.2 | Protocol compatibility handshake | Core |
 | 4.3 | Connection liveness and the disconnect overlay | Core |
@@ -278,6 +279,31 @@ Conformance:
 - LATITUDE: alert versus banner versus popover; the notice lifetime; marker
   wording.
 - MACOS-ONLY: NSAlert, NSPasteboard, the specific transient-message model.
+
+### 3.5 Client-only settings persist across sessions
+
+Some settings belong to the client, not to the machine or the server: the
+display style and pixel shape, the window background, the active keyboard
+mapping and its per-key disables, the selected sidebar mode, the Mode 7 copy-as
+preference, and the like. The user should not have to redo such a choice after
+quitting and relaunching. A client remembers its client-only settings across
+sessions.
+
+Conformance:
+
+- MANDATORY: client-only settings that a user sets persist across runs of the
+  client, in the platform's preferences store. A user who sets a display style,
+  a pixel shape, a keyboard mapping or a background does not find it reset on the
+  next launch.
+- LATITUDE: the storage mechanism; the scope at which a setting persists (global
+  default versus per-machine); any shorter-lived in-session cache layered on top
+  of the persisted value (for example the macOS client's per-machine,
+  process-lifetime video-settings cache, which is a convenience within this
+  rule, not a substitute for it); which settings are deliberately session-only
+  (immersive mode is not persisted, by section 6.4).
+
+This rule governs the persistence requirements referenced from sections 6.6
+(video settings) and 13.3 (settings and preferences).
 
 
 ## 4. Connection and server lifecycle
@@ -756,7 +782,9 @@ Conformance:
   the status event and resync; the battery-reset semantics (effective next
   start).
 - LATITUDE: whether to expose an explicit pause or hard-reset command; how Break
-  and battery-reset are presented.
+  and battery-reset are presented. No client is expected to expose Pause or a
+  hard Reset at present; the reference client exposes neither, and a client may
+  omit both and still be conformant.
 - MACOS-ONLY: the sidebar Break control wiring.
 
 Scenarios: press Break -> a soft machine-reset event, RAM preserved. Forget
@@ -1015,7 +1043,9 @@ still leave immersive mode by the client's own exit affordance.
 
 ### 6.5 Screen text selection and Copy As
 
-Profile: Advanced display. Binding document: `screen-text-library.md`.
+Profile: Advanced display. Binding document: `screen-text-library.md`. This
+capability is optional and need not be present from a client's first release; a
+client may ship without on-screen selection and add it later.
 
 Behaviour. The user can select text directly on the screen in any mode and copy
 it. A modified drag over the picture starts a selection; the picture freezes on a
@@ -1080,9 +1110,12 @@ Conformance:
 
 - MANDATORY (within this profile): video settings are a client concern and are
   per window; defaults for new windows are distinguishable from open windows'
-  current settings.
-- LATITUDE: which settings exist, any per-machine caching and its lifetime, the
-  storage format, which parameters persist versus reset.
+  current settings; video settings persist across sessions per the client-only
+  settings rule (section 3.5).
+- LATITUDE: which settings exist; any per-machine caching and its lifetime (the
+  macOS client's per-machine, process-lifetime cache is a convenience within the
+  section 3.5 rule, not a substitute for persisting the defaults); the storage
+  format; which parameters persist versus reset.
 - MACOS-ONLY: the preferences store and the SwiftUI controls.
 
 Scenarios: set a default style and open a new window -> it starts in that style;
@@ -1255,22 +1288,26 @@ the server's table). A Linux client would add a Linux section keying on the evde
 code. That works, but it means a mapping authored on one platform does not serve
 another without a per-platform section being added by hand.
 
-Recommendation: the specification SHOULD require that a mapping file key its
-physical entries on a platform-neutral physical key code - the W3C UI Events code
-values such as "KeyZ" and "ShiftLeft" - so one mapping file serves every client.
-Both macOS key codes and evdev codes translate to and from these neutral codes by
-fixed, unit-testable tables. Per-platform sections remain, but only for the few
-keys that have no neutral code, and for round-tripping sections a client does not
-understand. This is the right spec because it makes a mapping a portable artifact
-(a user's game mapping follows them from a Mac to a Pi), it keeps the translation
-table (needed anyway) as the single point of platform knowledge, and it costs
-little: each client already needs its platform-to-neutral table, and the existing
+The adopted form. A mapping file MUST key its physical entries on a
+platform-neutral physical key code - the W3C UI Events code values such as "KeyZ"
+and "ShiftLeft" - so one mapping file serves every client. Both macOS key codes
+and evdev codes translate to and from these neutral codes by fixed, unit-testable
+tables. Per-platform sections remain, but only for the few keys that have no
+neutral code, and for round-tripping sections a client does not understand. This
+makes a mapping a portable artifact (a user's game mapping follows them from a Mac
+to a Pi) and keeps the translation table (needed anyway) as the single point of
+platform knowledge. Each client needs its own platform-to-neutral table; existing
 per-platform files can be read for back-compatibility and rewritten to neutral
-codes on save. The migration cost is one translation table per platform (already
-required to interpret native events) plus a one-time read-old-write-neutral
-convertor; no server change is involved, since the server never sees mapping
-files. Until the neutral scheme ships, a client keys on its native scancode and
-preserves unknown sections, so nothing is lost by migrating later.
+codes on save. No server change is involved, since the server never sees mapping
+files.
+
+The macOS client does not yet conform: its keyboard mapping area is
+underdeveloped and still keys the direct map on the host physical scancode in a
+per-platform section rather than on neutral codes. The migration is: add a
+platform-to-neutral translation table (already needed to interpret native
+events), read the existing per-platform files for back-compatibility, and write
+neutral codes on save, preserving unknown sections throughout. This is tracked as
+GitHub issue #231.
 
 Rests on: `keyboard.proto KeyboardService.GetAllKeyMappings` and `GetKeyMapping`
 for the canonical character-to-BBC-key table used by character mapping.
@@ -1280,12 +1317,14 @@ Conformance:
 - MANDATORY: a mapping resolves a host key (physical and/or layout symbol) to a
   BBC key position; BBC SHIFT and CTRL are explicit per-entry overrides, not
   host-derived; the canonical character-to-key table is the server's.
-- RECOMMENDED (this specification): key physical entries on platform-neutral W3C
-  UI Events code values, with per-platform sections only for keys lacking a neutral
-  code and for round-tripping unknown sections.
+- MANDATORY: a new mapping file keys its physical entries on platform-neutral W3C
+  UI Events code values, with per-platform sections only for keys lacking a
+  neutral code and for round-tripping unknown sections. The macOS client does not
+  yet conform (tracked as GitHub issue #231).
 - LATITUDE: the editor (graphical, list or text), the built-in set, import and
   export, disableable keys, per-session overrides.
-- MACOS-ONLY: the macOS section's key-code form; the sidebar list UI.
+- MACOS-ONLY: the macOS section's key-code form (a non-conforming legacy to be
+  migrated per #231); the sidebar list UI.
 
 Scenarios: select a non-default mapping -> subsequent keys resolve per it. A
 mapping entry binding a physical key to Break triggers the Break RPCs. Import a
@@ -1523,9 +1562,12 @@ RPC. Re-inserting a recent disc goes back through the normal insert.
 
 Conformance:
 
-- MANDATORY: nothing at the protocol level.
-- LATITUDE (recommended behaviour): the list, the "only app-initiated inserts,
-  recorded on success" policy, the cap, de-dup by path, stale entries disabled.
+- MANDATORY (where a recent-discs feature is implemented): only inserts the user
+  made through the client are recorded, and only on the server's insert success;
+  discs a preset mounts at launch are never recorded. A client need not offer a
+  recents feature at all, but one that does must follow this policy.
+- LATITUDE: the list presentation, the cap, de-dup by path, stale entries
+  disabled.
 - MACOS-ONLY: the storage and the menu placement.
 
 Scenarios: insert two images and eject both -> both in the list, newest first.
@@ -1995,6 +2037,12 @@ launched blocked (section 5.5). The Memory sidebar mode is not a debugger view: 
 the read-only sideways slot view (section 11), driven by the sideways service, and it
 does not read arbitrary memory.
 
+A full debugger will most likely be a separate, dedicated debugger client rather
+than part of a GUI emulator client. This profile therefore stays optional for a
+GUI client, and a dedicated debugger client is the expected home for the
+debugging surface. The server's execution-control services are the contract both
+would share.
+
 Conformance:
 
 - MANDATORY: nothing (the whole profile is optional); a client that launches
@@ -2079,7 +2127,8 @@ them as the server's preset archive format and keep an untouched preset byte-exa
 Conformance:
 
 - MANDATORY: preset editing round-trips the server's archive format and keeps an
-  untouched preset byte-exact (the exact-record rule, section 5.2).
+  untouched preset byte-exact (the exact-record rule, section 5.2); client-only
+  preferences persist across sessions (section 3.5).
 - LATITUDE: the panes, the grouping, which settings are global versus per-machine, the
   storage.
 - MACOS-ONLY: the Settings scene and its tabs.
