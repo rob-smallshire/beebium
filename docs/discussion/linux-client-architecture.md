@@ -438,7 +438,12 @@ and at 60 Hz (Vulkan):
     receive to render   [0,1):1484 [3,4):1 [7,8):1
 
 CPU per thread, in cage: the render (GUI) thread 4.2 to 5.2%, the video
-reader 1.1%, the typing-status watcher 1.2 to 1.4% of one core.
+reader 1.1%, the typing-status watcher 1.2 to 1.4% of one core. Read those
+shares with care: gRPC's synchronous API does the connection's transport
+work (here mostly receiving 33 MB/s of frames) on whichever threads are
+blocked in it, so the work moves between them. Measured directly, with the
+watcher not started the client totals 6.5 to 6.6% against 6.8 to 7.2% with
+it: the watcher's own cost is about 0.3 to 0.6% of a core.
 
 Keyboard: typing `PRINT 6*7` through the client's own keyboard path (synthetic
 Qt key events with real scan codes, `*` as a physical Shift+8) read back
@@ -457,11 +462,14 @@ disagreed and read back the wanted latch each time.
   frames fall into one vblank, one is dropped: 4 or 5 in 30 s, about one
   every 7 s. On a 60 Hz output a frame is drawn as it arrives (0.1 ms), and
   the 50-in-60 judder is the display's, as on the Mac.
-- **Next for smoothness at 50 Hz** (not phase 0): present the newest frame
-  at each vblank rather than on arrival when the display rate matches the
-  frame rate, or nudge the server's pacing towards the display's (the
-  server already re-anchors its pacing clock). Either removes the periodic
-  drop.
+- **Open question: smoothness at 50 Hz.** Two candidates would remove the
+  periodic drop: present the newest frame at each vblank rather than on
+  arrival when the display rate matches the frame rate, or nudge the
+  server's pacing towards the display's (the server already re-anchors its
+  pacing clock). The first departs from present-on-arrival, which the client
+  specification makes mandatory (6.1) and the macOS client relies on for
+  display sleep, so it must be weighed against the macOS client's behaviour
+  and the specification before either becomes the rule for any client.
 
 ### Not covered, or found along the way
 
@@ -478,6 +486,6 @@ disagreed and read back the wanted latch each time.
   seat's keyboard capability); and OpenGL meant desktop GL 3.1 under
   Debian's Qt, which the shaders did not cover (it now requests OpenGL ES,
   and the shaders are baked for GLSL 1.40 too).
-- To look at: the typing-status watcher's 1.2% of a core. It asks for the
-  stream's default 20 ms interval; the Caps Lock sync it serves needs far
-  less.
+- Followed up: the typing-status watcher now asks for status at most every
+  250 ms (it had the stream's 20 ms default). That cuts the stream's
+  traffic before the guest is ready; CPU was not measurably different.
