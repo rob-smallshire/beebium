@@ -22,6 +22,7 @@
 #include "app/SystemPowerMonitor.hpp"
 
 #include <QApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -61,6 +62,10 @@ Application::Application(QRhiWidget::Api graphics_api, QObject* parent)
       power_(SystemPowerMonitor::create_for_this_host()),
       launcher_(QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
                     .filePath(QStringLiteral("servers"))) {
+    // One log per launch: keep the recent ones for diagnosis, not all.
+    prune_server_logs(QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
+                          .filePath(QStringLiteral("servers")),
+                      QDateTime::currentDateTime());
     discovery_.start();
 }
 
@@ -218,6 +223,13 @@ void Application::launch_preset_by_id(const QString& id, QWidget* parent) {
              {QStringLiteral("--format"), QStringLiteral("jsonl"), QStringLiteral("list-presets"),
               QStringLiteral("--all-models")},
              [this, found, id, guard](const CliResult& result) {
+                 if (!result.ok()) {
+                     ServerMessageDialog dialog(tr("Could Not Start"),
+                                                tr("The presets could not be read."),
+                                                result.standard_error, guard);
+                     dialog.exec();
+                     return;
+                 }
                  for (const auto& preset : parse_preset_listing(result.standard_output)) {
                      if (preset.id == id) {
                          launch_preset(*found, preset, guard);

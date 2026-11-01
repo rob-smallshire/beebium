@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_SERVERS_SERVER_LAUNCHER_HPP
 #define BEEBIUM_LINUX_SERVERS_SERVER_LAUNCHER_HPP
 
+#include <QDateTime>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -75,6 +76,11 @@ public:
 private:
     QString log_dirpath_;
 };
+
+// Remove server logs no longer worth keeping: those beyond the newest
+// `keep_newest` and older than `keep_days`. Returns how many were removed.
+int prune_server_logs(const QString& log_dirpath, const QDateTime& now, int keep_newest = 20,
+                      int keep_days = 7);
 
 // Whether a process is still there.
 bool process_alive(qint64 pid);

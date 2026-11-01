@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QTimer>
@@ -71,6 +72,20 @@ std::optional<int> parse_listening_port(const QByteArray& output) {
     bool ok = false;
     const int port = match.captured(1).toInt(&ok);
     return ok && port > 0 && port < 65536 ? std::optional<int>(port) : std::nullopt;
+}
+
+int prune_server_logs(const QString& log_dirpath, const QDateTime& now, int keep_newest,
+                      int keep_days) {
+    const QFileInfoList logs = QDir(log_dirpath).entryInfoList(
+        {QStringLiteral("*.log")}, QDir::Files, QDir::Time);  // newest first
+    int removed = 0;
+    for (int i = keep_newest; i < logs.size(); ++i) {
+        if (logs.at(i).lastModified().daysTo(now) > keep_days &&
+            QFile::remove(logs.at(i).absoluteFilePath())) {
+            ++removed;
+        }
+    }
+    return removed;
 }
 
 bool process_alive(qint64 pid) {

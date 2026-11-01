@@ -203,3 +203,32 @@ TEST_CASE("A server that never listens is stopped after the timeout", "[servers]
     REQUIRE(failure != nullptr);
     CHECK(failure->timed_out);
 }
+
+TEST_CASE("Old server logs beyond the newest twenty are pruned", "[servers][logs]") {
+    QTemporaryDir directory;
+    const QDateTime now = QDateTime::currentDateTime();
+    for (int i = 0; i < 25; ++i) {
+        QFile log(directory.filePath(QStringLiteral("%1.log").arg(i)));
+        REQUIRE(log.open(QIODevice::WriteOnly));
+        log.close();
+        // Logs 0..4 are recent; 5..24 are older, each a day further back.
+        const QDateTime when = i < 5 ? now.addSecs(-i * 60) : now.addDays(-(i + 3));
+        REQUIRE(log.open(QIODevice::Append));
+        REQUIRE(log.setFileTime(when, QFileDevice::FileModificationTime));
+        log.close();
+    }
+    // Newest twenty kept whatever their age; of the other five, those older
+    // than a week go (all of them here).
+    CHECK(prune_server_logs(directory.path(), now) == 5);
+    CHECK(QDir(directory.path()).entryList({QStringLiteral("*.log")}, QDir::Files).size() == 20);
+    CHECK(prune_server_logs(directory.path(), now) == 0);
+}
+
+TEST_CASE("Recent logs are kept even beyond twenty", "[servers][logs]") {
+    QTemporaryDir directory;
+    for (int i = 0; i < 25; ++i) {
+        QFile log(directory.filePath(QStringLiteral("%1.log").arg(i)));
+        REQUIRE(log.open(QIODevice::WriteOnly));
+    }
+    CHECK(prune_server_logs(directory.path(), QDateTime::currentDateTime()) == 0);
+}
