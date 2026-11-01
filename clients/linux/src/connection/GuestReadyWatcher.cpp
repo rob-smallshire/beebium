@@ -14,11 +14,19 @@
 
 #include "keyboard.grpc.pb.h"
 
+#include <cstdint>
+
 #if defined(__linux__)
 #include <pthread.h>
 #endif
 
 namespace beebium::linux_client {
+
+namespace {
+
+constexpr std::uint32_t WATCH_INTERVAL_MS = 250;
+
+}  // namespace
 
 GuestReadyWatcher::GuestReadyWatcher(std::shared_ptr<grpc::Channel> channel,
                                      std::function<void()> became_ready)
@@ -49,6 +57,10 @@ void GuestReadyWatcher::run() {
 #endif
     auto stub = beebium::KeyboardService::NewStub(channel_);
     beebium::WatchTypingStatusRequest request;
+    // Until the guest is ready the server pushes as emulated time passes, at
+    // the stream's default of every 20 ms; a Caps Lock sync a quarter of a
+    // second after the guest is ready is soon enough.
+    request.set_min_interval_ms(WATCH_INTERVAL_MS);
     auto reader = stub->WatchTypingStatus(&context_, request);
     bool ready = false;
     beebium::TypingStatus status;
