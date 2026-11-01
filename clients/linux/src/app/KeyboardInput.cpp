@@ -186,6 +186,22 @@ bool KeyboardInput::key_release(const QKeyEvent& event) {
     return !events.empty();
 }
 
+void KeyboardInput::press_break() {
+    if (!send_) {
+        return;
+    }
+    ResolvedKey key;
+    key.role = KeyRole::break_key;
+    send_(held_.press(QStringLiteral("bbc:Break").toStdString(), key));
+}
+
+void KeyboardInput::release_break() {
+    const auto events = held_.release("bbc:Break");
+    if (send_) {
+        send_(events);
+    }
+}
+
 void KeyboardInput::release_all() {
     host_modifiers_down_.clear();
     const auto events = held_.release_all();

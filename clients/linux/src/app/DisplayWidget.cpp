@@ -59,6 +59,7 @@ void DisplayWidget::focusInEvent(QFocusEvent* event) {
     // The host Caps Lock may have changed while we were away (7.3).
     keyboard_.sync_caps_lock();
     QRhiWidget::focusInEvent(event);
+    keyboard_changed();
 }
 
 bool DisplayWidget::event(QEvent* event) {
@@ -73,9 +74,33 @@ bool DisplayWidget::event(QEvent* event) {
 }
 
 void DisplayWidget::keyPressEvent(QKeyEvent* event) {
-    if (!keyboard_.key_press(*event)) {
-        QRhiWidget::keyPressEvent(event);
+    if (keyboard_.key_press(*event)) {
+        return;
     }
+    // Leaving the display by keyboard: Ctrl+Tab and Ctrl+Shift+Tab, Qt's
+    // convention for a widget that keeps Tab, and only when the mapping does
+    // not give them to the machine (7.1). Plain Tab and Escape are the
+    // machine's.
+    const bool control = event->modifiers().testFlag(Qt::ControlModifier);
+    if (control && (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab)) {
+        QWidget::focusNextPrevChild(event->key() == Qt::Key_Tab &&
+                                    !event->modifiers().testFlag(Qt::ShiftModifier));
+        return;
+    }
+    QRhiWidget::keyPressEvent(event);
+}
+
+KeysGoTo DisplayWidget::keys_go_to() const {
+    return linux_client::keys_go_to(hasFocus(), keyboard_.attached());
+}
+
+void DisplayWidget::keyboard_changed() {
+    const KeysGoTo now = keys_go_to();
+    if (now != published_keys_go_to_) {
+        published_keys_go_to_ = now;
+        Q_EMIT keys_go_to_changed(now);
+    }
+    update();
 }
 
 void DisplayWidget::keyReleaseEvent(QKeyEvent* event) {
@@ -90,6 +115,7 @@ void DisplayWidget::focusOutEvent(QFocusEvent* event) {
     // specification 7.2).
     keyboard_.release_all();
     QRhiWidget::focusOutEvent(event);
+    keyboard_changed();
 }
 
 bool DisplayWidget::focusNextPrevChild(bool) {

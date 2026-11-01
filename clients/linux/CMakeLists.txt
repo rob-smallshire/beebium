@@ -213,6 +213,7 @@ add_library(beebium_linux_app STATIC
     src/app/ConnectionRecovery.cpp
     src/app/DeepLink.cpp
     src/app/DiscoveredMachines.cpp
+    src/app/DisplayFrame.cpp
     src/app/DisplayWidget.cpp
     src/app/ErrorPresentation.cpp
     src/app/FilesystemSharing.cpp

@@ -32,7 +32,7 @@ TEST_CASE("A machine window has a menu bar and a display area", "[app][window]")
                                QStringLiteral("Help")});
 
     REQUIRE(window.centralWidget() != nullptr);
-    CHECK(window.centralWidget()->objectName() == QStringLiteral("display"));
+    CHECK(window.centralWidget()->findChild<QWidget*>(QStringLiteral("display")) != nullptr);
 }
 
 TEST_CASE("A machine window shows under the offscreen platform", "[app][window]") {

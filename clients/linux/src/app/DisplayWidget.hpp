@@ -55,8 +55,15 @@ public Q_SLOTS:
     // there from the reader thread).
     void frame_ready();
 
+    // Where keys go now (7.1): to the machine only while this display has
+    // focus and a machine is attached.
+    KeysGoTo keys_go_to() const;
+    // Call after attaching or detaching the keyboard, to refresh the above.
+    void keyboard_changed();
+
 Q_SIGNALS:
     void graphics_ready(const QString& description, bool software_renderer);
+    void keys_go_to_changed(beebium::linux_client::KeysGoTo destination);
 
 protected:
     void initialize(QRhiCommandBuffer* command_buffer) override;
@@ -75,6 +82,7 @@ private:
     FrameMailbox& mailbox_;
     DisplayRenderer renderer_;
     KeyboardInput keyboard_;
+    KeysGoTo published_keys_go_to_ = KeysGoTo::application;
     std::unique_ptr<HostLockState> host_locks_;
     QRhi* initialised_for_ = nullptr;
     QString graphics_description_;

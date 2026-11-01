@@ -17,6 +17,7 @@
 #include "app/CloseDecision.hpp"
 #include "app/ConnectionOverlay.hpp"
 #include "app/ConnectionRecovery.hpp"
+#include "app/DisplayFrame.hpp"
 #include "app/DisplayWidget.hpp"
 #include "app/ErrorPresentation.hpp"
 #include "app/MachineSession.hpp"
@@ -30,6 +31,7 @@
 #include <QInputDialog>
 #include <QPushButton>
 #include <QTimer>
+#include <QToolButton>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -56,7 +58,8 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
 
     display_->setObjectName(QStringLiteral("display"));
     display_->setApi(graphics_api);
-    setCentralWidget(display_);
+    // The display inside a frame that shows when it has keyboard focus (7.1).
+    setCentralWidget(new DisplayFrame(display_, this));
     resize(1280, 1024 + menuBar()->sizeHint().height());
 
     connect(session_, &MachineSession::frame_ready, display_, &DisplayWidget::frame_ready);
@@ -66,6 +69,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                                     [sender](const std::vector<WireEvent>& events) {
                                         sender->send(events);
                                     });
+        display_->keyboard_changed();
         display_->setFocus();
     });
     connect(session_, &MachineSession::guest_ready, this,
@@ -117,6 +121,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                     // Nothing typed reaches a machine that is not there, and
                     // nothing stays held for when it returns.
                     display_->keyboard().detach();
+                    display_->keyboard_changed();
                 }
                 show_verdict();
             });
@@ -139,6 +144,34 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
             [this](bool unsaved) {
                 unsaved_label_->setVisible(unsaved && !session_->machine_saved());
             });
+
+    // BREAK as a control, not only a menu item (5.5): held while pressed,
+    // like the key, with its shortcut said in the tooltip.
+    auto* break_button = new QToolButton(this);
+    break_button->setObjectName(QStringLiteral("breakButton"));
+    break_button->setText(tr("Break"));
+    break_button->setToolTip(tr("Break (Alt+F12): reset the machine; hold to keep it in reset"));
+    break_button->setFocusPolicy(Qt::TabFocus);
+    break_button->setEnabled(false);
+    connect(break_button, &QToolButton::pressed, this, [this] { display_->keyboard().press_break(); });
+    connect(break_button, &QToolButton::released, this, [this] { display_->keyboard().release_break(); });
+    statusBar()->addPermanentWidget(break_button);
+
+    // Where keys go (7.1), and how to change it.
+    auto* keys_label = new QLabel(this);
+    keys_label->setObjectName(QStringLiteral("keysLabel"));
+    keys_label->setToolTip(tr("Click the display to type into the machine; Ctrl+Tab leaves it. "
+                              "While the display has the keys, every key the keyboard mapping "
+                              "uses goes to the machine, Ctrl shortcuts included; F11, Alt with "
+                              "a menu letter and the mouse still reach Beebium."));
+    statusBar()->addPermanentWidget(keys_label);
+    const auto show_keys = [keys_label, break_button, this](KeysGoTo destination) {
+        keys_label->setText(destination == KeysGoTo::machine ? tr("Keys: machine")
+                                                             : tr("Keys: Beebium"));
+        break_button->setEnabled(display_->keyboard().attached());
+    };
+    show_keys(display_->keys_go_to());
+    connect(display_, &DisplayWidget::keys_go_to_changed, this, show_keys);
     connect(session_, &MachineSession::identity_changed, this,
             [this](const QString& name, const QString& description) {
                 setWindowTitle(name.isEmpty() ? QStringLiteral("Beebium") : name);
@@ -216,6 +249,52 @@ void MainWindow::build_menus() {
     connect(run_action, &QAction::triggered, session_, &MachineSession::run);
     connect(session_, &MachineSession::running_changed, run_action,
             [run_action](bool running) { run_action->setEnabled(!running); });
+    QAction* break_action = machine->addAction(tr("&Break"));
+    // Alt+F12 is BREAK in the built-in mappings: while the display has the
+    // keys it reaches the machine as a key; elsewhere this shortcut taps it.
+    break_action->setShortcut(QKeySequence(tr("Alt+F12")));
+    connect(break_action, &QAction::triggered, this, [this] {
+        display_->keyboard().press_break();
+        QTimer::singleShot(100, this, [this] { display_->keyboard().release_break(); });
+    });
+    machine->addSeparator();
+    QAction* battery_action = machine->addAction(tr("&Forget Battery-Backed State..."));
+    connect(battery_action, &QAction::triggered, this, [this] {
+        const auto answer = QMessageBox::question(
+            this, tr("Forget Battery-Backed State"),
+            tr("Forget what %1 keeps while it is off, such as its clock and settings? "
+               "It takes effect the next time the machine starts.")
+                .arg(session_->machine_name()),
+            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+        if (answer != QMessageBox::Yes) {
+            return;
+        }
+        auto connection = std::make_shared<QMetaObject::Connection>();
+        *connection = connect(session_, &MachineSession::battery_reset, this,
+                              [this, connection](const CallOutcome& outcome, const QStringList& units) {
+                                  disconnect(*connection);
+                                  if (!outcome.ok) {
+                                      ServerMessageDialog dialog(
+                                          tr("Could Not Forget"),
+                                          tr("The battery-backed state could not be forgotten."),
+                                          outcome.message, this);
+                                      dialog.exec();
+                                      return;
+                                  }
+                                  QMessageBox::information(
+                                      this, tr("Forget Battery-Backed State"),
+                                      units.isEmpty()
+                                          ? tr("This machine keeps no battery-backed state.")
+                                          : tr("At the next start this machine will forget: %1.")
+                                                .arg(units.join(QStringLiteral(", "))));
+                              });
+        session_->reset_battery();
+    });
+    for (QAction* action : {break_action, battery_action}) {
+        action->setEnabled(false);
+        connect(session_, &MachineSession::connected_to_server, action,
+                [action] { action->setEnabled(true); });
+    }
 
     QMenu* tools = menuBar()->addMenu(tr("&Tools"));
     QAction* configure_action = tools->addAction(tr("&Configure Beebium..."));

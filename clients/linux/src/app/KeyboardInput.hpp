@@ -39,6 +39,15 @@ std::optional<HostKey> host_key_from_event(const QKeyEvent& event, HostModifiers
 // a game's name. Nullopt for an unknown name.
 std::optional<MappingFile> built_in_mapping(const QString& name);
 
+// Where the keyboard's keys go now: to the machine while the display has
+// focus and a machine is attached, else to the application (client
+// specification 7.1, 13.2). Shown in the status bar.
+enum class KeysGoTo { machine, application };
+
+inline KeysGoTo keys_go_to(bool display_focused, bool machine_attached) {
+    return display_focused && machine_attached ? KeysGoTo::machine : KeysGoTo::application;
+}
+
 // The keyboard path of one machine window: Qt key events in, wire events out
 // through `send`, on the GUI thread (client specification 7.1, 7.2, 7.4).
 class KeyboardInput {
@@ -57,6 +66,13 @@ public:
 
     // Disconnected: release what is held, then send nothing more.
     void detach();
+
+    bool attached() const { return static_cast<bool>(send_); }
+
+    // BREAK from a control rather than a key (5.5): held like any key, in
+    // the one held-key set, so focus loss and detaching release it (R10).
+    void press_break();
+    void release_break();
 
     // Whether a key would go to the machine rather than to the application,
     // for deciding shortcut overrides. Not while detached; never F11 (full
