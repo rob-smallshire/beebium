@@ -87,6 +87,23 @@ add_library(beebium_linux_protos STATIC
 target_include_directories(beebium_linux_protos PUBLIC ${BEEBIUM_PROTO_OUT_DIRPATH})
 target_link_libraries(beebium_linux_protos PUBLIC gRPC::grpc++ protobuf::libprotobuf)
 
+# --- Connection: everything between the wire and the UI, without Qt ---------
+
+add_library(beebium_linux_connection STATIC
+    src/connection/Compatibility.cpp
+    src/connection/DecodedFrame.cpp
+    src/connection/PictureGeometry.cpp
+    src/connection/VideoStream.cpp
+)
+target_include_directories(beebium_linux_connection PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+find_package(Threads REQUIRED)
+target_link_libraries(beebium_linux_connection
+    PUBLIC
+        beebium_linux_protos
+        beebium_host_identity
+        Threads::Threads
+)
+
 # --- The application --------------------------------------------------------
 
 add_library(beebium_linux_app STATIC
@@ -99,8 +116,7 @@ target_compile_definitions(beebium_linux_app
 target_link_libraries(beebium_linux_app
     PUBLIC
         Qt6::Widgets
-        beebium_linux_protos
-        beebium_host_identity
+        beebium_linux_connection
 )
 
 qt_add_executable(beebium src/app/main.cpp)

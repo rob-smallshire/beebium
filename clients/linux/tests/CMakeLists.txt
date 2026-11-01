@@ -41,3 +41,23 @@ beebium_linux_add_test(test_application_info
 beebium_linux_add_test(test_main_window QT
     SOURCES test_main_window.cpp
     LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_compatibility
+    SOURCES test_compatibility.cpp
+    LIBRARIES beebium_linux_connection)
+
+beebium_linux_add_test(test_frame_mailbox
+    SOURCES test_frame_mailbox.cpp
+    LIBRARIES beebium_linux_connection)
+
+beebium_linux_add_test(test_frame_decode
+    SOURCES test_frame_decode.cpp
+    LIBRARIES beebium_linux_connection)
+
+beebium_linux_add_test(test_picture_geometry
+    SOURCES test_picture_geometry.cpp
+    LIBRARIES beebium_linux_connection)
+
+beebium_linux_add_test(test_video_stream
+    SOURCES test_video_stream.cpp
+    LIBRARIES beebium_linux_connection)
