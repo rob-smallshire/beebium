@@ -10,9 +10,9 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Which presets New Machine offers (client specification 5.1).
+// Which presets the presets page offers (client specification 5.1).
 
-#include "app/NewMachineDialog.hpp"
+#include "app/PresetsPage.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

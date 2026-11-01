@@ -10,13 +10,13 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-#include "app/ConnectDialog.hpp"
+#include "app/RunningMachinesPage.hpp"
 
 #include "app/DiscoveredMachines.hpp"
 
 #include <QComboBox>
-#include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
@@ -33,11 +33,11 @@ constexpr int UUID_ROLE = Qt::UserRole + 1;
 
 }  // namespace
 
-ConnectDialog::ConnectDialog(DiscoveredMachines& machines, const std::vector<Endpoint>& recents,
-                             IsOpen is_open, QWidget* parent)
-    : QDialog(parent), machines_(machines), is_open_(std::move(is_open)) {
-    setWindowTitle(tr("Connect to Machine"));
+RunningMachinesPage::RunningMachinesPage(DiscoveredMachines& machines, IsOpen is_open,
+                                         QWidget* parent)
+    : QWidget(parent), machines_(machines), is_open_(std::move(is_open)) {
     auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
 
     list_ = new QTreeWidget(this);
     list_->setObjectName(QStringLiteral("machines"));
@@ -49,36 +49,24 @@ ConnectDialog::ConnectDialog(DiscoveredMachines& machines, const std::vector<End
     list_note_->setWordWrap(true);
     layout->addWidget(list_note_);
 
+    auto* row = new QHBoxLayout;
     auto* form = new QFormLayout;
     address_ = new QComboBox(this);
     address_->setEditable(true);
     address_->setInsertPolicy(QComboBox::NoInsert);
-    for (const auto& recent : recents) {
-        address_->addItem(QString::fromStdString(recent.to_string()));
-    }
-    // The default, whatever the recents say (4.1).
-    address_->setEditText(QStringLiteral("localhost:%1").arg(Endpoint::DEFAULT_PORT));
+    address_->setMinimumContentsLength(24);
     form->addRow(tr("&Address:"), address_);
-    layout->addLayout(form);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
-    // Starting a machine of one's own is the other way in.
-    auto* new_machine = buttons->addButton(tr("&New Machine..."), QDialogButtonBox::ActionRole);
-    auto* open_machine = buttons->addButton(tr("&Open Machine..."), QDialogButtonBox::ActionRole);
-    connect_ = buttons->addButton(tr("&Connect"), QDialogButtonBox::AcceptRole);
+    row->addLayout(form, 1);
+    connect_ = new QPushButton(tr("&Connect"), this);
+    connect_->setObjectName(QStringLiteral("connect"));
     connect_->setDefault(true);
-    layout->addWidget(buttons);
-    connect(new_machine, &QPushButton::clicked, this, [this] {
-        choice_ = Choice::new_machine;
-        QDialog::accept();
-    });
-    connect(open_machine, &QPushButton::clicked, this, [this] {
-        choice_ = Choice::open_machine;
-        QDialog::accept();
-    });
+    row->addWidget(connect_);
+    layout->addLayout(row);
+    set_recents({});
 
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(connect_, &QPushButton::clicked, this, &RunningMachinesPage::request_connect);
+    connect(address_->lineEdit(), &QLineEdit::returnPressed, this,
+            &RunningMachinesPage::request_connect);
     connect(address_, &QComboBox::editTextChanged, this, [this] {
         picked_uuid_.clear();
         update_connect();
@@ -87,18 +75,31 @@ ConnectDialog::ConnectDialog(DiscoveredMachines& machines, const std::vector<End
             [this](QTreeWidgetItem* item) { choose(item); });
     connect(list_, &QTreeWidget::itemActivated, this, [this](QTreeWidgetItem* item) {
         choose(item);
-        if (endpoint()) {
-            accept();
-        }
+        request_connect();
     });
-    connect(&machines_, &DiscoveredMachines::changed, this, &ConnectDialog::rebuild);
+    connect(&machines_, &DiscoveredMachines::changed, this, &RunningMachinesPage::rebuild);
 
     rebuild();
     update_connect();
-    resize(560, 420);
 }
 
-void ConnectDialog::rebuild() {
+void RunningMachinesPage::set_recents(const std::vector<Endpoint>& recents) {
+    const QString typed = address_->currentText();
+    address_->clear();
+    for (const auto& recent : recents) {
+        address_->addItem(QString::fromStdString(recent.to_string()));
+    }
+    // The default, whatever the recents say (4.1), unless something is
+    // typed already.
+    address_->setEditText(typed.isEmpty() ? QStringLiteral("localhost:%1").arg(Endpoint::DEFAULT_PORT)
+                                          : typed);
+}
+
+void RunningMachinesPage::refresh() {
+    rebuild();
+}
+
+void RunningMachinesPage::rebuild() {
     list_->clear();
     bool this_host_heading = false;
     bool network_heading = false;
@@ -125,14 +126,15 @@ void ConnectDialog::rebuild() {
     if (!machines_.available()) {
         list_note_->setText(tr("Machines cannot be discovered on this computer; type an address."));
     } else if (machines_.machines().empty()) {
-        list_note_->setText(tr("No machines found yet; type an address, or wait for one to appear."));
+        list_note_->setText(tr("No running machines found yet; type an address, or wait for one "
+                               "to appear."));
     } else {
         list_note_->clear();
     }
     list_->resizeColumnToContents(0);
 }
 
-void ConnectDialog::choose(QTreeWidgetItem* item) {
+void RunningMachinesPage::choose(QTreeWidgetItem* item) {
     const QString address = item->data(0, ENDPOINT_ROLE).toString();
     if (address.isEmpty()) {
         return;  // a heading
@@ -142,15 +144,21 @@ void ConnectDialog::choose(QTreeWidgetItem* item) {
     picked_uuid_ = uuid;  // after the edit, which clears it
 }
 
-void ConnectDialog::update_connect() {
+void RunningMachinesPage::update_connect() {
     connect_->setEnabled(endpoint().has_value());
 }
 
-std::optional<Endpoint> ConnectDialog::endpoint() const {
+void RunningMachinesPage::request_connect() {
+    if (const auto chosen = endpoint()) {
+        Q_EMIT connect_requested(*chosen, picked_uuid_);
+    }
+}
+
+std::optional<Endpoint> RunningMachinesPage::endpoint() const {
     return parse_endpoint(address_->currentText().toStdString());
 }
 
-QString ConnectDialog::machine_uuid() const {
+QString RunningMachinesPage::machine_uuid() const {
     return picked_uuid_;
 }
 

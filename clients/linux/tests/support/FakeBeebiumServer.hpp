@@ -62,6 +62,8 @@ public:
     // and answers again when it is cleared or the call is cancelled.
     std::atomic<bool> stall_system_info{false};
     std::atomic<int> stalled_calls{0};
+    // Answers as a saved machine in this directory, when set (calls_mutex).
+    std::string saved_machine_dirpath;
 
     void push(std::optional<beebium::ServerStatusEvent> event) {
         {
@@ -78,6 +80,13 @@ public:
         info->mutable_identity()->set_name("Model B #1");
         info->mutable_identity()->set_description("Station 1.254");
         info->mutable_connections()->set_client_count(client_count);
+        {
+            std::lock_guard lock(calls_mutex);
+            if (!saved_machine_dirpath.empty()) {
+                info->set_machine_saved(true);
+                info->set_machine_dirpath(saved_machine_dirpath);
+            }
+        }
         if (stall_system_info) {
             ++stalled_calls;
             while (stall_system_info && !context->IsCancelled()) {

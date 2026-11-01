@@ -12,7 +12,6 @@
 
 #include "app/MainWindow.hpp"
 
-#include "app/ApplicationInfo.hpp"
 #include "app/ClientSettings.hpp"
 #include "app/CloseDecision.hpp"
 #include "app/ConnectionOverlay.hpp"
@@ -20,6 +19,7 @@
 #include "app/DisplayFrame.hpp"
 #include "app/DisplayWidget.hpp"
 #include "app/ErrorPresentation.hpp"
+#include "app/HomeWindow.hpp"
 #include "app/MachineSession.hpp"
 
 #include <QAction>
@@ -187,15 +187,12 @@ void MainWindow::build_menus() {
     // the machine first (DisplayWidget::event), so these shortcuts apply
     // when it does not; F11 is always the window's.
     QMenu* file = menuBar()->addMenu(tr("&File"));
-    QAction* new_action = file->addAction(tr("&New Machine..."));
-    new_action->setShortcut(QKeySequence::New);
-    connect(new_action, &QAction::triggered, this, &MainWindow::new_machine_requested);
-    QAction* open_action = file->addAction(tr("&Open Machine..."));
-    open_action->setShortcut(QKeySequence::Open);
-    connect(open_action, &QAction::triggered, this, &MainWindow::open_machine_requested);
-    QAction* connect_action = file->addAction(tr("&Connect to Machine..."));
-    connect_action->setShortcut(QKeySequence(tr("Ctrl+Shift+O")));
-    connect(connect_action, &QAction::triggered, this, &MainWindow::connect_requested);
+    // The application's own commands are the home window's (13.4).
+    QAction* home_action = file->addAction(tr("Show &Beebium"));
+    home_action->setToolTip(tr("Bring the Beebium window forward, to start, open or connect to "
+                               "another machine"));
+    home_action->setShortcut(QKeySequence(tr("Ctrl+Shift+H")));
+    connect(home_action, &QAction::triggered, this, &MainWindow::home_requested);
     file->addSeparator();
     QAction* save_action = file->addAction(tr("&Save"));
     save_action->setShortcut(QKeySequence::Save);
@@ -304,23 +301,10 @@ void MainWindow::build_menus() {
                 [action] { action->setEnabled(true); });
     }
 
-    QMenu* tools = menuBar()->addMenu(tr("&Tools"));
-    QAction* configure_action = tools->addAction(tr("&Configure Beebium..."));
-    configure_action->setMenuRole(QAction::PreferencesRole);
-    connect(configure_action, &QAction::triggered, this, &MainWindow::configure_requested);
-
     QMenu* help = menuBar()->addMenu(tr("&Help"));
     QAction* about_action = help->addAction(tr("&About Beebium"));
     about_action->setMenuRole(QAction::AboutRole);
-    connect(about_action, &QAction::triggered, this, [this] {
-        const auto text = [](std::string_view view) {
-            return QString::fromLatin1(view.data(), static_cast<qsizetype>(view.size()));
-        };
-        QMessageBox::about(this, tr("About Beebium"),
-                           tr("<p><b>Beebium</b> %1</p><p>A BBC Micro emulator.</p>"
-                              "<p>Protocol %2</p>")
-                               .arg(text(client_version()), text(client_protocol_fingerprint())));
-    });
+    connect(about_action, &QAction::triggered, this, [this] { show_about_beebium(this); });
 }
 
 MainWindow::~MainWindow() {

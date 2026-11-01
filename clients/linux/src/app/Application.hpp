@@ -15,6 +15,8 @@
 
 #include "app/ClientSettings.hpp"
 #include "app/DiscoveredMachines.hpp"
+#include "app/HomeWindow.hpp"
+#include "app/SavedMachines.hpp"
 #include "connection/Endpoint.hpp"
 #include "servers/CoreCli.hpp"
 #include "servers/ServerLauncher.hpp"
@@ -43,8 +45,14 @@ class SystemPowerMonitor;
 QStringList launch_requests(const QStringList& connect_values, const QStringList& new_machine_ids,
                             const QStringList& positional, const QString& working_dirpath);
 
-// The client: its settings, discovery, the power monitor, and every machine
-// window, one per connection (client specification 4.1, 4.5).
+// The client: its settings, discovery, the power monitor, the home window
+// and every machine window, one per connection (client specification 4.1,
+// 4.5, 13.4).
+//
+// The client's lifetime is its own, not Qt's last-window rule (13.4):
+// closing the home window does not end it while a machine window is open;
+// the last machine window closing ends it when the home window is closed,
+// and leaves the home window when it is not. finished() says it has ended.
 class Application : public QObject {
     Q_OBJECT
 
@@ -59,26 +67,25 @@ public:
                      const std::optional<LaunchedServer>& launched = std::nullopt,
                      bool run_on_connect = false);
 
-    // File > New Machine: choose a preset, launch it, open it (5.1).
-    void new_machine(QWidget* parent);
-    // File > Open Machine: choose a saved machine directory, launch it (5.3).
-    void open_machine(QWidget* parent);
+    // Show the home window, the one and only, bringing it forward: on the
+    // page given, else where it was, else the first page for this user.
+    void show_home(std::optional<HomePage> page = std::nullopt);
+    // The home window, once it has been shown; null before.
+    HomeWindow* home_window() const { return home_.get(); }
+
     // Launch a saved machine: its directory, or the document file inside it.
     void launch_saved_machine(const QString& path, QWidget* parent);
-    // Launch the preset with this id, as New Machine would (for the command
-    // line and scripts).
+    // Launch the preset with this id, as the presets page would (for the
+    // command line and scripts).
     void launch_preset_by_id(const QString& id, QWidget* parent);
-    // Tools > Configure Beebium.
+    // Settings > Configure Beebium.
     void configure(QWidget* parent);
-
-    // The Connect dialog; opens the chosen machine. Returns whether one was.
-    bool show_connect_dialog(QWidget* parent);
 
     // A launch's requests, this process's or a later one's, as
     // launch_requests() builds them: --connect <address>, --new-machine
-    // <preset id>, --open <saved machine path> and connect links. None at all
-    // asks where to connect, unless a window is already open (then it is
-    // brought forward).
+    // <preset id>, --open <saved machine path> and connect links. A request
+    // opens its machine's window only; none at all shows the home window
+    // (4.1, 13.4).
     void handle_arguments(const QStringList& arguments);
 
     // Called with each new window, for options that apply to it (the
@@ -86,21 +93,39 @@ public:
     void on_window_opened(std::function<void(MainWindow&)> hook) { window_hook_ = std::move(hook); }
 
     std::vector<MainWindow*> windows() const;
+    SavedMachines& saved_machines() { return *saved_machines_; }
 
-    // Quit: close every window as quitting, so only servers this client
-    // launched and alone uses are shut down (4.5).
+    // Quit: close every machine window as quitting, so only servers this
+    // client launched and alone uses are shut down (4.5), and the home
+    // window with them. A machine window whose close is cancelled stays,
+    // and so does the client.
     void quit_all();
     ClientSettings& settings() { return settings_; }
+
+Q_SIGNALS:
+    // No window is open and none is on its way: the client has ended.
+    void finished();
 
 private:
     // This host's servers, or nullopt having told the user (with a way to
     // set where they are).
     std::optional<ServerLocation> servers(QWidget* parent);
+    void browse_for_machine(QWidget* parent);
     void launch_preset(const ServerLocation& servers, const PresetListing& preset, QWidget* parent);
     void launch(const QString& executable_filepath, const QStringList& arguments,
                 const QString& provenance_uuid, const QString& what, QWidget* parent);
+    void describe_machine(const QString& machine_dirpath, SavedMachines::Described done);
+    // Keep the recents in step with a window's saved machine.
+    void track_saved_machine(MainWindow* window);
     MainWindow* find(const Endpoint& endpoint, const QString& machine_uuid) const;
     bool is_open(const DiscoveredMachine& machine) const;
+    // Work on the way to a window (a launch, a describe): the client may not
+    // end meanwhile.
+    void begin_work();
+    void end_work();
+    // A request that opened nothing leaves the user somewhere: the home window.
+    void after_failed_request();
+    void check_finished();
 
     QRhiWidget::Api graphics_api_;
     ClientSettings settings_;
@@ -110,6 +135,10 @@ private:
     std::function<void(MainWindow&)> window_hook_;
     CoreCli cli_;
     ServerLauncher launcher_;
+    std::unique_ptr<SavedMachines> saved_machines_;
+    std::unique_ptr<HomeWindow> home_;
+    int work_in_flight_ = 0;
+    bool finished_ = false;
     // Per preset, the next instance number this run: never reused (5.7).
     QHash<QString, int> next_ordinal_;
 };

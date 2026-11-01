@@ -206,9 +206,9 @@ qt_add_shaders(beebium_linux_display "display_shaders"
 add_library(beebium_linux_app STATIC
     src/app/Application.cpp
     src/app/ApplicationInfo.cpp
+    src/app/CardGrid.cpp
     src/app/ClientSettings.cpp
     src/app/CloseDecision.cpp
-    src/app/ConnectDialog.cpp
     src/app/ConnectionOverlay.cpp
     src/app/ConnectionRecovery.cpp
     src/app/DeepLink.cpp
@@ -218,11 +218,15 @@ add_library(beebium_linux_app STATIC
     src/app/ErrorPresentation.cpp
     src/app/FilesystemSharing.cpp
     src/app/GraphicsApi.cpp
+    src/app/HomeWindow.cpp
     src/app/HostLockState.cpp
     src/app/KeyboardInput.cpp
     src/app/MachineSession.cpp
     src/app/MainWindow.cpp
-    src/app/NewMachineDialog.cpp
+    src/app/PresetsPage.cpp
+    src/app/RunningMachinesPage.cpp
+    src/app/SavedMachines.cpp
+    src/app/SavedMachinesPage.cpp
     src/app/SettingsDialog.cpp
     src/app/SingleInstance.cpp
     src/app/SpikeMetrics.cpp

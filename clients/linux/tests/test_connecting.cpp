@@ -10,11 +10,10 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Connecting from the user's side (client specification 4.1): the Connect
-// dialog, one client per session, and one window per machine.
+// Connecting from the user's side (client specification 4.1): one client
+// per session, and one window per machine.
 
 #include "app/Application.hpp"
-#include "app/ConnectDialog.hpp"
 #include "app/DiscoveredMachines.hpp"
 #include "app/MachineSession.hpp"
 #include "app/MainWindow.hpp"
@@ -22,39 +21,12 @@
 
 #include "FakeBeebiumServer.hpp"
 
-#include <QComboBox>
-#include <QPushButton>
 #include <QTemporaryDir>
 
 #include <catch2/catch_test_macros.hpp>
 
 using namespace beebium::linux_client;
 using namespace beebium::linux_client::testing;
-
-TEST_CASE("The address defaults to localhost on the default port", "[connect-dialog]") {
-    DiscoveredMachines machines;
-    ConnectDialog dialog(machines, {}, {});
-    CHECK(dialog.address_box()->currentText() == QStringLiteral("localhost:48875"));
-    REQUIRE(dialog.endpoint().has_value());
-    CHECK(dialog.connect_button()->isEnabled());
-}
-
-TEST_CASE("An address that does not parse disables Connect", "[connect-dialog]") {
-    DiscoveredMachines machines;
-    ConnectDialog dialog(machines, {}, {});
-    dialog.address_box()->setEditText(QStringLiteral("host:99999"));
-    CHECK_FALSE(dialog.connect_button()->isEnabled());
-    dialog.address_box()->setEditText(QStringLiteral("pi400.local"));
-    CHECK(dialog.connect_button()->isEnabled());
-    CHECK(dialog.endpoint() == Endpoint{"pi400.local", 48875});
-}
-
-TEST_CASE("Recent connections are offered", "[connect-dialog]") {
-    DiscoveredMachines machines;
-    ConnectDialog dialog(machines, {{"studio", 48876}, {"pi400.local", 48875}}, {});
-    REQUIRE(dialog.address_box()->count() == 2);
-    CHECK(dialog.address_box()->itemText(0) == QStringLiteral("studio:48876"));
-}
 
 TEST_CASE("A later launch hands its arguments to the running client", "[single-instance]") {
     QTemporaryDir directory;

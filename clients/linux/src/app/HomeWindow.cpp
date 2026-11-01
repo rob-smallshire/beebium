@@ -1,0 +1,180 @@
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
+//
+// This file is part of Beebium.
+//
+// Beebium is free software: you can redistribute it and/or modify it under the terms of the
+// GNU General Public License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version. Beebium is distributed in the hope that it will
+// be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+// You should have received a copy of the GNU General Public License along with Beebium.
+// If not, see <https://www.gnu.org/licenses/>.
+
+#include "app/HomeWindow.hpp"
+
+#include "app/ApplicationInfo.hpp"
+#include "app/PresetsPage.hpp"
+#include "app/SavedMachinesPage.hpp"
+
+#include <QApplication>
+#include <QCloseEvent>
+#include <QHBoxLayout>
+#include <QIcon>
+#include <QLabel>
+#include <QListWidget>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QStackedWidget>
+#include <QStyle>
+#include <QVBoxLayout>
+
+namespace beebium::linux_client {
+
+namespace {
+
+QString text(std::string_view view) {
+    return QString::fromLatin1(view.data(), static_cast<qsizetype>(view.size()));
+}
+
+QIcon beebium_icon() {
+    const QIcon application = QApplication::windowIcon();
+    return application.isNull() ? QIcon::fromTheme(QStringLiteral("com.beebium.Beebium"))
+                                : application;
+}
+
+}  // namespace
+
+HomePage initial_home_page(bool has_recent_machines) {
+    return has_recent_machines ? HomePage::saved_machines : HomePage::presets;
+}
+
+void show_about_beebium(QWidget* parent) {
+    QMessageBox::about(parent, QObject::tr("About Beebium"),
+                       QObject::tr("<p><b>Beebium</b> %1</p><p>A BBC Micro emulator.</p>"
+                                   "<p>Protocol %2</p>")
+                           .arg(text(client_version()), text(client_protocol_fingerprint())));
+}
+
+HomeWindow::HomeWindow(QString thumbnail_cache_dirpath, SavedMachines& saved_machines,
+                       DiscoveredMachines& discovered, RunningMachinesPage::IsOpen is_open,
+                       QWidget* parent)
+    : QMainWindow(parent) {
+    setObjectName(QStringLiteral("home"));
+    setWindowTitle(tr("Beebium"));
+    auto* central = new QWidget(this);
+    auto* layout = new QVBoxLayout(central);
+    layout->addWidget(build_header());
+
+    auto* body = new QHBoxLayout;
+    pages_list_ = new QListWidget(central);
+    pages_list_->setObjectName(QStringLiteral("homePages"));
+    pages_list_->setIconSize(QSize(32, 32));
+    pages_list_->setSpacing(2);
+    const auto add_page_entry = [this](const QString& name, QStyle::StandardPixmap icon) {
+        auto* entry = new QListWidgetItem(style()->standardIcon(icon), name, pages_list_);
+        entry->setSizeHint(QSize(entry->sizeHint().width(), 44));
+    };
+    add_page_entry(tr("New Machine"), QStyle::SP_FileDialogNewFolder);
+    add_page_entry(tr("Saved Machines"), QStyle::SP_DirIcon);
+    add_page_entry(tr("Running Machines"), QStyle::SP_DriveNetIcon);
+    pages_list_->setFixedWidth(pages_list_->sizeHintForColumn(0) + 24);
+    body->addWidget(pages_list_);
+
+    pages_ = new QStackedWidget(central);
+    presets_ = new PresetsPage(std::move(thumbnail_cache_dirpath), pages_);
+    saved_ = new SavedMachinesPage(saved_machines, pages_);
+    running_ = new RunningMachinesPage(discovered, std::move(is_open), pages_);
+    pages_->addWidget(presets_);
+    pages_->addWidget(saved_);
+    pages_->addWidget(running_);
+    body->addWidget(pages_, 1);
+    layout->addLayout(body, 1);
+    setCentralWidget(central);
+
+    connect(pages_list_, &QListWidget::currentRowChanged, pages_, &QStackedWidget::setCurrentIndex);
+    pages_list_->setCurrentRow(0);
+    build_menus();
+    resize(900, 640);
+}
+
+QWidget* HomeWindow::build_header() {
+    auto* header = new QWidget(this);
+    auto* layout = new QHBoxLayout(header);
+    const QIcon icon = beebium_icon();
+    if (!icon.isNull()) {
+        auto* picture = new QLabel(header);
+        picture->setPixmap(icon.pixmap(64, 64));
+        layout->addWidget(picture);
+    }
+    auto* words = new QVBoxLayout;
+    auto* name = new QLabel(tr("Beebium"), header);
+    QFont font = name->font();
+    font.setPointSizeF(font.pointSizeF() * 1.6);
+    font.setBold(true);
+    name->setFont(font);
+    auto* version = new QLabel(tr("Version %1").arg(text(client_version())), header);
+    version->setEnabled(false);  // the secondary text colour
+    words->addWidget(name);
+    words->addWidget(version);
+    layout->addLayout(words);
+    layout->addStretch(1);
+    return header;
+}
+
+void HomeWindow::build_menus() {
+    QMenu* file = menuBar()->addMenu(tr("&File"));
+    QAction* new_action = file->addAction(tr("&New Machine..."));
+    new_action->setShortcut(QKeySequence::New);
+    connect(new_action, &QAction::triggered, this, [this] { show_page(HomePage::presets); });
+    QAction* open_action = file->addAction(tr("&Open Machine..."));
+    open_action->setShortcut(QKeySequence::Open);
+    connect(open_action, &QAction::triggered, saved_, &SavedMachinesPage::browse_requested);
+    QAction* recent_action = file->addAction(tr("Open &Recent..."));
+    connect(recent_action, &QAction::triggered, this,
+            [this] { show_page(HomePage::saved_machines); });
+    QAction* connect_action = file->addAction(tr("&Connect to Machine..."));
+    connect_action->setShortcut(QKeySequence(tr("Ctrl+Shift+O")));
+    connect(connect_action, &QAction::triggered, this,
+            [this] { show_page(HomePage::running_machines); });
+    file->addSeparator();
+    QAction* close_action = file->addAction(tr("C&lose Window"));
+    close_action->setShortcut(QKeySequence::Close);
+    connect(close_action, &QAction::triggered, this, &QWidget::close);
+    QAction* quit_action = file->addAction(tr("&Quit"));
+    quit_action->setShortcut(QKeySequence::Quit);
+    quit_action->setMenuRole(QAction::QuitRole);
+    connect(quit_action, &QAction::triggered, this, &HomeWindow::quit_requested);
+
+    QMenu* settings = menuBar()->addMenu(tr("&Settings"));
+    QAction* configure_action = settings->addAction(tr("&Configure Beebium..."));
+    configure_action->setShortcut(QKeySequence(tr("Ctrl+Shift+,")));
+    configure_action->setMenuRole(QAction::PreferencesRole);
+    connect(configure_action, &QAction::triggered, this, &HomeWindow::configure_requested);
+
+    QMenu* help = menuBar()->addMenu(tr("&Help"));
+    QAction* about_action = help->addAction(tr("&About Beebium"));
+    about_action->setMenuRole(QAction::AboutRole);
+    connect(about_action, &QAction::triggered, this, [this] { show_about_beebium(this); });
+}
+
+void HomeWindow::show_page(HomePage page) {
+    pages_list_->setCurrentRow(static_cast<int>(page));
+    if (isMinimized()) {
+        showNormal();
+    }
+    show();
+    raise();
+    activateWindow();
+}
+
+HomePage HomeWindow::page() const {
+    return static_cast<HomePage>(pages_->currentIndex());
+}
+
+void HomeWindow::closeEvent(QCloseEvent* event) {
+    // Hidden, never destroyed: there is only ever the one (13.4).
+    event->accept();
+    Q_EMIT closed();
+}
+
+}  // namespace beebium::linux_client

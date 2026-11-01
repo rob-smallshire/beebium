@@ -10,12 +10,12 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef BEEBIUM_LINUX_APP_CONNECT_DIALOG_HPP
-#define BEEBIUM_LINUX_APP_CONNECT_DIALOG_HPP
+#ifndef BEEBIUM_LINUX_APP_RUNNING_MACHINES_PAGE_HPP
+#define BEEBIUM_LINUX_APP_RUNNING_MACHINES_PAGE_HPP
 
 #include "connection/Endpoint.hpp"
 
-#include <QDialog>
+#include <QWidget>
 
 #include <functional>
 #include <optional>
@@ -32,36 +32,41 @@ namespace beebium::linux_client {
 class DiscoveredMachines;
 struct DiscoveredMachine;
 
-// Connect a window to a machine (client specification 4.1): pick one of the
-// discovered machines, this host's apart from the network's, or type an
-// address (default localhost:48875, recent connections offered).
-class ConnectDialog : public QDialog {
+// The home window's running machines (client specification 4.1, 13.4):
+// those discovered on this host apart from the network's, or an address to
+// type (default localhost:48875, recent connections offered), and Connect.
+class RunningMachinesPage : public QWidget {
     Q_OBJECT
 
 public:
     // Whether a machine is already open in a window, to mark it so.
     using IsOpen = std::function<bool(const DiscoveredMachine&)>;
 
-    // What the user chose: a machine to connect to, or to start one instead.
-    enum class Choice { connect, new_machine, open_machine };
+    RunningMachinesPage(DiscoveredMachines& machines, IsOpen is_open, QWidget* parent = nullptr);
 
-    ConnectDialog(DiscoveredMachines& machines, const std::vector<Endpoint>& recents,
-                  IsOpen is_open, QWidget* parent = nullptr);
+    // The recent connections the address box offers, most recent first.
+    void set_recents(const std::vector<Endpoint>& recents);
+    // Mark again which machines are open.
+    void refresh();
 
-    // What was chosen, once accepted.
+    // What Connect would connect to.
     std::optional<Endpoint> endpoint() const;
     // The chosen machine's uuid, when it was picked from the list.
     QString machine_uuid() const;
-    Choice choice() const { return choice_; }
 
-    // The typed address, for tests.
     QComboBox* address_box() const { return address_; }
     QPushButton* connect_button() const { return connect_; }
+    QTreeWidget* list() const { return list_; }
+
+Q_SIGNALS:
+    void connect_requested(const beebium::linux_client::Endpoint& endpoint,
+                           const QString& machine_uuid);
 
 private:
     void rebuild();
     void update_connect();
     void choose(QTreeWidgetItem* item);
+    void request_connect();
 
     DiscoveredMachines& machines_;
     IsOpen is_open_;
@@ -70,9 +75,8 @@ private:
     QComboBox* address_;
     QPushButton* connect_;
     QString picked_uuid_;
-    Choice choice_ = Choice::connect;
 };
 
 }  // namespace beebium::linux_client
 
-#endif  // BEEBIUM_LINUX_APP_CONNECT_DIALOG_HPP
+#endif  // BEEBIUM_LINUX_APP_RUNNING_MACHINES_PAGE_HPP

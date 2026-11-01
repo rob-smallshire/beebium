@@ -116,6 +116,7 @@ int main(int argc, char* argv[]) {
     Application client(api);
     QObject::connect(&instance, &SingleInstance::arguments_received, &client,
                      &Application::handle_arguments);
+    QObject::connect(&client, &Application::finished, &application, &QCoreApplication::quit);
 
     std::vector<std::unique_ptr<SpikeMetrics>> metrics;
     client.on_window_opened([&](MainWindow& window) {

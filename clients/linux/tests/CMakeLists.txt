@@ -148,6 +148,10 @@ beebium_linux_add_test(test_discovered_machines QT
     SOURCES test_discovered_machines.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_home_window QT
+    SOURCES test_home_window.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_connecting QT
     SOURCES test_connecting.cpp
     LIBRARIES beebium_linux_app)
