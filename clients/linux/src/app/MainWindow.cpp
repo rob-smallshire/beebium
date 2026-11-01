@@ -207,9 +207,17 @@ void MainWindow::build_menus() {
     connect(rename_action, &QAction::triggered, this, &MainWindow::rename);
     for (QAction* action : {save_action, save_as_action, rename_action}) {
         action->setEnabled(false);
-        connect(session_, &MachineSession::connected_to_server, action,
-                [action] { action->setEnabled(true); });
     }
+    // A transient machine is not a document on disk (5.3): its first save is
+    // Save, so Save As waits until it has been saved.
+    const auto enable_saving = [this, save_action, save_as_action, rename_action] {
+        save_action->setEnabled(true);
+        rename_action->setEnabled(true);
+        save_as_action->setEnabled(session_->machine_saved());
+    };
+    connect(session_, &MachineSession::connected_to_server, this, enable_saving);
+    connect(session_, &MachineSession::save_finished, this, enable_saving);
+    connect(session_, &MachineSession::system_info_refreshed, this, enable_saving);
     file->addSeparator();
     QAction* close_action = file->addAction(tr("C&lose Window"));
     close_action->setShortcut(QKeySequence::Close);
@@ -342,7 +350,8 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
 
 void MainWindow::save(std::function<void(bool saved)> then) {
     if (!session_->machine_saved()) {
-        // A transient machine has nowhere to save in place (5.4).
+        // A transient machine has nowhere to save in place (5.4): its first
+        // save chooses where.
         save_as(std::move(then));
         return;
     }
