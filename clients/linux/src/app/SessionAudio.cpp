@@ -77,11 +77,12 @@ void SessionAudio::trace() {
     }
     std::fprintf(stderr,
                  "beebium: sound trace at %lld ms: %zu frames held, %llu dropped on overflow, "
-                 "%llu before playback, %llu underruns, %d ms target, %llu samples, %.0f "
-                 "samples/s, server speed %.4f, %llu ticks skipped\n",
+                 "%llu before playback, %llu silence shed, %llu underruns, %d ms target, %llu "
+                 "samples, %.0f samples/s, server speed %.4f, %llu ticks skipped\n",
                  now_ms, ring_->available(),
                  static_cast<unsigned long long>(ring_->dropped_frames()),
                  static_cast<unsigned long long>(ring_->discarded_before_playback()),
+                 static_cast<unsigned long long>(renderer_ ? renderer_->silence_trimmed() : 0),
                  static_cast<unsigned long long>(ring_->underrun_events()),
                  renderer_ ? renderer_->latency_milliseconds() : 0,
                  static_cast<unsigned long long>(samples), rate, achieved, skipped);
@@ -207,12 +208,13 @@ void SessionAudio::stop() {
         std::fprintf(stderr,
                      "beebium: sound this connection: %llu underruns, %llu dropped (%llu on "
                      "overflow, %llu never sent), %d ms buffered; %llu waited out the "
-                     "sink starting\n",
+                     "sink starting; %llu frames of silence shed to hold the latency\n",
                      static_cast<unsigned long long>(sound.underrun_events),
                      static_cast<unsigned long long>(sound.dropped_samples),
                      static_cast<unsigned long long>(sound.dropped_samples) - wire, wire,
                      sound.latency_ms,
-                     static_cast<unsigned long long>(ring_ ? ring_->discarded_before_playback() : 0));
+                     static_cast<unsigned long long>(ring_ ? ring_->discarded_before_playback() : 0),
+                     static_cast<unsigned long long>(renderer_ ? renderer_->silence_trimmed() : 0));
     }
     ++generation_;
     if (output_) {

@@ -54,6 +54,37 @@ std::size_t FrameRing::skip(std::size_t count) {
     return taken;
 }
 
+bool FrameRing::peek(std::uint32_t* destination) const {
+    const std::uint64_t read = read_index_.load(std::memory_order_relaxed);
+    if (write_index_.load(std::memory_order_acquire) == read) {
+        return false;
+    }
+    std::memcpy(destination, &words_[static_cast<std::size_t>(read % capacity_) * fields_],
+                fields_ * sizeof(std::uint32_t));
+    return true;
+}
+
+std::size_t FrameRing::skip_repeats(const std::uint32_t* reference, std::size_t count,
+                                    std::size_t minimum) {
+    consuming_.store(true, std::memory_order_relaxed);
+    const std::uint64_t read = read_index_.load(std::memory_order_relaxed);
+    const std::uint64_t write = write_index_.load(std::memory_order_acquire);
+    const std::size_t limit = std::min(count, static_cast<std::size_t>(write - read));
+    std::size_t taken = 0;
+    while (taken < limit) {
+        const std::uint32_t* frame = &words_[static_cast<std::size_t>((read + taken) % capacity_) * fields_];
+        if (!std::equal(frame, frame + fields_, reference)) {
+            if (taken < minimum) {
+                return 0;
+            }
+            break;
+        }
+        ++taken;
+    }
+    read_index_.store(read + taken, std::memory_order_release);
+    return taken;
+}
+
 std::size_t FrameRing::read(std::uint32_t* destination, std::size_t count) {
     consuming_.store(true, std::memory_order_relaxed);
     const std::uint64_t read = read_index_.load(std::memory_order_relaxed);

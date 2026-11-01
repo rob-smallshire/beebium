@@ -49,6 +49,13 @@ public:
     }
     // Consumer: take and discard up to `count` frames.
     std::size_t skip(std::size_t count);
+    // Consumer: copy the next frame without taking it; false if none.
+    bool peek(std::uint32_t* destination) const;
+    // Consumer: take and discard the frames at the head that repeat
+    // `reference` exactly, up to `count`, stopping at the first that differs;
+    // none at all if fewer than `minimum` repeat it before one differs.
+    std::size_t skip_repeats(const std::uint32_t* reference, std::size_t count,
+                             std::size_t minimum = 0);
 
     // The ring's own count of frames kept and of frames taken: the index the
     // next kept frame gets, and the index of the next to be read.

@@ -43,7 +43,8 @@ AudioRenderer::AudioRenderer(AudioLayout layout, FrameRing& ring, const MixerCon
       controls_(controls),
       pre_roll_(static_cast<int>(layout_.sample_rate)),
       highpass_(layout_.channels.size()),
-      scratch_(BLOCK_FRAMES * ring.fields(), 0) {
+      scratch_(BLOCK_FRAMES * ring.fields(), 0),
+      last_frame_(ring.fields(), 0) {
     // A second-order Butterworth high-pass (Q = 1/sqrt 2), the Audio EQ
     // Cookbook's coefficients, normalised by a0.
     const float omega = 2.0f * PI * HIGHPASS_CUTOFF_HZ / static_cast<float>(layout_.sample_rate);
@@ -89,23 +90,74 @@ void AudioRenderer::render(float* interleaved, std::size_t frames) {
     }
 }
 
+void AudioRenderer::shed_silence(std::size_t count, std::size_t minimum) {
+    const std::size_t shed = ring_.skip_repeats(last_frame_.data(), count, minimum);
+    run_frames_ += shed;
+    shed_budget_ -= std::min(shed_budget_, shed);
+    silence_trimmed_.fetch_add(shed, std::memory_order_relaxed);
+}
+
+void AudioRenderer::note_played(std::size_t got) {
+    const std::size_t fields = ring_.fields();
+    for (std::size_t i = 0; i < got; ++i) {
+        const std::uint32_t* frame = &scratch_[i * fields];
+        if (std::equal(frame, frame + fields, last_frame_.begin())) {
+            ++run_frames_;
+        } else {
+            std::copy(frame, frame + fields, last_frame_.begin());
+            run_frames_ = 1;
+        }
+    }
+}
+
+void AudioRenderer::note_fill(std::size_t available, std::size_t frames) {
+    if (!started_ || pre_roll_.priming()) {
+        // Filling to the target, not held over it.
+        window_frames_ = 0;
+        window_min_ = SIZE_MAX;
+        return;
+    }
+    window_min_ = std::min(window_min_, available);
+    window_frames_ += frames;
+    const int rate = static_cast<int>(layout_.sample_rate);
+    if (window_frames_ < PreRoll::frames(LATENCY_WINDOW_MS, rate)) {
+        return;
+    }
+    const std::size_t target = pre_roll_.target_frames();
+    shed_budget_ = window_min_ > target + PreRoll::frames(LATENCY_MARGIN_MS, rate)
+                       ? window_min_ - target
+                       : 0;
+    window_frames_ = 0;
+    window_min_ = SIZE_MAX;
+}
+
 void AudioRenderer::render_block(float* interleaved, std::size_t frames) {
     // Through the pre-roll: nothing while priming, so the ring refills to
     // the target; a short read is an underrun, which the ring counts and the
     // pre-roll answers by raising the target and priming again.
-    const std::size_t available = ring_.available();
+    const std::size_t target = pre_roll_.target_frames();
+    std::size_t available = ring_.available();
+    if (started_ && !pre_roll_.priming() && shed_budget_ > 0 &&
+        run_frames_ >= PreRoll::frames(SHORTEST_SILENCE_MS, static_cast<int>(layout_.sample_rate)) &&
+        available > target) {
+        shed_silence(std::min(shed_budget_, available - target));
+        available = ring_.available();
+    }
+    note_fill(available, frames);
     const std::size_t pull = pre_roll_.frames_to_pull(available, frames);
     if (pull > 0 && !started_) {
-        // The first time it plays: whatever piled up while the sink was
-        // starting would otherwise stay as latency for the session, so
-        // playback starts at the pre-roll's target.
+        // The first time it plays: what piled up while the sink was starting
+        // would otherwise stay as latency, so its leading silence goes, down
+        // to the pre-roll's target; its first sound, a boot beep, is kept.
         started_ = true;
-        if (available > pre_roll_.target_frames()) {
-            ring_.skip(available - pre_roll_.target_frames());
+        if (available > target && ring_.peek(last_frame_.data())) {
+            shed_silence(available - target,
+                         PreRoll::frames(SHORTEST_SILENCE_MS, static_cast<int>(layout_.sample_rate)));
         }
         first_played_.store(static_cast<std::int64_t>(ring_.read_position()), std::memory_order_release);
     }
     const std::size_t got = pull > 0 ? ring_.read(scratch_.data(), pull) : 0;
+    note_played(got);
     if (pull > 0 && got < pull) {
         pre_roll_.note_underrun();
         latency_ms_.store(pre_roll_.target_milliseconds(), std::memory_order_relaxed);

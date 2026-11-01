@@ -49,6 +49,16 @@ public:
     // SN76489's four channels at full volume.
     static constexpr float MUSIC_MIX_GAIN = 0.85f;
     static constexpr std::size_t BLOCK_FRAMES = 1024;
+    // The latency cap: when the fill has stayed more than the margin over
+    // the pre-roll's target for a whole window (a stall in the sink while
+    // the stream kept coming), the excess is shed, but only from silence:
+    // frames inside a constant stretch already longer than the shortest
+    // silence, far longer than half a period of the SN76489's lowest tone
+    // (122 Hz, 4 ms), so no waveform is ever touched and nothing heard is
+    // lost. The margin is over a 1024-frame chunk's jitter.
+    static constexpr int LATENCY_WINDOW_MS = 1000;
+    static constexpr int LATENCY_MARGIN_MS = 40;
+    static constexpr int SHORTEST_SILENCE_MS = 25;
 
     AudioRenderer(AudioLayout layout, FrameRing& ring, const MixerControls& controls);
 
@@ -65,6 +75,9 @@ public:
     const PreRoll& pre_roll() const { return pre_roll_; }
     // The pre-roll's target, readable from any thread: the playback latency.
     int latency_milliseconds() const { return latency_ms_.load(std::memory_order_relaxed); }
+    // Frames of silence shed to hold the latency, at the first play and
+    // after: not a glitch, nothing heard was lost. Any thread.
+    std::uint64_t silence_trimmed() const { return silence_trimmed_.load(std::memory_order_relaxed); }
     // The ring index playback began from, once it has: -1 until then.
     std::int64_t first_played_index() const { return first_played_.load(std::memory_order_acquire); }
     const AudioLayout& layout() const { return layout_; }
@@ -77,6 +90,13 @@ private:
     };
 
     void render_block(float* interleaved, std::size_t frames);
+    // Shed up to `count` frames repeating the last one played, if at least
+    // `minimum` repeat it.
+    void shed_silence(std::size_t count, std::size_t minimum = 0);
+    // Follow the constant stretch through the frames just read, and the
+    // fill through the window.
+    void note_played(std::size_t got);
+    void note_fill(std::size_t available, std::size_t frames);
 
     AudioLayout layout_;
     FrameRing& ring_;
@@ -87,6 +107,12 @@ private:
     std::atomic<int> latency_ms_{PreRoll::INITIAL_TARGET_MS};
     bool started_ = false;
     std::atomic<std::int64_t> first_played_{-1};
+    std::vector<std::uint32_t> last_frame_;  // the frame last played
+    std::size_t run_frames_ = 0;             // how long it has been constant
+    std::size_t window_frames_ = 0;
+    std::size_t window_min_ = SIZE_MAX;
+    std::size_t shed_budget_ = 0;
+    std::atomic<std::uint64_t> silence_trimmed_{0};
 };
 
 }  // namespace beebium::linux_client

@@ -382,7 +382,7 @@ TEST_CASE("Overflow before playback begins is no glitch", "[audio][ring]") {
     CHECK(ring.dropped_frames() == 2);  // playing now: a real overflow
 }
 
-TEST_CASE("Playback starts at the pre-roll target, not with the backlog of a slow start",
+TEST_CASE("Playback starts at the pre-roll target, not with the silence of a slow start",
           "[audio][render][preroll]") {
     Rig rig(sn_only());
     // A sink slow to start: the stream filled the ring meanwhile.
@@ -392,6 +392,137 @@ TEST_CASE("Playback starts at the pre-roll target, not with the backlog of a slo
     rig.renderer.render(out.data(), 1024);
     // Trimmed to 120 ms, less the callback just played.
     CHECK(rig.ring.available() == PreRoll::frames(120, 48000) - 1024);
+    CHECK(rig.renderer.silence_trimmed() == 24000 - PreRoll::frames(120, 48000));
     CHECK(rig.ring.dropped_frames() == 0);
     CHECK(rig.ring.underrun_events() == 0);
+}
+
+TEST_CASE("A slow start's first sound is kept: only the silence before it goes",
+          "[audio][render][preroll]") {
+    Rig rig(sn_only());
+    // A boot beep 15000 frames into the backlog.
+    std::vector<std::uint32_t> words(2 * 24000, 0);
+    const auto beep = square_on(0, 1000.0);
+    for (std::size_t i = 15000; i < 24000; ++i) {
+        beep(i - 15000, &words[2 * i]);  // high first: it starts at once
+    }
+    rig.ring.write(words.data(), 24000);
+    std::vector<float> out(2 * 1024, 0.0f);
+    rig.renderer.render(out.data(), 1024);
+    CHECK(rig.renderer.silence_trimmed() == 15000);
+    CHECK(rig.ring.available() == 24000 - 15000 - 1024);
+    CHECK(peak(out, 0, 0) > 0.05f);  // the beep, at once
+}
+
+TEST_CASE("A backlog of sound is played, not trimmed", "[audio][render][preroll]") {
+    Rig rig(sn_only());
+    std::vector<std::uint32_t> words(2 * 24000, 0);
+    const auto tone = square_on(1, 440.0);
+    for (std::size_t i = 0; i < 24000; ++i) {
+        tone(i, &words[2 * i]);
+    }
+    rig.ring.write(words.data(), 24000);
+    std::vector<float> out(2 * 1024, 0.0f);
+    rig.renderer.render(out.data(), 1024);
+    CHECK(rig.renderer.silence_trimmed() == 0);
+    CHECK(rig.ring.available() == 24000 - 1024);
+}
+
+namespace {
+
+// The stream and the sink at the same rate, the fill held at `lead` frames
+// over what one callback takes, for `seconds`, the frames made by `make`.
+template <typename Make>
+void steady(Rig& rig, std::size_t& index, double seconds, std::size_t lead, Make make) {
+    std::vector<std::uint32_t> words(2 * 1024, 0);
+    std::vector<float> out(2 * 1024, 0.0f);
+    const auto top_up = [&] {
+        while (rig.ring.available() < lead + 1024) {
+            for (std::size_t i = 0; i < 1024; ++i) {
+                make(index++, &words[2 * i]);
+            }
+            rig.ring.write(words.data(), 1024);
+        }
+    };
+    const auto callbacks = static_cast<std::size_t>(seconds * 48000.0 / 1024.0);
+    for (std::size_t c = 0; c < callbacks; ++c) {
+        top_up();
+        rig.renderer.render(out.data(), 1024);
+        // Only what the stream made since: the fill stays wherever it is.
+        for (std::size_t i = 0; i < 1024; ++i) {
+            make(index++, &words[2 * i]);
+        }
+        rig.ring.write(words.data(), 1024);
+    }
+}
+
+void silence(std::size_t, std::uint32_t* frame) {
+    frame[0] = 0;
+    frame[1] = 0;
+}
+
+}  // namespace
+
+TEST_CASE("A fill held over the target sheds silence back to the target, never sound",
+          "[audio][render][latency]") {
+    Rig rig(sn_only());
+    std::size_t index = 0;
+    const std::size_t target = PreRoll::frames(120, 48000);
+    const std::size_t stalled = PreRoll::frames(400, 48000);  // a stall left 400 ms
+    // Fill to the stalled level, start playing, then hold it there.
+    std::vector<std::uint32_t> words(2 * stalled, 0);
+    const auto tone = square_on(0, 200.0);  // a low tone: long flat stretches
+    for (std::size_t i = 0; i < stalled; ++i) {
+        tone(index++, &words[2 * i]);
+    }
+    rig.ring.write(words.data(), stalled);
+    std::size_t made = index;
+    steady(rig, made, 3.0, stalled, tone);
+    CHECK(rig.renderer.silence_trimmed() == 0);  // sound throughout: kept
+    CHECK(rig.ring.available() > stalled);
+    // Then silence: the excess goes, the fill settles back near the target.
+    steady(rig, made, 0.1, 0, silence);
+    steady(rig, made, 3.0, 0, silence);
+    CHECK(rig.renderer.silence_trimmed() > 0);
+    CHECK(rig.ring.available() < target + PreRoll::frames(60, 48000));
+    CHECK(rig.ring.available() >= target);
+    CHECK(rig.ring.underrun_events() == 0);
+    CHECK(rig.ring.dropped_frames() == 0);
+}
+
+TEST_CASE("A fill at the target is left alone, however quiet", "[audio][render][latency]") {
+    Rig rig(sn_only());
+    const std::size_t target = PreRoll::frames(120, 48000);
+    std::vector<std::uint32_t> words(2 * target, 0);
+    rig.ring.write(words.data(), target);
+    std::vector<float> out(2 * 1024, 0.0f);
+    rig.renderer.render(out.data(), 1024);  // the first play, from the target
+    // Then a chunk's jitter over the target, held.
+    std::size_t made = target;
+    steady(rig, made, 4.0, target, silence);
+    CHECK(rig.renderer.silence_trimmed() == 0);
+    CHECK(rig.ring.underrun_events() == 0);
+}
+
+TEST_CASE("The ring skips repeats of a frame, and stops at the first that differs",
+          "[audio][ring]") {
+    FrameRing ring(16, 2);
+    // 1 2 three times, 3 4, 1 2, 3 4.
+    const std::vector<std::uint32_t> frames = {1, 2, 1, 2, 1, 2, 3, 4, 1, 2, 3, 4};
+    ring.write(frames.data(), 6);
+    std::vector<std::uint32_t> head(2, 0);
+    REQUIRE(ring.peek(head.data()));
+    CHECK(head == std::vector<std::uint32_t>{1, 2});
+    CHECK(ring.skip_repeats(head.data(), 2) == 2);  // at most the count
+    CHECK(ring.skip_repeats(head.data(), 10) == 1);  // to the first that differs
+    CHECK(ring.available() == 3);
+    CHECK(ring.skip_repeats(head.data(), 10) == 0);  // 3 4 at the head
+    CHECK(ring.skip(1) == 1);
+    CHECK(ring.skip_repeats(head.data(), 10, 2) == 0);  // only one 1 2: none go
+    CHECK(ring.available() == 2);
+    CHECK(ring.skip_repeats(head.data(), 10, 1) == 1);
+    std::vector<std::uint32_t> rest(2, 0);
+    CHECK(ring.read(rest.data(), 1) == 1);
+    CHECK(rest == std::vector<std::uint32_t>{3, 4});
+    CHECK_FALSE(ring.peek(head.data()));
 }
