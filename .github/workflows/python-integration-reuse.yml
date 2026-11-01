@@ -21,7 +21,7 @@ on:
         default: macos-arm64
         options:
           - macos-arm64
-          # macos-x86_64 suspended until a self-hosted Intel runner exists (#223).
+          - macos-x86_64
           - linux
           - windows
       pytest_args:
@@ -33,12 +33,22 @@ on:
 jobs:
   python-integration-reuse:
     name: Python Integration (${{ inputs.platform }}, run ${{ inputs.server_run_id }})
-    # Same runner label mapping as ci.yml's per-platform jobs.
-    runs-on: ${{ fromJSON('{"macos-arm64":"macos-14","macos-x86_64":"macos-15-intel","linux":"ubuntu-latest","windows":"windows-2022"}')[inputs.platform] }}
+    # Same runner label mapping as ci.yml's per-platform jobs; macos-x86_64 is
+    # the self-hosted Intel macOS runner.
+    runs-on: ${{ fromJSON('{"macos-arm64":"macos-14","macos-x86_64":["self-hosted","macOS","X64"],"linux":"ubuntu-latest","windows":"windows-2022"}')[inputs.platform] }}
 
     steps:
+      # The self-hosted Intel macOS runner's tools are pre-provisioned under
+      # $HOME/tools/bin (no Homebrew); see ci.yml's server-macos-x86_64.
+      - name: Put the runner's tools on PATH
+        if: inputs.platform == 'macos-x86_64'
+        run: echo "$HOME/tools/bin" >> "$GITHUB_PATH"
+
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # A self-hosted workspace persists between runs; start clean.
+          clean: true
 
       # Linux only: the server dlopens the Avahi runtime, and the
       # machine-advertisement test needs a running daemon (see ci.yml).

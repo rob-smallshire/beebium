@@ -183,27 +183,49 @@ jobs:
 
   server-macos-x86_64:
     name: Build and Test Server (macOS x86_64)
-    # Intel macOS suspended until a self-hosted Intel runner exists (#223); its three dependents skip through needs.
-    if: false
-    runs-on: macos-15-intel
+    # Self-hosted Intel macOS runner: the hosted Intel image took two to four
+    # hours for this build, or wedged (#223). Steps differ from the hosted
+    # arm64 job only where the runner requires it: tools are pre-provisioned
+    # (no Homebrew), Xcode is selected on the host, and the workspace persists.
+    runs-on: [self-hosted, macOS, X64]
     needs: preflight
 
     env:
       VCPKG_DEFAULT_TRIPLET: x64-osx-static
       # host=target: build protoc/grpc_cpp_plugin with the same static, release-only
       # triplet rather than a second native x64-osx (debug+release) copy of the
-      # gRPC/protobuf/abseil stack. The macos-15-intel runner is natively x64.
+      # gRPC/protobuf/abseil stack. The self-hosted Intel runner is natively x64.
       VCPKG_DEFAULT_HOST_TRIPLET: x64-osx-static
       VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/triplets
+      # Per-platform build parallelism (see the macOS arm64 job). The runner has
+      # 12 threads but 16 GiB RAM, and each server main_*.cpp TU takes about
+      # 2 GiB in the compiler, so all 12 at once would swap. 6 builds without.
+      CMAKE_BUILD_PARALLEL_LEVEL: "6"
 
     steps:
+      # The self-hosted Intel macOS runner has no Homebrew (Homebrew no longer
+      # installs on Intel macOS); its tools (cmake, ninja, protoc, xcodegen,
+      # uv, node, pkg-config) are pre-provisioned under $HOME/tools/bin. Put
+      # that on PATH explicitly rather than relying on the login shell profile.
+      - name: Put the runner's tools on PATH
+        run: echo "$HOME/tools/bin" >> "$GITHUB_PATH"
+
       - name: Checkout
         uses: actions/checkout@v7
-
-      - name: Select Xcode 16
-        uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16'
+          # The self-hosted workspace persists between runs; start clean.
+          clean: true
+
+      # maxim-lobanov/setup-xcode looks for /Applications/Xcode_<version>.app;
+      # the self-hosted runner has /Applications/Xcode.app selected with
+      # xcode-select, so assert its version instead.
+      - name: Check Xcode 16
+        run: |
+          xcodebuild -version
+          xcodebuild -version | head -1 | grep -qE '^Xcode 16\.' || {
+            echo "::error::the self-hosted Intel macOS runner must have Xcode 16 selected"
+            exit 1
+          }
 
       - name: Set VCPKG_INSTALLED_DIR
         run: |
@@ -211,8 +233,9 @@ jobs:
           # Include the runner image version in the vcpkg cache key. An image bump
           # changes the toolchain/SDK and thus vcpkg's ABI, so the cached binaries
           # go stale; without this the (immutable) key never rotates, vcpkg rebuilds
-          # from source every run, and the rebuild can never be saved.
-          echo "IMAGE_VERSION=$ImageVersion" >> $GITHUB_ENV
+          # from source every run, and the rebuild can never be saved. A
+          # self-hosted runner has no ImageVersion, so its key uses a fixed name.
+          echo "IMAGE_VERSION=${ImageVersion:-selfhosted}" >> $GITHUB_ENV
 
       - name: Cache vcpkg installed packages
         uses: actions/cache@v6
@@ -234,6 +257,8 @@ jobs:
       # tree and retry rather than failing the whole run on a transient blip.
       - name: Configure CMake
         run: |
+          # A self-hosted workspace persists between runs: configure from scratch.
+          rm -rf build
           for attempt in 1 2 3; do
             if cmake -B build \
                 -DCMAKE_BUILD_TYPE=Release \
@@ -257,7 +282,7 @@ jobs:
           exit 1
 
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL}"
 
       - name: Verify static linking
         run: |
@@ -814,17 +839,34 @@ jobs:
   gui-client-macos-x86_64:
 
     name: Build and Test GUI Client (macOS x86_64)
-    runs-on: macos-15-intel
+    # Self-hosted Intel macOS runner (see server-macos-x86_64).
+    runs-on: [self-hosted, macOS, X64]
     needs: server-macos-x86_64
 
     steps:
+      # The self-hosted Intel macOS runner has no Homebrew (Homebrew no longer
+      # installs on Intel macOS); its tools (cmake, ninja, protoc, xcodegen,
+      # uv, node, pkg-config) are pre-provisioned under $HOME/tools/bin. Put
+      # that on PATH explicitly rather than relying on the login shell profile.
+      - name: Put the runner's tools on PATH
+        run: echo "$HOME/tools/bin" >> "$GITHUB_PATH"
+
       - name: Checkout
         uses: actions/checkout@v7
-
-      - name: Select Xcode 16
-        uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16'
+          # The self-hosted workspace persists between runs; start clean.
+          clean: true
+
+      # maxim-lobanov/setup-xcode looks for /Applications/Xcode_<version>.app;
+      # the self-hosted runner has /Applications/Xcode.app selected with
+      # xcode-select, so assert its version instead.
+      - name: Check Xcode 16
+        run: |
+          xcodebuild -version
+          xcodebuild -version | head -1 | grep -qE '^Xcode 16\.' || {
+            echo "::error::the self-hosted Intel macOS runner must have Xcode 16 selected"
+            exit 1
+          }
 
       - name: Download server artifacts
         uses: actions/download-artifact@v8
@@ -835,7 +877,7 @@ jobs:
       - name: Make servers executable
         run: chmod +x server-build/src/server/beebium-model-b*
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
 
       - name: Generate Xcode project
         working-directory: clients/macos/Beebium
@@ -1029,12 +1071,23 @@ jobs:
 
   typescript-integration-macos-x86_64:
     name: TypeScript Client Integration Tests (macOS x86_64)
-    runs-on: macos-15-intel
+    # Self-hosted Intel macOS runner (see server-macos-x86_64).
+    runs-on: [self-hosted, macOS, X64]
     needs: server-macos-x86_64
 
     steps:
+      # The self-hosted Intel macOS runner has no Homebrew (Homebrew no longer
+      # installs on Intel macOS); its tools (cmake, ninja, protoc, xcodegen,
+      # uv, node, pkg-config) are pre-provisioned under $HOME/tools/bin. Put
+      # that on PATH explicitly rather than relying on the login shell profile.
+      - name: Put the runner's tools on PATH
+        run: echo "$HOME/tools/bin" >> "$GITHUB_PATH"
+
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # The self-hosted workspace persists between runs; start clean.
+          clean: true
 
       # Extract at 'build/' so the artifact's src/server/ and lib/
       # entries land in the same relative layout the server's build-time
@@ -1053,7 +1106,7 @@ jobs:
           node-version: '24'
 
       - name: Install protoc
-        run: brew install protobuf
+        run: command -v protoc >/dev/null || brew install protobuf
 
       - name: Install dependencies
         working-directory: clients/beebium-typescript-client
@@ -1403,12 +1456,23 @@ jobs:
 
   python-integration-macos-x86_64:
     name: Python Client Integration Tests (macOS x86_64)
-    runs-on: macos-15-intel
+    # Self-hosted Intel macOS runner (see server-macos-x86_64).
+    runs-on: [self-hosted, macOS, X64]
     needs: server-macos-x86_64
 
     steps:
+      # The self-hosted Intel macOS runner has no Homebrew (Homebrew no longer
+      # installs on Intel macOS); its tools (cmake, ninja, protoc, xcodegen,
+      # uv, node, pkg-config) are pre-provisioned under $HOME/tools/bin. Put
+      # that on PATH explicitly rather than relying on the login shell profile.
+      - name: Put the runner's tools on PATH
+        run: echo "$HOME/tools/bin" >> "$GITHUB_PATH"
+
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # The self-hosted workspace persists between runs; start clean.
+          clean: true
 
       # Extract at 'build/' so the artifact's src/server/ and lib/
       # entries land in the same relative layout the server's build-time
