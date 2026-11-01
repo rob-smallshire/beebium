@@ -625,8 +625,8 @@ void MainWindow::place_sidebar_and_status(bool immersive) {
 }
 
 bool MainWindow::status_shown() const {
-    return status_strip_->isVisibleTo(const_cast<MainWindow*>(this)) &&
-           (status_strip_->parentWidget() == frame_ || statusBar()->isVisibleTo(const_cast<MainWindow*>(this)));
+    return status_strip_->isVisibleTo(this) &&
+           (status_strip_->parentWidget() == frame_ || statusBar()->isVisibleTo(this));
 }
 
 void MainWindow::place_overlays() {
