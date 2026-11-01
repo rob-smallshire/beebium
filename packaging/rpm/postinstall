@@ -5,15 +5,18 @@
 # (and reads /proc/self/exe), so a symlink resolves back to /opt/beebium/bin
 # and the exe-relative discovery of extensions/, ROMs, and presets keeps working.
 #
+# Every server the package ships is linked: the list is the installed
+# /opt/beebium/bin/beebium-model-* files, never a fixed list that a new
+# machine variant would silently fall out of.
+#
 # RPM passes $1 = the number of installed instances of this package: 1 on a
 # fresh install, 2 during an upgrade. `ln -sf` is idempotent, so this is correct
 # for both.
 set -e
 
-SERVERS="beebium-model-b beebium-model-b-plus beebium-model-b-plus-128k beebium-model-b-romram"
-
-for s in $SERVERS; do
-    ln -sf "/opt/beebium/bin/$s" "/usr/bin/$s"
+for server_filepath in /opt/beebium/bin/beebium-model-*; do
+    [ -f "$server_filepath" ] || continue
+    ln -sf "$server_filepath" "/usr/bin/$(basename "$server_filepath")"
 done
 
 exit 0

@@ -137,6 +137,9 @@ jobs:
               echo "::group::bundle smoke (self-containment + boot + bare-command)"
               bash scripts/smoke-installed-tree.sh /opt/beebium
               echo "::endgroup::"
+              echo "::group::every server on PATH (postinst /usr/bin links)"
+              bash scripts/check-server-path-links.sh installed
+              echo "::endgroup::"
               echo "::group::interaction smoke (client drives the installed server)"
               # The Python client requires Python >=3.12, but debian:bookworm
               # (the .deb glibc-floor target) ships 3.11. Provide 3.12 with uv --
@@ -149,6 +152,10 @@ jobs:
               . /venv/bin/activate
               uv pip install --quiet ./clients/beebium-python-client pytest pytest-timeout
               pytest -q packaging/smoke/test_smoke.py
+              echo "::endgroup::"
+              echo "::group::removal takes every /usr/bin link (prerm)"
+              apt-get remove -y -qq beebium-server
+              bash scripts/check-server-path-links.sh removed
               echo "::endgroup::"
             '
 
@@ -230,6 +237,9 @@ jobs:
               echo "::group::bundle smoke (self-containment + boot + bare-command)"
               bash scripts/smoke-installed-tree.sh /opt/beebium
               echo "::endgroup::"
+              echo "::group::every server on PATH (%post /usr/bin links)"
+              bash scripts/check-server-path-links.sh installed
+              echo "::endgroup::"
               echo "::group::interaction smoke (client drives the installed server)"
               export HOME=/root
               curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -238,5 +248,9 @@ jobs:
               . /venv/bin/activate
               uv pip install --quiet ./clients/beebium-python-client pytest pytest-timeout
               pytest -q packaging/smoke/test_smoke.py
+              echo "::endgroup::"
+              echo "::group::removal takes every /usr/bin link (%preun)"
+              dnf remove -y -q beebium-server
+              bash scripts/check-server-path-links.sh removed
               echo "::endgroup::"
             '

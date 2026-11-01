@@ -1,8 +1,8 @@
 # CPack configuration for the self-contained Linux server bundle.
 #
 # Produces, from the same install() rules the bundle is built on:
-#   - a .deb that lays the relocatable tree under /opt/beebium and symlinks the
-#     four server binaries into /usr/bin (via the maintainer scripts),
+#   - a .deb that lays the relocatable tree under /opt/beebium and symlinks every
+#     server binary into /usr/bin (via the maintainer scripts),
 #   - an .rpm that does the same for the Fedora / RHEL family (%post/%preun
 #     scriptlets), and
 #   - a plain .tar.gz of the same tree for distros with no native package here.

@@ -5,12 +5,19 @@
 # an upgrade (the old package's %preun runs before the new one's %post). Only
 # tear the symlinks down on the final erase; during an upgrade the incoming
 # package's %post recreates them.
+#
+# One link per installed /opt/beebium/bin/beebium-model-* server (still present
+# when %preun runs), and only where /usr/bin holds our symlink, never a file
+# something else put there.
 set -e
 
 if [ "$1" = 0 ]; then
-    SERVERS="beebium-model-b beebium-model-b-plus beebium-model-b-plus-128k beebium-model-b-romram"
-    for s in $SERVERS; do
-        rm -f "/usr/bin/$s"
+    for server_filepath in /opt/beebium/bin/beebium-model-*; do
+        [ -f "$server_filepath" ] || continue
+        link_filepath="/usr/bin/$(basename "$server_filepath")"
+        if [ -L "$link_filepath" ] && [ "$(readlink "$link_filepath")" = "$server_filepath" ]; then
+            rm -f "$link_filepath"
+        fi
     done
 fi
 

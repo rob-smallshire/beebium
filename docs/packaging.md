@@ -456,8 +456,8 @@ ship-unsigned-first decision is still open.
 `cmake --install` produces one relocatable `bin`/`lib`/`share` tree; the package
 formats differ only in *where* they place it (see
 [Package formats](#package-formats)). The **`.deb`** installs it under
-`/opt/beebium` with `/usr/bin` symlinks onto the four servers so they are on
-`PATH`:
+`/opt/beebium` with a `/usr/bin` symlink onto every server it ships (each
+`/opt/beebium/bin/beebium-model-*`) so they are on `PATH`:
 
 ```
 /opt/beebium/
@@ -488,7 +488,10 @@ and [Windows](#windows) sections.)
 - **`.deb`** (`beebium-server_<version>_<arch>.deb`) — for Debian / Ubuntu /
   Raspberry Pi OS. Runtime dependencies are derived with `dpkg-shlibdeps`; since
   gRPC/protobuf are static, it depends only on `libc6 (>= 2.36)`, `libgcc-s1`,
-  `libstdc++6`. The maintainer scripts create and remove the `/usr/bin` symlinks.
+  `libstdc++6`. The maintainer scripts create and remove the `/usr/bin` symlinks,
+  one per installed `/opt/beebium/bin/beebium-model-*`; the smoke-deb job asserts
+  every server is linked after install and none is left after removal
+  (`scripts/check-server-path-links.sh`).
 - **`.rpm`** (`beebium-server-<version>-1.<arch>.rpm`, arch `x86_64` /
   `aarch64`) — the RPM sibling of the `.deb`, for the **Fedora / RHEL family**
   (and openSUSE): `sudo dnf install ./<file>.rpm`. It lays the same `/opt/beebium`
