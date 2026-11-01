@@ -340,3 +340,50 @@ if(BEEBIUM_LINUX_CLIENT_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# --- Installing and packaging ------------------------------------------------
+# A desktop application as freedesktop lays one out, under /usr when packaged:
+# the program, its desktop entry, MIME types for its documents, its AppStream
+# metainfo and its icons (packaging/). Only the program is installed of the
+# executables built here.
+include(GNUInstallDirs)
+install(TARGETS beebium RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES packaging/org.beebium.Beebium.desktop
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES packaging/org.beebium.Beebium.xml
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)
+install(FILES packaging/org.beebium.Beebium.metainfo.xml
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+install(DIRECTORY packaging/icons/hicolor
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
+
+# The .deb, built on the distribution it is for (Debian trixie, and so
+# Raspberry Pi OS trixie): unlike the self-contained server it links the
+# distribution's Qt 6 and gRPC, so dpkg-shlibdeps derives those Depends from
+# the program, never a hand list. What shlibdeps cannot see, Qt loads at run
+# time: the Wayland platform plugin and the Vulkan loader. The desktop, MIME
+# and icon caches are refreshed by the distribution's dpkg triggers, so there
+# are no maintainer scripts. The servers are found, not depended on (settings,
+# PATH, /opt/beebium/bin), so the server package is only recommended.
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "beebium-client")
+set(CPACK_PACKAGE_VENDOR "Robert Smallshire")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_CONTACT "Robert Smallshire <robert@smallshire.org.uk>")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Beebium BBC Micro emulator, the desktop application")
+set(CPACK_DEBIAN_PACKAGE_DESCRIPTION
+    "Beebium BBC Micro emulator, the desktop application\n"
+    " The window onto Beebium's emulator servers: start a BBC Micro from a\n"
+    " preset, open a saved machine, or connect to one running on the network.\n"
+    " The servers come in the beebium-server package.")
+set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Robert Smallshire <robert@smallshire.org.uk>")
+set(CPACK_DEBIAN_PACKAGE_SECTION "games")
+set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rob-smallshire/beebium")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "qt6-wayland, libvulkan1")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "beebium-server, avahi-daemon, libavahi-client3")
+set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+# Debug information stays with the build, not the package.
+set(CPACK_STRIP_FILES ON)
+include(CPack)

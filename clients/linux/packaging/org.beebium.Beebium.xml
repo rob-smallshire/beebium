@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Beebium's documents, so a file manager opens them with Beebium. A saved
+     machine is a directory, Name.beebium-machine, holding a document file of
+     the same name (docs/machine-directory.md); that file is what opens it. A
+     preset is a zip archive, Name.beebium-preset (docs/preset-schema.md). -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-beebium-machine">
+    <comment>Beebium machine</comment>
+    <sub-class-of type="application/json"/>
+    <icon name="org.beebium.Beebium"/>
+    <glob pattern="*.beebium-machine"/>
+  </mime-type>
+  <mime-type type="application/x-beebium-preset">
+    <comment>Beebium preset</comment>
+    <sub-class-of type="application/zip"/>
+    <icon name="org.beebium.Beebium"/>
+    <glob pattern="*.beebium-preset"/>
+  </mime-type>
+</mime-info>

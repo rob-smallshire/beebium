@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Beebium
+GenericName=BBC Micro Emulator
+Comment=Run BBC Micro machines, new from a preset, saved, or on the network
+Exec=beebium %U
+TryExec=beebium
+Icon=org.beebium.Beebium
+Terminal=false
+Categories=Game;Emulator;
+Keywords=BBC;Micro;Acorn;Emulator;Retro;
+MimeType=application/x-beebium-machine;application/x-beebium-preset;x-scheme-handler/beebium;
+StartupWMClass=Beebium
+StartupNotify=true

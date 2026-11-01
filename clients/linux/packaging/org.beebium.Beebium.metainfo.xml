@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.beebium.Beebium</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Beebium</name>
+  <summary>BBC Micro emulator</summary>
+  <developer id="org.beebium">
+    <name>Robert Smallshire</name>
+  </developer>
+  <description>
+    <p>
+      Beebium emulates the BBC Microcomputer and its family, cycle by cycle:
+      the Model B and B+ with their ROM and RAM boards, disc drives, sound,
+      the Tube second processors and Econet.
+    </p>
+    <p>
+      The emulator runs as a server; this application is its window. Start a
+      machine from a preset, open a saved one, or connect to one running
+      elsewhere on the network.
+    </p>
+  </description>
+  <launchable type="desktop-id">org.beebium.Beebium.desktop</launchable>
+  <url type="homepage">https://github.com/rob-smallshire/beebium</url>
+  <url type="bugtracker">https://github.com/rob-smallshire/beebium/issues</url>
+  <categories>
+    <category>Game</category>
+    <category>Emulator</category>
+  </categories>
+  <provides>
+    <binary>beebium</binary>
+    <mediatype>application/x-beebium-machine</mediatype>
+    <mediatype>application/x-beebium-preset</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+</component>
