@@ -188,8 +188,10 @@ qt_add_shaders(beebium_linux_display "display_shaders"
 # --- The application --------------------------------------------------------
 
 add_library(beebium_linux_app STATIC
+    src/app/Application.cpp
     src/app/ApplicationInfo.cpp
     src/app/ClientSettings.cpp
+    src/app/ConnectDialog.cpp
     src/app/ConnectionOverlay.cpp
     src/app/ConnectionRecovery.cpp
     src/app/DeepLink.cpp
@@ -202,6 +204,7 @@ add_library(beebium_linux_app STATIC
     src/app/KeyboardInput.cpp
     src/app/MachineSession.cpp
     src/app/MainWindow.cpp
+    src/app/SingleInstance.cpp
     src/app/SpikeMetrics.cpp
     src/app/SystemPowerMonitor.cpp
 )

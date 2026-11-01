@@ -19,6 +19,7 @@
 // against a real display by hand.
 
 #include <QApplication>
+#include <QStandardPaths>
 #include <QtGlobal>
 
 #include <catch2/catch_session.hpp>
@@ -27,6 +28,9 @@ int main(int argc, char* argv[]) {
     if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
     }
+    // Settings and other standard locations go to a test area, never the
+    // user's own configuration.
+    QStandardPaths::setTestModeEnabled(true);
     QApplication application(argc, argv);
     return Catch::Session().run(argc, argv);
 }

@@ -14,7 +14,7 @@ unset WAYLAND_DISPLAY DISPLAY
 timeout $((seconds + 30)) cage -- sh -c "
   wlr-randr --output HEADLESS-1 --custom-mode 1920x1080@${refresh}
   QT_QPA_PLATFORM=wayland '${client_filepath}' --connect '${endpoint}' --graphics-api ${api} \
-    --stats-interval ${seconds} --quit-after $((seconds + 2))
+    --stats-interval ${seconds} --quit-after $((seconds + 2)) --new-instance
   echo \"client exit status \$?\"" 2>&1 | tee /dev/stderr | grep -q "^client exit status 0$"
 status=$?
 [ $status -eq 0 ] || echo "FAILED: the client did not exit cleanly" >&2

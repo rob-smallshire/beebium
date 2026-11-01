@@ -12,6 +12,7 @@
 
 #include "app/MainWindow.hpp"
 
+#include <QAction>
 #include <QMenuBar>
 
 #include <catch2/catch_test_macros.hpp>
@@ -22,7 +23,12 @@ TEST_CASE("A machine window has a menu bar and a display area", "[app][window]")
     MainWindow window;
 
     REQUIRE(window.menuWidget() != nullptr);
-    CHECK(window.menuBar()->actions().isEmpty());
+    QStringList menus;
+    for (QAction* action : window.menuBar()->actions()) {
+        menus << action->text().remove(QLatin1Char('&'));
+    }
+    CHECK(menus == QStringList{QStringLiteral("File"), QStringLiteral("View"),
+                               QStringLiteral("Help")});
 
     REQUIRE(window.centralWidget() != nullptr);
     CHECK(window.centralWidget()->objectName() == QStringLiteral("display"));

@@ -10,10 +10,11 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
+#include "app/Application.hpp"
 #include "app/ApplicationInfo.hpp"
 #include "app/GraphicsApi.hpp"
 #include "app/MainWindow.hpp"
-#include "app/SystemPowerMonitor.hpp"
+#include "app/SingleInstance.hpp"
 #include "app/SpikeMetrics.hpp"
 
 #include <QApplication>
@@ -64,7 +65,13 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption quit_option(
         QStringLiteral("quit-after"), QStringLiteral("Quit after <seconds>."),
         QStringLiteral("seconds"));
-    parser.addOptions({connect_option, api_option, stats_option, quit_option});
+    const QCommandLineOption new_instance_option(
+        QStringLiteral("new-instance"),
+        QStringLiteral("Run a client of its own rather than hand over to a running one."));
+    parser.addOptions({connect_option, api_option, stats_option, quit_option, new_instance_option});
+    parser.addPositionalArgument(QStringLiteral("link"),
+                                 QStringLiteral("beebium://connect?host=H&port=P links to open."),
+                                 QStringLiteral("[link...]"));
     parser.process(application);
 
     const auto choice = choose_graphics_api(parser.value(api_option).toLower().toStdString(),
@@ -88,21 +95,30 @@ int main(int argc, char* argv[]) {
         api = QRhiWidget::Api::OpenGL;
     }
 
-    // Full system sleep and wake, for every window's recovery (4.4).
-    const auto power = SystemPowerMonitor::create_for_this_host();
-    MainWindow window(api, power.get());
-    window.show();
+    // One client per session: a later launch, or a beebium:// link, hands its
+    // arguments to the running client (4.1). Scripts that need a client of
+    // their own, the spike's measurements among them, opt out.
+    const QStringList arguments = QCoreApplication::arguments().mid(1);
+    SingleInstance instance;
+    if (!parser.isSet(new_instance_option) && !instance.claim(arguments)) {
+        return 0;
+    }
 
-    std::unique_ptr<SpikeMetrics> metrics;
-    if (parser.isSet(stats_option)) {
-        metrics = std::make_unique<SpikeMetrics>(window, parser.value(stats_option).toInt());
-    }
+    Application client(api);
+    QObject::connect(&instance, &SingleInstance::arguments_received, &client,
+                     &Application::handle_arguments);
+
+    std::vector<std::unique_ptr<SpikeMetrics>> metrics;
+    client.on_window_opened([&](MainWindow& window) {
+        if (parser.isSet(stats_option)) {
+            metrics.push_back(
+                std::make_unique<SpikeMetrics>(window, parser.value(stats_option).toInt()));
+        }
+    });
     if (parser.isSet(quit_option)) {
-        QTimer::singleShot(parser.value(quit_option).toInt() * 1000, &window,
-                           [&window] { window.close(); });
+        QTimer::singleShot(parser.value(quit_option).toInt() * 1000, &client,
+                           [] { QApplication::closeAllWindows(); });
     }
-    if (parser.isSet(connect_option)) {
-        window.connect_to(parser.value(connect_option));
-    }
+    client.handle_arguments(arguments);
     return QApplication::exec();
 }

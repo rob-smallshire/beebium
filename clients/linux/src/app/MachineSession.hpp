@@ -72,6 +72,7 @@ public:
     // The machine's name and description (5.7), from the handshake and then
     // from identity-changed events.
     QString machine_name() const { return machine_name_; }
+    QString machine_uuid() const { return machine_uuid_; }
     QString machine_description() const { return machine_description_; }
 
     // Whether the server can open paths this client exchanges with it (3.2):
@@ -130,6 +131,7 @@ private:
     QTimer liveness_ticker_;
     QString machine_name_;
     QString machine_description_;
+    QString machine_uuid_;
     bool server_shares_filesystem_ = false;
     bool template_media_written_ = false;
     std::optional<bool> guest_was_ready_;

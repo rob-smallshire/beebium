@@ -126,6 +126,7 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
 
     connected_ = true;
     machine_name_ = QString::fromStdString(result.machine_name);
+    machine_uuid_ = QString::fromStdString(result.machine_uuid);
     machine_description_ = QString::fromStdString(result.machine_description);
     server_shares_filesystem_ =
         shares_filesystem(result.server_is_local, current_sandbox());
@@ -186,6 +187,7 @@ void MachineSession::on_status_event(unsigned generation,
 
     if (event.status() == beebium::SERVER_STATUS_IDENTITY_CHANGED && event.has_identity()) {
         machine_name_ = QString::fromStdString(event.identity().name());
+        machine_uuid_ = QString::fromStdString(event.identity().uuid());
         machine_description_ = QString::fromStdString(event.identity().description());
         emit identity_changed(machine_name_, machine_description_);
     }

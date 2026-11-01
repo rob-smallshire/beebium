@@ -63,6 +63,7 @@ protected:
     void render(QRhiCommandBuffer* command_buffer) override;
     void releaseResources() override;
 
+    bool event(QEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;

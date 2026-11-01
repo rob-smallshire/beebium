@@ -16,6 +16,8 @@
 
 #include <QFile>
 
+#include <algorithm>
+
 namespace beebium::linux_client {
 
 namespace {
@@ -113,6 +115,29 @@ HostModifiers KeyboardInput::held_modifiers() const {
         held |= modifier;
     }
     return held;
+}
+
+bool KeyboardInput::takes(const QKeyEvent& event) const {
+    if (!send_ || event.key() == Qt::Key_F11) {
+        return false;
+    }
+    const auto host_key = host_key_from_event(event, held_modifiers());
+    if (!host_key) {
+        return false;
+    }
+    if (host_key->modifiers & MODIFIER_ALT) {
+        const bool bound_with_alt =
+            std::any_of(mapping_.keys.begin(), mapping_.keys.end(), [&](const MappingEntry& e) {
+                return e.code && *e.code == host_key->code && (e.with & MODIFIER_ALT);
+            });
+        if (!bound_with_alt) {
+            return false;
+        }
+    }
+    if (host_key->code == "CapsLock" && mapping_.synchronize_caps_lock) {
+        return true;
+    }
+    return resolve_key(mapping_, table_, *host_key).has_value();
 }
 
 bool KeyboardInput::key_press(const QKeyEvent& event) {

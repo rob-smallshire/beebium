@@ -58,6 +58,12 @@ public:
     // Disconnected: release what is held, then send nothing more.
     void detach();
 
+    // Whether a key would go to the machine rather than to the application,
+    // for deciding shortcut overrides. Not while detached; never F11 (full
+    // screen); and not with Alt held unless the mapping binds this key with
+    // Alt, Alt being the host's menu key here (frontend-modifier-keys.md R5).
+    bool takes(const QKeyEvent& event) const;
+
     // Return true if the event was the machine's.
     bool key_press(const QKeyEvent& event);
     bool key_release(const QKeyEvent& event);
