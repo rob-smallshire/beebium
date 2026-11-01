@@ -39,6 +39,14 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, QWidget* parent)
     resize(1280, 1024 + menuBar()->sizeHint().height());
 
     connect(session_, &MachineSession::frame_ready, display_, &DisplayWidget::frame_ready);
+    connect(session_, &MachineSession::keyboard_ready, this, [this] {
+        KeySender* sender = session_->key_sender();
+        display_->keyboard().attach(session_->key_table(),
+                                    [sender](const std::vector<WireEvent>& events) {
+                                        sender->send(events);
+                                    });
+        display_->setFocus();
+    });
     connect(display_, &DisplayWidget::graphics_ready, this,
             [](const QString& description, bool software) {
                 std::fprintf(stderr, "beebium: drawing with %s%s\n", qPrintable(description),
@@ -65,15 +73,23 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, QWidget* parent)
             });
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+    // The keyboard's sender belongs to the session, which as the elder child
+    // is destroyed first; detach while both still exist.
+    display_->keyboard().detach();
+    session_->disconnect_from_server();
+}
 
 void MainWindow::connect_to(const QString& endpoint) {
+    display_->keyboard().detach();
     session_->connect_to(endpoint);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
     // Closing the window is dropping its connection (lifecycle-management.md
-    // section 4); streams are cancelled before the window goes.
+    // section 4). Held keys are released first, and the key queue drains
+    // before the streams are cancelled, so nothing is left down on the machine.
+    display_->keyboard().detach();
     session_->disconnect_from_server();
     event->accept();
 }

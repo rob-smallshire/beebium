@@ -95,12 +95,25 @@ add_library(beebium_linux_metrics STATIC
 )
 target_include_directories(beebium_linux_metrics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+# --- Keyboard: host keys to BBC keys and the wire events, pure --------------
+
+add_library(beebium_linux_keyboard STATIC
+    src/keyboard/BbcKeyTable.cpp
+    src/keyboard/EvdevCodes.cpp
+    src/keyboard/HeldKeys.cpp
+    src/keyboard/KeyResolver.cpp
+)
+target_include_directories(beebium_linux_keyboard PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# Only BbcKeyTable::from_proto reads a proto message.
+target_link_libraries(beebium_linux_keyboard PUBLIC beebium_linux_protos)
+
 # --- Connection: everything between the wire and the UI, without Qt ---------
 
 add_library(beebium_linux_connection STATIC
     src/connection/Compatibility.cpp
     src/connection/DecodedFrame.cpp
     src/connection/Handshake.cpp
+    src/connection/KeySender.cpp
     src/connection/PictureGeometry.cpp
     src/connection/VideoStream.cpp
 )
@@ -109,6 +122,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(beebium_linux_connection
     PUBLIC
         beebium_linux_protos
+        beebium_linux_keyboard
         beebium_linux_metrics
         beebium_host_identity
         Threads::Threads
@@ -145,6 +159,7 @@ qt_add_shaders(beebium_linux_display "display_shaders"
 add_library(beebium_linux_app STATIC
     src/app/ApplicationInfo.cpp
     src/app/DisplayWidget.cpp
+    src/app/KeyboardInput.cpp
     src/app/MachineSession.cpp
     src/app/MainWindow.cpp
     src/app/SpikeMetrics.cpp

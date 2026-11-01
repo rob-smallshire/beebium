@@ -16,13 +16,35 @@
 
 #include "beebium/host_identity/HostFingerprint.hpp"
 
+#include "keyboard.grpc.pb.h"
+
 #include <QMetaObject>
+
+#include <cstdio>
 
 namespace beebium::linux_client {
 
 namespace {
 
 constexpr std::chrono::milliseconds HANDSHAKE_TIMEOUT{5000};
+
+// The server's canonical character-to-key table, fetched once per
+// connection (client specification 7.4). Mapping entries name BBC keys
+// through it too, so without it the keyboard stays inert, and says why.
+BbcKeyTable fetch_key_table(const std::shared_ptr<grpc::Channel>& channel) {
+    auto keyboard = beebium::KeyboardService::NewStub(channel);
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + HANDSHAKE_TIMEOUT);
+    beebium::AllKeyMappingsResponse response;
+    const grpc::Status status =
+        keyboard->GetAllKeyMappings(&context, beebium::GetAllKeyMappingsRequest{}, &response);
+    if (!status.ok()) {
+        std::fprintf(stderr, "beebium: no key table from the server: %s\n",
+                     status.error_message().c_str());
+        return {};
+    }
+    return BbcKeyTable::from_proto(response);
+}
 
 }  // namespace
 
@@ -41,13 +63,21 @@ void MachineSession::connect_to(const QString& endpoint) {
         const HandshakeResult result = perform_handshake(
             channel, client_protocol_fingerprint(),
             beebium::host_identity::host_fingerprint(), HANDSHAKE_TIMEOUT);
+        BbcKeyTable table;
+        if (result.reached && is_compatible(result.protocol)) {
+            table = fetch_key_table(channel);
+        }
         QMetaObject::invokeMethod(
-            this, [this, generation, result] { on_handshake(generation, result); },
+            this,
+            [this, generation, result, table = std::move(table)]() mutable {
+                on_handshake(generation, result, std::move(table));
+            },
             Qt::QueuedConnection);
     });
 }
 
-void MachineSession::on_handshake(unsigned generation, const HandshakeResult& result) {
+void MachineSession::on_handshake(unsigned generation, const HandshakeResult& result,
+                                  BbcKeyTable table) {
     if (generation != generation_) {
         return;
     }
@@ -89,10 +119,23 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
             },
         });
     video_->start();
+
+    if (!table.empty()) {
+        key_table_ = std::move(table);
+        keys_ = std::make_unique<KeySender>(channel_);
+        emit keyboard_ready();
+    }
 }
 
 void MachineSession::disconnect_from_server() {
     ++generation_;
+    if (keys_) {
+        // Drains what is queued first, so a release-all made just before
+        // disconnecting still reaches the machine.
+        keys_->stop();
+        keys_.reset();
+    }
+    key_table_ = BbcKeyTable();
     if (video_) {
         video_->stop();
         video_.reset();

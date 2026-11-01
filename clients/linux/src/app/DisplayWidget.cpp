@@ -26,6 +26,34 @@ QString describe_rhi(QRhi* rhi, bool* software_renderer) {
 DisplayWidget::DisplayWidget(FrameMailbox& mailbox, QWidget* parent)
     : QRhiWidget(parent), mailbox_(mailbox) {
     setMinimumSize(320, 256);
+    setFocusPolicy(Qt::StrongFocus);
+    // No input method: a compose sequence or dead key must not swallow
+    // presses meant for the machine.
+    setAttribute(Qt::WA_InputMethodEnabled, false);
+}
+
+void DisplayWidget::keyPressEvent(QKeyEvent* event) {
+    if (!keyboard_.key_press(*event)) {
+        QRhiWidget::keyPressEvent(event);
+    }
+}
+
+void DisplayWidget::keyReleaseEvent(QKeyEvent* event) {
+    if (!keyboard_.key_release(*event)) {
+        QRhiWidget::keyReleaseEvent(event);
+    }
+}
+
+void DisplayWidget::focusOutEvent(QFocusEvent* event) {
+    // Synchronously, here: the key-ups that follow focus loss go to whoever
+    // gains focus, so anything held now would stay down (R4; client
+    // specification 7.2).
+    keyboard_.release_all();
+    QRhiWidget::focusOutEvent(event);
+}
+
+bool DisplayWidget::focusNextPrevChild(bool) {
+    return false;
 }
 
 void DisplayWidget::frame_ready() {

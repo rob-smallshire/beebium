@@ -21,6 +21,8 @@
 // without a display.
 
 #include "app/ApplicationInfo.hpp"
+#include "app/KeyboardInput.hpp"
+#include "connection/KeySender.hpp"
 #include "connection/FrameMailbox.hpp"
 #include "connection/Handshake.hpp"
 #include "connection/VideoStream.hpp"
@@ -31,6 +33,7 @@
 #include "beebium/host_identity/HostFingerprint.hpp"
 
 #include "keyboard.grpc.pb.h"
+#include "video.grpc.pb.h"
 
 #include <QCommandLineParser>
 #include <QGuiApplication>
@@ -53,6 +56,80 @@ namespace {
 
 double milliseconds_between(Clock::time_point from, Clock::time_point to) {
     return std::chrono::duration<double, std::milli>(to - from).count();
+}
+
+// One keystroke as a US-layout X11 or Wayland session would deliver it: the
+// XKB keycode (evdev + 8), Qt's key, the layout's text, and whether the
+// user's own SHIFT is held for it.
+struct Stroke {
+    std::uint32_t evdev;
+    int qt_key;
+    const char* text;
+    bool shifted;
+};
+
+// Type through the client's own keyboard path (KeyboardInput, HeldKeys,
+// KeySender) with synthetic Qt events, then read the MODE 7 screen back.
+// Proves hardware-path typing end to end without a display.
+int run_key_test(const std::shared_ptr<grpc::Channel>& channel) {
+    auto keyboard_stub = beebium::KeyboardService::NewStub(channel);
+    beebium::AllKeyMappingsResponse table_response;
+    {
+        grpc::ClientContext context;
+        if (!keyboard_stub->GetAllKeyMappings(&context, {}, &table_response).ok()) {
+            std::fprintf(stderr, "key test: no key table\n");
+            return 1;
+        }
+    }
+    KeySender sender(channel);
+    KeyboardInput input;
+    input.attach(BbcKeyTable::from_proto(table_response),
+                 [&sender](const std::vector<WireEvent>& events) { sender.send(events); });
+
+    constexpr std::uint32_t LEFT_SHIFT = 42;
+    const Stroke strokes[] = {
+        {25, Qt::Key_P, "p", false}, {19, Qt::Key_R, "r", false},
+        {23, Qt::Key_I, "i", false}, {49, Qt::Key_N, "n", false},
+        {20, Qt::Key_T, "t", false}, {57, Qt::Key_Space, " ", false},
+        {7, Qt::Key_6, "6", false},  {9, Qt::Key_Asterisk, "*", true},
+        {8, Qt::Key_7, "7", false},  {28, Qt::Key_Return, "\r", false},
+    };
+    const auto hold = std::chrono::milliseconds(60);
+    for (const Stroke& stroke : strokes) {
+        const Qt::KeyboardModifiers modifiers =
+            stroke.shifted ? Qt::ShiftModifier : Qt::NoModifier;
+        if (stroke.shifted) {
+            input.key_press(QKeyEvent(QEvent::KeyPress, Qt::Key_Shift, Qt::ShiftModifier,
+                                      LEFT_SHIFT + 8, 0, 0, QString()));
+        }
+        const QString text = QString::fromLatin1(stroke.text);
+        input.key_press(QKeyEvent(QEvent::KeyPress, stroke.qt_key, modifiers, stroke.evdev + 8,
+                                  0, 0, text));
+        std::this_thread::sleep_for(hold);
+        input.key_release(QKeyEvent(QEvent::KeyRelease, stroke.qt_key, modifiers,
+                                    stroke.evdev + 8, 0, 0, text));
+        if (stroke.shifted) {
+            input.key_release(QKeyEvent(QEvent::KeyRelease, Qt::Key_Shift, Qt::NoModifier,
+                                        LEFT_SHIFT + 8, 0, 0, QString()));
+        }
+        std::this_thread::sleep_for(hold);
+    }
+    input.detach();
+    sender.stop();
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::fprintf(stderr, "key test: %llu key events sent, %llu failed\n",
+                 static_cast<unsigned long long>(sender.sent_count()),
+                 static_cast<unsigned long long>(sender.failed_count()));
+
+    auto video_stub = beebium::VideoService::NewStub(channel);
+    beebium::TeletextScreen screen;
+    grpc::ClientContext context;
+    if (!video_stub->GetTeletextScreen(&context, {}, &screen).ok() || !screen.active()) {
+        std::fprintf(stderr, "key test: no MODE 7 screen to read\n");
+        return 1;
+    }
+    std::fprintf(stderr, "key test: screen reads\n%s\n", screen.text().c_str());
+    return screen.text().find("42") != std::string::npos ? 0 : 1;
 }
 
 }  // namespace
@@ -87,8 +164,12 @@ int main(int argc, char* argv[]) {
         QStringLiteral("Read the last drawn frame back and save it to <filepath> (PNG), to "
                        "check what was drawn as well as how fast."),
         QStringLiteral("filepath"));
+    const QCommandLineOption key_test_option(
+        QStringLiteral("key-test"),
+        QStringLiteral("Type PRINT 6*7 through the keyboard path, read the screen, and exit "
+                       "(0 when it shows 42). Needs the machine in MODE 7."));
     parser.addOptions({connect_option, api_option, size_option, seconds_option, type_option,
-                       settle_option, save_option});
+                       settle_option, save_option, key_test_option});
     parser.process(application);
 
     const QStringList size_parts = parser.value(size_option).split(QLatin1Char('x'));
@@ -174,6 +255,10 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         std::this_thread::sleep_for(std::chrono::seconds(parser.value(settle_option).toInt()));
+    }
+
+    if (parser.isSet(key_test_option)) {
+        return run_key_test(channel);
     }
 
     FrameMailbox mailbox;

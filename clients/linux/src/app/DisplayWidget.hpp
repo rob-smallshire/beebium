@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_APP_DISPLAY_WIDGET_HPP
 #define BEEBIUM_LINUX_APP_DISPLAY_WIDGET_HPP
 
+#include "app/KeyboardInput.hpp"
 #include "connection/FrameMailbox.hpp"
 #include "display/DisplayRenderer.hpp"
 #include "metrics/IntervalStats.hpp"
@@ -39,6 +40,9 @@ public:
     IntervalRecorder& receive_to_render() { return receive_to_render_; }
     IntervalRecorder& render_intervals() { return render_intervals_; }
 
+    // Key events typed into the display go to the machine through this.
+    KeyboardInput& keyboard() { return keyboard_; }
+
     // The device QRhi is drawing with, once initialised.
     QString graphics_description() const { return graphics_description_; }
 
@@ -55,9 +59,16 @@ protected:
     void render(QRhiCommandBuffer* command_buffer) override;
     void releaseResources() override;
 
+    void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
+    // Tab and Shift+Tab belong to the machine, not to widget focus.
+    bool focusNextPrevChild(bool next) override;
+
 private:
     FrameMailbox& mailbox_;
     DisplayRenderer renderer_;
+    KeyboardInput keyboard_;
     QRhi* initialised_for_ = nullptr;
     QString graphics_description_;
     IntervalRecorder receive_to_render_;

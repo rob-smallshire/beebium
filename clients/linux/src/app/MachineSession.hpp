@@ -15,6 +15,8 @@
 
 #include "connection/FrameMailbox.hpp"
 #include "connection/Handshake.hpp"
+#include "connection/KeySender.hpp"
+#include "keyboard/BbcKeyTable.hpp"
 #include "connection/VideoStream.hpp"
 
 #include <QObject>
@@ -46,18 +48,26 @@ public:
 
     VideoStream* video_stream() { return video_.get(); }
 
+    // Valid from keyboard_ready until disconnect.
+    KeySender* key_sender() { return keys_.get(); }
+    const BbcKeyTable& key_table() const { return key_table_; }
+
 signals:
     void handshake_finished(bool reached, bool compatible, const QString& message);
     // Reader thread to GUI thread, queued: a frame is waiting.
     void frame_ready();
+    // The server's key table has arrived and key events can be sent.
+    void keyboard_ready();
     void video_stream_ended(int code, const QString& message, bool cancelled_by_client);
 
 private:
-    void on_handshake(unsigned generation, const HandshakeResult& result);
+    void on_handshake(unsigned generation, const HandshakeResult& result, BbcKeyTable table);
 
     std::shared_ptr<grpc::Channel> channel_;
     FrameMailbox mailbox_;
     std::unique_ptr<VideoStream> video_;
+    std::unique_ptr<KeySender> keys_;
+    BbcKeyTable key_table_;
     std::thread handshake_thread_;
     // Bumped by every connect and disconnect, so a handshake answer queued
     // for a connection since abandoned is recognised and dropped.

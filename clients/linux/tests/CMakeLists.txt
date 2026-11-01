@@ -73,3 +73,23 @@ beebium_linux_add_test(test_metrics
 beebium_linux_add_test(test_display_uniforms
     SOURCES test_display_uniforms.cpp
     LIBRARIES beebium_linux_display)
+
+beebium_linux_add_test(test_evdev_codes
+    SOURCES test_evdev_codes.cpp
+    LIBRARIES beebium_linux_keyboard)
+
+beebium_linux_add_test(test_key_resolver
+    SOURCES test_key_resolver.cpp
+    LIBRARIES beebium_linux_keyboard)
+
+beebium_linux_add_test(test_held_keys
+    SOURCES test_held_keys.cpp
+    LIBRARIES beebium_linux_keyboard)
+
+beebium_linux_add_test(test_key_sender
+    SOURCES test_key_sender.cpp
+    LIBRARIES beebium_linux_connection)
+
+beebium_linux_add_test(test_keyboard_input QT
+    SOURCES test_keyboard_input.cpp
+    LIBRARIES beebium_linux_app)
