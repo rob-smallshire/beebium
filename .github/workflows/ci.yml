@@ -44,7 +44,7 @@ jobs:
 
   server-macos-arm64:
     name: Build and Test Server (macOS arm64)
-    runs-on: macos-14
+    runs-on: macos-15
     needs: preflight
 
     env:
@@ -778,7 +778,7 @@ jobs:
   gui-client-macos-arm64:
 
     name: Build and Test GUI Client (macOS arm64)
-    runs-on: macos-14
+    runs-on: macos-15
     needs: server-macos-arm64
 
     steps:
@@ -1028,7 +1028,7 @@ jobs:
 
   typescript-integration-macos-arm64:
     name: TypeScript Client Integration Tests (macOS arm64)
-    runs-on: macos-14
+    runs-on: macos-15
     needs: server-macos-arm64
 
     steps:
@@ -1409,7 +1409,7 @@ jobs:
 
   python-integration-macos-arm64:
     name: Python Client Integration Tests (macOS arm64)
-    runs-on: macos-14
+    runs-on: macos-15
     needs: server-macos-arm64
 
     steps:

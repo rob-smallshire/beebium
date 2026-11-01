@@ -35,7 +35,7 @@ jobs:
     name: Python Integration (${{ inputs.platform }}, run ${{ inputs.server_run_id }})
     # Same runner label mapping as ci.yml's per-platform jobs; macos-x86_64 is
     # the self-hosted Intel macOS runner.
-    runs-on: ${{ fromJSON('{"macos-arm64":"macos-14","macos-x86_64":["self-hosted","macOS","X64"],"linux":"ubuntu-latest","windows":"windows-2022"}')[inputs.platform] }}
+    runs-on: ${{ fromJSON('{"macos-arm64":"macos-15","macos-x86_64":["self-hosted","macOS","X64"],"linux":"ubuntu-latest","windows":"windows-2022"}')[inputs.platform] }}
 
     steps:
       # The self-hosted Intel macOS runner's tools are pre-provisioned under

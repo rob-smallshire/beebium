@@ -32,7 +32,7 @@ jobs:
           # arch, runner, triplet, and the vcpkg cache-key arch token MUST match
           # ci.yml's server-macos-* jobs so this reuses their warm caches.
           - arch: arm64
-            runner: macos-14
+            runner: macos-15
             triplet: arm64-osx-static
             cache_arch: arm64
             # 11.0 (Big Sur) is the first macOS on Apple Silicon, so it is the

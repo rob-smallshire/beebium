@@ -773,7 +773,7 @@ In `release.yml`:
   that each wheel contains all four server binaries (the Windows wheel's carry
   the `.exe` suffix).
 - **`verify-server-wheels`** (a matrix on `ubuntu-latest` / `ubuntu-24.04-arm` /
-  `macos-14` / the self-hosted Intel macOS runner) and **`verify-server-wheels-windows`**
+  `macos-15` / the self-hosted Intel macOS runner) and **`verify-server-wheels-windows`**
   (`windows-2022`) install the matching server wheel plus the **client wheel
   built from the same checkout** into a fresh venv, then prove the whole user
   path: `import beebium.server`, that `ServerInstallation.default()` resolves to

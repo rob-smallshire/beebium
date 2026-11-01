@@ -225,7 +225,7 @@ jobs:
             runner: ubuntu-24.04-arm
             tag: manylinux_2_36_aarch64
           - arch: macos-arm64
-            runner: macos-14
+            runner: macos-15
             tag: macosx_11_0_arm64
           # The self-hosted Intel macOS runner (#223).
           - arch: macos-x86_64

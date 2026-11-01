@@ -54,13 +54,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Mirror macos-bundle.yml's runners: arm64 on macos-14, x86_64 on the
+        # Mirror macos-bundle.yml's runners: arm64 on macos-15, x86_64 on the
         # self-hosted Intel macOS runner (#223). The server floors (11.0 / 12.0)
         # are already baked into the prebuilt bundle; the app carries its own
         # deployment target.
         include:
           - arch: arm64
-            runner: macos-14
+            runner: macos-15
             self_hosted: false
           - arch: x86_64
             runner: [self-hosted, macOS, X64]
