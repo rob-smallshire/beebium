@@ -37,6 +37,15 @@ get_filename_component(BEEBIUM_REPO_DIRPATH "${CMAKE_CURRENT_SOURCE_DIR}/../.." 
 include(${BEEBIUM_REPO_DIRPATH}/cmake/BeebiumGrpc.cmake)
 
 find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets DBus Network ShaderTools)
+# Sound output (client specification 8): optional, so the rest builds and
+# is tested where Qt Multimedia is not installed; without it the client
+# says it has no sound output.
+find_package(Qt6 6.7 QUIET COMPONENTS Multimedia)
+if(TARGET Qt6::Multimedia)
+    message(STATUS "Beebium Linux client: sound output through Qt Multimedia")
+else()
+    message(STATUS "Beebium Linux client: no Qt Multimedia, so no sound output")
+endif()
 
 # No signals/slots/emit keywords: the generated protobuf code has accessors
 # named signals(), which the keyword macro would break. Q_SIGNALS, Q_SLOTS
@@ -219,6 +228,7 @@ qt_add_shaders(beebium_linux_display "display_shaders"
 add_library(beebium_linux_app STATIC
     src/app/Application.cpp
     src/app/ApplicationInfo.cpp
+    src/app/AudioOutput.cpp
     src/app/CardGrid.cpp
     src/app/ClientSettings.cpp
     src/app/CloseDecision.cpp
@@ -242,6 +252,7 @@ add_library(beebium_linux_app STATIC
     src/app/RunningMachinesPage.cpp
     src/app/SavedMachines.cpp
     src/app/SavedMachinesPage.cpp
+    src/app/SessionAudio.cpp
     src/app/SettingsDialog.cpp
     src/app/SingleInstance.cpp
     src/app/SpikeMetrics.cpp
@@ -250,6 +261,12 @@ add_library(beebium_linux_app STATIC
 target_include_directories(beebium_linux_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(beebium_linux_app
     PRIVATE BEEBIUM_LINUX_CLIENT_VERSION="${PROJECT_VERSION}")
+if(TARGET Qt6::Multimedia)
+    target_link_libraries(beebium_linux_app PUBLIC Qt6::Multimedia)
+    target_compile_definitions(beebium_linux_app PRIVATE BEEBIUM_HAVE_QT_MULTIMEDIA=1)
+else()
+    target_compile_definitions(beebium_linux_app PRIVATE BEEBIUM_HAVE_QT_MULTIMEDIA=0)
+endif()
 target_link_libraries(beebium_linux_app
     PUBLIC
         Qt6::Widgets

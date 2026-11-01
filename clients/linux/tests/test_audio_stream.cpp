@@ -14,6 +14,7 @@
 // 8.1, 8.3): the format once, then chunks into the ring, wire drops counted
 // from the sequence numbers.
 
+#include "app/SessionAudio.hpp"
 #include "connection/AudioStream.hpp"
 
 #include "FakeBeebiumServer.hpp"
@@ -133,4 +134,45 @@ TEST_CASE("Stopping the stream reports our own cancellation", "[audio][stream]")
     stream.stop();
     REQUIRE(listener.ended());
     CHECK(listener.end->cancelled_by_client);
+}
+
+// --- a window's sound -------------------------------------------------------------
+
+TEST_CASE("A window's sound loads with the format and says why it is silent",
+          "[audio][session]") {
+    FakeServer server;
+    SessionAudio audio;
+    CHECK_FALSE(audio.loaded());
+    audio.start(channel_to(server));
+    REQUIRE(wait_until([&] { return audio.loaded(); }));
+    CHECK(audio.layout().groups.size() == 1);
+    CHECK(audio.layout().channels.size() == 4);
+    // Tests run with BEEBIUM_AUDIO_OUTPUT=none, or with no Qt Multimedia.
+    CHECK_FALSE(audio.problem().isEmpty());
+    CHECK_FALSE(audio.health().glitched());
+    CHECK(audio.health().latency_ms == 120);
+    audio.stop();
+    CHECK_FALSE(audio.loaded());
+}
+
+TEST_CASE("A new connection starts the sound's counters again", "[audio][session]") {
+    FakeServer server;
+    SessionAudio audio;
+    audio.start(channel_to(server));
+    REQUIRE(wait_until([&] { return audio.loaded(); }));
+    REQUIRE(wait_until([&] { return server.audio.subscriptions == 1; }));
+    server.audio.push(audio_chunk(0, 1024));
+    server.audio.push(audio_chunk(2048, 1024));  // 1024 never sent
+    REQUIRE(wait_until([&] { return audio.health().dropped_samples == 1024; }));
+    CHECK(audio.health().glitched());
+
+    audio.start(channel_to(server));
+    REQUIRE(wait_until([&] { return audio.loaded(); }));
+    CHECK_FALSE(audio.health().glitched());
+    // The mixer's controls are the window's: they outlast the connection.
+    audio.controls().master.store(0.5f);
+    audio.start(channel_to(server));
+    REQUIRE(wait_until([&] { return audio.loaded(); }));
+    CHECK(audio.controls().master.load() == 0.5f);
+    audio.stop();
 }

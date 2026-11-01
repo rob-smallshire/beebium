@@ -19,6 +19,7 @@
 #include "audio/PreRoll.hpp"
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -62,6 +63,8 @@ public:
     static float soft_limit(float x);
 
     const PreRoll& pre_roll() const { return pre_roll_; }
+    // The pre-roll's target, readable from any thread: the playback latency.
+    int latency_milliseconds() const { return latency_ms_.load(std::memory_order_relaxed); }
     const AudioLayout& layout() const { return layout_; }
 
 private:
@@ -79,6 +82,7 @@ private:
     PreRoll pre_roll_;
     std::vector<Biquad> highpass_;
     std::vector<std::uint32_t> scratch_;
+    std::atomic<int> latency_ms_{PreRoll::INITIAL_TARGET_MS};
 };
 
 }  // namespace beebium::linux_client

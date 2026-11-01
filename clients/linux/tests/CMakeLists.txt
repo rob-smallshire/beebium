@@ -33,8 +33,9 @@ function(beebium_linux_add_test name)
     target_compile_definitions(${name} PRIVATE
         BEEBIUM_KEYBOARD_CORPUS_DIRPATH="${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}")
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
+    # No sound from tests, wherever they run.
     catch_discover_tests(${name}
-        PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;BEEBIUM_AUDIO_OUTPUT=none")
 endfunction()
 
 beebium_linux_add_test(test_application_info

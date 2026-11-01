@@ -97,6 +97,7 @@ void AudioRenderer::render_block(float* interleaved, std::size_t frames) {
     const std::size_t got = pull > 0 ? ring_.read(scratch_.data(), pull) : 0;
     if (pull > 0 && got < pull) {
         pre_roll_.note_underrun();
+        latency_ms_.store(pre_roll_.target_milliseconds(), std::memory_order_relaxed);
     }
 
     const bool muted = controls_.muted.load(std::memory_order_relaxed);

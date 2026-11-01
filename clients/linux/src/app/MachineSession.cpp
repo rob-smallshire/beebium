@@ -80,7 +80,8 @@ ConnectionFailure classify(const HandshakeResult& result) {
 
 }  // namespace
 
-MachineSession::MachineSession(QObject* parent) : QObject(parent) {
+MachineSession::MachineSession(QObject* parent)
+    : QObject(parent), audio_(new SessionAudio(this)) {
     liveness_ticker_.setInterval(LIVENESS_TICK);
     connect(&liveness_ticker_, &QTimer::timeout, this,
             [this] { tick_liveness(LivenessTracker::Clock::now()); });
@@ -185,6 +186,8 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
             {},
         });
     video_->start();
+    // Sound, torn down and set up again with the connection (8.3).
+    audio_->start(channel_);
 
     Q_EMIT connected_to_server();
     Q_EMIT identity_changed(machine_name_, machine_description_);
@@ -474,6 +477,7 @@ void MachineSession::stop_streams() {
         video_->stop();
         video_.reset();
     }
+    audio_->stop();
 }
 
 void MachineSession::disconnect_from_server() {
