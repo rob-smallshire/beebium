@@ -469,6 +469,8 @@ void MainWindow::update_immersive_enabled() {
 }
 
 void MainWindow::apply_presentation() {
+    static const char* const names[] = {"windowed", "full screen", "immersive"};
+    std::fprintf(stderr, "beebium: presentation %s\n", names[static_cast<int>(presentation_)]);
     const Chrome chrome = chrome_for(presentation_);
     const bool immersive = presentation_ == Presentation::immersive;
     menuBar()->setVisible(chrome.menu_bar);
