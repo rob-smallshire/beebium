@@ -59,6 +59,9 @@ public:
     CardGrid* grid() const { return grid_; }
     QPushButton* launch_button() const { return launch_; }
     QString status_text() const;
+    // The server's own words, when reading the presets failed.
+    QString detail_text() const;
+    bool offering_configure() const;
 
 Q_SIGNALS:
     void launch_requested(const beebium::linux_client::PresetListing& preset);
@@ -77,6 +80,7 @@ private:
     CoreCli cli_;
     CardGrid* grid_;
     QLabel* status_;
+    QLabel* detail_;
     QPushButton* configure_;
     QPushButton* launch_;
     std::vector<PresetListing> presets_;

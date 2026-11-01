@@ -161,9 +161,32 @@ TEST_CASE("Without servers the presets page says so and offers Configure", "[hom
     PresetsPage page(cache.path());
     page.set_servers(std::nullopt);
     CHECK(page.status_text().contains(QStringLiteral("could not find its servers")));
-    auto* configure = page.findChild<QPushButton*>();
-    REQUIRE(configure);
+    CHECK(page.offering_configure());
     CHECK_FALSE(page.launch_button()->isEnabled());
+}
+
+TEST_CASE("Servers that cannot list the presets are named, in their own words, with Configure",
+          "[home][presets]") {
+    // As a server too old for this client answers (#240).
+    QTemporaryDir directory;
+    const QString filepath = directory.filePath(QStringLiteral("beebium-model-b"));
+    {
+        QFile file(filepath);
+        REQUIRE(file.open(QIODevice::WriteOnly));
+        file.write("#!/bin/sh\necho 'Unknown argument: --all-models' >&2\nexit 64\n");
+        file.close();
+        file.setPermissions(file.permissions() | QFileDevice::ExeOwner);
+    }
+    QTemporaryDir cache;
+    PresetsPage page(cache.path());
+    page.set_servers(ServerLocation{directory.path(), QStringLiteral("PATH")});
+    REQUIRE(wait_until([&] { return page.status_text().startsWith(QStringLiteral("Beebium could not")); }));
+    CHECK(page.status_text() ==
+          QStringLiteral("Beebium could not read the presets from the servers in %1, found on PATH.")
+              .arg(directory.path()));
+    CHECK(page.detail_text() == QStringLiteral("Unknown argument: --all-models"));
+    CHECK(page.offering_configure());
+    CHECK(page.grid()->count() == 0);
 }
 
 TEST_CASE("The presets page shows the catalogue as cards, and Launch asks for the chosen",
@@ -174,6 +197,8 @@ TEST_CASE("The presets page shows the catalogue as cards, and Launch asks for th
     page.set_servers(ServerLocation{servers.dirpath(), QStringLiteral("settings")});
     REQUIRE(wait_until([&] { return page.grid()->count() == 1; }));
     CHECK(page.grid()->item(0)->text().startsWith(QStringLiteral("Model B")));
+    CHECK_FALSE(page.offering_configure());
+    CHECK(page.detail_text().isEmpty());
     // Chosen at once, so Launch, the default, is one press away.
     REQUIRE(page.launch_button()->isEnabled());
     CHECK(page.launch_button()->isDefault());

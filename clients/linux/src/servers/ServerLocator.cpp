@@ -12,6 +12,8 @@
 
 #include "servers/ServerLocator.hpp"
 
+#include <QObject>
+
 #include <QDir>
 #include <QFileInfo>
 
@@ -62,6 +64,25 @@ std::optional<ServerLocation> locate_servers_on_this_host(const QString& configu
                               const QFileInfo info(filepath);
                               return info.isFile() && info.isExecutable();
                           });
+}
+
+QString describe_servers(const ServerLocation& servers) {
+    const QString dirpath = servers.servers_dirpath;
+    if (servers.found_by == QLatin1String("settings")) {
+        return QObject::tr("the servers in %1, from the Beebium setting").arg(dirpath);
+    }
+    if (servers.found_by == QLatin1String("PATH")) {
+        return QObject::tr("the servers in %1, found on PATH").arg(dirpath);
+    }
+    return QObject::tr("the servers in %1").arg(dirpath);
+}
+
+QString servers_log_line(const std::optional<ServerLocation>& servers) {
+    if (!servers) {
+        return QStringLiteral("servers: none found (no Beebium setting, none on PATH or in "
+                              "/opt/beebium/bin)");
+    }
+    return QStringLiteral("servers: ") + describe_servers(*servers);
 }
 
 }  // namespace beebium::linux_client

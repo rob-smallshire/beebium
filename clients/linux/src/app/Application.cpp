@@ -72,6 +72,10 @@ Application::Application(QRhiWidget::Api graphics_api, QObject* parent)
     prune_server_logs(QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
                           .filePath(QStringLiteral("servers")),
                       QDateTime::currentDateTime());
+    // For diagnosis, every launch: the servers this client will use, and how
+    // it chose them.
+    std::fprintf(stderr, "beebium: %s\n",
+                 qPrintable(servers_log_line(locate_servers_on_this_host(settings_.servers_dirpath()))));
     // The client decides when it ends (13.4), not the last window closing.
     QGuiApplication::setQuitOnLastWindowClosed(false);
     saved_machines_ = std::make_unique<SavedMachines>(

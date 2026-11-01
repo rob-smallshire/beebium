@@ -56,6 +56,12 @@ PresetsPage::PresetsPage(QString thumbnail_cache_dirpath, QWidget* parent)
     status_->setWordWrap(true);
     status_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(status_);
+    detail_ = new QLabel(this);
+    detail_->setWordWrap(true);
+    detail_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    detail_->setEnabled(false);  // the secondary text colour
+    detail_->hide();
+    layout->addWidget(detail_);
 
     auto* buttons = new QHBoxLayout;
     configure_ = new QPushButton(tr("&Configure Beebium..."), this);
@@ -90,6 +96,14 @@ QString PresetsPage::status_text() const {
     return status_->text();
 }
 
+QString PresetsPage::detail_text() const {
+    return detail_->isHidden() ? QString() : detail_->text();
+}
+
+bool PresetsPage::offering_configure() const {
+    return !configure_->isHidden();
+}
+
 void PresetsPage::update_launch() {
     launch_->setEnabled(!launching_ && chosen().has_value());
 }
@@ -108,6 +122,7 @@ void PresetsPage::load() {
     presets_.clear();
     grid_->clear();
     update_launch();
+    detail_->hide();
     if (!servers_) {
         status_->setText(tr("Beebium could not find its servers on this computer. Install the "
                             "beebium-server package, or say where the servers are."));
@@ -126,10 +141,15 @@ void PresetsPage::load() {
                      return;  // superseded by a later load
                  }
                  if (!result.ok()) {
-                     status_->setText(tr("The presets could not be read.") +
-                                      (result.standard_error.isEmpty()
-                                           ? QString()
-                                           : QStringLiteral("\n") + result.standard_error));
+                     // Which servers, how they were chosen, and their own
+                     // words: a stale or foreign set found first on PATH is
+                     // then plain to see, and the way to choose others is
+                     // at hand.
+                     status_->setText(tr("Beebium could not read the presets from %1.")
+                                          .arg(describe_servers(*servers_)));
+                     detail_->setText(result.standard_error);
+                     detail_->setVisible(!result.standard_error.isEmpty());
+                     configure_->show();
                      return;
                  }
                  show_presets(launchable_presets(

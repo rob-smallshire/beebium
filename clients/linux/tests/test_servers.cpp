@@ -136,6 +136,21 @@ TEST_CASE("The disc formats are the server's, by kind", "[servers][discs]") {
     CHECK(disc_extensions(formats, QStringLiteral("hard-disc")) == QStringList{QStringLiteral("dat")});
 }
 
+TEST_CASE("Which servers, and how they were chosen, are said in words", "[servers]") {
+    CHECK(describe_servers({QStringLiteral("/usr/bin"), QStringLiteral("PATH")}) ==
+          QStringLiteral("the servers in /usr/bin, found on PATH"));
+    CHECK(describe_servers({QStringLiteral("/srv/beebium"), QStringLiteral("settings")}) ==
+          QStringLiteral("the servers in /srv/beebium, from the Beebium setting"));
+    CHECK(describe_servers({QStringLiteral("/opt/beebium/bin"), QStringLiteral("default")}) ==
+          QStringLiteral("the servers in /opt/beebium/bin"));
+}
+
+TEST_CASE("Every launch logs the servers it will use, or that it found none", "[servers]") {
+    CHECK(servers_log_line(ServerLocation{QStringLiteral("/usr/bin"), QStringLiteral("PATH")}) ==
+          QStringLiteral("servers: the servers in /usr/bin, found on PATH"));
+    CHECK(servers_log_line(std::nullopt).startsWith(QStringLiteral("servers: none found")));
+}
+
 TEST_CASE("Launch arguments block the machine until Run and report an ephemeral port",
           "[servers][launch]") {
     const auto preset = preset_launch_arguments(QStringLiteral("/p/x.beebium-preset"), 2,

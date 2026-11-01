@@ -48,6 +48,15 @@ std::optional<ServerLocation> locate_servers(
 // /opt/beebium/bin.
 std::optional<ServerLocation> locate_servers_on_this_host(const QString& configured);
 
+// Which servers, and how they were chosen, in words for a message or the
+// log: "the servers in /usr/bin, found on PATH", "the servers in /x, from
+// the Beebium setting", "the servers in /opt/beebium/bin".
+QString describe_servers(const ServerLocation& servers);
+
+// The line the client logs at every launch: the servers it will use and how
+// it chose them, or that it found none.
+QString servers_log_line(const std::optional<ServerLocation>& servers);
+
 }  // namespace beebium::linux_client
 
 #endif  // BEEBIUM_LINUX_SERVERS_SERVER_LOCATOR_HPP
