@@ -1,0 +1,95 @@
+{
+  "version": 2,
+  "id": "00000000-0000-0000-0000-000000000002",
+  "name": "Thrust",
+  "characterMapping": false,
+  "synchronizeCapsLock": false,
+  "keys": [
+    {
+      "code": "KeyZ",
+      "bbc": {
+        "key": "Caps Lock",
+        "action": "Rotate Left"
+      }
+    },
+    {
+      "code": "KeyX",
+      "bbc": {
+        "key": "Ctrl",
+        "action": "Rotate Right"
+      }
+    },
+    {
+      "code": "Space",
+      "bbc": {
+        "key": "Space",
+        "action": "Shield/Tractor"
+      }
+    },
+    {
+      "code": "Escape",
+      "bbc": {
+        "key": "Escape",
+        "disabled": false
+      }
+    },
+    {
+      "code": "Enter",
+      "bbc": {
+        "key": "Return",
+        "action": "Fire"
+      }
+    },
+    {
+      "code": "ShiftLeft",
+      "bbc": {
+        "key": "Shift",
+        "action": "Thrust"
+      }
+    },
+    {
+      "code": "ShiftRight",
+      "bbc": {
+        "key": "Shift"
+      }
+    },
+    {
+      "code": "KeyQ",
+      "bbc": {
+        "key": "Q",
+        "action": "Quiet"
+      }
+    },
+    {
+      "code": "KeyS",
+      "bbc": {
+        "key": "S",
+        "action": "Sound"
+      }
+    },
+    {
+      "code": "Backspace",
+      "bbc": {
+        "key": "Delete",
+        "action": "Unfreeze"
+      }
+    },
+    {
+      "code": "F11",
+      "bbc": {
+        "key": "Copy",
+        "action": "Freeze"
+      }
+    },
+    {
+      "code": "F12",
+      "with": [
+        "Alt"
+      ],
+      "bbc": {
+        "key": "Break",
+        "disabled": false
+      }
+    }
+  ]
+}

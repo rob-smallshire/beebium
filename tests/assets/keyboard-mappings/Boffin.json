@@ -1,0 +1,75 @@
+{
+  "version": 2,
+  "id": "00000000-0000-0000-0000-000000000005",
+  "name": "Boffin",
+  "characterMapping": true,
+  "synchronizeCapsLock": false,
+  "keys": [
+    {
+      "code": "Quote",
+      "bbc": {
+        "key": ":",
+        "action": "Raise Umbrella"
+      }
+    },
+    {
+      "code": "Slash",
+      "bbc": {
+        "key": "/",
+        "action": "Lower Umbrella"
+      }
+    },
+    {
+      "code": "KeyZ",
+      "bbc": {
+        "key": "Z",
+        "action": "Left"
+      }
+    },
+    {
+      "code": "KeyX",
+      "bbc": {
+        "key": "X",
+        "action": "Right"
+      }
+    },
+    {
+      "code": "KeyQ",
+      "bbc": {
+        "key": "Q",
+        "action": "Sound Off"
+      }
+    },
+    {
+      "code": "KeyS",
+      "bbc": {
+        "key": "S",
+        "action": "Sound On"
+      }
+    },
+    {
+      "code": "KeyP",
+      "bbc": {
+        "key": "Copy",
+        "action": "Pause"
+      }
+    },
+    {
+      "code": "KeyR",
+      "bbc": {
+        "key": "Delete",
+        "action": "Resume"
+      }
+    },
+    {
+      "code": "F12",
+      "with": [
+        "Alt"
+      ],
+      "bbc": {
+        "key": "Break",
+        "disabled": false
+      }
+    }
+  ]
+}

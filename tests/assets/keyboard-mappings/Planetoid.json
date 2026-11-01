@@ -1,0 +1,74 @@
+{
+  "version": 2,
+  "id": "00000000-0000-0000-0000-000000000006",
+  "name": "Planetoid",
+  "characterMapping": true,
+  "synchronizeCapsLock": false,
+  "keys": [
+    {
+      "code": "KeyA",
+      "bbc": {
+        "key": "A",
+        "action": "Up"
+      }
+    },
+    {
+      "code": "KeyZ",
+      "bbc": {
+        "key": "Z",
+        "action": "Down"
+      }
+    },
+    {
+      "code": "Space",
+      "bbc": {
+        "key": "Space",
+        "action": "Reverse"
+      }
+    },
+    {
+      "code": "ShiftLeft",
+      "bbc": {
+        "key": "Shift",
+        "action": "Thrust"
+      }
+    },
+    {
+      "code": "ShiftRight",
+      "bbc": {
+        "key": "Shift"
+      }
+    },
+    {
+      "code": "Enter",
+      "bbc": {
+        "key": "Return",
+        "action": "Fire"
+      }
+    },
+    {
+      "code": "Tab",
+      "bbc": {
+        "key": "Tab",
+        "action": "Smart Bomb"
+      }
+    },
+    {
+      "code": "KeyH",
+      "bbc": {
+        "key": "H",
+        "action": "Hyperspace"
+      }
+    },
+    {
+      "code": "F12",
+      "with": [
+        "Alt"
+      ],
+      "bbc": {
+        "key": "Break",
+        "disabled": false
+      }
+    }
+  ]
+}
