@@ -88,13 +88,23 @@ TEST_CASE("A paste is typed by the server and done when it says the queue draine
     CHECK_FALSE(t.typing.pasting());
 }
 
+TEST_CASE("A paste typed before the server answered is finished at once", "[typing][paste]") {
+    Typing t;
+    t.server.keyboard.typed_at_once = true;
+    t.typing.paste(QStringLiteral("OK"));
+    // No status follows: the answer itself says nothing is left to type.
+    REQUIRE(wait_until([&] { return t.outcome.has_value(); }));
+    CHECK(t.outcome->result == PasteOutcome::Result::typed);
+    CHECK_FALSE(t.typing.pasting());
+}
+
 TEST_CASE("A paste the server refuses says why, in its words", "[typing][paste]") {
     Typing t;
     {
         std::lock_guard lock(t.server.keyboard.typing_mutex);
         t.server.keyboard.refuse = "\xE2\x82\xAC";  // a euro sign
     }
-    t.typing.paste(QStringLiteral("price: €5"));
+    t.typing.paste(QString::fromUtf8("price: \xE2\x82\xAC" "5"));
     REQUIRE(wait_until([&] { return t.outcome.has_value(); }));
     CHECK(t.outcome->result == PasteOutcome::Result::refused);
     CHECK(t.outcome->message.contains(QStringLiteral("cannot type")));
