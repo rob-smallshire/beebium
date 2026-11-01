@@ -464,14 +464,13 @@ disagreed and read back the wanted latch each time.
   frames fall into one vblank, one is dropped: 4 or 5 in 30 s, about one
   every 7 s. On a 60 Hz output a frame is drawn as it arrives (0.1 ms), and
   the 50-in-60 judder is the display's, as on the Mac.
-- **Open question: smoothness at 50 Hz.** Two candidates would remove the
-  periodic drop: present the newest frame at each vblank rather than on
-  arrival when the display rate matches the frame rate, or nudge the
-  server's pacing towards the display's (the server already re-anchors its
-  pacing clock). The first departs from present-on-arrival, which the client
-  specification makes mandatory (6.1) and the macOS client relies on for
-  display sleep, so it must be weighed against the macOS client's behaviour
-  and the specification before either becomes the rule for any client.
+- **Decided: present on arrival at 50 Hz too.** Two ways to avoid the
+  periodic drop were considered: presenting the newest frame at each vblank
+  when the display rate matches the frame rate, or nudging the server's
+  pacing towards the display's. Rob ruled (phase 1 brief): keep
+  present-on-arrival everywhere, as the specification requires (6.1) and
+  the macOS client does, and accept the occasional dropped frame; no
+  vblank-latest or server-pacing work.
 
 ### Raspberry Pi 4 class (Pi 400), 2026-11-01
 
