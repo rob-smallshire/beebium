@@ -2187,13 +2187,22 @@ the application's commands need a window of their own. The presentation on those
 platforms is a home window, in the manner of a virtual-machine manager or a
 project manager: a persistent, ordinary window that is the application's face. It
 holds, as pages or sections in this order: the presets catalogue with a Launch
-command (section 5.1, the default page); saved machines, recent ones first, with
+command (section 5.1); saved machines, recent ones first, with
 Open (section 5.3); running machines, discovered on this host and on the network,
 with Connect and the address entry (section 4.1); and the application's own
 commands: Configure (section 13.3), the preset library and editor where the
 client has them (sections 5.2, 13.3), About, Quit. A machine window has no New,
 Open, Connect or Configure commands of its own; it has a command that brings the
 home window forward.
+
+The page shown first follows the macOS welcome window's rule: a user with saved
+machines in the recent list lands on saved machines, a user with none lands on
+the presets catalogue; a command that opens the window (New, Open Recent)
+chooses its page. The welcome window's presets and saved-machine pages are the
+model to follow, as a guide rather than a drawing: cards with the thumbnail or
+a placeholder, the name, and the model description or the last-used time; a
+saved machine that is open is marked as running; a saved machine offers Open,
+reveal in the file manager, and remove from the list.
 
 Lifetime. Closing the home window does not quit while a machine window is open;
 the home window can be reopened from any machine window. When the last machine
