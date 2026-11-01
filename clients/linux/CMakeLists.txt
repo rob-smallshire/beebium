@@ -254,6 +254,7 @@ add_library(beebium_linux_app STATIC
     src/app/MachineSession.cpp
     src/app/MappingCatalogue.cpp
     src/app/MainWindow.cpp
+    src/app/PictureDrop.cpp
     src/app/Presentation.cpp
     src/app/PresetsPage.cpp
     src/app/RunHold.cpp

@@ -22,6 +22,7 @@
 #include "app/HomeWindow.hpp"
 #include "app/ImmersiveExit.hpp"
 #include "app/KeyboardSidebar.hpp"
+#include "app/PictureDrop.hpp"
 #include "app/IndicatorStrip.hpp"
 #include "app/Sidebar.hpp"
 #include "app/SoundSidebar.hpp"
@@ -74,6 +75,12 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     // The display inside a frame that shows when it has keyboard focus (7.1).
     frame_ = new DisplayFrame(display_, this);
     frame_->installEventFilter(this);
+    // A disc image dropped onto the picture goes into drive 0, or the only
+    // empty drive (9.2).
+    new PictureDropTarget(
+        display_, [this] { return session_->discs().drives(); },
+        [this] { return session_->server_shares_filesystem(); },
+        [this](int drive, const QString& path) { session_->discs().insert(drive, path); });
     // The sidebar beside the picture (13.1), the macOS client's 280 pixels.
     splitter_ = new QSplitter(Qt::Horizontal, this);
     splitter_->setChildrenCollapsible(false);
