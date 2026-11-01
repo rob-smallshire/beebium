@@ -61,3 +61,15 @@ beebium_linux_add_test(test_picture_geometry
 beebium_linux_add_test(test_video_stream
     SOURCES test_video_stream.cpp
     LIBRARIES beebium_linux_connection)
+
+beebium_linux_add_test(test_handshake
+    SOURCES test_handshake.cpp
+    LIBRARIES beebium_linux_connection)
+
+beebium_linux_add_test(test_metrics
+    SOURCES test_metrics.cpp
+    LIBRARIES beebium_linux_metrics)
+
+beebium_linux_add_test(test_display_uniforms
+    SOURCES test_display_uniforms.cpp
+    LIBRARIES beebium_linux_display)

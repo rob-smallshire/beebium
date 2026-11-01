@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_CONNECTION_VIDEO_STREAM_HPP
 
 #include "connection/FrameMailbox.hpp"
+#include "metrics/IntervalStats.hpp"
 
 #include <grpcpp/grpcpp.h>
 
@@ -65,6 +66,9 @@ public:
     std::uint64_t frames_received() const { return frames_received_.load(); }
     std::uint64_t frames_refused() const { return frames_refused_.load(); }
 
+    // Time between consecutive frames' arrival, for pacing measurements.
+    IntervalRecorder& arrival_intervals() { return arrival_intervals_; }
+
 private:
     void run();
 
@@ -75,6 +79,7 @@ private:
     std::atomic<bool> stop_requested_{false};
     std::atomic<std::uint64_t> frames_received_{0};
     std::atomic<std::uint64_t> frames_refused_{0};
+    IntervalRecorder arrival_intervals_;
     std::thread reader_;
 };
 

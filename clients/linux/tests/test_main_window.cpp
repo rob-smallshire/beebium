@@ -25,7 +25,7 @@ TEST_CASE("A machine window has a menu bar and a display area", "[app][window]")
     CHECK(window.menuBar()->actions().isEmpty());
 
     REQUIRE(window.centralWidget() != nullptr);
-    CHECK(window.centralWidget()->objectName() == QStringLiteral("displayPlaceholder"));
+    CHECK(window.centralWidget()->objectName() == QStringLiteral("display"));
 }
 
 TEST_CASE("A machine window shows under the offscreen platform", "[app][window]") {

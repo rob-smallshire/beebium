@@ -14,16 +14,35 @@
 #define BEEBIUM_LINUX_APP_MAIN_WINDOW_HPP
 
 #include <QMainWindow>
+#include <QRhiWidget>
 
 namespace beebium::linux_client {
 
-// A machine window: one per connection to a server. For now it holds an
-// empty menu bar and a placeholder where the emulator display will go.
+class DisplayWidget;
+class MachineSession;
+
+// A machine window: one per connection to a server. It holds the menu bar
+// (empty until the client specification's menus are built) and the display.
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(QRhiWidget::Api graphics_api = QRhiWidget::Api::Vulkan,
+                        QWidget* parent = nullptr);
+    ~MainWindow() override;
+
+    MachineSession& session() { return *session_; }
+    DisplayWidget& display() { return *display_; }
+
+    // Connect this window to the server at host:port.
+    void connect_to(const QString& endpoint);
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
+private:
+    MachineSession* session_;
+    DisplayWidget* display_;
 };
 
 }  // namespace beebium::linux_client

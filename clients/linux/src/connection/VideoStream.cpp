@@ -15,6 +15,11 @@
 #include "video.grpc.pb.h"
 
 #include <chrono>
+#include <optional>
+
+#if defined(__linux__)
+#include <pthread.h>
+#endif
 
 namespace beebium::linux_client {
 
@@ -42,13 +47,23 @@ void VideoStream::stop() {
 }
 
 void VideoStream::run() {
+#if defined(__linux__)
+    // Named so per-thread CPU measurements can find it (15 characters at most).
+    pthread_setname_np(pthread_self(), "bbm-video");
+#endif
     auto stub = beebium::VideoService::NewStub(channel_);
     beebium::SubscribeFramesRequest request;
     auto reader = stub->SubscribeFrames(&context_, request);
 
     beebium::Frame wire;
+    std::optional<std::chrono::steady_clock::time_point> previous_arrival;
     while (reader->Read(&wire)) {
         const auto received_at = std::chrono::steady_clock::now();
+        if (previous_arrival) {
+            arrival_intervals_.record(
+                std::chrono::duration<double, std::milli>(received_at - *previous_arrival).count());
+        }
+        previous_arrival = received_at;
         auto decoded = decode_frame(wire, received_at);
         if (auto* frame = std::get_if<std::unique_ptr<DecodedFrame>>(&decoded)) {
             frames_received_.fetch_add(1);

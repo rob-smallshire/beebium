@@ -36,7 +36,7 @@ get_filename_component(BEEBIUM_REPO_DIRPATH "${CMAKE_CURRENT_SOURCE_DIR}/../.." 
 # gRPC, Protobuf, OpenSSL and the code generators, found as the servers find them.
 include(${BEEBIUM_REPO_DIRPATH}/cmake/BeebiumGrpc.cmake)
 
-find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets ShaderTools)
 qt_standard_project_setup()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
@@ -87,11 +87,20 @@ add_library(beebium_linux_protos STATIC
 target_include_directories(beebium_linux_protos PUBLIC ${BEEBIUM_PROTO_OUT_DIRPATH})
 target_link_libraries(beebium_linux_protos PUBLIC gRPC::grpc++ protobuf::libprotobuf)
 
+# --- Metrics: frame pacing and CPU use, without Qt -------------------------
+
+add_library(beebium_linux_metrics STATIC
+    src/metrics/IntervalStats.cpp
+    src/metrics/ThreadCpu.cpp
+)
+target_include_directories(beebium_linux_metrics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 # --- Connection: everything between the wire and the UI, without Qt ---------
 
 add_library(beebium_linux_connection STATIC
     src/connection/Compatibility.cpp
     src/connection/DecodedFrame.cpp
+    src/connection/Handshake.cpp
     src/connection/PictureGeometry.cpp
     src/connection/VideoStream.cpp
 )
@@ -100,15 +109,45 @@ find_package(Threads REQUIRED)
 target_link_libraries(beebium_linux_connection
     PUBLIC
         beebium_linux_protos
+        beebium_linux_metrics
         beebium_host_identity
         Threads::Threads
+)
+
+# --- Display: the QRhi renderer, without widgets ----------------------------
+
+add_library(beebium_linux_display STATIC
+    src/display/DisplayRenderer.cpp
+    src/display/DisplayUniforms.cpp
+)
+target_include_directories(beebium_linux_display PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# QRhi (rhi/qrhi.h) is semi-public API with limited compatibility promises.
+# Debian packages its headers with the private ones (qt6-base-private-dev,
+# under a versioned include path), so they are reached through GuiPrivate.
+target_link_libraries(beebium_linux_display
+    PUBLIC
+        Qt6::Gui
+        Qt6::GuiPrivate
+        beebium_linux_connection
+)
+# Baked at build time: SPIR-V for Vulkan, GLSL for OpenGL ES 3 and desktop GL,
+# and the default HLSL and MSL, so nothing is compiled when the client runs.
+qt_add_shaders(beebium_linux_display "display_shaders"
+    PREFIX "/"
+    GLSL "300es,150"
+    FILES
+        shaders/display.vert
+        shaders/display.frag
 )
 
 # --- The application --------------------------------------------------------
 
 add_library(beebium_linux_app STATIC
     src/app/ApplicationInfo.cpp
+    src/app/DisplayWidget.cpp
+    src/app/MachineSession.cpp
     src/app/MainWindow.cpp
+    src/app/SpikeMetrics.cpp
 )
 target_include_directories(beebium_linux_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(beebium_linux_app
@@ -116,11 +155,16 @@ target_compile_definitions(beebium_linux_app
 target_link_libraries(beebium_linux_app
     PUBLIC
         Qt6::Widgets
-        beebium_linux_connection
+        beebium_linux_display
 )
 
 qt_add_executable(beebium src/app/main.cpp)
 target_link_libraries(beebium PRIVATE beebium_linux_app)
+
+# The renderer against a live server, offscreen: frame cost and CPU use on a
+# machine with no display. See src/bench/DisplayBench.cpp.
+qt_add_executable(beebium-display-bench src/bench/DisplayBench.cpp)
+target_link_libraries(beebium-display-bench PRIVATE beebium_linux_app)
 
 # --- Tests ------------------------------------------------------------------
 
