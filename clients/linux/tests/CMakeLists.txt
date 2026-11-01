@@ -65,6 +65,10 @@ beebium_linux_add_test(test_video_stream
     SOURCES test_video_stream.cpp
     LIBRARIES beebium_linux_connection)
 
+beebium_linux_add_test(test_audio_stream QT
+    SOURCES test_audio_stream.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_handshake
     SOURCES test_handshake.cpp
     LIBRARIES beebium_linux_connection)

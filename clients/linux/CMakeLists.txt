@@ -140,7 +140,19 @@ target_link_libraries(beebium_linux_keyboard
 
 # --- Connection: everything between the wire and the UI, without Qt ---------
 
+# The audio path without a sink: the format, the ring, the pre-roll and the
+# renderer (client specification 8). No Qt.
+add_library(beebium_linux_audio STATIC
+    src/audio/AudioLayout.cpp
+    src/audio/AudioRenderer.cpp
+    src/audio/FrameRing.cpp
+    src/audio/PreRoll.cpp
+)
+target_include_directories(beebium_linux_audio PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(beebium_linux_audio PUBLIC beebium_linux_protos)
+
 add_library(beebium_linux_connection STATIC
+    src/connection/AudioStream.cpp
     src/connection/Compatibility.cpp
     src/connection/DecodedFrame.cpp
     src/connection/Endpoint.cpp
@@ -157,6 +169,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(beebium_linux_connection
     PUBLIC
         beebium_linux_protos
+        beebium_linux_audio
         beebium_linux_keyboard
         beebium_linux_metrics
         beebium_host_identity
@@ -164,17 +177,6 @@ target_link_libraries(beebium_linux_connection
 )
 
 # --- Servers: finding, querying and launching this host's servers ----------
-
-# The audio path without a sink: the format, the ring, the pre-roll and the
-# renderer (client specification 8). No Qt.
-add_library(beebium_linux_audio STATIC
-    src/audio/AudioLayout.cpp
-    src/audio/AudioRenderer.cpp
-    src/audio/FrameRing.cpp
-    src/audio/PreRoll.cpp
-)
-target_include_directories(beebium_linux_audio PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(beebium_linux_audio PUBLIC beebium_linux_protos)
 
 add_library(beebium_linux_servers STATIC
     src/servers/CoreCli.cpp

@@ -20,6 +20,7 @@
 
 #include "beebium/host_identity/HostFingerprint.hpp"
 
+#include "audio.grpc.pb.h"
 #include "keyboard.grpc.pb.h"
 #include "system.grpc.pb.h"
 #include "video.grpc.pb.h"
@@ -33,6 +34,7 @@
 #include <QString>
 
 #include <atomic>
+#include <cstring>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -183,6 +185,85 @@ class QuietVideoService final : public beebium::VideoService::Service {
     }
 };
 
+// The SN76489 alone, as the server describes it, and a scripted stream of
+// chunks: push a chunk to send it, nullopt to end the stream.
+class ScriptedAudioService final : public beebium::AudioService::Service {
+public:
+    std::atomic<int> format_calls{0};
+    std::atomic<int> subscriptions{0};
+
+    void push(std::optional<beebium::AudioChunk> chunk) {
+        {
+            std::lock_guard lock(mutex_);
+            script_.push_back(std::move(chunk));
+        }
+        changed_.notify_all();
+    }
+
+    grpc::Status GetAudioFormat(grpc::ServerContext*, const beebium::GetAudioFormatRequest*,
+                                beebium::AudioFormat* format) override {
+        ++format_calls;
+        format->set_sample_rate(48000);
+        format->set_source_count(2);
+        auto* group = format->add_groups();
+        group->set_group_id(1);
+        group->set_group_name("Internal Sound");
+        const char* names[2][2] = {{"Tone 0", "Tone 1"}, {"Tone 2", "Noise"}};
+        for (std::uint32_t field = 0; field < 2; ++field) {
+            auto* source = format->add_sources();
+            source->set_source_index(field);
+            source->set_source_name("SN76489");
+            source->set_encoding(beebium::ENCODING_2X16BIT_SIGNED);
+            source->set_group_id(1);
+            source->add_channel_names(names[field][0]);
+            source->add_channel_names(names[field][1]);
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status SubscribeAudio(grpc::ServerContext* context, const beebium::SubscribeAudioRequest*,
+                                grpc::ServerWriter<beebium::AudioChunk>* writer) override {
+        ++subscriptions;
+        for (;;) {
+            std::unique_lock lock(mutex_);
+            changed_.wait_for(lock, 20ms, [this] { return !script_.empty(); });
+            if (context->IsCancelled()) {
+                return grpc::Status::CANCELLED;
+            }
+            if (script_.empty()) {
+                continue;
+            }
+            auto next = std::move(script_.front());
+            script_.pop_front();
+            lock.unlock();
+            if (!next) {
+                return grpc::Status::OK;
+            }
+            writer->Write(*next);
+        }
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::deque<std::optional<beebium::AudioChunk>> script_;
+};
+
+// A chunk of `count` two-field frames starting at produced sample `sequence`,
+// every field `value`.
+inline beebium::AudioChunk audio_chunk(std::uint64_t sequence, std::uint32_t count,
+                                       std::uint32_t value = 0) {
+    beebium::AudioChunk chunk;
+    chunk.set_sequence(sequence);
+    chunk.set_sample_count(count);
+    std::string bytes(static_cast<std::size_t>(count) * 2 * 4, '\0');
+    for (std::size_t word = 0; word < static_cast<std::size_t>(count) * 2; ++word) {
+        std::memcpy(&bytes[word * 4], &value, 4);
+    }
+    chunk.set_samples(bytes);
+    return chunk;
+}
+
 // A machine that starts blocked, as a launched server does, until Run.
 class BlockedDebuggerService final : public beebium::DebuggerControl::Service {
 public:
@@ -219,6 +300,7 @@ struct FakeServer {
     QuietVideoService video;
     KeyTableService keyboard;
     BlockedDebuggerService debugger;
+    ScriptedAudioService audio;
     int port = 0;
     std::unique_ptr<grpc::Server> server;
 
@@ -229,6 +311,7 @@ struct FakeServer {
         builder.RegisterService(&video);
         builder.RegisterService(&keyboard);
         builder.RegisterService(&debugger);
+        builder.RegisterService(&audio);
         server = builder.BuildAndStart();
     }
     ~FakeServer() { server->Shutdown(std::chrono::system_clock::now() + 1s); }
