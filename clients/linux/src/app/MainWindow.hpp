@@ -101,6 +101,10 @@ private:
     void begin_close();
     void decide_close(int client_count);
     void shut_down_server();
+    // Signal a process this client launched (SIGTERM, a graceful shutdown)
+    // unless it has already ended, wait for it without blocking the GUI, at
+    // most 6 s, then close.
+    void stop_process_then_close(qint64 pid, bool already_asked);
     void finish_close();
     // The close was cancelled: the window stays, and a later close is an
     // ordinary close, not part of a quit.

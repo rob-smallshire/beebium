@@ -463,10 +463,21 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::begin_close() {
-    if (!session_->connected() || !is_live(recovery_->verdict()) ||
-        !session_->launched_server()) {
-        // Not ours, or not there to ask: the server is left as it is.
+    const auto server = session_->launched_server();
+    if (!server) {
+        // Not ours: the server is left as it is.
         finish_close();
+        return;
+    }
+    if (!session_->connected() || !is_live(recovery_->verdict())) {
+        // Ours, but not there to ask. If its process is still alive (hung
+        // rather than gone), nobody else would ever stop it and it would keep
+        // its machine's lock and port, so the client that launched it
+        // signals it (4.5).
+        recovery_->window_closing();
+        display_->keyboard().detach();
+        session_->disconnect_from_server();
+        stop_process_then_close(server->pid, false);
         return;
     }
     // How many clients watch it: ours alone, or others too. Without an
@@ -546,29 +557,38 @@ void MainWindow::shut_down_server() {
                                   finish_close();
                                   return;
                               }
-                              if (!outcome.ok) {
-                                  // Ours to stop: the signal shuts it down
-                                  // gracefully too.
-                                  terminate_process(server->pid);
-                              }
-                              // Let it finish flushing its drives, without
-                              // holding up the GUI; then the window goes.
-                              auto* poll = new QTimer(this);
-                              auto waited = std::make_shared<QElapsedTimer>();
-                              waited->start();
-                              connect(poll, &QTimer::timeout, this, [this, poll, waited, server] {
-                                  if (process_alive(server->pid) && waited->elapsed() < 6000) {
-                                      return;
-                                  }
-                                  if (process_alive(server->pid)) {
-                                      terminate_process(server->pid);
-                                  }
-                                  poll->deleteLater();
-                                  finish_close();
-                              });
-                              poll->start(100);
+                              // Asked and accepted: the server is on its way
+                              // down. Refused or unanswered: ours to stop.
+                              stop_process_then_close(server->pid, outcome.ok);
                           });
     session_->request_shutdown();
+}
+
+void MainWindow::stop_process_then_close(qint64 pid, bool already_asked) {
+    if (!process_alive(pid)) {
+        finish_close();
+        return;
+    }
+    if (!already_asked) {
+        // The signal shuts the server down gracefully too.
+        terminate_process(pid);
+    }
+    // Let it finish flushing its drives, without holding up the GUI.
+    auto* poll = new QTimer(this);
+    auto waited = std::make_shared<QElapsedTimer>();
+    waited->start();
+    connect(poll, &QTimer::timeout, this, [this, poll, waited, pid, already_asked] {
+        if (process_alive(pid) && waited->elapsed() < 6000) {
+            return;
+        }
+        if (process_alive(pid) && already_asked) {
+            // It accepted the shutdown but has not gone: ask the other way.
+            terminate_process(pid);
+        }
+        poll->deleteLater();
+        finish_close();
+    });
+    poll->start(100);
 }
 
 void MainWindow::cancel_close() {

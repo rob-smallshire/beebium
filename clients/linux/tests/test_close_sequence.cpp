@@ -22,6 +22,7 @@
 
 #include <QElapsedTimer>
 #include <QPointer>
+#include <QProcess>
 #include <QTimer>
 
 #include <catch2/catch_test_macros.hpp>
@@ -181,4 +182,38 @@ TEST_CASE("Closing while the server stalls leaves the GUI responsive and the win
     // No answer, so the server was left running rather than shut down.
     CHECK(server.system.shutdown_requests == 0);
     server.system.stall_system_info = false;
+}
+
+TEST_CASE("A launched server that is not there to ask is signalled if its process lives",
+          "[close][hung]") {
+    // A stand-in for the server's process: a child whose pid the window
+    // believes it launched.
+    QProcess hung;
+    hung.start(QStringLiteral("sleep"), {QStringLiteral("60")});
+    REQUIRE(hung.waitForStarted());
+
+    FakeServer server;
+    Answers answers;
+    QPointer<MainWindow> window = launched_window(server, answers, hung.processId());
+    // The heartbeats stop: the window reads unreachable.
+    wait_until([] { return false; }, 100ms);
+    window->session().tick_liveness(LivenessTracker::Clock::now() + 3s);
+    REQUIRE(window->session().liveness() == Liveness::unreachable);
+
+    window->close();
+    REQUIRE(wait_until([&] { return hung.state() == QProcess::NotRunning; }, 5000ms));
+    CHECK(hung.exitStatus() == QProcess::CrashExit);  // ended by a signal
+    REQUIRE(wait_until([&] { return window.isNull(); }, 5000ms));
+    CHECK(server.system.shutdown_requests == 0);
+}
+
+TEST_CASE("A launched server whose process has gone is simply left", "[close][hung]") {
+    FakeServer server;
+    Answers answers;
+    // A pid that is not running.
+    QPointer<MainWindow> window = launched_window(server, answers, 999999);
+    wait_until([] { return false; }, 100ms);
+    window->session().tick_liveness(LivenessTracker::Clock::now() + 3s);
+    window->close();
+    REQUIRE(wait_until([&] { return window.isNull(); }, 2000ms));
 }
