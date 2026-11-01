@@ -16,6 +16,7 @@
 #include "connection/Endpoint.hpp"
 
 #include <QSettings>
+#include <QStringList>
 
 #include <memory>
 #include <vector>
@@ -28,6 +29,7 @@ namespace beebium::linux_client {
 class ClientSettings {
 public:
     static constexpr std::size_t RECENT_CONNECTIONS_CAP = 10;
+    static constexpr std::size_t RECENT_MACHINES_CAP = 20;
 
     // The user's settings in the standard place.
     ClientSettings();
@@ -37,6 +39,14 @@ public:
     // Successful connections, most recent first (4.1).
     std::vector<Endpoint> recent_connections() const;
     void remember_connection(const Endpoint& endpoint);
+
+    // Saved machine directories opened or saved here, most recent first, for
+    // the home window's saved machines (5.3, 13.4). Paths are kept cleaned,
+    // so one machine is one entry however its path was spelt.
+    QStringList recent_machines() const;
+    void remember_machine(const QString& machine_dirpath);
+    void forget_machine(const QString& machine_dirpath);
+    void clear_machines();
 
     // Where this host's servers are, when the search should not decide;
     // empty to search (docs/deployment.md).

@@ -12,6 +12,7 @@
 
 #include "app/ClientSettings.hpp"
 
+#include <QDir>
 #include <QStringList>
 
 namespace beebium::linux_client {
@@ -19,6 +20,11 @@ namespace beebium::linux_client {
 namespace {
 
 const QString RECENT_CONNECTIONS_KEY = QStringLiteral("connections/recent");
+const QString RECENT_MACHINES_KEY = QStringLiteral("machines/recent");
+
+QString cleaned(const QString& dirpath) {
+    return QDir::cleanPath(dirpath);
+}
 
 }  // namespace
 
@@ -46,6 +52,34 @@ void ClientSettings::remember_connection(const Endpoint& endpoint) {
         texts << QString::fromStdString(recent.to_string());
     }
     settings_->setValue(RECENT_CONNECTIONS_KEY, texts);
+    settings_->sync();
+}
+
+QStringList ClientSettings::recent_machines() const {
+    return settings_->value(RECENT_MACHINES_KEY).toStringList();
+}
+
+void ClientSettings::remember_machine(const QString& machine_dirpath) {
+    QStringList recents = recent_machines();
+    const QString path = cleaned(machine_dirpath);
+    recents.removeAll(path);
+    recents.prepend(path);
+    while (static_cast<std::size_t>(recents.size()) > RECENT_MACHINES_CAP) {
+        recents.removeLast();
+    }
+    settings_->setValue(RECENT_MACHINES_KEY, recents);
+    settings_->sync();
+}
+
+void ClientSettings::forget_machine(const QString& machine_dirpath) {
+    QStringList recents = recent_machines();
+    recents.removeAll(cleaned(machine_dirpath));
+    settings_->setValue(RECENT_MACHINES_KEY, recents);
+    settings_->sync();
+}
+
+void ClientSettings::clear_machines() {
+    settings_->remove(RECENT_MACHINES_KEY);
     settings_->sync();
 }
 

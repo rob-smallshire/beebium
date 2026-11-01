@@ -57,3 +57,43 @@ TEST_CASE("An entry that no longer parses is skipped", "[settings]") {
     ClientSettings settings(filepath);
     REQUIRE(settings.recent_connections().size() == 1);
 }
+
+TEST_CASE("Saved machines are remembered most recent first, by one path each",
+          "[settings][machines]") {
+    QTemporaryDir directory;
+    const QString filepath = directory.filePath(QStringLiteral("Beebium.conf"));
+    {
+        ClientSettings settings(filepath);
+        settings.remember_machine(QStringLiteral("/home/u/Elite.beebium-machine"));
+        settings.remember_machine(QStringLiteral("/home/u/Repton.beebium-machine"));
+        // The same machine by another spelling of its path.
+        settings.remember_machine(QStringLiteral("/home/u/./Elite.beebium-machine/"));
+    }
+    ClientSettings reopened(filepath);
+    CHECK(reopened.recent_machines() ==
+          QStringList{QStringLiteral("/home/u/Elite.beebium-machine"),
+                      QStringLiteral("/home/u/Repton.beebium-machine")});
+}
+
+TEST_CASE("A saved machine can be forgotten, or all of them", "[settings][machines]") {
+    QTemporaryDir directory;
+    ClientSettings settings(directory.filePath(QStringLiteral("Beebium.conf")));
+    settings.remember_machine(QStringLiteral("/m/A.beebium-machine"));
+    settings.remember_machine(QStringLiteral("/m/B.beebium-machine"));
+    settings.forget_machine(QStringLiteral("/m/A.beebium-machine/"));
+    CHECK(settings.recent_machines() == QStringList{QStringLiteral("/m/B.beebium-machine")});
+    settings.clear_machines();
+    CHECK(settings.recent_machines().isEmpty());
+}
+
+TEST_CASE("The recent saved machines are capped", "[settings][machines]") {
+    QTemporaryDir directory;
+    ClientSettings settings(directory.filePath(QStringLiteral("Beebium.conf")));
+    for (std::size_t i = 0; i < ClientSettings::RECENT_MACHINES_CAP + 5; ++i) {
+        settings.remember_machine(QStringLiteral("/m/%1.beebium-machine").arg(i));
+    }
+    CHECK(static_cast<std::size_t>(settings.recent_machines().size()) ==
+          ClientSettings::RECENT_MACHINES_CAP);
+    CHECK(settings.recent_machines().front() ==
+          QStringLiteral("/m/%1.beebium-machine").arg(ClientSettings::RECENT_MACHINES_CAP + 4));
+}
