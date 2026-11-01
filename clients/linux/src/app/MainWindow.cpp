@@ -27,6 +27,7 @@
 #include "app/Sidebar.hpp"
 #include "app/SoundSidebar.hpp"
 #include "app/StorageSidebar.hpp"
+#include "app/WindowGeometry.hpp"
 #include "app/MachineSession.hpp"
 
 #include <QAction>
@@ -51,6 +52,7 @@
 #include <QMessageBox>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QScreen>
 #include <QStatusBar>
 
 #include <cstdio>
@@ -145,7 +147,19 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
         immersive_status_bar_ = !immersive_status_bar_;
         apply_presentation();
     });
-    resize(1280 + Sidebar::WIDTH, 1024 + menuBar()->sizeHint().height());
+    // The picture at twice the BBC's size beside the sidebar where the
+    // screen has room, else shrunk at 5:4 to fit with the title bar and the
+    // panel (a 1080p screen does not hold 1024 lines and the chrome).
+    if (const QScreen* on = screen()) {
+        const int chrome = menuBar()->sizeHint().height() + statusBar()->sizeHint().height() +
+                           2 * DisplayFrame::MARGIN;
+        const int side = Sidebar::WIDTH + splitter_->handleWidth() + 2 * DisplayFrame::MARGIN;
+        const QSize size = machine_window_size(on->geometry(), on->availableGeometry(), chrome, side);
+        resize(size);
+        std::fprintf(stderr, "beebium: window %dx%d on a %dx%d screen, %dx%d of it available\n",
+                     size.width(), size.height(), on->geometry().width(), on->geometry().height(),
+                     on->availableGeometry().width(), on->availableGeometry().height());
+    }
 
     connect(session_, &MachineSession::frame_ready, display_, &DisplayWidget::frame_ready);
     // A key or Break from the user, for a machine whose Run is held for its

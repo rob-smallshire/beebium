@@ -205,6 +205,10 @@ beebium_linux_add_test(test_picture_drop QT
     SOURCES test_picture_drop.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_window_geometry
+    SOURCES test_window_geometry.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_run_hold QT
     SOURCES test_run_hold.cpp
     LIBRARIES beebium_linux_app)
