@@ -207,6 +207,8 @@ TEST_CASE("Numbered channels are listed by number", "[audio][format]") {
 TEST_CASE("The ring keeps whole frames, and an overflow drops whole frames", "[audio][ring]") {
     FrameRing ring(4, 3);
     const std::vector<std::uint32_t> frames{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    std::uint32_t none = 0;
+    ring.read(&none, 0);  // playing
     CHECK(ring.write(frames.data(), 5) == 4);
     CHECK(ring.dropped_frames() == 1);
     std::vector<std::uint32_t> out(6, 0);
@@ -366,4 +368,30 @@ TEST_CASE("A stall costs one underrun, then playback re-primes at a higher targe
     // Priming: no further underruns while it refills.
     rig.renderer.render(out.data(), 1024);
     CHECK(rig.ring.underrun_events() == 1);
+}
+
+TEST_CASE("Overflow before playback begins is no glitch", "[audio][ring]") {
+    FrameRing ring(4, 1);
+    const std::vector<std::uint32_t> frames(6, 0);
+    ring.write(frames.data(), 6);
+    CHECK(ring.dropped_frames() == 0);
+    CHECK(ring.discarded_before_playback() == 2);
+    std::vector<std::uint32_t> out(4, 0);
+    ring.read(out.data(), 4);
+    ring.write(frames.data(), 6);
+    CHECK(ring.dropped_frames() == 2);  // playing now: a real overflow
+}
+
+TEST_CASE("Playback starts at the pre-roll target, not with the backlog of a slow start",
+          "[audio][render][preroll]") {
+    Rig rig(sn_only());
+    // A sink slow to start: the stream filled the ring meanwhile.
+    std::vector<std::uint32_t> words(2 * 24000, 0);
+    rig.ring.write(words.data(), 24000);
+    std::vector<float> out(2 * 1024, 0.0f);
+    rig.renderer.render(out.data(), 1024);
+    // Trimmed to 120 ms, less the callback just played.
+    CHECK(rig.ring.available() == PreRoll::frames(120, 48000) - 1024);
+    CHECK(rig.ring.dropped_frames() == 0);
+    CHECK(rig.ring.underrun_events() == 0);
 }

@@ -93,7 +93,17 @@ void AudioRenderer::render_block(float* interleaved, std::size_t frames) {
     // Through the pre-roll: nothing while priming, so the ring refills to
     // the target; a short read is an underrun, which the ring counts and the
     // pre-roll answers by raising the target and priming again.
-    const std::size_t pull = pre_roll_.frames_to_pull(ring_.available(), frames);
+    const std::size_t available = ring_.available();
+    const std::size_t pull = pre_roll_.frames_to_pull(available, frames);
+    if (pull > 0 && !started_) {
+        // The first time it plays: whatever piled up while the sink was
+        // starting would otherwise stay as latency for the session, so
+        // playback starts at the pre-roll's target.
+        started_ = true;
+        if (available > pre_roll_.target_frames()) {
+            ring_.skip(available - pre_roll_.target_frames());
+        }
+    }
     const std::size_t got = pull > 0 ? ring_.read(scratch_.data(), pull) : 0;
     if (pull > 0 && got < pull) {
         pre_roll_.note_underrun();

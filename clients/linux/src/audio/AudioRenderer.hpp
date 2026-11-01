@@ -83,6 +83,7 @@ private:
     std::vector<Biquad> highpass_;
     std::vector<std::uint32_t> scratch_;
     std::atomic<int> latency_ms_{PreRoll::INITIAL_TARGET_MS};
+    bool started_ = false;
 };
 
 }  // namespace beebium::linux_client

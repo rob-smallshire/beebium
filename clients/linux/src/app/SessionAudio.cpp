@@ -91,13 +91,19 @@ void SessionAudio::on_format(unsigned generation, const AudioLayout& layout,
 
 void SessionAudio::stop() {
     if (loaded_) {
-        // For diagnosis: how this connection's sound went.
+        // For diagnosis: how this connection's sound went, overflow apart
+        // from what the server never sent.
         const AudioHealth sound = health();
+        const auto wire = static_cast<unsigned long long>(stream_ ? stream_->wire_dropped_samples() : 0);
         std::fprintf(stderr,
-                     "beebium: sound this connection: %llu underruns, %llu dropped, "
-                     "%d ms buffered\n",
+                     "beebium: sound this connection: %llu underruns, %llu dropped (%llu on "
+                     "overflow, %llu never sent), %d ms buffered; %llu waited out the "
+                     "sink starting\n",
                      static_cast<unsigned long long>(sound.underrun_events),
-                     static_cast<unsigned long long>(sound.dropped_samples), sound.latency_ms);
+                     static_cast<unsigned long long>(sound.dropped_samples),
+                     static_cast<unsigned long long>(sound.dropped_samples) - wire, wire,
+                     sound.latency_ms,
+                     static_cast<unsigned long long>(ring_ ? ring_->discarded_before_playback() : 0));
     }
     ++generation_;
     if (output_) {

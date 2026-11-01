@@ -33,7 +33,8 @@ std::size_t FrameRing::write(const std::uint32_t* frames, std::size_t count) {
     const std::size_t space = capacity_ - static_cast<std::size_t>(write - read);
     const std::size_t taken = std::min(count, space);
     if (taken < count) {
-        dropped_.fetch_add(count - taken, std::memory_order_relaxed);
+        (consuming_.load(std::memory_order_relaxed) ? dropped_ : discarded_before_playback_)
+            .fetch_add(count - taken, std::memory_order_relaxed);
     }
     const std::size_t start = static_cast<std::size_t>(write % capacity_);
     const std::size_t first = std::min(taken, capacity_ - start);
@@ -44,7 +45,17 @@ std::size_t FrameRing::write(const std::uint32_t* frames, std::size_t count) {
     return taken;
 }
 
+std::size_t FrameRing::skip(std::size_t count) {
+    consuming_.store(true, std::memory_order_relaxed);
+    const std::uint64_t read = read_index_.load(std::memory_order_relaxed);
+    const std::uint64_t write = write_index_.load(std::memory_order_acquire);
+    const std::size_t taken = std::min(count, static_cast<std::size_t>(write - read));
+    read_index_.store(read + taken, std::memory_order_release);
+    return taken;
+}
+
 std::size_t FrameRing::read(std::uint32_t* destination, std::size_t count) {
+    consuming_.store(true, std::memory_order_relaxed);
     const std::uint64_t read = read_index_.load(std::memory_order_relaxed);
     const std::uint64_t write = write_index_.load(std::memory_order_acquire);
     const std::size_t held = static_cast<std::size_t>(write - read);

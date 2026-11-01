@@ -40,7 +40,15 @@ public:
     std::size_t capacity() const { return capacity_; }
     std::size_t fields() const { return fields_; }
 
+    // Frames that never played because the ring was full while playing.
     std::uint64_t dropped_frames() const { return dropped_.load(std::memory_order_relaxed); }
+    // Frames refused before the consumer first read: a sink slow to start,
+    // not a glitch.
+    std::uint64_t discarded_before_playback() const {
+        return discarded_before_playback_.load(std::memory_order_relaxed);
+    }
+    // Consumer: take and discard up to `count` frames.
+    std::size_t skip(std::size_t count);
     std::uint64_t underrun_frames() const { return underrun_frames_.load(std::memory_order_relaxed); }
     std::uint64_t underrun_events() const { return underrun_events_.load(std::memory_order_relaxed); }
 
@@ -51,6 +59,8 @@ private:
     std::atomic<std::uint64_t> read_index_{0};
     std::atomic<std::uint64_t> write_index_{0};
     std::atomic<std::uint64_t> dropped_{0};
+    std::atomic<std::uint64_t> discarded_before_playback_{0};
+    std::atomic<bool> consuming_{false};
     std::atomic<std::uint64_t> underrun_frames_{0};
     std::atomic<std::uint64_t> underrun_events_{0};
 };
