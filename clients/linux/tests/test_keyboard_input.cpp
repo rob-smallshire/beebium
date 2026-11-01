@@ -218,3 +218,16 @@ TEST_CASE("Unsynchronised, the host Caps Lock key resolves like any other",
     CHECK_FALSE(input.key_press(press(Qt::Key_CapsLock, XKB_CAPS_LOCK)));
     CHECK(pressed == 0);
 }
+
+TEST_CASE("A BBC key goes down and up by its catalogue name", "[keyboard][qt]") {
+    Wire wire;
+    KeyboardInput input;
+    CHECK_FALSE(input.send_named_key("Shift Lock", true));  // detached
+    input.attach(sample_key_table(), wire.sender());
+    CHECK(input.send_named_key("Shift Lock", true));
+    CHECK(input.send_named_key("Shift Lock", false));
+    CHECK_FALSE(input.send_named_key("Nonesuch", true));
+    REQUIRE(wire.events.size() == 2);
+    CHECK(wire.events[0] == WireEvent{WireAction::key_down, 0x50, false});
+    CHECK(wire.events[1] == WireEvent{WireAction::key_up, 0x50, false});
+}

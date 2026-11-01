@@ -21,11 +21,13 @@
 #include "app/ErrorPresentation.hpp"
 #include "app/HomeWindow.hpp"
 #include "app/ImmersiveExit.hpp"
+#include "app/IndicatorStrip.hpp"
 #include "app/Sidebar.hpp"
 #include "app/SoundSidebar.hpp"
 #include "app/MachineSession.hpp"
 
 #include <QAction>
+#include <QApplication>
 #include <QCloseEvent>
 #include <QDir>
 #include <QElapsedTimer>
@@ -218,6 +220,11 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                               "uses goes to the machine, Ctrl shortcuts included; F11, Alt with "
                               "a menu letter and the mouse still reach Beebium."));
     strip_layout->addWidget(keys_label);
+    // The machine's LEDs, after the macOS client's status bar, in the strip
+    // so they ride the immersive overlay too (10).
+    indicator_strip_ = new IndicatorStrip(session_->indicators(), status_strip_);
+    strip_layout->addWidget(indicator_strip_);
+    connect(indicator_strip_, &IndicatorStrip::key_tapped, this, &MainWindow::tap_named_key);
     const auto show_keys = [keys_label, break_button, this](KeysGoTo destination) {
         keys_label->setText(destination == KeysGoTo::machine ? tr("Keys: machine")
                                                              : tr("Keys: Beebium"));
@@ -548,6 +555,24 @@ void MainWindow::rename() {
                               }
                           });
     session_->set_name(name);
+}
+
+void MainWindow::tap_named_key(const QString& name) {
+    KeyboardInput& keyboard = display_->keyboard();
+    // Caps Lock follows the host's while synchronised (7.3): a click cannot
+    // fight it, so it only sounds, as on macOS.
+    if (name == QLatin1String("Caps Lock") && keyboard.mapping().synchronize_caps_lock) {
+        QApplication::beep();
+        return;
+    }
+    const std::string key = name.toStdString();
+    if (!keyboard.send_named_key(key, true)) {
+        return;
+    }
+    // Held long enough for the MOS's keyboard scan, as the macOS client does.
+    QTimer::singleShot(TAP_HOLD_MS, this, [this, key] {
+        display_->keyboard().send_named_key(key, false);
+    });
 }
 
 void MainWindow::set_presentation(Presentation presentation) {

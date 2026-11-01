@@ -85,6 +85,21 @@ void KeyboardInput::set_mapping(MappingFile mapping) {
     sync_caps_lock();
 }
 
+bool KeyboardInput::send_named_key(std::string_view name, bool down) {
+    if (!send_) {
+        return false;
+    }
+    const auto ik = table_.ik_by_name(name);
+    if (!ik) {
+        return false;
+    }
+    WireEvent event;
+    event.action = down ? WireAction::key_down : WireAction::key_up;
+    event.ik_number = *ik;
+    send_({event});
+    return true;
+}
+
 void KeyboardInput::sync_caps_lock() {
     if (!send_ || !mapping_.synchronize_caps_lock || !host_caps_lock_) {
         return;

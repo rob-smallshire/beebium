@@ -13,11 +13,19 @@
 // The machine's LEDs (client specification 10): discovered, in the
 // server's order, as brightness 0 to 255.
 
+#include "app/IndicatorStrip.hpp"
+#include "app/LedColour.hpp"
 #include "app/SessionIndicators.hpp"
 
 #include "FakeBeebiumServer.hpp"
 
+#include <QApplication>
+#include <QHBoxLayout>
+#include <QLayout>
+#include <QMouseEvent>
 #include <QStringList>
+
+#include <catch2/catch_approx.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -87,5 +95,77 @@ TEST_CASE("A lock LED's change is told apart, for the keyboard's latch", "[indic
         {"drive-0-led", 255}, {"shift-lock-led", 255}});
     REQUIRE(wait_until([&] { return !locks.isEmpty(); }));
     CHECK(locks == QStringList{QStringLiteral("shift-lock-led")});
+    indicators.stop();
+}
+
+// --- drawing them --------------------------------------------------------------------
+
+TEST_CASE("An LED's colour is read in every form the metadata uses", "[indicators][colour]") {
+    CHECK(led_colour(QStringLiteral("#ff0000")) == QColor(255, 0, 0));
+    CHECK(led_colour(QStringLiteral("#0a0")) == QColor(0, 170, 0));
+    CHECK(led_colour(QStringLiteral("rgb(214 122 127)")) == QColor(214, 122, 127));
+    CHECK(led_colour(QStringLiteral("rgb(214, 122, 127)")) == QColor(214, 122, 127));
+    const QColor green = led_colour(QStringLiteral("hsl(120 100% 50%)"));
+    CHECK(green.green() == 255);
+    CHECK(green.red() == 0);
+    CHECK(led_colour(QStringLiteral("nonsense")) == QColor(Qt::gray));
+}
+
+TEST_CASE("A wavelength is a hue, brought to an even brightness", "[indicators][colour]") {
+    const QColor red = led_colour(QStringLiteral("625nm"));
+    const QColor green = led_colour(QStringLiteral("568nm"));
+    CHECK(red.red() > red.green());
+    CHECK(red.red() > red.blue());
+    CHECK(green.green() > green.blue());
+    CHECK(green.green() >= green.red());
+    // The outline is the same hue, darker.
+    const QColor outline = led_outline(red);
+    CHECK(outline.lightness() < red.lightness());
+}
+
+TEST_CASE("Brightness is a fill, not on or off", "[indicators]") {
+    CHECK(LedIndicator::fill_fraction(0) == 0.0);
+    CHECK(LedIndicator::fill_fraction(255) == 1.0);
+    CHECK(LedIndicator::fill_fraction(128) == Catch::Approx(128.0 / 255.0));
+    CHECK(LedIndicator::fill_fraction(400) == 1.0);
+}
+
+TEST_CASE("The strip shows the server's LEDs in its order, and only related keys click",
+          "[indicators]") {
+    FakeServer server;
+    SessionIndicators indicators;
+    IndicatorStrip strip(indicators);
+    strip.show();
+    QStringList tapped;
+    QObject::connect(&strip, &IndicatorStrip::key_tapped,
+                     [&](const QString& key) { tapped << key; });
+    indicators.start(channel_to(server));
+    REQUIRE(wait_until([&] { return strip.count() == 4; }));
+    QStringList order;
+    for (int i = 0; i < strip.layout()->count(); ++i) {
+        order << strip.layout()->itemAt(i)->widget()->objectName();
+    }
+    CHECK(order == QStringList{QStringLiteral("caps-lock-led"), QStringLiteral("shift-lock-led"),
+                               QStringLiteral("drive-0-led"), QStringLiteral("drive-1-led")});
+
+    REQUIRE(wait_until([&] { return server.indicators.subscriptions == 1; }));
+    server.indicators.push(std::vector<std::pair<std::string, std::uint32_t>>{{"drive-0-led", 200}});
+    REQUIRE(wait_until([&] { return strip.led(QStringLiteral("drive-0-led"))->value() == 200; }));
+
+    const auto click = [](QWidget* widget) {
+        const QPointF centre(widget->width() / 2.0, widget->height() / 2.0);
+        QMouseEvent release(QEvent::MouseButtonRelease, centre, widget->mapToGlobal(centre),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(widget, &release);
+    };
+    // Laid out, so each LED has its size (a top-level window does not grow
+    // by itself as children arrive; in a machine window a layout sizes it).
+    strip.adjustSize();
+    REQUIRE(wait_until([&] { return strip.led(QStringLiteral("shift-lock-led"))->width() > 0; }));
+    CHECK(strip.led(QStringLiteral("shift-lock-led"))->clickable());
+    CHECK_FALSE(strip.led(QStringLiteral("drive-0-led"))->clickable());
+    click(strip.led(QStringLiteral("drive-0-led")));
+    click(strip.led(QStringLiteral("shift-lock-led")));
+    CHECK(tapped == QStringList{QStringLiteral("Shift Lock")});
     indicators.stop();
 }

@@ -22,6 +22,7 @@
 #include <QString>
 
 #include <functional>
+#include <string_view>
 #include <map>
 #include <optional>
 #include <string>
@@ -73,6 +74,11 @@ public:
     // the one held-key set, so focus loss and detaching release it (R10).
     void press_break();
     void release_break();
+
+    // A BBC key by its catalogue name ("Caps Lock"), down or up, as a control
+    // rather than a host key does it: an LED's related key (10). False when
+    // detached or the catalogue has no such key.
+    bool send_named_key(std::string_view name, bool down);
 
     // Whether a key would go to the machine rather than to the application,
     // for deciding shortcut overrides. Not while detached; never F11 (full

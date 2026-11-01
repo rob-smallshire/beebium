@@ -33,6 +33,7 @@ class MachineSession;
 class SystemPowerMonitor;
 class DisplayFrame;
 class Sidebar;
+class IndicatorStrip;
 class ImmersiveExit;
 
 // A machine window: one per connection to a server. It holds the menu bar
@@ -67,6 +68,7 @@ public:
     ConnectionRecovery& recovery() { return *recovery_; }
     DisplayWidget& display() { return *display_; }
     Sidebar& sidebar() { return *sidebar_; }
+    IndicatorStrip& indicator_strip() { return *indicator_strip_; }
     // Whether the status bar's contents are showing, in the bar or, while
     // immersive, over the picture.
     bool status_shown() const;
@@ -127,6 +129,10 @@ private:
     DisplayWidget* display_;
     ConnectionOverlay* overlay_;
     QWidget* status_strip_ = nullptr;
+    IndicatorStrip* indicator_strip_ = nullptr;
+    // An LED's related key, tapped (10).
+    void tap_named_key(const QString& name);
+    static constexpr int TAP_HOLD_MS = 50;
     QLabel* description_label_ = nullptr;
     ClientSettings* settings_ = nullptr;
     QLabel* unsaved_label_ = nullptr;
