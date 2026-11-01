@@ -42,6 +42,11 @@ struct HandshakeResult {
     std::string machine_description;
     std::string model_name;
     std::int32_t client_count = 0;
+    // Saved or transient, and where (5.3).
+    bool machine_saved = false;
+    std::string machine_dirpath;
+    // Whether the machine is running, or blocked until Run (5.5).
+    bool machine_running = true;
 
     std::uint32_t video_width = 0;
     std::uint32_t video_height = 0;

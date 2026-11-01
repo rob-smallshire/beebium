@@ -50,7 +50,7 @@ public:
 
     void show_content(const OverlayContent& content);
 
-signals:
+Q_SIGNALS:
     void retry_requested();
     void close_requested();
 

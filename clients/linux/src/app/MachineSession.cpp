@@ -17,7 +17,9 @@
 
 #include "beebium/host_identity/HostFingerprint.hpp"
 
+#include "debugger.grpc.pb.h"
 #include "keyboard.grpc.pb.h"
+#include "system.grpc.pb.h"
 
 #include <QMetaObject>
 
@@ -46,6 +48,16 @@ BbcKeyTable fetch_key_table(const std::shared_ptr<grpc::Channel>& channel) {
         return {};
     }
     return BbcKeyTable::from_proto(response);
+}
+
+constexpr std::chrono::milliseconds CALL_TIMEOUT{10000};
+
+void set_deadline(grpc::ClientContext& context) {
+    context.set_deadline(std::chrono::system_clock::now() + CALL_TIMEOUT);
+}
+
+CallOutcome outcome_of(const grpc::Status& status) {
+    return {status.ok(), status.error_code(), QString::fromStdString(status.error_message())};
 }
 
 ConnectionFailure classify(const HandshakeResult& result) {
@@ -112,19 +124,23 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
         handshake_thread_.join();
     }
     if (!result.reached) {
-        emit connection_failed(classify(result), QString::fromStdString(result.error));
+        Q_EMIT connection_failed(classify(result), QString::fromStdString(result.error));
         return;
     }
     if (!is_compatible(result.protocol)) {
         // Refused rather than warned about: a client may choose either, but
         // must not ignore it (client specification 4.2).
-        emit connection_failed(ConnectionFailure::incompatible,
+        Q_EMIT connection_failed(ConnectionFailure::incompatible,
                                QString::fromStdString(describe_protocol_mismatch(
                                    result, client_protocol_fingerprint())));
         return;
     }
 
     connected_ = true;
+    rpc_ = std::make_unique<RpcWorker>();
+    machine_saved_ = result.machine_saved;
+    machine_dirpath_ = QString::fromStdString(result.machine_dirpath);
+    machine_running_ = result.machine_running;
     machine_name_ = QString::fromStdString(result.machine_name);
     machine_uuid_ = QString::fromStdString(result.machine_uuid);
     machine_description_ = QString::fromStdString(result.machine_description);
@@ -163,13 +179,18 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
         });
     video_->start();
 
-    emit connected_to_server();
-    emit identity_changed(machine_name_, machine_description_);
+    Q_EMIT connected_to_server();
+    Q_EMIT identity_changed(machine_name_, machine_description_);
+    Q_EMIT running_changed(machine_running_);
+    if (run_on_connect_ && !machine_running_) {
+        // Launched blocked until Run (5.5).
+        run();
+    }
 
     if (!table.empty()) {
         key_table_ = std::move(table);
         keys_ = std::make_unique<KeySender>(channel_);
-        emit keyboard_ready();
+        Q_EMIT keyboard_ready();
     }
 }
 
@@ -189,16 +210,16 @@ void MachineSession::on_status_event(unsigned generation,
         machine_name_ = QString::fromStdString(event.identity().name());
         machine_uuid_ = QString::fromStdString(event.identity().uuid());
         machine_description_ = QString::fromStdString(event.identity().description());
-        emit identity_changed(machine_name_, machine_description_);
+        Q_EMIT identity_changed(machine_name_, machine_description_);
     }
     if (event.status() == beebium::SERVER_STATUS_MACHINE_RESET) {
-        emit machine_reset();
+        Q_EMIT machine_reset();
     }
     // Every event carries the guest's readiness; its rising edge, or a guest
     // already ready when the stream begins, is the sync point (7.3).
     const bool ready = event.guest_ready();
     if (ready && guest_was_ready_ != true) {
-        emit guest_ready();
+        Q_EMIT guest_ready();
     }
     guest_was_ready_ = ready;
 }
@@ -213,6 +234,216 @@ void MachineSession::on_status_end(unsigned generation, const StreamEnd& end) {
     set_liveness(before);
 }
 
+template <typename Result>
+void MachineSession::post_call(
+    std::function<Result(const std::shared_ptr<grpc::Channel>&)> call,
+    std::function<void(const Result&)> deliver) {
+    if (!rpc_ || !channel_) {
+        return;
+    }
+    const unsigned generation = generation_;
+    rpc_->post([this, generation, channel = channel_, call = std::move(call),
+                deliver = std::move(deliver)] {
+        Result result = call(channel);
+        QMetaObject::invokeMethod(
+            this,
+            [this, generation, result = std::move(result), deliver] {
+                if (generation == generation_) {
+                    deliver(result);
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void MachineSession::set_launched_server(const LaunchedServer& server) {
+    launched_ = server;
+    run_on_connect_ = true;
+}
+
+void MachineSession::run() {
+    post_call<CallOutcome>(
+        [](const std::shared_ptr<grpc::Channel>& channel) {
+            auto stub = beebium::DebuggerControl::NewStub(channel);
+            grpc::ClientContext context;
+            set_deadline(context);
+            beebium::RunResponse response;
+            CallOutcome outcome = outcome_of(stub->Run(&context, beebium::RunRequest{}, &response));
+            if (outcome.ok && !response.success()) {
+                outcome.ok = false;
+                outcome.message = QString::fromStdString(response.error());
+            }
+            return outcome;
+        },
+        [this](const CallOutcome& outcome) {
+            if (outcome.ok && !machine_running_) {
+                machine_running_ = true;
+                Q_EMIT running_changed(true);
+            }
+            Q_EMIT run_finished(outcome);
+        });
+}
+
+void MachineSession::refresh_system_info() {
+    struct Info {
+        CallOutcome outcome;
+        beebium::SystemInfo info;
+    };
+    post_call<Info>(
+        [](const std::shared_ptr<grpc::Channel>& channel) {
+            auto stub = beebium::SystemService::NewStub(channel);
+            grpc::ClientContext context;
+            set_deadline(context);
+            Info info;
+            info.outcome =
+                outcome_of(stub->GetSystemInfo(&context, beebium::GetSystemInfoRequest{}, &info.info));
+            return info;
+        },
+        [this](const Info& info) {
+            if (!info.outcome.ok) {
+                return;
+            }
+            machine_saved_ = info.info.machine_saved();
+            machine_dirpath_ = QString::fromStdString(info.info.machine_dirpath());
+            Q_EMIT system_info_refreshed(info.info.connections().client_count());
+        });
+}
+
+void MachineSession::save(const QString& destination_dirpath, bool replace_existing) {
+    struct Saved {
+        CallOutcome outcome;
+        beebium::SaveMachineResponse response;
+    };
+    const std::string destination = destination_dirpath.toStdString();
+    post_call<Saved>(
+        [destination, replace_existing](const std::shared_ptr<grpc::Channel>& channel) {
+            auto stub = beebium::SystemService::NewStub(channel);
+            grpc::ClientContext context;
+            set_deadline(context);
+            beebium::SaveMachineRequest request;
+            request.set_destination_dirpath(destination);
+            request.set_replace_existing(replace_existing);
+            Saved saved;
+            saved.outcome = outcome_of(stub->SaveMachine(&context, request, &saved.response));
+            return saved;
+        },
+        [this](const Saved& saved) {
+            if (saved.outcome.ok) {
+                machine_saved_ = true;
+                machine_dirpath_ = QString::fromStdString(saved.response.machine_dirpath());
+                template_media_written_ = false;
+            }
+            Q_EMIT save_finished(saved.outcome);
+        });
+}
+
+void MachineSession::move(const QString& destination_dirpath) {
+    struct Moved {
+        CallOutcome outcome;
+        beebium::MoveMachineResponse response;
+    };
+    const std::string destination = destination_dirpath.toStdString();
+    post_call<Moved>(
+        [destination](const std::shared_ptr<grpc::Channel>& channel) {
+            auto stub = beebium::SystemService::NewStub(channel);
+            grpc::ClientContext context;
+            set_deadline(context);
+            beebium::MoveMachineRequest request;
+            request.set_destination_dirpath(destination);
+            Moved moved;
+            moved.outcome = outcome_of(stub->MoveMachine(&context, request, &moved.response));
+            return moved;
+        },
+        [this](const Moved& moved) {
+            if (moved.outcome.ok) {
+                machine_dirpath_ = QString::fromStdString(moved.response.machine_dirpath());
+            }
+            Q_EMIT move_finished(moved.outcome);
+        });
+}
+
+void MachineSession::set_name(const QString& name) {
+    const std::string text = name.toStdString();
+    post_call<CallOutcome>(
+        [text](const std::shared_ptr<grpc::Channel>& channel) {
+            auto stub = beebium::SystemService::NewStub(channel);
+            grpc::ClientContext context;
+            set_deadline(context);
+            beebium::SetMachineNameRequest request;
+            request.set_name(text);
+            beebium::SetMachineNameResponse response;
+            return outcome_of(stub->SetMachineName(&context, request, &response));
+        },
+        [this](const CallOutcome& outcome) {
+            if (outcome.ok && machine_saved_) {
+                // A saved machine's rename moved its directory, which the
+                // answer does not say (5.4).
+                refresh_system_info();
+            }
+            Q_EMIT name_set(outcome);
+        });
+}
+
+void MachineSession::reset_battery() {
+    struct Reset {
+        CallOutcome outcome;
+        QStringList units;
+    };
+    post_call<Reset>(
+        [](const std::shared_ptr<grpc::Channel>& channel) {
+            auto stub = beebium::SystemService::NewStub(channel);
+            grpc::ClientContext context;
+            set_deadline(context);
+            beebium::ResetBatteryResponse response;
+            Reset reset;
+            reset.outcome =
+                outcome_of(stub->ResetBattery(&context, beebium::ResetBatteryRequest{}, &response));
+            for (const auto& unit : response.reset_units()) {
+                reset.units << QString::fromStdString(unit);
+            }
+            return reset;
+        },
+        [this](const Reset& reset) { Q_EMIT battery_reset(reset.outcome, reset.units); });
+}
+
+void MachineSession::request_shutdown() {
+    // The server's graceful shutdown waits for our streams, so they go first
+    // (4.5); the channel stays for the answer.
+    liveness_ticker_.stop();
+    ++generation_;
+    stop_streams();
+    const unsigned generation = generation_;
+    const std::string authority = launched_ ? launched_->provenance_uuid.toStdString() : std::string();
+    if (!rpc_ || !channel_) {
+        Q_EMIT shutdown_answered({false, grpc::StatusCode::UNAVAILABLE, tr("not connected")});
+        return;
+    }
+    rpc_->post([this, generation, channel = channel_, authority] {
+        auto stub = beebium::SystemService::NewStub(channel);
+        grpc::ClientContext context;
+        set_deadline(context);
+        if (!authority.empty()) {
+            context.AddMetadata("x-beebium-instance-uuid", authority);
+        }
+        beebium::ShutdownRequest request;
+        request.set_mode(beebium::SHUTDOWN_GRACEFUL);
+        beebium::ShutdownResponse response;
+        CallOutcome outcome = outcome_of(stub->RequestShutdown(&context, request, &response));
+        if (outcome.ok && !response.accepted()) {
+            outcome.ok = false;
+            outcome.message = QString::fromStdString(response.message());
+        }
+        QMetaObject::invokeMethod(
+            this,
+            [this, generation, outcome] {
+                if (generation == generation_) {
+                    Q_EMIT shutdown_answered(outcome);
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
 void MachineSession::tick_liveness(LivenessTracker::Clock::time_point now) {
     const Liveness before = liveness_.state();
     liveness_.on_tick(now);
@@ -221,7 +452,7 @@ void MachineSession::tick_liveness(LivenessTracker::Clock::time_point now) {
 
 void MachineSession::set_liveness(Liveness before) {
     if (liveness_.state() != before) {
-        emit liveness_changed(liveness_.state());
+        Q_EMIT liveness_changed(liveness_.state());
     }
 }
 
@@ -247,6 +478,11 @@ void MachineSession::disconnect_from_server() {
     ++generation_;
     liveness_ticker_.stop();
     stop_streams();
+    if (rpc_) {
+        // The call in hand finishes, bounded by its deadline; the rest go.
+        rpc_->stop();
+        rpc_.reset();
+    }
     if (handshake_thread_.joinable()) {
         // Bounded by the handshake's deadlines.
         handshake_thread_.join();

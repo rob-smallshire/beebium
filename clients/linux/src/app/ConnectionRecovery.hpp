@@ -44,7 +44,7 @@ public:
     // The window is closing: cancel recovery before teardown (4.4).
     void window_closing();
 
-signals:
+Q_SIGNALS:
     void verdict_changed(beebium::linux_client::ConnectionVerdict verdict, int attempt);
 
 private:

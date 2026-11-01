@@ -74,7 +74,7 @@ public:
     bool available() const { return available_; }
     const std::vector<DiscoveredMachine>& machines() const { return machines_; }
 
-signals:
+Q_SIGNALS:
     void changed();
 
 private:

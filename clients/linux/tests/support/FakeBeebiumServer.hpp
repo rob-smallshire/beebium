@@ -23,6 +23,7 @@
 #include "keyboard.grpc.pb.h"
 #include "system.grpc.pb.h"
 #include "video.grpc.pb.h"
+#include "debugger.grpc.pb.h"
 
 #include <grpcpp/grpcpp.h>
 
@@ -30,6 +31,7 @@
 #include <QElapsedTimer>
 #include <QString>
 
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -46,6 +48,15 @@ public:
     std::string protocol_fingerprint{client_protocol_fingerprint()};
     std::string host_fingerprint = beebium::host_identity::host_fingerprint();
 
+    // What the machine-control calls saw, and how they answer.
+    std::mutex calls_mutex;
+    std::string last_save_destination;
+    bool last_save_replace = false;
+    std::string last_name;
+    std::string shutdown_authority;  // x-beebium-instance-uuid
+    int shutdown_requests = 0;
+    bool save_fails = false;
+
     void push(std::optional<beebium::ServerStatusEvent> event) {
         {
             std::lock_guard lock(mutex_);
@@ -61,6 +72,45 @@ public:
         info->mutable_identity()->set_name("Model B #1");
         info->mutable_identity()->set_description("Station 1.254");
         info->mutable_connections()->set_client_count(1);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status SaveMachine(grpc::ServerContext*, const beebium::SaveMachineRequest* request,
+                             beebium::SaveMachineResponse* response) override {
+        std::lock_guard lock(calls_mutex);
+        last_save_destination = request->destination_dirpath();
+        last_save_replace = request->replace_existing();
+        if (save_fails) {
+            return {grpc::StatusCode::ALREADY_EXISTS, "destination exists"};
+        }
+        response->set_machine_dirpath(request->destination_dirpath().empty()
+                                          ? std::string("/m/Saved.beebium-machine")
+                                          : request->destination_dirpath());
+        return grpc::Status::OK;
+    }
+
+    grpc::Status SetMachineName(grpc::ServerContext*, const beebium::SetMachineNameRequest* request,
+                                beebium::SetMachineNameResponse*) override {
+        std::lock_guard lock(calls_mutex);
+        last_name = request->name();
+        return grpc::Status::OK;
+    }
+
+    grpc::Status ResetBattery(grpc::ServerContext*, const beebium::ResetBatteryRequest*,
+                              beebium::ResetBatteryResponse* response) override {
+        response->add_reset_units("integra-b-rtc");
+        return grpc::Status::OK;
+    }
+
+    grpc::Status RequestShutdown(grpc::ServerContext* context, const beebium::ShutdownRequest*,
+                                 beebium::ShutdownResponse* response) override {
+        std::lock_guard lock(calls_mutex);
+        ++shutdown_requests;
+        const auto found = context->client_metadata().find("x-beebium-instance-uuid");
+        if (found != context->client_metadata().end()) {
+            shutdown_authority = std::string(found->second.data(), found->second.size());
+        }
+        response->set_accepted(true);
         return grpc::Status::OK;
     }
 
@@ -109,6 +159,26 @@ class QuietVideoService final : public beebium::VideoService::Service {
     }
 };
 
+// A machine that starts blocked, as a launched server does, until Run.
+class BlockedDebuggerService final : public beebium::DebuggerControl::Service {
+public:
+    std::atomic<bool> running{false};
+    std::atomic<int> runs{0};
+
+    grpc::Status GetState(grpc::ServerContext*, const beebium::Empty*,
+                          beebium::ExecutionState* state) override {
+        state->set_is_running(running);
+        return grpc::Status::OK;
+    }
+    grpc::Status Run(grpc::ServerContext*, const beebium::RunRequest*,
+                     beebium::RunResponse* response) override {
+        ++runs;
+        running = true;
+        response->set_success(true);
+        return grpc::Status::OK;
+    }
+};
+
 class KeyTableService final : public beebium::KeyboardService::Service {
     grpc::Status GetAllKeyMappings(grpc::ServerContext*, const beebium::GetAllKeyMappingsRequest*,
                                    beebium::AllKeyMappingsResponse* response) override {
@@ -124,6 +194,7 @@ struct FakeServer {
     ScriptedSystemService system;
     QuietVideoService video;
     KeyTableService keyboard;
+    BlockedDebuggerService debugger;
     int port = 0;
     std::unique_ptr<grpc::Server> server;
 
@@ -133,6 +204,7 @@ struct FakeServer {
         builder.RegisterService(&system);
         builder.RegisterService(&video);
         builder.RegisterService(&keyboard);
+        builder.RegisterService(&debugger);
         server = builder.BuildAndStart();
     }
     ~FakeServer() { server->Shutdown(std::chrono::system_clock::now() + 1s); }

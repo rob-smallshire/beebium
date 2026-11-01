@@ -14,6 +14,7 @@
 
 #include "system.grpc.pb.h"
 #include "video.grpc.pb.h"
+#include "debugger.grpc.pb.h"
 
 namespace beebium::linux_client {
 
@@ -53,6 +54,8 @@ HandshakeResult perform_handshake(const std::shared_ptr<grpc::Channel>& channel,
     result.machine_description = info.identity().description();
     result.model_name = info.identity().model_name();
     result.client_count = info.connections().client_count();
+    result.machine_saved = info.machine_saved();
+    result.machine_dirpath = info.machine_dirpath();
 
     auto video = beebium::VideoService::NewStub(channel);
     beebium::VideoConfig config;
@@ -70,6 +73,18 @@ HandshakeResult perform_handshake(const std::shared_ptr<grpc::Channel>& channel,
     result.video_width = config.width();
     result.video_height = config.height();
     result.video_framerate_hz = config.framerate_hz();
+
+    // Whether it waits for Run: a server without a debugger answers nothing
+    // here, and is then taken to be running.
+    auto debugger = beebium::DebuggerControl::NewStub(channel);
+    beebium::ExecutionState state;
+    {
+        grpc::ClientContext context;
+        set_deadline(context, timeout);
+        if (debugger->GetState(&context, beebium::Empty{}, &state).ok()) {
+            result.machine_running = state.is_running();
+        }
+    }
     result.reached = true;
     return result;
 }

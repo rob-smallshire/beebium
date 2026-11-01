@@ -135,7 +135,7 @@ void DiscoveredMachines::added(const beebium::discovery::DiscoveredService& serv
         machines_.push_back(std::move(machine));
     }
     sort_for_display(machines_);
-    emit changed();
+    Q_EMIT changed();
 }
 
 void DiscoveredMachines::removed(const QString& instance_name) {
@@ -144,7 +144,7 @@ void DiscoveredMachines::removed(const QString& instance_name) {
                                    [&](const auto& m) { return m.instance_name == instance_name; }),
                     machines_.end());
     if (machines_.size() != before) {
-        emit changed();
+        Q_EMIT changed();
     }
 }
 

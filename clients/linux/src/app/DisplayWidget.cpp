@@ -106,7 +106,7 @@ void DisplayWidget::initialize(QRhiCommandBuffer*) {
         initialised_for_ = rhi();
         bool software = false;
         graphics_description_ = describe_rhi(rhi(), &software);
-        emit graphics_ready(graphics_description_, software);
+        Q_EMIT graphics_ready(graphics_description_, software);
     }
 }
 

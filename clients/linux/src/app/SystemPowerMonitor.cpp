@@ -43,12 +43,12 @@ public:
         }
     }
 
-private slots:
+private Q_SLOTS:
     void on_prepare_for_sleep(bool start) {
         if (start) {
-            emit will_sleep();
+            Q_EMIT will_sleep();
         } else {
-            emit did_wake();
+            Q_EMIT did_wake();
         }
     }
 };

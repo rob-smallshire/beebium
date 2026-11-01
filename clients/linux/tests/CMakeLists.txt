@@ -155,3 +155,7 @@ beebium_linux_add_test(test_connecting QT
 beebium_linux_add_test(test_servers QT
     SOURCES test_servers.cpp
     LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_machine_control QT
+    SOURCES test_machine_control.cpp
+    LIBRARIES beebium_linux_app)

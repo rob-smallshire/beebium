@@ -88,7 +88,7 @@ void ConnectionRecovery::publish() {
     if (now != published_ || policy_.attempt() != published_attempt_) {
         published_ = now;
         published_attempt_ = policy_.attempt();
-        emit verdict_changed(now, published_attempt_);
+        Q_EMIT verdict_changed(now, published_attempt_);
     }
 }
 

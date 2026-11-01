@@ -50,12 +50,12 @@ public:
     // The device QRhi is drawing with, once initialised.
     QString graphics_description() const { return graphics_description_; }
 
-public slots:
+public Q_SLOTS:
     // A new frame is waiting in the mailbox. Call on the GUI thread (queue it
     // there from the reader thread).
     void frame_ready();
 
-signals:
+Q_SIGNALS:
     void graphics_ready(const QString& description, bool software_renderer);
 
 protected:

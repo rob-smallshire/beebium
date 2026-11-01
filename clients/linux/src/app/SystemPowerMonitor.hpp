@@ -32,7 +32,7 @@ public:
     // when there is no system bus or no logind.
     static std::unique_ptr<SystemPowerMonitor> create_for_this_host(QObject* parent = nullptr);
 
-signals:
+Q_SIGNALS:
     // A full sleep is imminent.
     void will_sleep();
     // Woke from full sleep: a live connection is very likely dead.

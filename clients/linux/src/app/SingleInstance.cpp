@@ -70,7 +70,7 @@ bool SingleInstance::claim(const QStringList& arguments) {
                 QStringList arguments;
                 stream >> arguments;
                 if (stream.commitTransaction()) {
-                    emit arguments_received(arguments);
+                    Q_EMIT arguments_received(arguments);
                 }
             });
         }

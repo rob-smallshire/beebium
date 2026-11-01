@@ -37,7 +37,7 @@ public:
     // `arguments` and return false: the caller then exits.
     bool claim(const QStringList& arguments);
 
-signals:
+Q_SIGNALS:
     // Another launch's arguments, on the running instance.
     void arguments_received(const QStringList& arguments);
 

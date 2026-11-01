@@ -43,7 +43,7 @@ public:
 
     virtual std::optional<bool> caps_lock() const = 0;
 
-signals:
+Q_SIGNALS:
     // Wayland only: the compositor reported a change.
     void caps_lock_changed(bool on);
 };

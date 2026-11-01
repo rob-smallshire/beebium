@@ -38,6 +38,11 @@ include(${BEEBIUM_REPO_DIRPATH}/cmake/BeebiumGrpc.cmake)
 
 find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets DBus Network ShaderTools)
 
+# No signals/slots/emit keywords: the generated protobuf code has accessors
+# named signals(), which the keyword macro would break. Q_SIGNALS, Q_SLOTS
+# and Q_EMIT instead.
+add_compile_definitions(QT_NO_KEYWORDS)
+
 # nlohmann-json for keyboard mapping files, found as the root build finds it:
 # an installed copy, else the same pinned release fetched.
 find_package(nlohmann_json 3.11 CONFIG QUIET)
@@ -144,6 +149,7 @@ add_library(beebium_linux_connection STATIC
     src/connection/Liveness.cpp
     src/connection/PictureGeometry.cpp
     src/connection/ReconnectPolicy.cpp
+    src/connection/RpcWorker.cpp
     src/connection/VideoStream.cpp
 )
 target_include_directories(beebium_linux_connection PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

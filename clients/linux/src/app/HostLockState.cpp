@@ -191,7 +191,7 @@ private:
         const auto caps = caps_locked_in_mask(locked, self->caps_index_);
         if (caps && caps != self->caps_) {
             self->caps_ = caps;
-            emit self->caps_lock_changed(*caps);
+            Q_EMIT self->caps_lock_changed(*caps);
         }
     }
 

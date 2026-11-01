@@ -29,8 +29,8 @@ namespace {
 
 class FakePowerMonitor final : public SystemPowerMonitor {
 public:
-    void sleep() { emit will_sleep(); }
-    void wake() { emit did_wake(); }
+    void sleep() { Q_EMIT will_sleep(); }
+    void wake() { Q_EMIT did_wake(); }
 };
 
 struct Harness {

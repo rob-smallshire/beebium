@@ -47,7 +47,7 @@ public:
     // Connect this window to the server at host:port.
     void connect_to(const QString& endpoint);
 
-signals:
+Q_SIGNALS:
     // File > Connect to Machine: the application shows its Connect dialog.
     void connect_requested();
     // File > Quit: the application closes every window.
