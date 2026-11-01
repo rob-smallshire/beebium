@@ -54,6 +54,9 @@ QString host_key_label(const MappingEntry& entry);
 struct ReferenceRow {
     QString host_key;
     QString action;
+    // A word on reaching the key, if it is on one most keyboards lack: one
+    // sentence, empty for most rows.
+    QString hint;
 };
 std::vector<ReferenceRow> mapping_reference(const MappingFile& mapping);
 

@@ -23,6 +23,7 @@
 #include <QCheckBox>
 #include <QDir>
 #include <QFile>
+#include <QLabel>
 #include <QListWidget>
 #include <QTemporaryDir>
 #include <QTreeWidget>
@@ -105,6 +106,43 @@ TEST_CASE("Logical labels its five keys with no host namesake", "[keyboard][mode
     CHECK(rows == QStringList{QStringLiteral("F10 = f0"), QStringLiteral("F11 = Copy"),
                               QStringLiteral("Alt+F12 = Break"), QStringLiteral("F13 = Shift Lock"),
                               QStringLiteral("Backspace = Delete")});
+}
+
+TEST_CASE("Shift Lock on F13 carries a hint that a user mapping reaches it", "[keyboard][mode]") {
+    const auto mapping = built_in_mapping(QStringLiteral("Logical"));
+    REQUIRE(mapping);
+    QStringList hinted;
+    for (const auto& row : mapping_reference(*mapping)) {
+        if (!row.hint.isEmpty()) {
+            hinted << row.action;
+            CHECK(row.hint == QStringLiteral(
+                                  "Most PC keyboards have no F13: to reach Shift Lock, copy this "
+                                  "mapping and put it on a key you have, as Break is on Alt+F12."));
+        }
+    }
+    CHECK(hinted == QStringList{QStringLiteral("Shift Lock")});
+    // Shift Lock on a key the keyboard has needs no hint.
+    MappingFile moved = *mapping;
+    for (auto& entry : moved.keys) {
+        if (entry.bbc_key == "Shift Lock") {
+            entry.code = "ScrollLock";
+        }
+    }
+    for (const auto& row : mapping_reference(moved)) {
+        CHECK(row.hint.isEmpty());
+    }
+}
+
+TEST_CASE("The mode shows the hint under the table only for a mapping with Shift Lock on F13",
+          "[keyboard][mode]") {
+    QTemporaryDir directory;
+    KeyboardSidebar sidebar(directory.path());
+    sidebar.set_active(QString::fromStdString(built_in_mapping(QStringLiteral("Logical"))->id));
+    REQUIRE(sidebar.reference_hint());
+    CHECK(sidebar.reference_hint()->isVisibleTo(&sidebar));
+    CHECK(sidebar.reference_hint()->text().startsWith(QStringLiteral("Most PC keyboards have no F13")));
+    sidebar.set_active(QString::fromStdString(built_in_mapping(QStringLiteral("Thrust"))->id));
+    CHECK_FALSE(sidebar.reference_hint()->isVisibleTo(&sidebar));
 }
 
 TEST_CASE("The mode shows the active mapping's labels and switches on a choice",

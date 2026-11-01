@@ -48,6 +48,7 @@ public:
     const std::vector<MappingChoice>& choices() const { return choices_; }
     QListWidget* chooser() const { return list_; }
     QTreeWidget* reference() const { return reference_; }
+    QLabel* reference_hint() const { return hint_; }
     QCheckBox* caps_lock_sync() const { return caps_; }
 
 Q_SIGNALS:
@@ -67,6 +68,7 @@ private:
     QListWidget* list_;
     QLabel* reference_title_;
     QTreeWidget* reference_;
+    QLabel* hint_;
     QCheckBox* caps_;
 };
 
