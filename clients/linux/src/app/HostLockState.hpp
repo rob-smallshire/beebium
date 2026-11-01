@@ -26,7 +26,8 @@ namespace beebium::linux_client {
 //
 // - X11: the core keyboard state's Lock bit (QueryPointer), at any time.
 // - Wayland: the locked modifiers the compositor sends this client, through
-//   a wl_keyboard of our own on Qt's seat, decoded with the seat's XKB keymap.
+//   a seat and keyboard of our own (created only once the seat has a
+//   keyboard), decoded with the seat's XKB keymap.
 //   The compositor sends them only while the client has keyboard focus, as
 //   Wayland intends; the state is the one at the last focus or change.
 // - Anything else (offscreen, eglfs): unknown, and synchronisation does

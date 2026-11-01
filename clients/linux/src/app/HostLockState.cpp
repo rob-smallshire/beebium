@@ -21,6 +21,9 @@
 
 #if defined(BEEBIUM_HAS_WAYLAND_LOCKS)
 #include <sys/mman.h>
+
+#include <algorithm>
+#include <cstring>
 #include <unistd.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
@@ -77,26 +80,29 @@ private:
 
 class WaylandLockState final : public HostLockState {
 public:
-    WaylandLockState(wl_seat* seat, QObject* parent)
+    explicit WaylandLockState(wl_display* display, QObject* parent)
         : HostLockState(parent), context_(xkb_context_new(XKB_CONTEXT_NO_FLAGS)) {
-        // A wl_keyboard of our own on Qt's seat: Qt's keeps its listener,
-        // and the compositor sends both the same keymap and modifiers.
-        keyboard_ = wl_seat_get_keyboard(seat);
-        static const wl_keyboard_listener listener = {
-            &WaylandLockState::on_keymap,    &WaylandLockState::on_enter,
-            &WaylandLockState::on_leave,     &WaylandLockState::on_key,
-            &WaylandLockState::on_modifiers, &WaylandLockState::on_repeat_info,
-        };
-        wl_keyboard_add_listener(keyboard_, &listener, this);
+        // A seat of our own, bound through the registry, so this reader can
+        // hear the seat's capabilities: asking a seat with no keyboard for one
+        // is a protocol error that ends the connection, and a seat may gain or
+        // lose its keyboard at any time. Qt keeps its own seat and listeners.
+        registry_ = wl_display_get_registry(display);
+        static const wl_registry_listener registry_listener = {
+            &WaylandLockState::on_global, &WaylandLockState::on_global_remove};
+        wl_registry_add_listener(registry_, &registry_listener, this);
     }
 
     ~WaylandLockState() override {
-        if (keyboard_) {
-            if (wl_keyboard_get_version(keyboard_) >= WL_KEYBOARD_RELEASE_SINCE_VERSION) {
-                wl_keyboard_release(keyboard_);
+        release_keyboard();
+        if (seat_) {
+            if (wl_seat_get_version(seat_) >= WL_SEAT_RELEASE_SINCE_VERSION) {
+                wl_seat_release(seat_);
             } else {
-                wl_keyboard_destroy(keyboard_);
+                wl_seat_destroy(seat_);
             }
+        }
+        if (registry_) {
+            wl_registry_destroy(registry_);
         }
         if (keymap_) {
             xkb_keymap_unref(keymap_);
@@ -109,6 +115,52 @@ public:
     std::optional<bool> caps_lock() const override { return caps_; }
 
 private:
+    static void on_global(void* data, wl_registry* registry, uint32_t name,
+                          const char* interface, uint32_t version) {
+        auto* self = static_cast<WaylandLockState*>(data);
+        if (self->seat_ || std::strcmp(interface, wl_seat_interface.name) != 0) {
+            return;  // the first seat is the one Qt uses too
+        }
+        self->seat_ = static_cast<wl_seat*>(
+            wl_registry_bind(registry, name, &wl_seat_interface, std::min<uint32_t>(version, 5)));
+        static const wl_seat_listener seat_listener = {&WaylandLockState::on_capabilities,
+                                                       &WaylandLockState::on_seat_name};
+        wl_seat_add_listener(self->seat_, &seat_listener, self);
+    }
+
+    static void on_global_remove(void*, wl_registry*, uint32_t) {}
+
+    static void on_capabilities(void* data, wl_seat* seat, uint32_t capabilities) {
+        auto* self = static_cast<WaylandLockState*>(data);
+        const bool has_keyboard = (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) != 0;
+        if (has_keyboard && !self->keyboard_) {
+            self->keyboard_ = wl_seat_get_keyboard(seat);
+            static const wl_keyboard_listener listener = {
+                &WaylandLockState::on_keymap,    &WaylandLockState::on_enter,
+                &WaylandLockState::on_leave,     &WaylandLockState::on_key,
+                &WaylandLockState::on_modifiers, &WaylandLockState::on_repeat_info,
+            };
+            wl_keyboard_add_listener(self->keyboard_, &listener, self);
+        } else if (!has_keyboard && self->keyboard_) {
+            self->release_keyboard();
+            self->caps_.reset();  // no keyboard, no state
+        }
+    }
+
+    static void on_seat_name(void*, wl_seat*, const char*) {}
+
+    void release_keyboard() {
+        if (!keyboard_) {
+            return;
+        }
+        if (wl_keyboard_get_version(keyboard_) >= WL_KEYBOARD_RELEASE_SINCE_VERSION) {
+            wl_keyboard_release(keyboard_);
+        } else {
+            wl_keyboard_destroy(keyboard_);
+        }
+        keyboard_ = nullptr;
+    }
+
     static void on_keymap(void* data, wl_keyboard*, uint32_t format, int32_t fd, uint32_t size) {
         auto* self = static_cast<WaylandLockState*>(data);
         if (format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 && self->context_) {
@@ -150,6 +202,8 @@ private:
 
     xkb_context* context_ = nullptr;
     xkb_keymap* keymap_ = nullptr;
+    wl_registry* registry_ = nullptr;
+    wl_seat* seat_ = nullptr;
     wl_keyboard* keyboard_ = nullptr;
     std::optional<std::uint32_t> caps_index_;
     std::optional<bool> caps_;
@@ -169,8 +223,8 @@ std::unique_ptr<HostLockState> HostLockState::create(QObject* parent) {
 #endif
 #if defined(BEEBIUM_HAS_WAYLAND_LOCKS)
     if (auto* wayland = qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>()) {
-        if (wl_seat* seat = wayland->seat()) {
-            return std::make_unique<WaylandLockState>(seat, parent);
+        if (wl_display* display = wayland->display()) {
+            return std::make_unique<WaylandLockState>(display, parent);
         }
     }
 #endif
