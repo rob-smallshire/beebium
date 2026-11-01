@@ -235,7 +235,10 @@ ordinary distribution package:
 - **Recommends, not Depends, the servers:** the client finds them itself (its
   settings, `PATH`, `/opt/beebium/bin`), and says what to do when it finds
   none. It also recommends `avahi-daemon` and `libavahi-client3`, which
-  discovery loads at run time.
+  discovery loads at run time, and `qt6-gtk-platformtheme`: the client sets
+  no style, palette or font of its own and takes them from Qt's platform
+  theme, and Raspberry Pi OS on labwc ships none for Qt 6, so without it the
+  client is Fusion with a light palette whatever the desktop's GTK theme.
 - **No maintainer scripts:** the desktop, MIME and icon caches are refreshed
   by the distribution's dpkg triggers.
 

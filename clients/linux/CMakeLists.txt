@@ -386,7 +386,12 @@ set(CPACK_DEBIAN_PACKAGE_SECTION "games")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rob-smallshire/beebium")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "qt6-wayland, libvulkan1")
-set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "beebium-server, avahi-daemon, libavahi-client3")
+# The client sets no style, palette or font of its own: it takes them from
+# Qt's platform theme. Raspberry Pi OS trixie on labwc ships no Qt 6 platform
+# theme, so without the GTK one the client falls to Qt's generic theme, Fusion
+# with a light palette, whatever the desktop's GTK theme. It runs without it.
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS
+    "beebium-server, avahi-daemon, libavahi-client3, qt6-gtk-platformtheme")
 set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
 # Debug information stays with the build, not the package.
 set(CPACK_STRIP_FILES ON)
