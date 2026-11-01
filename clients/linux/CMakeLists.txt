@@ -220,9 +220,11 @@ add_library(beebium_linux_app STATIC
     src/app/GraphicsApi.cpp
     src/app/HomeWindow.cpp
     src/app/HostLockState.cpp
+    src/app/ImmersiveExit.cpp
     src/app/KeyboardInput.cpp
     src/app/MachineSession.cpp
     src/app/MainWindow.cpp
+    src/app/Presentation.cpp
     src/app/PresetsPage.cpp
     src/app/RunningMachinesPage.cpp
     src/app/SavedMachines.cpp
