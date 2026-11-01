@@ -25,10 +25,11 @@
 #include "video.grpc.pb.h"
 #include "debugger.grpc.pb.h"
 
+#include "WaitUntil.hpp"
+
 #include <grpcpp/grpcpp.h>
 
 #include <QCoreApplication>
-#include <QElapsedTimer>
 #include <QString>
 
 #include <atomic>
@@ -231,20 +232,6 @@ inline beebium::ServerStatusEvent event(beebium::ServerStatusType type,
     e.set_status(type);
     e.set_guest_ready(guest_ready);
     return e;
-}
-
-template <typename Predicate>
-bool wait_until(Predicate predicate, std::chrono::milliseconds timeout = 5000ms) {
-    QElapsedTimer timer;
-    timer.start();
-    while (!predicate()) {
-        if (timer.elapsed() > timeout.count()) {
-            return false;
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-        std::this_thread::sleep_for(2ms);
-    }
-    return true;
 }
 
 }  // namespace beebium::linux_client::testing
