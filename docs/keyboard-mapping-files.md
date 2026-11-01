@@ -129,6 +129,12 @@ native identifier in place of `code`:
 { "platform": "windows", "scanCode": 290, "bbc": { "key": "f0" } }
 ```
 
+The native identifiers: macOS `keyCode` is the virtual key code (kVK_*);
+linux `scancode` is the evdev key code (`KEY_*` from linux/input-event-codes.h),
+not Qt's `nativeScanCode`, which is evdev + 8 on xcb and Wayland; windows
+`scanCode` is the hardware scan code (with the extended flag in bit 8), not
+the virtual key.
+
 A client applies the entries for its own platform and preserves the others
 untouched when it writes the file. `platform` values: `"macOS"`, `"linux"`,
 `"windows"`; unknown values are preserved too. A client must not write a
@@ -137,9 +143,14 @@ file that does.
 
 ## 4. Resolution
 
-Given a host key event with its physical `code` and current host modifiers,
-a client resolves it in this order, and the first rule that yields a result
-wins:
+Given a host key event with its physical `code` and the host modifiers held
+at that moment, a client resolves it in this order, and the first rule that
+yields a result wins. "Held modifiers" means the modifier keys the client
+itself tracks as down when the event arrives, not counting the key of the
+event: a press of ShiftLeft is resolved with no Shift held, whatever the
+platform's event state says (X11 and Wayland differ on whether a modifier's
+own press already carries it). Clients derive the set from their held-key
+tracking, not from the event's modifier flags.
 
 1. **Physical entries for this `code`** (and this platform's 3.4 entries for
    this native key), considering only entries whose `with` set is a subset of
