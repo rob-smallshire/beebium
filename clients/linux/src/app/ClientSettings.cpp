@@ -21,6 +21,7 @@ namespace {
 
 const QString RECENT_CONNECTIONS_KEY = QStringLiteral("connections/recent");
 const QString RECENT_MACHINES_KEY = QStringLiteral("machines/recent");
+const QString RECENT_DISCS_KEY = QStringLiteral("discs/recent");
 
 QString cleaned(const QString& dirpath) {
     return QDir::cleanPath(dirpath);
@@ -80,6 +81,27 @@ void ClientSettings::forget_machine(const QString& machine_dirpath) {
 
 void ClientSettings::clear_machines() {
     settings_->remove(RECENT_MACHINES_KEY);
+    settings_->sync();
+}
+
+QStringList ClientSettings::recent_discs() const {
+    return settings_->value(RECENT_DISCS_KEY).toStringList();
+}
+
+void ClientSettings::remember_disc(const QString& filepath) {
+    QStringList recents = recent_discs();
+    const QString path = cleaned(filepath);
+    recents.removeAll(path);
+    recents.prepend(path);
+    while (static_cast<std::size_t>(recents.size()) > RECENT_DISCS_CAP) {
+        recents.removeLast();
+    }
+    settings_->setValue(RECENT_DISCS_KEY, recents);
+    settings_->sync();
+}
+
+void ClientSettings::clear_discs() {
+    settings_->remove(RECENT_DISCS_KEY);
     settings_->sync();
 }
 

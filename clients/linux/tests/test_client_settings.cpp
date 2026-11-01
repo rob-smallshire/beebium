@@ -97,3 +97,24 @@ TEST_CASE("The recent saved machines are capped", "[settings][machines]") {
     CHECK(settings.recent_machines().front() ==
           QStringLiteral("/m/%1.beebium-machine").arg(ClientSettings::RECENT_MACHINES_CAP + 4));
 }
+
+TEST_CASE("Recent discs are kept newest first, one per path, ten at most",
+          "[settings][discs]") {
+    QTemporaryDir directory;
+    const QString filepath = directory.filePath(QStringLiteral("Beebium.conf"));
+    {
+        ClientSettings settings(filepath);
+        for (int i = 0; i < 12; ++i) {
+            settings.remember_disc(QStringLiteral("/d/%1.ssd").arg(i));
+        }
+        settings.remember_disc(QStringLiteral("/d/./5.ssd"));  // again, by another spelling
+    }
+    ClientSettings reopened(filepath);
+    const QStringList discs = reopened.recent_discs();
+    CHECK(static_cast<std::size_t>(discs.size()) == ClientSettings::RECENT_DISCS_CAP);
+    CHECK(discs.front() == QStringLiteral("/d/5.ssd"));
+    CHECK(discs.count(QStringLiteral("/d/5.ssd")) == 1);
+    CHECK(discs[1] == QStringLiteral("/d/11.ssd"));
+    reopened.clear_discs();
+    CHECK(reopened.recent_discs().isEmpty());
+}

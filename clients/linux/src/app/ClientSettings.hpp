@@ -30,6 +30,7 @@ class ClientSettings {
 public:
     static constexpr std::size_t RECENT_CONNECTIONS_CAP = 10;
     static constexpr std::size_t RECENT_MACHINES_CAP = 20;
+    static constexpr std::size_t RECENT_DISCS_CAP = 10;
 
     // The user's settings in the standard place.
     ClientSettings();
@@ -47,6 +48,13 @@ public:
     void remember_machine(const QString& machine_dirpath);
     void forget_machine(const QString& machine_dirpath);
     void clear_machines();
+
+    // Disc images inserted by the user here, most recent first, shared by
+    // every drive (client specification 9.2): only an insert the server
+    // accepted, never a disc a preset mounted. Paths are the identity.
+    QStringList recent_discs() const;
+    void remember_disc(const QString& filepath);
+    void clear_discs();
 
     // Where this host's servers are, when the search should not decide;
     // empty to search (docs/deployment.md).
