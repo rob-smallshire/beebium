@@ -120,6 +120,7 @@ private:
     ConnectionRecovery* recovery_;
     DisplayWidget* display_;
     ConnectionOverlay* overlay_;
+    QWidget* status_strip_ = nullptr;
     QLabel* description_label_ = nullptr;
     ClientSettings* settings_ = nullptr;
     QLabel* unsaved_label_ = nullptr;

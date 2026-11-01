@@ -29,6 +29,7 @@
 #include <QElapsedTimer>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QPushButton>
 #include <QTimer>
@@ -140,15 +141,22 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     connect(overlay_, &ConnectionOverlay::close_requested, this, &QWidget::close);
     // The title is the machine's name, exactly (5.7). Qt has no window
     // subtitle, so the description goes at the start of the status bar.
-    description_label_ = new QLabel(this);
-    statusBar()->addWidget(description_label_, 1);
+    // Everything the status bar shows is in one strip, which immersive mode
+    // can lift over the picture whole (6.4).
+    status_strip_ = new QWidget(this);
+    status_strip_->setObjectName(QStringLiteral("statusStrip"));
+    auto* strip_layout = new QHBoxLayout(status_strip_);
+    strip_layout->setContentsMargins(4, 0, 4, 0);
+    statusBar()->addWidget(status_strip_, 1);
+    description_label_ = new QLabel(status_strip_);
+    strip_layout->addWidget(description_label_, 1);
     // The unsaved-changes mark (5.3), beside rather than in the title, which
     // is exactly the machine's name (5.7).
     unsaved_label_ = new QLabel(tr("Unsaved changes"), this);
     unsaved_label_->setToolTip(tr("This machine has written to its discs since it was launched; "
                                   "save it to keep them."));
     unsaved_label_->hide();
-    statusBar()->addPermanentWidget(unsaved_label_);
+    strip_layout->addWidget(unsaved_label_);
     connect(session_, &MachineSession::unsaved_changes_changed, unsaved_label_,
             [this](bool unsaved) {
                 unsaved_label_->setVisible(unsaved && !session_->machine_saved());
@@ -164,7 +172,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     break_button->setEnabled(false);
     connect(break_button, &QToolButton::pressed, this, [this] { display_->keyboard().press_break(); });
     connect(break_button, &QToolButton::released, this, [this] { display_->keyboard().release_break(); });
-    statusBar()->addPermanentWidget(break_button);
+    strip_layout->addWidget(break_button);
 
     // Where keys go (7.1), and how to change it.
     auto* keys_label = new QLabel(this);
@@ -173,7 +181,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                               "While the display has the keys, every key the keyboard mapping "
                               "uses goes to the machine, Ctrl shortcuts included; F11, Alt with "
                               "a menu letter and the mouse still reach Beebium."));
-    statusBar()->addPermanentWidget(keys_label);
+    strip_layout->addWidget(keys_label);
     const auto show_keys = [keys_label, break_button, this](KeysGoTo destination) {
         keys_label->setText(destination == KeysGoTo::machine ? tr("Keys: machine")
                                                              : tr("Keys: Beebium"));
