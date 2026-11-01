@@ -176,11 +176,19 @@ TEST_CASE("A machine window shows the sidebar beside the picture, and Sound togg
           "[sidebar][window]") {
     LiveWindow live;
     CHECK(live.window.sidebar().isVisible());
-    CHECK(live.window.sidebar().mode() == SidebarMode::sound);
+    // Storage first, as the macOS client opens.
+    CHECK(live.window.sidebar().mode() == SidebarMode::storage);
+    QAction* storage = action_named(live.window, QStringLiteral("Storage"));
+    REQUIRE(storage);
+    CHECK(storage->shortcut() == QKeySequence(QStringLiteral("Ctrl+1")));
     QAction* sound = action_named(live.window, QStringLiteral("Sound"));
     REQUIRE(sound);
     CHECK(sound->shortcut() == QKeySequence(QStringLiteral("Ctrl+5")));
-    // Pressed with Sound showing, it hides the sidebar; again, it shows it.
+    // Pressed with another mode showing, it shows Sound; pressed with Sound
+    // showing, it hides the sidebar; again, it shows it.
+    sound->trigger();
+    CHECK(live.window.sidebar().isVisible());
+    CHECK(live.window.sidebar().mode() == SidebarMode::sound);
     sound->trigger();
     CHECK_FALSE(live.window.sidebar().isVisible());
     sound->trigger();

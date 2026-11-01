@@ -13,11 +13,18 @@
 // The floppy drives (client specification 9): the server's snapshot and
 // events, and inserts, ejects and blank discs with classified outcomes.
 
+#include "app/ClientSettings.hpp"
 #include "app/SessionDiscs.hpp"
+#include "app/StorageSidebar.hpp"
 
 #include "FakeBeebiumServer.hpp"
 
+#include <QAction>
 #include <QDir>
+#include <QFile>
+#include <QMenu>
+#include <QPushButton>
+#include <QToolButton>
 #include <QFileInfo>
 #include <QTemporaryDir>
 
@@ -166,4 +173,180 @@ TEST_CASE("The blank discs are the server's templates; one is made with its exte
     REQUIRE(wait_until([&] { return outcome.has_value(); }));
     CHECK_FALSE(outcome->ok);
     CHECK(outcome->kind == beebium::CREATE_DISC_ERROR_KIND_WRONG_EXTENSION);
+}
+
+// --- the Storage mode -----------------------------------------------------------------
+
+namespace {
+
+struct Shown {
+    Connected c;
+    QTemporaryDir directory;
+    ClientSettings settings{directory.filePath(QStringLiteral("Beebium.conf"))};
+    bool local = true;
+    StorageSidebar sidebar{c.discs, &settings, [this] { return local; }};
+    explicit Shown(bool controller = true) : c(controller) {
+        sidebar.show();
+        REQUIRE(wait_until([&] { return !sidebar.rows().empty() || !controller; }));
+    }
+    DriveRow* row(int number) { return sidebar.row(number); }
+    QString touch(const QString& name) {
+        const QString path = directory.filePath(name);
+        QFile file(path);
+        REQUIRE(file.open(QIODevice::WriteOnly));
+        return path;
+    }
+};
+
+}  // namespace
+
+TEST_CASE("Each drive has its row, offering Browse only for a local server",
+          "[storage][sidebar]") {
+    Shown s;
+    REQUIRE(s.sidebar.rows().size() == 2);
+    CHECK(s.row(0)->state_text() == QStringLiteral("Empty - Drop disc image here"));
+    CHECK(s.row(0)->browse_button()->isEnabled());
+    CHECK_FALSE(s.row(0)->eject_button()->isEnabled());
+    s.local = false;
+    s.row(0)->refresh();
+    CHECK(s.row(0)->state_text() == QStringLiteral("Empty - server is on another host"));
+    CHECK_FALSE(s.row(0)->browse_button()->isEnabled());
+    CHECK(s.row(0)->drop_refusal() == QStringLiteral("Server is on another host"));
+}
+
+TEST_CASE("A machine with no disc controller says so", "[storage][sidebar]") {
+    Shown s(false);
+    REQUIRE(wait_until([&] { return s.sidebar.status_text() == QStringLiteral("No Storage Devices"); }));
+    CHECK(s.sidebar.rows().empty());
+}
+
+TEST_CASE("A loaded drive shows the disc's name and offers Eject; a taken insert is recent",
+          "[storage][sidebar]") {
+    Shown s;
+    const QString path = s.touch(QStringLiteral("Elite.ssd"));
+    s.c.discs.insert(0, path);
+    REQUIRE(wait_until([&] { return s.row(0)->state_text() == QStringLiteral("Elite.ssd"); }));
+    CHECK(s.row(0)->eject_button()->isEnabled());
+    CHECK_FALSE(s.row(0)->browse_button()->isEnabled());
+    CHECK(s.row(0)->drop_refusal() == QStringLiteral("Eject disc first"));
+    REQUIRE(wait_until([&] { return !s.settings.recent_discs().isEmpty(); }));
+    CHECK(s.settings.recent_discs().front() == path);
+}
+
+TEST_CASE("A failed insert stays on its row by its kind, with the server's words",
+          "[storage][sidebar][errors]") {
+    Shown s;
+    {
+        std::lock_guard lock(s.c.server.disc.calls_mutex);
+        s.c.server.disc.fail_next_insert = std::make_pair(
+            beebium::DISC_ERROR_KIND_UNRECOGNISED, std::string("no handler recognised notes.txt"));
+    }
+    s.c.discs.insert(1, s.touch(QStringLiteral("notes.txt")));
+    REQUIRE(wait_until([&] { return s.row(1)->message().kind == DriveMessage::Kind::failure; }));
+    CHECK(s.row(1)->message().marker == QStringLiteral("Unrecognised format"));
+    CHECK(s.row(1)->message().detail == QStringLiteral("no handler recognised notes.txt"));
+    CHECK(s.row(1)->message().sentence.endsWith(QLatin1Char('.')));
+    // Not recent: the server did not take it.
+    CHECK(s.settings.recent_discs().isEmpty());
+    // A passing notice does not hide it; only clearing does.
+    s.row(1)->show_notice(QStringLiteral("Eject disc first"));
+    CHECK(s.row(1)->message().kind == DriveMessage::Kind::failure);
+    s.row(1)->clear_message();
+    CHECK(s.row(1)->message().kind == DriveMessage::Kind::none);
+}
+
+TEST_CASE("An unknown failure kind reads as an honest generic", "[storage][errors]") {
+    CHECK(disc_error_marker(beebium::DISC_ERROR_KIND_UNSPECIFIED).isEmpty());
+    CHECK(disc_error_marker(99).isEmpty());
+    CHECK(disc_error_marker(beebium::DISC_ERROR_KIND_CANNOT_OPEN) == QStringLiteral("Cannot open"));
+    CHECK(create_disc_error_marker(beebium::CREATE_DISC_ERROR_KIND_WRONG_EXTENSION) ==
+          QStringLiteral("Wrong extension"));
+    CHECK(create_disc_error_sentence(0) == QStringLiteral("The disc image could not be created."));
+}
+
+TEST_CASE("A notice times out", "[storage][errors]") {
+    Shown s;
+    s.row(0)->show_notice(QStringLiteral("Drop a single disc image"));
+    CHECK(s.row(0)->message().kind == DriveMessage::Kind::notice);
+    REQUIRE(wait_until([&] { return s.row(0)->message().kind == DriveMessage::Kind::none; },
+                       std::chrono::milliseconds(DriveRow::NOTICE_MS + 2000)));
+}
+
+TEST_CASE("A busy eject offers Force Eject after two seconds, and Cancel throughout",
+          "[storage][sidebar][eject]") {
+    Shown s;
+    s.c.discs.insert(0, s.touch(QStringLiteral("a.ssd")));
+    REQUIRE(wait_until([&] { return s.row(0)->eject_button()->isEnabled(); }));
+    {
+        std::lock_guard lock(s.c.server.disc.calls_mutex);
+        s.c.server.disc.drive_busy = true;
+    }
+    s.row(0)->eject_button()->click();
+    REQUIRE(wait_until([&] { return s.row(0)->state_text() == QStringLiteral("Ejecting..."); }));
+    CHECK(s.row(0)->cancel_button()->isVisibleTo(s.row(0)));
+    CHECK_FALSE(s.row(0)->force_button()->isVisibleTo(s.row(0)));
+    REQUIRE(wait_until([&] { return s.row(0)->eject_stalled(); }, std::chrono::milliseconds(4000)));
+    CHECK(s.row(0)->state_text() == QStringLiteral("Ejecting - drive busy"));
+    CHECK(s.row(0)->force_button()->isVisibleTo(s.row(0)));
+    s.row(0)->force_button()->click();
+    REQUIRE(wait_until([&] { return s.row(0)->state_text() == QStringLiteral("Empty - Drop disc image here"); }));
+}
+
+TEST_CASE("A drop is refused for a remote server, then an occupied drive, then many files",
+          "[storage][sidebar][drop]") {
+    Shown s;
+    const QString one = s.touch(QStringLiteral("one.ssd"));
+    const QString two = s.touch(QStringLiteral("two.ssd"));
+    s.row(0)->drop_files({one, two});
+    CHECK(s.row(0)->message().marker == QStringLiteral("Drop a single disc image"));
+    s.row(0)->clear_message();
+    s.row(0)->drop_files({one});
+    REQUIRE(wait_until([&] { return s.row(0)->state_text() == QStringLiteral("one.ssd"); }));
+    s.row(0)->drop_files({two});
+    CHECK(s.row(0)->message().marker == QStringLiteral("Eject disc first"));
+    s.local = false;
+    s.row(1)->drop_files({two});
+    CHECK(s.row(1)->message().marker == QStringLiteral("Server is on another host"));
+}
+
+TEST_CASE("Recent discs are labelled apart, and a missing one cannot be chosen",
+          "[storage][sidebar][recent]") {
+    CHECK(recent_disc_labels({QStringLiteral("/a/Games/Elite.ssd"), QStringLiteral("/b/Work/Elite.ssd"),
+                              QStringLiteral("/a/Repton.ssd")}) ==
+          QStringList{QStringLiteral("Elite.ssd (Games)"), QStringLiteral("Elite.ssd (Work)"),
+                      QStringLiteral("Repton.ssd")});
+    Shown s;
+    const QString present = s.touch(QStringLiteral("Here.ssd"));
+    s.settings.remember_disc(s.directory.filePath(QStringLiteral("Gone.ssd")));
+    s.settings.remember_disc(present);
+    Q_EMIT s.row(0)->browse_menu()->aboutToShow();
+    QMenu* recent = nullptr;
+    for (QAction* action : s.row(0)->browse_menu()->actions()) {
+        if (action->menu() && action->text() == QStringLiteral("Recent")) {
+            recent = action->menu();
+        }
+    }
+    REQUIRE(recent);
+    QStringList enabled;
+    QStringList disabled;
+    for (QAction* action : recent->actions()) {
+        if (!action->isSeparator()) {
+            (action->isEnabled() ? enabled : disabled) << action->text();
+        }
+    }
+    CHECK(enabled.contains(QStringLiteral("Here.ssd")));
+    CHECK(enabled.contains(QStringLiteral("Clear Recent Discs")));
+    CHECK(disabled == QStringList{QStringLiteral("Gone.ssd")});
+}
+
+TEST_CASE("A blank disc is made, then inserted, then recent", "[storage][sidebar][blank]") {
+    Shown s;
+    REQUIRE(wait_until([&] { return s.c.discs.blank_discs().size() == 2; }));
+    // As New Blank Disc does once its file dialog has a name.
+    s.row(1)->setProperty("pendingBlankDrive", 1);
+    s.c.discs.create_disc(QStringLiteral("Acorn DFS 80T DS 400K"),
+                          s.directory.filePath(QStringLiteral("Blank")));
+    REQUIRE(wait_until([&] { return s.row(1)->state_text() == QStringLiteral("Blank.dsd"); }));
+    REQUIRE(wait_until([&] { return !s.settings.recent_discs().isEmpty(); }));
+    CHECK(s.settings.recent_discs().front() == s.directory.filePath(QStringLiteral("Blank.dsd")));
 }

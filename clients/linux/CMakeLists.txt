@@ -266,6 +266,7 @@ add_library(beebium_linux_app STATIC
     src/app/SingleInstance.cpp
     src/app/SoundSidebar.cpp
     src/app/SpikeMetrics.cpp
+    src/app/StorageSidebar.cpp
     src/app/SystemPowerMonitor.cpp
 )
 target_include_directories(beebium_linux_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

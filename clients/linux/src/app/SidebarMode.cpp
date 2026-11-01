@@ -56,7 +56,7 @@ bool shows_server_state(SidebarMode mode) {
 }
 
 std::vector<SidebarMode> offered_sidebar_modes() {
-    return {SidebarMode::sound};
+    return {SidebarMode::storage, SidebarMode::sound};
 }
 
 StalePresentation stale_presentation(SidebarMode mode, ConnectionVerdict verdict) {

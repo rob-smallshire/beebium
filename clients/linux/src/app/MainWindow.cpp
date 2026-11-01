@@ -24,6 +24,7 @@
 #include "app/IndicatorStrip.hpp"
 #include "app/Sidebar.hpp"
 #include "app/SoundSidebar.hpp"
+#include "app/StorageSidebar.hpp"
 #include "app/MachineSession.hpp"
 
 #include <QAction>
@@ -73,11 +74,17 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     splitter_ = new QSplitter(Qt::Horizontal, this);
     splitter_->setChildrenCollapsible(false);
     sidebar_ = new Sidebar(splitter_);
+    sidebar_->add_mode(SidebarMode::storage,
+                       new StorageSidebar(session_->discs(), settings_,
+                                          [this] { return session_->server_shares_filesystem(); },
+                                          sidebar_));
     sidebar_->add_mode(SidebarMode::sound, new SoundSidebar(session_->audio(), sidebar_));
+    // Storage first, as the macOS client opens.
+    sidebar_->set_mode(SidebarMode::storage);
     if (settings_) {
         const auto mode = static_cast<SidebarMode>(
             settings_->store()
-                .value(QStringLiteral("view/sidebarMode"), static_cast<int>(SidebarMode::sound))
+                .value(QStringLiteral("view/sidebarMode"), static_cast<int>(SidebarMode::storage))
                 .toInt());
         sidebar_->set_mode(mode);
     }
