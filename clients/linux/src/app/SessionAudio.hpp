@@ -91,6 +91,9 @@ private:
     unsigned generation_ = 0;
     // BEEBIUM_AUDIO_TRACE=1: the ring's fill and counters each second.
     QTimer trace_;
+    std::shared_ptr<grpc::Channel> trace_channel_;
+    long long traced_ms_ = 0;
+    std::uint64_t traced_samples_ = 0;
     void trace();
 };
 

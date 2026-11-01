@@ -18,6 +18,10 @@
 #include "audio/PreRoll.hpp"
 #include "connection/AudioStream.hpp"
 
+#include "system.grpc.pb.h"
+
+#include <grpcpp/grpcpp.h>
+
 #include <QMetaObject>
 #include <QtGlobal>
 
@@ -37,22 +41,45 @@ SessionAudio::SessionAudio(QObject* parent)
 }
 
 void SessionAudio::trace() {
-    if (!ring_) {
+    if (!ring_ || !stream_) {
         return;
     }
     // Monotonic milliseconds, to turn the counts into rates.
-    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::steady_clock::now().time_since_epoch())
-                            .count();
-    std::fprintf(stderr, "beebium: sound trace at %lld ms: ", static_cast<long long>(now_ms));
+    const long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::steady_clock::now().time_since_epoch())
+                                 .count();
+    const std::uint64_t samples = stream_->samples_received();
+    const double rate = traced_ms_ > 0 && now_ms > traced_ms_
+                            ? static_cast<double>(samples - traced_samples_) * 1000.0 /
+                                  static_cast<double>(now_ms - traced_ms_)
+                            : 0.0;
+    traced_ms_ = now_ms;
+    traced_samples_ = samples;
+    // The server's own account of its speed, beside the rate it delivers:
+    // falling behind real time apart from producing the wrong rate. A short
+    // blocking call, made only while tracing.
+    double achieved = -1.0;
+    unsigned long long skipped = 0;
+    if (trace_channel_) {
+        auto stub = beebium::SystemService::NewStub(trace_channel_);
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::milliseconds(200));
+        beebium::PacingStats pacing;
+        if (stub->GetPacingStats(&context, {}, &pacing).ok()) {
+            achieved = pacing.achieved_speed_multiplier();
+            skipped = pacing.ticks_skipped();
+        }
+    }
     std::fprintf(stderr,
-                 "%zu frames held, %llu dropped on overflow, %llu "
-                 "before playback, %llu underruns, %d ms target, %llu chunks\n",
-                 ring_->available(), static_cast<unsigned long long>(ring_->dropped_frames()),
+                 "beebium: sound trace at %lld ms: %zu frames held, %llu dropped on overflow, "
+                 "%llu before playback, %llu underruns, %d ms target, %llu samples, %.0f "
+                 "samples/s, server speed %.4f, %llu ticks skipped\n",
+                 now_ms, ring_->available(),
+                 static_cast<unsigned long long>(ring_->dropped_frames()),
                  static_cast<unsigned long long>(ring_->discarded_before_playback()),
                  static_cast<unsigned long long>(ring_->underrun_events()),
                  renderer_ ? renderer_->latency_milliseconds() : 0,
-                 static_cast<unsigned long long>(stream_ ? stream_->chunks_received() : 0));
+                 static_cast<unsigned long long>(samples), rate, achieved, skipped);
 }
 
 SessionAudio::~SessionAudio() {
@@ -61,6 +88,8 @@ SessionAudio::~SessionAudio() {
 
 void SessionAudio::start(std::shared_ptr<grpc::Channel> channel) {
     stop();
+    trace_channel_ = channel;
+    traced_ms_ = 0;
     const unsigned generation = ++generation_;
     stream_ = std::make_unique<AudioStream>(
         std::move(channel),

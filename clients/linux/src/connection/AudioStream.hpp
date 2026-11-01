@@ -59,6 +59,7 @@ public:
     void stop() { reader_.stop(); }
 
     std::uint64_t chunks_received() const { return chunks_.load(); }
+    std::uint64_t samples_received() const { return samples_.load(); }
     std::uint64_t wire_dropped_samples() const { return wire_dropped_.load(); }
     std::uint64_t malformed_chunks() const { return malformed_.load(); }
 
@@ -76,6 +77,7 @@ private:
     WireDrops drops_;
     grpc::Status format_status_;
     std::atomic<std::uint64_t> chunks_{0};
+    std::atomic<std::uint64_t> samples_{0};
     std::atomic<std::uint64_t> wire_dropped_{0};
     std::atomic<std::uint64_t> malformed_{0};
     StreamReader<beebium::AudioChunk> reader_;

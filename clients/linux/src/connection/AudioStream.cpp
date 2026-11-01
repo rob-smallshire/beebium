@@ -68,6 +68,7 @@ void AudioStream::on_chunk(beebium::AudioChunk& chunk) {
         return;
     }
     chunks_.fetch_add(1);
+    samples_.fetch_add(count);
     drops_.chunk(chunk.sequence(), count);
     wire_dropped_.store(drops_.dropped());
     words_.resize(count * fields_);
