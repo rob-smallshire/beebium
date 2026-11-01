@@ -220,6 +220,8 @@ add_library(beebium_linux_app STATIC
     src/app/KeyboardInput.cpp
     src/app/MachineSession.cpp
     src/app/MainWindow.cpp
+    src/app/NewMachineDialog.cpp
+    src/app/SettingsDialog.cpp
     src/app/SingleInstance.cpp
     src/app/SpikeMetrics.cpp
     src/app/SystemPowerMonitor.cpp

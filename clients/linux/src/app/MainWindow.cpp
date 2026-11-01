@@ -81,6 +81,17 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
             });
     connect(session_, &MachineSession::connected_to_server, this,
             [] { std::fprintf(stderr, "beebium: connected\n"); });
+    connect(session_, &MachineSession::running_changed, this, [](bool running) {
+        std::fprintf(stderr, "beebium: machine %s\n", running ? "running" : "waiting for Run");
+    });
+    connect(session_, &MachineSession::run_finished, this, [this](const CallOutcome& outcome) {
+        if (!outcome.ok) {
+            ServerMessageDialog dialog(tr("Could Not Run"),
+                                       tr("The machine could not be started."), outcome.message,
+                                       this);
+            dialog.exec();
+        }
+    });
     connect(session_, &MachineSession::liveness_changed, this, [](Liveness liveness) {
         std::fprintf(stderr, "beebium: liveness %s\n", liveness_name(liveness));
     });
@@ -123,6 +134,12 @@ void MainWindow::build_menus() {
     // the machine first (DisplayWidget::event), so these shortcuts apply
     // when it does not; F11 is always the window's.
     QMenu* file = menuBar()->addMenu(tr("&File"));
+    QAction* new_action = file->addAction(tr("&New Machine..."));
+    new_action->setShortcut(QKeySequence::New);
+    connect(new_action, &QAction::triggered, this, &MainWindow::new_machine_requested);
+    QAction* open_action = file->addAction(tr("&Open Machine..."));
+    open_action->setShortcut(QKeySequence::Open);
+    connect(open_action, &QAction::triggered, this, &MainWindow::open_machine_requested);
     QAction* connect_action = file->addAction(tr("&Connect to Machine..."));
     connect_action->setShortcut(QKeySequence(tr("Ctrl+Shift+O")));
     connect(connect_action, &QAction::triggered, this, &MainWindow::connect_requested);
@@ -157,6 +174,19 @@ void MainWindow::build_menus() {
     connect(full_screen_action, &QAction::toggled, this, [this](bool full) {
         full ? showFullScreen() : showNormal();
     });
+
+    QMenu* machine = menuBar()->addMenu(tr("&Machine"));
+    QAction* run_action = machine->addAction(tr("&Run"));
+    run_action->setToolTip(tr("Start a machine that is waiting to run"));
+    run_action->setEnabled(false);
+    connect(run_action, &QAction::triggered, session_, &MachineSession::run);
+    connect(session_, &MachineSession::running_changed, run_action,
+            [run_action](bool running) { run_action->setEnabled(!running); });
+
+    QMenu* tools = menuBar()->addMenu(tr("&Tools"));
+    QAction* configure_action = tools->addAction(tr("&Configure Beebium..."));
+    configure_action->setMenuRole(QAction::PreferencesRole);
+    connect(configure_action, &QAction::triggered, this, &MainWindow::configure_requested);
 
     QMenu* help = menuBar()->addMenu(tr("&Help"));
     QAction* about_action = help->addAction(tr("&About Beebium"));

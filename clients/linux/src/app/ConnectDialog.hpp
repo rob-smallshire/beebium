@@ -42,6 +42,9 @@ public:
     // Whether a machine is already open in a window, to mark it so.
     using IsOpen = std::function<bool(const DiscoveredMachine&)>;
 
+    // What the user chose: a machine to connect to, or to start one instead.
+    enum class Choice { connect, new_machine, open_machine };
+
     ConnectDialog(DiscoveredMachines& machines, const std::vector<Endpoint>& recents,
                   IsOpen is_open, QWidget* parent = nullptr);
 
@@ -49,6 +52,7 @@ public:
     std::optional<Endpoint> endpoint() const;
     // The chosen machine's uuid, when it was picked from the list.
     QString machine_uuid() const;
+    Choice choice() const { return choice_; }
 
     // The typed address, for tests.
     QComboBox* address_box() const { return address_; }
@@ -66,6 +70,7 @@ private:
     QComboBox* address_;
     QPushButton* connect_;
     QString picked_uuid_;
+    Choice choice_ = Choice::connect;
 };
 
 }  // namespace beebium::linux_client

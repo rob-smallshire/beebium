@@ -49,4 +49,22 @@ void ClientSettings::remember_connection(const Endpoint& endpoint) {
     settings_->sync();
 }
 
+QString ClientSettings::servers_dirpath() const {
+    return settings_->value(QStringLiteral("servers/dirpath")).toString();
+}
+
+void ClientSettings::set_servers_dirpath(const QString& dirpath) {
+    settings_->setValue(QStringLiteral("servers/dirpath"), dirpath);
+    settings_->sync();
+}
+
+QString ClientSettings::rom_dirpath() const {
+    return settings_->value(QStringLiteral("servers/romDirpath")).toString();
+}
+
+void ClientSettings::set_rom_dirpath(const QString& dirpath) {
+    settings_->setValue(QStringLiteral("servers/romDirpath"), dirpath);
+    settings_->sync();
+}
+
 }  // namespace beebium::linux_client

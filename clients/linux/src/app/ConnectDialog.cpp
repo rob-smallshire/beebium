@@ -62,9 +62,20 @@ ConnectDialog::ConnectDialog(DiscoveredMachines& machines, const std::vector<End
     layout->addLayout(form);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
+    // Starting a machine of one's own is the other way in.
+    auto* new_machine = buttons->addButton(tr("&New Machine..."), QDialogButtonBox::ActionRole);
+    auto* open_machine = buttons->addButton(tr("&Open Machine..."), QDialogButtonBox::ActionRole);
     connect_ = buttons->addButton(tr("&Connect"), QDialogButtonBox::AcceptRole);
     connect_->setDefault(true);
     layout->addWidget(buttons);
+    connect(new_machine, &QPushButton::clicked, this, [this] {
+        choice_ = Choice::new_machine;
+        QDialog::accept();
+    });
+    connect(open_machine, &QPushButton::clicked, this, [this] {
+        choice_ = Choice::open_machine;
+        QDialog::accept();
+    });
 
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);

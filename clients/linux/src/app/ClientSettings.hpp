@@ -38,6 +38,15 @@ public:
     std::vector<Endpoint> recent_connections() const;
     void remember_connection(const Endpoint& endpoint);
 
+    // Where this host's servers are, when the search should not decide;
+    // empty to search (docs/deployment.md).
+    QString servers_dirpath() const;
+    void set_servers_dirpath(const QString& dirpath);
+    // A ROM directory for launched servers, overriding their own; empty for
+    // their own.
+    QString rom_dirpath() const;
+    void set_rom_dirpath(const QString& dirpath);
+
     QSettings& store() { return *settings_; }
 
 private:

@@ -52,6 +52,10 @@ Q_SIGNALS:
     void connect_requested();
     // File > Quit: the application closes every window.
     void quit_requested();
+    // File > New Machine, File > Open Machine, Tools > Configure Beebium.
+    void new_machine_requested();
+    void open_machine_requested();
+    void configure_requested();
 
 protected:
     void closeEvent(QCloseEvent* event) override;

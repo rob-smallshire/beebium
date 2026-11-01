@@ -65,13 +65,19 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption quit_option(
         QStringLiteral("quit-after"), QStringLiteral("Quit after <seconds>."),
         QStringLiteral("seconds"));
+    const QCommandLineOption new_machine_option(
+        QStringLiteral("new-machine"), QStringLiteral("Launch the preset <id> as a new machine."),
+        QStringLiteral("id"));
     const QCommandLineOption new_instance_option(
         QStringLiteral("new-instance"),
         QStringLiteral("Run a client of its own rather than hand over to a running one."));
-    parser.addOptions({connect_option, api_option, stats_option, quit_option, new_instance_option});
-    parser.addPositionalArgument(QStringLiteral("link"),
-                                 QStringLiteral("beebium://connect?host=H&port=P links to open."),
-                                 QStringLiteral("[link...]"));
+    parser.addOptions({connect_option, api_option, stats_option, quit_option, new_machine_option,
+                       new_instance_option});
+    parser.addPositionalArgument(
+        QStringLiteral("machine"),
+        QStringLiteral("Saved machines (a .beebium-machine directory or its document) to open, "
+                       "or beebium://connect?host=H&port=P links."),
+        QStringLiteral("[machine|link...]"));
     parser.process(application);
 
     const auto choice = choose_graphics_api(parser.value(api_option).toLower().toStdString(),
