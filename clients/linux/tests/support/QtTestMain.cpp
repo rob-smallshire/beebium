@@ -38,6 +38,10 @@ int main(int argc, char* argv[]) {
         qputenv("HOME", home.path().toLocal8Bit());
     }
     QStandardPaths::setTestModeEnabled(true);
+    // No sound from tests, wherever they run, unless asked for by hand.
+    if (qEnvironmentVariableIsEmpty("BEEBIUM_AUDIO_OUTPUT")) {
+        qputenv("BEEBIUM_AUDIO_OUTPUT", "none");
+    }
     QApplication application(argc, argv);
     return Catch::Session().run(argc, argv);
 }
