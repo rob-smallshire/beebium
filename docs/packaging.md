@@ -429,7 +429,8 @@ enterprise deployment (Intune/SCCM/Group Policy) is needed.
   smoke). It exposes `workflow_call`, so `release.yml` reuses it and attaches the
   ZIP to the draft.
 - `packaging/scoop/beebium-server.json` — the canonical Scoop manifest (bin shims
-  for the four servers, `checkver`/`autoupdate`; `url`/`hash` are placeholders
+  for every server in the ZIP, which the smoke job checks against the extracted
+  ZIP, `checkver`/`autoupdate`; `url`/`hash` are placeholders
   pinned at release time, like the Homebrew `sha256`).
 - `packaging/scoop/sync-bucket.sh <version> <bucket-checkout>` — downloads the
   published release `.zip` asset, computes its `sha256`, and writes the pinned

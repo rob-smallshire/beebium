@@ -5,7 +5,7 @@
 # and runs only on demand or as a reusable job in the release flow -- never on
 # push. The vcpkg NuGet binary cache makes reruns cheap after the first build.
 #
-# The result is beebium-server-<version>-windows-x64.zip: bin/ (the four servers
+# The result is beebium-server-<version>-windows-x64.zip: bin/ (every server
 # + ABI DLLs + extensions) and share/beebium (ROMs/presets), self-contained
 # except for the Visual C++ Redistributable.
 
@@ -127,11 +127,14 @@ jobs:
     needs: build
     runs-on: windows-2022
     steps:
-      # Only scripts/, for the extension-library check below; no sources and
-      # no build tree, so the runner stays a clean one.
+      # Only scripts/ (the extension-library check) and packaging/scoop/ (the
+      # manifest's bin list); no sources and no build tree, so the runner stays
+      # a clean one.
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts
+            packaging/scoop
           sparse-checkout-cone-mode: true
 
       - uses: actions/download-artifact@v8
@@ -158,6 +161,25 @@ jobs:
           $blank = @(& $exe --format tsv list-blank-discs | Select-Object -Skip 1 | Where-Object { $_ })
           if ($blank.Count -eq 0) { Write-Host "::error::list-blank-discs lists no templates from the ZIP (share\beebium\blank-discs) -- create-disc needs them"; exit 1 }
           Write-Host "Windows smoke OK: extracted ZIP runs, discovers all extensions, and ships $($presets.Count) preset(s) and $($blank.Count) blank disc template(s)"
+
+      # Scoop puts on PATH only the servers the manifest's "bin" array names, so
+      # it must name exactly the servers the ZIP ships: one missing leaves a
+      # machine off PATH, one extra breaks the install.
+      - name: Check the Scoop manifest shims every server in the ZIP
+        run: |
+          $manifest = Get-Content packaging\scoop\beebium-server.json -Raw | ConvertFrom-Json
+          $shimmed = @($manifest.bin | Sort-Object)
+          $shipped = @(Get-ChildItem extracted\bin\beebium-model-*.exe | ForEach-Object { "bin\$($_.Name)" } | Sort-Object)
+          if ($shipped.Count -eq 0) { Write-Host "::error::no bin\beebium-model-*.exe in the ZIP"; exit 1 }
+          $diff = @(Compare-Object -ReferenceObject $shipped -DifferenceObject $shimmed)
+          if ($diff.Count -ne 0) {
+            foreach ($d in $diff) {
+              if ($d.SideIndicator -eq '<=') { Write-Host "::error::the ZIP ships $($d.InputObject) but the Scoop manifest does not shim it" }
+              else { Write-Host "::error::the Scoop manifest shims $($d.InputObject) but the ZIP does not ship it" }
+            }
+            exit 1
+          }
+          Write-Host "Scoop manifest shims all $($shipped.Count) servers in the ZIP"
 
       # list-extensions above reads only the manifests, so it lists a plugin
       # whose DLL is missing. Every plugin's DLL must sit beside its manifest in
