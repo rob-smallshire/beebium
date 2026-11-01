@@ -28,6 +28,7 @@
 
 #include <QApplication>
 #include <QComboBox>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QMenu>
@@ -503,4 +504,28 @@ TEST_CASE("A saved machine on a server that shares this filesystem is remembered
     CHECK(client.settings().recent_machines().front() == QStringLiteral("/here/Elite.beebium-machine"));
     window->close();
     REQUIRE(wait_until([&] { return client.windows().empty(); }));
+}
+
+TEST_CASE("A saved machine whose directory has gone is forgotten after three passes",
+          "[home][saved]") {
+    QTemporaryDir directory;
+    ClientSettings settings(directory.filePath(QStringLiteral("Beebium.conf")));
+    const QString gone = directory.filePath(QStringLiteral("Gone.beebium-machine"));
+    // Present on disk but not describable (no servers, say): never forgotten.
+    const QString unreadable = directory.filePath(QStringLiteral("Unreadable.beebium-machine"));
+    REQUIRE(QDir().mkpath(unreadable));
+    settings.remember_machine(gone);
+    settings.remember_machine(unreadable);
+    SavedMachines machines(settings, [](const QString&, SavedMachines::Described done) {
+        done(std::nullopt);
+    });
+    machines.reload();
+    machines.reload();
+    CHECK(settings.recent_machines().size() == 2);
+    machines.reload();
+    CHECK(settings.recent_machines() == QStringList{unreadable});
+    for (int pass = 0; pass < 5; ++pass) {
+        machines.reload();
+    }
+    CHECK(settings.recent_machines() == QStringList{unreadable});
 }

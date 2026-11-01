@@ -16,6 +16,7 @@
 #include "servers/CoreCli.hpp"
 
 #include <QObject>
+#include <QHash>
 #include <QStringList>
 
 #include <functional>
@@ -28,13 +29,17 @@ class ClientSettings;
 
 // The saved machines the home window offers (client specification 5.3,
 // 13.4): the client's recent machine directories, each described by the
-// server's describe-machine, in recents order. A directory that no longer
-// describes is left out of the list but kept among the recents, since it
-// may only be unreachable for now.
+// server's describe-machine, in recents order. A directory that does not
+// describe is left out of the list but kept among the recents, since it may
+// only be unreadable for now; one that has gone from the disk for
+// FORGET_AFTER_PASSES passes in a row is forgotten, so the first-page rule
+// does not count it.
 class SavedMachines : public QObject {
     Q_OBJECT
 
 public:
+    static constexpr int FORGET_AFTER_PASSES = 3;
+
     using Described = std::function<void(const std::optional<MachineDescription>&)>;
     // Describe one machine directory, answering once, asynchronously or not.
     using Describe = std::function<void(const QString& machine_dirpath, Described done)>;
@@ -69,6 +74,8 @@ private:
     bool loading_ = false;
     bool reload_queued_ = false;
     int pass_ = 0;
+    // Per directory, the passes in a row it has been gone from the disk.
+    QHash<QString, int> gone_passes_;
 };
 
 }  // namespace beebium::linux_client

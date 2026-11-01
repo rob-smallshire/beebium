@@ -15,6 +15,7 @@
 #include "app/ClientSettings.hpp"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QPointer>
 
 #include <algorithm>
@@ -66,8 +67,17 @@ void SavedMachines::describe_next(std::size_t index, int pass) {
                   if (!guard || pass != pass_) {
                       return;
                   }
+                  const QString dirpath = pass_dirpaths_.at(static_cast<qsizetype>(index));
                   if (machine) {
                       pending_.push_back(*machine);
+                      gone_passes_.remove(dirpath);
+                  } else if (!QFileInfo::exists(dirpath)) {
+                      if (++gone_passes_[dirpath] >= FORGET_AFTER_PASSES) {
+                          gone_passes_.remove(dirpath);
+                          settings_.forget_machine(dirpath);
+                      }
+                  } else {
+                      gone_passes_.remove(dirpath);
                   }
                   describe_next(index + 1, pass);
               });
