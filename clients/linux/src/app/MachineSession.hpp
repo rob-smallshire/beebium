@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_APP_MACHINE_SESSION_HPP
 
 #include "app/SessionAudio.hpp"
+#include "app/SessionDiscs.hpp"
 #include "app/SessionIndicators.hpp"
 #include "connection/CallCanceller.hpp"
 #include "connection/FrameMailbox.hpp"
@@ -103,6 +104,8 @@ public:
     SessionAudio& audio() { return *audio_; }
     // The machine's LEDs (10).
     SessionIndicators& indicators() { return *indicators_; }
+    // The floppy drives (9).
+    SessionDiscs& discs() { return *discs_; }
 
     // Valid from keyboard_ready until disconnect.
     KeySender* key_sender() { return keys_.get(); }
@@ -190,6 +193,7 @@ private:
     std::unique_ptr<VideoStream> video_;
     SessionAudio* audio_;
     SessionIndicators* indicators_;
+    SessionDiscs* discs_;
     std::unique_ptr<KeySender> keys_;
     std::unique_ptr<RpcWorker> rpc_;
     BbcKeyTable key_table_;
