@@ -86,10 +86,22 @@ std::optional<MachineDescription> parse_machine_description(const QByteArray& js
         const auto text = [&row](const char* key) {
             return row.value(QString::fromLatin1(key)).toString();
         };
-        MachineDescription machine{text("machine_dirpath"), text("name"), text("description"),
-                                   text("uuid"), text("model"), text("preset"),
-                                   text("created"), text("last_used"),
-                                   text("thumbnail_filepath")};
+        MachineDescription machine;
+        machine.machine_dirpath = text("machine_dirpath");
+        machine.name = text("name");
+        machine.description = text("description");
+        machine.uuid = text("uuid");
+        machine.model = text("model");
+        machine.preset = text("preset");
+        machine.created = text("created");
+        machine.last_used = text("last_used");
+        machine.thumbnail_filepath = text("thumbnail_filepath");
+        // Present and null: running, by a process that cannot be named.
+        machine.locked = row.contains(QStringLiteral("locked_by_pid"));
+        if (row.value(QStringLiteral("locked_by_pid")).isDouble()) {
+            machine.locked_by_pid =
+                static_cast<qint64>(row.value(QStringLiteral("locked_by_pid")).toDouble());
+        }
         if (!machine.machine_dirpath.isEmpty() && !machine.uuid.isEmpty() &&
             !machine.model.isEmpty()) {
             return machine;

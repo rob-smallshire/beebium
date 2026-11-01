@@ -104,7 +104,22 @@ TEST_CASE("A machine description parses, and a non-machine does not", "[servers]
     REQUIRE(machine);
     CHECK(machine->name == "Elite");
     CHECK(machine->model == "model-b");
+    CHECK_FALSE(machine->running());
     CHECK_FALSE(parse_machine_description(R"({"error":"not a machine"})").has_value());
+}
+
+TEST_CASE("A machine whose lock a server holds is running", "[servers][machines]") {
+    const auto machine = parse_machine_description(
+        R"({"machine_dirpath":"/m/Elite.beebium-machine","name":"Elite","uuid":"u-1","model":"model-b","created":"2026-11-01T10:00:00Z","locked_by_pid":4242})");
+    REQUIRE(machine);
+    CHECK(machine->running());
+    CHECK(machine->locked_by_pid == 4242);
+
+    const auto unnamed = parse_machine_description(
+        R"({"machine_dirpath":"/m/Elite.beebium-machine","name":"Elite","uuid":"u-1","model":"model-b","created":"2026-11-01T10:00:00Z","locked_by_pid":null})");
+    REQUIRE(unnamed);
+    CHECK(unnamed->running());
+    CHECK_FALSE(unnamed->locked_by_pid.has_value());
 }
 
 TEST_CASE("Launch arguments block the machine until Run and report an ephemeral port",

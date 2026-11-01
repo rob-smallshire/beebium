@@ -79,6 +79,13 @@ struct MachineDescription {
     QString created;
     QString last_used;
     QString thumbnail_filepath;
+    // Whether a server holds the machine's lock, and its pid when the lock
+    // names one.
+    bool locked = false;
+    std::optional<qint64> locked_by_pid;
+
+    bool running() const { return locked; }
+    bool operator==(const MachineDescription&) const = default;
 };
 
 // Nullopt unless the output describes a machine (dirpath, uuid and model).
