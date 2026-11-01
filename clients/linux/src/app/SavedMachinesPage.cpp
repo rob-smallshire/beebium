@@ -13,12 +13,10 @@
 #include "app/SavedMachinesPage.hpp"
 
 #include "app/CardGrid.hpp"
+#include "app/FileManager.hpp"
 #include "app/SavedMachines.hpp"
 
-#include <QDBusConnection>
-#include <QDBusMessage>
 #include <QDateTime>
-#include <QDesktopServices>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -27,7 +25,6 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QStackedLayout>
-#include <QUrl>
 #include <QVBoxLayout>
 
 namespace beebium::linux_client {
@@ -180,24 +177,11 @@ void SavedMachinesPage::show_context_menu(const QPoint& position) {
     QMenu menu(this);
     menu.addAction(tr("&Open"), this, [this, dirpath] { Q_EMIT open_requested(dirpath); });
     menu.addAction(tr("Show in &File Manager"), this,
-                   [this, dirpath] { show_in_file_manager(dirpath); });
+                   [dirpath] { show_in_file_manager(dirpath); });
     menu.addSeparator();
     // Only a list entry: the machine on disk is untouched, so no question.
     menu.addAction(tr("&Remove from List"), this, [this, dirpath] { machines_.forget(dirpath); });
     menu.exec(grid_->viewport()->mapToGlobal(position));
-}
-
-void SavedMachinesPage::show_in_file_manager(const QString& machine_dirpath) {
-    // The freedesktop file manager interface selects the machine in its
-    // folder; without one, the folder is opened.
-    QDBusMessage call = QDBusMessage::createMethodCall(
-        QStringLiteral("org.freedesktop.FileManager1"), QStringLiteral("/org/freedesktop/FileManager1"),
-        QStringLiteral("org.freedesktop.FileManager1"), QStringLiteral("ShowItems"));
-    call << QStringList{QUrl::fromLocalFile(machine_dirpath).toString()} << QString();
-    const QDBusMessage reply = QDBusConnection::sessionBus().call(call, QDBus::Block, 2000);
-    if (reply.type() != QDBusMessage::ReplyMessage) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(machine_dirpath).absolutePath()));
-    }
 }
 
 }  // namespace beebium::linux_client

@@ -63,7 +63,6 @@ private:
     void update_buttons();
     void open_chosen();
     void show_context_menu(const QPoint& position);
-    void show_in_file_manager(const QString& machine_dirpath);
 
     SavedMachines& machines_;
     QStackedLayout* stack_;
