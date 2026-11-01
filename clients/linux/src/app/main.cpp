@@ -18,6 +18,7 @@
 #include "app/SpikeMetrics.hpp"
 
 #include <QApplication>
+#include <QIcon>
 #include <QCommandLineParser>
 #include <QDir>
 #include <QSurfaceFormat>
@@ -43,9 +44,12 @@ int main(int argc, char* argv[]) {
     QApplication::setApplicationName(QStringLiteral("Beebium"));
     QApplication::setApplicationVersion(QString::fromLatin1(
         client_version().data(), static_cast<qsizetype>(client_version().size())));
-    // The application ID: reverse DNS, as the macOS bundle identifier
-    // (com.beebium.Beebium). Wayland compositors match the desktop entry by it.
-    QApplication::setDesktopFileName(QStringLiteral("com.beebium.Beebium"));
+    // The application ID, the freedesktop one the package installs its
+    // desktop entry, icons and metainfo under; Wayland compositors match the
+    // desktop entry by it.
+    QApplication::setDesktopFileName(QStringLiteral("org.beebium.Beebium"));
+    // The installed icon, from the theme (the package puts it in hicolor).
+    QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("org.beebium.Beebium")));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Beebium BBC Micro emulator client"));
@@ -77,7 +81,8 @@ int main(int argc, char* argv[]) {
     parser.addPositionalArgument(
         QStringLiteral("machine"),
         QStringLiteral("Saved machines (a .beebium-machine directory or its document) to open, "
-                       "or beebium://connect?host=H&port=P links."),
+                       "presets (a .beebium-preset file) to launch, or "
+                       "beebium://connect?host=H&port=P links."),
         QStringLiteral("[machine|link...]"));
     parser.process(application);
 

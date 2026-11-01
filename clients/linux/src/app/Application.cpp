@@ -26,6 +26,8 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QJsonObject>
+#include <QJsonDocument>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QStandardPaths>
@@ -49,6 +51,10 @@ QStringList launch_requests(const QStringList& connect_values, const QStringList
     for (const QString& argument : positional) {
         if (parse_connect_link(QUrl(argument))) {
             requests << argument;
+        } else if (argument.endsWith(QLatin1String(".beebium-preset"), Qt::CaseInsensitive)) {
+            // A preset file, as the file manager opens one: launched as the
+            // presets page would launch it.
+            requests << QStringLiteral("--preset-file") << QDir(working_dirpath).absoluteFilePath(argument);
         } else {
             requests << QStringLiteral("--open") << QDir(working_dirpath).absoluteFilePath(argument);
         }
@@ -331,6 +337,40 @@ void Application::launch_preset_by_id(const QString& id, QWidget* parent) {
              });
 }
 
+void Application::launch_preset_file(const QString& filepath, QWidget* parent) {
+    const auto found = servers(parent);
+    if (!found) {
+        after_failed_request();
+        return;
+    }
+    // Which model, and so which server: the preset says (5.1).
+    begin_work();
+    QPointer<QWidget> guard(parent);
+    cli_.run(found->executable_filepath(QStringLiteral("model-b")),
+             {QStringLiteral("show-preset"), filepath},
+             [this, found, filepath, guard](const CliResult& result) {
+                 const QJsonObject preset = QJsonDocument::fromJson(result.standard_output).object();
+                 const QString model = preset.value(QStringLiteral("model")).toString();
+                 if (!result.ok() || model.isEmpty()) {
+                     ServerMessageDialog dialog(
+                         tr("Could Not Open"),
+                         tr("Beebium could not read a preset at %1.").arg(filepath),
+                         result.standard_error, guard);
+                     dialog.exec();
+                     after_failed_request();
+                     end_work();
+                     return;
+                 }
+                 PresetListing listing;
+                 listing.filepath = filepath;
+                 listing.model = model;
+                 listing.id = QFileInfo(filepath).completeBaseName();
+                 listing.name = preset.value(QStringLiteral("name")).toString(listing.id);
+                 launch_preset(*found, listing, guard);
+                 end_work();
+             });
+}
+
 void Application::browse_for_machine(QWidget* parent) {
     const QString dirpath = QFileDialog::getExistingDirectory(
         parent, tr("Open Machine"), QDir::homePath(), QFileDialog::ShowDirsOnly);
@@ -450,6 +490,9 @@ void Application::handle_arguments(const QStringList& arguments) {
             }
         } else if (argument == QLatin1String("--new-machine") && i + 1 < arguments.size()) {
             launch_preset_by_id(arguments.at(++i), nullptr);
+            requested = true;
+        } else if (argument == QLatin1String("--preset-file") && i + 1 < arguments.size()) {
+            launch_preset_file(arguments.at(++i), nullptr);
             requested = true;
         } else if (argument == QLatin1String("--open") && i + 1 < arguments.size()) {
             // A saved machine, as the file manager opens one; one that cannot

@@ -40,8 +40,9 @@ class SystemPowerMonitor;
 
 // The requests in a command line, normalised so that no option's value is
 // taken for a path: the --connect and --new-machine values, then each
-// positional argument as a connect link if it is one, else as --open with
-// its absolute path. What one client hands another.
+// positional argument as a connect link if it is one, as --preset-file for a
+// .beebium-preset, else as --open, each with its absolute path. What one
+// client hands another.
 QStringList launch_requests(const QStringList& connect_values, const QStringList& new_machine_ids,
                             const QStringList& positional, const QString& working_dirpath);
 
@@ -78,6 +79,8 @@ public:
     // Launch the preset with this id, as the presets page would (for the
     // command line and scripts).
     void launch_preset_by_id(const QString& id, QWidget* parent);
+    // Launch a preset file, as the file manager opens one.
+    void launch_preset_file(const QString& filepath, QWidget* parent);
     // Settings > Configure Beebium.
     void configure(QWidget* parent);
 

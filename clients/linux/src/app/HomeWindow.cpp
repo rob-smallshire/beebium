@@ -38,7 +38,7 @@ QString text(std::string_view view) {
 
 QIcon beebium_icon() {
     const QIcon application = QApplication::windowIcon();
-    return application.isNull() ? QIcon::fromTheme(QStringLiteral("com.beebium.Beebium"))
+    return application.isNull() ? QIcon::fromTheme(QStringLiteral("org.beebium.Beebium"))
                                 : application;
 }
 

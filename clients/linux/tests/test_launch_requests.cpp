@@ -36,3 +36,15 @@ TEST_CASE("Options and positional arguments become explicit requests", "[argumen
 TEST_CASE("No arguments are no requests", "[arguments]") {
     CHECK(launch_requests({}, {}, {}, QStringLiteral("/")).isEmpty());
 }
+
+TEST_CASE("A preset file is a request to launch it, a machine's document to open it",
+          "[arguments]") {
+    const QStringList requests = launch_requests(
+        {}, {},
+        {QStringLiteral("Mine.beebium-preset"), QStringLiteral("Elite.beebium-machine/Elite.beebium-machine")},
+        QStringLiteral("/home/u"));
+    CHECK(requests == QStringList{QStringLiteral("--preset-file"),
+                                  QStringLiteral("/home/u/Mine.beebium-preset"),
+                                  QStringLiteral("--open"),
+                                  QStringLiteral("/home/u/Elite.beebium-machine/Elite.beebium-machine")});
+}

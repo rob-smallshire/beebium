@@ -62,6 +62,7 @@ struct FakeServers {
             "echo \"$*\" >> '" + log_filepath.toUtf8() + "'\n"
             "case \"$1\" in\n"
             "  start) echo 'Listening on port " + QByteArray::number(grpc_port) + "'; exec sleep 30;;\n"
+            "  show-preset) printf '{\"model\":\"model-b\",\"name\":\"From a File\"}\\n';;\n"
             "  describe-machine) printf '{\"machine_dirpath\":\"%s\",\"name\":\"Elite\","
             "\"uuid\":\"u-1\",\"model\":\"model-b\",\"created\":\"2026-11-01T10:00:00Z\"}\\n' \"$2\";;\n"
             "  *) echo '{\"id\":\"model-b\",\"name\":\"Model B\",\"source\":\"system\","
@@ -528,4 +529,28 @@ TEST_CASE("A saved machine whose directory has gone is forgotten after three pas
         machines.reload();
     }
     CHECK(settings.recent_machines() == QStringList{unreadable});
+}
+
+TEST_CASE("Opening a preset file launches it as the presets page would", "[home][launch]") {
+    FakeServer server;
+    FakeServers servers(server.port);
+    const QString preset_filepath = servers.directory.filePath(QStringLiteral("Mine.beebium-preset"));
+    {
+        QFile preset(preset_filepath);
+        REQUIRE(preset.open(QIODevice::WriteOnly));
+    }
+    Application client(QRhiWidget::Api::OpenGL);
+    reset(client, servers.dirpath());
+    client.handle_arguments({QStringLiteral("--preset-file"), preset_filepath});
+    REQUIRE(wait_until([&] { return client.windows().size() == 1; }));
+    // That machine's window only (4.1).
+    CHECK(client.home_window() == nullptr);
+    MainWindow* window = client.windows().front();
+    REQUIRE(wait_until([&] { return window->session().connected(); }));
+    const QStringList calls = servers.calls();
+    CHECK(std::any_of(calls.begin(), calls.end(), [&](const QString& call) {
+        return call.startsWith(QStringLiteral("start --preset ") + preset_filepath);
+    }));
+    window->close();
+    REQUIRE(wait_until([&] { return client.windows().empty(); }, 15000ms));
 }
