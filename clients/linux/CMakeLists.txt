@@ -168,11 +168,13 @@ target_link_libraries(beebium_linux_display
         Qt6::GuiPrivate
         beebium_linux_connection
 )
-# Baked at build time: SPIR-V for Vulkan, GLSL for OpenGL ES 3 and desktop GL,
-# and the default HLSL and MSL, so nothing is compiled when the client runs.
+# Baked at build time: SPIR-V for Vulkan, GLSL ES 3.00 for OpenGL ES, GLSL
+# 1.40 and 1.50 for desktop GL 3.1 and 3.2+ (Mesa's desktop GL on the Pi's
+# V3D is 3.1), and the default HLSL and MSL, so nothing is compiled at run
+# time.
 qt_add_shaders(beebium_linux_display "display_shaders"
     PREFIX "/"
-    GLSL "300es,150"
+    GLSL "300es,140,150"
     FILES
         shaders/display.vert
         shaders/display.frag

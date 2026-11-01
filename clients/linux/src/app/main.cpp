@@ -16,6 +16,7 @@
 
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QSurfaceFormat>
 #include <QTimer>
 
 #include <cstdio>
@@ -31,6 +32,19 @@ int main(int argc, char* argv[]) {
         if (std::strcmp(argv[i], "--version") == 0) {
             std::puts(version_text().c_str());
             return 0;
+        }
+    }
+
+    // OpenGL means OpenGL ES (the design's fallback, and the Pi GPU's native
+    // API): Debian's Qt otherwise asks Mesa for desktop GL, a 3.1 subset on
+    // the V3D. The default format must be set before QApplication exists.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--graphics-api") == 0 &&
+            (std::strcmp(argv[i + 1], "opengl") == 0 || std::strcmp(argv[i + 1], "gles") == 0)) {
+            QSurfaceFormat format = QSurfaceFormat::defaultFormat();
+            format.setRenderableType(QSurfaceFormat::OpenGLES);
+            format.setVersion(3, 0);
+            QSurfaceFormat::setDefaultFormat(format);
         }
     }
 
