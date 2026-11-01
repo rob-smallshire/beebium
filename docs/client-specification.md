@@ -1417,12 +1417,13 @@ Profile: Core.
 Behaviour. A client may offer on-screen or auxiliary key controls (the macOS
 client provides a Touch Bar strip of BBC keys and LED status). An auxiliary key
 names a BBC key directly (it does not resolve a host scancode); it synthesises and
-forbids nothing. Any such control, and any keyboard-view presentation of the active
-mapping, shows the mapping's action labels where it carries them (7.4, #234). The mandatory requirement it embodies (rule R10) is that every
-input path - physical keyboard, on-screen, scripting - routes through one held-key
-set and one send queue, keyed by an identity broad enough to tell them apart, so
-that release-all on focus loss covers every path, and a non-matrix key such as
-Break has its own release message.
+forbids nothing. Any such control, and any keyboard-view presentation of the
+active mapping, shows the mapping's action labels where it carries them (7.4,
+#234). The mandatory requirement it embodies (rule R10) is that every input path -
+physical keyboard, on-screen, scripting - routes through one held-key set and one
+send queue, keyed by an identity broad enough to tell them apart, so that
+release-all on focus loss covers every path, and a non-matrix key such as Break
+has its own release message.
 
 Conformance:
 
