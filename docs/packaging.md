@@ -486,7 +486,7 @@ by Homebrew from the formula; the Windows `.zip` is assembled by
 `packaging/windows/make-zip.ps1`, not CPack — see the [macOS](#the-macos-homebrew-formula)
 and [Windows](#windows) sections.)
 
-- **`.deb`** (`beebium-server_<version>_<arch>.deb`) — for Debian / Ubuntu /
+- **`.deb`** (`beebium-server_<version>_<arch>.deb`) - for Debian / Ubuntu /
   Raspberry Pi OS. Runtime dependencies are derived with `dpkg-shlibdeps`; since
   gRPC/protobuf are static, it depends only on `libc6 (>= 2.36)`, `libgcc-s1`,
   `libstdc++6`. The maintainer scripts create and remove the `/usr/bin` symlinks,
@@ -494,7 +494,7 @@ and [Windows](#windows) sections.)
   every server is linked after install and none is left after removal
   (`scripts/check-server-path-links.sh`).
 - **`.rpm`** (`beebium-server-<version>-1.<arch>.rpm`, arch `x86_64` /
-  `aarch64`) — the RPM sibling of the `.deb`, for the **Fedora / RHEL family**
+  `aarch64`) - the RPM sibling of the `.deb`, for the **Fedora / RHEL family**
   (and openSUSE): `sudo dnf install ./<file>.rpm`. It lays the same `/opt/beebium`
   system tree with the same `/usr/bin` symlinks, created and removed by `%post`/
   `%preun` scriptlets. RPM's `find-requires` derives the base-library
