@@ -110,19 +110,33 @@ final class KeyboardMapping: Identifiable {
     }
 
     /// Resolve a key input to a BBC key using this mapping
+    /// The outcome of resolving a host key event.
+    enum KeyResolution {
+        /// A BBC key to press.
+        case resolved(ResolvedKey)
+        /// The entry that won the physical match is currently switched off, so the
+        /// key is ignored and resolution stops: it does not fall through to
+        /// character mapping (docs/keyboard-mapping-files.md section 4). A client
+        /// may give feedback (a sound), which is platform latitude.
+        case switchedOff
+        /// Nothing mapped this key.
+        case unmapped
+    }
+
+    /// Resolve a key input to a BBC key using this mapping.
     /// - Parameters:
     ///   - input: The key input event
     ///   - cache: The BBC key cache for character/name lookups
     ///   - isSwitchedOff: Whether a BBC key is currently switched off by the user
-    ///     (a session override). When nil, the entry's own default decides. A
-    ///     switched-off entry is skipped as if absent, so resolution continues to
-    ///     the next entry or to character mapping (section 4).
-    /// - Returns: The resolved BBC key, or nil if not mapped
-    func resolve(
+    ///     (a session override). When nil, the entry's own default decides.
+    /// - Returns: The resolution outcome. A switched-off entry still takes part in
+    ///   the physical match; if it wins, the result is `.switchedOff` and
+    ///   resolution stops rather than falling through to character mapping.
+    func resolution(
         _ input: KeyInput,
         cache: BBCKeyCache,
         isSwitchedOff: ((String) -> Bool)? = nil
-    ) -> ResolvedKey? {
+    ) -> KeyResolution {
         // 1. Try physical keyCode mapping first
         if let candidates = keyMappings[input.keyCode] {
             // Filter input modifiers to relevant ones (exclude Caps Lock)
@@ -136,10 +150,6 @@ final class KeyboardMapping: Identifiable {
             var noRequirementMatch: BBCKeyRef?
 
             for candidate in candidates {
-                // A switched-off entry is skipped as if absent.
-                let off = isSwitchedOff?(candidate.bbcKeyName) ?? candidate.disabledByDefault
-                if off { continue }
-
                 let required = candidate.requireModifiers
 
                 if required.isEmpty {
@@ -163,10 +173,17 @@ final class KeyboardMapping: Identifiable {
             }
 
             // Select best match
-            let match = exactMatch ?? supersetMatch ?? noRequirementMatch
-
-            if let ref = match {
-                return resolveRef(ref, cache: cache)
+            if let ref = exactMatch ?? supersetMatch ?? noRequirementMatch {
+                // The winning entry decides. If it is currently switched off, the
+                // key is ignored and resolution stops - it is not re-resolved
+                // through character mapping, because the user switched it off to
+                // stop it doing anything.
+                let off = isSwitchedOff?(ref.bbcKeyName) ?? ref.disabledByDefault
+                if off { return .switchedOff }
+                if let resolved = resolveRef(ref, cache: cache) {
+                    return .resolved(resolved)
+                }
+                return .unmapped
             }
         }
 
@@ -175,15 +192,25 @@ final class KeyboardMapping: Identifiable {
         if characterMapping,
            let char = input.lookupCharacter,
            let entry = cache.lookup(character: char) {
-            return ResolvedKey(
+            return .resolved(ResolvedKey(
                 bbcKeyName: entry.name,
                 ikNumber: entry.ikNumber,
                 bbcShift: entry.needsShift,
                 bbcCtrl: false,
                 fromCharacterMapping: true
-            )
+            ))
         }
 
+        return .unmapped
+    }
+
+    /// Convenience returning the resolved BBC key, or nil when the key is ignored
+    /// (unmapped, or a winning entry currently switched off). Used where the
+    /// ignored reason does not matter, including the conformance tests.
+    func resolve(_ input: KeyInput, cache: BBCKeyCache) -> ResolvedKey? {
+        if case .resolved(let key) = resolution(input, cache: cache) {
+            return key
+        }
         return nil
     }
 

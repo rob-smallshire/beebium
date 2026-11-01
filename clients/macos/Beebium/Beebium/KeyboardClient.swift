@@ -245,37 +245,39 @@ final class KeyboardClient: ObservableObject, Disconnectable {
             return
         }
 
-        // Resolve the input using the active mapping
-        guard let resolved = mapping.resolve(input, cache: manager.bbcKeyCache) else {
+        // Resolve the input using the active mapping. The mapping makes the
+        // switched-off decision through the session predicate: a key the user has
+        // switched off is ignored (not re-resolved through character mapping), and
+        // we give the disabled-key sound as feedback.
+        switch mapping.resolution(input, cache: manager.bbcKeyCache,
+                                  isSwitchedOff: { manager.isKeyDisabled($0) }) {
+        case .resolved(let resolved):
+            print("[KBD][resolve] keyCode=\(input.keyCode)"
+                  + " -> bbcKeyName=\(resolved.bbcKeyName)"
+                  + " ik=\(formatIk(resolved.ikNumber))"
+                  + " bbcShift=\(resolved.bbcShift) bbcCtrl=\(resolved.bbcCtrl)"
+                  + " fromCharMap=\(resolved.fromCharacterMapping)"
+                  + " (mapping=\(mapping.name))")
+            press(
+                id: .host(input.keyCode),
+                ikNumber: resolved.ikNumber,
+                isBreak: resolved.isBreak,
+                fact: makeFact(for: resolved)
+            )
+
+        case .switchedOff:
+            signalDisabledKey()
+            print("[KBD][resolve] keyCode=\(input.keyCode) -> DISABLED"
+                  + " (mapping=\(mapping.name))")
+
+        case .unmapped:
             // Key not mapped - play system alert (unless it's a host modifier key)
             if !MacKeyCode.isHostModifierKey(input.keyCode) {
                 signalUnmappedKey()
             }
             print("[KBD][resolve] keyCode=\(input.keyCode) -> UNMAPPED"
                   + " (mapping=\(mapping.name))")
-            return
         }
-
-        print("[KBD][resolve] keyCode=\(input.keyCode)"
-              + " -> bbcKeyName=\(resolved.bbcKeyName)"
-              + " ik=\(formatIk(resolved.ikNumber))"
-              + " bbcShift=\(resolved.bbcShift) bbcCtrl=\(resolved.bbcCtrl)"
-              + " fromCharMap=\(resolved.fromCharacterMapping)"
-              + " (mapping=\(mapping.name))")
-
-        // Check if key is disabled
-        if manager.isKeyDisabled(resolved.bbcKeyName) {
-            signalDisabledKey()
-            print("[KBD][resolve] -> DISABLED")
-            return
-        }
-
-        press(
-            id: .host(input.keyCode),
-            ikNumber: resolved.ikNumber,
-            isBreak: resolved.isBreak,
-            fact: makeFact(for: resolved)
-        )
     }
 
     /// Handle a key up event
