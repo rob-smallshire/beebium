@@ -238,6 +238,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 
 ### Component Documentation (`docs/`)
 
+- `client-specification.md` - The normative client behavioural specification: what any Beebium client lets a user accomplish and how each capability behaves, derived from the macOS client (the first implementation, not the canon), with Core and optional conformance profiles, mandatory versus platform-latitude versus macOS-only marked, testable scenarios, and the proto-to-capability map; Linux and later clients are built against it
 - `clock-architecture.md` - Timing model and synchronisation
 - `disc-subsystem.md` - Disc controller and image formats
 - `sound-subsystem.md` - SN76489 and audio pipeline
@@ -266,6 +267,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 ### Design Discussions (`docs/discussion/`)
 
 - `debugger-capabilities.md` - Debugging features roadmap
+- `raspberry-pi-linux-client-discussion.md` and `linux-client-architecture.md` - The Linux / Raspberry Pi client: the three-contract approach (server capabilities, client specification, platform presentation) and the Qt 6 / Vulkan architecture note (non-normative)
 - `memory-interface-design.md` - Python debugger API
 
 ### Reference Material (`docs/manuals_text/`)
