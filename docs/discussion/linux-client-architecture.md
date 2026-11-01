@@ -268,12 +268,53 @@ graceful stop) is ported as a pure, unit-tested class.
   unpacking and pre-roll, reconnect policy, mapping-file parsing), runnable
   headless with `QT_QPA_PLATFORM=offscreen` where Qt types are involved.
 
+### Continuous integration (proposal for phase 1)
+
+No workflow builds `clients/linux` yet. Proposed: one job in `ci.yml`, two
+lanes, each configuring `clients/linux` on its own (not the root project),
+building it and running its ctest. The client needs Qt 6.7 or later
+(`QRhiWidget`), and that decides where each lane runs.
+
+| Lane | Runner | Dependencies |
+|------|--------|--------------|
+| arm64 | `[self-hosted, Linux, ARM64]` (the Pi 5) | Pre-provisioned on the host, as for `server-linux-arm64`: Qt 6.8.2 base, private and shader tools, gRPC 1.51, protobuf 3.21, OpenSSL, Vulkan headers |
+| x86-64 | `ubuntu-latest` running a `debian:trixie` container | `apt-get install` per run: `qt6-base-dev qt6-base-private-dev qt6-shadertools-dev libgrpc++-dev protobuf-compiler-grpc libprotobuf-dev libssl-dev cmake ninja-build g++ pkg-config libvulkan-dev libgl-dev` |
+
+Points behind the proposal:
+
+- **Not plain `ubuntu-latest` apt.** Ubuntu 24.04 ships Qt 6.4, too old for
+  `QRhiWidget`. A `debian:trixie` container gives the same Qt, gRPC and
+  protobuf as Raspberry Pi OS, so x86-64 also builds against the reference
+  distribution's versions. An Ubuntu runner image with Qt 6.7 or later
+  (26.04) would do as well, once GitHub offers one; installing Qt with
+  aqtinstall instead would test a Qt no distribution package ships.
+- **Light on the Pi.** The client has no heavy translation unit (the
+  servers' memory ceiling does not apply), and a clean build plus tests takes
+  a few minutes. `CMAKE_BUILD_PARALLEL_LEVEL: "2"`, as the server job uses,
+  keeps headroom anyway. The single runner serialises it with the server job.
+- **Headless only.** Every test runs under the offscreen platform and
+  in-process fake services; nothing in CI needs a GPU or a display. A later
+  stage could run `beebium-display-bench --key-test` (and a Vulkan frame
+  bench under `QT_QPA_PLATFORM=vkkhrdisplay`) against the server the arm64
+  server job builds; that is an end-to-end smoke, not part of this proposal.
+- **Triggered by what it builds from.** Path filters: `clients/linux/**`,
+  `src/service/proto/**`, `src/core/extension-api/proto/**`,
+  `src/service/include/beebium/service/ProtocolFingerprint.hpp`,
+  `src/host-identity/**`, `cmake/BeebiumGrpc.cmake`,
+  `cmake/BeebiumProto.cmake`, and the workflow itself.
+- **Warnings.** The client builds with `-Wall -Wextra` and has none; the job
+  should keep it that way (`-Werror` on the client's own targets only, not on
+  generated code).
+- **Retry configure** as the server jobs do: Catch2 comes from FetchContent.
+
 
 ## 7. Packaging
 
 - Raspberry Pi OS: a `.deb` for trixie arm64, dynamically linked against the
   distribution's Qt and gRPC (Qt is not something to bundle into a distro
-  package), dependencies from `dpkg-shlibdeps`. It installs a desktop entry,
+  package), dependencies from `dpkg-shlibdeps`. It installs a desktop entry
+  (`com.beebium.Beebium.desktop`, the macOS bundle identifier's form, matching
+  the application's desktop file name; the executable is `beebium`),
   hicolor icons generated from the Shape of Beebium generator, an AppStream
   metainfo file, and shared-mime-info definitions for `.ssd`, `.dsd` and `.hfe`
   (no freedesktop types exist for them; glob plus, for `.hfe`, the

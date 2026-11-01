@@ -38,7 +38,9 @@ int main(int argc, char* argv[]) {
     QApplication::setApplicationName(QStringLiteral("Beebium"));
     QApplication::setApplicationVersion(QString::fromLatin1(
         client_version().data(), static_cast<qsizetype>(client_version().size())));
-    QApplication::setDesktopFileName(QStringLiteral("beebium"));
+    // The application ID: reverse DNS, as the macOS bundle identifier
+    // (com.beebium.Beebium). Wayland compositors match the desktop entry by it.
+    QApplication::setDesktopFileName(QStringLiteral("com.beebium.Beebium"));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Beebium BBC Micro emulator client"));
