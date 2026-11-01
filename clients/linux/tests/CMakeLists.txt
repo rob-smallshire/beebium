@@ -111,3 +111,7 @@ beebium_linux_add_test(test_caps_lock_sync QT
 if(XKBCOMMON_FOUND)
     target_link_libraries(test_caps_lock_sync PRIVATE PkgConfig::XKBCOMMON)
 endif()
+
+beebium_linux_add_test(test_graphics_api
+    SOURCES test_graphics_api.cpp
+    LIBRARIES beebium_linux_app)

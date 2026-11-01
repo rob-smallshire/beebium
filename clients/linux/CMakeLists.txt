@@ -185,6 +185,7 @@ qt_add_shaders(beebium_linux_display "display_shaders"
 add_library(beebium_linux_app STATIC
     src/app/ApplicationInfo.cpp
     src/app/DisplayWidget.cpp
+    src/app/GraphicsApi.cpp
     src/app/HostLockState.cpp
     src/app/KeyboardInput.cpp
     src/app/MachineSession.cpp

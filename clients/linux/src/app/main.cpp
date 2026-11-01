@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include "app/ApplicationInfo.hpp"
+#include "app/GraphicsApi.hpp"
 #include "app/MainWindow.hpp"
 #include "app/SpikeMetrics.hpp"
 
@@ -35,19 +36,6 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // OpenGL means OpenGL ES (the design's fallback, and the Pi GPU's native
-    // API): Debian's Qt otherwise asks Mesa for desktop GL, a 3.1 subset on
-    // the V3D. The default format must be set before QApplication exists.
-    for (int i = 1; i + 1 < argc; ++i) {
-        if (std::strcmp(argv[i], "--graphics-api") == 0 &&
-            (std::strcmp(argv[i + 1], "opengl") == 0 || std::strcmp(argv[i + 1], "gles") == 0)) {
-            QSurfaceFormat format = QSurfaceFormat::defaultFormat();
-            format.setRenderableType(QSurfaceFormat::OpenGLES);
-            format.setVersion(3, 0);
-            QSurfaceFormat::setDefaultFormat(format);
-        }
-    }
-
     QApplication application(argc, argv);
     QApplication::setApplicationName(QStringLiteral("Beebium"));
     QApplication::setApplicationVersion(QString::fromLatin1(
@@ -65,8 +53,9 @@ int main(int argc, char* argv[]) {
         QStringLiteral("host:port"));
     const QCommandLineOption api_option(
         QStringLiteral("graphics-api"),
-        QStringLiteral("Draw with <api>: vulkan (default) or opengl."), QStringLiteral("api"),
-        QStringLiteral("vulkan"));
+        QStringLiteral("Draw with <api>: vulkan or opengl (OpenGL ES). Default: Vulkan, "
+                       "but OpenGL ES on Wayland."),
+        QStringLiteral("api"));
     const QCommandLineOption stats_option(
         QStringLiteral("stats-interval"),
         QStringLiteral("Print frame pacing and CPU use every <seconds>."),
@@ -77,13 +66,25 @@ int main(int argc, char* argv[]) {
     parser.addOptions({connect_option, api_option, stats_option, quit_option});
     parser.process(application);
 
-    const QString api_name = parser.value(api_option).toLower();
-    QRhiWidget::Api api = QRhiWidget::Api::Vulkan;
-    if (api_name == QStringLiteral("opengl") || api_name == QStringLiteral("gles")) {
-        api = QRhiWidget::Api::OpenGL;
-    } else if (api_name != QStringLiteral("vulkan")) {
-        std::fprintf(stderr, "beebium: unknown graphics API '%s'\n", qPrintable(api_name));
+    const auto choice = choose_graphics_api(parser.value(api_option).toLower().toStdString(),
+                                            QGuiApplication::platformName().toStdString());
+    if (!choice) {
+        std::fprintf(stderr, "beebium: unknown graphics API '%s'\n",
+                     qPrintable(parser.value(api_option)));
         return 2;
+    }
+    std::fprintf(stderr, "beebium: graphics API %s, %s\n",
+                 std::string(graphics_api_name(choice->api)).c_str(), choice->reason.c_str());
+    QRhiWidget::Api api = QRhiWidget::Api::Vulkan;
+    if (choice->api == GraphicsApi::opengl_es) {
+        // OpenGL ES, the GPU's native API: Debian's Qt would otherwise ask Mesa
+        // for desktop GL, a 3.1 subset on the Pi's V3D. Set before any window
+        // exists, so before the first context.
+        QSurfaceFormat format = QSurfaceFormat::defaultFormat();
+        format.setRenderableType(QSurfaceFormat::OpenGLES);
+        format.setVersion(3, 0);
+        QSurfaceFormat::setDefaultFormat(format);
+        api = QRhiWidget::Api::OpenGL;
     }
 
     MainWindow window(api);
