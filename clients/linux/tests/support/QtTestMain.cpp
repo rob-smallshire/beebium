@@ -20,6 +20,7 @@
 
 #include <QApplication>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QtGlobal>
 
 #include <catch2/catch_session.hpp>
@@ -29,7 +30,13 @@ int main(int argc, char* argv[]) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
     }
     // Settings and other standard locations go to a test area, never the
-    // user's own configuration.
+    // user's own configuration; and to this process's own, since ctest runs
+    // each case as its own process, in parallel, and cases that set the
+    // client's settings must not see each other's.
+    QTemporaryDir home;
+    if (home.isValid()) {
+        qputenv("HOME", home.path().toLocal8Bit());
+    }
     QStandardPaths::setTestModeEnabled(true);
     QApplication application(argc, argv);
     return Catch::Session().run(argc, argv);
