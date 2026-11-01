@@ -1306,6 +1306,15 @@ and user mappings are editable, cloneable, importable and exportable. A client m
 offer a graphical key-grid editor or a list; the macOS reference client currently
 offers a sidebar list, not a grid.
 
+Where a client presents the active mapping, it shows each entry's action label when
+the mapping carries one, for the built-in mappings as much as for user mappings: a
+built-in is not treated as unlabelled. The built-in Default and Logical mappings
+label the BBC keys with no host namesake - Break, Copy, Shift Lock and Delete - so
+the user can see which host key reaches each; the game mappings label their in-game
+functions ("Fire", "Thrust"). How the labels are laid out - a reference list, notes
+on a grid, tooltips - is the client's choice, and whether a client offers a keyboard
+view at all is latitude (GitHub issue #234).
+
 What the macOS mapping files key on today, and the recommendation. The macOS files
 key the direct map on the host physical scancode, stored in a per-platform section
 (for example a macOS section carrying a key code) with explicit BBC SHIFT and CTRL
@@ -1348,8 +1357,12 @@ Conformance:
   UI Events code values, with per-platform sections only for keys lacking a
   neutral code and for round-tripping unknown sections. The macOS client does not
   yet conform (tracked as GitHub issue #231).
+- MANDATORY: where a client presents the active mapping to the user, it surfaces
+  that mapping's per-entry action labels where present, for built-in mappings as
+  well as user mappings; a built-in is not shown as unlabelled (GitHub issue #234).
 - LATITUDE: the editor (graphical, list or text), the built-in set, import and
-  export, disableable keys, per-session overrides.
+  export, disableable keys, per-session overrides; whether to offer a keyboard view
+  at all, and the form it takes (reference list, grid, tooltips).
 - MACOS-ONLY: the macOS section's key-code form (a non-conforming legacy to be
   migrated per #231); the sidebar list UI.
 
@@ -1357,7 +1370,9 @@ Scenarios: select a non-default mapping -> subsequent keys resolve per it. A
 mapping entry binding a physical key to Break triggers the Break RPCs. Import a
 mapping with a section for another platform -> it round-trips on export unchanged.
 A mapping authored on one platform using neutral codes -> it loads and works on
-another with no hand-editing.
+another with no hand-editing. Activate a game mapping -> the keyboard view lists its
+labelled bindings; activate Default or Logical -> the view still names the host keys
+for Break, Copy, Shift Lock and Delete.
 
 ### 7.5 Paste as typing
 
@@ -1402,7 +1417,8 @@ Profile: Core.
 Behaviour. A client may offer on-screen or auxiliary key controls (the macOS
 client provides a Touch Bar strip of BBC keys and LED status). An auxiliary key
 names a BBC key directly (it does not resolve a host scancode); it synthesises and
-forbids nothing. The mandatory requirement it embodies (rule R10) is that every
+forbids nothing. Any such control, and any keyboard-view presentation of the active
+mapping, shows the mapping's action labels where it carries them (7.4, #234). The mandatory requirement it embodies (rule R10) is that every
 input path - physical keyboard, on-screen, scripting - routes through one held-key
 set and one send queue, keyed by an identity broad enough to tell them apart, so
 that release-all on focus loss covers every path, and a non-matrix key such as

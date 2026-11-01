@@ -92,7 +92,8 @@
     {
       "code": "F11",
       "bbc": {
-        "key": "Copy"
+        "key": "Copy",
+        "action": "Copy"
       }
     },
     {
@@ -109,19 +110,22 @@
       ],
       "bbc": {
         "key": "Break",
-        "disabled": false
+        "disabled": false,
+        "action": "Break"
       }
     },
     {
       "code": "F13",
       "bbc": {
-        "key": "Shift Lock"
+        "key": "Shift Lock",
+        "action": "Shift Lock"
       }
     },
     {
       "code": "Backspace",
       "bbc": {
-        "key": "Delete"
+        "key": "Delete",
+        "action": "Delete"
       }
     },
     {

@@ -205,6 +205,12 @@ Break is on Alt+F12 (Option+F12 on macOS) in every built-in: F11 is the BBC
 Copy key in the Default mapping and is the desktop full-screen key under the
 KDE conventions the Linux client follows, so it is not Break anywhere.
 
+Default and Logical carry an `action` label (3.3) on the BBC keys that have no
+host namesake - Break, Copy, Shift Lock and Delete - so a client's keyboard view
+names the host key that reaches each even for these general mappings; the game
+mappings label their in-game functions. A client's keyboard view shows these
+labels for built-in mappings as well as user ones (client specification 7.4, #234).
+
 ## 6. Conformance
 
 - A client reads any version 2 file, applies the entries it can, preserves
