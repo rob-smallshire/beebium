@@ -573,12 +573,13 @@ void MainWindow::tap_named_key(const QString& name) {
         return;
     }
     const std::string key = name.toStdString();
-    if (!keyboard.send_named_key(key, true)) {
+    if (!keyboard.press_named_key("led", key)) {
         return;
     }
-    // Held long enough for the MOS's keyboard scan, as the macOS client does.
+    // Held long enough for the MOS's keyboard scan, as the macOS client does;
+    // a focus loss meanwhile has released it already (R10).
     QTimer::singleShot(TAP_HOLD_MS, this, [this, key] {
-        display_->keyboard().send_named_key(key, false);
+        display_->keyboard().release_named_key("led", key);
     });
 }
 

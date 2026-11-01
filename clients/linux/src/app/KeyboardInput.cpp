@@ -85,19 +85,31 @@ void KeyboardInput::set_mapping(MappingFile mapping) {
     sync_caps_lock();
 }
 
-bool KeyboardInput::send_named_key(std::string_view name, bool down) {
+bool KeyboardInput::press_named_key(std::string_view source, std::string_view name) {
     if (!send_) {
         return false;
     }
-    const auto ik = table_.ik_by_name(name);
-    if (!ik) {
-        return false;
+    ResolvedKey key;
+    if (name == "Break") {
+        key.role = KeyRole::break_key;
+    } else {
+        const auto ik = table_.ik_by_name(name);
+        if (!ik) {
+            return false;
+        }
+        key.ik_number = *ik;
+        key.role = name == "Shift" ? KeyRole::shift : name == "Ctrl" ? KeyRole::ctrl : KeyRole::matrix;
     }
-    WireEvent event;
-    event.action = down ? WireAction::key_down : WireAction::key_up;
-    event.ik_number = *ik;
-    send_({event});
+    const std::string id = std::string(source) + ":" + std::string(name);
+    send_(held_.press(id, key));
     return true;
+}
+
+void KeyboardInput::release_named_key(std::string_view source, std::string_view name) {
+    const auto events = held_.release(std::string(source) + ":" + std::string(name));
+    if (send_ && !events.empty()) {
+        send_(events);
+    }
 }
 
 void KeyboardInput::sync_caps_lock() {

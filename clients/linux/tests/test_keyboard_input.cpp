@@ -219,15 +219,41 @@ TEST_CASE("Unsynchronised, the host Caps Lock key resolves like any other",
     CHECK(pressed == 0);
 }
 
-TEST_CASE("A BBC key goes down and up by its catalogue name", "[keyboard][qt]") {
+TEST_CASE("A BBC key goes down and up by its catalogue name, in the one held set",
+          "[keyboard][qt]") {
     Wire wire;
     KeyboardInput input;
-    CHECK_FALSE(input.send_named_key("Shift Lock", true));  // detached
+    CHECK_FALSE(input.press_named_key("led", "Shift Lock"));  // detached
     input.attach(sample_key_table(), wire.sender());
-    CHECK(input.send_named_key("Shift Lock", true));
-    CHECK(input.send_named_key("Shift Lock", false));
-    CHECK_FALSE(input.send_named_key("Nonesuch", true));
+    CHECK(input.press_named_key("led", "Shift Lock"));
+    CHECK(input.held_keys().is_held("led:Shift Lock"));
+    input.release_named_key("led", "Shift Lock");
+    CHECK_FALSE(input.press_named_key("led", "Nonesuch"));
     REQUIRE(wire.events.size() == 2);
     CHECK(wire.events[0] == WireEvent{WireAction::key_down, 0x50, false});
     CHECK(wire.events[1] == WireEvent{WireAction::key_up, 0x50, false});
+}
+
+TEST_CASE("Focus lost during a tap's hold releases the tapped key (R10)", "[keyboard][qt]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    REQUIRE(input.press_named_key("led", "Shift Lock"));
+    input.release_all();  // focus lost before the hold ends
+    REQUIRE(wire.events.size() == 2);
+    CHECK(wire.events[1] == WireEvent{WireAction::key_up, 0x50, false});
+    // The hold's own release, when it comes, sends nothing more (R8).
+    input.release_named_key("led", "Shift Lock");
+    CHECK(wire.events.size() == 2);
+}
+
+TEST_CASE("Break by name keeps its own release message", "[keyboard][qt]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    REQUIRE(input.press_named_key("led", "Break"));
+    input.release_named_key("led", "Break");
+    REQUIRE(wire.events.size() == 2);
+    CHECK(wire.events[0].action == WireAction::break_down);
+    CHECK(wire.events[1].action == WireAction::break_up);
 }

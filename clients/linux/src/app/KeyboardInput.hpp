@@ -75,10 +75,13 @@ public:
     void press_break();
     void release_break();
 
-    // A BBC key by its catalogue name ("Caps Lock"), down or up, as a control
-    // rather than a host key does it: an LED's related key (10). False when
-    // detached or the catalogue has no such key.
-    bool send_named_key(std::string_view name, bool down);
+    // A BBC key by its catalogue name ("Shift Lock", or "Break"), as a
+    // control rather than a host key presses it: an LED's related key (10).
+    // It goes in the one held-key set, keyed "<source>:<name>" so paths are
+    // told apart, so release_all() covers it (rule R10); Break keeps its own
+    // message. False when detached or the catalogue has no such key.
+    bool press_named_key(std::string_view source, std::string_view name);
+    void release_named_key(std::string_view source, std::string_view name);
 
     // Whether a key would go to the machine rather than to the application,
     // for deciding shortcut overrides. Not while detached; never F11 (full
