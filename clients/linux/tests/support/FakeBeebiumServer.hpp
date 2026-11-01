@@ -21,6 +21,8 @@
 #include "beebium/host_identity/HostFingerprint.hpp"
 
 #include "audio.grpc.pb.h"
+#include "disc.grpc.pb.h"
+#include "indicator.grpc.pb.h"
 #include "keyboard.grpc.pb.h"
 #include "system.grpc.pb.h"
 #include "video.grpc.pb.h"
@@ -34,6 +36,10 @@
 #include <QString>
 
 #include <atomic>
+#include <utility>
+#include <string>
+#include <vector>
+#include <cstdio>
 #include <cstring>
 #include <condition_variable>
 #include <deque>
@@ -264,6 +270,317 @@ inline beebium::AudioChunk audio_chunk(std::uint64_t sequence, std::uint32_t cou
     return chunk;
 }
 
+// Two floppy drives that behave as the server's do: an insert succeeds
+// unless told to fail, and announces itself on the event stream; a safe
+// eject asks, then completes unless the drive is held busy; an immediate
+// one force-ejects; CancelEject abandons a pending one. Blank discs are two
+// templates; CreateDisc writes an empty file with the template's extension.
+class ScriptedDiscService final : public beebium::DiscService::Service {
+public:
+    struct Drive {
+        beebium::DiscDriveState state = beebium::DISC_DRIVE_STATE_EMPTY;
+        std::string name;
+        std::string url;
+        bool motor = false;
+        bool write_protected = false;
+    };
+
+    std::mutex calls_mutex;
+    bool has_controller = true;
+    std::vector<Drive> drives{Drive{}, Drive{}};
+    // The next insert fails with this kind and message, when set.
+    std::optional<std::pair<beebium::DiscErrorKind, std::string>> fail_next_insert;
+    // A safe eject waits while this is set, as a drive whose motor runs.
+    bool drive_busy = false;
+    std::vector<std::string> inserted_urls;
+    int immediate_ejects = 0;
+    int cancels = 0;
+    std::atomic<int> subscriptions{0};
+
+    void push(std::optional<beebium::DiscEvent> event) {
+        {
+            std::lock_guard lock(mutex_);
+            script_.push_back(std::move(event));
+        }
+        changed_.notify_all();
+    }
+    // An event as the server would send it.
+    void announce(beebium::DiscEventType type, std::uint32_t drive) {
+        beebium::DiscEvent event;
+        event.set_type(type);
+        event.set_drive(drive);
+        {
+            std::lock_guard lock(calls_mutex);
+            if (drive < drives.size() && !drives[drive].name.empty()) {
+                event.mutable_disc()->set_name(drives[drive].name);
+                event.mutable_disc()->set_format("SSD");
+                event.mutable_disc()->set_sides(1);
+                event.set_disc_url(drives[drive].url);
+            }
+        }
+        push(event);
+    }
+
+    grpc::Status GetDriveStatus(grpc::ServerContext*, const beebium::GetDriveStatusRequest*,
+                                beebium::GetDriveStatusResponse* response) override {
+        std::lock_guard lock(calls_mutex);
+        response->set_has_disc_controller(has_controller);
+        if (!has_controller) {
+            return grpc::Status::OK;
+        }
+        response->set_controller_type("WD1770");
+        for (std::uint32_t i = 0; i < drives.size(); ++i) {
+            auto* status = response->add_drives();
+            status->set_drive(i);
+            status->set_state(drives[i].state);
+            status->set_disc_name(drives[i].name);
+            status->set_disc_url(drives[i].url);
+            status->set_motor_on(drives[i].motor);
+            status->set_write_protected(drives[i].write_protected);
+            if (!drives[i].name.empty()) {
+                status->mutable_disc()->set_name(drives[i].name);
+                status->mutable_disc()->set_format("SSD");
+                status->mutable_disc()->set_sides(1);
+                status->mutable_disc()->set_write_protected(drives[i].write_protected);
+            }
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status InsertDisc(grpc::ServerContext*, const beebium::InsertDiscRequest* request,
+                            beebium::InsertDiscResponse* response) override {
+        {
+            std::lock_guard lock(calls_mutex);
+            inserted_urls.push_back(request->url());
+            if (fail_next_insert) {
+                response->set_success(false);
+                response->set_kind(fail_next_insert->first);
+                response->set_error(fail_next_insert->second);
+                fail_next_insert.reset();
+                return grpc::Status::OK;
+            }
+            if (request->drive() >= drives.size()) {
+                response->set_kind(beebium::DISC_ERROR_KIND_INVALID_DRIVE);
+                response->set_error("invalid drive number");
+                return grpc::Status::OK;
+            }
+            Drive& drive = drives[request->drive()];
+            if (drive.state != beebium::DISC_DRIVE_STATE_EMPTY) {
+                response->set_kind(beebium::DISC_ERROR_KIND_DRIVE_OCCUPIED);
+                response->set_error("drive 0 already holds a disc");
+                return grpc::Status::OK;
+            }
+            const std::string& url = request->url();
+            drive.state = beebium::DISC_DRIVE_STATE_LOADED;
+            drive.url = url;
+            drive.name = url.substr(url.find_last_of('/') + 1);
+            response->set_success(true);
+            response->mutable_disc()->set_name(drive.name);
+            response->mutable_disc()->set_format("SSD");
+            response->mutable_disc()->set_sides(1);
+        }
+        announce(beebium::DISC_EVENT_INSERTED, request->drive());
+        return grpc::Status::OK;
+    }
+
+    grpc::Status EjectDisc(grpc::ServerContext*, const beebium::EjectDiscRequest* request,
+                           beebium::EjectDiscResponse* response) override {
+        bool complete = false;
+        {
+            std::lock_guard lock(calls_mutex);
+            if (request->drive() >= drives.size() ||
+                drives[request->drive()].state == beebium::DISC_DRIVE_STATE_EMPTY) {
+                response->set_error("drive empty");
+                return grpc::Status::OK;
+            }
+            response->set_accepted(true);
+            if (request->immediate()) {
+                ++immediate_ejects;
+            }
+            complete = request->immediate() || !drive_busy;
+            drives[request->drive()].state = beebium::DISC_DRIVE_STATE_EJECTING;
+        }
+        if (!request->immediate()) {
+            announce(beebium::DISC_EVENT_EJECT_REQUESTED, request->drive());
+        }
+        if (complete) {
+            {
+                std::lock_guard lock(calls_mutex);
+                drives[request->drive()] = Drive{};
+            }
+            announce(request->immediate() ? beebium::DISC_EVENT_FORCE_EJECTED
+                                          : beebium::DISC_EVENT_EJECTED,
+                     request->drive());
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status CancelEject(grpc::ServerContext*, const beebium::CancelEjectRequest* request,
+                             beebium::CancelEjectResponse* response) override {
+        {
+            std::lock_guard lock(calls_mutex);
+            ++cancels;
+            if (request->drive() >= drives.size() ||
+                drives[request->drive()].state != beebium::DISC_DRIVE_STATE_EJECTING) {
+                response->set_error("no eject pending");
+                return grpc::Status::OK;
+            }
+            drives[request->drive()].state = beebium::DISC_DRIVE_STATE_LOADED;
+            response->set_cancelled(true);
+        }
+        announce(beebium::DISC_EVENT_EJECT_CANCELLED, request->drive());
+        return grpc::Status::OK;
+    }
+
+    grpc::Status ListBlankDiscs(grpc::ServerContext*, const beebium::ListBlankDiscsRequest*,
+                                beebium::ListBlankDiscsResponse* response) override {
+        for (const char* filename : {"Acorn DFS 80T DS 400K.dsd", "Acorn DFS 80T SS 200K.ssd"}) {
+            auto* disc = response->add_discs();
+            const std::string name(filename);
+            disc->set_filename(name);
+            disc->set_label(name.substr(0, name.find_last_of('.')));
+            disc->set_kind("floppy");
+            disc->set_size_bytes(name.find(".dsd") != std::string::npos ? 409600 : 204800);
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status CreateDisc(grpc::ServerContext*, const beebium::CreateDiscRequest* request,
+                            beebium::CreateDiscResponse* response) override {
+        const std::string& label = request->label();
+        std::string extension;
+        if (label == "Acorn DFS 80T DS 400K") {
+            extension = ".dsd";
+        } else if (label == "Acorn DFS 80T SS 200K") {
+            extension = ".ssd";
+        } else {
+            response->set_kind(beebium::CREATE_DISC_ERROR_KIND_UNKNOWN_LABEL);
+            response->set_error("no blank disc is called " + label);
+            return grpc::Status::OK;
+        }
+        std::string path = request->destination_path();
+        const auto dot = path.find_last_of('.');
+        const auto slash = path.find_last_of('/');
+        if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) {
+            path += extension;
+        } else if (path.substr(dot) != extension) {
+            response->set_kind(beebium::CREATE_DISC_ERROR_KIND_WRONG_EXTENSION);
+            response->set_error("a blank disc from " + label + " must end in " + extension);
+            return grpc::Status::OK;
+        }
+        std::FILE* file = std::fopen(path.c_str(), "wb");
+        if (!file) {
+            response->set_kind(beebium::CREATE_DISC_ERROR_KIND_WRITE_FAILED);
+            response->set_error("cannot write " + path);
+            return grpc::Status::OK;
+        }
+        std::fclose(file);
+        response->set_success(true);
+        response->set_created_path(path);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status SubscribeDiscEvents(grpc::ServerContext* context,
+                                     const beebium::SubscribeDiscEventsRequest*,
+                                     grpc::ServerWriter<beebium::DiscEvent>* writer) override {
+        ++subscriptions;
+        for (;;) {
+            std::unique_lock lock(mutex_);
+            changed_.wait_for(lock, 20ms, [this] { return !script_.empty(); });
+            if (context->IsCancelled()) {
+                return grpc::Status::CANCELLED;
+            }
+            if (script_.empty()) {
+                continue;
+            }
+            auto next = std::move(script_.front());
+            script_.pop_front();
+            lock.unlock();
+            if (!next) {
+                return grpc::Status::OK;
+            }
+            writer->Write(*next);
+        }
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::deque<std::optional<beebium::DiscEvent>> script_;
+};
+
+// The server's LEDs: the two lock LEDs, then the drives', as it registers
+// them, and a scripted stream of brightness updates.
+class ScriptedIndicatorService final : public beebium::IndicatorService::Service {
+public:
+    std::atomic<int> subscriptions{0};
+    std::atomic<std::uint32_t> min_interval_ms{0};
+
+    void push(std::optional<std::vector<std::pair<std::string, std::uint32_t>>> values) {
+        {
+            std::lock_guard lock(mutex_);
+            script_.push_back(std::move(values));
+        }
+        changed_.notify_all();
+    }
+
+    grpc::Status ListIndicators(grpc::ServerContext*, const beebium::ListIndicatorsRequest*,
+                                beebium::ListIndicatorsResponse* response) override {
+        const auto add = [response](const char* name, const char* label, const char* color,
+                                    const char* shape, const char* related_key) {
+            auto* info = response->add_indicators();
+            info->set_name(name);
+            auto& metadata = *info->mutable_metadata();
+            metadata["label"] = label;
+            metadata["color"] = color;
+            metadata["shape"] = shape;
+            if (related_key) {
+                metadata["related_key"] = related_key;
+            }
+        };
+        add("caps-lock-led", "CAPS LOCK", "625nm", "domed", "Caps Lock");
+        add("shift-lock-led", "SHIFT LOCK", "625nm", "domed", "Shift Lock");
+        add("drive-0-led", "DRIVE 0", "568nm", "rectangular", nullptr);
+        add("drive-1-led", "DRIVE 1", "#00ff00", "rectangular", nullptr);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status Subscribe(grpc::ServerContext* context,
+                           const beebium::SubscribeIndicatorsRequest* request,
+                           grpc::ServerWriter<beebium::IndicatorUpdate>* writer) override {
+        ++subscriptions;
+        min_interval_ms = request->min_interval_ms();
+        std::uint64_t sequence = 0;
+        for (;;) {
+            std::unique_lock lock(mutex_);
+            changed_.wait_for(lock, 20ms, [this] { return !script_.empty(); });
+            if (context->IsCancelled()) {
+                return grpc::Status::CANCELLED;
+            }
+            if (script_.empty()) {
+                continue;
+            }
+            auto next = std::move(script_.front());
+            script_.pop_front();
+            lock.unlock();
+            if (!next) {
+                return grpc::Status::OK;
+            }
+            beebium::IndicatorUpdate update;
+            update.set_sequence(++sequence);
+            for (const auto& [name, value] : *next) {
+                (*update.mutable_values())[name] = value;
+            }
+            writer->Write(update);
+        }
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::deque<std::optional<std::vector<std::pair<std::string, std::uint32_t>>>> script_;
+};
+
 // A machine that starts blocked, as a launched server does, until Run.
 class BlockedDebuggerService final : public beebium::DebuggerControl::Service {
 public:
@@ -301,6 +618,8 @@ struct FakeServer {
     KeyTableService keyboard;
     BlockedDebuggerService debugger;
     ScriptedAudioService audio;
+    ScriptedDiscService disc;
+    ScriptedIndicatorService indicators;
     int port = 0;
     std::unique_ptr<grpc::Server> server;
 
@@ -312,6 +631,8 @@ struct FakeServer {
         builder.RegisterService(&keyboard);
         builder.RegisterService(&debugger);
         builder.RegisterService(&audio);
+        builder.RegisterService(&disc);
+        builder.RegisterService(&indicators);
         server = builder.BuildAndStart();
     }
     ~FakeServer() { server->Shutdown(std::chrono::system_clock::now() + 1s); }

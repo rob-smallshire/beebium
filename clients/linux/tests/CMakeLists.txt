@@ -132,6 +132,10 @@ beebium_linux_add_test(test_sidebar QT
     SOURCES test_sidebar.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_indicators QT
+    SOURCES test_indicators.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_graphics_api
     SOURCES test_graphics_api.cpp
     LIBRARIES beebium_linux_app)

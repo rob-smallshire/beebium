@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_APP_MACHINE_SESSION_HPP
 
 #include "app/SessionAudio.hpp"
+#include "app/SessionIndicators.hpp"
 #include "connection/CallCanceller.hpp"
 #include "connection/FrameMailbox.hpp"
 #include "connection/Handshake.hpp"
@@ -100,6 +101,8 @@ public:
     VideoStream* video_stream() { return video_.get(); }
     // The window's sound: this connection's audio and the mixer (8).
     SessionAudio& audio() { return *audio_; }
+    // The machine's LEDs (10).
+    SessionIndicators& indicators() { return *indicators_; }
 
     // Valid from keyboard_ready until disconnect.
     KeySender* key_sender() { return keys_.get(); }
@@ -186,6 +189,7 @@ private:
     std::unique_ptr<ServerStatusStream> status_;
     std::unique_ptr<VideoStream> video_;
     SessionAudio* audio_;
+    SessionIndicators* indicators_;
     std::unique_ptr<KeySender> keys_;
     std::unique_ptr<RpcWorker> rpc_;
     BbcKeyTable key_table_;

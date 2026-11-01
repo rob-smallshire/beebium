@@ -162,6 +162,7 @@ target_link_libraries(beebium_linux_audio PUBLIC beebium_linux_protos)
 
 add_library(beebium_linux_connection STATIC
     src/connection/AudioStream.cpp
+    src/connection/IndicatorStream.cpp
     src/connection/Compatibility.cpp
     src/connection/DecodedFrame.cpp
     src/connection/Endpoint.cpp
@@ -253,6 +254,7 @@ add_library(beebium_linux_app STATIC
     src/app/SavedMachines.cpp
     src/app/SavedMachinesPage.cpp
     src/app/SessionAudio.cpp
+    src/app/SessionIndicators.cpp
     src/app/SettingsDialog.cpp
     src/app/Sidebar.cpp
     src/app/SidebarMode.cpp
