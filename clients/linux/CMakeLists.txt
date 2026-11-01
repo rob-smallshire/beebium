@@ -318,6 +318,10 @@ target_link_libraries(beebium PRIVATE beebium_linux_app)
 
 # The renderer against a live server, offscreen: frame cost and CPU use on a
 # machine with no display. See src/bench/DisplayBench.cpp.
+# A server's pace without the GUI, for diagnosing sound that underruns.
+add_executable(beebium-pacing-probe tools/pacing-probe/main.cpp)
+target_link_libraries(beebium-pacing-probe PRIVATE beebium_linux_connection)
+
 qt_add_executable(beebium-display-bench src/bench/DisplayBench.cpp)
 target_link_libraries(beebium-display-bench PRIVATE beebium_linux_app)
 
