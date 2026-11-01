@@ -22,6 +22,8 @@
 
 #include "FakeBeebiumServer.hpp"
 
+#include <QAction>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <optional>
@@ -130,6 +132,28 @@ TEST_CASE("A reset during a paste is told, with what it discarded", "[typing][pa
     REQUIRE(wait_until([&] { return t.outcome.has_value(); }));
     CHECK(t.outcome->result == PasteOutcome::Result::cut_short_by_reset);
     CHECK(t.outcome->count == 10);
+}
+
+TEST_CASE("Paste is offered only while the machine is there to type into",
+          "[typing][paste][window]") {
+    FakeServer server;
+    MainWindow window(QRhiWidget::Api::OpenGL);
+    QAction* paste = nullptr;
+    for (QAction* action : window.findChildren<QAction*>()) {
+        if (action->text().remove(QLatin1Char('&')) == QStringLiteral("Paste")) {
+            paste = action;
+        }
+    }
+    REQUIRE(paste);
+    CHECK_FALSE(paste->isEnabled());
+    window.show();
+    window.connect_to(server.endpoint());
+    REQUIRE(wait_until([&] { return paste->isEnabled(); }));
+    server.system.push(event(beebium::SERVER_STATUS_SHUTTING_DOWN));
+    server.system.push(std::nullopt);
+    REQUIRE(wait_until([&] { return !paste->isEnabled(); }));
+    window.set_quitting(true);
+    window.close();
 }
 
 // --- the lock latches in a machine window -------------------------------------------

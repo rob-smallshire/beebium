@@ -378,6 +378,13 @@ void MainWindow::build_menus() {
     connect(paste_action, &QAction::triggered, this, &MainWindow::paste);
     connect(session_, &MachineSession::connected_to_server, paste_action,
             [paste_action] { paste_action->setEnabled(true); });
+    // Not live, nothing to type into: the action goes with the keyboard.
+    connect(recovery_, &ConnectionRecovery::verdict_changed, paste_action,
+            [paste_action](ConnectionVerdict verdict) {
+                if (!is_live(verdict)) {
+                    paste_action->setEnabled(false);
+                }
+            });
     connect(&session_->typing(), &SessionTyping::pasting_changed, paste_action,
             [paste_action](bool pasting) { paste_action->setEnabled(!pasting); });
     QMenu* view = menuBar()->addMenu(tr("&View"));
