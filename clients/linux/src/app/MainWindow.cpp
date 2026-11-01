@@ -455,7 +455,10 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     event->ignore();
     if (close_phase_ == ClosePhase::open) {
         close_phase_ = ClosePhase::closing;
-        begin_close();
+        // From the event loop, never inside this event: the close that ends
+        // the sequence must not nest in the one being refused here, or Qt
+        // takes the outer refusal as final and the window never goes.
+        QMetaObject::invokeMethod(this, &MainWindow::begin_close, Qt::QueuedConnection);
     }
 }
 

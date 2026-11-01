@@ -36,6 +36,25 @@
 
 namespace beebium::linux_client {
 
+QStringList launch_requests(const QStringList& connect_values, const QStringList& new_machine_ids,
+                            const QStringList& positional, const QString& working_dirpath) {
+    QStringList requests;
+    for (const QString& value : connect_values) {
+        requests << QStringLiteral("--connect") << value;
+    }
+    for (const QString& id : new_machine_ids) {
+        requests << QStringLiteral("--new-machine") << id;
+    }
+    for (const QString& argument : positional) {
+        if (parse_connect_link(QUrl(argument))) {
+            requests << argument;
+        } else {
+            requests << QStringLiteral("--open") << QDir(working_dirpath).absoluteFilePath(argument);
+        }
+    }
+    return requests;
+}
+
 Application::Application(QRhiWidget::Api graphics_api, QObject* parent)
     : QObject(parent),
       graphics_api_(graphics_api),
@@ -290,9 +309,10 @@ void Application::handle_arguments(const QStringList& arguments) {
         } else if (argument == QLatin1String("--new-machine") && i + 1 < arguments.size()) {
             launch_preset_by_id(arguments.at(++i), nullptr);
             opened = true;
-        } else if (!argument.startsWith(QLatin1Char('-')) && QFileInfo::exists(argument)) {
-            // A saved machine, as the file manager opens one.
-            launch_saved_machine(QFileInfo(argument).absoluteFilePath(), nullptr);
+        } else if (argument == QLatin1String("--open") && i + 1 < arguments.size()) {
+            // A saved machine, as the file manager opens one; one that cannot
+            // be read is said so (5.3).
+            launch_saved_machine(arguments.at(++i), nullptr);
             opened = true;
         } else if (auto link = parse_connect_link(QUrl(argument))) {
             // A link's run flag: Run on connect, for a machine started blocked.

@@ -19,6 +19,7 @@
 
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QDir>
 #include <QSurfaceFormat>
 #include <QTimer>
 
@@ -104,7 +105,9 @@ int main(int argc, char* argv[]) {
     // One client per session: a later launch, or a beebium:// link, hands its
     // arguments to the running client (4.1). Scripts that need a client of
     // their own, the spike's measurements among them, opt out.
-    const QStringList arguments = QCoreApplication::arguments().mid(1);
+    const QStringList arguments =
+        launch_requests(parser.values(connect_option), parser.values(new_machine_option),
+                        parser.positionalArguments(), QDir::currentPath());
     SingleInstance instance;
     if (!parser.isSet(new_instance_option) && !instance.claim(arguments)) {
         return 0;

@@ -36,6 +36,13 @@ namespace beebium::linux_client {
 class MainWindow;
 class SystemPowerMonitor;
 
+// The requests in a command line, normalised so that no option's value is
+// taken for a path: the --connect and --new-machine values, then each
+// positional argument as a connect link if it is one, else as --open with
+// its absolute path. What one client hands another.
+QStringList launch_requests(const QStringList& connect_values, const QStringList& new_machine_ids,
+                            const QStringList& positional, const QString& working_dirpath);
+
 // The client: its settings, discovery, the power monitor, and every machine
 // window, one per connection (client specification 4.1, 4.5).
 class Application : public QObject {
@@ -67,10 +74,11 @@ public:
     // The Connect dialog; opens the chosen machine. Returns whether one was.
     bool show_connect_dialog(QWidget* parent);
 
-    // A launch's arguments, this process's or a later one's: connect links
-    // and --connect addresses open windows, --new-machine <preset id> and a
-    // saved machine's path launch one; none at all asks where to connect,
-    // unless a window is already open (then it is brought forward).
+    // A launch's requests, this process's or a later one's, as
+    // launch_requests() builds them: --connect <address>, --new-machine
+    // <preset id>, --open <saved machine path> and connect links. None at all
+    // asks where to connect, unless a window is already open (then it is
+    // brought forward).
     void handle_arguments(const QStringList& arguments);
 
     // Called with each new window, for options that apply to it (the

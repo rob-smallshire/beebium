@@ -96,7 +96,8 @@ TEST_CASE("Opening a machine already open brings its window forward", "[applicat
     CHECK(again == first);
     CHECK(client.windows().size() == 1);
     first->close();
-    wait_until([&] { return client.windows().empty(); }, 2000ms);
+    // A window on a server it did not launch closes at once.
+    REQUIRE(wait_until([&] { return client.windows().empty(); }, 5000ms));
 }
 
 TEST_CASE("A successful connection is remembered", "[application]") {
@@ -109,5 +110,17 @@ TEST_CASE("A successful connection is remembered", "[application]") {
     REQUIRE_FALSE(recents.empty());
     CHECK(recents.front() == endpoint);
     window->close();
-    wait_until([&] { return client.windows().empty(); }, 2000ms);
+    REQUIRE(wait_until([&] { return client.windows().empty(); }, 5000ms));
+}
+
+TEST_CASE("Quitting closes every window", "[application][close]") {
+    FakeServer first_server;
+    FakeServer second_server;
+    Application client(QRhiWidget::Api::OpenGL);
+    MainWindow* first = client.open({"127.0.0.1", static_cast<std::uint16_t>(first_server.port)});
+    MainWindow* second =
+        client.open({"127.0.0.1", static_cast<std::uint16_t>(second_server.port)});
+    REQUIRE(wait_until([&] { return first->session().connected() && second->session().connected(); }));
+    client.quit_all();
+    REQUIRE(wait_until([&] { return client.windows().empty(); }, 5000ms));
 }

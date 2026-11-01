@@ -171,3 +171,7 @@ beebium_linux_add_test(test_close_decision QT
 beebium_linux_add_test(test_keyboard_focus QT
     SOURCES test_keyboard_focus.cpp
     LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_launch_requests QT
+    SOURCES test_launch_requests.cpp
+    LIBRARIES beebium_linux_app)
