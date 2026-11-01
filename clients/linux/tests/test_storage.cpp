@@ -342,10 +342,9 @@ TEST_CASE("Recent discs are labelled apart, and a missing one cannot be chosen",
 TEST_CASE("A blank disc is made, then inserted, then recent", "[storage][sidebar][blank]") {
     Shown s;
     REQUIRE(wait_until([&] { return s.c.discs.blank_discs().size() == 2; }));
-    // As New Blank Disc does once its file dialog has a name.
-    s.row(1)->setProperty("pendingBlankDrive", 1);
-    s.c.discs.create_disc(QStringLiteral("Acorn DFS 80T DS 400K"),
-                          s.directory.filePath(QStringLiteral("Blank")));
+    // As New Blank Disc asks once its file dialog has a name.
+    Q_EMIT s.row(1)->blank_disc_requested(1, QStringLiteral("Acorn DFS 80T DS 400K"),
+                                          s.directory.filePath(QStringLiteral("Blank")));
     REQUIRE(wait_until([&] { return s.row(1)->state_text() == QStringLiteral("Blank.dsd"); }));
     REQUIRE(wait_until([&] { return !s.settings.recent_discs().isEmpty(); }));
     CHECK(s.settings.recent_discs().front() == s.directory.filePath(QStringLiteral("Blank.dsd")));

@@ -413,9 +413,7 @@ void DriveRow::new_blank_disc(const BlankDiscTemplate& blank) {
         path += extension;
     }
     clear_message();
-    // Two steps: create, then insert what was created (the sidebar does).
-    setProperty("pendingBlankDrive", number_);
-    discs_.create_disc(blank.label, path);
+    Q_EMIT blank_disc_requested(number_, blank.label, path);
 }
 
 QString DriveRow::drop_refusal() const {
@@ -584,13 +582,8 @@ StorageSidebar::StorageSidebar(SessionDiscs& discs, ClientSettings* settings,
     connect(&discs_, &SessionDiscs::create_finished, this,
             [this](const QString&, const DiscOutcome& outcome) {
                 // The row that asked for it.
-                DriveRow* target = nullptr;
-                for (DriveRow* candidate : rows_) {
-                    if (candidate->property("pendingBlankDrive").isValid()) {
-                        target = candidate;
-                        candidate->setProperty("pendingBlankDrive", QVariant());
-                    }
-                }
+                DriveRow* target = pending_blank_drive_ ? row(*pending_blank_drive_) : nullptr;
+                pending_blank_drive_.reset();
                 if (!target) {
                     return;
                 }
@@ -609,6 +602,11 @@ StorageSidebar::StorageSidebar(SessionDiscs& discs, ClientSettings* settings,
 }
 
 StorageSidebar::~StorageSidebar() = default;
+
+void StorageSidebar::make_blank_disc(int drive, const QString& label, const QString& path) {
+    pending_blank_drive_ = drive;
+    discs_.create_disc(label, path);
+}
 
 DriveRow* StorageSidebar::row(int number) const {
     for (DriveRow* candidate : rows_) {
@@ -645,6 +643,7 @@ void StorageSidebar::rebuild() {
     for (const DriveInfo& drive : discs_.drives()) {
         auto* row = new DriveRow(discs_, drive.number, settings_, shares_,
                                  [this] { return extensions_; }, this);
+        connect(row, &DriveRow::blank_disc_requested, this, &StorageSidebar::make_blank_disc);
         rows_layout_->addWidget(row);
         rows_.push_back(row);
     }
@@ -653,6 +652,7 @@ void StorageSidebar::rebuild() {
 void StorageSidebar::load_formats() {
     // Once, from this host's servers: Browse is only offered for a server
     // sharing this filesystem, so a local server's list is the right one.
+    // Any model's server lists the same formats, so model-b's is asked.
     if (formats_asked_) {
         return;
     }

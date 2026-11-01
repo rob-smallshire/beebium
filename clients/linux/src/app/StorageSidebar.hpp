@@ -20,6 +20,7 @@
 #include <QWidget>
 
 #include <functional>
+#include <optional>
 #include <vector>
 
 class QLabel;
@@ -98,6 +99,10 @@ public:
     // As a drop of these files would go.
     void drop_files(const QStringList& paths);
 
+Q_SIGNALS:
+    // New Blank Disc has a name: make the disc and insert it here (9.3).
+    void blank_disc_requested(int drive, const QString& label, const QString& path);
+
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragLeaveEvent(QDragLeaveEvent* event) override;
@@ -156,6 +161,9 @@ public:
     QString status_text() const;
     // The disc formats' extensions, once read from a local server.
     QStringList floppy_extensions() const { return extensions_; }
+    // Make a blank disc from a template and insert it in a drive: two
+    // steps, the second once the first succeeds (9.3).
+    void make_blank_disc(int drive, const QString& label, const QString& path);
 
 private:
     void rebuild();
@@ -171,6 +179,8 @@ private:
     std::unique_ptr<CoreCli> cli_;
     QStringList extensions_;
     bool formats_asked_ = false;
+    // The drive a blank disc under way goes into.
+    std::optional<int> pending_blank_drive_;
 };
 
 }  // namespace beebium::linux_client
