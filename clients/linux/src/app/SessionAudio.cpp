@@ -19,6 +19,7 @@
 #include "connection/AudioStream.hpp"
 
 #include <QMetaObject>
+#include <QtGlobal>
 
 #include <cstdio>
 
@@ -27,6 +28,25 @@ namespace beebium::linux_client {
 SessionAudio::SessionAudio(QObject* parent)
     : QObject(parent), output_(std::make_unique<AudioOutput>()) {
     connect(output_.get(), &AudioOutput::status_changed, this, &SessionAudio::problem_changed);
+    if (qEnvironmentVariable("BEEBIUM_AUDIO_TRACE") == QLatin1String("1")) {
+        trace_.setInterval(1000);
+        connect(&trace_, &QTimer::timeout, this, &SessionAudio::trace);
+        trace_.start();
+    }
+}
+
+void SessionAudio::trace() {
+    if (!ring_) {
+        return;
+    }
+    std::fprintf(stderr,
+                 "beebium: sound trace: %zu frames held, %llu dropped on overflow, %llu "
+                 "before playback, %llu underruns, %d ms target, %llu chunks\n",
+                 ring_->available(), static_cast<unsigned long long>(ring_->dropped_frames()),
+                 static_cast<unsigned long long>(ring_->discarded_before_playback()),
+                 static_cast<unsigned long long>(ring_->underrun_events()),
+                 renderer_ ? renderer_->latency_milliseconds() : 0,
+                 static_cast<unsigned long long>(stream_ ? stream_->chunks_received() : 0));
 }
 
 SessionAudio::~SessionAudio() {

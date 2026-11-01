@@ -15,6 +15,7 @@
 #include "audio/AudioRenderer.hpp"
 
 #include <QThread>
+#include <QTimer>
 #include <QtGlobal>
 
 #include <cstdio>
@@ -118,6 +119,29 @@ public:
         // A short device buffer: the latency is the pre-roll's to set.
         sink_->setBufferSize(format.bytesForDuration(40000));
         sink_->start(device_.get());
+        if (qEnvironmentVariable("BEEBIUM_AUDIO_TRACE") == QLatin1String("1")) {
+            // The sink's side of the trace, beside the ring's: a sink gone
+            // Idle, or pulling sparsely, shows here.
+            trace_ = std::make_unique<QTimer>();
+            trace_->setInterval(1000);
+            connect(trace_.get(), &QTimer::timeout, this, [this] {
+                if (!sink_) {
+                    return;
+                }
+                static const char* const states[] = {"active", "suspended", "stopped", "idle"};
+                const int state = static_cast<int>(sink_->state());
+                std::fprintf(stderr,
+                             "beebium: sink trace: %s, %lld of %lld bytes free, %lld us "
+                             "elapsed, %lld us processed, error %d\n",
+                             state >= 0 && state < 4 ? states[state] : "?",
+                             static_cast<long long>(sink_->bytesFree()),
+                             static_cast<long long>(sink_->bufferSize()),
+                             static_cast<long long>(sink_->elapsedUSecs()),
+                             static_cast<long long>(sink_->processedUSecs()),
+                             static_cast<int>(sink_->error()));
+            });
+            trace_->start();
+        }
         std::fprintf(stderr, "beebium: sound to %s, %d Hz %s\n", qPrintable(device.description()),
                      sample_rate, float_samples ? "float" : "16-bit");
         Q_EMIT status(QString());
@@ -129,6 +153,7 @@ public:
 
     void stop_sink() {
 #if BEEBIUM_HAVE_QT_MULTIMEDIA
+        trace_.reset();
         if (sink_) {
             sink_->stop();
             sink_.reset();
@@ -144,6 +169,7 @@ private:
 #if BEEBIUM_HAVE_QT_MULTIMEDIA
     std::unique_ptr<RendererDevice> device_;
     std::unique_ptr<QAudioSink> sink_;
+    std::unique_ptr<QTimer> trace_;
 #endif
 };
 

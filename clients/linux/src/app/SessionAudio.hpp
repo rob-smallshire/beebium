@@ -17,6 +17,7 @@
 #include "audio/MixerControls.hpp"
 
 #include <QObject>
+#include <QTimer>
 #include <QString>
 
 #include <cstdint>
@@ -88,6 +89,9 @@ private:
     bool loaded_ = false;
     QString stream_problem_;
     unsigned generation_ = 0;
+    // BEEBIUM_AUDIO_TRACE=1: the ring's fill and counters each second.
+    QTimer trace_;
+    void trace();
 };
 
 }  // namespace beebium::linux_client
