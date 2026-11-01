@@ -1518,6 +1518,14 @@ jobs:
         # rather than stalling the job.
         run: bash scripts/test-wheel.sh tests/ readme/snippets/ -v --durations=0 --timeout=600
 
+  # The Linux client .deb: built, tested and packaged in debian:trixie on both
+  # architectures, then smoked in a fresh trixie container. The same workflow
+  # builds the release's client packages (release.yml).
+  linux-client:
+    name: Linux client package
+    needs: preflight
+    uses: ./.github/workflows/linux-client-package.yml
+
   # Builds the npm tarball and exercises it the way a consumer would. Nothing
   # else here can: the other jobs run `npm ci`, which installs devDependencies,
   # so a runtime import reachable only by hoisting out of a dev-only package

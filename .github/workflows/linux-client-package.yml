@@ -1,0 +1,107 @@
+# Build, test, package and smoke-test the Linux client .deb
+# (beebium-client_<version>_<arch>.deb).
+#
+# The client links the distribution's Qt 6 and gRPC dynamically, so unlike the
+# static server bundle it is built ON its target distribution: Debian trixie,
+# whose amd64 and arm64 packages also serve Raspberry Pi OS trixie. Ubuntu
+# 24.04 (the hosted runner image) ships Qt 6.4, below the client's 6.7 floor,
+# so the build runs in a debian:trixie container on the hosted runners.
+#
+# dpkg-shlibdeps ties the .deb to the exact Qt build it was compiled against
+# (qt6-base-private-abi, from the QRhi display), so every run installs the
+# archive's current packages afresh and nothing built is cached between runs.
+# See docs/packaging.md, "The Linux client .deb".
+#
+# The dependency list and the build and smoke commands live in
+# clients/linux/ci/, so CI and a local container run the same steps. ci.yml
+# calls this on every push; release.yml calls it to attach the .debs.
+
+name: Linux client package
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build client .deb (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    container: debian:trixie
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      # A bare debian:trixie has no git: install it before checkout, or
+      # actions/checkout falls back to a REST tarball with no .git.
+      - name: Install git
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates
+
+      - uses: actions/checkout@v7
+
+      - name: Install the build dependencies
+        run: sh clients/linux/ci/install-build-deps.sh
+
+      # Two jobs: the hosted runners' RAM, as for the server's Linux job.
+      - name: Configure, build, test and package
+        run: sh clients/linux/ci/build-package.sh build-linux-client 2
+
+      - name: Check the package metadata matches its file name
+        run: |
+          set -eu
+          V="$(grep -E '^current_version' .bumpversion.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          deb="build-linux-client/beebium-client_${V}_${{ matrix.arch }}.deb"
+          test -f "${deb}" || { echo "::error::expected ${deb}"; ls build-linux-client/*.deb; exit 1; }
+          dpkg-deb -f "${deb}" Package Version Architecture Depends Recommends
+          [ "$(dpkg-deb -f "${deb}" Package)" = beebium-client ] || { echo "::error::Package is not beebium-client"; exit 1; }
+          [ "$(dpkg-deb -f "${deb}" Version)" = "${V}" ] || { echo "::error::Version is not ${V}"; exit 1; }
+          [ "$(dpkg-deb -f "${deb}" Architecture)" = "${{ matrix.arch }}" ] || { echo "::error::Architecture is not ${{ matrix.arch }}"; exit 1; }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-client-${{ matrix.arch }}
+          path: build-linux-client/beebium-client_*_${{ matrix.arch }}.deb
+          if-no-files-found: error
+
+  # Install the .deb in a FRESH debian:trixie, not the build container, so the
+  # build's -dev packages cannot satisfy a dependency the .deb fails to declare.
+  smoke:
+    name: smoke client .deb (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-client-${{ matrix.arch }}
+          path: _artifacts
+
+      # The Qt the .deb resolved to is printed so a future qt6-base-private-abi
+      # mismatch (a Debian Qt point update) is visible in the log.
+      - name: Install, run, validate and remove in a clean Debian trixie
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work debian:trixie sh -c '
+            set -eu
+            sh clients/linux/ci/smoke-package.sh _artifacts/beebium-client_*_${{ matrix.arch }}.deb
+            echo "Qt the package was built for and resolved to:"
+            dpkg-deb -f _artifacts/beebium-client_*_${{ matrix.arch }}.deb Depends | tr "," "\n" | grep -E "qt6-base-private-abi|libqt6core6" || true
+            dpkg-query -W -f="\${Package} \${Version}\n" "libqt6core6*"
+          '
