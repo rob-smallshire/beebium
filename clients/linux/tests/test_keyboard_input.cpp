@@ -76,13 +76,13 @@ TEST_CASE("An event with no native scan code has no physical identity", "[keyboa
 
 TEST_CASE("The built-in mappings are compiled in", "[keyboard][qt]") {
     for (const char* name :
-         {"Default", "Logical", "Arcadians", "Boffin", "Planetoid", "Snapper", "Thrust"}) {
+         {"Logical", "Arcadians", "Boffin", "Planetoid", "Snapper", "Thrust"}) {
         INFO(name);
         CHECK(built_in_mapping(QString::fromLatin1(name)).has_value());
     }
     CHECK_FALSE(built_in_mapping(QStringLiteral("Nonesuch")).has_value());
     KeyboardInput input;
-    CHECK(input.mapping().name == "Default");
+    CHECK(input.mapping().name == "Logical");
 }
 
 TEST_CASE("Typing reaches the wire, and auto-repeat does not", "[keyboard][qt]") {
@@ -103,7 +103,7 @@ TEST_CASE("Host modifiers come from the keys tracked as down, not the event's fl
     KeyboardInput input;
     input.attach(sample_key_table(), wire.sender());
 
-    // Alt+F12 is Break under Default. The F12 event's own flags claim nothing.
+    // Alt+F12 is Break under Logical. The F12 event's own flags claim nothing.
     input.key_press(press(Qt::Key_Alt, XKB_LEFT_ALT));
     CHECK(input.held_modifiers() == MODIFIER_ALT);
     CHECK(input.key_press(press(Qt::Key_F12, XKB_F12)));
@@ -158,7 +158,7 @@ std::vector<WireEvent> caps_syncs(const std::vector<WireEvent>& events) {
 TEST_CASE("Syncing sends the host Caps Lock state when the mapping asks",
           "[keyboard][qt][caps-lock]") {
     Wire wire;
-    KeyboardInput input;  // Default: synchronizeCapsLock on
+    KeyboardInput input;  // Logical: synchronizeCapsLock on
     input.attach(sample_key_table(), wire.sender());
     input.set_host_caps_lock([] { return std::optional<bool>(false); });
     input.sync_caps_lock();

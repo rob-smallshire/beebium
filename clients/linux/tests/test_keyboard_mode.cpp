@@ -56,7 +56,7 @@ QStringList reference_rows(const KeyboardSidebar& sidebar) {
 
 }  // namespace
 
-TEST_CASE("The built-ins come first, Default leading, then the user's files", "[keyboard][mode]") {
+TEST_CASE("The built-ins come first, Logical leading, then the user's files", "[keyboard][mode]") {
     QTemporaryDir directory;
     QByteArray mine = corpus("Thrust.json");
     mine.replace("\"Thrust\"", "\"My Thrust\"");
@@ -64,17 +64,17 @@ TEST_CASE("The built-ins come first, Default leading, then the user's files", "[
     write(directory.filePath(QStringLiteral("broken.json")), "{ not json");
     write(directory.filePath(QStringLiteral("old.json")), R"({"version":1,"keys":[]})");
     const auto choices = mapping_choices(directory.path());
-    REQUIRE(choices.size() == 10);
-    CHECK(choices[0].name == QStringLiteral("Default"));
+    REQUIRE(choices.size() == 9);
+    CHECK(choices[0].name == QStringLiteral("Logical"));
     CHECK(choices[0].built_in);
-    CHECK(choices[6].built_in);
+    CHECK(choices[5].built_in);
     // The user's files by file name: broken, mine, old.
-    CHECK_FALSE(choices[7].usable());
-    CHECK_FALSE(choices[7].problem.isEmpty());
-    CHECK(choices[8].usable());
-    CHECK_FALSE(choices[8].built_in);
-    CHECK(choices[8].name == QStringLiteral("My Thrust"));
-    CHECK_FALSE(choices[9].usable());
+    CHECK_FALSE(choices[6].usable());
+    CHECK_FALSE(choices[6].problem.isEmpty());
+    CHECK(choices[7].usable());
+    CHECK_FALSE(choices[7].built_in);
+    CHECK(choices[7].name == QStringLiteral("My Thrust"));
+    CHECK_FALSE(choices[8].usable());
 }
 
 TEST_CASE("A host key is named as a person would", "[keyboard][mode]") {
@@ -95,8 +95,8 @@ TEST_CASE("A host key is named as a person would", "[keyboard][mode]") {
     CHECK(host_key_label(entry).isEmpty());  // another platform's key
 }
 
-TEST_CASE("Default labels its five keys with no host namesake", "[keyboard][mode]") {
-    const auto mapping = built_in_mapping(QStringLiteral("Default"));
+TEST_CASE("Logical labels its five keys with no host namesake", "[keyboard][mode]") {
+    const auto mapping = built_in_mapping(QStringLiteral("Logical"));
     REQUIRE(mapping);
     QStringList rows;
     for (const auto& row : mapping_reference(*mapping)) {
@@ -112,7 +112,7 @@ TEST_CASE("The mode shows the active mapping's labels and switches on a choice",
     QTemporaryDir directory;
     write(directory.filePath(QStringLiteral("broken.json")), "{ not json");
     KeyboardSidebar sidebar(directory.path());
-    const auto default_mapping = built_in_mapping(QStringLiteral("Default"));
+    const auto default_mapping = built_in_mapping(QStringLiteral("Logical"));
     sidebar.set_active(QString::fromStdString(default_mapping->id));
     CHECK(reference_rows(sidebar).size() == 5);
 

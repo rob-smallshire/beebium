@@ -36,8 +36,8 @@ namespace beebium::linux_client {
 std::optional<HostKey> host_key_from_event(const QKeyEvent& event, HostModifiers held);
 
 // A built-in mapping (docs/keyboard-mapping-files.md 5), from the copies of
-// the conformance corpus compiled into the client: "Default", "Logical", or
-// a game's name. Nullopt for an unknown name.
+// the conformance corpus compiled into the client: "Logical", or a game's
+// name. Nullopt for an unknown name.
 std::optional<MappingFile> built_in_mapping(const QString& name);
 
 // Where the keyboard's keys go now: to the machine while the display has

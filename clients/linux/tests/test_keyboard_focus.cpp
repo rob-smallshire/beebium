@@ -70,7 +70,7 @@ TEST_CASE("Keys go to the machine only while the display has focus and a machine
     CHECK(keys_go_to(false, false) == KeysGoTo::application);
 }
 
-TEST_CASE("Under the Default mapping Ctrl shortcuts are the machine's, Ctrl+Tab is not",
+TEST_CASE("Under the Logical mapping Ctrl shortcuts are the machine's, Ctrl+Tab is not",
           "[focus][shortcuts]") {
     Wire wire;
     KeyboardInput input;

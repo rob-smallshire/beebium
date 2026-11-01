@@ -73,7 +73,7 @@ std::optional<MappingFile> built_in_mapping(const QString& name) {
 }
 
 KeyboardInput::KeyboardInput() {
-    if (auto mapping = built_in_mapping(QStringLiteral("Default"))) {
+    if (auto mapping = built_in_mapping(QStringLiteral("Logical"))) {
         mapping_ = std::move(*mapping);
     }
 }

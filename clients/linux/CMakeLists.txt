@@ -313,7 +313,6 @@ qt_add_resources(beebium_linux_app "keyboard_mappings"
     PREFIX "/keyboard-mappings"
     BASE ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}
     FILES
-        ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Default.json
         ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Logical.json
         ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Arcadians.json
         ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Boffin.json

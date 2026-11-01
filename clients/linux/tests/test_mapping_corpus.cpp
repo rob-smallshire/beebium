@@ -106,7 +106,7 @@ TEST_CASE("Every portable and Linux case in the corpus resolves as expected",
 }
 
 TEST_CASE("Every built-in mapping in the corpus parses", "[keyboard][corpus]") {
-    for (const char* filename : {"Default.json", "Logical.json", "Arcadians.json", "Boffin.json",
+    for (const char* filename : {"Logical.json", "Arcadians.json", "Boffin.json",
                                  "Planetoid.json", "Snapper.json", "Thrust.json"}) {
         INFO(filename);
         const MappingFile mapping = corpus_mapping(filename);
@@ -115,11 +115,10 @@ TEST_CASE("Every built-in mapping in the corpus parses", "[keyboard][corpus]") {
 }
 
 TEST_CASE("The built-ins carry the ids section 5 fixes", "[keyboard][corpus]") {
-    CHECK(corpus_mapping("Default.json").id == "00000000-0000-0000-0000-000000000001");
+    CHECK(corpus_mapping("Logical.json").id == "00000000-0000-0000-0000-000000000001");
     CHECK(corpus_mapping("Thrust.json").id == "00000000-0000-0000-0000-000000000002");
     CHECK(corpus_mapping("Snapper.json").id == "00000000-0000-0000-0000-000000000003");
     CHECK(corpus_mapping("Arcadians.json").id == "00000000-0000-0000-0000-000000000004");
     CHECK(corpus_mapping("Boffin.json").id == "00000000-0000-0000-0000-000000000005");
     CHECK(corpus_mapping("Planetoid.json").id == "00000000-0000-0000-0000-000000000006");
-    CHECK(corpus_mapping("Logical.json").id == "00000000-0000-0000-0000-000000000007");
 }

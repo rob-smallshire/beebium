@@ -64,9 +64,9 @@ TEST_CASE("An entry naming a key the catalogue lacks resolves to nothing",
     CHECK_FALSE(resolve_key(mapping, sample_key_table(), key).has_value());
 }
 
-TEST_CASE("The host SHIFT and CTRL keys resolve to the modifier roles under Default",
+TEST_CASE("The host SHIFT and CTRL keys resolve to the modifier roles under Logical",
           "[keyboard][resolve]") {
-    const auto mapping = corpus_mapping("Default.json");
+    const auto mapping = corpus_mapping("Logical.json");
     for (const char* code : {"ShiftLeft", "ShiftRight"}) {
         HostKey key;
         key.code = code;

@@ -119,7 +119,7 @@ TEST_CASE("Writing preserves what this client does not understand",
 
 TEST_CASE("Every corpus mapping round-trips unchanged in meaning",
           "[keyboard][mapping-file][round-trip]") {
-    for (const char* filename : {"Default.json", "Logical.json", "Arcadians.json", "Boffin.json",
+    for (const char* filename : {"Logical.json", "Arcadians.json", "Boffin.json",
                                  "Planetoid.json", "Snapper.json", "Thrust.json"}) {
         INFO(filename);
         const Json original = Json::parse(corpus_text(filename));

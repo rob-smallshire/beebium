@@ -32,10 +32,10 @@ constexpr WireEvent up(std::uint8_t ik) { return {WireAction::key_up, ik}; }
 constexpr std::uint8_t SHIFT = BBC_SHIFT_IK;
 constexpr std::uint8_t CTRL = BBC_CTRL_IK;
 
-// Resolve under the Default built-in. `text` is the character ignoring
+// Resolve under the Logical built-in. `text` is the character ignoring
 // Control; `modifiers` the host modifiers held besides the key.
 ResolvedKey resolve(std::string code, std::string text = {}, HostModifiers modifiers = 0) {
-    static const MappingFile mapping = corpus_mapping("Default.json");
+    static const MappingFile mapping = corpus_mapping("Logical.json");
     HostKey host;
     host.code = std::move(code);
     host.text = std::move(text);

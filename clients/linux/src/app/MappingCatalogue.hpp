@@ -35,7 +35,7 @@ struct MappingChoice {
     bool usable() const { return mapping.has_value(); }
 };
 
-// The built-in names, Default first, as every client ships them.
+// The built-in names, Logical first, as every client ships them.
 const std::vector<QString>& built_in_mapping_names();
 
 // Where the user's mapping files are: $XDG_CONFIG_HOME/Beebium/keyboard-mappings.

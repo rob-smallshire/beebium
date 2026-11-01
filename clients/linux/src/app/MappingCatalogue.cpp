@@ -24,9 +24,8 @@ namespace beebium::linux_client {
 
 const std::vector<QString>& built_in_mapping_names() {
     static const std::vector<QString> names{
-        QStringLiteral("Default"),  QStringLiteral("Logical"), QStringLiteral("Arcadians"),
-        QStringLiteral("Boffin"),   QStringLiteral("Planetoid"), QStringLiteral("Snapper"),
-        QStringLiteral("Thrust"),
+        QStringLiteral("Logical"), QStringLiteral("Arcadians"), QStringLiteral("Boffin"),
+        QStringLiteral("Planetoid"), QStringLiteral("Snapper"), QStringLiteral("Thrust"),
     };
     return names;
 }
