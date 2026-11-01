@@ -1171,8 +1171,21 @@ Conformance:
 - MANDATORY: hardware-path matrix typing (send BBC key positions, never character
   injection); Break via the Break RPCs; serialised in-order sends; drop host
   auto-repeat; type-ahead via TypeQuickly and the status stream.
+- MANDATORY: the emulated keyboard wins. The machine display is a control that
+  can have keyboard focus, and while it has focus every key the active mapping
+  sends to the machine goes to the machine, including CTRL and ALT with letters
+  that the host platform would otherwise treat as application shortcuts (the
+  emulator must see CTRL normally). The client shows clearly whether the
+  display has focus (a visible focus indication on the display and a state in
+  the status bar or equivalent), and stays reachable without the keyboard
+  shortcuts it has ceded: menus by mouse and by mnemonic, full screen and the
+  immersive exit on keys the mapping does not claim. Application shortcuts
+  apply whenever the display does not have focus. (Rob, 2026-11-01. macOS is
+  not affected in practice because its shortcuts use Command, which no mapping
+  claims; Linux and Windows clients, whose conventions use Ctrl, are.)
 - LATITUDE: a two-stage resolver (direct scancode map then character map);
-  whether the canonical table is cached.
+  whether the canonical table is cached; which keys outside the mapping the
+  window keeps (F11, Alt mnemonics on Linux).
 - MACOS-ONLY: using NSEvent.keyCode as the physical identity. A Qt client uses
   the native scancode (XKB keycode).
 
