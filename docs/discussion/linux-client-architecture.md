@@ -378,14 +378,106 @@ Not worth copying, because they solve macOS or Swift problems:
    product?
 
 
-## 10. Phase 0 spike: what it must measure
+## 10. Phase 0 spike: what it must measure, and what it found
 
-On the Pi 5 (and later the Pi 4), connected to a local `beebium-model-b` and to
-one on another machine:
+The brief: on the Pi 5 (and later the Pi 4), connected to a local
+`beebium-model-b` and to one on another machine, measure client CPU per
+thread at 50 Hz frames on Vulkan and GLES; frame pacing (inter-arrival, and
+arrival to present) as histograms; whether presentation is smooth under labwc
+and X11; and that keys reach the machine through the hardware path with SHIFT
+derived.
 
-- Client CPU (per thread if possible) at 50 Hz frames, Vulkan and GLES.
-- Frame pacing: inter-arrival time of frames at the client, and arrival to
-  present latency, as histograms.
-- Whether presentation is smooth under labwc and under X11.
-- That key down and up reach the machine through the hardware path, with
-  SHIFT derived, not passed through.
+### Setup (2026-11-01)
+
+- Raspberry Pi 5, 8 GiB, Debian 13, Qt 6.8.2, Mesa 26.2.2 (rpt). Every run
+  logged QRhi's device: V3D 7.1.7.0, never llvmpipe. Vulkan 1.3 through
+  `v3dv`; OpenGL ES 3.1.
+- Server: the released v0.15.0 `beebium-model-b`, local, in MODE 1 (50
+  progressive frames a second; MODE 7 sends 25, each a composited pair of
+  fields, by design).
+- Presentation: `cage` 0.3.1 on the wlroots headless backend
+  (`WLR_BACKENDS=headless`, GLES2 renderer on the V3D), its virtual
+  1920x1080 output set to 50 or 60 Hz with `wlr-randr`; the client full
+  screen in it on the Wayland platform. Runs of 30 s, on an otherwise idle
+  machine.
+- Offscreen: `beebium-display-bench`, the same renderer drawing into a
+  texture under `QT_QPA_PLATFORM=vkkhrdisplay` (Vulkan with no display),
+  timing upload, draw and the wait for the GPU.
+
+### Results
+
+Frames arrived every 20.0 ms (sd 0.5 to 0.6 ms) in every run.
+
+Cost of a frame, offscreen, Vulkan (upload, draw, GPU finished):
+
+| Target | Mean | p99 | Client CPU (one core) |
+|--------|------|-----|-----------------------|
+| 1920x1080 | 1.56 ms | 1.66 ms | 3.8% |
+| 3840x2160 | 5.04 ms | 5.10 ms | 3.8% |
+
+Presented in cage, 1920x1080, 30 s each:
+
+| Output | API | Render interval | Receive to render | Frames dropped | Client CPU |
+|--------|-----|-----------------|-------------------|----------------|------------|
+| 50 Hz | Vulkan | 20.03 ms, sd 0.17 | mean 9.4, p95 18.0, max 19.6 ms | 4 | 7.0% |
+| 50 Hz | GLES | 20.03 ms, sd 0.06 | mean 9.6, p95 17.3, max 19.8 ms | 5 | 7.8% |
+| 60 Hz | Vulkan | 20.00 ms, sd 0.56 | mean 0.15, p99 0.18, max 7.8 ms | 2 | 7.2% |
+| 60 Hz | GLES | 19.99 ms, sd 0.55 | mean 0.12, p99 0.13, max 9.3 ms | 2 | 7.8% |
+
+Histograms, 1 ms buckets (the 50 Hz Vulkan run; GLES alike):
+
+    render interval     [14,15):1 [19,20):64 [20,21):1450 [21,22):1
+    receive to render   [0,1):96 [1,2):94 [2,3):90 [3,4):95 [4,5):94 [5,6):81
+                        [6,7):66 [7,8):60 [8,9):62 [9,10):59 [10,11):58
+                        [11,12):57 [12,13):58 [13,14):96 [14,15):125
+                        [15,16):95 [16,17):44 [17,18):114 [18,19):59 [19,20):14
+
+and at 60 Hz (Vulkan):
+
+    render interval     [16,17):2 [19,20):941 [20,21):540 [21,22):1 [26,27):1
+    receive to render   [0,1):1484 [3,4):1 [7,8):1
+
+CPU per thread, in cage: the render (GUI) thread 4.2 to 5.2%, the video
+reader 1.1%, the typing-status watcher 1.2 to 1.4% of one core.
+
+Keyboard: typing `PRINT 6*7` through the client's own keyboard path (synthetic
+Qt key events with real scan codes, `*` as a physical Shift+8) read back
+`42` from the screen; Caps Lock synchronisation tapped the guest only when it
+disagreed and read back the wanted latch each time.
+
+### What the numbers say
+
+- **The Pi 5 has headroom to spare.** A frame costs 1.6 ms of GPU time at
+  1080p and 5 ms at 4K; the whole client uses under a tenth of one core.
+  Vulkan and GLES are equivalent for this load; Vulkan stays the default.
+- **Pacing is the display's, not the client's.** On a 50 Hz output the
+  render locks to the vblank (sd under 0.2 ms) and a frame waits for the next
+  one: latency spreads evenly over 0 to 20 ms, because the server's 50 Hz
+  and the display's 50 Hz are separate clocks whose phase drifts. Where two
+  frames fall into one vblank, one is dropped: 4 or 5 in 30 s, about one
+  every 7 s. On a 60 Hz output a frame is drawn as it arrives (0.1 ms), and
+  the 50-in-60 judder is the display's, as on the Mac.
+- **Next for smoothness at 50 Hz** (not phase 0): present the newest frame
+  at each vblank rather than on arrival when the display rate matches the
+  frame rate, or nudge the server's pacing towards the display's (the
+  server already re-anchors its pacing clock). Either removes the periodic
+  drop.
+
+### Not covered, or found along the way
+
+- Not measured: a server on another machine; labwc (Raspberry Pi OS's
+  compositor) and X11, since trejon has no desktop session (cage is a
+  wlroots compositor like labwc, so the Wayland path is the same one); the
+  Pi 4.
+- The Wayland Caps Lock reader runs under cage without harm, but a headless
+  seat has no keyboard, so it reports the state as unknown; nothing could
+  type into it (no `wtype`). The X11 reader is untested: there is no
+  Xwayland on trejon. Both need a desktop session.
+- Fixed on the way: the Wayland reader asked a seat with no keyboard for
+  one, a protocol error that ended the connection (it now waits for the
+  seat's keyboard capability); and OpenGL meant desktop GL 3.1 under
+  Debian's Qt, which the shaders did not cover (it now requests OpenGL ES,
+  and the shaders are baked for GLSL 1.40 too).
+- To look at: the typing-status watcher's 1.2% of a core. It asks for the
+  stream's default 20 ms interval; the Caps Lock sync it serves needs far
+  less.
