@@ -183,6 +183,16 @@ What Wayland forbids, by design, and so what we must not build on:
 Raspberry Pi OS on the Pi 4 and 5 now defaults to labwc on Wayland, with X11
 selectable. Both must be tested; the code path is the same.
 
+Keys and focus (client specification 7.1 and 13.2, as Rob ruled). The
+emulated keyboard wins: while the display has keyboard focus, every key the
+active mapping uses goes to the machine, Ctrl shortcuts included, since on a
+BBC Micro CTRL with a letter is typing. The display shows that it has focus
+with a frame in the desktop's highlight colour, and the status bar says
+where keys go ("Keys: machine" or "Keys: Beebium"). Clicking the display
+takes focus; Ctrl+Tab and Ctrl+Shift+Tab, which the built-in mappings leave
+alone, move focus out of it; F11, Alt with a menu letter and the mouse always
+reach the application.
+
 Mapping files. The macOS mapping JSON already keeps per-platform sections and
 preserves the ones it does not understand (`"macOS": {"keyCode": 6}`). The
 minimal Linux addition is a `"linux": {"evdev": 44}` section. A better
