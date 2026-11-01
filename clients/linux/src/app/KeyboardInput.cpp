@@ -199,6 +199,9 @@ bool KeyboardInput::key_press(const QKeyEvent& event) {
     // A synchronised Caps Lock is a toggle with its own path, never a held
     // key (7.3); unsynchronised, a mapping may bind it like any other key.
     if (host_key->code == "CapsLock" && caps_lock_sync_enabled()) {
+        if (user_pressed_) {
+            user_pressed_();
+        }
         if (caps_lock_pressed_) {
             caps_lock_pressed_();
         }
@@ -207,6 +210,9 @@ bool KeyboardInput::key_press(const QKeyEvent& event) {
     const auto resolved = resolve_key(mapping_, table_, *host_key);
     if (!resolved) {
         return false;
+    }
+    if (user_pressed_) {
+        user_pressed_();
     }
     send_(held_.press(key_id(event), *resolved));
     return true;
@@ -232,6 +238,9 @@ void KeyboardInput::press_break() {
     }
     ResolvedKey key;
     key.role = KeyRole::break_key;
+    if (user_pressed_) {
+        user_pressed_();
+    }
     send_(held_.press(QStringLiteral("bbc:Break").toStdString(), key));
 }
 

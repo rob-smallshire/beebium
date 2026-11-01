@@ -115,6 +115,10 @@ public:
     using HostCapsLock = std::function<std::optional<bool>()>;
     void set_host_caps_lock(HostCapsLock host_caps_lock) { host_caps_lock_ = std::move(host_caps_lock); }
     void set_caps_lock_pressed(std::function<void()> pressed) { caps_lock_pressed_ = std::move(pressed); }
+    // The user pressed a key the machine takes, or Break: called before it
+    // is sent. Not for what the client sends of its own accord (lock
+    // syncs, paste, releases).
+    void on_user_press(std::function<void()> pressed) { user_pressed_ = std::move(pressed); }
 
     // Caps Lock synchronisation for this session, overriding the mapping's
     // default (the Keyboard mode's toggle); nullopt to follow the mapping.
@@ -135,6 +139,7 @@ private:
     MappingFile mapping_;
     BbcKeyTable table_;
     Sender send_;
+    std::function<void()> user_pressed_;
     HeldKeys held_;
     // Host modifier keys down, by physical identity, whether or not the
     // mapping sends them to the machine.

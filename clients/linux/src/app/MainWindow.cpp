@@ -148,15 +148,13 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     resize(1280 + Sidebar::WIDTH, 1024 + menuBar()->sizeHint().height());
 
     connect(session_, &MachineSession::frame_ready, display_, &DisplayWidget::frame_ready);
+    // A key or Break from the user, for a machine whose Run is held for its
+    // sound, runs it now; the client's own lock syncs and releases do not.
+    display_->keyboard().on_user_press([this] { session_->release_run_hold(); });
     connect(session_, &MachineSession::keyboard_ready, this, [this] {
         KeySender* sender = session_->key_sender();
         display_->keyboard().attach(session_->key_table(),
-                                    [this, sender](const std::vector<WireEvent>& events) {
-                                        if (!events.empty()) {
-                                            // A key or Break for a machine whose Run
-                                            // is held for its sound runs it now.
-                                            session_->release_run_hold();
-                                        }
+                                    [sender](const std::vector<WireEvent>& events) {
                                         sender->send(events);
                                     });
         display_->keyboard_changed();

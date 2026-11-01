@@ -159,6 +159,27 @@ TEST_CASE("Ctrl+H alone and Shift+H alone are still the machine's", "[keyboard][
     CHECK(input.takes(ctrl_h));
 }
 
+TEST_CASE("Only the user's own presses count as reaching for the machine", "[keyboard][qt]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    int presses = 0;
+    input.on_user_press([&] { ++presses; });
+    input.key_press(press(Qt::Key_Shift, XKB_LEFT_SHIFT));
+    CHECK(presses == 1);
+    input.press_break();
+    CHECK(presses == 2);
+    // What the client sends of its own accord is not the user's.
+    input.release_break();
+    input.release_all();
+    input.press_named_key("caps-lock-sync", "Caps Lock");
+    input.release_named_key("caps-lock-sync", "Caps Lock");
+    CHECK(presses == 2);
+    // Nor is a key the machine does not take.
+    input.key_press(press(Qt::Key_F12, XKB_F12));
+    CHECK(presses == 2);
+}
+
 TEST_CASE("Releasing everything forgets the host modifiers too", "[keyboard][qt]") {
     Wire wire;
     KeyboardInput input;
