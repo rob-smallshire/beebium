@@ -1,0 +1,278 @@
+{
+  "version": 2,
+  "id": "00000000-0000-0000-0000-000000000007",
+  "name": "Logical",
+  "characterMapping": true,
+  "synchronizeCapsLock": true,
+  "keys": [
+    {
+      "code": "ArrowUp",
+      "bbc": {
+        "key": "Up"
+      }
+    },
+    {
+      "code": "ArrowDown",
+      "bbc": {
+        "key": "Down"
+      }
+    },
+    {
+      "code": "ArrowLeft",
+      "bbc": {
+        "key": "Left"
+      }
+    },
+    {
+      "code": "ArrowRight",
+      "bbc": {
+        "key": "Right"
+      }
+    },
+    {
+      "code": "F1",
+      "bbc": {
+        "key": "f1"
+      }
+    },
+    {
+      "code": "F2",
+      "bbc": {
+        "key": "f2"
+      }
+    },
+    {
+      "code": "F3",
+      "bbc": {
+        "key": "f3"
+      }
+    },
+    {
+      "code": "F4",
+      "bbc": {
+        "key": "f4"
+      }
+    },
+    {
+      "code": "F5",
+      "bbc": {
+        "key": "f5"
+      }
+    },
+    {
+      "code": "F6",
+      "bbc": {
+        "key": "f6"
+      }
+    },
+    {
+      "code": "F7",
+      "bbc": {
+        "key": "f7"
+      }
+    },
+    {
+      "code": "F8",
+      "bbc": {
+        "key": "f8"
+      }
+    },
+    {
+      "code": "F9",
+      "bbc": {
+        "key": "f9"
+      }
+    },
+    {
+      "code": "F10",
+      "bbc": {
+        "key": "f0"
+      }
+    },
+    {
+      "code": "F11",
+      "bbc": {
+        "key": "Copy"
+      }
+    },
+    {
+      "code": "Escape",
+      "bbc": {
+        "key": "Escape",
+        "disabled": false
+      }
+    },
+    {
+      "code": "F12",
+      "with": [
+        "Alt"
+      ],
+      "bbc": {
+        "key": "Break",
+        "disabled": false
+      }
+    },
+    {
+      "code": "F13",
+      "bbc": {
+        "key": "Shift Lock"
+      }
+    },
+    {
+      "code": "Backspace",
+      "bbc": {
+        "key": "Delete"
+      }
+    },
+    {
+      "code": "ShiftLeft",
+      "bbc": {
+        "key": "Shift"
+      }
+    },
+    {
+      "code": "ShiftRight",
+      "bbc": {
+        "key": "Shift"
+      }
+    },
+    {
+      "code": "ControlLeft",
+      "bbc": {
+        "key": "Ctrl"
+      }
+    },
+    {
+      "code": "ControlRight",
+      "bbc": {
+        "key": "Ctrl"
+      }
+    },
+    {
+      "code": "Digit1",
+      "bbc": {
+        "key": "1"
+      }
+    },
+    {
+      "code": "Digit2",
+      "bbc": {
+        "key": "2"
+      }
+    },
+    {
+      "code": "Digit3",
+      "bbc": {
+        "key": "3"
+      }
+    },
+    {
+      "code": "Digit4",
+      "bbc": {
+        "key": "4"
+      }
+    },
+    {
+      "code": "Digit5",
+      "bbc": {
+        "key": "5"
+      }
+    },
+    {
+      "code": "Digit6",
+      "bbc": {
+        "key": "6"
+      }
+    },
+    {
+      "code": "Digit7",
+      "bbc": {
+        "key": "7"
+      }
+    },
+    {
+      "code": "Digit8",
+      "bbc": {
+        "key": "8"
+      }
+    },
+    {
+      "code": "Digit9",
+      "bbc": {
+        "key": "9"
+      }
+    },
+    {
+      "code": "Digit0",
+      "bbc": {
+        "key": "0"
+      }
+    },
+    {
+      "code": "Minus",
+      "bbc": {
+        "key": "-"
+      }
+    },
+    {
+      "code": "Equal",
+      "bbc": {
+        "key": "^"
+      }
+    },
+    {
+      "code": "BracketLeft",
+      "bbc": {
+        "key": "@"
+      }
+    },
+    {
+      "code": "BracketRight",
+      "bbc": {
+        "key": "["
+      }
+    },
+    {
+      "code": "Semicolon",
+      "bbc": {
+        "key": ";"
+      }
+    },
+    {
+      "code": "Quote",
+      "bbc": {
+        "key": ":"
+      }
+    },
+    {
+      "code": "Backslash",
+      "bbc": {
+        "key": "]"
+      }
+    },
+    {
+      "code": "IntlBackslash",
+      "bbc": {
+        "key": "\\"
+      }
+    },
+    {
+      "code": "Comma",
+      "bbc": {
+        "key": ","
+      }
+    },
+    {
+      "code": "Period",
+      "bbc": {
+        "key": "."
+      }
+    },
+    {
+      "code": "Slash",
+      "bbc": {
+        "key": "/"
+      }
+    }
+  ]
+}

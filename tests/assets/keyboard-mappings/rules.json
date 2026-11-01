@@ -1,5 +1,5 @@
 {
-  "description": "Conformance cases for docs/keyboard-mapping-files.md section 4 (resolution), 3.3 (key names) and 3.4 (platform entries). Every client loads this file, resolves each case's event against the named mapping and the catalogue, and must get the expected result. Event fields: code (W3C), modifiers (host modifiers held, besides the key itself: Shift, Control, Alt, Meta), text (the character the host layout gives with those modifiers, ignoring Control), platform and native (for platform entries; a client runs a case with a platform only if it is its own). Expected: a BBC key by catalogue name and internal key number, with the BBC SHIFT and CTRL the entry or catalogue asks for; or break; or ignored. shift false from character mapping means the BBC SHIFT must be up for that key.",
+  "description": "Conformance cases for docs/keyboard-mapping-files.md section 4 (resolution), 3.3 (key names) and 3.4 (platform entries). Every client loads this file, resolves each case's event against the named mapping and the catalogue, and must get the expected result. Event fields: code (W3C), modifiers (host modifiers held, besides the key itself: Shift, Control, Alt, Meta), text (the character the host layout gives with those modifiers, ignoring Control), platform and native (for platform entries; a client runs a case with a platform only if it is its own). Expected: a BBC key by catalogue name and internal key number, with the BBC SHIFT and CTRL the entry or catalogue asks for; or break; or ignored. shift false from character mapping means the BBC SHIFT must be up for that key. A case's mapping is a key of `mappings`, or a file name in this directory (the built-ins).",
   "catalogue": {
     "description": "A slice of the server's character-to-key catalogue (KeyboardService.GetAllKeyMappings, src/core/src/KeyboardMapping.cpp): only the rows these cases use.",
     "entries": [
@@ -218,6 +218,30 @@
         "ik": 21,
         "needsShift": false,
         "name": "8"
+      },
+      {
+        "character": "",
+        "ik": 57,
+        "needsShift": false,
+        "name": "Up"
+      },
+      {
+        "character": "@",
+        "ik": 71,
+        "needsShift": false,
+        "name": "@"
+      },
+      {
+        "character": "\"",
+        "ik": 49,
+        "needsShift": true,
+        "name": "\""
+      },
+      {
+        "character": "2",
+        "ik": 49,
+        "needsShift": false,
+        "name": "2"
       }
     ]
   },
@@ -830,6 +854,100 @@
       },
       "expect": {
         "ignored": true
+      }
+    },
+    {
+      "name": "5: Default maps the cursor keys by position",
+      "mapping": "Default.json",
+      "event": {
+        "code": "ArrowUp"
+      },
+      "expect": {
+        "key": "Up",
+        "ik": 57,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "name": "5: Default puts Break on Alt+F12",
+      "mapping": "Default.json",
+      "event": {
+        "code": "F12",
+        "modifiers": [
+          "Alt"
+        ]
+      },
+      "expect": {
+        "break": true
+      }
+    },
+    {
+      "name": "5: Default types the character a UK Shift+' gives",
+      "mapping": "Default.json",
+      "event": {
+        "code": "Quote",
+        "modifiers": [
+          "Shift"
+        ],
+        "text": "@"
+      },
+      "expect": {
+        "key": "@",
+        "ik": 71,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "name": "5: Logical takes the same key by position: the BBC's colon key",
+      "mapping": "Logical.json",
+      "event": {
+        "code": "Quote",
+        "modifiers": [
+          "Shift"
+        ],
+        "text": "@"
+      },
+      "expect": {
+        "key": ":",
+        "ik": 72,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "name": "5: Logical takes digits by position, whatever the layout's shifted face",
+      "mapping": "Logical.json",
+      "event": {
+        "code": "Digit2",
+        "modifiers": [
+          "Shift"
+        ],
+        "text": "\""
+      },
+      "expect": {
+        "key": "2",
+        "ik": 49,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "name": "5: Default types a US Shift+2 as the character it gives",
+      "mapping": "Default.json",
+      "event": {
+        "code": "Digit2",
+        "modifiers": [
+          "Shift"
+        ],
+        "text": "@"
+      },
+      "expect": {
+        "key": "@",
+        "ik": 71,
+        "shift": false,
+        "ctrl": false
       }
     }
   ]
