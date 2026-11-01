@@ -156,6 +156,11 @@ void Application::track_saved_machine(MainWindow* window) {
         if (!session.machine_saved() || session.machine_dirpath().isEmpty()) {
             return;
         }
+        // Another host's path means nothing here: describe-machine could
+        // never read it (3.2).
+        if (!session.server_shares_filesystem()) {
+            return;
+        }
         if (*remembered == session.machine_dirpath()) {
             return;
         }

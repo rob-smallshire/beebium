@@ -466,3 +466,41 @@ TEST_CASE("Open on the saved machines page opens that machine, and it is remembe
     window->close();
     REQUIRE(wait_until([&] { return client.windows().empty(); }, 15000ms));
 }
+
+TEST_CASE("A saved machine on a server that does not share this filesystem is not remembered",
+          "[home][saved]") {
+    FakeServer server;
+    server.system.host_fingerprint = "another-host";
+    {
+        std::lock_guard lock(server.system.calls_mutex);
+        server.system.saved_machine_dirpath = "/elsewhere/Elite.beebium-machine";
+    }
+    Application client(QRhiWidget::Api::OpenGL);
+    reset(client);
+    MainWindow* window = client.open(endpoint_of(server));
+    REQUIRE(wait_until([&] { return window->session().connected(); }));
+    REQUIRE(window->session().machine_saved());
+    CHECK_FALSE(window->session().server_shares_filesystem());
+    window->session().refresh_system_info();
+    QCoreApplication::processEvents();
+    CHECK(client.settings().recent_machines().isEmpty());
+    window->close();
+    REQUIRE(wait_until([&] { return client.windows().empty(); }));
+}
+
+TEST_CASE("A saved machine on a server that shares this filesystem is remembered",
+          "[home][saved]") {
+    FakeServer server;
+    {
+        std::lock_guard lock(server.system.calls_mutex);
+        server.system.saved_machine_dirpath = "/here/Elite.beebium-machine";
+    }
+    Application client(QRhiWidget::Api::OpenGL);
+    reset(client);
+    MainWindow* window = client.open(endpoint_of(server));
+    REQUIRE(wait_until([&] { return window->session().connected(); }));
+    REQUIRE(wait_until([&] { return !client.settings().recent_machines().isEmpty(); }));
+    CHECK(client.settings().recent_machines().front() == QStringLiteral("/here/Elite.beebium-machine"));
+    window->close();
+    REQUIRE(wait_until([&] { return client.windows().empty(); }));
+}
