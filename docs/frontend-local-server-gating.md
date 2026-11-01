@@ -43,8 +43,10 @@ for a server on the very machine doing the discovering.
 
 ### Deriving the fingerprint
 
-`src/service/include/beebium/service/HostFingerprint.hpp`, over
-`beebium::platform::host_identifier()`:
+`src/host-identity/include/beebium/host_identity/HostFingerprint.hpp`, over
+`beebium::platform::host_identifier()` in `HostIdentifier.hpp` beside it. The
+library (`beebium_host_identity`) is header-only and free of the emulator
+core, so a C++ client derives its token from the server's own recipe:
 
 | Platform | Host identifier |
 |----------|-----------------|

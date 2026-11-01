@@ -18,9 +18,9 @@ import Foundation
 /// `SystemInfo.host_fingerprint`.
 ///
 /// The two must be derived the same way, so the recipe here mirrors
-/// `src/service/include/beebium/service/HostFingerprint.hpp`: the platform's
-/// host identifier, prefixed with a domain string, hashed with SHA-256 and
-/// rendered as lowercase hex. Changing either side alone makes every server
+/// `src/host-identity/include/beebium/host_identity/HostFingerprint.hpp`: the
+/// platform's host identifier, prefixed with a domain string, hashed with
+/// SHA-256 and rendered as lowercase hex. Changing either side alone makes every server
 /// look as though it is somewhere else.
 enum HostFingerprint {
     /// Must match `HOST_FINGERPRINT_DOMAIN` on the server.

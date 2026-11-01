@@ -10,23 +10,44 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef BEEBIUM_SERVICE_HOST_FINGERPRINT_HPP
-#define BEEBIUM_SERVICE_HOST_FINGERPRINT_HPP
+#ifndef BEEBIUM_HOST_IDENTITY_HOST_FINGERPRINT_HPP
+#define BEEBIUM_HOST_IDENTITY_HOST_FINGERPRINT_HPP
 
-#include "beebium/PlatformUtils.hpp"
+#include "beebium/host_identity/HostIdentifier.hpp"
 
 #include <openssl/sha.h>
 
 #include <array>
 #include <string>
+#include <string_view>
 
-namespace beebium::service {
+namespace beebium::host_identity {
 
 // Domain separation, so this digest can only ever be compared against another
 // host fingerprint and never collides with some other hash of the same input.
 // Both ends of the wire must use this exact string, so it is part of the
 // protocol: changing it makes every peer look like a different host.
 inline constexpr char HOST_FINGERPRINT_DOMAIN[] = "beebium-host-v1:";
+
+// The fingerprint of a given host identifier: SHA-256 over the domain prefix
+// and the identifier, as lowercase hex. Separate from host_fingerprint() so the
+// recipe can be checked against known values on any host.
+inline std::string host_fingerprint_of(std::string_view identifier) {
+    std::string input(HOST_FINGERPRINT_DOMAIN);
+    input.append(identifier);
+    std::array<unsigned char, SHA256_DIGEST_LENGTH> digest{};
+    SHA256(reinterpret_cast<const unsigned char*>(input.data()), input.size(),
+           digest.data());
+
+    static constexpr char HEX[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(digest.size() * 2);
+    for (unsigned char byte : digest) {
+        out.push_back(HEX[byte >> 4]);
+        out.push_back(HEX[byte & 0x0F]);
+    }
+    return out;
+}
 
 // A stable, opaque token identifying this host, for comparison only.
 //
@@ -44,22 +65,9 @@ inline std::string host_fingerprint() {
     if (!identifier) {
         return {};
     }
-
-    const std::string input = std::string(HOST_FINGERPRINT_DOMAIN) + *identifier;
-    std::array<unsigned char, SHA256_DIGEST_LENGTH> digest{};
-    SHA256(reinterpret_cast<const unsigned char*>(input.data()), input.size(),
-           digest.data());
-
-    static constexpr char HEX[] = "0123456789abcdef";
-    std::string out;
-    out.reserve(digest.size() * 2);
-    for (unsigned char byte : digest) {
-        out.push_back(HEX[byte >> 4]);
-        out.push_back(HEX[byte & 0x0F]);
-    }
-    return out;
+    return host_fingerprint_of(*identifier);
 }
 
-}  // namespace beebium::service
+}  // namespace beebium::host_identity
 
-#endif  // BEEBIUM_SERVICE_HOST_FINGERPRINT_HPP
+#endif  // BEEBIUM_HOST_IDENTITY_HOST_FINGERPRINT_HPP

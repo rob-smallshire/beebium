@@ -275,6 +275,7 @@ add_subdirectory(src/extensions)
 add_subdirectory(src/discovery)
 
 if(BEEBIUM_BUILD_SERVICE)
+    add_subdirectory(src/host-identity)
     add_subdirectory(src/service)
 endif()
 

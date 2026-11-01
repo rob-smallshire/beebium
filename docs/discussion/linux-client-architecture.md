@@ -257,10 +257,9 @@ graceful stop) is ported as a pure, unit-tested class.
   `src/core/extension-api/proto`) at build time with the same
   `cmake/BeebiumProto.cmake` the servers use; generated code never enters the
   tree.
-- It reuses, by path, `src/discovery` and the two fingerprint headers. Today
-  `HostFingerprint.hpp` reaches `host_identifier()` through the core's
-  `PlatformUtils.hpp`; refactor first, so the client does not need the core's
-  include tree for one function.
+- It reuses, by path, `src/discovery`, `ProtocolFingerprint.hpp` and
+  `src/host-identity` (`beebium_host_identity`, the header-only host
+  fingerprint recipe, free of the emulator core).
 - Dependencies on Raspberry Pi OS come from the distribution: Qt 6.8, gRPC
   1.51 and protobuf 3.21 (the Linux server already builds against these via the
   pkg-config fallback), OpenSSL, Avahi headers, Vulkan and GLES headers.

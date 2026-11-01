@@ -94,6 +94,7 @@ target_link_libraries(beebium_service
         # (RpcContext/RpcResponseWriter/ExtensionRpcDispatcher, anchored in
         # beebium_extension_api) to the ExtensionRpc gRPC service.
         beebium_extension_api
+        beebium_host_identity
         gRPC::grpc++
         protobuf::libprotobuf
 )

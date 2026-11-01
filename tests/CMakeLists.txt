@@ -1550,6 +1550,16 @@ target_link_libraries(test_loopback_serial_extension PRIVATE
 catch_discover_tests(test_loopback_serial_extension)
 
 # rpc-serial extension test (needs the service layer for the RpcSerial proto).
+# Host fingerprint recipe (beebium_host_identity, shared with clients)
+if(BEEBIUM_BUILD_SERVICE)
+    add_executable(test_host_fingerprint test_host_fingerprint.cpp)
+    target_link_libraries(test_host_fingerprint PRIVATE
+        beebium_host_identity
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_host_fingerprint)
+endif()
+
 if(BEEBIUM_BUILD_SERVICE)
     add_executable(test_rpc_serial_extension test_rpc_serial_extension.cpp)
     target_include_directories(test_rpc_serial_extension PRIVATE

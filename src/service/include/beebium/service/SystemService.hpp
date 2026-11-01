@@ -19,7 +19,7 @@
 #include "beebium/NamePlaceholderRegistry.hpp"
 #include "beebium/NameTemplate.hpp"
 #include "beebium/service/ConnectionTracker.hpp"
-#include "beebium/service/HostFingerprint.hpp"
+#include "beebium/host_identity/HostFingerprint.hpp"
 #include "beebium/service/MachineStore.hpp"
 #include "beebium/service/ProtocolFingerprint.hpp"
 #include "beebium/service/ShutdownPolicy.hpp"
@@ -417,7 +417,7 @@ grpc::Status SystemServiceImpl<MachineType>::GetSystemInfo(
     // connecting client can refuse to proceed on a contract mismatch, and the
     // path of this executable so the client can say which binary that was.
     response->set_protocol_fingerprint(std::string(PROTOCOL_FINGERPRINT));
-    response->set_host_fingerprint(host_fingerprint());
+    response->set_host_fingerprint(beebium::host_identity::host_fingerprint());
 
     if (auto exe_path = beebium::platform::executable_path()) {
         response->set_executable_path(exe_path->string());
