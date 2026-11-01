@@ -112,6 +112,21 @@ TEST_CASE("F11 leaves immersive for a window with its chrome back", "[immersive]
     CHECK_FALSE(live.window.isFullScreen());
 }
 
+TEST_CASE("Show Beebium is reachable while immersive, its menu bar hidden",
+          "[immersive][window]") {
+    LiveWindow live;
+    live.immersive()->trigger();
+    REQUIRE(live.window.presentation() == Presentation::immersive);
+    QAction* home = view_action(live.window, QStringLiteral("Show Beebium"));
+    REQUIRE(home);  // on the window, so its Ctrl+Shift+H works with the menus hidden
+    CHECK(home->shortcut() == QKeySequence(QStringLiteral("Ctrl+Shift+H")));
+    CHECK(home->shortcutContext() == Qt::WindowShortcut);
+    int requested = 0;
+    QObject::connect(&live.window, &MainWindow::home_requested, [&] { ++requested; });
+    home->trigger();
+    CHECK(requested == 1);
+}
+
 TEST_CASE("The exit bar leaves immersive", "[immersive][window]") {
     LiveWindow live;
     live.immersive()->trigger();

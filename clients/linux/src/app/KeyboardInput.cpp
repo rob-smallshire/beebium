@@ -151,8 +151,14 @@ HostModifiers KeyboardInput::held_modifiers() const {
     return held;
 }
 
+bool KeyboardInput::window_chord(const QKeyEvent& event) const {
+    const auto host_key = host_key_from_event(event, held_modifiers());
+    return host_key && host_key->code == "KeyH" &&
+           host_key->modifiers == (MODIFIER_CONTROL | MODIFIER_SHIFT);
+}
+
 bool KeyboardInput::takes(const QKeyEvent& event) const {
-    if (!send_ || event.key() == Qt::Key_F11) {
+    if (!send_ || event.key() == Qt::Key_F11 || window_chord(event)) {
         return false;
     }
     const auto host_key = host_key_from_event(event, held_modifiers());
@@ -187,7 +193,7 @@ bool KeyboardInput::key_press(const QKeyEvent& event) {
     if (const HostModifiers modifier = modifier_for_code(host_key->code)) {
         host_modifiers_down_[key_id(event)] = modifier;
     }
-    if (!send_) {
+    if (!send_ || window_chord(event)) {
         return false;
     }
     // A synchronised Caps Lock is a toggle with its own path, never a held
@@ -231,6 +237,13 @@ void KeyboardInput::press_break() {
 
 void KeyboardInput::release_break() {
     const auto events = held_.release("bbc:Break");
+    if (send_) {
+        send_(events);
+    }
+}
+
+void KeyboardInput::yield_to_window() {
+    const auto events = held_.release_all();
     if (send_) {
         send_(events);
     }

@@ -88,6 +88,14 @@ public:
     // screen); and not with Alt held unless the mapping binds this key with
     // Alt, Alt being the host's menu key here (frontend-modifier-keys.md R5).
     bool takes(const QKeyEvent& event) const;
+    // Ctrl+Shift+H (Show Beebium, the macOS client's Cmd+Shift+H): the
+    // window's whatever the mapping says, so the home window is always a
+    // chord away, immersive or not.
+    bool window_chord(const QKeyEvent& event) const;
+    // A window chord is about to fire: the CTRL and SHIFT that reached the
+    // machine on their way down come up now, never left held. Which host
+    // modifiers are physically down is kept: the chord may be pressed again.
+    void yield_to_window();
 
     // Return true if the event was the machine's.
     bool key_press(const QKeyEvent& event);

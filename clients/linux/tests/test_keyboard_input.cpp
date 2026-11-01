@@ -32,6 +32,8 @@ constexpr quint32 XKB_LEFT_SHIFT = 42 + 8;
 constexpr quint32 XKB_LEFT_ALT = 56 + 8;
 constexpr quint32 XKB_F12 = 88 + 8;
 constexpr quint32 XKB_CAPS_LOCK = 58 + 8;
+constexpr quint32 XKB_H = 35 + 8;
+constexpr quint32 XKB_LEFT_CONTROL = 29 + 8;
 
 QKeyEvent press(int key, quint32 scan_code, const QString& text = {},
                 Qt::KeyboardModifiers modifiers = Qt::NoModifier, bool auto_repeat = false) {
@@ -116,6 +118,45 @@ TEST_CASE("Host modifiers come from the keys tracked as down, not the event's fl
     wire.events.clear();
     CHECK_FALSE(input.key_press(press(Qt::Key_F12, XKB_F12, {}, Qt::AltModifier)));
     CHECK(wire.events.empty());
+}
+
+TEST_CASE("Ctrl+Shift+H is the window's, and the machine is left holding nothing",
+          "[keyboard][qt]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    // CTRL and SHIFT reach the machine as they go down, before the H that
+    // makes them a chord.
+    input.key_press(press(Qt::Key_Control, XKB_LEFT_CONTROL));
+    input.key_press(press(Qt::Key_Shift, XKB_LEFT_SHIFT));
+    REQUIRE_FALSE(input.held_keys().empty());
+    const QKeyEvent h = press(Qt::Key_H, XKB_H, {}, Qt::ControlModifier | Qt::ShiftModifier);
+    CHECK(input.window_chord(h));
+    CHECK_FALSE(input.takes(h));
+    wire.events.clear();
+    CHECK_FALSE(input.key_press(h));
+    CHECK(wire.events.empty());  // no H for the machine
+    // Given to the window: CTRL and SHIFT come up at once.
+    input.yield_to_window();
+    CHECK(input.held_keys().empty());
+    CHECK_FALSE(wire.events.empty());
+    // Still held, the chord is the window's again.
+    CHECK(input.window_chord(h));
+    // And their own key-ups later send nothing more.
+    wire.events.clear();
+    input.key_release(release(Qt::Key_Shift, XKB_LEFT_SHIFT));
+    input.key_release(release(Qt::Key_Control, XKB_LEFT_CONTROL));
+    CHECK(wire.events.empty());
+}
+
+TEST_CASE("Ctrl+H alone and Shift+H alone are still the machine's", "[keyboard][qt]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    input.key_press(press(Qt::Key_Control, XKB_LEFT_CONTROL));
+    const QKeyEvent ctrl_h = press(Qt::Key_H, XKB_H, {}, Qt::ControlModifier);
+    CHECK_FALSE(input.window_chord(ctrl_h));
+    CHECK(input.takes(ctrl_h));
 }
 
 TEST_CASE("Releasing everything forgets the host modifiers too", "[keyboard][qt]") {

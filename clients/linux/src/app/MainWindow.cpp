@@ -347,6 +347,9 @@ void MainWindow::build_menus() {
                                "another machine"));
     home_action->setShortcut(QKeySequence(tr("Ctrl+Shift+H")));
     connect(home_action, &QAction::triggered, this, &MainWindow::home_requested);
+    // On the window too: the menu bar is hidden while immersive (6.4).
+    home_action->setShortcutContext(Qt::WindowShortcut);
+    addAction(home_action);
     file->addSeparator();
     QAction* save_action = file->addAction(tr("&Save"));
     save_action->setShortcut(QKeySequence::Save);

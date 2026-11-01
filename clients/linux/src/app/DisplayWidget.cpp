@@ -65,10 +65,16 @@ void DisplayWidget::focusInEvent(QFocusEvent* event) {
 bool DisplayWidget::event(QEvent* event) {
     // A key the machine takes is the machine's, even where an application
     // shortcut uses it: on a BBC Micro, CTRL with a letter is typing.
-    if (event->type() == QEvent::ShortcutOverride &&
-        keyboard_.takes(*static_cast<QKeyEvent*>(event))) {
-        event->accept();
-        return true;
+    if (event->type() == QEvent::ShortcutOverride) {
+        const auto& key = *static_cast<QKeyEvent*>(event);
+        if (keyboard_.takes(key)) {
+            event->accept();
+            return true;
+        }
+        if (keyboard_.window_chord(key)) {
+            // The window's shortcut follows, and focus may go with it.
+            keyboard_.yield_to_window();
+        }
     }
     return QRhiWidget::event(event);
 }
