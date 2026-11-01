@@ -14,17 +14,19 @@
 
 #include "keyboard/EvdevCodes.hpp"
 
+#include <QFile>
+
 namespace beebium::linux_client {
 
 namespace {
 
 // The character a key gives without CTRL. Qt reports Ctrl+M as text "\r",
-// but key() still names M; letters come back as capitals, so take the lower
-// case, which is what the key types unshifted (R9).
-std::string character_ignoring_ctrl(const QKeyEvent& event) {
+// but key() still names M; letters come back as capitals, so take the case
+// SHIFT selects (R9).
+std::string character_ignoring_ctrl(const QKeyEvent& event, bool shift_held) {
     const int key = event.key();
     if (key >= Qt::Key_A && key <= Qt::Key_Z) {
-        return std::string(1, static_cast<char>('a' + (key - Qt::Key_A)));
+        return std::string(1, static_cast<char>((shift_held ? 'A' : 'a') + (key - Qt::Key_A)));
     }
     if (key >= Qt::Key_Space && key <= Qt::Key_AsciiTilde) {
         return std::string(1, static_cast<char>(key));
@@ -39,24 +41,44 @@ HeldKeys::KeyId key_id(const QKeyEvent& event) {
 
 }  // namespace
 
-std::optional<HostKey> host_key_from_event(const QKeyEvent& event) {
+std::optional<HostKey> host_key_from_event(const QKeyEvent& event, HostModifiers held) {
     const auto evdev = evdev_for_xkb_keycode(event.nativeScanCode());
     if (!evdev) {
         return std::nullopt;
     }
-    const std::string_view code = w3c_code_for_evdev(*evdev);
-    if (code.empty()) {
+    HostKey key;
+    key.evdev = evdev;
+    key.code = std::string(w3c_code_for_evdev(*evdev));
+    key.modifiers = held;
+    key.text = (held & MODIFIER_CONTROL)
+                   ? character_ignoring_ctrl(event, (held & MODIFIER_SHIFT) != 0)
+                   : event.text().toStdString();
+    return key;
+}
+
+std::optional<MappingFile> built_in_mapping(const QString& name) {
+    QFile file(QStringLiteral(":/keyboard-mappings/%1.json").arg(name));
+    if (!file.open(QIODevice::ReadOnly)) {
         return std::nullopt;
     }
-    HostKey key;
-    key.code = std::string(code);
-    key.text = event.text().toStdString();
-    key.ctrl_held = event.modifiers().testFlag(Qt::ControlModifier);
-    key.alt_held = event.modifiers().testFlag(Qt::AltModifier);
-    if (key.ctrl_held) {
-        key.text_ignoring_ctrl = character_ignoring_ctrl(event);
+    const QByteArray bytes = file.readAll();
+    auto result = parse_mapping_file(std::string_view(bytes.constData(),
+                                                      static_cast<std::size_t>(bytes.size())));
+    if (auto* mapping = std::get_if<MappingFile>(&result)) {
+        return std::move(*mapping);
     }
-    return key;
+    return std::nullopt;
+}
+
+KeyboardInput::KeyboardInput() {
+    if (auto mapping = built_in_mapping(QStringLiteral("Default"))) {
+        mapping_ = std::move(*mapping);
+    }
+}
+
+void KeyboardInput::set_mapping(MappingFile mapping) {
+    release_all();
+    mapping_ = std::move(mapping);
 }
 
 void KeyboardInput::attach(BbcKeyTable table, Sender send) {
@@ -71,15 +93,28 @@ void KeyboardInput::detach() {
     table_ = BbcKeyTable();
 }
 
+HostModifiers KeyboardInput::held_modifiers() const {
+    HostModifiers held = 0;
+    for (const auto& [id, modifier] : host_modifiers_down_) {
+        held |= modifier;
+    }
+    return held;
+}
+
 bool KeyboardInput::key_press(const QKeyEvent& event) {
     if (event.isAutoRepeat()) {
         return true;  // the MOS runs its own repeat (R7)
     }
-    if (!send_) {
+    const auto host_key = host_key_from_event(event, held_modifiers());
+    if (!host_key) {
         return false;
     }
-    const auto host_key = host_key_from_event(event);
-    if (!host_key) {
+    // Tracked before resolving anything else, mapped or not: a later key's
+    // `with` is decided by it.
+    if (const HostModifiers modifier = modifier_for_code(host_key->code)) {
+        host_modifiers_down_[key_id(event)] = modifier;
+    }
+    if (!send_) {
         return false;
     }
     const auto resolved = resolve_key(mapping_, table_, *host_key);
@@ -94,6 +129,7 @@ bool KeyboardInput::key_release(const QKeyEvent& event) {
     if (event.isAutoRepeat()) {
         return true;
     }
+    host_modifiers_down_.erase(key_id(event));
     // By identity alone: what the key resolved to was decided at its press,
     // and a release of a key never pressed sends nothing (R8).
     const auto events = held_.release(key_id(event));
@@ -104,6 +140,7 @@ bool KeyboardInput::key_release(const QKeyEvent& event) {
 }
 
 void KeyboardInput::release_all() {
+    host_modifiers_down_.clear();
     const auto events = held_.release_all();
     if (send_) {
         send_(events);

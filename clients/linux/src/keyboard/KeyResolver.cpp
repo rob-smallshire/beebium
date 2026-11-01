@@ -14,38 +14,31 @@
 
 namespace beebium::linux_client {
 
-KeyMapping logical_key_mapping() {
-    KeyMapping mapping;
-    mapping.name = "Logical";
-    mapping.character_mapping = true;
-    mapping.entries = {
-        {"ArrowUp", false, "Up"},       {"ArrowDown", false, "Down"},
-        {"ArrowLeft", false, "Left"},   {"ArrowRight", false, "Right"},
-        {"F1", false, "f1"},            {"F2", false, "f2"},
-        {"F3", false, "f3"},            {"F4", false, "f4"},
-        {"F5", false, "f5"},            {"F6", false, "f6"},
-        {"F7", false, "f7"},            {"F8", false, "f8"},
-        {"F9", false, "f9"},            {"F10", false, "f0"},
-        {"F11", false, "Copy"},         {"Escape", false, "Escape"},
-        {"F12", true, "Break"},         {"F13", false, "Shift Lock"},
-        {"Backspace", false, "Delete"}, {"ShiftLeft", false, "Shift"},
-        {"ShiftRight", false, "Shift"}, {"ControlLeft", false, "Ctrl"},
-        {"ControlRight", false, "Ctrl"},
-    };
-    return mapping;
-}
-
 namespace {
 
-std::optional<ResolvedKey> resolve_entry(const KeyMappingEntry& entry, const BbcKeyTable& table) {
+bool applies_to(const MappingEntry& entry, const HostKey& key) {
+    if (entry.code) {
+        return !key.code.empty() && *entry.code == key.code;
+    }
+    return entry.platform == "linux" && entry.linux_scancode && key.evdev &&
+           *entry.linux_scancode == *key.evdev;
+}
+
+// Switchable entries start as the file says; the user's switches belong to
+// the keyboard view, which does not exist yet.
+bool switched_on(const MappingEntry& entry) {
+    return !entry.disabled.value_or(false);
+}
+
+std::optional<ResolvedKey> resolve_entry(const MappingEntry& entry, const BbcKeyTable& table) {
     ResolvedKey key;
     key.bbc_shift = entry.bbc_shift;
     key.bbc_ctrl = entry.bbc_ctrl;
-    if (entry.bbc_key_name == "Break") {
+    if (entry.bbc_key == "Break") {
         key.role = KeyRole::break_key;
         return key;
     }
-    const auto ik = table.ik_by_name(entry.bbc_key_name);
+    const auto ik = table.ik_by_name(entry.bbc_key);
     if (!ik) {
         return std::nullopt;
     }
@@ -60,34 +53,38 @@ std::optional<ResolvedKey> resolve_entry(const KeyMappingEntry& entry, const Bbc
 
 }  // namespace
 
-std::optional<ResolvedKey> resolve_key(const KeyMapping& mapping, const BbcKeyTable& table,
+std::optional<ResolvedKey> resolve_key(const MappingFile& mapping, const BbcKeyTable& table,
                                        const HostKey& key) {
-    const KeyMappingEntry* with_alt = nullptr;
-    const KeyMappingEntry* plain = nullptr;
-    for (const auto& entry : mapping.entries) {
-        if (entry.code != key.code) {
+    const MappingEntry* exact = nullptr;
+    const MappingEntry* subset = nullptr;
+    const MappingEntry* unqualified = nullptr;
+    for (const auto& entry : mapping.keys) {
+        if (!applies_to(entry, key) || !switched_on(entry)) {
             continue;
         }
-        if (entry.requires_alt) {
-            if (key.alt_held && !with_alt) {
-                with_alt = &entry;
+        if ((entry.with & ~key.modifiers) != 0) {
+            continue;  // needs a modifier that is not held
+        }
+        if (entry.with == key.modifiers) {
+            if (!exact) {
+                exact = &entry;
             }
-        } else if (!plain) {
-            plain = &entry;
+        } else if (entry.with != 0) {
+            if (!subset) {
+                subset = &entry;
+            }
+        } else if (!unqualified) {
+            unqualified = &entry;
         }
     }
-    if (const KeyMappingEntry* entry = with_alt ? with_alt : plain) {
+    if (const MappingEntry* entry = exact ? exact : subset ? subset : unqualified) {
         return resolve_entry(*entry, table);
     }
 
-    if (!mapping.character_mapping) {
+    if (!mapping.character_mapping || key.text.empty()) {
         return std::nullopt;
     }
-    const std::string& character = key.ctrl_held ? key.text_ignoring_ctrl : key.text;
-    if (character.empty()) {
-        return std::nullopt;
-    }
-    const auto entry = table.by_character(character);
+    const auto entry = table.by_character(key.text);
     if (!entry) {
         return std::nullopt;
     }

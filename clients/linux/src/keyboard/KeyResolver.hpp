@@ -14,51 +14,31 @@
 #define BEEBIUM_LINUX_KEYBOARD_KEY_RESOLVER_HPP
 
 #include "keyboard/BbcKeyTable.hpp"
+#include "keyboard/MappingFile.hpp"
 
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace beebium::linux_client {
 
-// A direct entry of a keyboard mapping: a physical host key, named by its
-// neutral W3C code (client specification 7.4), bound to a BBC key with
-// explicit SHIFT and CTRL overrides.
-struct KeyMappingEntry {
-    std::string code;           // "ArrowUp", "F12"
-    bool requires_alt = false;  // matches only while Alt is held
-    std::string bbc_key_name;   // a server table name, or "Break"
-    bool bbc_shift = false;     // hold BBC SHIFT with it
-    bool bbc_ctrl = false;      // hold BBC CTRL with it
-};
-
-struct KeyMapping {
-    std::string name;
-    // Resolve keys with no direct entry by the character the host layout
-    // gives them, through the server's table.
-    bool character_mapping = true;
-    std::vector<KeyMappingEntry> entries;
-};
-
-// The built-in default, "Logical": the macOS client's Logical mapping in
-// neutral codes. Keys that produce characters (letters, digits, punctuation,
-// Return, Tab, Space) come through character mapping; the rest are direct.
-KeyMapping logical_key_mapping();
-
-// One host key event, as the resolver needs it.
+// One host key event, as resolution needs it.
 struct HostKey {
-    std::string code;                // W3C code of the physical key
-    std::string text;                // what the host layout produced (UTF-8)
-    std::string text_ignoring_ctrl;  // the same key's character without CTRL
-    bool ctrl_held = false;
-    bool alt_held = false;
+    std::string code;                    // W3C code of the physical key; empty if none
+    std::optional<std::uint32_t> evdev;  // the native key, for linux platform entries
+    // Modifier keys held besides this one, from the client's own tracking
+    // of held keys, not the event's flags (docs/keyboard-mapping-files.md 4).
+    HostModifiers modifiers = 0;
+    // The character the host layout gives this key with those modifiers,
+    // ignoring Control: the host folds Ctrl+M into a carriage return, and
+    // the BBC applies CTRL itself (frontend-modifier-keys.md R9).
+    std::string text;
 };
 
 enum class KeyRole {
     matrix,     // an ordinary key at a matrix position
-    shift,      // the user's own SHIFT: feeds the physical state only
-    ctrl,       // the user's own CTRL: likewise
+    shift,      // the BBC SHIFT key itself: feeds the derived SHIFT
+    ctrl,       // the BBC CTRL key itself: likewise
     break_key,  // the reset line, not a matrix position
 };
 
@@ -66,16 +46,20 @@ struct ResolvedKey {
     KeyRole role = KeyRole::matrix;
     std::uint8_t ik_number = 0;
     bool from_character_mapping = false;
-    bool bbc_shift = false;  // the BBC key needs SHIFT (character) or asks for it (direct)
-    bool bbc_ctrl = false;   // direct entries only: a character never needs CTRL
+    bool bbc_shift = false;  // the entry holds SHIFT, or the character's face needs it
+    bool bbc_ctrl = false;   // the entry holds CTRL; a character never needs it
 };
 
-// Resolve a host key: a direct entry first (one requiring Alt is preferred
-// while Alt is held), else, if the mapping allows, the character. Under CTRL
-// the character is the unmodified one, since the host folds Ctrl+M into a
-// carriage return and the BBC applies CTRL itself (frontend-modifier-keys.md
-// R9). Nullopt for a key that maps to nothing.
-std::optional<ResolvedKey> resolve_key(const KeyMapping& mapping, const BbcKeyTable& table,
+// Resolve per docs/keyboard-mapping-files.md section 4 (client
+// specification 7.4):
+//  1. physical entries for this key (its code, or this platform's entry for
+//     its native key) whose `with` is a subset of the held modifiers: one
+//     equal to them; else the first, in file order, that is a proper subset;
+//     else the first with no `with`. An entry switched off is skipped;
+//  2. if the mapping allows, the character, through the server's catalogue;
+//  3. nothing.
+// An entry naming a key the catalogue does not know resolves to nothing.
+std::optional<ResolvedKey> resolve_key(const MappingFile& mapping, const BbcKeyTable& table,
                                        const HostKey& key);
 
 }  // namespace beebium::linux_client

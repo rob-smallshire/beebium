@@ -15,11 +15,13 @@
 
 #include "keyboard/HeldKeys.hpp"
 
+#include "Corpus.hpp"
 #include "SampleKeyTable.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 using namespace beebium::linux_client;
+using beebium::linux_client::testing::corpus_mapping;
 using beebium::linux_client::testing::sample_key_table;
 using Events = std::vector<WireEvent>;
 
@@ -30,15 +32,15 @@ constexpr WireEvent up(std::uint8_t ik) { return {WireAction::key_up, ik}; }
 constexpr std::uint8_t SHIFT = BBC_SHIFT_IK;
 constexpr std::uint8_t CTRL = BBC_CTRL_IK;
 
-ResolvedKey resolve(std::string code, std::string text = {}, bool ctrl = false,
-                    std::string text_ignoring_ctrl = {}, bool alt = false) {
+// Resolve under the Default built-in. `text` is the character ignoring
+// Control; `modifiers` the host modifiers held besides the key.
+ResolvedKey resolve(std::string code, std::string text = {}, HostModifiers modifiers = 0) {
+    static const MappingFile mapping = corpus_mapping("Default.json");
     HostKey host;
     host.code = std::move(code);
     host.text = std::move(text);
-    host.ctrl_held = ctrl;
-    host.text_ignoring_ctrl = std::move(text_ignoring_ctrl);
-    host.alt_held = alt;
-    const auto resolved = resolve_key(logical_key_mapping(), sample_key_table(), host);
+    host.modifiers = modifiers;
+    const auto resolved = resolve_key(mapping, sample_key_table(), host);
     REQUIRE(resolved.has_value());
     return *resolved;
 }
@@ -62,7 +64,8 @@ TEST_CASE("A US colon suppresses the user's SHIFT while it is held", "[keyboard]
     HeldKeys held;
     CHECK(held.press("evdev:42", resolve("ShiftLeft")) == Events{down(SHIFT)});
     // Modifiers move before the key goes down.
-    CHECK(held.press("evdev:39", resolve("Semicolon", ":")) == Events{up(SHIFT), down(0x48)});
+    CHECK(held.press("evdev:39", resolve("Semicolon", ":", MODIFIER_SHIFT)) ==
+          Events{up(SHIFT), down(0x48)});
     // The key comes up before the modifiers move back.
     CHECK(held.release("evdev:39") == Events{up(0x48), down(SHIFT)});
     CHECK(held.release("evdev:42") == Events{up(SHIFT)});
@@ -72,7 +75,7 @@ TEST_CASE("A shifted character rides the user's SHIFT", "[keyboard][held]") {
     HeldKeys held;
     held.press("evdev:42", resolve("ShiftLeft"));
     // Physical SHIFT already gives the shifted face: nothing to add.
-    CHECK(held.press("evdev:30", resolve("KeyA", "A")) == Events{down(0x41)});
+    CHECK(held.press("evdev:30", resolve("KeyA", "A", MODIFIER_SHIFT)) == Events{down(0x41)});
     // Facts were frozen at the press: releasing SHIFT releases BBC SHIFT.
     CHECK(held.release("evdev:42") == Events{up(SHIFT)});
     CHECK(held.release("evdev:30") == Events{up(0x41)});
@@ -82,7 +85,7 @@ TEST_CASE("Holding both SHIFTs and releasing one leaves SHIFT down, not stuck",
           "[keyboard][held]") {
     HeldKeys held;
     CHECK(held.press("evdev:42", resolve("ShiftLeft")) == Events{down(SHIFT)});
-    CHECK(held.press("evdev:54", resolve("ShiftRight")).empty());
+    CHECK(held.press("evdev:54", resolve("ShiftRight", {}, MODIFIER_SHIFT)).empty());
     CHECK(held.release("evdev:42").empty());
     CHECK(held.bbc_shift_down());
     CHECK(held.release("evdev:54") == Events{up(SHIFT)});
@@ -92,7 +95,7 @@ TEST_CASE("Holding both SHIFTs and releasing one leaves SHIFT down, not stuck",
 TEST_CASE("CTRL with a letter is CTRL and that letter, not RETURN", "[keyboard][held]") {
     HeldKeys held;
     CHECK(held.press("evdev:29", resolve("ControlLeft")) == Events{down(CTRL)});
-    CHECK(held.press("evdev:50", resolve("KeyM", "\r", true, "m")) == Events{down(0x65)});
+    CHECK(held.press("evdev:50", resolve("KeyM", "m", MODIFIER_CONTROL)) == Events{down(0x65)});
     CHECK(held.release("evdev:50") == Events{up(0x65)});
     CHECK(held.release("evdev:29") == Events{up(CTRL)});
 }
@@ -101,7 +104,7 @@ TEST_CASE("Releasing everything leaves nothing down", "[keyboard][held]") {
     // Hold SHIFT, switch away: everything comes up, keys before modifiers.
     HeldKeys held;
     held.press("evdev:42", resolve("ShiftLeft"));
-    held.press("evdev:30", resolve("KeyA", "A"));
+    held.press("evdev:30", resolve("KeyA", "A", MODIFIER_SHIFT));
     CHECK(held.release_all() == Events{up(0x41), up(SHIFT)});
     CHECK(held.empty());
     CHECK_FALSE(held.bbc_shift_down());
@@ -125,7 +128,7 @@ TEST_CASE("A second press of a held key sends nothing", "[keyboard][held]") {
 
 TEST_CASE("Break goes to the reset line, not the matrix", "[keyboard][held]") {
     HeldKeys held;
-    const auto alt_f12 = resolve("F12", {}, false, {}, true);
+    const auto alt_f12 = resolve("F12", {}, MODIFIER_ALT);
     CHECK(held.press("evdev:88", alt_f12) == Events{{WireAction::break_down, 0}});
     CHECK(held.release("evdev:88") == Events{{WireAction::break_up, 0}});
 

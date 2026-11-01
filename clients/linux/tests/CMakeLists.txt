@@ -30,6 +30,9 @@ function(beebium_linux_add_test name)
         target_link_libraries(${name} PRIVATE Catch2::Catch2WithMain)
     endif()
     target_link_libraries(${name} PRIVATE ${ARG_LIBRARIES})
+    target_compile_definitions(${name} PRIVATE
+        BEEBIUM_KEYBOARD_CORPUS_DIRPATH="${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}")
+    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
     catch_discover_tests(${name}
         PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
@@ -93,3 +96,11 @@ beebium_linux_add_test(test_key_sender
 beebium_linux_add_test(test_keyboard_input QT
     SOURCES test_keyboard_input.cpp
     LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_mapping_file
+    SOURCES test_mapping_file.cpp
+    LIBRARIES beebium_linux_keyboard)
+
+beebium_linux_add_test(test_mapping_corpus
+    SOURCES test_mapping_corpus.cpp
+    LIBRARIES beebium_linux_keyboard)

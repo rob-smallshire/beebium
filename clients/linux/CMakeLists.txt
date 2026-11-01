@@ -37,6 +37,24 @@ get_filename_component(BEEBIUM_REPO_DIRPATH "${CMAKE_CURRENT_SOURCE_DIR}/../.." 
 include(${BEEBIUM_REPO_DIRPATH}/cmake/BeebiumGrpc.cmake)
 
 find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets ShaderTools)
+
+# nlohmann-json for keyboard mapping files, found as the root build finds it:
+# an installed copy, else the same pinned release fetched.
+find_package(nlohmann_json 3.11 CONFIG QUIET)
+if(NOT nlohmann_json_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(
+        nlohmann_json
+        URL https://github.com/nlohmann/json/archive/refs/tags/v3.11.3.tar.gz
+        URL_HASH SHA256=0d8ef5af7f9794e3263480193c491549b2ba6cc74bb018906202ada498a79406
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    FetchContent_MakeAvailable(nlohmann_json)
+endif()
+
+# The keyboard mapping conformance corpus. Its built-ins are also the
+# built-ins the client ships (docs/keyboard-mapping-files.md 5, 6): one copy.
+set(BEEBIUM_KEYBOARD_CORPUS_DIRPATH ${BEEBIUM_REPO_DIRPATH}/tests/assets/keyboard-mappings)
 qt_standard_project_setup()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
@@ -102,10 +120,15 @@ add_library(beebium_linux_keyboard STATIC
     src/keyboard/EvdevCodes.cpp
     src/keyboard/HeldKeys.cpp
     src/keyboard/KeyResolver.cpp
+    src/keyboard/MappingFile.cpp
 )
 target_include_directories(beebium_linux_keyboard PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # Only BbcKeyTable::from_proto reads a proto message.
-target_link_libraries(beebium_linux_keyboard PUBLIC beebium_linux_protos)
+target_link_libraries(beebium_linux_keyboard
+    PUBLIC
+        beebium_linux_protos
+        nlohmann_json::nlohmann_json
+)
 
 # --- Connection: everything between the wire and the UI, without Qt ---------
 
@@ -171,6 +194,19 @@ target_link_libraries(beebium_linux_app
     PUBLIC
         Qt6::Widgets
         beebium_linux_display
+)
+
+qt_add_resources(beebium_linux_app "keyboard_mappings"
+    PREFIX "/keyboard-mappings"
+    BASE ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}
+    FILES
+        ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Default.json
+        ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Logical.json
+        ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Arcadians.json
+        ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Boffin.json
+        ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Planetoid.json
+        ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Snapper.json
+        ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Thrust.json
 )
 
 qt_add_executable(beebium src/app/main.cpp)

@@ -52,8 +52,8 @@ public:
     // the same key shifted.
     std::optional<BbcKeyEntry> by_character(std::string_view utf8_character) const;
 
-    // By key name, as mapping files name BBC keys. Case matters only where
-    // names differ by case alone ("a" and "A" are one key, so either works).
+    // By key name, as mapping files name BBC keys: exactly, else ignoring
+    // ASCII case ("return" is "Return"; "a" and "A" are one key).
     std::optional<std::uint8_t> ik_by_name(std::string_view name) const;
 
     bool empty() const { return by_character_.empty() && by_name_.empty(); }

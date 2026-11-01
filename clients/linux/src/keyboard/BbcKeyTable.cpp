@@ -14,7 +14,21 @@
 
 #include "keyboard.pb.h"
 
+#include <cctype>
+
 namespace beebium::linux_client {
+
+namespace {
+
+std::string fold_case(std::string_view text) {
+    std::string folded(text);
+    for (char& c : folded) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return folded;
+}
+
+}  // namespace
 
 BbcKeyTable::BbcKeyTable(const std::vector<BbcKeyEntry>& entries) {
     for (const auto& entry : entries) {
@@ -49,10 +63,18 @@ std::optional<BbcKeyEntry> BbcKeyTable::by_character(std::string_view utf8_chara
 
 std::optional<std::uint8_t> BbcKeyTable::ik_by_name(std::string_view name) const {
     const auto found = by_name_.find(name);
-    if (found == by_name_.end()) {
-        return std::nullopt;
+    if (found != by_name_.end()) {
+        return found->second;
     }
-    return found->second;
+    // Names compare case-insensitively (docs/keyboard-mapping-files.md 3.3);
+    // the letters' two cases name one key, so any match will do.
+    const auto folded = fold_case(name);
+    for (const auto& [candidate, ik] : by_name_) {
+        if (fold_case(candidate) == folded) {
+            return ik;
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace beebium::linux_client
