@@ -20,6 +20,8 @@
 
 #include <QMetaObject>
 
+#include <cstdio>
+
 namespace beebium::linux_client {
 
 SessionAudio::SessionAudio(QObject* parent)
@@ -88,6 +90,15 @@ void SessionAudio::on_format(unsigned generation, const AudioLayout& layout,
 }
 
 void SessionAudio::stop() {
+    if (loaded_) {
+        // For diagnosis: how this connection's sound went.
+        const AudioHealth sound = health();
+        std::fprintf(stderr,
+                     "beebium: sound this connection: %llu underruns, %llu dropped, "
+                     "%d ms buffered\n",
+                     static_cast<unsigned long long>(sound.underrun_events),
+                     static_cast<unsigned long long>(sound.dropped_samples), sound.latency_ms);
+    }
     ++generation_;
     if (output_) {
         output_->stop();
