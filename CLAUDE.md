@@ -252,6 +252,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 - `coprocessor-extension-guide.md` - How to add a new coprocessor (Z80, 6809, NS32016, 80186...) as a plugin
 - `emulation-thread-ownership.md` - Who owns emulated state and how a service or extension reaches it safely from a gRPC thread: the pause/quiesce primitive, the busy scope, and the TSan witnesses that enforce it
 - `keyboard.md` - Keyboard matrix and input handling
+- `keyboard-mapping-files.md` - The cross-client keyboard mapping file format (version 2): physical keys named by W3C code values, host modifiers, BBC keys by catalogue name, platform escape entries, resolution order, the built-in mappings, conformance corpus, and the conversion from the macOS client's version 1 form (#231)
 - `frontend-modifier-keys.md` - How a front-end must translate host modifier keys (SHIFT/CTRL) to avoid stuck-modifier desync; platform-independent rules plus macOS specifics, for future front-ends
 - `frontend-local-server-gating.md` - How a front-end discovers whether the server shares its filesystem (SystemInfo.host_fingerprint), and which path-exchanging features must be gated on it; platform-independent rules plus macOS specifics, for future front-ends
 - `frontend-sleep-wake.md` - How a front-end survives host sleep: present-on-frame for display sleep, and a platform-abstracted wake signal driving active reconnect for full system sleep; for future front-ends
