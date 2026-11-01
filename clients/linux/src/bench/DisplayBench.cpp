@@ -68,6 +68,40 @@ struct Stroke {
     bool shifted;
 };
 
+// Caps Lock synchronisation against a live machine (client specification
+// 7.3): sync the guest to off, then on, through KeySender, reading the exact
+// latch back after each. Exits 0 when both took.
+int run_caps_lock_test(const std::shared_ptr<grpc::Channel>& channel) {
+    auto stub = beebium::KeyboardService::NewStub(channel);
+    const auto read_latch = [&]() -> std::optional<bool> {
+        grpc::ClientContext context;
+        beebium::LockKeyState state;
+        if (!stub->GetLockState(&context, {}, &state).ok()) {
+            return std::nullopt;
+        }
+        return state.caps_lock_on();
+    };
+    std::fprintf(stderr, "caps test: guest Caps Lock starts %s\n",
+                 read_latch().value_or(false) ? "on" : "off");
+    bool all_took = true;
+    for (bool wanted : {false, true, true}) {
+        KeySender sender(channel);
+        WireEvent sync;
+        sync.action = WireAction::caps_lock_sync;
+        sync.caps_lock_on = wanted;
+        sender.send({sync});
+        sender.stop();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        const auto latch = read_latch();
+        std::fprintf(stderr, "caps test: synced to %s: %llu tap(s), guest now %s\n",
+                     wanted ? "on" : "off",
+                     static_cast<unsigned long long>(sender.caps_lock_taps()),
+                     latch ? (*latch ? "on" : "off") : "unknown");
+        all_took = all_took && latch == wanted;
+    }
+    return all_took ? 0 : 1;
+}
+
 // Type through the client's own keyboard path (KeyboardInput, HeldKeys,
 // KeySender) with synthetic Qt events, then read the MODE 7 screen back.
 // Proves hardware-path typing end to end without a display.
@@ -168,8 +202,12 @@ int main(int argc, char* argv[]) {
         QStringLiteral("key-test"),
         QStringLiteral("Type PRINT 6*7 through the keyboard path, read the screen, and exit "
                        "(0 when it shows 42). Needs the machine in MODE 7."));
+    const QCommandLineOption caps_test_option(
+        QStringLiteral("caps-lock-test"),
+        QStringLiteral("Sync the machine's Caps Lock off, on and on again through the key "
+                       "sender, reading the latch back; exit 0 when each took."));
     parser.addOptions({connect_option, api_option, size_option, seconds_option, type_option,
-                       settle_option, save_option, key_test_option});
+                       settle_option, save_option, key_test_option, caps_test_option});
     parser.process(application);
 
     const QStringList size_parts = parser.value(size_option).split(QLatin1Char('x'));
@@ -259,6 +297,9 @@ int main(int argc, char* argv[]) {
 
     if (parser.isSet(key_test_option)) {
         return run_key_test(channel);
+    }
+    if (parser.isSet(caps_test_option)) {
+        return run_caps_lock_test(channel);
     }
 
     FrameMailbox mailbox;

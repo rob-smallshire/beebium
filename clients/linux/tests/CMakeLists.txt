@@ -104,3 +104,10 @@ beebium_linux_add_test(test_mapping_file
 beebium_linux_add_test(test_mapping_corpus
     SOURCES test_mapping_corpus.cpp
     LIBRARIES beebium_linux_keyboard)
+
+beebium_linux_add_test(test_caps_lock_sync QT
+    SOURCES test_caps_lock_sync.cpp
+    LIBRARIES beebium_linux_app)
+if(XKBCOMMON_FOUND)
+    target_link_libraries(test_caps_lock_sync PRIVATE PkgConfig::XKBCOMMON)
+endif()

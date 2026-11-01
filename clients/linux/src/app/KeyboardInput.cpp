@@ -79,6 +79,20 @@ KeyboardInput::KeyboardInput() {
 void KeyboardInput::set_mapping(MappingFile mapping) {
     release_all();
     mapping_ = std::move(mapping);
+    // Switching synchronisation on is a sync point (7.3).
+    sync_caps_lock();
+}
+
+void KeyboardInput::sync_caps_lock() {
+    if (!send_ || !mapping_.synchronize_caps_lock || !host_caps_lock_) {
+        return;
+    }
+    if (const auto host_on = host_caps_lock_()) {
+        WireEvent sync;
+        sync.action = WireAction::caps_lock_sync;
+        sync.caps_lock_on = *host_on;
+        send_({sync});
+    }
 }
 
 void KeyboardInput::attach(BbcKeyTable table, Sender send) {
@@ -116,6 +130,14 @@ bool KeyboardInput::key_press(const QKeyEvent& event) {
     }
     if (!send_) {
         return false;
+    }
+    // A synchronised Caps Lock is a toggle with its own path, never a held
+    // key (7.3); unsynchronised, a mapping may bind it like any other key.
+    if (host_key->code == "CapsLock" && mapping_.synchronize_caps_lock) {
+        if (caps_lock_pressed_) {
+            caps_lock_pressed_();
+        }
+        return true;
     }
     const auto resolved = resolve_key(mapping_, table_, *host_key);
     if (!resolved) {

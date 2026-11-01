@@ -31,6 +31,7 @@ constexpr quint32 XKB_M = 50 + 8;
 constexpr quint32 XKB_LEFT_SHIFT = 42 + 8;
 constexpr quint32 XKB_LEFT_ALT = 56 + 8;
 constexpr quint32 XKB_F12 = 88 + 8;
+constexpr quint32 XKB_CAPS_LOCK = 58 + 8;
 
 QKeyEvent press(int key, quint32 scan_code, const QString& text = {},
                 Qt::KeyboardModifiers modifiers = Qt::NoModifier, bool auto_repeat = false) {
@@ -138,4 +139,82 @@ TEST_CASE("Detaching releases what is held and sends nothing after", "[keyboard]
     wire.events.clear();
     CHECK_FALSE(input.key_press(press(Qt::Key_A, XKB_A, QStringLiteral("a"))));
     CHECK(wire.events.empty());
+}
+
+namespace {
+
+std::vector<WireEvent> caps_syncs(const std::vector<WireEvent>& events) {
+    std::vector<WireEvent> syncs;
+    for (const auto& event : events) {
+        if (event.action == WireAction::caps_lock_sync) {
+            syncs.push_back(event);
+        }
+    }
+    return syncs;
+}
+
+}  // namespace
+
+TEST_CASE("Syncing sends the host Caps Lock state when the mapping asks",
+          "[keyboard][qt][caps-lock]") {
+    Wire wire;
+    KeyboardInput input;  // Default: synchronizeCapsLock on
+    input.attach(sample_key_table(), wire.sender());
+    input.set_host_caps_lock([] { return std::optional<bool>(false); });
+    input.sync_caps_lock();
+    const auto syncs = caps_syncs(wire.events);
+    REQUIRE(syncs.size() == 1);
+    CHECK_FALSE(syncs[0].caps_lock_on);
+}
+
+TEST_CASE("Syncing does nothing when the host state is unknown or sync is off",
+          "[keyboard][qt][caps-lock]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    input.sync_caps_lock();  // no host reader
+    input.set_host_caps_lock([] { return std::optional<bool>(); });
+    input.sync_caps_lock();  // unknown
+    CHECK(caps_syncs(wire.events).empty());
+
+    input.set_host_caps_lock([] { return std::optional<bool>(true); });
+    input.set_mapping(*built_in_mapping(QStringLiteral("Thrust")));  // sync off
+    input.sync_caps_lock();
+    CHECK(caps_syncs(wire.events).empty());
+}
+
+TEST_CASE("Choosing a synchronising mapping is a sync point", "[keyboard][qt][caps-lock]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    input.set_host_caps_lock([] { return std::optional<bool>(true); });
+    input.set_mapping(*built_in_mapping(QStringLiteral("Logical")));
+    CHECK(caps_syncs(wire.events).size() == 1);
+}
+
+TEST_CASE("A synchronised host Caps Lock key is a toggle, not a held key",
+          "[keyboard][qt][caps-lock]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    int pressed = 0;
+    input.set_caps_lock_pressed([&] { ++pressed; });
+    CHECK(input.key_press(press(Qt::Key_CapsLock, XKB_CAPS_LOCK)));
+    input.key_release(release(Qt::Key_CapsLock, XKB_CAPS_LOCK));
+    CHECK(pressed == 1);
+    CHECK(wire.events.empty());
+    CHECK(input.held_keys().empty());
+}
+
+TEST_CASE("Unsynchronised, the host Caps Lock key resolves like any other",
+          "[keyboard][qt][caps-lock]") {
+    Wire wire;
+    KeyboardInput input;
+    input.set_mapping(*built_in_mapping(QStringLiteral("Thrust")));
+    input.attach(sample_key_table(), wire.sender());
+    int pressed = 0;
+    input.set_caps_lock_pressed([&] { ++pressed; });
+    // Thrust names no CapsLock entry and maps no characters: ignored.
+    CHECK_FALSE(input.key_press(press(Qt::Key_CapsLock, XKB_CAPS_LOCK)));
+    CHECK(pressed == 0);
 }

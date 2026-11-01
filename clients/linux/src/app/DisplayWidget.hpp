@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_APP_DISPLAY_WIDGET_HPP
 #define BEEBIUM_LINUX_APP_DISPLAY_WIDGET_HPP
 
+#include "app/HostLockState.hpp"
 #include "app/KeyboardInput.hpp"
 #include "connection/FrameMailbox.hpp"
 #include "display/DisplayRenderer.hpp"
@@ -62,6 +63,7 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
+    void focusInEvent(QFocusEvent* event) override;
     // Tab and Shift+Tab belong to the machine, not to widget focus.
     bool focusNextPrevChild(bool next) override;
 
@@ -69,6 +71,7 @@ private:
     FrameMailbox& mailbox_;
     DisplayRenderer renderer_;
     KeyboardInput keyboard_;
+    std::unique_ptr<HostLockState> host_locks_;
     QRhi* initialised_for_ = nullptr;
     QString graphics_description_;
     IntervalRecorder receive_to_render_;

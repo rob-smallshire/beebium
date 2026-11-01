@@ -135,6 +135,7 @@ target_link_libraries(beebium_linux_keyboard
 add_library(beebium_linux_connection STATIC
     src/connection/Compatibility.cpp
     src/connection/DecodedFrame.cpp
+    src/connection/GuestReadyWatcher.cpp
     src/connection/Handshake.cpp
     src/connection/KeySender.cpp
     src/connection/PictureGeometry.cpp
@@ -182,6 +183,7 @@ qt_add_shaders(beebium_linux_display "display_shaders"
 add_library(beebium_linux_app STATIC
     src/app/ApplicationInfo.cpp
     src/app/DisplayWidget.cpp
+    src/app/HostLockState.cpp
     src/app/KeyboardInput.cpp
     src/app/MachineSession.cpp
     src/app/MainWindow.cpp
@@ -195,6 +197,24 @@ target_link_libraries(beebium_linux_app
         Qt6::Widgets
         beebium_linux_display
 )
+
+# Reading the host's Caps Lock (src/app/HostLockState.cpp): xcb on X11,
+# wayland-client and xkbcommon on Wayland. Without them the client still
+# builds, and Caps Lock synchronisation does nothing.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(XCB IMPORTED_TARGET xcb)
+    pkg_check_modules(WAYLAND_CLIENT IMPORTED_TARGET wayland-client)
+    pkg_check_modules(XKBCOMMON IMPORTED_TARGET xkbcommon)
+endif()
+if(XCB_FOUND)
+    target_compile_definitions(beebium_linux_app PRIVATE BEEBIUM_HAS_X11_LOCKS)
+    target_link_libraries(beebium_linux_app PRIVATE PkgConfig::XCB)
+endif()
+if(WAYLAND_CLIENT_FOUND AND XKBCOMMON_FOUND)
+    target_compile_definitions(beebium_linux_app PRIVATE BEEBIUM_HAS_WAYLAND_LOCKS)
+    target_link_libraries(beebium_linux_app PRIVATE PkgConfig::WAYLAND_CLIENT PkgConfig::XKBCOMMON)
+endif()
 
 qt_add_resources(beebium_linux_app "keyboard_mappings"
     PREFIX "/keyboard-mappings"

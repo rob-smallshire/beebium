@@ -69,6 +69,19 @@ public:
     // The host modifiers held now, from tracking (section 4).
     HostModifiers held_modifiers() const;
 
+    // Caps Lock synchronisation (client specification 7.3), when the mapping
+    // asks for it: where the host state comes from, and what to call when the
+    // host Caps Lock key is pressed (its new state is not known until the
+    // windowing system has applied the press, so the caller syncs later).
+    using HostCapsLock = std::function<std::optional<bool>()>;
+    void set_host_caps_lock(HostCapsLock host_caps_lock) { host_caps_lock_ = std::move(host_caps_lock); }
+    void set_caps_lock_pressed(std::function<void()> pressed) { caps_lock_pressed_ = std::move(pressed); }
+
+    // Align the guest's Caps Lock to the host's, if the mapping synchronises
+    // it, the host state is known and the machine is attached. The guest is
+    // tapped only if it differs.
+    void sync_caps_lock();
+
     const HeldKeys& held_keys() const { return held_; }
 
 private:
@@ -79,6 +92,8 @@ private:
     // Host modifier keys down, by physical identity, whether or not the
     // mapping sends them to the machine.
     std::map<std::string, HostModifiers> host_modifiers_down_;
+    HostCapsLock host_caps_lock_;
+    std::function<void()> caps_lock_pressed_;
 };
 
 }  // namespace beebium::linux_client

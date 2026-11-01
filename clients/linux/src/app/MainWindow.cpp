@@ -47,6 +47,8 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, QWidget* parent)
                                     });
         display_->setFocus();
     });
+    connect(session_, &MachineSession::guest_ready, this,
+            [this] { display_->keyboard().sync_caps_lock(); });
     connect(display_, &DisplayWidget::graphics_ready, this,
             [](const QString& description, bool software) {
                 std::fprintf(stderr, "beebium: drawing with %s%s\n", qPrintable(description),

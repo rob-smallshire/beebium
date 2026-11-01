@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_APP_MACHINE_SESSION_HPP
 
 #include "connection/FrameMailbox.hpp"
+#include "connection/GuestReadyWatcher.hpp"
 #include "connection/Handshake.hpp"
 #include "connection/KeySender.hpp"
 #include "keyboard/BbcKeyTable.hpp"
@@ -58,6 +59,9 @@ signals:
     void frame_ready();
     // The server's key table has arrived and key events can be sent.
     void keyboard_ready();
+    // The machine's MOS has asked for input since a reset: its lock latches
+    // are settled (client specification 7.3).
+    void guest_ready();
     void video_stream_ended(int code, const QString& message, bool cancelled_by_client);
 
 private:
@@ -67,6 +71,7 @@ private:
     FrameMailbox mailbox_;
     std::unique_ptr<VideoStream> video_;
     std::unique_ptr<KeySender> keys_;
+    std::unique_ptr<GuestReadyWatcher> guest_ready_watcher_;
     BbcKeyTable key_table_;
     std::thread handshake_thread_;
     // Bumped by every connect and disconnect, so a handshake answer queued

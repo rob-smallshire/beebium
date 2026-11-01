@@ -23,11 +23,20 @@
 namespace beebium::linux_client {
 
 // What reaches the server, in this order.
-enum class WireAction { key_down, key_up, break_down, break_up };
+enum class WireAction {
+    key_down,
+    key_up,
+    break_down,
+    break_up,
+    // Align the guest's Caps Lock to caps_lock_on, tapping it only if the
+    // guest's exact latch differs (CapsLockSync.hpp).
+    caps_lock_sync,
+};
 
 struct WireEvent {
     WireAction action = WireAction::key_down;
-    std::uint8_t ik_number = 0;  // unused for Break
+    std::uint8_t ik_number = 0;  // matrix keys only
+    bool caps_lock_on = false;   // caps_lock_sync only
 
     bool operator==(const WireEvent&) const = default;
 };

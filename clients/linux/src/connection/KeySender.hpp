@@ -15,6 +15,8 @@
 
 #include "keyboard/HeldKeys.hpp"
 
+#include "keyboard.grpc.pb.h"
+
 #include <grpcpp/grpcpp.h>
 
 #include <atomic>
@@ -32,6 +34,8 @@ namespace beebium::linux_client {
 // a thread of its own: the GUI thread enqueues and never waits on the
 // network, and the machine sees transitions in generation order
 // (frontend-modifier-keys.md section 3; client specification 7.1, 7.2).
+// Caps Lock syncs ride the same queue (7.3), so a tap never interleaves
+// with a key the user is typing.
 class KeySender {
 public:
     explicit KeySender(std::shared_ptr<grpc::Channel> channel);
@@ -48,10 +52,13 @@ public:
 
     std::uint64_t sent_count() const { return sent_.load(); }
     std::uint64_t failed_count() const { return failed_.load(); }
+    // Caps Lock syncs that found the guest out of step and tapped it.
+    std::uint64_t caps_lock_taps() const { return caps_lock_taps_.load(); }
 
 private:
     void run();
     bool deliver(const WireEvent& event);
+    bool sync_caps_lock(beebium::KeyboardService::Stub& stub, bool host_on);
 
     std::shared_ptr<grpc::Channel> channel_;
     std::mutex mutex_;
@@ -60,6 +67,7 @@ private:
     bool stopping_ = false;
     std::atomic<std::uint64_t> sent_{0};
     std::atomic<std::uint64_t> failed_{0};
+    std::atomic<std::uint64_t> caps_lock_taps_{0};
     std::thread worker_;
 };
 

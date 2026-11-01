@@ -12,7 +12,17 @@
 
 #include "app/DisplayWidget.hpp"
 
+#include <QTimer>
+
+#include <chrono>
+
 namespace beebium::linux_client {
+
+namespace {
+
+constexpr std::chrono::milliseconds CAPS_LOCK_SETTLE{30};
+
+}  // namespace
 
 QString describe_rhi(QRhi* rhi, bool* software_renderer) {
     const QRhiDriverInfo info = rhi->driverInfo();
@@ -30,6 +40,25 @@ DisplayWidget::DisplayWidget(FrameMailbox& mailbox, QWidget* parent)
     // No input method: a compose sequence or dead key must not swallow
     // presses meant for the machine.
     setAttribute(Qt::WA_InputMethodEnabled, false);
+
+    // Caps Lock synchronisation (client specification 7.3).
+    host_locks_ = HostLockState::create(this);
+    keyboard_.set_host_caps_lock([this] { return host_locks_->caps_lock(); });
+    // After a host Caps Lock press the windowing system applies the toggle
+    // after delivering the press, so read the new state a moment later. On
+    // Wayland the compositor's report of the change syncs as well; a sync
+    // finding host and guest agreed does nothing.
+    keyboard_.set_caps_lock_pressed([this] {
+        QTimer::singleShot(CAPS_LOCK_SETTLE, this, [this] { keyboard_.sync_caps_lock(); });
+    });
+    connect(host_locks_.get(), &HostLockState::caps_lock_changed, this,
+            [this](bool) { keyboard_.sync_caps_lock(); });
+}
+
+void DisplayWidget::focusInEvent(QFocusEvent* event) {
+    // The host Caps Lock may have changed while we were away (7.3).
+    keyboard_.sync_caps_lock();
+    QRhiWidget::focusInEvent(event);
 }
 
 void DisplayWidget::keyPressEvent(QKeyEvent* event) {

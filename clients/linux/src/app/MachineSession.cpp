@@ -124,11 +124,20 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
         key_table_ = std::move(table);
         keys_ = std::make_unique<KeySender>(channel_);
         emit keyboard_ready();
+
+        guest_ready_watcher_ = std::make_unique<GuestReadyWatcher>(channel_, [this] {
+            QMetaObject::invokeMethod(this, &MachineSession::guest_ready, Qt::QueuedConnection);
+        });
+        guest_ready_watcher_->start();
     }
 }
 
 void MachineSession::disconnect_from_server() {
     ++generation_;
+    if (guest_ready_watcher_) {
+        guest_ready_watcher_->stop();
+        guest_ready_watcher_.reset();
+    }
     if (keys_) {
         // Drains what is queued first, so a release-all made just before
         // disconnecting still reaches the machine.
