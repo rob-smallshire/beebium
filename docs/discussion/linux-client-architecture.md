@@ -73,6 +73,8 @@ Proposal: a `QRhiWidget` subclass (Qt 6.7+; Debian trixie and Pi OS trixie
 ship 6.8.2) as the emulator display inside a `QMainWindow`, with
 `setApi(Vulkan)` preferred and OpenGL ES as fallback, chosen at start-up by
 what the platform offers and overridable by a setting or environment variable.
+(As built: OpenGL ES is the default on Wayland for now, because of a Qt 6.8
+crash closing Vulkan windows there; see section 10.)
 
 Things to know about `QRhiWidget` that the spike must measure rather than
 assume:
@@ -471,16 +473,90 @@ disagreed and read back the wanted latch each time.
   display sleep, so it must be weighed against the macOS client's behaviour
   and the specification before either becomes the rule for any client.
 
+### Raspberry Pi 4 class (Pi 400), 2026-11-01
+
+A Pi 400 (BCM2711, VideoCore VI: V3D 4.2.14.0 through `v3dv`, Vulkan 1.3,
+OpenGL ES 3.1; Mesa 25.0.7; 3.7 GiB, no swap) running Raspberry Pi OS trixie
+with its labwc desktop logged in. Same server, same client build, same
+method. QRhi drew on the V3D in every run. 40.9 C before the longest runs and
+45.7 C after; never throttled (`get_throttled` 0x0 throughout).
+
+Offscreen, Vulkan (upload, draw, GPU finished):
+
+| Case | Mean | p99 | Client CPU |
+|------|------|-----|------------|
+| MODE 1, 1920x1080 | 4.57 ms | 9.92 ms | 11.0% |
+| MODE 1, 3840x2160 | 14.89 ms | 16.44 ms | 10.5% |
+| MODE 7, 1920x1080 | 6.24 ms | 10.96 ms | 14.4% |
+
+Presented, 30 s each:
+
+| Where | API | Arrival | Render interval | Receive to render | Dropped | Client CPU |
+|-------|-----|---------|-----------------|-------------------|---------|------------|
+| cage 50 Hz | Vulkan | 20.08 ms | 20.09, sd 0.68 | mean 8.4, max 14.4 ms | 8 | 21.7% |
+| cage 50 Hz | GLES | 20.84 ms | 20.84, sd 1.00 | mean 0.91, p99 5.1 ms | 6 | 26.5% |
+| cage 60 Hz | Vulkan | 19.91 ms | 19.90, sd 0.86 | mean 0.40, p99 0.66 ms | 1 | 20.4% |
+| cage 60 Hz | GLES | 20.92 ms | 20.95, sd 1.08 | mean 1.45, p99 14.2 ms | 8 | 27.3% |
+| labwc, 59.95 Hz monitor, windowed | Vulkan | 20.32 ms | 20.34, sd 2.06 | mean 0.53, p99 1.7 ms | 1 | 26.3% |
+| labwc, 59.95 Hz monitor, windowed | GLES | 20.11 ms | 20.11, sd 1.35 | mean 0.31, p99 0.9 ms | 0 | 21.3% |
+
+What it says:
+
+- **The Pi 4 is sized well for the job.** A 1080p frame costs 4.6 ms of GPU
+  time (three times the Pi 5's), 4K still fits in a 20 ms frame at 14.9 ms,
+  and the client uses about a fifth of one core (three times the Pi 5's).
+  The shader budget for effects at 1080p is therefore roughly 15 ms a frame
+  on the Pi 4, before the compositor's own share.
+- **Pacing matches the Pi 5's**: locked to the vblank at 50 Hz, drawn on
+  arrival at 60 Hz, with somewhat wider spread from the busier CPU.
+- **Anomaly: under cage, the GLES runs slowed the server.** Frames arrived
+  every 20.8 to 20.9 ms instead of 20.0: the emulator ran at about 96% speed
+  while the client drew with GLES in cage. It did not happen with Vulkan in
+  cage, nor with GLES under labwc. Unexplained.
+- **On the real desktop** (labwc, 2560x1440 at 59.95 Hz, the monitor's mode
+  left as it was), both APIs drew every frame on arrival within a
+  millisecond and dropped at most one in 30 s.
+
 ### Not covered, or found along the way
 
-- Not measured: a server on another machine; labwc (Raspberry Pi OS's
-  compositor) and X11, since trejon has no desktop session (cage is a
-  wlroots compositor like labwc, so the Wayland path is the same one); the
-  Pi 4.
-- The Wayland Caps Lock reader runs under cage without harm, but a headless
-  seat has no keyboard, so it reports the state as unknown; nothing could
-  type into it (no `wtype`). The X11 reader is untested: there is no
-  Xwayland on trejon. Both need a desktop session.
+- Not measured: a server on another machine; a native Xorg session (the
+  Pi 400's desktop is labwc, and replacing it was not an option).
+- **Qt 6.8.2 crashes closing a Vulkan QRhiWidget window on Wayland.** On
+  both Pis, under labwc and cage, on Mesa 25 and 26: segfault, abort or hang
+  in `QBackingStoreRhiSupport::SwapchainData::reset` reaching the V3D
+  driver's Wayland code (`wl_display_flush` on a dead lock), after Mesa
+  warns that its display queue was destroyed with proxies attached. A
+  thirty-line QRhiWidget program reproduces it
+  (`clients/linux/tools/qrhiwidget-wayland-close`); the same program on
+  OpenGL, and this client on Vulkan under X11 (xcb through Xwayland), close
+  cleanly. The Pi 5 runs above crashed on exit too, after their
+  measurements, unnoticed; the spike's scripts (`clients/linux/tools/spike`)
+  now fail any run whose client does not exit cleanly. **Decided:** the
+  client defaults to OpenGL ES on Wayland and Vulkan elsewhere, logging the
+  choice and why, with `--graphics-api` to choose either; the default flips
+  back when a Qt that fixes the crash ships. Qt 6.9 and 6.10: no release
+  note found that names this crash or `QBackingStoreRhiSupport`; VLC treats
+  Qt before 6.9.0 as destroying a window's Wayland surface on `hide()` and
+  works around it, which may be related but was not confirmed (destroying
+  the window before it is hidden did not avoid this crash). To be reported
+  to Qt with the reproducer, and re-tested on the first newer Qt the
+  distribution ships.
+- **Shortcut inhibition (6.4).** labwc 0.9.7 does not offer
+  `keyboard-shortcuts-inhibit` (it never creates the wlroots manager its
+  wlroots provides), and Qt 6.8's Wayland client never requests it. On
+  Raspberry Pi OS, then, immersive mode cannot take the compositor's own
+  bindings; the specification's rule applies: the exit path is mandatory,
+  and the user is never trapped.
+- Caps Lock readers on the Pi 400's desktop: the X11 reader (xcb through
+  Xwayland) followed `xdotool`'s Caps Lock off, on, off. The Wayland reader,
+  against labwc's real seat and the Pi 400's own keyboard pressed by hand
+  (Caps Lock on, off, on, off, a few seconds apart), read off, on, off, on,
+  off at two-second samples: every transition, none missed or invented.
+  (`wtype` cannot test this: its virtual keyboard sends keys and held
+  modifiers, never a locked Caps state.) Under cage's headless seat, which
+  has no keyboard, it reports the state as unknown. The probe did not count
+  the taps sent to the guest; those are covered by the live
+  `--caps-lock-test` on the Pi 5.
 - Fixed on the way: the Wayland reader asked a seat with no keyboard for
   one, a protocol error that ended the connection (it now waits for the
   seat's keyboard capability); and OpenGL meant desktop GL 3.1 under

@@ -1003,9 +1003,13 @@ What is mandatory versus latitude needs care, because a client cannot assume it
 can capture every host keystroke. On Wayland in particular, whether a full-screen
 client receives compositor shortcuts (the Super key, Alt-Tab, the compositor's
 own bindings) depends on the compositor honouring the keyboard-shortcuts-inhibit
-protocol, which is not guaranteed (for example on Raspberry Pi OS's labwc it is
-an open question). The specification therefore does NOT require that all host
-shortcuts reach the emulator in immersive mode.
+protocol, which is not guaranteed. On Raspberry Pi OS it is not available: labwc
+0.9.7 does not offer keyboard-shortcuts-inhibit (its wlroots implements the
+protocol, but labwc never creates it), and Qt 6.8's Wayland client never
+requests it either (checked on Raspberry Pi OS trixie, 2026-11-01; see
+`docs/discussion/linux-client-architecture.md` section 10). The specification
+therefore does NOT require that all host shortcuts reach the emulator in
+immersive mode.
 
 | Aspect | Conformance |
 |--------|-------------|
