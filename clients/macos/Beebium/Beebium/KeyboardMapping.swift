@@ -13,6 +13,11 @@
 import Foundation
 import AppKit
 
+// This file owns resolution: turning a host key event into a BBC key. The
+// on-disk file model (parsing, serialisation, the raw entries) lives in
+// KeyboardMappingFile.swift; a KeyboardMapping is built from one of those and
+// writes itself back through one (issue #231).
+
 /// A reference to a BBC key with required host modifiers and BBC modifier overrides.
 struct BBCKeyRef {
     /// The BBC key name (e.g., "Up", "f0", "a", "Return")
@@ -26,86 +31,6 @@ struct BBCKeyRef {
 
     /// Required host modifiers for this mapping to match
     let requireModifiers: NSEvent.ModifierFlags
-}
-
-/// A key mapping entry from JSON with nested platform-specific structure.
-///
-/// The macOS client only understands the "macOS" and "bbc" sections.
-/// All other platform sections (windows, linux, etc.) are preserved for round-tripping.
-///
-/// Example JSON:
-/// {
-///   "macOS": { "keyCode": 111, "option": true },
-///   "windows": { "VKCode": 123, "alt": true },  // Preserved but not interpreted
-///   "bbc": { "keyName": "Break" }
-/// }
-struct KeyMappingEntry {
-    /// All key/value pairs from JSON (preserves unknown platform sections)
-    var rawJSON: [String: Any]
-
-    /// macOS platform section (interpreted by this client)
-    var macOS: MacOSKeySpec? {
-        guard let dict = rawJSON["macOS"] as? [String: Any] else { return nil }
-        return MacOSKeySpec(dict: dict)
-    }
-
-    /// BBC target section (interpreted by this client)
-    var bbc: BBCKeySpec? {
-        guard let dict = rawJSON["bbc"] as? [String: Any] else { return nil }
-        return BBCKeySpec(dict: dict)
-    }
-
-    struct MacOSKeySpec {
-        let keyCode: UInt16
-        let shift: Bool
-        let control: Bool
-        let option: Bool
-        let command: Bool
-        let function: Bool
-
-        init?(dict: [String: Any]) {
-            guard let keyCode = dict["keyCode"] as? Int else { return nil }
-            self.keyCode = UInt16(keyCode)
-            self.shift = dict["shift"] as? Bool ?? false
-            self.control = dict["control"] as? Bool ?? false
-            self.option = dict["option"] as? Bool ?? false
-            self.command = dict["command"] as? Bool ?? false
-            self.function = dict["function"] as? Bool ?? false
-        }
-
-        /// Convert to NSEvent.ModifierFlags
-        var requiredModifiers: NSEvent.ModifierFlags {
-            var flags: NSEvent.ModifierFlags = []
-            if shift { flags.insert(.shift) }
-            if control { flags.insert(.control) }
-            if option { flags.insert(.option) }
-            if command { flags.insert(.command) }
-            if function { flags.insert(.function) }
-            return flags
-        }
-    }
-
-    struct BBCKeySpec {
-        let keyName: String
-        let shift: Bool
-        let ctrl: Bool
-        let disabled: Bool?  // Tri-state: nil = not disableable, false/true = disableable with default state
-        let action: String?  // Optional action description for reference table
-
-        init?(dict: [String: Any]) {
-            guard let keyName = dict["keyName"] as? String else { return nil }
-            self.keyName = keyName
-            self.shift = dict["shift"] as? Bool ?? false
-            self.ctrl = dict["ctrl"] as? Bool ?? false
-            self.disabled = dict["disabled"] as? Bool  // nil if absent
-            self.action = dict["action"] as? String  // nil if absent
-        }
-    }
-
-    /// Create from JSON dictionary (preserves all sections)
-    init(rawJSON: [String: Any]) {
-        self.rawJSON = rawJSON
-    }
 }
 
 /// A keyboard mapping that translates host key input to BBC Micro keys.
@@ -139,7 +64,7 @@ final class KeyboardMapping: Identifiable {
     /// Maps keyCode to array of possible mappings (supports multiple mappings with different modifiers)
     var keyMappings: [UInt16: [BBCKeyRef]]
 
-    /// All entries from JSON (for round-trip serialization)
+    /// All entries from the file (for round-trip serialization)
     /// Includes entries for other platforms that we don't understand
     internal private(set) var allEntries: [KeyMappingEntry]
 
@@ -270,27 +195,6 @@ final class KeyboardMapping: Identifiable {
         )
     }
 
-    /// Create macOS section dictionary from keyCode and modifiers
-    private static func createMacOSDict(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> [String: Any] {
-        var dict: [String: Any] = ["keyCode": Int(keyCode)]
-        if modifiers.contains(.shift) { dict["shift"] = true }
-        if modifiers.contains(.control) { dict["control"] = true }
-        if modifiers.contains(.option) { dict["option"] = true }
-        if modifiers.contains(.command) { dict["command"] = true }
-        if modifiers.contains(.function) { dict["function"] = true }
-        return dict
-    }
-
-    /// Create BBC section dictionary from key name and modifiers
-    private static func createBBCDict(keyName: String, shift: Bool, ctrl: Bool, disabled: Bool? = nil, action: String? = nil) -> [String: Any] {
-        var dict: [String: Any] = ["keyName": keyName]
-        if shift { dict["shift"] = true }
-        if ctrl { dict["ctrl"] = true }
-        if let disabled = disabled { dict["disabled"] = disabled }
-        if let action = action { dict["action"] = action }
-        return dict
-    }
-
     /// Create a built-in mapping programmatically
     init(
         id: UUID = UUID(),
@@ -311,48 +215,44 @@ final class KeyboardMapping: Identifiable {
         var entries: [KeyMappingEntry] = []
         for (keyCode, refs) in keyMappings {
             for ref in refs {
-                let macOSDict = Self.createMacOSDict(keyCode: keyCode, modifiers: ref.requireModifiers)
-                let bbcDict = Self.createBBCDict(keyName: ref.bbcKeyName, shift: ref.bbcWithShift, ctrl: ref.bbcWithCtrl)
-                let rawJSON: [String: Any] = [
-                    "macOS": macOSDict,
-                    "bbc": bbcDict
-                ]
-                entries.append(KeyMappingEntry(rawJSON: rawJSON))
+                entries.append(KeyMappingEntry.make(
+                    macOSKeyCode: keyCode,
+                    modifiers: ref.requireModifiers,
+                    bbcKeyName: ref.bbcKeyName,
+                    bbcShift: ref.bbcWithShift,
+                    bbcCtrl: ref.bbcWithCtrl
+                ))
             }
         }
         self.allEntries = entries
     }
 
-    /// Load from JSON dictionary, extracting macOS entries while preserving all for round-trip
+    /// Load from a mapping file, extracting the macOS entries into the resolver
+    /// indices while preserving all entries for round-trip.
     /// - Parameters:
-    ///   - json: The JSON dictionary
+    ///   - json: The mapping file's JSON dictionary
     ///   - isBuiltIn: Whether this is a built-in mapping (default: false for user mappings)
     init(json: [String: Any], isBuiltIn: Bool = false) {
-        // Extract known fields
-        if let idString = json["id"] as? String,
-           let uuid = UUID(uuidString: idString) {
-            self.id = uuid
-        } else {
-            self.id = UUID()
-        }
+        let file = KeyboardMappingFile(json: json)
 
-        self.name = json["name"] as? String ?? "Unnamed"
+        self.id = file.id
+        self.name = file.name
         self.isBuiltIn = isBuiltIn
-        self.characterMapping = json["characterMapping"] as? Bool ?? true
-        self.synchronizeCapsLock = json["synchronizeCapsLock"] as? Bool ?? true
+        self.characterMapping = file.characterMapping
+        self.synchronizeCapsLock = file.synchronizeCapsLock
+        self.allEntries = file.entries
 
-        // Parse all entries, preserving raw JSON
-        let entriesJSON = json["keyMappings"] as? [[String: Any]] ?? []
-        self.allEntries = entriesJSON.map { KeyMappingEntry(rawJSON: $0) }
+        self.keyMappings = Self.directMappings(from: file.entries)
+        self.disableableKeys = Self.disableableKeys(from: file.entries)
+    }
 
-        // Build keyMappings: [UInt16: [BBCKeyRef]] from entries
+    /// Build the keyCode -> [BBCKeyRef] resolver index from file entries,
+    /// keeping only those with both a macOS and a BBC section.
+    private static func directMappings(from entries: [KeyMappingEntry]) -> [UInt16: [BBCKeyRef]] {
         var mappingDict: [UInt16: [BBCKeyRef]] = [:]
-
-        for entry in allEntries {
-            // Extract platform-specific key code (macOS in this case)
+        for entry in entries {
             guard let macOSSpec = entry.macOS,
                   let bbcSpec = entry.bbc else {
-                // Skip entries without macOS or BBC sections
                 continue
             }
 
@@ -363,42 +263,36 @@ final class KeyboardMapping: Identifiable {
                 requireModifiers: macOSSpec.requiredModifiers
             )
 
-            let keyCode = macOSSpec.keyCode
-
-            // Append to array for this keyCode
-            if mappingDict[keyCode] == nil {
-                mappingDict[keyCode] = []
-            }
-            mappingDict[keyCode]?.append(ref)
+            mappingDict[macOSSpec.keyCode, default: []].append(ref)
         }
+        return mappingDict
+    }
 
-        self.keyMappings = mappingDict
-
-        // Build disableableKeys from entries with "disabled" field
+    /// Build the disableable-keys index from file entries. The first entry for a
+    /// given BBC key wins if several target the same key.
+    private static func disableableKeys(from entries: [KeyMappingEntry]) -> [String: Bool] {
         var disableableDict: [String: Bool] = [:]
-        for entry in allEntries {
+        for entry in entries {
             guard let bbcSpec = entry.bbc,
                   let disabledState = bbcSpec.disabled else {
                 continue
             }
-            // First entry wins if multiple mappings target same key
             if disableableDict[bbcSpec.keyName] == nil {
                 disableableDict[bbcSpec.keyName] = disabledState
             }
         }
-        self.disableableKeys = disableableDict
+        return disableableDict
     }
 
-    /// Serialize to JSON dictionary, preserving all platform entries
+    /// Serialize to a JSON dictionary, preserving all platform entries.
     func toJSON() -> [String: Any] {
-        return [
-            "version": 1,
-            "id": id.uuidString,
-            "name": name,
-            "characterMapping": characterMapping,
-            "synchronizeCapsLock": synchronizeCapsLock,
-            "keyMappings": allEntries.map { $0.rawJSON }
-        ]
+        return KeyboardMappingFile(
+            id: id,
+            name: name,
+            characterMapping: characterMapping,
+            synchronizeCapsLock: synchronizeCapsLock,
+            entries: allEntries
+        ).toJSON()
     }
 
     /// Clone this mapping with a new name
@@ -439,19 +333,16 @@ final class KeyboardMapping: Identifiable {
         )
 
         // Append to array
-        if keyMappings[keyCode] == nil {
-            keyMappings[keyCode] = []
-        }
-        keyMappings[keyCode]?.append(ref)
+        keyMappings[keyCode, default: []].append(ref)
 
         // Update allEntries
-        let macOSDict = Self.createMacOSDict(keyCode: keyCode, modifiers: requireModifiers)
-        let bbcDict = Self.createBBCDict(keyName: bbcKeyName, shift: bbcWithShift, ctrl: bbcWithCtrl)
-        let rawJSON: [String: Any] = [
-            "macOS": macOSDict,
-            "bbc": bbcDict
-        ]
-        allEntries.append(KeyMappingEntry(rawJSON: rawJSON))
+        allEntries.append(KeyMappingEntry.make(
+            macOSKeyCode: keyCode,
+            modifiers: requireModifiers,
+            bbcKeyName: bbcKeyName,
+            bbcShift: bbcWithShift,
+            bbcCtrl: bbcWithCtrl
+        ))
     }
 
     /// Remove all key mappings for a given keyCode
@@ -464,4 +355,3 @@ final class KeyboardMapping: Identifiable {
         }
     }
 }
-

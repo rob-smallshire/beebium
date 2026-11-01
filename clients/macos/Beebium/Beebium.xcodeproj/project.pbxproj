@@ -222,6 +222,7 @@
 		C6AED867FD53B569CAD5A945 /* ConfigurationEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */; };
 		C7CFB3597A51313102A58455 /* PopoverTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BCB8ED24D409A21A27A8C /* PopoverTextField.swift */; };
 		C8A9065DC655ACA33F00D0F0 /* UTType+BeebiumPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1022577F48C48C283B9D31DB /* UTType+BeebiumPreset.swift */; };
+		C8B9946440A6BD81331A2BF8 /* KeyboardMappingFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D479C8A62437BA18788365E /* KeyboardMappingFile.swift */; };
 		CBC5ABA53015DE535C5F17A4 /* video.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 642BEA30A8664289314B2D9E /* video.pb.swift */; };
 		CC184BBA4B126032E36F04DB /* FocusDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9D42AD7DD904E1B5B80617 /* FocusDiagnostics.swift */; };
 		CC3CDA8C1FB5B978B592EADE /* EconetClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115851A5C42EB33AAB063B35 /* EconetClientTests.swift */; };
@@ -369,6 +370,7 @@
 		4A25B5AEA5BC043A1C1314DA /* debugger.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = debugger.grpc.swift; sourceTree = "<group>"; };
 		4A3FE1A20DF4E1D3707C33DE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		4CBA0F2E3AF169574330E718 /* MachinesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinesPage.swift; sourceTree = "<group>"; };
+		4D479C8A62437BA18788365E /* KeyboardMappingFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMappingFile.swift; sourceTree = "<group>"; };
 		4DAEE1DC0F503B0F7129CE02 /* BeebiumTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BeebiumTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralTreeTests.swift; sourceTree = "<group>"; };
 		4E0CD29C9A89B375C692C019 /* audio.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = audio.pb.swift; sourceTree = "<group>"; };
@@ -837,6 +839,7 @@
 				208639B544792E5992A279DF /* Info.plist */,
 				3A63D58ABA4C03E6D3AE1D51 /* KeyboardClient.swift */,
 				BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */,
+				4D479C8A62437BA18788365E /* KeyboardMappingFile.swift */,
 				9E27CCAEA2B3295D30B7E900 /* KeyboardMappingManager.swift */,
 				B98CF59648104556C3677412 /* KeyboardMTKView.swift */,
 				FF6041795434C164F849A27B /* KeyInput.swift */,
@@ -1280,6 +1283,7 @@
 				987BD71FBAD1D69713DD3995 /* KeyboardClient.swift in Sources */,
 				DD7F6150B025820774A44746 /* KeyboardMTKView.swift in Sources */,
 				BE8551008B3836CA24806130 /* KeyboardMapping.swift in Sources */,
+				C8B9946440A6BD81331A2BF8 /* KeyboardMappingFile.swift in Sources */,
 				9F0D659309F36B7DD20F0070 /* KeyboardMappingManager.swift in Sources */,
 				B0A2354141FA9EC4227A8007 /* KeyboardSectionView.swift in Sources */,
 				1F9774ADF4454EEA179ED3EA /* KeyboardSettingsPane.swift in Sources */,
