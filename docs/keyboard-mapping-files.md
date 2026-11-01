@@ -159,7 +159,11 @@ tracking, not from the event's modifier flags.
    - else the first entry, in file order, whose `with` set is a proper
      subset of the held modifiers;
    - else the first entry with no `with`.
-   A `disabled` entry currently switched off is skipped as if absent.
+   If the entry that wins is a `disabled` entry currently switched off, the
+   key is **ignored**: resolution stops here and does not fall through to
+   character mapping, because the user switched the key off to stop it doing
+   anything. A client may give feedback that a switched-off key was pressed
+   (the macOS client plays its disabled-key sound); that is latitude.
 2. **Character mapping**, if `characterMapping` is on: the character the host
    layout gives this key with the held modifiers, ignoring Control, looked up
    in the server catalogue; the catalogue's `needs_shift` drives the BBC
