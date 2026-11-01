@@ -132,6 +132,8 @@ private:
     IndicatorStrip* indicator_strip_ = nullptr;
     // An LED's related key, tapped (10).
     void tap_named_key(const QString& name);
+    // Edit > Paste (7.5).
+    void paste();
     static constexpr int TAP_HOLD_MS = 50;
     QLabel* description_label_ = nullptr;
     ClientSettings* settings_ = nullptr;

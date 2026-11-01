@@ -28,6 +28,9 @@
 #include "app/MachineSession.hpp"
 
 #include <QAction>
+#include <QMimeData>
+#include <QGuiApplication>
+#include <QClipboard>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDir>
@@ -122,7 +125,13 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
         display_->keyboard_changed();
         display_->setFocus();
     });
-    connect(session_, &MachineSession::guest_ready, this,
+    // The machine owns its lock latches and re-inits them on every reset;
+    // the client reads them exactly at each moment they may have changed
+    // (7.3): the guest's readiness after a boot or reset, from the typing
+    // stream rather than any settle time, and a lock LED changing.
+    connect(&session_->typing(), &SessionTyping::guest_ready_rose, this,
+            [this] { display_->keyboard().sync_caps_lock(); });
+    connect(&session_->indicators(), &SessionIndicators::lock_led_changed, this,
             [this] { display_->keyboard().sync_caps_lock(); });
     connect(display_, &DisplayWidget::graphics_ready, this,
             [](const QString& description, bool software) {
@@ -226,6 +235,47 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                               "While the display has the keys, every key the keyboard mapping "
                               "uses goes to the machine, Ctrl shortcuts included; F11, Alt with "
                               "a menu letter and the mouse still reach Beebium."));
+    // A paste under way, and its Cancel (7.5): Escape is the machine's while
+    // the display has the keys, so the control is the way to stop it.
+    auto* pasting_label = new QLabel(tr("Pasting..."), status_strip_);
+    pasting_label->setObjectName(QStringLiteral("pastingLabel"));
+    auto* cancel_paste = new QToolButton(status_strip_);
+    cancel_paste->setObjectName(QStringLiteral("cancelPaste"));
+    cancel_paste->setText(tr("Cancel"));
+    cancel_paste->setToolTip(tr("Stop typing the rest; what has been typed stays"));
+    cancel_paste->setFocusPolicy(Qt::NoFocus);
+    pasting_label->hide();
+    cancel_paste->hide();
+    strip_layout->addWidget(pasting_label);
+    strip_layout->addWidget(cancel_paste);
+    connect(cancel_paste, &QToolButton::clicked, &session_->typing(), &SessionTyping::cancel_paste);
+    connect(&session_->typing(), &SessionTyping::pasting_changed, this,
+            [pasting_label, cancel_paste](bool pasting) {
+                pasting_label->setVisible(pasting);
+                cancel_paste->setVisible(pasting);
+            });
+    connect(&session_->typing(), &SessionTyping::paste_finished, this,
+            [this](const PasteOutcome& outcome) {
+                switch (outcome.result) {
+                case PasteOutcome::Result::typed:
+                case PasteOutcome::Result::cancelled:
+                    break;
+                case PasteOutcome::Result::cut_short_by_reset:
+                    QMessageBox::information(
+                        this, tr("Paste"),
+                        tr("The machine was reset while pasting, so the last %n characters were "
+                           "not typed.", nullptr, static_cast<int>(outcome.count)));
+                    break;
+                case PasteOutcome::Result::refused:
+                case PasteOutcome::Result::failed: {
+                    ServerMessageDialog dialog(tr("Could Not Paste"),
+                                               tr("The text could not be typed into the machine."),
+                                               outcome.message, this);
+                    dialog.exec();
+                    break;
+                }
+                }
+            });
     strip_layout->addWidget(keys_label);
     // The machine's LEDs, after the macOS client's status bar, in the strip
     // so they ride the immersive overlay too (10).
@@ -291,6 +341,20 @@ void MainWindow::build_menus() {
     quit_action->setMenuRole(QAction::QuitRole);
     connect(quit_action, &QAction::triggered, this, &MainWindow::quit_requested);
 
+    // Edit > Paste types the clipboard into the machine (7.5): Ctrl+Shift+V,
+    // the terminals' convention, since Ctrl+V is the machine's while the
+    // display has the keys.
+    QMenu* edit = menuBar()->addMenu(tr("&Edit"));
+    QAction* paste_action = edit->addAction(QIcon::fromTheme(QStringLiteral("edit-paste")),
+                                            tr("&Paste"));
+    paste_action->setShortcut(QKeySequence(tr("Ctrl+Shift+V")));
+    paste_action->setToolTip(tr("Type the clipboard's text into the machine"));
+    paste_action->setEnabled(false);
+    connect(paste_action, &QAction::triggered, this, &MainWindow::paste);
+    connect(session_, &MachineSession::connected_to_server, paste_action,
+            [paste_action] { paste_action->setEnabled(true); });
+    connect(&session_->typing(), &SessionTyping::pasting_changed, paste_action,
+            [paste_action](bool pasting) { paste_action->setEnabled(!pasting); });
     QMenu* view = menuBar()->addMenu(tr("&View"));
     status_bar_action_ = view->addAction(tr("Show &Status Bar"));
     status_bar_action_->setCheckable(true);
@@ -562,6 +626,16 @@ void MainWindow::rename() {
                               }
                           });
     session_->set_name(name);
+}
+
+void MainWindow::paste() {
+    const QMimeData* data = QGuiApplication::clipboard()->mimeData();
+    if (!data || !data->hasText() || data->text().isEmpty()) {
+        QMessageBox::information(this, tr("Paste"),
+                                 tr("The clipboard holds no text to type into the machine."));
+        return;
+    }
+    session_->typing().paste(data->text());
 }
 
 void MainWindow::tap_named_key(const QString& name) {

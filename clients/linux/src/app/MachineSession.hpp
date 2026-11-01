@@ -16,6 +16,7 @@
 #include "app/SessionAudio.hpp"
 #include "app/SessionDiscs.hpp"
 #include "app/SessionIndicators.hpp"
+#include "app/SessionTyping.hpp"
 #include "connection/CallCanceller.hpp"
 #include "connection/FrameMailbox.hpp"
 #include "connection/Handshake.hpp"
@@ -106,6 +107,8 @@ public:
     SessionIndicators& indicators() { return *indicators_; }
     // The floppy drives (9).
     SessionDiscs& discs() { return *discs_; }
+    // Typing: the guest_ready edge and pasting (7.3, 7.5).
+    SessionTyping& typing() { return *typing_; }
 
     // Valid from keyboard_ready until disconnect.
     KeySender* key_sender() { return keys_.get(); }
@@ -194,6 +197,7 @@ private:
     SessionAudio* audio_;
     SessionIndicators* indicators_;
     SessionDiscs* discs_;
+    SessionTyping* typing_;
     std::unique_ptr<KeySender> keys_;
     std::unique_ptr<RpcWorker> rpc_;
     BbcKeyTable key_table_;

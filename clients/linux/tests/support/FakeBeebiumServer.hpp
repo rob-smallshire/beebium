@@ -601,16 +601,127 @@ public:
     }
 };
 
+// The keyboard as the server keeps it: a key table, the machine's lock
+// latches (a Caps Lock key-down toggles caps, as the MOS does), the
+// type-ahead queue, and a scripted typing-status stream.
 class KeyTableService final : public beebium::KeyboardService::Service {
+public:
+    std::atomic<bool> caps_lock_on{false};
+    std::atomic<bool> shift_lock_on{false};
+    std::atomic<int> lock_reads{0};
+    std::atomic<int> caps_taps{0};
+    std::mutex typing_mutex;
+    std::vector<std::string> typed;  // TypeQuickly texts accepted
+    // TypeQuickly refuses a text containing this, naming it (typing_mutex).
+    std::string refuse;
+    std::atomic<int> clears{0};
+    std::atomic<int> typing_watchers{0};
+
+    void push_typing(std::optional<beebium::TypingStatus> status) {
+        {
+            std::lock_guard lock(script_mutex_);
+            script_.push_back(std::move(status));
+        }
+        changed_.notify_all();
+    }
+
     grpc::Status GetAllKeyMappings(grpc::ServerContext*, const beebium::GetAllKeyMappingsRequest*,
                                    beebium::AllKeyMappingsResponse* response) override {
-        auto* entry = response->add_mappings();
-        entry->set_character("a");
-        entry->set_ik_number(0x41);
-        entry->set_name("a");
+        const auto add = [response](const char* character, std::uint32_t ik, const char* name) {
+            auto* entry = response->add_mappings();
+            entry->set_character(character);
+            entry->set_ik_number(ik);
+            entry->set_name(name);
+        };
+        add("a", 0x41, "a");
+        add("", 0x40, "Caps Lock");
+        add("", 0x50, "Shift Lock");
         return grpc::Status::OK;
     }
+
+    grpc::Status GetLockState(grpc::ServerContext*, const beebium::GetLockStateRequest*,
+                              beebium::LockKeyState* state) override {
+        ++lock_reads;
+        state->set_caps_lock_on(caps_lock_on);
+        state->set_shift_lock_on(shift_lock_on);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status KeyDown(grpc::ServerContext*, const beebium::KeyRequest* request,
+                         beebium::KeyResponse*) override {
+        if (request->ik_number() == 0x40) {
+            ++caps_taps;
+            caps_lock_on = !caps_lock_on;
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status KeyUp(grpc::ServerContext*, const beebium::KeyRequest*,
+                       beebium::KeyResponse*) override {
+        return grpc::Status::OK;
+    }
+
+    grpc::Status TypeQuickly(grpc::ServerContext*, const beebium::TypeQuicklyRequest* request,
+                             beebium::TypeQuicklyResponse* response) override {
+        std::lock_guard lock(typing_mutex);
+        if (!refuse.empty() && request->text().find(refuse) != std::string::npos) {
+            response->set_accepted(false);
+            response->set_error("cannot type \"" + refuse + "\" on a BBC Micro keyboard");
+            return grpc::Status::OK;
+        }
+        typed.push_back(request->text());
+        response->set_accepted(true);
+        response->set_pending_characters(static_cast<std::uint32_t>(request->text().size()));
+        return grpc::Status::OK;
+    }
+
+    grpc::Status ClearTyping(grpc::ServerContext*, const beebium::ClearTypingRequest*,
+                             beebium::ClearTypingResponse* response) override {
+        ++clears;
+        response->set_characters_cleared(7);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status WatchTypingStatus(grpc::ServerContext* context,
+                                   const beebium::WatchTypingStatusRequest*,
+                                   grpc::ServerWriter<beebium::TypingStatus>* writer) override {
+        ++typing_watchers;
+        for (;;) {
+            std::unique_lock lock(script_mutex_);
+            changed_.wait_for(lock, 20ms, [this] { return !script_.empty(); });
+            if (context->IsCancelled()) {
+                return grpc::Status::CANCELLED;
+            }
+            if (script_.empty()) {
+                continue;
+            }
+            auto next = std::move(script_.front());
+            script_.pop_front();
+            lock.unlock();
+            if (!next) {
+                return grpc::Status::OK;
+            }
+            writer->Write(*next);
+        }
+    }
+
+private:
+    std::mutex script_mutex_;
+    std::condition_variable changed_;
+    std::deque<std::optional<beebium::TypingStatus>> script_;
 };
+
+// A typing status as the server would push it.
+inline beebium::TypingStatus typing_status(bool guest_ready, std::uint32_t pending,
+                                           std::uint32_t discarded = 0) {
+    beebium::TypingStatus status;
+    status.set_guest_ready(guest_ready);
+    status.set_pending_characters(pending);
+    status.set_idle(pending == 0);
+    status.set_machine_running(true);
+    status.set_discarded_by_reset(discarded);
+    return status;
+}
 
 struct FakeServer {
     ScriptedSystemService system;

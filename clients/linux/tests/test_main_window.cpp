@@ -27,7 +27,7 @@ TEST_CASE("A machine window has a menu bar and a display area", "[app][window]")
     for (QAction* action : window.menuBar()->actions()) {
         menus << action->text().remove(QLatin1Char('&'));
     }
-    CHECK(menus == QStringList{QStringLiteral("File"), QStringLiteral("View"),
+    CHECK(menus == QStringList{QStringLiteral("File"), QStringLiteral("Edit"), QStringLiteral("View"),
                                QStringLiteral("Machine"), QStringLiteral("Help")});
 
     REQUIRE(window.centralWidget() != nullptr);

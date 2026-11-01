@@ -260,6 +260,7 @@ add_library(beebium_linux_app STATIC
     src/app/SessionAudio.cpp
     src/app/SessionDiscs.cpp
     src/app/SessionIndicators.cpp
+    src/app/SessionTyping.cpp
     src/app/SettingsDialog.cpp
     src/app/Sidebar.cpp
     src/app/SidebarMode.cpp

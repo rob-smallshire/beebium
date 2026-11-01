@@ -128,6 +128,8 @@ void KeyboardInput::attach(BbcKeyTable table, Sender send) {
     release_all();
     table_ = std::move(table);
     send_ = std::move(send);
+    // Connecting is a sync point (7.3).
+    sync_caps_lock();
 }
 
 void KeyboardInput::detach() {

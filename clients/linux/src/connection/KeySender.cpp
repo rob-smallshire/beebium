@@ -101,7 +101,11 @@ bool KeySender::sync_caps_lock(beebium::KeyboardService::Stub& stub, bool host_o
             return false;
         }
     }
-    if (!should_tap_caps_lock(true, host_on, guest.caps_lock_on())) {
+    const bool tap = should_tap_caps_lock(true, host_on, guest.caps_lock_on());
+    std::fprintf(stderr, "beebium: Caps Lock read: machine %s, host %s%s\n",
+                 guest.caps_lock_on() ? "on" : "off", host_on ? "on" : "off",
+                 tap ? ", tapping" : "");
+    if (!tap) {
         return true;
     }
     beebium::KeyRequest request;
