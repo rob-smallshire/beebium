@@ -25,6 +25,7 @@
 #include <QAudioDevice>
 #include <QAudioFormat>
 #include <QAudioSink>
+#include <QByteArray>
 #include <QIODevice>
 #include <QMediaDevices>
 
@@ -53,33 +54,57 @@ public:
         return float_samples_ ? 2 * sizeof(float) : 2 * sizeof(qint16);
     }
 
+    // Writes what is still owed first; renders more only once the device
+    // has taken all of it, so a short write holds its frames for the next
+    // tick instead of losing them.
     void feed(QIODevice* device, qint64 bytes_free) {
+        if (device == nullptr) {
+            return;
+        }
+        if (!pending_.isEmpty()) {
+            const qint64 written = device->write(pending_);
+            if (written > 0) {
+                pending_.remove(0, written);
+            }
+            if (!pending_.isEmpty()) {
+                return;
+            }
+            bytes_free -= std::max<qint64>(written, 0);
+        }
         const std::size_t frames = static_cast<std::size_t>(std::max<qint64>(bytes_free, 0)) /
                                    frame_bytes();
-        if (frames == 0 || device == nullptr) {
+        if (frames == 0) {
             return;
         }
         samples_.resize(2 * frames);
         renderer_->render(samples_.data(), frames);
-        if (float_samples_) {
-            device->write(reinterpret_cast<const char*>(samples_.data()),
-                          static_cast<qint64>(frames * frame_bytes()));
-            return;
+        const char* bytes = reinterpret_cast<const char*>(samples_.data());
+        if (!float_samples_) {
+            words_.resize(2 * frames);
+            for (std::size_t i = 0; i < 2 * frames; ++i) {
+                words_[i] = static_cast<qint16>(
+                    std::lround(std::clamp(samples_[i], -1.0f, 1.0f) * 32767.0f));
+            }
+            bytes = reinterpret_cast<const char*>(words_.data());
         }
-        words_.resize(2 * frames);
-        for (std::size_t i = 0; i < 2 * frames; ++i) {
-            words_[i] = static_cast<qint16>(
-                std::lround(std::clamp(samples_[i], -1.0f, 1.0f) * 32767.0f));
+        const qint64 size = static_cast<qint64>(frames * frame_bytes());
+        const qint64 written = device->write(bytes, size);
+        if (written < size) {
+            pending_.append(bytes + std::max<qint64>(written, 0), size - std::max<qint64>(written, 0));
+            ++short_writes_;
         }
-        device->write(reinterpret_cast<const char*>(words_.data()),
-                      static_cast<qint64>(frames * frame_bytes()));
     }
+
+    // How often the device took less than it said it had room for.
+    std::uint64_t short_writes() const { return short_writes_; }
 
 private:
     std::shared_ptr<AudioRenderer> renderer_;
     bool float_samples_;
     std::vector<float> samples_;
     std::vector<qint16> words_;
+    QByteArray pending_;
+    std::uint64_t short_writes_ = 0;
 };
 
 }  // namespace
@@ -148,14 +173,15 @@ public:
                                         .count();
                 std::fprintf(stderr,
                              "beebium: sink trace at %lld ms: %s, %lld of %lld bytes free, %lld us "
-                             "elapsed, %lld us processed, error %d\n",
+                             "elapsed, %lld us processed, error %d, %llu short writes\n",
                              static_cast<long long>(now_ms),
                              state >= 0 && state < 4 ? states[state] : "?",
                              static_cast<long long>(sink_->bytesFree()),
                              static_cast<long long>(sink_->bufferSize()),
                              static_cast<long long>(sink_->elapsedUSecs()),
                              static_cast<long long>(sink_->processedUSecs()),
-                             static_cast<int>(sink_->error()));
+                             static_cast<int>(sink_->error()),
+                             static_cast<unsigned long long>(feeder_ ? feeder_->short_writes() : 0));
             });
             trace_->start();
         }
@@ -172,6 +198,11 @@ public:
 #if BEEBIUM_HAVE_QT_MULTIMEDIA
         trace_.reset();
         feed_.reset();
+        if (feeder_ && feeder_->short_writes() > 0) {
+            std::fprintf(stderr, "beebium: the sound output took less than it had room for %llu "
+                                 "times; nothing was lost\n",
+                         static_cast<unsigned long long>(feeder_->short_writes()));
+        }
         if (sink_) {
             sink_->stop();
             sink_.reset();
