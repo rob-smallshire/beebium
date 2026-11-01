@@ -165,6 +165,17 @@ target_link_libraries(beebium_linux_connection
 
 # --- Servers: finding, querying and launching this host's servers ----------
 
+# The audio path without a sink: the format, the ring, the pre-roll and the
+# renderer (client specification 8). No Qt.
+add_library(beebium_linux_audio STATIC
+    src/audio/AudioLayout.cpp
+    src/audio/AudioRenderer.cpp
+    src/audio/FrameRing.cpp
+    src/audio/PreRoll.cpp
+)
+target_include_directories(beebium_linux_audio PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(beebium_linux_audio PUBLIC beebium_linux_protos)
+
 add_library(beebium_linux_servers STATIC
     src/servers/CoreCli.cpp
     src/servers/ServerLauncher.cpp
