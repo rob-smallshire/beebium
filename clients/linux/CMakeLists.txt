@@ -331,6 +331,10 @@ target_link_libraries(beebium PRIVATE beebium_linux_app)
 add_executable(beebium-pacing-probe tools/pacing-probe/main.cpp)
 target_link_libraries(beebium-pacing-probe PRIVATE beebium_linux_connection)
 
+# Type text into a server's machine, for acceptance runs on a desktop.
+add_executable(beebium-type tools/type-text/main.cpp)
+target_link_libraries(beebium-type PRIVATE beebium_linux_protos)
+
 qt_add_executable(beebium-display-bench src/bench/DisplayBench.cpp)
 target_link_libraries(beebium-display-bench PRIVATE beebium_linux_app)
 
