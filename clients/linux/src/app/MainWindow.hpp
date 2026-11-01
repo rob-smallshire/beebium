@@ -31,6 +31,21 @@ class SystemPowerMonitor;
 
 // A machine window: one per connection to a server. It holds the menu bar
 // (empty until the client specification's menus are built) and the display.
+// The questions closing a machine window may ask (client specification 4.5),
+// as a seam: the window asks through this, the default answers with message
+// boxes, and tests answer without them.
+struct ClosePrompts {
+    enum class Shared { shut_down, leave_running, cancel };
+    enum class Unsaved { save, discard, cancel };
+
+    // Ours, and others use it: what to do with the server.
+    std::function<Shared(QWidget* window, const QString& machine)> shared;
+    // Ours, transient, written to, about to shut down: save it first?
+    std::function<Unsaved(QWidget* window, const QString& machine)> unsaved;
+
+    static ClosePrompts message_boxes();
+};
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -52,6 +67,9 @@ public:
     // The whole client is quitting: a shared server this window launched is
     // left running without asking (4.5).
     void set_quitting(bool quitting) { quitting_ = quitting; }
+
+    // Replace the close questions (tests).
+    void set_close_prompts(ClosePrompts prompts) { prompts_ = std::move(prompts); }
 
     // File > Save, Save As, Rename Machine (5.4, 5.7). `then` is told whether
     // the machine was saved.
@@ -84,6 +102,9 @@ private:
     void decide_close(int client_count);
     void shut_down_server();
     void finish_close();
+    // The close was cancelled: the window stays, and a later close is an
+    // ordinary close, not part of a quit.
+    void cancel_close();
 
     MachineSession* session_;
     ConnectionRecovery* recovery_;
@@ -94,6 +115,7 @@ private:
     QLabel* unsaved_label_ = nullptr;
     ClosePhase close_phase_ = ClosePhase::open;
     bool quitting_ = false;
+    ClosePrompts prompts_ = ClosePrompts::message_boxes();
 };
 
 }  // namespace beebium::linux_client

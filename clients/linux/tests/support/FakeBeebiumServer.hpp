@@ -56,6 +56,11 @@ public:
     std::string shutdown_authority;  // x-beebium-instance-uuid
     int shutdown_requests = 0;
     bool save_fails = false;
+    std::atomic<int> client_count{1};
+    // GetSystemInfo blocks, as a stalled server's would, while this is set,
+    // and answers again when it is cleared or the call is cancelled.
+    std::atomic<bool> stall_system_info{false};
+    std::atomic<int> stalled_calls{0};
 
     void push(std::optional<beebium::ServerStatusEvent> event) {
         {
@@ -65,13 +70,22 @@ public:
         changed_.notify_all();
     }
 
-    grpc::Status GetSystemInfo(grpc::ServerContext*, const beebium::GetSystemInfoRequest*,
+    grpc::Status GetSystemInfo(grpc::ServerContext* context, const beebium::GetSystemInfoRequest*,
                                beebium::SystemInfo* info) override {
         info->set_protocol_fingerprint(protocol_fingerprint);
         info->set_host_fingerprint(host_fingerprint);
         info->mutable_identity()->set_name("Model B #1");
         info->mutable_identity()->set_description("Station 1.254");
-        info->mutable_connections()->set_client_count(1);
+        info->mutable_connections()->set_client_count(client_count);
+        if (stall_system_info) {
+            ++stalled_calls;
+            while (stall_system_info && !context->IsCancelled()) {
+                std::this_thread::sleep_for(5ms);
+            }
+            if (context->IsCancelled()) {
+                return grpc::Status::CANCELLED;
+            }
+        }
         return grpc::Status::OK;
     }
 

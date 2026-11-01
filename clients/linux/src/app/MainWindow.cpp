@@ -496,44 +496,38 @@ void MainWindow::decide_close(int client_count) {
         return;
     }
     if (action == CloseAction::ask) {
-        QMessageBox box(QMessageBox::Question, tr("Close Machine"),
-                        tr("%1 is also in use by another client.").arg(session_->machine_name()),
-                        QMessageBox::NoButton, this);
-        QPushButton* shut_down = box.addButton(tr("Shut Down"), QMessageBox::DestructiveRole);
-        QPushButton* leave = box.addButton(tr("Leave Running"), QMessageBox::AcceptRole);
-        box.addButton(QMessageBox::Cancel);
-        box.setDefaultButton(leave);
-        box.exec();
-        if (box.clickedButton() == leave) {
+        switch (prompts_.shared(this, session_->machine_name())) {
+        case ClosePrompts::Shared::leave_running:
             finish_close();
-        } else if (box.clickedButton() == shut_down) {
+            break;
+        case ClosePrompts::Shared::shut_down:
             shut_down_server();
-        } else {
-            close_phase_ = ClosePhase::open;
+            break;
+        case ClosePrompts::Shared::cancel:
+            cancel_close();
+            break;
         }
         return;
     }
     // Shutting it down. A transient machine's written media go with it
     // unless saved first (4.5).
     if (!session_->machine_saved() && session_->template_media_written()) {
-        const auto answer = QMessageBox::question(
-            this, tr("Save Machine"),
-            tr("%1 has written to its discs. Save it before closing?").arg(session_->machine_name()),
-            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
-        if (answer == QMessageBox::Cancel) {
-            close_phase_ = ClosePhase::open;
+        switch (prompts_.unsaved(this, session_->machine_name())) {
+        case ClosePrompts::Unsaved::cancel:
+            cancel_close();
             return;
-        }
-        if (answer == QMessageBox::Save) {
+        case ClosePrompts::Unsaved::save:
             save_as([this](bool saved) {
                 if (saved) {
                     shut_down_server();
                 } else {
                     // Cancelling the save cancels the close.
-                    close_phase_ = ClosePhase::open;
+                    cancel_close();
                 }
             });
             return;
+        case ClosePrompts::Unsaved::discard:
+            break;
         }
     }
     shut_down_server();
@@ -575,6 +569,40 @@ void MainWindow::shut_down_server() {
                               poll->start(100);
                           });
     session_->request_shutdown();
+}
+
+void MainWindow::cancel_close() {
+    close_phase_ = ClosePhase::open;
+    quitting_ = false;
+}
+
+ClosePrompts ClosePrompts::message_boxes() {
+    ClosePrompts prompts;
+    prompts.shared = [](QWidget* window, const QString& machine) {
+        QMessageBox box(QMessageBox::Question, QObject::tr("Close Machine"),
+                        QObject::tr("%1 is also in use by another client.").arg(machine),
+                        QMessageBox::NoButton, window);
+        QPushButton* shut_down = box.addButton(QObject::tr("Shut Down"), QMessageBox::DestructiveRole);
+        QPushButton* leave = box.addButton(QObject::tr("Leave Running"), QMessageBox::AcceptRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(leave);
+        box.exec();
+        if (box.clickedButton() == leave) {
+            return Shared::leave_running;
+        }
+        return box.clickedButton() == shut_down ? Shared::shut_down : Shared::cancel;
+    };
+    prompts.unsaved = [](QWidget* window, const QString& machine) {
+        const auto answer = QMessageBox::question(
+            window, QObject::tr("Save Machine"),
+            QObject::tr("%1 has written to its discs. Save it before closing?").arg(machine),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+        if (answer == QMessageBox::Save) {
+            return Unsaved::save;
+        }
+        return answer == QMessageBox::Discard ? Unsaved::discard : Unsaved::cancel;
+    };
+    return prompts;
 }
 
 void MainWindow::finish_close() {
