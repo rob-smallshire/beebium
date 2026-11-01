@@ -205,6 +205,74 @@ Raspberry Pi 4 / 400 (Cortex-A72, baseline ARMv8-A): the build uses default
 Pi 4 / 400 / 5. Raspberry Pi support requires a 64-bit OS image (Pi OS 64-bit or
 Ubuntu for Pi); the 32-bit default image is not supported.
 
+## The Linux desktop client (`beebium-client`)
+
+The Linux app (`clients/linux`, Qt 6) ships as a `.deb` of its own,
+`beebium-client_<version>_<arch>.deb` for `amd64` and `arm64`, beside the
+server packages and never overlapping them. Unlike the server it is an
+ordinary distribution package:
+
+- **What it installs, under `/usr`:** the program, `/usr/bin/beebium`; its
+  desktop entry, `/usr/share/applications/org.beebium.Beebium.desktop`, which
+  opens a saved machine's document, a `.beebium-preset` file or a
+  `beebium://` link; the MIME types of those two documents,
+  `/usr/share/mime/packages/org.beebium.Beebium.xml`; its AppStream metainfo,
+  `/usr/share/metainfo/org.beebium.Beebium.metainfo.xml`; and the icon, "The
+  Shape of Beebium" cut to the hicolor sizes by `scripts/logo`. The files are
+  in `clients/linux/packaging/`, the install rules and the CPack stanza at the
+  end of `clients/linux/CMakeLists.txt`.
+- **Built per distribution, not static:** it links the distribution's Qt 6
+  and gRPC, so it is built on the distribution it is for: Debian trixie,
+  which serves Raspberry Pi OS trixie too, as they share the archive's
+  libraries. Ubuntu 24.04 and Debian bookworm ship a Qt older than the 6.7 it
+  needs.
+- **Depends:** derived by `dpkg-shlibdeps` from the program, never written by
+  hand, apart from what Qt loads at run time, which it cannot see: the
+  Wayland platform plugin (`qt6-wayland`) and the Vulkan loader
+  (`libvulkan1`). The display uses QRhi, a semi-private Qt API, so the
+  package depends on the exact Qt build (`qt6-base-private-abi`): a release
+  is built against the archive's current Qt.
+- **Recommends, not Depends, the servers:** the client finds them itself (its
+  settings, `PATH`, `/opt/beebium/bin`), and says what to do when it finds
+  none. It also recommends `avahi-daemon` and `libavahi-client3`, which
+  discovery loads at run time.
+- **No maintainer scripts:** the desktop, MIME and icon caches are refreshed
+  by the distribution's dpkg triggers.
+
+**The Qt private-ABI pin.** The display draws with `QRhiWidget`, part of Qt's
+semi-private QRhi API, which Qt does not keep binary-compatible across its own
+builds. `dpkg-shlibdeps` therefore adds `qt6-base-private-abi (= 6.8.2)`: the
+`.deb` installs only beside the exact Qt build it was compiled against. Debian
+stable (trixie) and Raspberry Pi OS trixie hold Qt at 6.8.2 for the life of the
+release, taking patch fixes without changing that version, so users of stable
+are unaffected. On testing or unstable, whose Qt moves on, the package becomes
+uninstallable until it is rebuilt, and that is not supported. If Debian ever
+moves stable to a new Qt point release, the client must be rebuilt and
+re-released against it. That is why CI installs the archive's current packages
+on every run and caches nothing built. The smoke job prints the Qt version the
+package resolved to, so a mismatch shows in the log.
+
+`.github/workflows/linux-client-package.yml` (on `workflow_dispatch`, and on
+`workflow_call` from `ci.yml` on every push and from `release.yml`) runs these
+steps in a `debian:trixie` container on `ubuntu-latest` (`amd64`) and
+`ubuntu-24.04-arm` (`arm64`). It checks the `.deb`'s Package, Version and
+Architecture against its file name, uploads it as `linux-client-<arch>`, and
+smokes it in a fresh `debian:trixie` container, so the build's `-dev` packages
+cannot satisfy a dependency the `.deb` fails to declare.
+
+To build and check it locally, as CI does, in a Debian trixie container from
+the repository root:
+
+```bash
+clients/linux/ci/install-build-deps.sh      # as root: the build dependencies
+clients/linux/ci/build-package.sh build 4   # configure, build, test, cpack
+clients/linux/ci/smoke-package.sh build/beebium-client_*.deb  # as root, ideally a fresh container
+```
+
+The smoke installs the package with `apt` so its Depends resolve, runs it,
+validates the desktop entry and metainfo, and removes it, failing if anything
+is left under `/usr`.
+
 ## The macOS Homebrew formula
 
 The macOS server is distributed through a Homebrew tap

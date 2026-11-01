@@ -49,7 +49,17 @@ brew install --cask rob-smallshire/beebium/beebium-gui
 
 Requires macOS 13 (Ventura) or newer.
 
-*There is no Windows or Linux app yet. On those platforms, run Beebium through the headless servers below.*
+### The Linux app
+
+On Debian trixie and Raspberry Pi OS trixie, `amd64` or `arm64`, download `beebium-client` and `beebium-server` from the [latest release](https://github.com/rob-smallshire/beebium/releases/latest) and install both with `apt`, so their dependencies come too:
+
+```bash
+sudo apt install ./beebium-client_*_arm64.deb ./beebium-server_*_arm64.deb
+```
+
+Then start **Beebium** from the desktop's menu. The app finds the servers by itself; if you keep them somewhere else, say where in *Settings > Configure Beebium*.
+
+*There is no Windows app yet. On Windows, run Beebium through the headless servers below.*
 
 ### Headless servers, for developers
 
