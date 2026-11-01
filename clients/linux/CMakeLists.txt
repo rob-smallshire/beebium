@@ -36,7 +36,7 @@ get_filename_component(BEEBIUM_REPO_DIRPATH "${CMAKE_CURRENT_SOURCE_DIR}/../.." 
 # gRPC, Protobuf, OpenSSL and the code generators, found as the servers find them.
 include(${BEEBIUM_REPO_DIRPATH}/cmake/BeebiumGrpc.cmake)
 
-find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets ShaderTools)
+find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets DBus ShaderTools)
 
 # nlohmann-json for keyboard mapping files, found as the root build finds it:
 # an installed copy, else the same pinned release fetched.
@@ -139,6 +139,7 @@ add_library(beebium_linux_connection STATIC
     src/connection/KeySender.cpp
     src/connection/Liveness.cpp
     src/connection/PictureGeometry.cpp
+    src/connection/ReconnectPolicy.cpp
     src/connection/VideoStream.cpp
 )
 target_include_directories(beebium_linux_connection PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -184,6 +185,8 @@ qt_add_shaders(beebium_linux_display "display_shaders"
 
 add_library(beebium_linux_app STATIC
     src/app/ApplicationInfo.cpp
+    src/app/ConnectionOverlay.cpp
+    src/app/ConnectionRecovery.cpp
     src/app/DisplayWidget.cpp
     src/app/ErrorPresentation.cpp
     src/app/FilesystemSharing.cpp
@@ -193,6 +196,7 @@ add_library(beebium_linux_app STATIC
     src/app/MachineSession.cpp
     src/app/MainWindow.cpp
     src/app/SpikeMetrics.cpp
+    src/app/SystemPowerMonitor.cpp
 )
 target_include_directories(beebium_linux_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(beebium_linux_app
@@ -200,6 +204,7 @@ target_compile_definitions(beebium_linux_app
 target_link_libraries(beebium_linux_app
     PUBLIC
         Qt6::Widgets
+        Qt6::DBus
         beebium_linux_display
 )
 

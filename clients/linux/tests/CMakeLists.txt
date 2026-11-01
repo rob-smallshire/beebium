@@ -127,3 +127,11 @@ beebium_linux_add_test(test_machine_session QT
 beebium_linux_add_test(test_error_presentation QT
     SOURCES test_error_presentation.cpp
     LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_reconnect_policy
+    SOURCES test_reconnect_policy.cpp
+    LIBRARIES beebium_linux_connection)
+
+beebium_linux_add_test(test_connection_recovery QT
+    SOURCES test_connection_recovery.cpp
+    LIBRARIES beebium_linux_app)

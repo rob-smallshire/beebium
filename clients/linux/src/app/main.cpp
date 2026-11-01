@@ -13,6 +13,7 @@
 #include "app/ApplicationInfo.hpp"
 #include "app/GraphicsApi.hpp"
 #include "app/MainWindow.hpp"
+#include "app/SystemPowerMonitor.hpp"
 #include "app/SpikeMetrics.hpp"
 
 #include <QApplication>
@@ -87,7 +88,9 @@ int main(int argc, char* argv[]) {
         api = QRhiWidget::Api::OpenGL;
     }
 
-    MainWindow window(api);
+    // Full system sleep and wake, for every window's recovery (4.4).
+    const auto power = SystemPowerMonitor::create_for_this_host();
+    MainWindow window(api, power.get());
     window.show();
 
     std::unique_ptr<SpikeMetrics> metrics;

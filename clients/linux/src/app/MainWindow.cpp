@@ -12,6 +12,8 @@
 
 #include "app/MainWindow.hpp"
 
+#include "app/ConnectionOverlay.hpp"
+#include "app/ConnectionRecovery.hpp"
 #include "app/DisplayWidget.hpp"
 #include "app/ErrorPresentation.hpp"
 #include "app/MachineSession.hpp"
@@ -25,10 +27,14 @@
 
 namespace beebium::linux_client {
 
-MainWindow::MainWindow(QRhiWidget::Api graphics_api, QWidget* parent)
+MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power, QWidget* parent)
     : QMainWindow(parent),
       session_(new MachineSession(this)),
-      display_(new DisplayWidget(session_->mailbox(), this)) {
+      // Before anything else listens to the session: a failed reconnect is
+      // counted by recovery before the window decides whether to say so.
+      recovery_(new ConnectionRecovery(*session_, power, this)),
+      display_(new DisplayWidget(session_->mailbox(), this)),
+      overlay_(new ConnectionOverlay(display_)) {
     setWindowTitle(QStringLiteral("Beebium"));
 
     // The menus come from the client specification (13.2); the bar exists
@@ -60,6 +66,9 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, QWidget* parent)
             [this](ConnectionFailure failure, const QString& server_message) {
                 std::fprintf(stderr, "beebium: connection failed: %s\n",
                              qPrintable(server_message));
+                if (recovery_->recovering()) {
+                    return;  // the overlay counts the attempts
+                }
                 ServerMessageDialog dialog(
                     tr("Could Not Connect"),
                     connection_failure_sentence(failure, session_->endpoint()),
@@ -71,6 +80,22 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, QWidget* parent)
     connect(session_, &MachineSession::liveness_changed, this, [](Liveness liveness) {
         std::fprintf(stderr, "beebium: liveness %s\n", liveness_name(liveness));
     });
+
+    // The connection's one verdict, over the frozen last frame (4.3, 4.4).
+    display_->installEventFilter(this);
+    connect(recovery_, &ConnectionRecovery::verdict_changed, this,
+            [this](ConnectionVerdict verdict, int) {
+                if (!is_live(verdict)) {
+                    // Nothing typed reaches a machine that is not there, and
+                    // nothing stays held for when it returns.
+                    display_->keyboard().detach();
+                }
+                show_verdict();
+            });
+    connect(overlay_, &ConnectionOverlay::retry_requested, recovery_, &ConnectionRecovery::retry);
+    // Close goes through the window's own close, so it gets the same
+    // teardown as the window manager's close button (4.5).
+    connect(overlay_, &ConnectionOverlay::close_requested, this, &QWidget::close);
     // The title is the machine's name, exactly (5.7). Qt has no window
     // subtitle, so the description goes at the start of the status bar.
     description_label_ = new QLabel(this);
@@ -94,7 +119,22 @@ void MainWindow::connect_to(const QString& endpoint) {
     session_->connect_to(endpoint);
 }
 
+void MainWindow::show_verdict() {
+    const QString machine =
+        session_->machine_name().isEmpty() ? session_->endpoint() : session_->machine_name();
+    overlay_->show_content(overlay_content(recovery_->verdict(), machine, recovery_->attempt()));
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == display_ && event->type() == QEvent::Resize) {
+        overlay_->setGeometry(display_->rect());
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
 void MainWindow::closeEvent(QCloseEvent* event) {
+    // Recovery first, so nothing re-dials during teardown (4.4).
+    recovery_->window_closing();
     // Closing the window is dropping its connection (lifecycle-management.md
     // section 4). Held keys are released first, and the key queue drains
     // before the streams are cancelled, so nothing is left down on the machine.

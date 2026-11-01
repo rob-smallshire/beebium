@@ -20,8 +20,11 @@ class QLabel;
 
 namespace beebium::linux_client {
 
+class ConnectionOverlay;
+class ConnectionRecovery;
 class DisplayWidget;
 class MachineSession;
+class SystemPowerMonitor;
 
 // A machine window: one per connection to a server. It holds the menu bar
 // (empty until the client specification's menus are built) and the display.
@@ -29,11 +32,13 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
+    // `power` signals full system sleep and wake for recovery; may be null.
     explicit MainWindow(QRhiWidget::Api graphics_api = QRhiWidget::Api::Vulkan,
-                        QWidget* parent = nullptr);
+                        SystemPowerMonitor* power = nullptr, QWidget* parent = nullptr);
     ~MainWindow() override;
 
     MachineSession& session() { return *session_; }
+    ConnectionRecovery& recovery() { return *recovery_; }
     DisplayWidget& display() { return *display_; }
 
     // Connect this window to the server at host:port.
@@ -41,10 +46,15 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    void show_verdict();
+
     MachineSession* session_;
+    ConnectionRecovery* recovery_;
     DisplayWidget* display_;
+    ConnectionOverlay* overlay_;
     QLabel* description_label_ = nullptr;
 };
 
