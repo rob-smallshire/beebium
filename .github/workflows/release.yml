@@ -52,6 +52,11 @@ jobs:
     needs: build-env
     uses: ./.github/workflows/linux-packages.yml
 
+  # The Linux client .deb (beebium-client), built on Debian trixie against the
+  # archive's current Qt and smoked in a fresh trixie container.
+  linux-client:
+    uses: ./.github/workflows/linux-client-package.yml
+
   macos-formula:
     uses: ./.github/workflows/macos-package.yml
 
@@ -433,7 +438,7 @@ jobs:
 
   release:
     name: draft GitHub Release
-    needs: [linux, macos-formula, macos-bundle, macos-app, verify-dmgs, windows]
+    needs: [linux, linux-client, macos-formula, macos-bundle, macos-app, verify-dmgs, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -448,6 +453,13 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: dmg-*
+          path: _artifacts
+          merge-multiple: true
+
+      # The Linux client .debs (one per arch) join the release asset set.
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: linux-client-*
           path: _artifacts
           merge-multiple: true
 
@@ -478,6 +490,8 @@ jobs:
             "beebium-server_${V}_arm64.deb" \
             "beebium-server-${V}-1.x86_64.rpm" \
             "beebium-server-${V}-1.aarch64.rpm" \
+            "beebium-client_${V}_amd64.deb" \
+            "beebium-client_${V}_arm64.deb" \
             "Beebium-${V}-macos-arm64.dmg" \
             "Beebium-${V}-macos-x86_64.dmg" | sort)"
           actual="$(ls -1 | sort)"
@@ -502,6 +516,18 @@ jobs:
           for arch in amd64 arm64; do
             d="beebium-server_${V}_${arch}.deb"
             a="$(dpkg-deb -f "${d}" Architecture)"
+            [ "${a}" = "${arch}" ] || { echo "::error::${d} Architecture=${a}, expected ${arch}"; exit 1; }
+          done
+
+          # 3a. Each client .deb is the beebium-client package, at this version,
+          #     for the architecture its filename names.
+          for arch in amd64 arm64; do
+            d="beebium-client_${V}_${arch}.deb"
+            p="$(dpkg-deb -f "${d}" Package)"
+            v="$(dpkg-deb -f "${d}" Version)"
+            a="$(dpkg-deb -f "${d}" Architecture)"
+            [ "${p}" = beebium-client ] || { echo "::error::${d} Package=${p}, expected beebium-client"; exit 1; }
+            [ "${v}" = "${V}" ] || { echo "::error::${d} Version=${v}, expected ${V}"; exit 1; }
             [ "${a}" = "${arch}" ] || { echo "::error::${d} Architecture=${a}, expected ${arch}"; exit 1; }
           done
 

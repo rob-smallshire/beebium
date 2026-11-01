@@ -17,13 +17,24 @@ brew install --cask rob-smallshire/beebium/beebium-gui
 
 Requires macOS 13 (Ventura) or newer.
 
-*Windows and Linux applications are planned. For now, those platforms run Beebium through the headless servers below.*
+### Linux
+
+For Debian trixie and Raspberry Pi OS trixie (`amd64` or `arm64`): download the app and the servers for your architecture, then install both with apt, which fetches the app's Qt and gRPC libraries from the distribution.
+
+- **amd64**: [beebium-client_@@V@@_amd64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-client_@@V@@_amd64.deb) and [beebium-server_@@V@@_amd64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_amd64.deb)
+- **arm64**: [beebium-client_@@V@@_arm64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-client_@@V@@_arm64.deb) and [beebium-server_@@V@@_arm64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_arm64.deb)
+
+```
+sudo apt install ./beebium-client_@@V@@_arm64.deb ./beebium-server_@@V@@_arm64.deb
+```
+
+*A Windows application is planned. For now, Windows runs Beebium through the headless servers below.*
 
 ---
 
 ## Headless emulator servers
 
-For developers and advanced users: drive Beebium from the **Python** or **TypeScript** client, from **CI**, from your own **gRPC** client — or from the **macOS application** above, which can connect over the network to a server running on another machine (it discovers them on your LAN automatically via mDNS/Bonjour). Each package puts the four servers (Model B, B+, B+ 128K, ROM/RAM) on your `PATH`, with the ROMs and extensions bundled.
+For developers and advanced users: drive Beebium from the **Python** or **TypeScript** client, from **CI**, from your own **gRPC** client - or from the **macOS application** above, which can connect over the network to a server running on another machine (it discovers them on your LAN automatically via mDNS/Bonjour). Each package puts every server (Model B, B+, B+ 128K, and Model B with the ROM/RAM, ATPL Sidewise, Watford ROM/RAM and Integra-B boards) on your `PATH`, with the ROMs and extensions bundled.
 
 ### Python — any platform
 

@@ -16,6 +16,7 @@ the macOS `.app`, see [macOS App Packaging](macos-app-packaging.md).
 | Server (headless core) | Self-contained `.deb` (apt) + `.tar.gz` (everything else) | **Done** (Linux, both arches) |
 | Server (macOS) | Homebrew tap `rob-smallshire/homebrew-beebium`, formula `beebium-server` | **Done** (arm64 CI-gated; Intel best-effort); tap pinned to each release automatically on publish |
 | Server (Windows) | Self-contained `.zip` (built + smoke-tested in CI, attached to the release) + Scoop bucket + WinGet | **Done** (`.zip` in CI/release); Scoop bucket + WinGet pending |
+| App (Linux GUI) | Per-arch `.deb` (`beebium-client`, release asset) for Debian trixie and Raspberry Pi OS trixie | **Done** (built and smoked in CI on every push, attached to the release) |
 | App (macOS GUI) | Signed + notarized per-arch DMG (release asset) + Homebrew cask `beebium-gui` | **Done** (cask + DMG); Developer ID signed/notarized, cask synced automatically on publish; needs macOS 13+ |
 | Python client | PyPI (`beebium`) | Planned |
 | TypeScript client | npm (`@beebium/client`) | Planned |
@@ -724,9 +725,10 @@ published assets.
    install.
 4. **Publish-boundary gate** (the `Verify the publishable artifacts` step in
    `release.yml`, before the upload) — validates the *exact set of files about to
-   be attached*: exactly the seven expected filenames (no missing/extra/dupes),
+   be attached*: exactly the expected filenames (no missing/extra/dupes),
    each Linux `.tar.gz` is a single relocatable top-level directory (not `/opt`),
-   each `.deb`'s `Architecture` and each `.rpm`'s arch match their filenames, and
+   each `.deb`'s `Architecture` and each `.rpm`'s arch match their filenames, each
+   client `.deb` is `beebium-client` at the release version, and
    the shipped amd64 server actually runs (`smoke-installed-tree.sh`). If any
    check fails the job stops and no draft is created with bad assets. This closes
    the gap that once published stale `/opt`-rooted tarballs while every smoke job
