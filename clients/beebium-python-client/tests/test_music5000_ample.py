@@ -52,6 +52,8 @@ PIECE_TITLE = "Pavane"
 SAMPLE_RATE = 48000
 FIELD = 2
 TIMEOUT = 120.0
+# Studio first reads the keyboard about 18.4 emulated s after power-on.
+READY_WITHIN = 30.0
 
 
 def _capture_field(bbc: Beebium, seconds: float) -> list[tuple[int, int]]:
@@ -99,6 +101,11 @@ def test_ample_studio_plays_a_piece_through_the_music_5000(launch_bbc) -> None:
     # real time so the stream is consumed as fast as it is made.
     bbc.system.set_speed_multiplier(0.0)
     bbc.expect(STUDIO_MENU, timeout=TIMEOUT)
+    # Studio draws its menu 0.3 emulated s before it first reads the
+    # keyboard. Typed before then, past type()'s 5 s default readiness budget,
+    # the text is refused, so wait for the read with a budget that fits this
+    # boot.
+    bbc.wait_until_ready(ready_within=READY_WITHIN)
     bbc.system.set_speed_multiplier(1.0)
 
     before = _capture_field(bbc, 1.0)
