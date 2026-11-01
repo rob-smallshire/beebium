@@ -83,6 +83,9 @@ public:
     // Windowed, full screen or immersive (6.4), as the View menu, F11 and
     // the exit bar choose it.
     void set_presentation(Presentation presentation);
+    // Go immersive the first time the machine is live (--immersive): a
+    // machine shown edge to edge from the start, as on a kiosk.
+    void set_immersive_when_live() { immersive_when_live_ = true; }
     Presentation presentation() const { return presentation_; }
 
     // Replace the close questions (tests).
@@ -153,6 +156,7 @@ private:
     void place_sidebar_and_status(bool immersive);
     void place_overlays();
     Presentation presentation_ = Presentation::windowed;
+    bool immersive_when_live_ = false;
     void apply_presentation();
     // Immersive is offered only while the machine is live (6.4).
     void update_immersive_enabled();

@@ -73,11 +73,15 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption new_machine_option(
         QStringLiteral("new-machine"), QStringLiteral("Launch the preset <id> as a new machine."),
         QStringLiteral("id"));
+    const QCommandLineOption immersive_option(
+        QStringLiteral("immersive"),
+        QStringLiteral("Show machine windows immersive, the picture to the screen's edges, once "
+                       "their machine is live."));
     const QCommandLineOption new_instance_option(
         QStringLiteral("new-instance"),
         QStringLiteral("Run a client of its own rather than hand over to a running one."));
     parser.addOptions({connect_option, api_option, stats_option, quit_option, new_machine_option,
-                       new_instance_option});
+                       new_instance_option, immersive_option});
     parser.addPositionalArgument(
         QStringLiteral("machine"),
         QStringLiteral("Saved machines (a .beebium-machine directory or its document) to open, "
@@ -125,6 +129,9 @@ int main(int argc, char* argv[]) {
 
     std::vector<std::unique_ptr<SpikeMetrics>> metrics;
     client.on_window_opened([&](MainWindow& window) {
+        if (parser.isSet(immersive_option)) {
+            window.set_immersive_when_live();
+        }
         if (parser.isSet(stats_option)) {
             metrics.push_back(
                 std::make_unique<SpikeMetrics>(window, parser.value(stats_option).toInt()));

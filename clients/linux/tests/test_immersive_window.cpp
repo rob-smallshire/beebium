@@ -72,6 +72,25 @@ struct LiveWindow {
 
 }  // namespace
 
+TEST_CASE("A window asked to open immersive goes immersive once its machine is live",
+          "[immersive][window]") {
+    FakeServer server;
+    MainWindow window{QRhiWidget::Api::OpenGL};
+    window.set_immersive_when_live();
+    window.show();
+    CHECK(window.presentation() == Presentation::windowed);  // nothing live yet
+    window.connect_to(server.endpoint());
+    REQUIRE(wait_until([&] { return window.presentation() == Presentation::immersive; }));
+    // Once: leaving it is the user's to choose, and stays chosen.
+    window.set_presentation(Presentation::windowed);
+    window.session().disconnect_from_server();
+    window.connect_to(server.endpoint());
+    REQUIRE(wait_until([&] { return window.session().connected(); }));
+    CHECK(window.presentation() == Presentation::windowed);
+    window.set_quitting(true);
+    window.close();
+}
+
 TEST_CASE("Immersive waits for a live machine", "[immersive][window]") {
     MainWindow window(QRhiWidget::Api::OpenGL);
     QAction* immersive = view_action(window, QStringLiteral("Enter Immersive"));

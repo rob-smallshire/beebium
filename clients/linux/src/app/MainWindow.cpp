@@ -713,8 +713,14 @@ void MainWindow::set_presentation(Presentation presentation) {
 }
 
 void MainWindow::update_immersive_enabled() {
-    if (immersive_action_) {
-        immersive_action_->setEnabled(session_->connected() && is_live(recovery_->verdict()));
+    if (!immersive_action_) {
+        return;
+    }
+    const bool live = session_->connected() && is_live(recovery_->verdict());
+    immersive_action_->setEnabled(live);
+    if (live && immersive_when_live_) {
+        immersive_when_live_ = false;
+        set_presentation(Presentation::immersive);
     }
 }
 
