@@ -63,6 +63,7 @@ private:
     std::vector<IndicatorInfo> indicators_;
     QHash<QString, int> values_;
     unsigned generation_ = 0;
+    bool trace_ = false;
 };
 
 }  // namespace beebium::linux_client

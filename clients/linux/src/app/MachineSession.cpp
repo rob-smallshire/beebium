@@ -155,6 +155,8 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
     machine_description_ = QString::fromStdString(result.machine_description);
     server_shares_filesystem_ =
         shares_filesystem(result.server_is_local, current_sandbox());
+    std::fprintf(stderr, "beebium: the server %s this filesystem\n",
+                 server_shares_filesystem_ ? "shares" : "does not share");
     guest_was_ready_.reset();
 
     // The status stream first: it is the connection's liveness (4.3).

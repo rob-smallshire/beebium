@@ -23,6 +23,7 @@
 #include <QUrl>
 
 #include <chrono>
+#include <cstdio>
 
 namespace beebium::linux_client {
 
@@ -210,6 +211,14 @@ void SessionDiscs::on_event(unsigned generation, const beebium::DiscEvent& event
     if (!drive) {
         return;  // before the snapshot, or a drive it did not report
     }
+    static const char* const names[] = {"unknown",       "inserted",        "ejected",
+                                        "force-ejected", "eject requested", "eject cancelled",
+                                        "motor on",      "motor off"};
+    const int type = static_cast<int>(event.type());
+    std::fprintf(stderr, "beebium: drive %d %s%s%s\n", drive->number,
+                 type >= 0 && type < 8 ? names[type] : "?",
+                 event.type() == beebium::DISC_EVENT_INSERTED ? ": " : "",
+                 event.type() == beebium::DISC_EVENT_INSERTED ? event.disc().name().c_str() : "");
     switch (event.type()) {
     case beebium::DISC_EVENT_INSERTED:
         drive->state = DriveInfo::State::loaded;

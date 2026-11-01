@@ -13,10 +13,16 @@
 #include "app/SessionIndicators.hpp"
 
 #include <QMetaObject>
+#include <QtGlobal>
+
+#include <cstdio>
 
 namespace beebium::linux_client {
 
-SessionIndicators::SessionIndicators(QObject* parent) : QObject(parent) {}
+SessionIndicators::SessionIndicators(QObject* parent)
+    : QObject(parent),
+      // BEEBIUM_LED_TRACE=1: each LED's changes, for diagnosis.
+      trace_(qEnvironmentVariable("BEEBIUM_LED_TRACE") == QLatin1String("1")) {}
 
 SessionIndicators::~SessionIndicators() {
     stop();
@@ -75,6 +81,9 @@ void SessionIndicators::on_values(unsigned generation, const IndicatorStream::Va
             continue;
         }
         values_.insert(name, value);
+        if (trace_) {
+            std::fprintf(stderr, "beebium: LED %s %d\n", qPrintable(name), value);
+        }
         Q_EMIT value_changed(name, value);
         if (is_lock_led(name)) {
             Q_EMIT lock_led_changed(name);
