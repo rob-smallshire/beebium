@@ -182,9 +182,10 @@ jobs:
             bash "${cask_sync_script}" "${VERSION}" _tap
             if [ -f "${cask_filepath}" ] && grep -q "version \"${VERSION}\"" "${cask_filepath}"; then
               # Publish-boundary: every hash the cask carries is present and
-              # non-placeholder. While Intel macOS is suspended (#223) the cask
-              # has a single arm64 `sha256 "..."`; a release cut before that has
-              # the arm:/intel: pair, so check whichever form is there.
+              # non-placeholder. The cask has the arm:/intel: pair, except at
+              # the releases cut while Intel macOS was suspended (#223), whose
+              # sync script writes a single arm64 `sha256 "..."`; the checkout
+              # is the release tag, so check whichever form is there.
               if grep -q 'intel:' "${cask_filepath}"; then
                 arm_sha="$(sed -n -E 's/.*arm:[[:space:]]*"([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"
                 intel_sha="$(sed -n -E 's/.*intel:[[:space:]]*"([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"

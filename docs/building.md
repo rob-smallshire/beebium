@@ -233,7 +233,7 @@ xcodebuild test \
 | Platform | Architecture | Runner/Machine | Notes |
 |----------|--------------|----------------|-------|
 | macOS | arm64 | Apple Silicon Mac, `macos-14` runner | Native on M1/M2/M3 |
-| macOS | x86_64 | Intel Mac, `macos-15-intel` runner | Native on Intel, Rosetta on AS |
+| macOS | x86_64 | Intel Mac, self-hosted runner | Native on Intel, Rosetta on AS |
 | Linux | x86_64 | `ubuntu-latest` runner | Standard Linux build |
 | Windows | x64 | `windows-latest` runner | MSVC build |
 
@@ -241,19 +241,33 @@ xcodebuild test \
 
 GitHub Actions builds and tests across all platforms. See `.github/workflows/ci.yml` for details.
 
+**Self-hosted Intel macOS runner.** The macOS x86_64 lanes (the server, GUI
+client and both integration jobs in `ci.yml`, and the x86_64 bundle, app and
+wheel verification in the release) run on a self-hosted Intel Mac, labelled
+`[self-hosted, macOS, X64]`, because the hosted Intel image took hours to build
+the server or never finished
+([#223](https://github.com/rob-smallshire/beebium/issues/223)). Homebrew no
+longer installs on Intel macOS, so the runner has none: its tools (cmake, ninja,
+protoc, xcodegen, uv, node, pkg-config) are pre-provisioned under
+`$HOME/tools/bin`, which each job puts on `PATH` first, and Xcode 16 is selected
+with `xcode-select` (the jobs assert its version instead of running
+`setup-xcode`). The workspace persists between runs, so checkout cleans and
+configure starts from an empty build directory. The build runs at
+`CMAKE_BUILD_PARALLEL_LEVEL=6`, which fits its RAM.
+
 **Server builds:**
 - `server-macos-arm64`: Server for Apple Silicon
-- `server-macos-x86_64`: Server for Intel (suspended, #223)
+- `server-macos-x86_64`: Server for Intel
 - `server-linux`: Server for Linux
 - `server-windows`: Server for Windows
 
 **GUI client builds:**
 - `gui-client-macos-arm64`: Client for Apple Silicon
-- `gui-client-macos-x86_64`: Client for Intel (suspended, #223)
+- `gui-client-macos-x86_64`: Client for Intel
 
 **Client integration tests:**
-- `typescript-client`, `typescript-integration-linux`, `typescript-integration-macos-arm64`, `typescript-integration-macos-x86_64` (suspended, #223)
-- `python-client`, `python-integration-linux`, `python-integration-windows`, `python-integration-macos-arm64`, `python-integration-macos-x86_64` (suspended, #223)
+- `typescript-client`, `typescript-integration-linux`, `typescript-integration-macos-arm64`, `typescript-integration-macos-x86_64`
+- `python-client`, `python-integration-linux`, `python-integration-windows`, `python-integration-macos-arm64`, `python-integration-macos-x86_64`
 
 ## Deployment
 

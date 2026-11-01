@@ -1,5 +1,4 @@
-# Build the self-contained macOS server bundles (arm64; x86_64 suspended until a
-# self-hosted Intel runner exists, #223).
+# Build the self-contained macOS server bundles (arm64 + x86_64).
 #
 # Like the Linux/Windows bundles this is a from-source static build
 # (gRPC/protobuf/abseil via the *-osx-static triplets), so it is expensive and
@@ -41,32 +40,67 @@ jobs:
             # LC_BUILD_VERSION minos from this link flag regardless of the (warm-
             # cached) static deps' own object minos, so the floor is honest.
             deployment_target: "11.0"
-          # x86_64 (macos-15-intel, x64-osx-static, cache_arch x64, deployment
-          # target 12.0) suspended until a self-hosted Intel runner exists (#223).
+            self_hosted: false
+            # The hosted macOS runners are RAM-starved for a static gRPC/protobuf
+            # build; serialise the heavy compiles as ci.yml does.
+            parallel: "1"
+          # The self-hosted Intel macOS runner (#223).
+          - arch: x86_64
+            runner: [self-hosted, macOS, X64]
+            triplet: x64-osx-static
+            cache_arch: x64
+            # 12.0 (Monterey) is a defensible modern Intel floor: Catalina/Big Sur
+            # are past their support window, and it keeps the wheel's reach broad
+            # without claiming an OS we cannot reason about.
+            deployment_target: "12.0"
+            self_hosted: true
+            # 12 threads but 16 GiB at about 2 GiB per server TU, as ci.yml.
+            parallel: "6"
 
     env:
       VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
       VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.triplet }}
       VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/triplets
-      # The hosted macOS runners are RAM-starved for a static gRPC/protobuf
-      # build; serialise the heavy compiles as ci.yml does.
-      CMAKE_BUILD_PARALLEL_LEVEL: "1"
+      # Per-runner build parallelism, from the matrix.
+      CMAKE_BUILD_PARALLEL_LEVEL: ${{ matrix.parallel }}
 
     steps:
+      # The self-hosted Intel macOS runner has no Homebrew; its tools are
+      # pre-provisioned under $HOME/tools/bin (see ci.yml's server-macos-x86_64).
+      - name: Put the runner's tools on PATH
+        if: matrix.self_hosted
+        run: echo "$HOME/tools/bin" >> "$GITHUB_PATH"
+
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # A self-hosted workspace persists between runs; start clean.
+          clean: true
 
       - name: Select Xcode 16
+        if: ${{ !matrix.self_hosted }}
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16'
+
+      # setup-xcode looks for /Applications/Xcode_<version>.app; the self-hosted
+      # runner has /Applications/Xcode.app selected, so assert its version.
+      - name: Check Xcode 16
+        if: matrix.self_hosted
+        run: |
+          xcodebuild -version
+          xcodebuild -version | head -1 | grep -qE '^Xcode 16\.' || {
+            echo "::error::the self-hosted Intel macOS runner must have Xcode 16 selected"
+            exit 1
+          }
 
       - name: Set VCPKG_INSTALLED_DIR
         run: |
           echo "VCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed" >> $GITHUB_ENV
           # Same runner-image-version key component as ci.yml, so an image bump
           # rotates the key identically and the caches stay shared and warm.
-          echo "IMAGE_VERSION=$ImageVersion" >> $GITHUB_ENV
+          # A self-hosted runner has no ImageVersion; ci.yml uses the same fallback.
+          echo "IMAGE_VERSION=${ImageVersion:-selfhosted}" >> $GITHUB_ENV
 
       - name: Cache vcpkg installed packages
         uses: actions/cache@v6
@@ -85,6 +119,8 @@ jobs:
 
       - name: Configure CMake
         run: |
+          # A self-hosted workspace persists between runs: configure from scratch.
+          rm -rf build
           for attempt in 1 2 3; do
             if cmake -B build \
                 -DCMAKE_BUILD_TYPE=Release \

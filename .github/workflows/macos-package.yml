@@ -30,8 +30,8 @@ permissions:
 jobs:
   # arm64 only, because the formula is: Homebrew ships no Intel macOS bottles for
   # its grpc, protobuf and openssl@3 dependencies, so Intel Macs use the
-  # self-contained tarball, wheel or DMG, which release.yml builds on
-  # macos-15-intel (where ci.yml also builds and tests the server).
+  # self-contained tarball, wheel or DMG, which release.yml builds on the
+  # self-hosted Intel macOS runner (where ci.yml also builds and tests the server).
   formula:
     name: formula (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}

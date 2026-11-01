@@ -55,13 +55,16 @@ jobs:
       fail-fast: false
       matrix:
         # Mirror macos-bundle.yml's runners: arm64 on macos-14, x86_64 on the
-        # native Intel runner. The server floors (11.0 / 12.0) are already baked
-        # into the prebuilt bundle; the app carries its own deployment target.
+        # self-hosted Intel macOS runner (#223). The server floors (11.0 / 12.0)
+        # are already baked into the prebuilt bundle; the app carries its own
+        # deployment target.
         include:
           - arch: arm64
             runner: macos-14
-          # x86_64 (macos-15-intel) suspended until a self-hosted Intel runner
-          # exists (#223).
+            self_hosted: false
+          - arch: x86_64
+            runner: [self-hosted, macOS, X64]
+            self_hosted: true
     steps:
       # Check out the ref this workflow runs on -- NOT v<version>. For a
       # workflow_call from release.yml that is the release tag (which carries the
@@ -71,8 +74,18 @@ jobs:
       # point of the dispatch is to prove the current app+DMG path without
       # cutting a release. (Checking out v<version> would build stale app source:
       # a release tagged before this workflow landed has the old embed phase.)
+      #
+      # The self-hosted Intel macOS runner has no Homebrew; its tools are
+      # pre-provisioned under $HOME/tools/bin (see ci.yml's server-macos-x86_64).
+      - name: Put the runner's tools on PATH
+        if: matrix.self_hosted
+        run: echo "$HOME/tools/bin" >> "$GITHUB_PATH"
+
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # A self-hosted workspace persists between runs; start clean.
+          clean: true
 
       - name: Resolve the bare version
         id: v
@@ -85,9 +98,21 @@ jobs:
           echo "VERSION=${version}" >> "${GITHUB_ENV}"
 
       - name: Select Xcode 16
+        if: ${{ !matrix.self_hosted }}
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16'
+
+      # setup-xcode looks for /Applications/Xcode_<version>.app; the self-hosted
+      # runner has /Applications/Xcode.app selected, so assert its version.
+      - name: Check Xcode 16
+        if: matrix.self_hosted
+        run: |
+          xcodebuild -version
+          xcodebuild -version | head -1 | grep -qE '^Xcode 16\.' || {
+            echo "::error::the self-hosted Intel macOS runner must have Xcode 16 selected"
+            exit 1
+          }
 
       # Acquire the static server bundle tarball. In a release run it is the
       # same-run artifact; on manual dispatch it is the published release asset.
@@ -118,7 +143,7 @@ jobs:
           echo "SERVERS_TREE=${tree}" >> "${GITHUB_ENV}"
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
 
       - name: Generate the Xcode project
         working-directory: clients/macos/Beebium
@@ -333,8 +358,8 @@ jobs:
           # staple, with NSURLError -1005 ("network connection was lost") right
           # after a successful submit. Retry each lookup five times at 30 s,
           # more than the submit's three: across attempts 2 to 4 of the
-          # v0.13.0 release run, single-shot CloudKit lookups on the Intel
-          # runner (macos-15-intel) went 4 succeeded, 3 dropped, about a 40
+          # v0.13.0 release run, single-shot CloudKit lookups on the then-hosted
+          # Intel runner (macos-15-intel) went 4 succeeded, 3 dropped, about a 40
           # percent drop rate, at which three attempts per call still fail
           # this lane roughly one run in three and five bring that to a few
           # percent. This does not make either step optional: an app whose
