@@ -16,6 +16,7 @@
 #include "app/Presentation.hpp"
 
 #include <QMainWindow>
+#include <QSplitter>
 #include <QRhiWidget>
 
 #include <functional>
@@ -31,6 +32,7 @@ class DisplayWidget;
 class MachineSession;
 class SystemPowerMonitor;
 class DisplayFrame;
+class Sidebar;
 class ImmersiveExit;
 
 // A machine window: one per connection to a server. It holds the menu bar
@@ -64,6 +66,10 @@ public:
     MachineSession& session() { return *session_; }
     ConnectionRecovery& recovery() { return *recovery_; }
     DisplayWidget& display() { return *display_; }
+    Sidebar& sidebar() { return *sidebar_; }
+    // Whether the status bar's contents are showing, in the bar or, while
+    // immersive, over the picture.
+    bool status_shown() const;
 
     // Connect this window to the server at host:port.
     void connect_to(const QString& endpoint);
@@ -129,6 +135,15 @@ private:
     QAction* status_bar_action_ = nullptr;
     QAction* full_screen_action_ = nullptr;
     QAction* immersive_action_ = nullptr;
+    QAction* sidebar_action_ = nullptr;
+    QSplitter* splitter_ = nullptr;
+    Sidebar* sidebar_ = nullptr;
+    // While immersive: whether the sidebar and status bar are over the picture.
+    bool immersive_sidebar_ = false;
+    bool immersive_status_bar_ = false;
+    bool overlaid_ = false;
+    void place_sidebar_and_status(bool immersive);
+    void place_overlays();
     Presentation presentation_ = Presentation::windowed;
     void apply_presentation();
     // Immersive is offered only while the machine is live (6.4).

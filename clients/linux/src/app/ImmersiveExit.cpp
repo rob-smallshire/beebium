@@ -26,15 +26,33 @@ ImmersiveExit::ImmersiveExit(QWidget* display) : QWidget(display), display_(disp
     button_->setObjectName(QStringLiteral("exitImmersive"));
     // Never take keyboard focus from the display: the keys stay the machine's.
     button_->setFocusPolicy(Qt::NoFocus);
+    sidebar_button_ = new QPushButton(tr("Sidebar"), this);
+    sidebar_button_->setObjectName(QStringLiteral("immersiveSidebar"));
+    status_bar_button_ = new QPushButton(tr("Status Bar"), this);
+    status_bar_button_->setObjectName(QStringLiteral("immersiveStatusBar"));
+    for (QPushButton* toggle : {sidebar_button_, status_bar_button_}) {
+        toggle->setCheckable(true);
+        toggle->setFocusPolicy(Qt::NoFocus);
+    }
     layout->addStretch(1);
+    layout->addWidget(sidebar_button_);
+    layout->addWidget(status_bar_button_);
+    layout->addSpacing(12);
     layout->addWidget(button_);
     layout->addStretch(1);
     connect(button_, &QPushButton::clicked, this, &ImmersiveExit::exit_requested);
+    connect(sidebar_button_, &QPushButton::clicked, this, &ImmersiveExit::sidebar_toggled);
+    connect(status_bar_button_, &QPushButton::clicked, this, &ImmersiveExit::status_bar_toggled);
     rest_timer_.setSingleShot(true);
     rest_timer_.setInterval(REST_MS);
     connect(&rest_timer_, &QTimer::timeout, this, &ImmersiveExit::rest);
     display_->installEventFilter(this);
     hide();
+}
+
+void ImmersiveExit::show_overlay_state(bool sidebar, bool status_bar) {
+    sidebar_button_->setChecked(sidebar);
+    status_bar_button_->setChecked(status_bar);
 }
 
 bool ImmersiveExit::bar_shown() const {

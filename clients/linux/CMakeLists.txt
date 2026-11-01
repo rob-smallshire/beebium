@@ -254,7 +254,10 @@ add_library(beebium_linux_app STATIC
     src/app/SavedMachinesPage.cpp
     src/app/SessionAudio.cpp
     src/app/SettingsDialog.cpp
+    src/app/Sidebar.cpp
+    src/app/SidebarMode.cpp
     src/app/SingleInstance.cpp
+    src/app/SoundSidebar.cpp
     src/app/SpikeMetrics.cpp
     src/app/SystemPowerMonitor.cpp
 )

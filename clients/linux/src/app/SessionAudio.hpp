@@ -66,6 +66,9 @@ public:
     AudioHealth health() const;
     // Why there is no sound, if there is none: empty while it plays.
     QString problem() const;
+    // Why the stream itself failed, if it did: the format could not be read,
+    // or the stream broke.
+    QString stream_problem() const { return stream_problem_; }
 
 Q_SIGNALS:
     // The format arrived (loaded) or the connection went (not).

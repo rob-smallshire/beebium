@@ -128,6 +128,10 @@ beebium_linux_add_test(test_audio
     SOURCES test_audio.cpp
     LIBRARIES beebium_linux_audio)
 
+beebium_linux_add_test(test_sidebar QT
+    SOURCES test_sidebar.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_graphics_api
     SOURCES test_graphics_api.cpp
     LIBRARIES beebium_linux_app)

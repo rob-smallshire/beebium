@@ -38,9 +38,14 @@ public:
     bool active() const { return active_; }
     bool bar_shown() const;
     bool pointer_hidden() const { return pointer_hidden_; }
+    // The bar's toggles for the surfaces that stay reachable while
+    // immersive, over the picture rather than reflowing it (6.4).
+    void show_overlay_state(bool sidebar, bool status_bar);
 
 Q_SIGNALS:
     void exit_requested();
+    void sidebar_toggled();
+    void status_bar_toggled();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -53,6 +58,8 @@ private:
 
     QWidget* display_;
     QPushButton* button_;
+    QPushButton* sidebar_button_;
+    QPushButton* status_bar_button_;
     QTimer rest_timer_;
     bool active_ = false;
     bool pointer_hidden_ = false;

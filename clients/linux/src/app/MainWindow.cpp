@@ -21,6 +21,8 @@
 #include "app/ErrorPresentation.hpp"
 #include "app/HomeWindow.hpp"
 #include "app/ImmersiveExit.hpp"
+#include "app/Sidebar.hpp"
+#include "app/SoundSidebar.hpp"
 #include "app/MachineSession.hpp"
 
 #include <QAction>
@@ -39,6 +41,8 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QSignalBlocker>
+#include <QSplitter>
 #include <QStatusBar>
 
 #include <cstdio>
@@ -62,11 +66,42 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     display_->setApi(graphics_api);
     // The display inside a frame that shows when it has keyboard focus (7.1).
     frame_ = new DisplayFrame(display_, this);
-    setCentralWidget(frame_);
+    frame_->installEventFilter(this);
+    // The sidebar beside the picture (13.1), the macOS client's 280 pixels.
+    splitter_ = new QSplitter(Qt::Horizontal, this);
+    splitter_->setChildrenCollapsible(false);
+    sidebar_ = new Sidebar(splitter_);
+    sidebar_->add_mode(SidebarMode::sound, new SoundSidebar(session_->audio(), sidebar_));
+    if (settings_) {
+        const auto mode = static_cast<SidebarMode>(
+            settings_->store()
+                .value(QStringLiteral("view/sidebarMode"), static_cast<int>(SidebarMode::sound))
+                .toInt());
+        sidebar_->set_mode(mode);
+    }
+    connect(sidebar_, &Sidebar::mode_changed, this, [this](SidebarMode mode) {
+        if (settings_) {
+            settings_->store().setValue(QStringLiteral("view/sidebarMode"), static_cast<int>(mode));
+        }
+    });
+    splitter_->addWidget(sidebar_);
+    splitter_->addWidget(frame_);
+    splitter_->setStretchFactor(0, 0);
+    splitter_->setStretchFactor(1, 1);
+    splitter_->setSizes({Sidebar::WIDTH, 1280});
+    setCentralWidget(splitter_);
     immersive_exit_ = new ImmersiveExit(display_);
     connect(immersive_exit_, &ImmersiveExit::exit_requested, this,
             [this] { set_presentation(Presentation::windowed); });
-    resize(1280, 1024 + menuBar()->sizeHint().height());
+    connect(immersive_exit_, &ImmersiveExit::sidebar_toggled, this, [this] {
+        immersive_sidebar_ = !immersive_sidebar_;
+        apply_presentation();
+    });
+    connect(immersive_exit_, &ImmersiveExit::status_bar_toggled, this, [this] {
+        immersive_status_bar_ = !immersive_status_bar_;
+        apply_presentation();
+    });
+    resize(1280 + Sidebar::WIDTH, 1024 + menuBar()->sizeHint().height());
 
     connect(session_, &MachineSession::frame_ready, display_, &DisplayWidget::frame_ready);
     connect(session_, &MachineSession::keyboard_ready, this, [this] {
@@ -126,6 +161,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                 // Immersive is only meaningful while live: the window
                 // returns to its layout, where the overlay explains (6.4).
                 update_immersive_enabled();
+                sidebar_->set_verdict(verdict);
                 if (!is_live(verdict)) {
                     set_presentation(after_connection_lost(presentation_));
                     // Nothing typed reaches a machine that is not there, and
@@ -250,11 +286,58 @@ void MainWindow::build_menus() {
         settings_ ? settings_->store().value(QStringLiteral("view/statusBar"), true).toBool() : true;
     status_bar_action_->setChecked(show_status_bar);
     connect(status_bar_action_, &QAction::toggled, this, [this](bool shown) {
-        if (settings_) {
+        if (presentation_ == Presentation::immersive) {
+            // Over the picture while immersive; the window's setting stays.
+            const QSignalBlocker keep(status_bar_action_);
+            status_bar_action_->setChecked(!shown);
+            immersive_status_bar_ = !immersive_status_bar_;
+        } else if (settings_) {
             settings_->store().setValue(QStringLiteral("view/statusBar"), shown);
         }
         apply_presentation();
     });
+    // The sidebar and its modes, as the macOS client's View menu has them:
+    // Control-Command-S is Ctrl+Alt+S, Command-digit Ctrl+digit.
+    sidebar_action_ = view->addAction(tr("Show S&idebar"));
+    sidebar_action_->setCheckable(true);
+    sidebar_action_->setShortcut(QKeySequence(tr("Ctrl+Alt+S")));
+    sidebar_action_->setChecked(
+        settings_ ? settings_->store().value(QStringLiteral("view/sidebar"), true).toBool() : true);
+    connect(sidebar_action_, &QAction::toggled, this, [this](bool shown) {
+        if (presentation_ == Presentation::immersive) {
+            const QSignalBlocker keep(sidebar_action_);
+            sidebar_action_->setChecked(!shown);
+            immersive_sidebar_ = !immersive_sidebar_;
+        } else if (settings_) {
+            settings_->store().setValue(QStringLiteral("view/sidebar"), shown);
+        }
+        apply_presentation();
+    });
+    std::vector<QAction*> window_actions{status_bar_action_, sidebar_action_};
+    for (SidebarMode mode : offered_sidebar_modes()) {
+        QAction* mode_action = view->addAction(sidebar_mode_icon(mode), sidebar_mode_label(mode));
+        mode_action->setShortcut(QKeySequence(
+            QStringLiteral("Ctrl+%1").arg(static_cast<int>(mode))));
+        // Shows that mode; pressed again with it showing, hides the sidebar.
+        connect(mode_action, &QAction::triggered, this, [this, mode] {
+            const bool immersive = presentation_ == Presentation::immersive;
+            bool& shown_flag = immersive_sidebar_;
+            const bool shown = immersive ? shown_flag : sidebar_action_->isChecked();
+            const bool hide = shown && sidebar_->mode() == mode;
+            sidebar_->set_mode(mode);
+            if (immersive) {
+                shown_flag = !hide;
+            } else {
+                const QSignalBlocker quiet(sidebar_action_);
+                sidebar_action_->setChecked(!hide);
+                if (settings_) {
+                    settings_->store().setValue(QStringLiteral("view/sidebar"), !hide);
+                }
+            }
+            apply_presentation();
+        });
+        window_actions.push_back(mode_action);
+    }
     view->addSeparator();
     // Immersive as the macOS client has it, Ctrl+Shift+F for its
     // Command-Shift-F; Shift+F11 too, since F11 with any modifier always
@@ -274,7 +357,9 @@ void MainWindow::build_menus() {
             [this] { set_presentation(after_full_screen_key(presentation_)); });
     // Window-wide, and on the window as well as in the menus: the menu bar
     // is hidden while immersive, and F11 must still lead out (6.4).
-    for (QAction* action : {status_bar_action_, immersive_action_, full_screen_action_}) {
+    window_actions.push_back(immersive_action_);
+    window_actions.push_back(full_screen_action_);
+    for (QAction* action : window_actions) {
         action->setShortcutContext(Qt::WindowShortcut);
         addAction(action);
     }
@@ -361,6 +446,9 @@ void MainWindow::show_verdict() {
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     if (watched == display_ && event->type() == QEvent::Resize) {
         overlay_->setGeometry(display_->rect());
+    }
+    if (watched == frame_ && event->type() == QEvent::Resize) {
+        place_overlays();
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -481,10 +569,18 @@ void MainWindow::apply_presentation() {
     std::fprintf(stderr, "beebium: presentation %s\n", names[static_cast<int>(presentation_)]);
     const Chrome chrome = chrome_for(presentation_);
     const bool immersive = presentation_ == Presentation::immersive;
+    if (immersive != overlaid_) {
+        // Entering, the sidebar and status bar go; any shown again while
+        // immersive appear over the picture without reflowing it (6.4).
+        immersive_sidebar_ = false;
+        immersive_status_bar_ = false;
+        overlaid_ = immersive;
+    }
     menuBar()->setVisible(chrome.menu_bar);
-    statusBar()->setVisible(chrome.status_bar && status_bar_action_->isChecked());
+    place_sidebar_and_status(immersive);
     frame_->set_bare(immersive);
     immersive_exit_->set_active(immersive);
+    immersive_exit_->show_overlay_state(immersive_sidebar_, immersive_status_bar_);
     immersive_action_->setText(immersive ? tr("Exit &Immersive Mode") : tr("Enter &Immersive Mode"));
     full_screen_action_->setChecked(presentation_ == Presentation::full_screen);
     if (chrome.os_full_screen && !isFullScreen()) {
@@ -495,6 +591,54 @@ void MainWindow::apply_presentation() {
     if (immersive) {
         // The keys stay the machine's: entering never takes them away.
         display_->setFocus();
+    }
+}
+
+void MainWindow::place_sidebar_and_status(bool immersive) {
+    if (immersive) {
+        // Lifted out of the layout and over the picture.
+        statusBar()->hide();
+        if (sidebar_->parentWidget() != frame_) {
+            sidebar_->setParent(frame_);
+        }
+        if (status_strip_->parentWidget() != frame_) {
+            statusBar()->removeWidget(status_strip_);
+            status_strip_->setParent(frame_);
+            status_strip_->setAutoFillBackground(true);
+        }
+        sidebar_->setVisible(immersive_sidebar_);
+        status_strip_->setVisible(immersive_status_bar_);
+        place_overlays();
+        return;
+    }
+    if (sidebar_->parentWidget() != splitter_) {
+        splitter_->insertWidget(0, sidebar_);
+        splitter_->setSizes({Sidebar::WIDTH, std::max(width() - Sidebar::WIDTH, 1)});
+    }
+    if (status_strip_->parentWidget() == frame_) {
+        status_strip_->setAutoFillBackground(false);
+        statusBar()->addWidget(status_strip_, 1);
+    }
+    status_strip_->show();
+    sidebar_->setVisible(sidebar_action_->isChecked());
+    statusBar()->setVisible(chrome_for(presentation_).status_bar && status_bar_action_->isChecked());
+}
+
+bool MainWindow::status_shown() const {
+    return status_strip_->isVisibleTo(const_cast<MainWindow*>(this)) &&
+           (status_strip_->parentWidget() == frame_ || statusBar()->isVisibleTo(const_cast<MainWindow*>(this)));
+}
+
+void MainWindow::place_overlays() {
+    if (sidebar_->parentWidget() == frame_) {
+        sidebar_->setGeometry(0, 0, Sidebar::WIDTH, frame_->height());
+        sidebar_->raise();
+    }
+    if (status_strip_->parentWidget() == frame_) {
+        const int height = status_strip_->sizeHint().height() + 6;
+        const int left = sidebar_->isVisible() && sidebar_->parentWidget() == frame_ ? Sidebar::WIDTH : 0;
+        status_strip_->setGeometry(left, frame_->height() - height, frame_->width() - left, height);
+        status_strip_->raise();
     }
 }
 
