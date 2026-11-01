@@ -16,6 +16,7 @@
 #include "connection/IndicatorStream.hpp"
 
 #include <QHash>
+#include <QSet>
 #include <QObject>
 #include <QString>
 
@@ -45,9 +46,12 @@ public:
     // Brightness 0 to 255; 0 for one not heard of.
     int value(const QString& name) const { return values_.value(name, 0); }
 
-    // Whether a lock LED's name: its change is the moment to re-read the
-    // machine's lock latch (7.3).
-    static bool is_lock_led(const QString& name);
+    // Whether an indicator is a lock LED, from its metadata: its related key
+    // is the BBC's Caps Lock or Shift Lock, keys the client knows by their
+    // catalogue names; no indicator is known by its own name (10). Its
+    // change is the moment to re-read the machine's lock latch (7.3).
+    static bool is_lock_led(const IndicatorInfo& info);
+    bool is_lock_led(const QString& name) const { return lock_leds_.contains(name); }
 
 Q_SIGNALS:
     void listed();
@@ -62,6 +66,7 @@ private:
     std::unique_ptr<IndicatorStream> stream_;
     std::vector<IndicatorInfo> indicators_;
     QHash<QString, int> values_;
+    QSet<QString> lock_leds_;
     unsigned generation_ = 0;
     bool trace_ = false;
 };

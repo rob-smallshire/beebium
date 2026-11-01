@@ -95,6 +95,13 @@ TEST_CASE("A lock LED's change is told apart, for the keyboard's latch", "[indic
         {"drive-0-led", 255}, {"shift-lock-led", 255}});
     REQUIRE(wait_until([&] { return !locks.isEmpty(); }));
     CHECK(locks == QStringList{QStringLiteral("shift-lock-led")});
+    // Known by its related key, not its name.
+    IndicatorInfo renamed;
+    renamed.name = "led-7";
+    renamed.related_key = "Caps Lock";
+    CHECK(SessionIndicators::is_lock_led(renamed));
+    renamed.related_key.clear();
+    CHECK_FALSE(SessionIndicators::is_lock_led(renamed));
     indicators.stop();
 }
 

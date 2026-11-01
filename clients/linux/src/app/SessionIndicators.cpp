@@ -28,8 +28,8 @@ SessionIndicators::~SessionIndicators() {
     stop();
 }
 
-bool SessionIndicators::is_lock_led(const QString& name) {
-    return name == QLatin1String("caps-lock-led") || name == QLatin1String("shift-lock-led");
+bool SessionIndicators::is_lock_led(const IndicatorInfo& info) {
+    return info.related_key == "Caps Lock" || info.related_key == "Shift Lock";
 }
 
 void SessionIndicators::start(std::shared_ptr<grpc::Channel> channel) {
@@ -67,6 +67,12 @@ void SessionIndicators::on_listed(unsigned generation, std::vector<IndicatorInfo
     }
     indicators_ = std::move(infos);
     values_.clear();
+    lock_leds_.clear();
+    for (const auto& info : indicators_) {
+        if (is_lock_led(info)) {
+            lock_leds_.insert(QString::fromStdString(info.name));
+        }
+    }
     Q_EMIT listed();
 }
 
