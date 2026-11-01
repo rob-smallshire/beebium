@@ -215,8 +215,7 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
                                      .count();
             std::fprintf(stderr, "beebium: running the machine, %lld ms after connecting, %s\n",
                          static_cast<long long>(held_ms),
-                         audio_->sound_ready() ? "its sound ready"
-                                               : "its sound not ready in time");
+                         audio_->sound_ready() ? "its sound ready" : "its sound not ready");
             run();
         });
     }

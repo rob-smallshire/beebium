@@ -132,6 +132,9 @@ public:
 
     // DebuggerControl.Run: start a machine waiting for it (5.5).
     void run();
+    // The user reached for the machine (a key, Break) while its Run was held
+    // for its sound: run it now rather than wait out the hold.
+    void release_run_hold() { run_hold_.release(); }
     // SystemService.GetSystemInfo again: clients, saved, directory.
     void refresh_system_info();
     // SaveMachine (5.4): empty destination saves a saved machine in place.

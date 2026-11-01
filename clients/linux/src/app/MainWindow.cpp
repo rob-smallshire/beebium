@@ -144,7 +144,12 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     connect(session_, &MachineSession::keyboard_ready, this, [this] {
         KeySender* sender = session_->key_sender();
         display_->keyboard().attach(session_->key_table(),
-                                    [sender](const std::vector<WireEvent>& events) {
+                                    [this, sender](const std::vector<WireEvent>& events) {
+                                        if (!events.empty()) {
+                                            // A key or Break for a machine whose Run
+                                            // is held for its sound runs it now.
+                                            session_->release_run_hold();
+                                        }
                                         sender->send(events);
                                     });
         display_->keyboard_changed();
