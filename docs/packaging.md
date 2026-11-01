@@ -237,8 +237,13 @@ ordinary distribution package:
   none. It also recommends `avahi-daemon` and `libavahi-client3`, which
   discovery loads at run time, and `qt6-gtk-platformtheme`: the client sets
   no style, palette or font of its own and takes them from Qt's platform
-  theme, and Raspberry Pi OS on labwc ships none for Qt 6, so without it the
-  client is Fusion with a light palette whatever the desktop's GTK theme.
+  theme. Where a desktop sets none up for Qt 6 (plain Debian trixie under
+  labwc or another wlroots compositor), the client falls to Qt's generic
+  theme, Fusion with a light palette, whatever the GTK theme; with the GTK
+  platform theme it follows the GTK theme. Raspberry Pi OS's own session
+  sets qt6ct through `QT_QPA_PLATFORMTHEME`, which already carries its
+  palette and font, so there the GTK theme is used only when that variable
+  says `gtk3`.
 - **No maintainer scripts:** the desktop, MIME and icon caches are refreshed
   by the distribution's dpkg triggers.
 
