@@ -22,6 +22,7 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <cstdio>
 
 namespace beebium::linux_client {
 
@@ -65,11 +66,14 @@ bool Application::is_open(const DiscoveredMachine& machine) const {
 MainWindow* Application::open(const Endpoint& endpoint, const QString& machine_uuid) {
     if (MainWindow* existing = find(endpoint, machine_uuid)) {
         // Never a second window on the same machine (4.1).
+        std::fprintf(stderr, "beebium: %s is open already; bringing its window forward\n",
+                     endpoint.to_string().c_str());
         existing->show();
         existing->raise();
         existing->activateWindow();
         return existing;
     }
+    std::fprintf(stderr, "beebium: opening a window on %s\n", endpoint.to_string().c_str());
     auto* window = new MainWindow(graphics_api_, power_.get(), &settings_);
     windows_.emplace_back(window);
     connect(window, &MainWindow::connect_requested, this,

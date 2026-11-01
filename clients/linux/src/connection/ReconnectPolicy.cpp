@@ -101,6 +101,18 @@ void ReconnectPolicy::on_will_sleep() {
     }
 }
 
+const char* verdict_name(ConnectionVerdict verdict) {
+    switch (verdict) {
+    case ConnectionVerdict::live: return "live";
+    case ConnectionVerdict::unreachable: return "unreachable";
+    case ConnectionVerdict::reconnecting: return "reconnecting";
+    case ConnectionVerdict::could_not_reconnect: return "could not reconnect";
+    case ConnectionVerdict::stopped: return "stopped";
+    case ConnectionVerdict::died: return "stopped unexpectedly";
+    }
+    return "unknown";
+}
+
 ConnectionVerdict connection_verdict(Liveness liveness, ReconnectPolicy::Phase phase) {
     switch (phase) {
     case ReconnectPolicy::Phase::waiting:

@@ -88,7 +88,11 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     // The connection's one verdict, over the frozen last frame (4.3, 4.4).
     display_->installEventFilter(this);
     connect(recovery_, &ConnectionRecovery::verdict_changed, this,
-            [this](ConnectionVerdict verdict, int) {
+            [this](ConnectionVerdict verdict, int attempt) {
+                std::fprintf(stderr, "beebium: connection %s%s\n", verdict_name(verdict),
+                             verdict == ConnectionVerdict::reconnecting
+                                 ? qPrintable(QStringLiteral(" (attempt %1)").arg(attempt))
+                                 : "");
                 if (!is_live(verdict)) {
                     // Nothing typed reaches a machine that is not there, and
                     // nothing stays held for when it returns.

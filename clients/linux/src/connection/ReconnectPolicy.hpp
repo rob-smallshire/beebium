@@ -95,6 +95,8 @@ enum class ConnectionVerdict {
     died,                  // the emulator stopped unexpectedly: Close
 };
 
+const char* verdict_name(ConnectionVerdict verdict);
+
 // An active recovery outranks the raw liveness: a stream that died reads as
 // reconnecting while recovery is trying.
 ConnectionVerdict connection_verdict(Liveness liveness, ReconnectPolicy::Phase phase);
