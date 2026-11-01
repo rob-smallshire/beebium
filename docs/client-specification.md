@@ -116,6 +116,7 @@ Section 3 states cross-cutting foundations that every later section assumes.
 | 13.1 | Sidebar modes | Core |
 | 13.2 | Application menus and commands | Core |
 | 13.3 | Settings and preferences | Core |
+| 13.4 | The entry point and the home window | Core |
 
 
 ## 2. The contract model and conformance profiles
@@ -592,7 +593,8 @@ Conformance:
   `show-preset`, model names from `describe-preset-schema`; a preset whose
   executable is absent is omitted; a no-thumbnail preset is never fetched.
 - LATITUDE: the picker or card presentation, grouping, thumbnail caching.
-- MACOS-ONLY: the welcome window and its presets page.
+- MACOS-ONLY: the welcome window and its presets page (the entry-point rule
+  behind it is in section 13.4).
 
 Scenarios: a preset directory with a built-in and a user preset -> two groups. A
 preset whose executable is removed -> absent from the picker. A no-thumbnail
@@ -2118,7 +2120,10 @@ File/Machine/View/Tools/Help menu bar are the Linux recommendation):
 
 - File: New (open the presets view), Open a saved machine, Open Recent (a previews
   view, not a names submenu), Rename Machine (for a transient machine), Import Presets,
-  Connect, Save, Save As, Close.
+  Connect, Save, Save As, Close. On a platform with a home window (section 13.4) the
+  application-level commands among these (New, Open, Open Recent, Import Presets,
+  Connect, Configure) live in the home window, and a machine window's File menu holds
+  the machine's own commands plus one that brings the home window forward.
 - View: Show/Hide Status Bar, Enter/Exit Immersive Mode, Show/Hide Sidebar, and one
   command per sidebar mode.
 - Edit: the standard editing commands (they apply in the client's own text fields),
@@ -2161,6 +2166,58 @@ Conformance:
 Scenarios: duplicate a preset -> a uniquely-named user copy persists across launches.
 Export a preset -> the suggested name and type come from the stored file, not a
 hard-coded extension.
+
+### 13.4 The entry point and the home window
+
+Profile: Core.
+
+Behaviour. Launched with no machine, link or other request, the client leads with
+the most common thing a user does: start a new machine from a preset. Opening a
+saved machine and connecting to a running one are reachable from the same place
+in one step, in that order of prominence, since that is their order of frequency.
+Connecting to a running server is the rarest and most expert of the three and is
+never the front door. Launched with a request (a saved machine, a preset id, a
+connect link), the client opens that machine's window only and shows no front
+door (section 4.1).
+
+On macOS the front door is the welcome window, which the always-present menu bar
+lets vanish without losing the application's commands. On Linux and Windows there
+is no application-level menu bar: a machine window carries only its own menus, so
+the application's commands need a window of their own. The presentation on those
+platforms is a home window, in the manner of a virtual-machine manager or a
+project manager: a persistent, ordinary window that is the application's face. It
+holds, as pages or sections in this order: the presets catalogue with a Launch
+command (section 5.1, the default page); saved machines, recent ones first, with
+Open (section 5.3); running machines, discovered on this host and on the network,
+with Connect and the address entry (section 4.1); and the application's own
+commands: Configure (section 13.3), the preset library and editor where the
+client has them (sections 5.2, 13.3), About, Quit. A machine window has no New,
+Open, Connect or Configure commands of its own; it has a command that brings the
+home window forward.
+
+Lifetime. Closing the home window does not quit while a machine window is open;
+the home window can be reopened from any machine window. When the last machine
+window closes and the home window is closed, the client quits. Quit, from the home
+window or a machine window, closes every machine window under the rules of
+section 4.5. The home window is never a duplicate: a request to show it brings
+the one forward.
+
+Conformance:
+
+- MANDATORY: new-from-preset leads; open and connect are one step away from the
+  entry point; a launch with a request shows no front door; the home window's
+  lifetime rules above where a client has one.
+- LATITUDE: whether the front door is a welcome window or a home window; the
+  pages and their layout; which application-level commands the home window
+  carries beyond New, Open, Connect and Configure.
+- MACOS-ONLY: the welcome window and the always-present menu bar it relies on.
+
+Scenarios: launch with no arguments -> the presets catalogue, with saved and
+running machines reachable without a further dialog. Launch with a saved
+machine's path -> that machine's window and nothing else. On a home-window
+platform: close the home window with a machine running -> the client stays; close
+that machine's window -> the client quits. Close the last machine window with the
+home window open -> the client stays, showing the home window.
 
 
 ## Appendix A. Server services used, by capability
