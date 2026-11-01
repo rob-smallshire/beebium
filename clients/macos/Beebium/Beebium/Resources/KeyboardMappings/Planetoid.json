@@ -1,45 +1,74 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "00000000-0000-0000-0000-000000000006",
   "name": "Planetoid",
   "characterMapping": true,
   "synchronizeCapsLock": false,
-  "keyMappings": [
+  "keys": [
     {
-      "macOS": { "keyCode": 0 },
-      "bbc": { "keyName": "A", "action": "Up" }
+      "code": "KeyA",
+      "bbc": {
+        "key": "A",
+        "action": "Up"
+      }
     },
     {
-      "macOS": { "keyCode": 6 },
-      "bbc": { "keyName": "Z", "action": "Down" }
+      "code": "KeyZ",
+      "bbc": {
+        "key": "Z",
+        "action": "Down"
+      }
     },
     {
-      "macOS": { "keyCode": 49 },
-      "bbc": { "keyName": "Space", "action": "Reverse" }
+      "code": "Space",
+      "bbc": {
+        "key": "Space",
+        "action": "Reverse"
+      }
     },
     {
-      "macOS": { "keyCode": 56 },
-      "bbc": { "keyName": "Shift", "action": "Thrust" }
+      "code": "ShiftLeft",
+      "bbc": {
+        "key": "Shift",
+        "action": "Thrust"
+      }
     },
     {
-      "macOS": { "keyCode": 60 },
-      "bbc": { "keyName": "Shift" }
+      "code": "ShiftRight",
+      "bbc": {
+        "key": "Shift"
+      }
     },
     {
-      "macOS": { "keyCode": 36 },
-      "bbc": { "keyName": "Return", "action": "Fire" }
+      "code": "Enter",
+      "bbc": {
+        "key": "Return",
+        "action": "Fire"
+      }
     },
     {
-      "macOS": { "keyCode": 48 },
-      "bbc": { "keyName": "Tab", "action": "Smart Bomb" }
+      "code": "Tab",
+      "bbc": {
+        "key": "Tab",
+        "action": "Smart Bomb"
+      }
     },
     {
-      "macOS": { "keyCode": 4 },
-      "bbc": { "keyName": "H", "action": "Hyperspace" }
+      "code": "KeyH",
+      "bbc": {
+        "key": "H",
+        "action": "Hyperspace"
+      }
     },
     {
-      "macOS": { "keyCode": 111, "option": true },
-      "bbc": { "keyName": "Break", "disabled": false }
+      "code": "F12",
+      "with": [
+        "Alt"
+      ],
+      "bbc": {
+        "key": "Break",
+        "disabled": false
+      }
     }
   ]
 }

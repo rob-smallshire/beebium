@@ -62,6 +62,7 @@
 		1FE8AE12703189FD243A6977 /* FileReferenceMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */; };
 		2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */; };
 		22DE4363A66E960D161ECD01 /* disc.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44DA8D133CDD247497229CA /* disc.grpc.swift */; };
+		22ECF44772C0159ABFED1800 /* BuiltInMappingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6B04201EE913A2107FB39B /* BuiltInMappingsTests.swift */; };
 		23DC1F33FE15F8CEABE9FBE2 /* BBCModifierState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 063CC2272D058D46784E181A /* BBCModifierState.swift */; };
 		23F3E03B298F6AB8A9B9924E /* EconetClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA006204A482FCD8B77F7549 /* EconetClient.swift */; };
 		25614C8EFD2EC82348C86EEA /* ExtensionEditorForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 965A81E6609BBCFAA7FA3997 /* ExtensionEditorForm.swift */; };
@@ -536,6 +537,7 @@
 		CA006204A482FCD8B77F7549 /* EconetClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetClient.swift; sourceTree = "<group>"; };
 		CB59783F295E0122C4DF3A8D /* AudioRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRendererTests.swift; sourceTree = "<group>"; };
 		CC51B6CDDCA00180CC81969A /* serial.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = serial.grpc.swift; sourceTree = "<group>"; };
+		CC6B04201EE913A2107FB39B /* BuiltInMappingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuiltInMappingsTests.swift; sourceTree = "<group>"; };
 		CDB10CCDB68756C040A009F0 /* EconetStationPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetStationPresentationTests.swift; sourceTree = "<group>"; };
 		CF33113C39D9E1D2BE649FF6 /* system.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = system.grpc.swift; sourceTree = "<group>"; };
 		CF6562062957B62B8C099A42 /* DiscClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscClient.swift; sourceTree = "<group>"; };
@@ -934,6 +936,7 @@
 				1DFE84A58CCC1A258C1DA04E /* BBCModifierStateTests.swift */,
 				BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */,
 				C858E5C4019E78FFD1AD693F /* BlankDiscNamingTests.swift */,
+				CC6B04201EE913A2107FB39B /* BuiltInMappingsTests.swift */,
 				31CA435023B19D31740E399C /* ColorExtensionsTests.swift */,
 				BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */,
 				C46D7348FD4254C5DB38C76D /* CommittingFieldTests.swift */,
@@ -1145,6 +1148,7 @@
 				E2C3C9AB563A0A8406735C73 /* BBCModifierStateTests.swift in Sources */,
 				9E04292AEA136B391E1E68CE /* BiquadFilterTests.swift in Sources */,
 				2DFA99C752F8021C8A4C91AE /* BlankDiscNamingTests.swift in Sources */,
+				22ECF44772C0159ABFED1800 /* BuiltInMappingsTests.swift in Sources */,
 				BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */,
 				524A3CDC4C24461BC89C6886 /* ComboBoxRepresentableTests.swift in Sources */,
 				E0FA0966EB7097E8B3EF885D /* CommittingFieldTests.swift in Sources */,

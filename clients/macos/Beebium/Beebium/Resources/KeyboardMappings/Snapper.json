@@ -1,29 +1,47 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "00000000-0000-0000-0000-000000000003",
   "name": "Snapper",
   "characterMapping": true,
   "synchronizeCapsLock": false,
-  "keyMappings": [
+  "keys": [
     {
-      "macOS": { "keyCode": 39 },
-      "bbc": { "keyName": ":", "action": "Up" }
+      "code": "Quote",
+      "bbc": {
+        "key": ":",
+        "action": "Up"
+      }
     },
     {
-      "macOS": { "keyCode": 44 },
-      "bbc": { "keyName": "/", "action": "Down" }
+      "code": "Slash",
+      "bbc": {
+        "key": "/",
+        "action": "Down"
+      }
     },
     {
-      "macOS": { "keyCode": 6 },
-      "bbc": { "keyName": "Z", "action": "Left" }
+      "code": "KeyZ",
+      "bbc": {
+        "key": "Z",
+        "action": "Left"
+      }
     },
     {
-      "macOS": { "keyCode": 7 },
-      "bbc": { "keyName": "X", "action": "Right" }
+      "code": "KeyX",
+      "bbc": {
+        "key": "X",
+        "action": "Right"
+      }
     },
     {
-      "macOS": { "keyCode": 111, "option": true },
-      "bbc": { "keyName": "Break", "disabled": false }
+      "code": "F12",
+      "with": [
+        "Alt"
+      ],
+      "bbc": {
+        "key": "Break",
+        "disabled": false
+      }
     }
   ]
 }

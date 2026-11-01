@@ -1,119 +1,278 @@
 {
-  "version": 1,
-  "id": "00000000-0000-0000-0000-000000000001",
+  "version": 2,
+  "id": "00000000-0000-0000-0000-000000000007",
   "name": "Logical",
   "characterMapping": true,
   "synchronizeCapsLock": true,
-  "keyMappings": [
+  "keys": [
     {
-      "macOS": { "keyCode": 126 },
-      "windows": { "VKCode": 38 },
-      "bbc": { "keyName": "Up" }
+      "code": "ArrowUp",
+      "bbc": {
+        "key": "Up"
+      }
     },
     {
-      "macOS": { "keyCode": 125 },
-      "windows": { "VKCode": 40 },
-      "bbc": { "keyName": "Down" }
+      "code": "ArrowDown",
+      "bbc": {
+        "key": "Down"
+      }
     },
     {
-      "macOS": { "keyCode": 123 },
-      "windows": { "VKCode": 37 },
-      "bbc": { "keyName": "Left" }
+      "code": "ArrowLeft",
+      "bbc": {
+        "key": "Left"
+      }
     },
     {
-      "macOS": { "keyCode": 124 },
-      "windows": { "VKCode": 39 },
-      "bbc": { "keyName": "Right" }
+      "code": "ArrowRight",
+      "bbc": {
+        "key": "Right"
+      }
     },
     {
-      "macOS": { "keyCode": 122 },
-      "windows": { "VKCode": 112 },
-      "bbc": { "keyName": "f1" }
+      "code": "F1",
+      "bbc": {
+        "key": "f1"
+      }
     },
     {
-      "macOS": { "keyCode": 120 },
-      "windows": { "VKCode": 113 },
-      "bbc": { "keyName": "f2" }
+      "code": "F2",
+      "bbc": {
+        "key": "f2"
+      }
     },
     {
-      "macOS": { "keyCode": 99 },
-      "windows": { "VKCode": 114 },
-      "bbc": { "keyName": "f3" }
+      "code": "F3",
+      "bbc": {
+        "key": "f3"
+      }
     },
     {
-      "macOS": { "keyCode": 118 },
-      "windows": { "VKCode": 115 },
-      "bbc": { "keyName": "f4" }
+      "code": "F4",
+      "bbc": {
+        "key": "f4"
+      }
     },
     {
-      "macOS": { "keyCode": 96 },
-      "windows": { "VKCode": 116 },
-      "bbc": { "keyName": "f5" }
+      "code": "F5",
+      "bbc": {
+        "key": "f5"
+      }
     },
     {
-      "macOS": { "keyCode": 97 },
-      "windows": { "VKCode": 117 },
-      "bbc": { "keyName": "f6" }
+      "code": "F6",
+      "bbc": {
+        "key": "f6"
+      }
     },
     {
-      "macOS": { "keyCode": 98 },
-      "windows": { "VKCode": 118 },
-      "bbc": { "keyName": "f7" }
+      "code": "F7",
+      "bbc": {
+        "key": "f7"
+      }
     },
     {
-      "macOS": { "keyCode": 100 },
-      "windows": { "VKCode": 119 },
-      "bbc": { "keyName": "f8" }
+      "code": "F8",
+      "bbc": {
+        "key": "f8"
+      }
     },
     {
-      "macOS": { "keyCode": 101 },
-      "windows": { "VKCode": 120 },
-      "bbc": { "keyName": "f9" }
+      "code": "F9",
+      "bbc": {
+        "key": "f9"
+      }
     },
     {
-      "macOS": { "keyCode": 109 },
-      "windows": { "VKCode": 121 },
-      "bbc": { "keyName": "f0" }
+      "code": "F10",
+      "bbc": {
+        "key": "f0"
+      }
     },
     {
-      "macOS": { "keyCode": 103 },
-      "windows": { "VKCode": 122 },
-      "bbc": { "keyName": "Copy" }
+      "code": "F11",
+      "bbc": {
+        "key": "Copy"
+      }
     },
     {
-      "macOS": { "keyCode": 53 },
-      "windows": { "VKCode": 27 },
-      "bbc": { "keyName": "Escape", "disabled": false }
+      "code": "Escape",
+      "bbc": {
+        "key": "Escape",
+        "disabled": false
+      }
     },
     {
-      "macOS": { "keyCode": 111, "option": true },
-      "windows": { "VKCode": 123, "alt": true },
-      "bbc": { "keyName": "Break", "disabled": false }
+      "code": "F12",
+      "with": [
+        "Alt"
+      ],
+      "bbc": {
+        "key": "Break",
+        "disabled": false
+      }
     },
     {
-      "macOS": { "keyCode": 105 },
-      "bbc": { "keyName": "ShiftLock" }
+      "code": "F13",
+      "bbc": {
+        "key": "Shift Lock"
+      }
     },
     {
-      "macOS": { "keyCode": 51 },
-      "windows": { "VKCode": 8 },
-      "bbc": { "keyName": "Delete" }
+      "code": "Backspace",
+      "bbc": {
+        "key": "Delete"
+      }
     },
     {
-      "macOS": { "keyCode": 56 },
-      "bbc": { "keyName": "Shift" }
+      "code": "ShiftLeft",
+      "bbc": {
+        "key": "Shift"
+      }
     },
     {
-      "macOS": { "keyCode": 60 },
-      "bbc": { "keyName": "Shift" }
+      "code": "ShiftRight",
+      "bbc": {
+        "key": "Shift"
+      }
     },
     {
-      "macOS": { "keyCode": 59 },
-      "bbc": { "keyName": "Ctrl" }
+      "code": "ControlLeft",
+      "bbc": {
+        "key": "Ctrl"
+      }
     },
     {
-      "macOS": { "keyCode": 62 },
-      "bbc": { "keyName": "Ctrl" }
+      "code": "ControlRight",
+      "bbc": {
+        "key": "Ctrl"
+      }
+    },
+    {
+      "code": "Digit1",
+      "bbc": {
+        "key": "1"
+      }
+    },
+    {
+      "code": "Digit2",
+      "bbc": {
+        "key": "2"
+      }
+    },
+    {
+      "code": "Digit3",
+      "bbc": {
+        "key": "3"
+      }
+    },
+    {
+      "code": "Digit4",
+      "bbc": {
+        "key": "4"
+      }
+    },
+    {
+      "code": "Digit5",
+      "bbc": {
+        "key": "5"
+      }
+    },
+    {
+      "code": "Digit6",
+      "bbc": {
+        "key": "6"
+      }
+    },
+    {
+      "code": "Digit7",
+      "bbc": {
+        "key": "7"
+      }
+    },
+    {
+      "code": "Digit8",
+      "bbc": {
+        "key": "8"
+      }
+    },
+    {
+      "code": "Digit9",
+      "bbc": {
+        "key": "9"
+      }
+    },
+    {
+      "code": "Digit0",
+      "bbc": {
+        "key": "0"
+      }
+    },
+    {
+      "code": "Minus",
+      "bbc": {
+        "key": "-"
+      }
+    },
+    {
+      "code": "Equal",
+      "bbc": {
+        "key": "^"
+      }
+    },
+    {
+      "code": "BracketLeft",
+      "bbc": {
+        "key": "@"
+      }
+    },
+    {
+      "code": "BracketRight",
+      "bbc": {
+        "key": "["
+      }
+    },
+    {
+      "code": "Semicolon",
+      "bbc": {
+        "key": ";"
+      }
+    },
+    {
+      "code": "Quote",
+      "bbc": {
+        "key": ":"
+      }
+    },
+    {
+      "code": "Backslash",
+      "bbc": {
+        "key": "]"
+      }
+    },
+    {
+      "code": "IntlBackslash",
+      "bbc": {
+        "key": "\\"
+      }
+    },
+    {
+      "code": "Comma",
+      "bbc": {
+        "key": ","
+      }
+    },
+    {
+      "code": "Period",
+      "bbc": {
+        "key": "."
+      }
+    },
+    {
+      "code": "Slash",
+      "bbc": {
+        "key": "/"
+      }
     }
   ]
 }

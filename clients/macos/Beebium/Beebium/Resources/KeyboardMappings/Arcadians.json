@@ -1,45 +1,76 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "00000000-0000-0000-0000-000000000004",
   "name": "Arcadians",
   "characterMapping": false,
   "synchronizeCapsLock": false,
-  "keyMappings": [
+  "keys": [
     {
-      "macOS": { "keyCode": 6 },
-      "bbc": { "keyName": "Caps Lock", "action": "Left" }
+      "code": "KeyZ",
+      "bbc": {
+        "key": "Caps Lock",
+        "action": "Left"
+      }
     },
     {
-      "macOS": { "keyCode": 7 },
-      "bbc": { "keyName": "Ctrl", "action": "Right" }
+      "code": "KeyX",
+      "bbc": {
+        "key": "Ctrl",
+        "action": "Right"
+      }
     },
     {
-      "macOS": { "keyCode": 36 },
-      "bbc": { "keyName": "Return", "action": "Fire" }
+      "code": "Enter",
+      "bbc": {
+        "key": "Return",
+        "action": "Fire"
+      }
     },
     {
-      "macOS": { "keyCode": 18 },
-      "bbc": { "keyName": "1", "action": "1-player" }
+      "code": "Digit1",
+      "bbc": {
+        "key": "1",
+        "action": "1-player"
+      }
     },
     {
-      "macOS": { "keyCode": 19 },
-      "bbc": { "keyName": "2", "action": "2-player" }
+      "code": "Digit2",
+      "bbc": {
+        "key": "2",
+        "action": "2-player"
+      }
     },
     {
-      "macOS": { "keyCode": 53 },
-      "bbc": { "keyName": "Escape", "action": "Menu", "disabled": false }
+      "code": "Escape",
+      "bbc": {
+        "key": "Escape",
+        "disabled": false,
+        "action": "Menu"
+      }
     },
     {
-      "macOS": { "keyCode": 12 },
-      "bbc": { "keyName": "Q", "action": "Quiet" }
+      "code": "KeyQ",
+      "bbc": {
+        "key": "Q",
+        "action": "Quiet"
+      }
     },
     {
-      "macOS": { "keyCode": 1 },
-      "bbc": { "keyName": "S", "action": "Sound" }
+      "code": "KeyS",
+      "bbc": {
+        "key": "S",
+        "action": "Sound"
+      }
     },
     {
-      "macOS": { "keyCode": 111, "option": true },
-      "bbc": { "keyName": "Break", "disabled": false }
+      "code": "F12",
+      "with": [
+        "Alt"
+      ],
+      "bbc": {
+        "key": "Break",
+        "disabled": false
+      }
     }
   ]
 }
