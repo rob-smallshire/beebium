@@ -1239,7 +1239,14 @@ The decision to drive the guest is exact-latch based, not LED-brightness based,
 and taps only when the host and guest disagree (so it never fights a reset). The
 authoritative latch is read from the keyboard service, not inferred from the
 lock-LED brightness (which is duty-cycle filtered). The sync points are: a user
-keypress, window focus, connection, the MOS boot, and the sync-enabled toggle.
+keypress, window focus, connection, the guest becoming ready after any boot or
+reset, and the sync-enabled toggle.
+
+The "guest ready" sync point is the `guest_ready` edge of
+`KeyboardService.WatchTypingStatus`: it rises when the MOS first asks for
+input after a reset, so it is exact at any emulation speed and covers a reset
+the client did not initiate. A client must not substitute a wall-clock settle
+delay for it (the macOS client still does, and migrates; see #232).
 
 Which locks are host-driven is deliberately per-platform. macOS drives Caps from
 the host and leaves Shift Lock guest-only; a client on a host with a real Shift
@@ -1254,7 +1261,8 @@ Conformance:
 - MANDATORY: treat Caps Lock as a toggle with its own path; use the exact latch
   from the keyboard service, not the filtered LED, for sync and automation; the
   machine is authoritative and the client adopts rather than fights on reset; tap
-  only on disagreement.
+  only on disagreement; sync after boot or reset on the `guest_ready` edge, not
+  on a wall-clock delay.
 - LATITUDE: which locks are host-driven (per platform); the toggle timing.
 - MACOS-ONLY: Caps host-driven and Shift guest-only; detecting the host Caps
   toggle; the known limits (a client cannot read the host Caps state while
