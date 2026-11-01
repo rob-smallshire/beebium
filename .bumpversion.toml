@@ -52,6 +52,14 @@ regex = true
 search = '"version": "{current_version}"'
 replace = '"version": "{new_version}"'
 
+# --- Linux client (Qt) -----------------------------------------------------
+# A standalone CMake project with its own project() version, which the client
+# and its .deb report.
+[[tool.bumpversion.files]]
+filename = "clients/linux/CMakeLists.txt"
+search = "VERSION {current_version}"
+replace = "VERSION {new_version}"
+
 # --- Python client ---------------------------------------------------------
 # The distribution version is dynamic, read from this single source file by
 # hatchling; the pyproject carries no version string to bump.
