@@ -230,18 +230,6 @@
         "ik": 71,
         "needsShift": false,
         "name": "@"
-      },
-      {
-        "character": "\"",
-        "ik": 49,
-        "needsShift": true,
-        "name": "\""
-      },
-      {
-        "character": "2",
-        "ik": 49,
-        "needsShift": false,
-        "name": "2"
       }
     ]
   },
@@ -918,8 +906,8 @@
     },
     {
       "id": "R32",
-      "name": "5: Default maps the cursor keys by position",
-      "mapping": "Default.json",
+      "name": "5: Logical maps the cursor keys by position",
+      "mapping": "Logical.json",
       "event": {
         "code": "ArrowUp"
       },
@@ -932,8 +920,8 @@
     },
     {
       "id": "R33",
-      "name": "5: Default puts Break on Alt+F12",
-      "mapping": "Default.json",
+      "name": "5: Logical puts Break on Alt+F12",
+      "mapping": "Logical.json",
       "event": {
         "code": "F12",
         "modifiers": [
@@ -946,8 +934,8 @@
     },
     {
       "id": "R34",
-      "name": "5: Default types the character a UK Shift+' gives",
-      "mapping": "Default.json",
+      "name": "5: Logical types the character a UK Shift+' gives",
+      "mapping": "Logical.json",
       "event": {
         "code": "Quote",
         "modifiers": [
@@ -963,45 +951,9 @@
       }
     },
     {
-      "id": "R35",
-      "name": "5: Logical takes the same key by position: the BBC's colon key",
-      "mapping": "Logical.json",
-      "event": {
-        "code": "Quote",
-        "modifiers": [
-          "Shift"
-        ],
-        "text": "@"
-      },
-      "expect": {
-        "key": ":",
-        "ik": 72,
-        "shift": false,
-        "ctrl": false
-      }
-    },
-    {
-      "id": "R36",
-      "name": "5: Logical takes digits by position, whatever the layout's shifted face",
-      "mapping": "Logical.json",
-      "event": {
-        "code": "Digit2",
-        "modifiers": [
-          "Shift"
-        ],
-        "text": "\""
-      },
-      "expect": {
-        "key": "2",
-        "ik": 49,
-        "shift": false,
-        "ctrl": false
-      }
-    },
-    {
       "id": "R37",
-      "name": "5: Default types a US Shift+2 as the character it gives",
-      "mapping": "Default.json",
+      "name": "5: Logical types a US Shift+2 as the character it gives",
+      "mapping": "Logical.json",
       "event": {
         "code": "Digit2",
         "modifiers": [

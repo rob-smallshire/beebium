@@ -23,8 +23,7 @@ final class BuiltInMappingsTests: XCTestCase {
 
     /// name -> ratified id (section 5).
     private static let expected: [String: String] = [
-        "Default": "00000000-0000-0000-0000-000000000001",
-        "Logical": "00000000-0000-0000-0000-000000000007",
+        "Logical": "00000000-0000-0000-0000-000000000001",
         "Thrust": "00000000-0000-0000-0000-000000000002",
         "Snapper": "00000000-0000-0000-0000-000000000003",
         "Arcadians": "00000000-0000-0000-0000-000000000004",
@@ -77,20 +76,20 @@ final class BuiltInMappingsTests: XCTestCase {
         }
     }
 
-    func testDefaultIsTheManagerDefaultId() {
+    func testLogicalIsTheManagerDefaultId() {
         // The manager uses this id as the default/active mapping and the toggle
-        // target; Default must carry it.
+        // target; Logical must carry it.
         XCTAssertEqual(
             KeyboardMappingManager.defaultLogicalMappingID.uuidString.lowercased(),
-            Self.expected["Default"])
+            Self.expected["Logical"])
     }
 
-    func testThereAreExactlySevenBuiltInFiles() throws {
+    func testThereAreExactlySixBuiltInFiles() throws {
         let files = try FileManager.default.contentsOfDirectory(
             at: bundleMappingsDir, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
             .filter { $0.pathExtension == "json" }
         XCTAssertEqual(Set(files.map { $0.deletingPathExtension().lastPathComponent }),
                        Set(Self.expected.keys),
-                       "the bundle ships exactly the seven ratified built-ins")
+                       "the bundle ships exactly the six ratified built-ins")
     }
 }

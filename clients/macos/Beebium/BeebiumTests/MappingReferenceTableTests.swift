@@ -18,10 +18,10 @@ import AppKit
 /// active mapping's labelled bindings, built-in mappings included. This pins the
 /// reference-table model that feeds the sidebar
 /// (`KeyboardMappingManager.mappingReferenceEntries`) so it can never go empty
-/// for a built-in again: with the general Default or Logical mapping active it
-/// lists exactly the five BBC keys that have no host namesake -- f0, Break, Copy,
-/// Shift Lock and Delete -- each with its host key; a game mapping still lists
-/// its in-game bindings.
+/// for a built-in again: with the general Logical mapping active it lists exactly
+/// the five BBC keys that have no host namesake -- f0, Break, Copy, Shift Lock and
+/// Delete -- each with its host key; a game mapping still lists its in-game
+/// bindings.
 ///
 /// The host-key codes asserted are macOS virtual key codes from the shared
 /// macos-keycodes.json table (F10 = 109, F11 = 103, F13 = 105, F12 = 111,
@@ -51,7 +51,7 @@ final class MappingReferenceTableTests: XCTestCase {
                              "built-in \(id) is missing from the bundle")
     }
 
-    /// Default and Logical must each name exactly the five namesake-less keys,
+    /// The general Logical mapping must name exactly the five namesake-less keys,
     /// with the right host key and (for Break alone) the Option modifier.
     private func assertNamesTheFiveSpecialKeys(
         _ mapping: KeyboardMapping, file: StaticString = #filePath, line: UInt = #line
@@ -90,14 +90,9 @@ final class MappingReferenceTableTests: XCTestCase {
         }
     }
 
-    func testDefaultNamesExactlyTheFiveSpecialKeys() throws {
-        try assertNamesTheFiveSpecialKeys(
-            builtIn(id: "00000000-0000-0000-0000-000000000001"))
-    }
-
     func testLogicalNamesExactlyTheFiveSpecialKeys() throws {
         try assertNamesTheFiveSpecialKeys(
-            builtIn(id: "00000000-0000-0000-0000-000000000007"))
+            builtIn(id: "00000000-0000-0000-0000-000000000001"))
     }
 
     func testGameMappingStillListsItsBindings() throws {

@@ -189,25 +189,24 @@ user's stored choice carries across clients:
 
 | `id` (last group) | Name | What it is |
 |-------------------|------|------------|
-| `...0001` | Default | The positional map of a modern keyboard onto the BBC keyboard, character mapping on, Caps Lock synchronisation on. This is the macOS client's present `Logical.json`, renamed; its id is the one clients treat as the default and active mapping, so it must not change. The physical entries cover the keys whose position matters (cursor keys, function keys, Escape, Tab, Caps Lock, Shift, Ctrl, Return, Delete, Copy on F11, Break on Alt+F12); everything else comes through character mapping so that any host layout types correctly. |
+| `...0001` | Logical | The positional map of a modern keyboard onto the BBC keyboard, character mapping on, Caps Lock synchronisation on. This is the mapping every client treats as the default and active one, so its id must not change. The physical entries cover the keys whose position matters (cursor keys, function keys, Escape, Shift, Ctrl, Delete, Copy on F11, Break on Alt+F12); everything else comes through character mapping so that any host layout types correctly. |
 | `...0002` | Thrust | Game mapping |
 | `...0003` | Snapper | Game mapping |
 | `...0004` | Arcadians | Game mapping |
 | `...0005` | Boffin | Game mapping |
 | `...0006` | Planetoid | Game mapping |
-| `...0007` | Logical | As Default, with the punctuation keys mapped by position rather than by character, for games and software that read key positions. New in version 2. |
 
 The ids are UUIDs of the form `00000000-0000-0000-0000-00000000000N`. The
 game mappings keep the ids they ship with today, converted to version 2. User
 mappings are copies with fresh ids.
 
 Break is on Alt+F12 (Option+F12 on macOS) in every built-in: F11 is the BBC
-Copy key in the Default mapping and is the desktop full-screen key under the
+Copy key in the Logical mapping and is the desktop full-screen key under the
 KDE conventions the Linux client follows, so it is not Break anywhere.
 
-Default and Logical carry an `action` label (3.3) on the BBC keys that have no
-host namesake - Break, Copy, Shift Lock and Delete - so a client's keyboard view
-names the host key that reaches each even for these general mappings; the game
+Logical carries an `action` label (3.3) on the BBC keys that have no host
+namesake - f0, Break, Copy, Shift Lock and Delete - so a client's keyboard view
+names the host key that reaches each even for this general mapping; the game
 mappings label their in-game functions. A client's keyboard view shows these
 labels for built-in mappings as well as user ones (client specification 7.4, #234).
 

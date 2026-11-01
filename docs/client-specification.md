@@ -1308,9 +1308,9 @@ offers a sidebar list, not a grid.
 
 Where a client presents the active mapping, it shows each entry's action label when
 the mapping carries one, for the built-in mappings as much as for user mappings: a
-built-in is not treated as unlabelled. The built-in Default and Logical mappings
-label the BBC keys with no host namesake - Break, Copy, Shift Lock and Delete - so
-the user can see which host key reaches each; the game mappings label their in-game
+built-in is not treated as unlabelled. The built-in Logical mapping labels the BBC
+keys with no host namesake - f0, Break, Copy, Shift Lock and Delete - so the user
+can see which host key reaches each; the game mappings label their in-game
 functions ("Fire", "Thrust"). How the labels are laid out - a reference list, notes
 on a grid, tooltips - is the client's choice, and whether a client offers a keyboard
 view at all is latitude (GitHub issue #234).
@@ -1371,8 +1371,8 @@ mapping entry binding a physical key to Break triggers the Break RPCs. Import a
 mapping with a section for another platform -> it round-trips on export unchanged.
 A mapping authored on one platform using neutral codes -> it loads and works on
 another with no hand-editing. Activate a game mapping -> the keyboard view lists its
-labelled bindings; activate Default or Logical -> the view still names the host keys
-for Break, Copy, Shift Lock and Delete.
+labelled bindings; activate Logical -> the view still names the host keys for f0,
+Break, Copy, Shift Lock and Delete.
 
 ### 7.5 Paste as typing
 
