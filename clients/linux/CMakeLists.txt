@@ -135,9 +135,9 @@ target_link_libraries(beebium_linux_keyboard
 add_library(beebium_linux_connection STATIC
     src/connection/Compatibility.cpp
     src/connection/DecodedFrame.cpp
-    src/connection/GuestReadyWatcher.cpp
     src/connection/Handshake.cpp
     src/connection/KeySender.cpp
+    src/connection/Liveness.cpp
     src/connection/PictureGeometry.cpp
     src/connection/VideoStream.cpp
 )
@@ -185,6 +185,8 @@ qt_add_shaders(beebium_linux_display "display_shaders"
 add_library(beebium_linux_app STATIC
     src/app/ApplicationInfo.cpp
     src/app/DisplayWidget.cpp
+    src/app/ErrorPresentation.cpp
+    src/app/FilesystemSharing.cpp
     src/app/GraphicsApi.cpp
     src/app/HostLockState.cpp
     src/app/KeyboardInput.cpp

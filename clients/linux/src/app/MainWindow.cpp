@@ -13,11 +13,13 @@
 #include "app/MainWindow.hpp"
 
 #include "app/DisplayWidget.hpp"
+#include "app/ErrorPresentation.hpp"
 #include "app/MachineSession.hpp"
 
 #include <QCloseEvent>
 #include <QMenuBar>
-#include <QMessageBox>
+#include <QLabel>
+#include <QStatusBar>
 
 #include <cstdio>
 
@@ -54,24 +56,29 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, QWidget* parent)
                 std::fprintf(stderr, "beebium: drawing with %s%s\n", qPrintable(description),
                              software ? " (SOFTWARE RENDERER, not the GPU)" : "");
             });
-    connect(session_, &MachineSession::handshake_finished, this,
-            [this](bool reached, bool compatible, const QString& message) {
-                if (reached && compatible) {
-                    std::fprintf(stderr, "beebium: connected, video %s\n", qPrintable(message));
-                    return;
-                }
-                std::fprintf(stderr, "beebium: %s\n", qPrintable(message));
-                QMessageBox::warning(this,
-                                     reached ? tr("Incompatible server")
-                                             : tr("Could not connect"),
-                                     message);
+    connect(session_, &MachineSession::connection_failed, this,
+            [this](ConnectionFailure failure, const QString& server_message) {
+                std::fprintf(stderr, "beebium: connection failed: %s\n",
+                             qPrintable(server_message));
+                ServerMessageDialog dialog(
+                    tr("Could Not Connect"),
+                    connection_failure_sentence(failure, session_->endpoint()),
+                    server_message, this);
+                dialog.exec();
             });
-    connect(session_, &MachineSession::video_stream_ended, this,
-            [](int code, const QString& message, bool cancelled_by_client) {
-                if (!cancelled_by_client) {
-                    std::fprintf(stderr, "beebium: video stream ended, code %d: %s\n", code,
-                                 qPrintable(message));
-                }
+    connect(session_, &MachineSession::connected_to_server, this,
+            [] { std::fprintf(stderr, "beebium: connected\n"); });
+    connect(session_, &MachineSession::liveness_changed, this, [](Liveness liveness) {
+        std::fprintf(stderr, "beebium: liveness %s\n", liveness_name(liveness));
+    });
+    // The title is the machine's name, exactly (5.7). Qt has no window
+    // subtitle, so the description goes at the start of the status bar.
+    description_label_ = new QLabel(this);
+    statusBar()->addWidget(description_label_, 1);
+    connect(session_, &MachineSession::identity_changed, this,
+            [this](const QString& name, const QString& description) {
+                setWindowTitle(name.isEmpty() ? QStringLiteral("Beebium") : name);
+                description_label_->setText(description);
             });
 }
 

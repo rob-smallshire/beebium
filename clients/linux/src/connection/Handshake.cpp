@@ -48,6 +48,11 @@ HandshakeResult perform_handshake(const std::shared_ptr<grpc::Channel>& channel,
     result.server_executable_path = info.executable_path();
     result.protocol = assess_protocol(info.protocol_fingerprint(), client_protocol_fingerprint);
     result.server_is_local = is_server_local(info.host_fingerprint(), client_host_fingerprint);
+    result.machine_uuid = info.identity().uuid();
+    result.machine_name = info.identity().name();
+    result.machine_description = info.identity().description();
+    result.model_name = info.identity().model_name();
+    result.client_count = info.connections().client_count();
 
     auto video = beebium::VideoService::NewStub(channel);
     beebium::VideoConfig config;

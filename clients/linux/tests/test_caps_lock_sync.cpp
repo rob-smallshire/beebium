@@ -10,25 +10,19 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Caps Lock synchronisation, client specification 7.3: the decision, the
-// host state readers, and the guest-ready sync point.
+// Caps Lock synchronisation, client specification 7.3: the decision and the
+// host state readers. The guest-ready sync point is the session's
+// (test_machine_session.cpp).
 
 #include "app/HostLockState.hpp"
-#include "connection/GuestReadyWatcher.hpp"
 #include "keyboard/CapsLockSync.hpp"
-
-#include "keyboard.grpc.pb.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <xkbcommon/xkbcommon.h>
 
-#include <atomic>
-#include <chrono>
-#include <thread>
 
 using namespace beebium::linux_client;
-using namespace std::chrono_literals;
 
 TEST_CASE("The guest is tapped only when sync is on and the states differ",
           "[caps-lock]") {
@@ -76,53 +70,4 @@ TEST_CASE("With no windowing system the host state is unknown", "[caps-lock]") {
     const auto locks = HostLockState::create();
     REQUIRE(locks);
     CHECK_FALSE(locks->caps_lock().has_value());
-}
-
-namespace {
-
-class TypingStatusService final : public beebium::KeyboardService::Service {
-public:
-    std::vector<bool> guest_ready_sequence;
-
-    grpc::Status WatchTypingStatus(grpc::ServerContext* context,
-                                   const beebium::WatchTypingStatusRequest*,
-                                   grpc::ServerWriter<beebium::TypingStatus>* writer) override {
-        for (bool ready : guest_ready_sequence) {
-            beebium::TypingStatus status;
-            status.set_guest_ready(ready);
-            writer->Write(status);
-        }
-        while (!context->IsCancelled()) {
-            std::this_thread::sleep_for(5ms);
-        }
-        return grpc::Status::OK;
-    }
-};
-
-}  // namespace
-
-TEST_CASE("Each time the guest becomes ready is one sync point", "[caps-lock][guest-ready]") {
-    TypingStatusService service;
-    // Ready at once, a reset, ready again; repeats of a state are not edges.
-    service.guest_ready_sequence = {true, true, false, false, true, true};
-    int port = 0;
-    grpc::ServerBuilder builder;
-    builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
-    builder.RegisterService(&service);
-    auto server = builder.BuildAndStart();
-    REQUIRE(server);
-
-    std::atomic<int> ready_count{0};
-    GuestReadyWatcher watcher(grpc::CreateChannel("127.0.0.1:" + std::to_string(port),
-                                                  grpc::InsecureChannelCredentials()),
-                              [&] { ++ready_count; });
-    watcher.start();
-    const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (ready_count < 2 && std::chrono::steady_clock::now() < deadline) {
-        std::this_thread::sleep_for(10ms);
-    }
-    std::this_thread::sleep_for(100ms);  // no third call follows
-    watcher.stop();
-    server->Shutdown(std::chrono::system_clock::now() + 1s);
-    CHECK(ready_count == 2);
 }

@@ -16,6 +16,8 @@
 #include <QMainWindow>
 #include <QRhiWidget>
 
+class QLabel;
+
 namespace beebium::linux_client {
 
 class DisplayWidget;
@@ -43,6 +45,7 @@ protected:
 private:
     MachineSession* session_;
     DisplayWidget* display_;
+    QLabel* description_label_ = nullptr;
 };
 
 }  // namespace beebium::linux_client

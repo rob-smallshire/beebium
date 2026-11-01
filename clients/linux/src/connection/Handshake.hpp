@@ -35,6 +35,14 @@ struct HandshakeResult {
     std::string server_executable_path;
     bool server_is_local = false;  // client specification 3.2
 
+    // The machine, as SystemInfo names it (client specification 5.7), and the
+    // clients watching it (4.5).
+    std::string machine_uuid;
+    std::string machine_name;
+    std::string machine_description;
+    std::string model_name;
+    std::int32_t client_count = 0;
+
     std::uint32_t video_width = 0;
     std::uint32_t video_height = 0;
     std::uint32_t video_framerate_hz = 0;

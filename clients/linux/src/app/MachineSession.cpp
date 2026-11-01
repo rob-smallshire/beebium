@@ -13,6 +13,7 @@
 #include "app/MachineSession.hpp"
 
 #include "app/ApplicationInfo.hpp"
+#include "app/FilesystemSharing.hpp"
 
 #include "beebium/host_identity/HostFingerprint.hpp"
 
@@ -27,6 +28,7 @@ namespace beebium::linux_client {
 namespace {
 
 constexpr std::chrono::milliseconds HANDSHAKE_TIMEOUT{5000};
+constexpr std::chrono::milliseconds LIVENESS_TICK{250};
 
 // The server's canonical character-to-key table, fetched once per
 // connection (client specification 7.4). Mapping entries name BBC keys
@@ -46,9 +48,26 @@ BbcKeyTable fetch_key_table(const std::shared_ptr<grpc::Channel>& channel) {
     return BbcKeyTable::from_proto(response);
 }
 
+ConnectionFailure classify(const HandshakeResult& result) {
+    if (result.reached) {
+        return ConnectionFailure::incompatible;
+    }
+    switch (result.code) {
+    case grpc::StatusCode::UNAVAILABLE:
+    case grpc::StatusCode::DEADLINE_EXCEEDED:
+        return ConnectionFailure::unreachable;
+    default:
+        return ConnectionFailure::error;
+    }
+}
+
 }  // namespace
 
-MachineSession::MachineSession(QObject* parent) : QObject(parent) {}
+MachineSession::MachineSession(QObject* parent) : QObject(parent) {
+    liveness_ticker_.setInterval(LIVENESS_TICK);
+    connect(&liveness_ticker_, &QTimer::timeout, this,
+            [this] { tick_liveness(LivenessTracker::Clock::now()); });
+}
 
 MachineSession::~MachineSession() {
     disconnect_from_server();
@@ -56,6 +75,8 @@ MachineSession::~MachineSession() {
 
 void MachineSession::connect_to(const QString& endpoint) {
     disconnect_from_server();
+    endpoint_ = endpoint;
+    liveness_.reset();
     channel_ = grpc::CreateChannel(endpoint.toStdString(), grpc::InsecureChannelCredentials());
 
     const unsigned generation = ++generation_;
@@ -76,6 +97,12 @@ void MachineSession::connect_to(const QString& endpoint) {
     });
 }
 
+void MachineSession::reconnect() {
+    if (!endpoint_.isEmpty()) {
+        connect_to(endpoint_);
+    }
+}
+
 void MachineSession::on_handshake(unsigned generation, const HandshakeResult& result,
                                   BbcKeyTable table) {
     if (generation != generation_) {
@@ -85,59 +112,118 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
         handshake_thread_.join();
     }
     if (!result.reached) {
-        emit handshake_finished(false, false, QString::fromStdString(result.error));
+        emit connection_failed(classify(result), QString::fromStdString(result.error));
         return;
     }
     if (!is_compatible(result.protocol)) {
         // Refused rather than warned about: a client may choose either, but
         // must not ignore it (client specification 4.2).
-        emit handshake_finished(true, false,
-                                QString::fromStdString(describe_protocol_mismatch(
-                                    result, client_protocol_fingerprint())));
+        emit connection_failed(ConnectionFailure::incompatible,
+                               QString::fromStdString(describe_protocol_mismatch(
+                                   result, client_protocol_fingerprint())));
         return;
     }
-    emit handshake_finished(true, true,
-                            QStringLiteral("%1 x %2 at %3 Hz")
-                                .arg(result.video_width)
-                                .arg(result.video_height)
-                                .arg(result.video_framerate_hz));
+
+    connected_ = true;
+    machine_name_ = QString::fromStdString(result.machine_name);
+    machine_description_ = QString::fromStdString(result.machine_description);
+    server_shares_filesystem_ =
+        shares_filesystem(result.server_is_local, current_sandbox());
+    guest_was_ready_.reset();
+
+    // The status stream first: it is the connection's liveness (4.3).
+    status_ = std::make_unique<ServerStatusStream>(
+        channel_,
+        ServerStatusStream::Callbacks{
+            [this, generation](const beebium::ServerStatusEvent& event) {
+                QMetaObject::invokeMethod(
+                    this, [this, generation, event] { on_status_event(generation, event); },
+                    Qt::QueuedConnection);
+            },
+            [this, generation](const StreamEnd& end) {
+                QMetaObject::invokeMethod(
+                    this, [this, generation, end] { on_status_end(generation, end); },
+                    Qt::QueuedConnection);
+            },
+        });
+    status_->start();
+    liveness_ticker_.start();
 
     video_ = std::make_unique<VideoStream>(
         channel_, mailbox_,
         VideoStream::Callbacks{
-            [this] { QMetaObject::invokeMethod(this, &MachineSession::frame_ready,
-                                               Qt::QueuedConnection); },
-            [this](const StreamEnd& end) {
-                QMetaObject::invokeMethod(
-                    this,
-                    [this, end] {
-                        emit video_stream_ended(static_cast<int>(end.code),
-                                                QString::fromStdString(end.message),
-                                                end.cancelled_by_client);
-                    },
-                    Qt::QueuedConnection);
+            [this] {
+                QMetaObject::invokeMethod(this, &MachineSession::frame_ready,
+                                          Qt::QueuedConnection);
             },
+            // A video stream's end is not a liveness signal; the status
+            // stream decides (4.3).
+            {},
         });
     video_->start();
+
+    emit connected_to_server();
+    emit identity_changed(machine_name_, machine_description_);
 
     if (!table.empty()) {
         key_table_ = std::move(table);
         keys_ = std::make_unique<KeySender>(channel_);
         emit keyboard_ready();
-
-        guest_ready_watcher_ = std::make_unique<GuestReadyWatcher>(channel_, [this] {
-            QMetaObject::invokeMethod(this, &MachineSession::guest_ready, Qt::QueuedConnection);
-        });
-        guest_ready_watcher_->start();
     }
 }
 
-void MachineSession::disconnect_from_server() {
-    ++generation_;
-    if (guest_ready_watcher_) {
-        guest_ready_watcher_->stop();
-        guest_ready_watcher_.reset();
+void MachineSession::on_status_event(unsigned generation,
+                                     const beebium::ServerStatusEvent& event) {
+    if (generation != generation_) {
+        return;
     }
+    const Liveness before = liveness_.state();
+    liveness_.on_event(LivenessTracker::Clock::now(),
+                       event.status() == beebium::SERVER_STATUS_SHUTTING_DOWN);
+    set_liveness(before);
+
+    template_media_written_ = event.template_media_written();
+
+    if (event.status() == beebium::SERVER_STATUS_IDENTITY_CHANGED && event.has_identity()) {
+        machine_name_ = QString::fromStdString(event.identity().name());
+        machine_description_ = QString::fromStdString(event.identity().description());
+        emit identity_changed(machine_name_, machine_description_);
+    }
+    if (event.status() == beebium::SERVER_STATUS_MACHINE_RESET) {
+        emit machine_reset();
+    }
+    // Every event carries the guest's readiness; its rising edge, or a guest
+    // already ready when the stream begins, is the sync point (7.3).
+    const bool ready = event.guest_ready();
+    if (ready && guest_was_ready_ != true) {
+        emit guest_ready();
+    }
+    guest_was_ready_ = ready;
+}
+
+void MachineSession::on_status_end(unsigned generation, const StreamEnd& end) {
+    if (generation != generation_) {
+        return;
+    }
+    const Liveness before = liveness_.state();
+    liveness_.on_stream_end(end.cancelled_by_client);
+    liveness_ticker_.stop();
+    set_liveness(before);
+}
+
+void MachineSession::tick_liveness(LivenessTracker::Clock::time_point now) {
+    const Liveness before = liveness_.state();
+    liveness_.on_tick(now);
+    set_liveness(before);
+}
+
+void MachineSession::set_liveness(Liveness before) {
+    if (liveness_.state() != before) {
+        emit liveness_changed(liveness_.state());
+    }
+}
+
+void MachineSession::stop_streams() {
     if (keys_) {
         // Drains what is queued first, so a release-all made just before
         // disconnecting still reaches the machine.
@@ -145,15 +231,28 @@ void MachineSession::disconnect_from_server() {
         keys_.reset();
     }
     key_table_ = BbcKeyTable();
+    if (status_) {
+        status_->stop();
+        status_.reset();
+    }
     if (video_) {
         video_->stop();
         video_.reset();
     }
+}
+
+void MachineSession::disconnect_from_server() {
+    ++generation_;
+    liveness_ticker_.stop();
+    stop_streams();
     if (handshake_thread_.joinable()) {
         // Bounded by the handshake's deadlines.
         handshake_thread_.join();
     }
     channel_.reset();
+    connected_ = false;
+    server_shares_filesystem_ = false;
+    template_media_written_ = false;
 }
 
 }  // namespace beebium::linux_client

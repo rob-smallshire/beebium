@@ -115,3 +115,15 @@ endif()
 beebium_linux_add_test(test_graphics_api
     SOURCES test_graphics_api.cpp
     LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_liveness
+    SOURCES test_liveness.cpp
+    LIBRARIES beebium_linux_connection)
+
+beebium_linux_add_test(test_machine_session QT
+    SOURCES test_machine_session.cpp
+    LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_error_presentation QT
+    SOURCES test_error_presentation.cpp
+    LIBRARIES beebium_linux_app)
