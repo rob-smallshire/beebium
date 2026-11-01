@@ -81,7 +81,7 @@ final class KeyboardMappingManager: ObservableObject {
         for entry in mapping.allEntries {
             guard let macOSSpec = entry.macOS,
                   let bbcSpec = entry.bbc,
-                  bbcSpec.keyName == "Break" else { continue }
+                  bbcSpec.key == "Break" else { continue }
             var components: [String] = []
             if macOSSpec.requiredModifiers.contains(.control) { components.append("⌃") }
             if macOSSpec.requiredModifiers.contains(.option) { components.append("⌥") }
@@ -195,10 +195,43 @@ final class KeyboardMappingManager: ObservableObject {
                     let mapping = KeyboardMapping(json: json)
                     mappings.append(mapping)
                     print("[KeyboardMappingManager] Loaded mapping: \(mapping.name)")
+                    // An older-format file is rewritten as the current version
+                    // once, on first load, with the original kept as a backup.
+                    if mapping.fileNeedsRewrite {
+                        migrateUserMappingToCurrentVersion(mapping, originalURL: fileURL)
+                    }
                 }
             } catch {
                 print("[KeyboardMappingManager] Failed to load \(fileURL.lastPathComponent): \(error)")
             }
+        }
+    }
+
+    /// Rewrite a user mapping file as the current format version, keeping the
+    /// original beside it (docs/keyboard-mapping-files.md section 7). The backup
+    /// takes a ".json.v1" suffix so the plain *.json load scan ignores it, and
+    /// the canonical "<id>.json" is overwritten with the version 2 content. Only
+    /// the canonically named file is migrated; an oddly named import is left to
+    /// convert in memory each load rather than risk touching the wrong file.
+    private func migrateUserMappingToCurrentVersion(_ mapping: KeyboardMapping, originalURL: URL) {
+        let canonicalURL = userMappingsDirectory
+            .appendingPathComponent("\(mapping.id.uuidString).json")
+        guard originalURL.standardizedFileURL == canonicalURL.standardizedFileURL else { return }
+
+        let backupURL = userMappingsDirectory
+            .appendingPathComponent("\(mapping.id.uuidString).json.v1")
+        do {
+            if !FileManager.default.fileExists(atPath: backupURL.path) {
+                try FileManager.default.copyItem(at: originalURL, to: backupURL)
+            }
+            let json = mapping.toJSON()
+            let data = try JSONSerialization.data(
+                withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+            try data.write(to: canonicalURL)
+            print("[KeyboardMappingManager] Migrated mapping to version 2: \(mapping.name)")
+        } catch {
+            print("[KeyboardMappingManager] Failed to migrate "
+                  + "\(originalURL.lastPathComponent) to version 2: \(error)")
         }
     }
 

@@ -77,6 +77,7 @@
 		316C036A4CF391595A4DD8CC /* PresetManagerDraftLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */; };
 		317D8650FFD239EF03206DA7 /* EconetTransportsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */; };
 		345AA9A186D7CA962B5D31A1 /* DebuggerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */; };
+		35CCC11B17FEB11EF5844F10 /* KeyboardMappingFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB655B9391362AB6D1F5101 /* KeyboardMappingFileTests.swift */; };
 		361BFD07D5C734F4857DAEFF /* AudioLimiterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3162BA8FF05AE79259EC5AA /* AudioLimiterTests.swift */; };
 		3922D2EE613A705A5EC066D7 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E96BF7B20865AFD600D53F /* JSONValue.swift */; };
 		394059FE9C2A8CC58886CC50 /* PeripheralsModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F91689B09CACC55C956BA2 /* PeripheralsModeView.swift */; };
@@ -420,6 +421,7 @@
 		76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalRenderer.swift; sourceTree = "<group>"; };
 		77B50A78CE4E5CCC31E34AE2 /* LockStateReconcilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockStateReconcilerTests.swift; sourceTree = "<group>"; };
 		7B03CB6D61C32284DED1F50E /* ScsiDiscEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScsiDiscEditorTests.swift; sourceTree = "<group>"; };
+		7BB655B9391362AB6D1F5101 /* KeyboardMappingFileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMappingFileTests.swift; sourceTree = "<group>"; };
 		7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetTransportsClient.swift; sourceTree = "<group>"; };
 		7C5792BABD709C954B706793 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		7D174CDFCDCA4A6503D8EC7F /* PresetDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDiagnosticsView.swift; sourceTree = "<group>"; };
@@ -955,6 +957,7 @@
 				560CD4997F297C12AD3CA81C /* FileCommandsImportTests.swift */,
 				AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */,
 				89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */,
+				7BB655B9391362AB6D1F5101 /* KeyboardMappingFileTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
 				77B50A78CE4E5CCC31E34AE2 /* LockStateReconcilerTests.swift */,
 				A452738F56C6C80444FBD7B3 /* LockSyncPolicyTests.swift */,
@@ -1164,6 +1167,7 @@
 				4F2191D03485C8683FE70F49 /* FileCommandsImportTests.swift in Sources */,
 				1FE8AE12703189FD243A6977 /* FileReferenceMenuTests.swift in Sources */,
 				A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */,
+				35CCC11B17FEB11EF5844F10 /* KeyboardMappingFileTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
 				9FD319C4AF922A8D60CB43CA /* LockStateReconcilerTests.swift in Sources */,
 				582166736131C819C1974BDE /* LockSyncPolicyTests.swift in Sources */,

@@ -73,6 +73,11 @@ final class KeyboardMapping: Identifiable {
     /// Key absent = NOT disableable
     var disableableKeys: [String: Bool] = [:]
 
+    /// True when this mapping was loaded from a file older than the current
+    /// format version, so a loader should rewrite it as the current version.
+    /// Always false for a programmatically built mapping.
+    let fileNeedsRewrite: Bool
+
     /// The result of resolving an input to a BBC key
     struct ResolvedKey {
         /// BBC key name (e.g., "A", "Return", "Break")
@@ -210,6 +215,7 @@ final class KeyboardMapping: Identifiable {
         self.characterMapping = characterMapping
         self.synchronizeCapsLock = synchronizeCapsLock
         self.keyMappings = keyMappings
+        self.fileNeedsRewrite = false
 
         // Build allEntries from keyMappings
         var entries: [KeyMappingEntry] = []
@@ -241,6 +247,7 @@ final class KeyboardMapping: Identifiable {
         self.characterMapping = file.characterMapping
         self.synchronizeCapsLock = file.synchronizeCapsLock
         self.allEntries = file.entries
+        self.fileNeedsRewrite = file.needsRewrite
 
         self.keyMappings = Self.directMappings(from: file.entries)
         self.disableableKeys = Self.disableableKeys(from: file.entries)
@@ -257,7 +264,7 @@ final class KeyboardMapping: Identifiable {
             }
 
             let ref = BBCKeyRef(
-                bbcKeyName: bbcSpec.keyName,
+                bbcKeyName: bbcSpec.key,
                 bbcWithShift: bbcSpec.shift,
                 bbcWithCtrl: bbcSpec.ctrl,
                 requireModifiers: macOSSpec.requiredModifiers
@@ -277,8 +284,8 @@ final class KeyboardMapping: Identifiable {
                   let disabledState = bbcSpec.disabled else {
                 continue
             }
-            if disableableDict[bbcSpec.keyName] == nil {
-                disableableDict[bbcSpec.keyName] = disabledState
+            if disableableDict[bbcSpec.key] == nil {
+                disableableDict[bbcSpec.key] = disabledState
             }
         }
         return disableableDict
