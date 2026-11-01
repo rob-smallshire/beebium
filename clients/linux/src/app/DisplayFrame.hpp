@@ -30,6 +30,10 @@ public:
     DisplayFrame(QWidget* display, QWidget* parent = nullptr);
 
     bool showing_focus() const;
+    // Immersive: the picture to the edges, with no margin and no focus
+    // frame (client specification 6.4).
+    void set_bare(bool bare);
+    bool bare() const { return bare_; }
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -37,6 +41,7 @@ protected:
 
 private:
     QWidget* display_;
+    bool bare_ = false;
 };
 
 }  // namespace beebium::linux_client

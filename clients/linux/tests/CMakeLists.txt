@@ -116,6 +116,10 @@ beebium_linux_add_test(test_presentation QT
     SOURCES test_presentation.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_immersive_window QT
+    SOURCES test_immersive_window.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_graphics_api
     SOURCES test_graphics_api.cpp
     LIBRARIES beebium_linux_app)

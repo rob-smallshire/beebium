@@ -20,6 +20,7 @@
 #include "app/DisplayWidget.hpp"
 #include "app/ErrorPresentation.hpp"
 #include "app/HomeWindow.hpp"
+#include "app/ImmersiveExit.hpp"
 #include "app/MachineSession.hpp"
 
 #include <QAction>
@@ -59,7 +60,11 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     display_->setObjectName(QStringLiteral("display"));
     display_->setApi(graphics_api);
     // The display inside a frame that shows when it has keyboard focus (7.1).
-    setCentralWidget(new DisplayFrame(display_, this));
+    frame_ = new DisplayFrame(display_, this);
+    setCentralWidget(frame_);
+    immersive_exit_ = new ImmersiveExit(display_);
+    connect(immersive_exit_, &ImmersiveExit::exit_requested, this,
+            [this] { set_presentation(Presentation::windowed); });
     resize(1280, 1024 + menuBar()->sizeHint().height());
 
     connect(session_, &MachineSession::frame_ready, display_, &DisplayWidget::frame_ready);
@@ -117,7 +122,11 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                              verdict == ConnectionVerdict::reconnecting
                                  ? qPrintable(QStringLiteral(" (attempt %1)").arg(attempt))
                                  : "");
+                // Immersive is only meaningful while live: the window
+                // returns to its layout, where the overlay explains (6.4).
+                update_immersive_enabled();
                 if (!is_live(verdict)) {
+                    set_presentation(after_connection_lost(presentation_));
                     // Nothing typed reaches a machine that is not there, and
                     // nothing stays held for when it returns.
                     display_->keyboard().detach();
@@ -225,27 +234,43 @@ void MainWindow::build_menus() {
     connect(quit_action, &QAction::triggered, this, &MainWindow::quit_requested);
 
     QMenu* view = menuBar()->addMenu(tr("&View"));
-    QAction* status_bar_action = view->addAction(tr("Show &Status Bar"));
-    status_bar_action->setCheckable(true);
+    status_bar_action_ = view->addAction(tr("Show &Status Bar"));
+    status_bar_action_->setCheckable(true);
+    // Ctrl+/ as the macOS client's Command-/.
+    status_bar_action_->setShortcut(QKeySequence(tr("Ctrl+/")));
     const bool show_status_bar =
         settings_ ? settings_->store().value(QStringLiteral("view/statusBar"), true).toBool() : true;
-    status_bar_action->setChecked(show_status_bar);
-    statusBar()->setVisible(show_status_bar);
-    connect(status_bar_action, &QAction::toggled, this, [this](bool shown) {
-        statusBar()->setVisible(shown);
+    status_bar_action_->setChecked(show_status_bar);
+    connect(status_bar_action_, &QAction::toggled, this, [this](bool shown) {
         if (settings_) {
             settings_->store().setValue(QStringLiteral("view/statusBar"), shown);
         }
+        apply_presentation();
     });
-    QAction* full_screen_action = view->addAction(tr("&Full Screen"));
-    full_screen_action->setCheckable(true);
-    full_screen_action->setShortcut(QKeySequence(Qt::Key_F11));
-    // A window-wide shortcut, so it works whatever has focus, the display
-    // included: the obvious way out of full screen.
-    full_screen_action->setShortcutContext(Qt::WindowShortcut);
-    connect(full_screen_action, &QAction::toggled, this, [this](bool full) {
-        full ? showFullScreen() : showNormal();
-    });
+    view->addSeparator();
+    // Immersive as the macOS client has it, Ctrl+Shift+F for its
+    // Command-Shift-F; Shift+F11 too, since F11 with any modifier always
+    // reaches Beebium, the display's keys or not (7.1).
+    immersive_action_ = view->addAction(tr("Enter &Immersive Mode"));
+    immersive_action_->setShortcuts({QKeySequence(tr("Ctrl+Shift+F")),
+                                     QKeySequence(Qt::SHIFT | Qt::Key_F11)});
+    update_immersive_enabled();
+    connect(session_, &MachineSession::connected_to_server, this,
+            &MainWindow::update_immersive_enabled);
+    connect(immersive_action_, &QAction::triggered, this,
+            [this] { set_presentation(after_immersive_command(presentation_)); });
+    full_screen_action_ = view->addAction(tr("&Full Screen"));
+    full_screen_action_->setCheckable(true);
+    full_screen_action_->setShortcut(QKeySequence(Qt::Key_F11));
+    connect(full_screen_action_, &QAction::triggered, this,
+            [this] { set_presentation(after_full_screen_key(presentation_)); });
+    // Window-wide, and on the window as well as in the menus: the menu bar
+    // is hidden while immersive, and F11 must still lead out (6.4).
+    for (QAction* action : {status_bar_action_, immersive_action_, full_screen_action_}) {
+        action->setShortcutContext(Qt::WindowShortcut);
+        addAction(action);
+    }
+    apply_presentation();
 
     QMenu* machine = menuBar()->addMenu(tr("&Machine"));
     QAction* run_action = machine->addAction(tr("&Run"));
@@ -427,6 +452,51 @@ void MainWindow::rename() {
                               }
                           });
     session_->set_name(name);
+}
+
+void MainWindow::set_presentation(Presentation presentation) {
+    if (presentation == presentation_) {
+        return;
+    }
+    presentation_ = presentation;
+    apply_presentation();
+}
+
+void MainWindow::update_immersive_enabled() {
+    if (immersive_action_) {
+        immersive_action_->setEnabled(session_->connected() && is_live(recovery_->verdict()));
+    }
+}
+
+void MainWindow::apply_presentation() {
+    const Chrome chrome = chrome_for(presentation_);
+    const bool immersive = presentation_ == Presentation::immersive;
+    menuBar()->setVisible(chrome.menu_bar);
+    statusBar()->setVisible(chrome.status_bar && status_bar_action_->isChecked());
+    frame_->set_bare(immersive);
+    immersive_exit_->set_active(immersive);
+    immersive_action_->setText(immersive ? tr("Exit &Immersive Mode") : tr("Enter &Immersive Mode"));
+    full_screen_action_->setChecked(presentation_ == Presentation::full_screen);
+    if (chrome.os_full_screen && !isFullScreen()) {
+        showFullScreen();
+    } else if (!chrome.os_full_screen && isFullScreen()) {
+        showNormal();
+    }
+    if (immersive) {
+        // The keys stay the machine's: entering never takes them away.
+        display_->setFocus();
+    }
+}
+
+void MainWindow::changeEvent(QEvent* event) {
+    QMainWindow::changeEvent(event);
+    // The desktop left full screen by its own means (a compositor binding):
+    // follow it, as the macOS client does its window's (6.4).
+    if (event->type() == QEvent::WindowStateChange && !isFullScreen() &&
+        presentation_ != Presentation::windowed && isVisible()) {
+        presentation_ = Presentation::windowed;
+        apply_presentation();
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {

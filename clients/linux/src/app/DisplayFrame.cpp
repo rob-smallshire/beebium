@@ -26,7 +26,14 @@ DisplayFrame::DisplayFrame(QWidget* display, QWidget* parent) : QWidget(parent),
 }
 
 bool DisplayFrame::showing_focus() const {
-    return display_->hasFocus();
+    return !bare_ && display_->hasFocus();
+}
+
+void DisplayFrame::set_bare(bool bare) {
+    bare_ = bare;
+    const int margin = bare ? 0 : MARGIN;
+    layout()->setContentsMargins(margin, margin, margin, margin);
+    update();
 }
 
 bool DisplayFrame::eventFilter(QObject* watched, QEvent* event) {

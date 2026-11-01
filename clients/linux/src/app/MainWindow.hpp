@@ -13,6 +13,8 @@
 #ifndef BEEBIUM_LINUX_APP_MAIN_WINDOW_HPP
 #define BEEBIUM_LINUX_APP_MAIN_WINDOW_HPP
 
+#include "app/Presentation.hpp"
+
 #include <QMainWindow>
 #include <QRhiWidget>
 
@@ -28,6 +30,8 @@ class ConnectionRecovery;
 class DisplayWidget;
 class MachineSession;
 class SystemPowerMonitor;
+class DisplayFrame;
+class ImmersiveExit;
 
 // A machine window: one per connection to a server. It holds the menu bar
 // (empty until the client specification's menus are built) and the display.
@@ -68,6 +72,11 @@ public:
     // left running without asking (4.5).
     void set_quitting(bool quitting) { quitting_ = quitting; }
 
+    // Windowed, full screen or immersive (6.4), as the View menu, F11 and
+    // the exit bar choose it.
+    void set_presentation(Presentation presentation);
+    Presentation presentation() const { return presentation_; }
+
     // Replace the close questions (tests).
     void set_close_prompts(ClosePrompts prompts) { prompts_ = std::move(prompts); }
 
@@ -85,6 +94,7 @@ Q_SIGNALS:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void changeEvent(QEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
@@ -113,6 +123,15 @@ private:
     QLabel* description_label_ = nullptr;
     ClientSettings* settings_ = nullptr;
     QLabel* unsaved_label_ = nullptr;
+    DisplayFrame* frame_ = nullptr;
+    ImmersiveExit* immersive_exit_ = nullptr;
+    QAction* status_bar_action_ = nullptr;
+    QAction* full_screen_action_ = nullptr;
+    QAction* immersive_action_ = nullptr;
+    Presentation presentation_ = Presentation::windowed;
+    void apply_presentation();
+    // Immersive is offered only while the machine is live (6.4).
+    void update_immersive_enabled();
     ClosePhase close_phase_ = ClosePhase::open;
     bool quitting_ = false;
     ClosePrompts prompts_ = ClosePrompts::message_boxes();
