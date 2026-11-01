@@ -135,3 +135,15 @@ beebium_linux_add_test(test_reconnect_policy
 beebium_linux_add_test(test_connection_recovery QT
     SOURCES test_connection_recovery.cpp
     LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_endpoint
+    SOURCES test_endpoint.cpp
+    LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_client_settings QT
+    SOURCES test_client_settings.cpp
+    LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_discovered_machines QT
+    SOURCES test_discovered_machines.cpp
+    LIBRARIES beebium_linux_app)

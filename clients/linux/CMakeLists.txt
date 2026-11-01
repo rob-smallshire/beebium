@@ -36,7 +36,7 @@ get_filename_component(BEEBIUM_REPO_DIRPATH "${CMAKE_CURRENT_SOURCE_DIR}/../.." 
 # gRPC, Protobuf, OpenSSL and the code generators, found as the servers find them.
 include(${BEEBIUM_REPO_DIRPATH}/cmake/BeebiumGrpc.cmake)
 
-find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets DBus ShaderTools)
+find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets DBus Network ShaderTools)
 
 # nlohmann-json for keyboard mapping files, found as the root build finds it:
 # an installed copy, else the same pinned release fetched.
@@ -64,6 +64,9 @@ endif()
 # Shared with the servers, by path.
 add_subdirectory(${BEEBIUM_REPO_DIRPATH}/src/host-identity
                  ${CMAKE_CURRENT_BINARY_DIR}/shared/host-identity)
+# mDNS browsing (Avahi on Linux, loaded at run time) for the Connect dialog.
+add_subdirectory(${BEEBIUM_REPO_DIRPATH}/src/discovery
+                 ${CMAKE_CURRENT_BINARY_DIR}/shared/discovery)
 
 # --- Protocol stubs ---------------------------------------------------------
 
@@ -135,6 +138,7 @@ target_link_libraries(beebium_linux_keyboard
 add_library(beebium_linux_connection STATIC
     src/connection/Compatibility.cpp
     src/connection/DecodedFrame.cpp
+    src/connection/Endpoint.cpp
     src/connection/Handshake.cpp
     src/connection/KeySender.cpp
     src/connection/Liveness.cpp
@@ -185,8 +189,11 @@ qt_add_shaders(beebium_linux_display "display_shaders"
 
 add_library(beebium_linux_app STATIC
     src/app/ApplicationInfo.cpp
+    src/app/ClientSettings.cpp
     src/app/ConnectionOverlay.cpp
     src/app/ConnectionRecovery.cpp
+    src/app/DeepLink.cpp
+    src/app/DiscoveredMachines.cpp
     src/app/DisplayWidget.cpp
     src/app/ErrorPresentation.cpp
     src/app/FilesystemSharing.cpp
@@ -205,7 +212,9 @@ target_link_libraries(beebium_linux_app
     PUBLIC
         Qt6::Widgets
         Qt6::DBus
+        Qt6::Network
         beebium_linux_display
+        beebium_discovery
 )
 
 # Reading the host's Caps Lock (src/app/HostLockState.cpp): xcb on X11,
