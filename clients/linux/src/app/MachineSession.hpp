@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_APP_MACHINE_SESSION_HPP
 #define BEEBIUM_LINUX_APP_MACHINE_SESSION_HPP
 
+#include "app/RunHold.hpp"
 #include "app/SessionAudio.hpp"
 #include "app/SessionDiscs.hpp"
 #include "app/SessionIndicators.hpp"
@@ -221,6 +222,8 @@ private:
 
     std::optional<LaunchedServer> launched_;
     bool run_on_connect_ = false;
+    // A launched machine's Run, held until its sound can be heard.
+    RunHold run_hold_;
     bool machine_running_ = true;
     bool machine_saved_ = false;
     QString machine_dirpath_;

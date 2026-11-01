@@ -103,6 +103,7 @@ void AudioRenderer::render_block(float* interleaved, std::size_t frames) {
         if (available > pre_roll_.target_frames()) {
             ring_.skip(available - pre_roll_.target_frames());
         }
+        first_played_.store(static_cast<std::int64_t>(ring_.read_position()), std::memory_order_release);
     }
     const std::size_t got = pull > 0 ? ring_.read(scratch_.data(), pull) : 0;
     if (pull > 0 && got < pull) {

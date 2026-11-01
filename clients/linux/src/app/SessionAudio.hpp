@@ -70,11 +70,16 @@ public:
     // Why the stream itself failed, if it did: the format could not be read,
     // or the stream broke.
     QString stream_problem() const { return stream_problem_; }
+    // Whether a machine started now would be heard from its first sound: the
+    // sound output is consuming, or there is none to wait for (no output, or
+    // a failed one, or a failed stream).
+    bool sound_ready() const;
 
 Q_SIGNALS:
     // The format arrived (loaded) or the connection went (not).
     void loaded_changed(bool loaded);
     void problem_changed();
+    void sound_ready_changed();
 
 private:
     void on_format(unsigned generation, const AudioLayout& layout,
@@ -91,6 +96,12 @@ private:
     unsigned generation_ = 0;
     // BEEBIUM_AUDIO_TRACE=1: the ring's fill and counters each second.
     QTimer trace_;
+    // Watches for the first play, and then for the stream's first sound (a
+    // cold launch's boot beep), to log what became of it.
+    QTimer first_play_;
+    qint64 format_at_ms_ = 0;
+    qint64 first_play_at_ms_ = 0;
+    void log_first_play();
     std::shared_ptr<grpc::Channel> trace_channel_;
     long long traced_ms_ = 0;
     std::uint64_t traced_samples_ = 0;

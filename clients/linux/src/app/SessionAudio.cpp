@@ -33,6 +33,11 @@ namespace beebium::linux_client {
 SessionAudio::SessionAudio(QObject* parent)
     : QObject(parent), output_(std::make_unique<AudioOutput>()) {
     connect(output_.get(), &AudioOutput::status_changed, this, &SessionAudio::problem_changed);
+    connect(this, &SessionAudio::problem_changed, this, &SessionAudio::sound_ready_changed);
+    connect(output_.get(), &AudioOutput::consuming_changed, this,
+            &SessionAudio::sound_ready_changed);
+    first_play_.setInterval(50);
+    connect(&first_play_, &QTimer::timeout, this, &SessionAudio::log_first_play);
     if (qEnvironmentVariable("BEEBIUM_AUDIO_TRACE") == QLatin1String("1")) {
         trace_.setInterval(1000);
         connect(&trace_, &QTimer::timeout, this, &SessionAudio::trace);
@@ -138,13 +143,62 @@ void SessionAudio::on_format(unsigned generation, const AudioLayout& layout,
     auto playback = std::make_shared<Playback>(ring, layout_, controls_);
     renderer_ = std::shared_ptr<AudioRenderer>(playback, &playback->renderer);
     output_->start(renderer_, static_cast<int>(layout_.sample_rate));
+    format_at_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                        .count();
+    first_play_at_ms_ = 0;
+    first_play_.start();
     stream_problem_.clear();
     loaded_ = true;
     Q_EMIT loaded_changed(true);
     Q_EMIT problem_changed();
 }
 
+void SessionAudio::log_first_play() {
+    if (!renderer_ || !stream_ || !ring_) {
+        first_play_.stop();
+        return;
+    }
+    const std::int64_t played = renderer_->first_played_index();
+    if (played < 0) {
+        return;  // the sink has not asked for sound yet
+    }
+    const qint64 now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now().time_since_epoch())
+                              .count();
+    if (first_play_at_ms_ == 0) {
+        first_play_at_ms_ = now_ms;
+        std::fprintf(stderr, "beebium: sound began %lld ms after the format, from frame %lld\n",
+                     static_cast<long long>(now_ms - format_at_ms_),
+                     static_cast<long long>(played));
+    }
+    // Then, once the machine has made a sound and playback has reached it,
+    // what became of it.
+    const std::int64_t sound = stream_->first_sound_ring_index();
+    const bool reached = sound >= 0 && static_cast<std::int64_t>(ring_->read_position()) > sound;
+    const bool given_up = now_ms - first_play_at_ms_ > 10000;
+    if (sound == AudioStream::NO_SOUND_YET && !given_up) {
+        return;
+    }
+    if (sound >= 0 && !reached && !given_up) {
+        return;
+    }
+    first_play_.stop();
+    const char* fate = sound == AudioStream::NO_SOUND_YET ? "none in 10 s"
+                       : sound == AudioStream::SOUND_REFUSED
+                           ? "lost, refused while the sink was starting"
+                       : sound < played ? "lost, trimmed at the first play"
+                       : reached        ? "played"
+                                        : "not reached in 10 s";
+    std::fprintf(stderr,
+                 "beebium: the stream's first sound, frame %lld, %lld ms after sound began: %s; "
+                 "%llu underruns so far\n",
+                 static_cast<long long>(sound), static_cast<long long>(now_ms - first_play_at_ms_),
+                 fate, static_cast<unsigned long long>(ring_->underrun_events()));
+}
+
 void SessionAudio::stop() {
+    first_play_.stop();
     if (loaded_) {
         // For diagnosis: how this connection's sound went, overflow apart
         // from what the server never sent.
@@ -185,6 +239,11 @@ AudioHealth SessionAudio::health() const {
     }
     health.latency_ms = renderer_ ? renderer_->latency_milliseconds() : PreRoll::INITIAL_TARGET_MS;
     return health;
+}
+
+bool SessionAudio::sound_ready() const {
+    return !AudioOutput::available() || !output_->status().isEmpty() || output_->consuming() ||
+           !stream_problem_.isEmpty();
 }
 
 QString SessionAudio::problem() const {

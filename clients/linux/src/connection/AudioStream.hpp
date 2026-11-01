@@ -63,6 +63,13 @@ public:
     std::uint64_t wire_dropped_samples() const { return wire_dropped_.load(); }
     std::uint64_t malformed_chunks() const { return malformed_.load(); }
 
+    // Where the stream's first sound went (a frame differing from the one
+    // before it: silence is a constant level): -1 until there is one, then
+    // its index in the ring, or -2 if the ring was full and refused it.
+    static constexpr std::int64_t NO_SOUND_YET = -1;
+    static constexpr std::int64_t SOUND_REFUSED = -2;
+    std::int64_t first_sound_ring_index() const { return first_sound_.load(); }
+
 private:
     std::unique_ptr<grpc::ClientReader<beebium::AudioChunk>> open(grpc::ClientContext& context);
     void on_chunk(beebium::AudioChunk& chunk);
@@ -80,6 +87,8 @@ private:
     std::atomic<std::uint64_t> samples_{0};
     std::atomic<std::uint64_t> wire_dropped_{0};
     std::atomic<std::uint64_t> malformed_{0};
+    std::atomic<std::int64_t> first_sound_{NO_SOUND_YET};
+    std::vector<std::uint32_t> last_frame_;  // reader thread only
     StreamReader<beebium::AudioChunk> reader_;
 };
 

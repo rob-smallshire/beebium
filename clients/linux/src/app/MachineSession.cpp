@@ -23,6 +23,7 @@
 
 #include <QMetaObject>
 
+#include <chrono>
 #include <cstdio>
 
 namespace beebium::linux_client {
@@ -87,6 +88,11 @@ MachineSession::MachineSession(QObject* parent)
     liveness_ticker_.setInterval(LIVENESS_TICK);
     connect(&liveness_ticker_, &QTimer::timeout, this,
             [this] { tick_liveness(LivenessTracker::Clock::now()); });
+    connect(audio_, &SessionAudio::sound_ready_changed, this, [this] {
+        if (audio_->sound_ready()) {
+            run_hold_.release();
+        }
+    });
 }
 
 MachineSession::~MachineSession() {
@@ -200,8 +206,19 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
     Q_EMIT identity_changed(machine_name_, machine_description_);
     Q_EMIT running_changed(machine_running_);
     if (run_on_connect_ && !machine_running_) {
-        // Launched blocked until Run (5.5).
-        run();
+        // Launched blocked until Run (5.5), and held until its sound can be
+        // heard, boot beep and all (8.3).
+        const auto held_from = std::chrono::steady_clock::now();
+        run_hold_.arm(audio_->sound_ready(), [this, held_from] {
+            const auto held_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - held_from)
+                                     .count();
+            std::fprintf(stderr, "beebium: running the machine, %lld ms after connecting, %s\n",
+                         static_cast<long long>(held_ms),
+                         audio_->sound_ready() ? "its sound ready"
+                                               : "its sound not ready in time");
+            run();
+        });
     }
 
     if (!table.empty()) {
@@ -469,6 +486,7 @@ void MachineSession::set_liveness(Liveness before) {
 }
 
 void MachineSession::stop_streams() {
+    run_hold_.cancel();
     if (keys_) {
         // Drains what is queued first, so a release-all made just before
         // disconnecting still reaches the machine.

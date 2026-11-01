@@ -17,7 +17,9 @@
 #include "audio.grpc.pb.h"
 
 #include <chrono>
+#include <algorithm>
 #include <cstring>
+#include <optional>
 
 namespace beebium::linux_client {
 
@@ -73,7 +75,22 @@ void AudioStream::on_chunk(beebium::AudioChunk& chunk) {
     wire_dropped_.store(drops_.dropped());
     words_.resize(count * fields_);
     std::memcpy(words_.data(), chunk.samples().data(), bytes);  // little-endian fields
-    ring_->write(words_.data(), count);
+    // The first frame that differs from the one before it is the first sound.
+    std::optional<std::size_t> sound;
+    if (first_sound_.load() == NO_SOUND_YET) {
+        for (std::size_t i = 0; i < count && !sound; ++i) {
+            const std::uint32_t* frame = &words_[i * fields_];
+            if (!last_frame_.empty() && !std::equal(frame, frame + fields_, last_frame_.begin())) {
+                sound = i;
+            }
+            last_frame_.assign(frame, frame + fields_);
+        }
+    }
+    const std::uint64_t position = ring_->write_position();
+    const std::size_t kept = ring_->write(words_.data(), count);
+    if (sound) {
+        first_sound_.store(*sound < kept ? static_cast<std::int64_t>(position + *sound) : SOUND_REFUSED);
+    }
 }
 
 void AudioStream::on_finished(const StreamEnd& end) {

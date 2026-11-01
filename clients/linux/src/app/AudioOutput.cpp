@@ -57,9 +57,10 @@ public:
     // Writes what is still owed first; renders more only once the device
     // has taken all of it, so a short write holds its frames for the next
     // tick instead of losing them.
-    void feed(QIODevice* device, qint64 bytes_free) {
+    // Returns whether the device took any sound.
+    bool feed(QIODevice* device, qint64 bytes_free) {
         if (device == nullptr) {
-            return;
+            return false;
         }
         if (!pending_.isEmpty()) {
             const qint64 written = device->write(pending_);
@@ -67,14 +68,14 @@ public:
                 pending_.remove(0, written);
             }
             if (!pending_.isEmpty()) {
-                return;
+                return written > 0;
             }
             bytes_free -= std::max<qint64>(written, 0);
         }
         const std::size_t frames = static_cast<std::size_t>(std::max<qint64>(bytes_free, 0)) /
                                    frame_bytes();
         if (frames == 0) {
-            return;
+            return false;
         }
         samples_.resize(2 * frames);
         renderer_->render(samples_.data(), frames);
@@ -93,6 +94,7 @@ public:
             pending_.append(bytes + std::max<qint64>(written, 0), size - std::max<qint64>(written, 0));
             ++short_writes_;
         }
+        return written > 0;
     }
 
     // How often the device took less than it said it had room for.
@@ -119,9 +121,10 @@ public:
     using QObject::QObject;
     ~SinkWorker() override { stop_sink(); }
 
-    void start_sink(std::shared_ptr<AudioRenderer> renderer, int sample_rate) {
+    void start_sink(std::shared_ptr<AudioRenderer> renderer, int sample_rate, unsigned generation) {
         stop_sink();
 #if BEEBIUM_HAVE_QT_MULTIMEDIA
+        generation_ = generation;
         const QAudioDevice device = QMediaDevices::defaultAudioOutput();
         if (device.isNull()) {
             Q_EMIT status(tr("No sound output was found on this computer."));
@@ -150,12 +153,8 @@ public:
         feed_ = std::make_unique<QTimer>();
         feed_->setTimerType(Qt::PreciseTimer);
         feed_->setInterval(5);
-        connect(feed_.get(), &QTimer::timeout, this, [this] {
-            if (sink_ && output_) {
-                feeder_->feed(output_, sink_->bytesFree());
-            }
-        });
-        feeder_->feed(output_, sink_->bytesFree());
+        connect(feed_.get(), &QTimer::timeout, this, [this] { feed(); });
+        feed();
         feed_->start();
         if (qEnvironmentVariable("BEEBIUM_AUDIO_TRACE") == QLatin1String("1")) {
             // The sink's side of the trace, beside the ring's: a sink gone
@@ -191,11 +190,13 @@ public:
 #else
         Q_UNUSED(renderer);
         Q_UNUSED(sample_rate);
+        Q_UNUSED(generation);
 #endif
     }
 
     void stop_sink() {
 #if BEEBIUM_HAVE_QT_MULTIMEDIA
+        consuming_ = false;
         trace_.reset();
         feed_.reset();
         if (feeder_ && feeder_->short_writes() > 0) {
@@ -214,9 +215,21 @@ public:
 
 Q_SIGNALS:
     void status(const QString& status);
+    // The device took its first sound since the sink of this start()
+    // generation started.
+    void consuming(unsigned generation);
 
 private:
 #if BEEBIUM_HAVE_QT_MULTIMEDIA
+    void feed() {
+        if (sink_ && output_ && feeder_->feed(output_, sink_->bytesFree()) && !consuming_) {
+            consuming_ = true;
+            Q_EMIT consuming(generation_);
+        }
+    }
+
+    bool consuming_ = false;
+    unsigned generation_ = 0;
     std::unique_ptr<Feeder> feeder_;
     std::unique_ptr<QAudioSink> sink_;
     QIODevice* output_ = nullptr;  // the sink's, while it runs
@@ -248,6 +261,12 @@ AudioOutput::AudioOutput(QObject* parent) : QObject(parent) {
     worker_ = new SinkWorker;
     worker_->moveToThread(thread_);
     connect(worker_, &SinkWorker::status, this, &AudioOutput::set_status);
+    connect(worker_, &SinkWorker::consuming, this, [this](unsigned generation) {
+        if (!consuming_ && started_ && generation == generation_) {
+            consuming_ = true;
+            Q_EMIT consuming_changed(true);
+        }
+    });
     thread_->start();
 }
 
@@ -271,10 +290,12 @@ void AudioOutput::start(std::shared_ptr<AudioRenderer> renderer, int sample_rate
     if (!worker_) {
         return;
     }
+    started_ = true;
+    const unsigned generation = ++generation_;
     QMetaObject::invokeMethod(
         worker_,
-        [worker = worker_, renderer = std::move(renderer), sample_rate]() mutable {
-            worker->start_sink(std::move(renderer), sample_rate);
+        [worker = worker_, renderer = std::move(renderer), sample_rate, generation]() mutable {
+            worker->start_sink(std::move(renderer), sample_rate, generation);
         },
         Qt::QueuedConnection);
 }
@@ -282,6 +303,11 @@ void AudioOutput::start(std::shared_ptr<AudioRenderer> renderer, int sample_rate
 void AudioOutput::stop() {
     if (!worker_) {
         return;
+    }
+    started_ = false;
+    if (consuming_) {
+        consuming_ = false;
+        Q_EMIT consuming_changed(false);
     }
     QMetaObject::invokeMethod(worker_, [worker = worker_] { worker->stop_sink(); },
                               Qt::QueuedConnection);

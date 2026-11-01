@@ -49,6 +49,11 @@ public:
     }
     // Consumer: take and discard up to `count` frames.
     std::size_t skip(std::size_t count);
+
+    // The ring's own count of frames kept and of frames taken: the index the
+    // next kept frame gets, and the index of the next to be read.
+    std::uint64_t write_position() const { return write_index_.load(std::memory_order_acquire); }
+    std::uint64_t read_position() const { return read_index_.load(std::memory_order_acquire); }
     std::uint64_t underrun_frames() const { return underrun_frames_.load(std::memory_order_relaxed); }
     std::uint64_t underrun_events() const { return underrun_events_.load(std::memory_order_relaxed); }
 

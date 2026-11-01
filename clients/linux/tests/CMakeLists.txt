@@ -201,6 +201,10 @@ beebium_linux_add_test(test_machine_control QT
     SOURCES test_machine_control.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_run_hold QT
+    SOURCES test_run_hold.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_new_machine QT
     SOURCES test_new_machine.cpp
     LIBRARIES beebium_linux_app)

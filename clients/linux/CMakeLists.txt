@@ -256,6 +256,7 @@ add_library(beebium_linux_app STATIC
     src/app/MainWindow.cpp
     src/app/Presentation.cpp
     src/app/PresetsPage.cpp
+    src/app/RunHold.cpp
     src/app/RunningMachinesPage.cpp
     src/app/SavedMachines.cpp
     src/app/SavedMachinesPage.cpp

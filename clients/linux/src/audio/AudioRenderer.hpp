@@ -65,6 +65,8 @@ public:
     const PreRoll& pre_roll() const { return pre_roll_; }
     // The pre-roll's target, readable from any thread: the playback latency.
     int latency_milliseconds() const { return latency_ms_.load(std::memory_order_relaxed); }
+    // The ring index playback began from, once it has: -1 until then.
+    std::int64_t first_played_index() const { return first_played_.load(std::memory_order_acquire); }
     const AudioLayout& layout() const { return layout_; }
 
 private:
@@ -84,6 +86,7 @@ private:
     std::vector<std::uint32_t> scratch_;
     std::atomic<int> latency_ms_{PreRoll::INITIAL_TARGET_MS};
     bool started_ = false;
+    std::atomic<std::int64_t> first_played_{-1};
 };
 
 }  // namespace beebium::linux_client

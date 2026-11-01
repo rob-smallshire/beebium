@@ -50,9 +50,13 @@ public:
 
     // What the output is doing, for the Sound sidebar: empty while playing.
     QString status() const { return status_; }
+    // Whether the device has taken sound since start(): a sink can take a
+    // second or two to start.
+    bool consuming() const { return consuming_; }
 
 Q_SIGNALS:
     void status_changed(const QString& status);
+    void consuming_changed(bool consuming);
 
 private:
     void set_status(const QString& status);
@@ -60,6 +64,9 @@ private:
     QThread* thread_ = nullptr;
     SinkWorker* worker_ = nullptr;
     QString status_;
+    bool started_ = false;
+    bool consuming_ = false;
+    unsigned generation_ = 0;  // of start(), to ignore an earlier sink's news
 };
 
 }  // namespace beebium::linux_client
