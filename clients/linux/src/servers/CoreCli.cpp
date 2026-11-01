@@ -12,6 +12,7 @@
 
 #include "servers/CoreCli.hpp"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
@@ -78,6 +79,41 @@ std::vector<PresetListing> parse_preset_listing(const QByteArray& jsonl) {
         presets.push_back(preset);
     }
     return presets;
+}
+
+std::vector<DiscFormat> parse_disc_formats(const QByteArray& jsonl) {
+    std::vector<DiscFormat> formats;
+    for (const QByteArray& line : jsonl.split('\n')) {
+        const QJsonObject row = QJsonDocument::fromJson(line).object();
+        if (row.isEmpty() || !row.value(QStringLiteral("extensions")).isArray()) {
+            continue;
+        }
+        DiscFormat format;
+        format.name = row.value(QStringLiteral("name")).toString();
+        format.kind = row.value(QStringLiteral("kind")).toString();
+        for (const auto& extension : row.value(QStringLiteral("extensions")).toArray()) {
+            QString text = extension.toString().toLower();
+            if (text.startsWith(QLatin1Char('.'))) {
+                text.remove(0, 1);
+            }
+            if (!text.isEmpty()) {
+                format.extensions << text;
+            }
+        }
+        formats.push_back(format);
+    }
+    return formats;
+}
+
+QStringList disc_extensions(const std::vector<DiscFormat>& formats, const QString& kind) {
+    QStringList extensions;
+    for (const auto& format : formats) {
+        if (format.kind == kind) {
+            extensions << format.extensions;
+        }
+    }
+    extensions.removeDuplicates();
+    return extensions;
 }
 
 std::optional<MachineDescription> parse_machine_description(const QByteArray& jsonl) {

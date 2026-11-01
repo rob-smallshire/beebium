@@ -122,6 +122,20 @@ TEST_CASE("A machine whose lock a server holds is running", "[servers][machines]
     CHECK_FALSE(unnamed->locked_by_pid.has_value());
 }
 
+TEST_CASE("The disc formats are the server's, by kind", "[servers][discs]") {
+    const auto formats = parse_disc_formats(
+        R"json({"name":"SSD/DSD (DFS)","kind":"floppy","description":"x","extensions":[".ssd",".DSD"],"write_support":true})json"
+        "\n"
+        R"({"name":"HFE","kind":"floppy","extensions":[".hfe"]})"
+        "\n"
+        R"({"name":"Acorn SCSI","kind":"hard-disc","extensions":[".dat"]})"
+        "\nnot json\n");
+    REQUIRE(formats.size() == 3);
+    CHECK(disc_extensions(formats, QStringLiteral("floppy")) ==
+          QStringList{QStringLiteral("ssd"), QStringLiteral("dsd"), QStringLiteral("hfe")});
+    CHECK(disc_extensions(formats, QStringLiteral("hard-disc")) == QStringList{QStringLiteral("dat")});
+}
+
 TEST_CASE("Launch arguments block the machine until Run and report an ephemeral port",
           "[servers][launch]") {
     const auto preset = preset_launch_arguments(QStringLiteral("/p/x.beebium-preset"), 2,

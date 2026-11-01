@@ -91,6 +91,18 @@ struct MachineDescription {
 // Nullopt unless the output describes a machine (dirpath, uuid and model).
 std::optional<MachineDescription> parse_machine_description(const QByteArray& jsonl);
 
+// One row of `list-disc-formats`: the formats a server loads, so a file
+// picker offers exactly those and the client keeps no list of its own.
+struct DiscFormat {
+    QString name;
+    QString kind;  // "floppy" or "hard-disc"
+    QStringList extensions;  // lower case, without the dot: "ssd"
+};
+
+std::vector<DiscFormat> parse_disc_formats(const QByteArray& jsonl);
+// The extensions of every format of a kind, for a file dialog's filter.
+QStringList disc_extensions(const std::vector<DiscFormat>& formats, const QString& kind);
+
 }  // namespace beebium::linux_client
 
 #endif  // BEEBIUM_LINUX_SERVERS_CORE_CLI_HPP
