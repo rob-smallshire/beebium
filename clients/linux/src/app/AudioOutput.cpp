@@ -18,6 +18,7 @@
 #include <QTimer>
 #include <QtGlobal>
 
+#include <chrono>
 #include <cstdio>
 
 #if BEEBIUM_HAVE_QT_MULTIMEDIA
@@ -38,45 +39,47 @@ namespace beebium::linux_client {
 
 namespace {
 
-// The renderer as a device the sink pulls from: always as much as asked,
-// silence included, so the sink never starves and never blocks.
-class RendererDevice : public QIODevice {
+// Writes the renderer's sound into the sink as fast as the device takes
+// it: whatever bytesFree() says the device has consumed since last time,
+// silence included, so playback follows the device's own clock. (Qt's pull
+// mode asked for some 2% too few frames on PipeWire, so the ring overfilled
+// and the device was short.)
+class Feeder {
 public:
-    RendererDevice(std::shared_ptr<AudioRenderer> renderer, bool float_samples)
+    Feeder(std::shared_ptr<AudioRenderer> renderer, bool float_samples)
         : renderer_(std::move(renderer)), float_samples_(float_samples) {}
 
-    qint64 bytesAvailable() const override { return 1 << 20; }
-    bool isSequential() const override { return true; }
-    // A stream has no position to go back to; the sink asks anyway, and the
-    // base class would warn about it each time.
-    bool seek(qint64) override { return false; }
-
-protected:
-    qint64 readData(char* data, qint64 max_size) override {
-        const std::size_t frame_bytes = float_samples_ ? 2 * sizeof(float) : 2 * sizeof(qint16);
-        const std::size_t frames = static_cast<std::size_t>(max_size) / frame_bytes;
-        if (frames == 0) {
-            return 0;
-        }
-        if (float_samples_) {
-            renderer_->render(reinterpret_cast<float*>(data), frames);
-        } else {
-            scratch_.resize(2 * frames);
-            renderer_->render(scratch_.data(), frames);
-            auto* out = reinterpret_cast<qint16*>(data);
-            for (std::size_t i = 0; i < 2 * frames; ++i) {
-                out[i] = static_cast<qint16>(
-                    std::lround(std::clamp(scratch_[i], -1.0f, 1.0f) * 32767.0f));
-            }
-        }
-        return static_cast<qint64>(frames * frame_bytes);
+    std::size_t frame_bytes() const {
+        return float_samples_ ? 2 * sizeof(float) : 2 * sizeof(qint16);
     }
-    qint64 writeData(const char*, qint64) override { return -1; }
+
+    void feed(QIODevice* device, qint64 bytes_free) {
+        const std::size_t frames = static_cast<std::size_t>(std::max<qint64>(bytes_free, 0)) /
+                                   frame_bytes();
+        if (frames == 0 || device == nullptr) {
+            return;
+        }
+        samples_.resize(2 * frames);
+        renderer_->render(samples_.data(), frames);
+        if (float_samples_) {
+            device->write(reinterpret_cast<const char*>(samples_.data()),
+                          static_cast<qint64>(frames * frame_bytes()));
+            return;
+        }
+        words_.resize(2 * frames);
+        for (std::size_t i = 0; i < 2 * frames; ++i) {
+            words_[i] = static_cast<qint16>(
+                std::lround(std::clamp(samples_[i], -1.0f, 1.0f) * 32767.0f));
+        }
+        device->write(reinterpret_cast<const char*>(words_.data()),
+                      static_cast<qint64>(frames * frame_bytes()));
+    }
 
 private:
     std::shared_ptr<AudioRenderer> renderer_;
     bool float_samples_;
-    std::vector<float> scratch_;
+    std::vector<float> samples_;
+    std::vector<qint16> words_;
 };
 
 }  // namespace
@@ -113,12 +116,22 @@ public:
             return;
         }
         const bool float_samples = format.sampleFormat() == QAudioFormat::Float;
-        device_ = std::make_unique<RendererDevice>(std::move(renderer), float_samples);
-        device_->open(QIODevice::ReadOnly);
+        feeder_ = std::make_unique<Feeder>(std::move(renderer), float_samples);
         sink_ = std::make_unique<QAudioSink>(device, format);
         // A short device buffer: the latency is the pre-roll's to set.
         sink_->setBufferSize(format.bytesForDuration(40000));
-        sink_->start(device_.get());
+        output_ = sink_->start();
+        // Topped up every 5 ms, well inside the 40 ms buffer.
+        feed_ = std::make_unique<QTimer>();
+        feed_->setTimerType(Qt::PreciseTimer);
+        feed_->setInterval(5);
+        connect(feed_.get(), &QTimer::timeout, this, [this] {
+            if (sink_ && output_) {
+                feeder_->feed(output_, sink_->bytesFree());
+            }
+        });
+        feeder_->feed(output_, sink_->bytesFree());
+        feed_->start();
         if (qEnvironmentVariable("BEEBIUM_AUDIO_TRACE") == QLatin1String("1")) {
             // The sink's side of the trace, beside the ring's: a sink gone
             // Idle, or pulling sparsely, shows here.
@@ -130,9 +143,13 @@ public:
                 }
                 static const char* const states[] = {"active", "suspended", "stopped", "idle"};
                 const int state = static_cast<int>(sink_->state());
+                const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now().time_since_epoch())
+                                        .count();
                 std::fprintf(stderr,
-                             "beebium: sink trace: %s, %lld of %lld bytes free, %lld us "
+                             "beebium: sink trace at %lld ms: %s, %lld of %lld bytes free, %lld us "
                              "elapsed, %lld us processed, error %d\n",
+                             static_cast<long long>(now_ms),
                              state >= 0 && state < 4 ? states[state] : "?",
                              static_cast<long long>(sink_->bytesFree()),
                              static_cast<long long>(sink_->bufferSize()),
@@ -154,11 +171,13 @@ public:
     void stop_sink() {
 #if BEEBIUM_HAVE_QT_MULTIMEDIA
         trace_.reset();
+        feed_.reset();
         if (sink_) {
             sink_->stop();
             sink_.reset();
         }
-        device_.reset();
+        output_ = nullptr;
+        feeder_.reset();
 #endif
     }
 
@@ -167,8 +186,10 @@ Q_SIGNALS:
 
 private:
 #if BEEBIUM_HAVE_QT_MULTIMEDIA
-    std::unique_ptr<RendererDevice> device_;
+    std::unique_ptr<Feeder> feeder_;
     std::unique_ptr<QAudioSink> sink_;
+    QIODevice* output_ = nullptr;  // the sink's, while it runs
+    std::unique_ptr<QTimer> feed_;
     std::unique_ptr<QTimer> trace_;
 #endif
 };

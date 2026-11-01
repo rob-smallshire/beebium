@@ -26,7 +26,8 @@ class AudioRenderer;
 class SinkWorker;
 
 // Plays a renderer through the host's default audio output: a QAudioSink
-// (PipeWire or PulseAudio underneath) pulling from the renderer, at the
+// (PipeWire or PulseAudio underneath) fed from the renderer as fast as
+// the device consumes, at the
 // format's sample rate, as float stereo where the device takes it, else
 // 16-bit (client specification 8.3). The sink lives on a thread of its own,
 // so an output that blocks, as one may after the host wakes, never holds up

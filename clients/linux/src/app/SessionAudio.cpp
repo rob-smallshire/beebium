@@ -21,6 +21,7 @@
 #include <QMetaObject>
 #include <QtGlobal>
 
+#include <chrono>
 #include <cstdio>
 
 namespace beebium::linux_client {
@@ -39,8 +40,13 @@ void SessionAudio::trace() {
     if (!ring_) {
         return;
     }
+    // Monotonic milliseconds, to turn the counts into rates.
+    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count();
+    std::fprintf(stderr, "beebium: sound trace at %lld ms: ", static_cast<long long>(now_ms));
     std::fprintf(stderr,
-                 "beebium: sound trace: %zu frames held, %llu dropped on overflow, %llu "
+                 "%zu frames held, %llu dropped on overflow, %llu "
                  "before playback, %llu underruns, %d ms target, %llu chunks\n",
                  ring_->available(), static_cast<unsigned long long>(ring_->dropped_frames()),
                  static_cast<unsigned long long>(ring_->discarded_before_playback()),
