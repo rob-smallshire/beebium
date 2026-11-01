@@ -46,6 +46,9 @@ public:
 
     qint64 bytesAvailable() const override { return 1 << 20; }
     bool isSequential() const override { return true; }
+    // A stream has no position to go back to; the sink asks anyway, and the
+    // base class would warn about it each time.
+    bool seek(qint64) override { return false; }
 
 protected:
     qint64 readData(char* data, qint64 max_size) override {
