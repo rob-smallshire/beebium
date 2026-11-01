@@ -157,6 +157,16 @@ target_link_libraries(beebium_linux_connection
         Threads::Threads
 )
 
+# --- Servers: finding, querying and launching this host's servers ----------
+
+add_library(beebium_linux_servers STATIC
+    src/servers/CoreCli.cpp
+    src/servers/ServerLauncher.cpp
+    src/servers/ServerLocator.cpp
+)
+target_include_directories(beebium_linux_servers PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(beebium_linux_servers PUBLIC Qt6::Core)
+
 # --- Display: the QRhi renderer, without widgets ----------------------------
 
 add_library(beebium_linux_display STATIC
@@ -217,6 +227,7 @@ target_link_libraries(beebium_linux_app
         Qt6::DBus
         Qt6::Network
         beebium_linux_display
+        beebium_linux_servers
         beebium_discovery
 )
 

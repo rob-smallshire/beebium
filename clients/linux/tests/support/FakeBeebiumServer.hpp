@@ -24,6 +24,8 @@
 #include "system.grpc.pb.h"
 #include "video.grpc.pb.h"
 
+#include <grpcpp/grpcpp.h>
+
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QString>
