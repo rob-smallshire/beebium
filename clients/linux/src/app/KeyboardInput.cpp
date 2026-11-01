@@ -112,8 +112,13 @@ void KeyboardInput::release_named_key(std::string_view source, std::string_view 
     }
 }
 
+void KeyboardInput::set_caps_lock_sync_override(std::optional<bool> on) {
+    caps_lock_sync_override_ = on;
+    sync_caps_lock();
+}
+
 void KeyboardInput::sync_caps_lock() {
-    if (!send_ || !mapping_.synchronize_caps_lock || !host_caps_lock_) {
+    if (!send_ || !caps_lock_sync_enabled() || !host_caps_lock_) {
         return;
     }
     if (const auto host_on = host_caps_lock_()) {
@@ -163,7 +168,7 @@ bool KeyboardInput::takes(const QKeyEvent& event) const {
             return false;
         }
     }
-    if (host_key->code == "CapsLock" && mapping_.synchronize_caps_lock) {
+    if (host_key->code == "CapsLock" && caps_lock_sync_enabled()) {
         return true;
     }
     return resolve_key(mapping_, table_, *host_key).has_value();
@@ -187,7 +192,7 @@ bool KeyboardInput::key_press(const QKeyEvent& event) {
     }
     // A synchronised Caps Lock is a toggle with its own path, never a held
     // key (7.3); unsynchronised, a mapping may bind it like any other key.
-    if (host_key->code == "CapsLock" && mapping_.synchronize_caps_lock) {
+    if (host_key->code == "CapsLock" && caps_lock_sync_enabled()) {
         if (caps_lock_pressed_) {
             caps_lock_pressed_();
         }

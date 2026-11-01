@@ -21,6 +21,7 @@
 #include "app/ErrorPresentation.hpp"
 #include "app/HomeWindow.hpp"
 #include "app/ImmersiveExit.hpp"
+#include "app/KeyboardSidebar.hpp"
 #include "app/IndicatorStrip.hpp"
 #include "app/Sidebar.hpp"
 #include "app/SoundSidebar.hpp"
@@ -82,6 +83,30 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                                           [this] { return session_->server_shares_filesystem(); },
                                           sidebar_));
     sidebar_->add_mode(SidebarMode::sound, new SoundSidebar(session_->audio(), sidebar_));
+    // The keyboard mapping, as chosen last time (7.4).
+    auto* keyboard_mode = new KeyboardSidebar(user_mappings_dirpath(), sidebar_);
+    if (settings_) {
+        const QString chosen = settings_->store().value(QStringLiteral("keyboard/mapping")).toString();
+        for (const MappingChoice& choice : keyboard_mode->choices()) {
+            if (!chosen.isEmpty() && choice.id == chosen && choice.mapping) {
+                display_->keyboard().set_mapping(*choice.mapping);
+            }
+        }
+    }
+    keyboard_mode->set_active(QString::fromStdString(display_->keyboard().mapping().id));
+    keyboard_mode->set_caps_lock_sync(display_->keyboard().caps_lock_sync_enabled());
+    connect(keyboard_mode, &KeyboardSidebar::mapping_chosen, this,
+            [this, keyboard_mode](const MappingChoice& choice) {
+                display_->keyboard().set_mapping(*choice.mapping);
+                keyboard_mode->set_caps_lock_sync(display_->keyboard().caps_lock_sync_enabled());
+                if (settings_) {
+                    settings_->store().setValue(QStringLiteral("keyboard/mapping"), choice.id);
+                }
+                std::fprintf(stderr, "beebium: keyboard mapping %s\n", qPrintable(choice.name));
+            });
+    connect(keyboard_mode, &KeyboardSidebar::caps_lock_sync_toggled, this,
+            [this](bool on) { display_->keyboard().set_caps_lock_sync_override(on); });
+    sidebar_->add_mode(SidebarMode::keyboard, keyboard_mode);
     // Storage first, as the macOS client opens.
     sidebar_->set_mode(SidebarMode::storage);
     if (settings_) {
@@ -642,7 +667,7 @@ void MainWindow::tap_named_key(const QString& name) {
     KeyboardInput& keyboard = display_->keyboard();
     // Caps Lock follows the host's while synchronised (7.3): a click cannot
     // fight it, so it only sounds, as on macOS.
-    if (name == QLatin1String("Caps Lock") && keyboard.mapping().synchronize_caps_lock) {
+    if (name == QLatin1String("Caps Lock") && keyboard.caps_lock_sync_enabled()) {
         QApplication::beep();
         return;
     }

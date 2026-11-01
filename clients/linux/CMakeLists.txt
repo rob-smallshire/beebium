@@ -249,8 +249,10 @@ add_library(beebium_linux_app STATIC
     src/app/ImmersiveExit.cpp
     src/app/IndicatorStrip.cpp
     src/app/KeyboardInput.cpp
+    src/app/KeyboardSidebar.cpp
     src/app/LedColour.cpp
     src/app/MachineSession.cpp
+    src/app/MappingCatalogue.cpp
     src/app/MainWindow.cpp
     src/app/Presentation.cpp
     src/app/PresetsPage.cpp

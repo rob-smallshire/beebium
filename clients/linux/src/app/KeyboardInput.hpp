@@ -108,6 +108,14 @@ public:
     void set_host_caps_lock(HostCapsLock host_caps_lock) { host_caps_lock_ = std::move(host_caps_lock); }
     void set_caps_lock_pressed(std::function<void()> pressed) { caps_lock_pressed_ = std::move(pressed); }
 
+    // Caps Lock synchronisation for this session, overriding the mapping's
+    // default (the Keyboard mode's toggle); nullopt to follow the mapping.
+    // Switching it on is a sync point (7.3).
+    void set_caps_lock_sync_override(std::optional<bool> on);
+    bool caps_lock_sync_enabled() const {
+        return caps_lock_sync_override_.value_or(mapping_.synchronize_caps_lock);
+    }
+
     // Align the guest's Caps Lock to the host's, if the mapping synchronises
     // it, the host state is known and the machine is attached. The guest is
     // tapped only if it differs.
@@ -124,6 +132,7 @@ private:
     // mapping sends them to the machine.
     std::map<std::string, HostModifiers> host_modifiers_down_;
     HostCapsLock host_caps_lock_;
+    std::optional<bool> caps_lock_sync_override_;
     std::function<void()> caps_lock_pressed_;
 };
 
