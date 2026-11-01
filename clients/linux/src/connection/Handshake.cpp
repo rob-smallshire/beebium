@@ -29,16 +29,29 @@ void set_deadline(grpc::ClientContext& context, std::chrono::milliseconds timeou
 HandshakeResult perform_handshake(const std::shared_ptr<grpc::Channel>& channel,
                                   std::string_view client_protocol_fingerprint,
                                   std::string_view client_host_fingerprint,
-                                  std::chrono::milliseconds timeout) {
+                                  std::chrono::milliseconds timeout,
+                                  CallCanceller* canceller) {
     HandshakeResult result;
+    // Each call registers with the canceller, if any, for its duration.
+    const auto call = [canceller](grpc::ClientContext& context, auto&& make) {
+        if (canceller && !canceller->begin(context)) {
+            return grpc::Status(grpc::StatusCode::CANCELLED, "abandoned");
+        }
+        grpc::Status status = make();
+        if (canceller) {
+            canceller->end();
+        }
+        return status;
+    };
 
     auto system = beebium::SystemService::NewStub(channel);
     beebium::SystemInfo info;
     {
         grpc::ClientContext context;
         set_deadline(context, timeout);
-        const grpc::Status status =
-            system->GetSystemInfo(&context, beebium::GetSystemInfoRequest{}, &info);
+        const grpc::Status status = call(context, [&] {
+            return system->GetSystemInfo(&context, beebium::GetSystemInfoRequest{}, &info);
+        });
         if (!status.ok()) {
             result.code = status.error_code();
             result.error = status.error_message();
@@ -62,8 +75,9 @@ HandshakeResult perform_handshake(const std::shared_ptr<grpc::Channel>& channel,
     {
         grpc::ClientContext context;
         set_deadline(context, timeout);
-        const grpc::Status status =
-            video->GetConfig(&context, beebium::GetConfigRequest{}, &config);
+        const grpc::Status status = call(context, [&] {
+            return video->GetConfig(&context, beebium::GetConfigRequest{}, &config);
+        });
         if (!status.ok()) {
             result.code = status.error_code();
             result.error = status.error_message();
@@ -81,7 +95,9 @@ HandshakeResult perform_handshake(const std::shared_ptr<grpc::Channel>& channel,
     {
         grpc::ClientContext context;
         set_deadline(context, timeout);
-        if (debugger->GetState(&context, beebium::Empty{}, &state).ok()) {
+        const grpc::Status status = call(
+            context, [&] { return debugger->GetState(&context, beebium::Empty{}, &state); });
+        if (status.ok()) {
             result.machine_running = state.is_running();
         }
     }

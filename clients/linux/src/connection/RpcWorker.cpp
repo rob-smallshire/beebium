@@ -24,7 +24,7 @@ RpcWorker::~RpcWorker() {
     stop();
 }
 
-void RpcWorker::post(std::function<void()> job) {
+void RpcWorker::post(Job job) {
     {
         std::lock_guard lock(mutex_);
         if (stopping_) {
@@ -40,6 +40,9 @@ void RpcWorker::stop() {
         std::lock_guard lock(mutex_);
         stopping_ = true;
         jobs_.clear();
+        if (in_hand_) {
+            in_hand_->TryCancel();
+        }
     }
     wake_.notify_one();
     if (worker_.joinable()) {
@@ -52,7 +55,8 @@ void RpcWorker::run() {
     pthread_setname_np(pthread_self(), "bbm-rpc");
 #endif
     for (;;) {
-        std::function<void()> job;
+        Job job;
+        grpc::ClientContext context;
         {
             std::unique_lock lock(mutex_);
             wake_.wait(lock, [this] { return stopping_ || !jobs_.empty(); });
@@ -61,8 +65,11 @@ void RpcWorker::run() {
             }
             job = std::move(jobs_.front());
             jobs_.pop_front();
+            in_hand_ = &context;
         }
-        job();
+        job(context);
+        std::lock_guard lock(mutex_);
+        in_hand_ = nullptr;
     }
 }
 

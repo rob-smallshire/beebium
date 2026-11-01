@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_APP_MACHINE_SESSION_HPP
 #define BEEBIUM_LINUX_APP_MACHINE_SESSION_HPP
 
+#include "connection/CallCanceller.hpp"
 #include "connection/FrameMailbox.hpp"
 #include "connection/Handshake.hpp"
 #include "connection/KeySender.hpp"
@@ -172,8 +173,9 @@ private:
     // `deliver` its result on the GUI thread if the connection is still
     // the one it was made on.
     template <typename Result>
-    void post_call(std::function<Result(const std::shared_ptr<grpc::Channel>&)> call,
-                   std::function<void(const Result&)> deliver);
+    void post_call(
+        std::function<Result(const std::shared_ptr<grpc::Channel>&, grpc::ClientContext&)> call,
+        std::function<void(const Result&)> deliver);
 
     QString endpoint_;
     std::shared_ptr<grpc::Channel> channel_;
@@ -184,6 +186,9 @@ private:
     std::unique_ptr<RpcWorker> rpc_;
     BbcKeyTable key_table_;
     std::thread handshake_thread_;
+    // Lets a disconnect end the handshake's calls at once rather than wait
+    // out their deadlines on the GUI thread.
+    std::shared_ptr<CallCanceller> handshake_canceller_;
     // Bumped by every connect and disconnect, so an answer or event queued
     // for a connection since abandoned is recognised and dropped.
     unsigned generation_ = 0;

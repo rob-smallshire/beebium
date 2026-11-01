@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_CONNECTION_HANDSHAKE_HPP
 #define BEEBIUM_LINUX_CONNECTION_HANDSHAKE_HPP
 
+#include "connection/CallCanceller.hpp"
 #include "connection/Compatibility.hpp"
 
 #include <grpcpp/grpcpp.h>
@@ -56,11 +57,13 @@ struct HandshakeResult {
 // SystemService.GetSystemInfo, compared against our protocol and host
 // fingerprints (client specification 4.2, 3.2), then VideoService.GetConfig
 // once (6.1). Blocking: call it off the GUI thread. Each call is bounded by
-// `timeout`, so an unreachable host cannot hang the caller.
+// `timeout`, so an unreachable host cannot hang the caller, and `canceller`,
+// when given, ends it sooner (a reconnect or a close abandoning it).
 HandshakeResult perform_handshake(const std::shared_ptr<grpc::Channel>& channel,
                                   std::string_view client_protocol_fingerprint,
                                   std::string_view client_host_fingerprint,
-                                  std::chrono::milliseconds timeout);
+                                  std::chrono::milliseconds timeout,
+                                  CallCanceller* canceller = nullptr);
 
 // The message a user is shown for a protocol verdict other than compatible,
 // naming both fingerprints and the server binary (client specification 4.2).

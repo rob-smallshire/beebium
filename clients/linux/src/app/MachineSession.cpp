@@ -35,13 +35,18 @@ constexpr std::chrono::milliseconds LIVENESS_TICK{250};
 // The server's canonical character-to-key table, fetched once per
 // connection (client specification 7.4). Mapping entries name BBC keys
 // through it too, so without it the keyboard stays inert, and says why.
-BbcKeyTable fetch_key_table(const std::shared_ptr<grpc::Channel>& channel) {
+BbcKeyTable fetch_key_table(const std::shared_ptr<grpc::Channel>& channel,
+                            CallCanceller& canceller) {
     auto keyboard = beebium::KeyboardService::NewStub(channel);
     grpc::ClientContext context;
     context.set_deadline(std::chrono::system_clock::now() + HANDSHAKE_TIMEOUT);
+    if (!canceller.begin(context)) {
+        return {};
+    }
     beebium::AllKeyMappingsResponse response;
     const grpc::Status status =
         keyboard->GetAllKeyMappings(&context, beebium::GetAllKeyMappingsRequest{}, &response);
+    canceller.end();
     if (!status.ok()) {
         std::fprintf(stderr, "beebium: no key table from the server: %s\n",
                      status.error_message().c_str());
@@ -92,13 +97,15 @@ void MachineSession::connect_to(const QString& endpoint) {
     channel_ = grpc::CreateChannel(endpoint.toStdString(), grpc::InsecureChannelCredentials());
 
     const unsigned generation = ++generation_;
-    handshake_thread_ = std::thread([this, generation, channel = channel_] {
+    handshake_canceller_ = std::make_shared<CallCanceller>();
+    handshake_thread_ = std::thread([this, generation, channel = channel_,
+                                     canceller = handshake_canceller_] {
         const HandshakeResult result = perform_handshake(
             channel, client_protocol_fingerprint(),
-            beebium::host_identity::host_fingerprint(), HANDSHAKE_TIMEOUT);
+            beebium::host_identity::host_fingerprint(), HANDSHAKE_TIMEOUT, canceller.get());
         BbcKeyTable table;
         if (result.reached && is_compatible(result.protocol)) {
-            table = fetch_key_table(channel);
+            table = fetch_key_table(channel, *canceller);
         }
         QMetaObject::invokeMethod(
             this,
@@ -239,15 +246,16 @@ void MachineSession::on_status_end(unsigned generation, const StreamEnd& end) {
 
 template <typename Result>
 void MachineSession::post_call(
-    std::function<Result(const std::shared_ptr<grpc::Channel>&)> call,
+    std::function<Result(const std::shared_ptr<grpc::Channel>&, grpc::ClientContext&)> call,
     std::function<void(const Result&)> deliver) {
     if (!rpc_ || !channel_) {
         return;
     }
     const unsigned generation = generation_;
     rpc_->post([this, generation, channel = channel_, call = std::move(call),
-                deliver = std::move(deliver)] {
-        Result result = call(channel);
+                deliver = std::move(deliver)](grpc::ClientContext& context) {
+        set_deadline(context);
+        Result result = call(channel, context);
         QMetaObject::invokeMethod(
             this,
             [this, generation, result = std::move(result), deliver] {
@@ -266,10 +274,8 @@ void MachineSession::set_launched_server(const LaunchedServer& server) {
 
 void MachineSession::run() {
     post_call<CallOutcome>(
-        [](const std::shared_ptr<grpc::Channel>& channel) {
+        [](const std::shared_ptr<grpc::Channel>& channel, grpc::ClientContext& context) {
             auto stub = beebium::DebuggerControl::NewStub(channel);
-            grpc::ClientContext context;
-            set_deadline(context);
             beebium::RunResponse response;
             CallOutcome outcome = outcome_of(stub->Run(&context, beebium::RunRequest{}, &response));
             if (outcome.ok && !response.success()) {
@@ -293,10 +299,8 @@ void MachineSession::refresh_system_info() {
         beebium::SystemInfo info;
     };
     post_call<Info>(
-        [](const std::shared_ptr<grpc::Channel>& channel) {
+        [](const std::shared_ptr<grpc::Channel>& channel, grpc::ClientContext& context) {
             auto stub = beebium::SystemService::NewStub(channel);
-            grpc::ClientContext context;
-            set_deadline(context);
             Info info;
             info.outcome =
                 outcome_of(stub->GetSystemInfo(&context, beebium::GetSystemInfoRequest{}, &info.info));
@@ -319,10 +323,9 @@ void MachineSession::save(const QString& destination_dirpath, bool replace_exist
     };
     const std::string destination = destination_dirpath.toStdString();
     post_call<Saved>(
-        [destination, replace_existing](const std::shared_ptr<grpc::Channel>& channel) {
+        [destination, replace_existing](const std::shared_ptr<grpc::Channel>& channel,
+                                         grpc::ClientContext& context) {
             auto stub = beebium::SystemService::NewStub(channel);
-            grpc::ClientContext context;
-            set_deadline(context);
             beebium::SaveMachineRequest request;
             request.set_destination_dirpath(destination);
             request.set_replace_existing(replace_existing);
@@ -350,10 +353,8 @@ void MachineSession::move(const QString& destination_dirpath) {
     };
     const std::string destination = destination_dirpath.toStdString();
     post_call<Moved>(
-        [destination](const std::shared_ptr<grpc::Channel>& channel) {
+        [destination](const std::shared_ptr<grpc::Channel>& channel, grpc::ClientContext& context) {
             auto stub = beebium::SystemService::NewStub(channel);
-            grpc::ClientContext context;
-            set_deadline(context);
             beebium::MoveMachineRequest request;
             request.set_destination_dirpath(destination);
             Moved moved;
@@ -371,10 +372,8 @@ void MachineSession::move(const QString& destination_dirpath) {
 void MachineSession::set_name(const QString& name) {
     const std::string text = name.toStdString();
     post_call<CallOutcome>(
-        [text](const std::shared_ptr<grpc::Channel>& channel) {
+        [text](const std::shared_ptr<grpc::Channel>& channel, grpc::ClientContext& context) {
             auto stub = beebium::SystemService::NewStub(channel);
-            grpc::ClientContext context;
-            set_deadline(context);
             beebium::SetMachineNameRequest request;
             request.set_name(text);
             beebium::SetMachineNameResponse response;
@@ -396,10 +395,8 @@ void MachineSession::reset_battery() {
         QStringList units;
     };
     post_call<Reset>(
-        [](const std::shared_ptr<grpc::Channel>& channel) {
+        [](const std::shared_ptr<grpc::Channel>& channel, grpc::ClientContext& context) {
             auto stub = beebium::SystemService::NewStub(channel);
-            grpc::ClientContext context;
-            set_deadline(context);
             beebium::ResetBatteryResponse response;
             Reset reset;
             reset.outcome =
@@ -424,9 +421,8 @@ void MachineSession::request_shutdown() {
         Q_EMIT shutdown_answered({false, grpc::StatusCode::UNAVAILABLE, tr("not connected")});
         return;
     }
-    rpc_->post([this, generation, channel = channel_, authority] {
+    rpc_->post([this, generation, channel = channel_, authority](grpc::ClientContext& context) {
         auto stub = beebium::SystemService::NewStub(channel);
-        grpc::ClientContext context;
         set_deadline(context);
         if (!authority.empty()) {
             context.AddMetadata("x-beebium-instance-uuid", authority);
@@ -485,12 +481,15 @@ void MachineSession::disconnect_from_server() {
     liveness_ticker_.stop();
     stop_streams();
     if (rpc_) {
-        // The call in hand finishes, bounded by its deadline; the rest go.
+        // Prompt: the call in hand is cancelled and the rest dropped.
         rpc_->stop();
         rpc_.reset();
     }
+    if (handshake_canceller_) {
+        handshake_canceller_->cancel();
+    }
     if (handshake_thread_.joinable()) {
-        // Bounded by the handshake's deadlines.
+        // Prompt: its calls were just cancelled.
         handshake_thread_.join();
     }
     channel_.reset();

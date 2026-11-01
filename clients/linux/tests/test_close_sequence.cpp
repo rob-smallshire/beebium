@@ -16,11 +16,13 @@
 
 #include "app/MachineSession.hpp"
 #include "app/MainWindow.hpp"
+#include "connection/RpcWorker.hpp"
 
 #include "FakeBeebiumServer.hpp"
 
 #include <QElapsedTimer>
 #include <QPointer>
+#include <QTimer>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -91,4 +93,92 @@ TEST_CASE("A cancelled quit leaves later closes ordinary closes", "[close][quit]
     answers.shared = ClosePrompts::Shared::leave_running;
     window->close();
     REQUIRE(wait_until([&] { return window.isNull(); }, 5000ms));
+}
+
+namespace {
+
+std::chrono::milliseconds elapsed_since(const QElapsedTimer& timer) {
+    return std::chrono::milliseconds(timer.elapsed());
+}
+
+}  // namespace
+
+TEST_CASE("Stopping the worker cancels a stalled call at once", "[close][stall]") {
+    FakeServer server;
+    server.system.stall_system_info = true;
+    auto channel = grpc::CreateChannel(server.endpoint().toStdString(),
+                                       grpc::InsecureChannelCredentials());
+    RpcWorker worker;
+    std::atomic<bool> returned{false};
+    worker.post([&](grpc::ClientContext& context) {
+        context.set_deadline(std::chrono::system_clock::now() + 10s);
+        beebium::SystemInfo info;
+        beebium::SystemService::NewStub(channel)->GetSystemInfo(&context, {}, &info);
+        returned = true;
+    });
+    REQUIRE(wait_until([&] { return server.system.stalled_calls == 1; }));
+    QElapsedTimer timer;
+    timer.start();
+    worker.stop();
+    CHECK(elapsed_since(timer) < 1000ms);
+    CHECK(returned);
+    server.system.stall_system_info = false;
+}
+
+TEST_CASE("A disconnect does not wait for a stalled call", "[close][stall]") {
+    FakeServer server;
+    MachineSession session;
+    bool connected = false;
+    QObject::connect(&session, &MachineSession::connected_to_server, [&] { connected = true; });
+    session.connect_to(server.endpoint());
+    REQUIRE(wait_until([&] { return connected; }));
+    server.system.stall_system_info = true;
+    session.refresh_system_info();
+    REQUIRE(wait_until([&] { return server.system.stalled_calls == 1; }));
+    QElapsedTimer timer;
+    timer.start();
+    session.disconnect_from_server();
+    CHECK(elapsed_since(timer) < 1000ms);
+    server.system.stall_system_info = false;
+}
+
+TEST_CASE("A disconnect does not wait for a stalled handshake", "[close][stall]") {
+    FakeServer server;
+    server.system.stall_system_info = true;
+    MachineSession session;
+    session.connect_to(server.endpoint());
+    REQUIRE(wait_until([&] { return server.system.stalled_calls == 1; }));
+    QElapsedTimer timer;
+    timer.start();
+    session.disconnect_from_server();
+    CHECK(elapsed_since(timer) < 1000ms);
+    server.system.stall_system_info = false;
+}
+
+TEST_CASE("Closing while the server stalls leaves the GUI responsive and the window goes",
+          "[close][stall]") {
+    FakeServer server;
+    Answers answers;
+    QPointer<MainWindow> window = launched_window(server, answers);
+    server.system.stall_system_info = true;
+
+    // The event loop's longest pause while the close runs.
+    QElapsedTimer since_tick;
+    since_tick.start();
+    qint64 longest_pause = 0;
+    QTimer ticker;
+    QObject::connect(&ticker, &QTimer::timeout, [&] {
+        longest_pause = std::max(longest_pause, since_tick.restart());
+    });
+    ticker.start(50);
+
+    QElapsedTimer closing;
+    closing.start();
+    window->close();
+    REQUIRE(wait_until([&] { return window.isNull(); }, 6000ms));
+    CHECK(elapsed_since(closing) < 4500ms);
+    CHECK(longest_pause < 1000);
+    // No answer, so the server was left running rather than shut down.
+    CHECK(server.system.shutdown_requests == 0);
+    server.system.stall_system_info = false;
 }
