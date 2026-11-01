@@ -1,5 +1,5 @@
 {
-  "description": "Conformance cases for docs/keyboard-mapping-files.md section 4 (resolution), 3.3 (key names) and 3.4 (platform entries). Every client loads this file, resolves each case's event against the named mapping and the catalogue, and must get the expected result. Event fields: code (W3C), modifiers (host modifiers held, besides the key itself: Shift, Control, Alt, Meta), text (the character the host layout gives with those modifiers, ignoring Control), platform and native (for platform entries; a client runs a case with a platform only if it is its own). Expected: a BBC key by catalogue name and internal key number, with the BBC SHIFT and CTRL the entry or catalogue asks for; or break; or ignored. shift false from character mapping means the BBC SHIFT must be up for that key. A case's mapping is a key of `mappings`, or a file name in this directory (the built-ins).",
+  "description": "Conformance cases, each with a stable id for reference across clients, for docs/keyboard-mapping-files.md section 4 (resolution), 3.3 (key names) and 3.4 (platform entries). Every client loads this file, resolves each case's event against the named mapping and the catalogue, and must get the expected result. Event fields: code (W3C), modifiers (host modifiers held, besides the key itself: Shift, Control, Alt, Meta), text (the character the host layout gives with those modifiers, ignoring Control), platform and native (for platform entries; a client runs a case with a platform only if it is its own). Expected: a BBC key by catalogue name and internal key number, with the BBC SHIFT and CTRL the entry or catalogue asks for; or break; or ignored. shift false from character mapping means the BBC SHIFT must be up for that key. A case's mapping is a key of `mappings`, or a file name in this directory (the built-ins).",
   "catalogue": {
     "description": "A slice of the server's character-to-key catalogue (KeyboardService.GetAllKeyMappings, src/core/src/KeyboardMapping.cpp): only the rows these cases use.",
     "entries": [
@@ -388,6 +388,21 @@
             "key": "f3"
           },
           "x-unknown-entry-field": 1
+        },
+        {
+          "code": "KeyW",
+          "bbc": {
+            "key": "E"
+          }
+        },
+        {
+          "code": "KeyW",
+          "with": [
+            "Shift"
+          ],
+          "bbc": {
+            "key": "Q"
+          }
         }
       ]
     },
@@ -408,6 +423,7 @@
   },
   "cases": [
     {
+      "id": "R01",
       "name": "1: no modifiers, no exact match: the first entry without `with`",
       "mapping": "rules",
       "event": {
@@ -422,6 +438,7 @@
       }
     },
     {
+      "id": "R02",
       "name": "1: an entry whose `with` equals the held modifiers wins",
       "mapping": "rules",
       "event": {
@@ -439,6 +456,7 @@
       }
     },
     {
+      "id": "R03",
       "name": "1: exact match on two modifiers",
       "mapping": "rules",
       "event": {
@@ -457,6 +475,7 @@
       }
     },
     {
+      "id": "R04",
       "name": "1: no exact match: the first proper subset in file order, not the largest",
       "mapping": "rules",
       "event": {
@@ -476,6 +495,7 @@
       }
     },
     {
+      "id": "R05",
       "name": "1: an entry needing Shift does not match without Shift",
       "mapping": "rules",
       "event": {
@@ -493,6 +513,7 @@
       }
     },
     {
+      "id": "R06",
       "name": "1: a proper subset other than the first entries",
       "mapping": "rules",
       "event": {
@@ -511,20 +532,37 @@
       }
     },
     {
-      "name": "1: a disabled entry switched off is skipped; character mapping applies",
+      "id": "R07",
+      "name": "1: a switched-off entry that wins silences its key: no later entry, no character mapping",
       "mapping": "rules",
       "event": {
         "code": "KeyW",
         "text": "w"
       },
       "expect": {
-        "key": "w",
-        "ik": 33,
+        "ignored": true
+      }
+    },
+    {
+      "id": "R08",
+      "name": "1: a switched-off entry does not block a better match for the same key",
+      "mapping": "rules",
+      "event": {
+        "code": "KeyW",
+        "modifiers": [
+          "Shift"
+        ],
+        "text": "W"
+      },
+      "expect": {
+        "key": "Q",
+        "ik": 16,
         "shift": false,
         "ctrl": false
       }
     },
     {
+      "id": "R09",
       "name": "1: a disabled entry switched on applies",
       "mapping": "rules",
       "event": {
@@ -539,6 +577,7 @@
       }
     },
     {
+      "id": "R10",
       "name": "1: an entry's shift is held with the key",
       "mapping": "rules",
       "event": {
@@ -556,6 +595,7 @@
       }
     },
     {
+      "id": "R11",
       "name": "1: without its `with` the entry does not apply; the character does",
       "mapping": "rules",
       "event": {
@@ -570,6 +610,7 @@
       }
     },
     {
+      "id": "R12",
       "name": "1: an entry's ctrl is held with the key",
       "mapping": "rules",
       "event": {
@@ -584,6 +625,7 @@
       }
     },
     {
+      "id": "R13",
       "name": "1: Break goes to the break line",
       "mapping": "rules",
       "event": {
@@ -597,6 +639,7 @@
       }
     },
     {
+      "id": "R14",
       "name": "1: F12 without Alt has no entry and no character",
       "mapping": "rules",
       "event": {
@@ -607,6 +650,7 @@
       }
     },
     {
+      "id": "R15",
       "name": "3.3: key names compare case-insensitively",
       "mapping": "rules",
       "event": {
@@ -621,6 +665,7 @@
       }
     },
     {
+      "id": "R16",
       "name": "3.3: a single letter names the key, not the case",
       "mapping": "rules",
       "event": {
@@ -638,6 +683,7 @@
       }
     },
     {
+      "id": "R17",
       "name": "4: the host SHIFT maps to the BBC SHIFT through an ordinary entry",
       "mapping": "rules",
       "event": {
@@ -651,6 +697,7 @@
       }
     },
     {
+      "id": "R18",
       "name": "4: the host CTRL likewise",
       "mapping": "rules",
       "event": {
@@ -664,6 +711,7 @@
       }
     },
     {
+      "id": "R19",
       "name": "3.4: this platform's entry applies (Linux)",
       "mapping": "rules",
       "event": {
@@ -680,6 +728,7 @@
       }
     },
     {
+      "id": "R20",
       "name": "3.4: this platform's entry applies (macOS)",
       "mapping": "rules",
       "event": {
@@ -696,6 +745,7 @@
       }
     },
     {
+      "id": "R21",
       "name": "3.4: this platform's entry applies (Windows)",
       "mapping": "rules",
       "event": {
@@ -712,6 +762,7 @@
       }
     },
     {
+      "id": "R22",
       "name": "2: character mapping, unshifted face",
       "mapping": "rules",
       "event": {
@@ -726,6 +777,7 @@
       }
     },
     {
+      "id": "R23",
       "name": "2: character mapping, shifted face needs SHIFT",
       "mapping": "rules",
       "event": {
@@ -743,6 +795,7 @@
       }
     },
     {
+      "id": "R24",
       "name": "2: a US apostrophe is the BBC's shifted 7",
       "mapping": "rules",
       "event": {
@@ -757,6 +810,7 @@
       }
     },
     {
+      "id": "R25",
       "name": "2: a US colon (Shift+;) is the BBC's unshifted colon",
       "mapping": "rules",
       "event": {
@@ -774,6 +828,7 @@
       }
     },
     {
+      "id": "R26",
       "name": "2: under Control the character ignoring Control is used, and CTRL is not added",
       "mapping": "rules",
       "event": {
@@ -791,6 +846,7 @@
       }
     },
     {
+      "id": "R27",
       "name": "2: Control with a character-mapped key",
       "mapping": "rules",
       "event": {
@@ -808,6 +864,7 @@
       }
     },
     {
+      "id": "R28",
       "name": "3: a character the catalogue lacks is ignored",
       "mapping": "rules",
       "event": {
@@ -819,6 +876,7 @@
       }
     },
     {
+      "id": "R29",
       "name": "3: a key with no entry and no character is ignored",
       "mapping": "rules",
       "event": {
@@ -832,6 +890,7 @@
       }
     },
     {
+      "id": "R30",
       "name": "1: entries apply when character mapping is off",
       "mapping": "noCharacters",
       "event": {
@@ -846,6 +905,7 @@
       }
     },
     {
+      "id": "R31",
       "name": "2: character mapping off: an unnamed key is ignored",
       "mapping": "noCharacters",
       "event": {
@@ -857,6 +917,7 @@
       }
     },
     {
+      "id": "R32",
       "name": "5: Default maps the cursor keys by position",
       "mapping": "Default.json",
       "event": {
@@ -870,6 +931,7 @@
       }
     },
     {
+      "id": "R33",
       "name": "5: Default puts Break on Alt+F12",
       "mapping": "Default.json",
       "event": {
@@ -883,6 +945,7 @@
       }
     },
     {
+      "id": "R34",
       "name": "5: Default types the character a UK Shift+' gives",
       "mapping": "Default.json",
       "event": {
@@ -900,6 +963,7 @@
       }
     },
     {
+      "id": "R35",
       "name": "5: Logical takes the same key by position: the BBC's colon key",
       "mapping": "Logical.json",
       "event": {
@@ -917,6 +981,7 @@
       }
     },
     {
+      "id": "R36",
       "name": "5: Logical takes digits by position, whatever the layout's shifted face",
       "mapping": "Logical.json",
       "event": {
@@ -934,6 +999,7 @@
       }
     },
     {
+      "id": "R37",
       "name": "5: Default types a US Shift+2 as the character it gives",
       "mapping": "Default.json",
       "event": {

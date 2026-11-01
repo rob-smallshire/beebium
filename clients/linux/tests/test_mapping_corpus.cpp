@@ -71,7 +71,7 @@ TEST_CASE("Every portable and Linux case in the corpus resolves as expected",
             continue;  // another client's native key
         }
         ++run;
-        INFO(name);
+        INFO(item["id"].get<std::string>() << " " << name);
 
         const std::string mapping_name = item["mapping"].get<std::string>();
         if (!mappings.count(mapping_name)) {

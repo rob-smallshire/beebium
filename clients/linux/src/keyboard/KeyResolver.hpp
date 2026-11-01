@@ -55,7 +55,8 @@ struct ResolvedKey {
 //  1. physical entries for this key (its code, or this platform's entry for
 //     its native key) whose `with` is a subset of the held modifiers: one
 //     equal to them; else the first, in file order, that is a proper subset;
-//     else the first with no `with`. An entry switched off is skipped;
+//     else the first with no `with`. If that entry is switched off, the key
+//     is ignored, without falling through;
 //  2. if the mapping allows, the character, through the server's catalogue;
 //  3. nothing.
 // An entry naming a key the catalogue does not know resolves to nothing.

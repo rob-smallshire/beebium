@@ -59,7 +59,7 @@ std::optional<ResolvedKey> resolve_key(const MappingFile& mapping, const BbcKeyT
     const MappingEntry* subset = nullptr;
     const MappingEntry* unqualified = nullptr;
     for (const auto& entry : mapping.keys) {
-        if (!applies_to(entry, key) || !switched_on(entry)) {
+        if (!applies_to(entry, key)) {
             continue;
         }
         if ((entry.with & ~key.modifiers) != 0) {
@@ -78,6 +78,12 @@ std::optional<ResolvedKey> resolve_key(const MappingFile& mapping, const BbcKeyT
         }
     }
     if (const MappingEntry* entry = exact ? exact : subset ? subset : unqualified) {
+        // A switched-off entry still wins its key, and silences it: the user
+        // switched it off to stop the key doing anything, so it does not fall
+        // through to character mapping.
+        if (!switched_on(*entry)) {
+            return std::nullopt;
+        }
         return resolve_entry(*entry, table);
     }
 
