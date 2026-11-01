@@ -31,6 +31,12 @@ struct BBCKeyRef {
 
     /// Required host modifiers for this mapping to match
     let requireModifiers: NSEvent.ModifierFlags
+
+    /// The entry's default switched-off state (from its `disabled` field). A
+    /// switched-off entry is skipped during resolution as if absent
+    /// (docs/keyboard-mapping-files.md section 4). A caller may override the
+    /// current state per key; absent an override this default decides.
+    var disabledByDefault: Bool = false
 }
 
 /// A keyboard mapping that translates host key input to BBC Micro keys.
@@ -107,8 +113,16 @@ final class KeyboardMapping: Identifiable {
     /// - Parameters:
     ///   - input: The key input event
     ///   - cache: The BBC key cache for character/name lookups
+    ///   - isSwitchedOff: Whether a BBC key is currently switched off by the user
+    ///     (a session override). When nil, the entry's own default decides. A
+    ///     switched-off entry is skipped as if absent, so resolution continues to
+    ///     the next entry or to character mapping (section 4).
     /// - Returns: The resolved BBC key, or nil if not mapped
-    func resolve(_ input: KeyInput, cache: BBCKeyCache) -> ResolvedKey? {
+    func resolve(
+        _ input: KeyInput,
+        cache: BBCKeyCache,
+        isSwitchedOff: ((String) -> Bool)? = nil
+    ) -> ResolvedKey? {
         // 1. Try physical keyCode mapping first
         if let candidates = keyMappings[input.keyCode] {
             // Filter input modifiers to relevant ones (exclude Caps Lock)
@@ -122,17 +136,25 @@ final class KeyboardMapping: Identifiable {
             var noRequirementMatch: BBCKeyRef?
 
             for candidate in candidates {
+                // A switched-off entry is skipped as if absent.
+                let off = isSwitchedOff?(candidate.bbcKeyName) ?? candidate.disabledByDefault
+                if off { continue }
+
                 let required = candidate.requireModifiers
 
                 if required.isEmpty {
-                    // No requirements - always matches (fallback)
-                    noRequirementMatch = candidate
+                    // No requirements - always matches (fallback). The first such
+                    // entry in file order wins.
+                    if noRequirementMatch == nil {
+                        noRequirementMatch = candidate
+                    }
                 } else if relevantModifiers == required {
                     // Exact match - highest priority
                     exactMatch = candidate
                     break  // Stop searching, this is the best
                 } else if relevantModifiers.isSuperset(of: required) {
-                    // Superset match - middle priority
+                    // Proper-subset match (a superset of the required set) - middle
+                    // priority. The first such entry in file order wins.
                     if supersetMatch == nil {
                         supersetMatch = candidate
                     }
@@ -267,7 +289,8 @@ final class KeyboardMapping: Identifiable {
                 bbcKeyName: bbcSpec.key,
                 bbcWithShift: bbcSpec.shift,
                 bbcWithCtrl: bbcSpec.ctrl,
-                requireModifiers: macOSSpec.requiredModifiers
+                requireModifiers: macOSSpec.requiredModifiers,
+                disabledByDefault: bbcSpec.disabled == true
             )
 
             mappingDict[macOSSpec.keyCode, default: []].append(ref)
