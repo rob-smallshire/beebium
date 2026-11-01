@@ -244,6 +244,15 @@ jobs:
           # transiently and broke a release run.
           version: "0.12.3"
 
+      # The self-hosted runner has no setup-python tool cache (its macOS builds
+      # install under the hosted image's /Users/runner), so pin the venv's
+      # interpreter through uv rather than whatever python3 is on PATH.
+      - name: Install Python with uv (self-hosted)
+        if: matrix.self_hosted
+        run: |
+          uv python install 3.12
+          echo "UV_PYTHON=3.12" >> "$GITHUB_ENV"
+
       - name: Download the server wheels
         uses: actions/download-artifact@v8
         with:

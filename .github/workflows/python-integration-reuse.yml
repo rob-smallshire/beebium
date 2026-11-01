@@ -74,7 +74,11 @@ jobs:
         if: inputs.platform != 'windows'
         run: chmod +x build/src/server/beebium-model-b*
 
+      # Not on the self-hosted Intel macOS runner: setup-python's macOS builds
+      # install under the hosted image's /Users/runner tool cache. There uv
+      # provides the interpreter (see the step after Install uv).
       - name: Set up Python
+        if: inputs.platform != 'macos-x86_64'
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -86,6 +90,14 @@ jobs:
           # against the astral-sh/versions manifest, the fetch of which failed
           # transiently and broke a release run.
           version: "0.12.3"
+
+      # Same version as setup-python above; UV_PYTHON makes test-wheel.sh's
+      # uv build and uv venv use it.
+      - name: Install Python with uv (self-hosted Intel macOS)
+        if: inputs.platform == 'macos-x86_64'
+        run: |
+          uv python install 3.12
+          echo "UV_PYTHON=3.12" >> "$GITHUB_ENV"
 
       - name: Start Avahi daemon (mDNS advertiser for the machine-name test)
         if: inputs.platform == 'linux'
