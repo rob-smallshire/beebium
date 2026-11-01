@@ -25,10 +25,28 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include <memory>
+
 #include <chrono>
 #include <cstdio>
 #include <string>
 #include <thread>
+
+namespace {
+
+// What the machine made of it, a few seconds on.
+void print_screen(const std::shared_ptr<grpc::Channel>& channel) {
+    std::this_thread::sleep_for(std::chrono::seconds(4));
+    auto video = beebium::VideoService::NewStub(channel);
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+    beebium::ScreenText screen;
+    if (video->GetScreenText(&context, {}, &screen).ok()) {
+        std::printf("--- the screen:\n%s\n---\n", screen.text().c_str());
+    }
+}
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
     if (argc != 3 && argc != 4) {
@@ -71,6 +89,14 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         std::printf("typing %u characters\n", response.pending_characters());
+        if (response.pending_characters() == 0) {
+            // Typed already, within one status interval: no status will show
+            // it pending, so none would show it draining.
+            std::printf("typed\n");
+            watch_context.TryCancel();
+            print_screen(channel);
+            return 0;
+        }
     }
     bool seen_pending = false;
     beebium::TypingStatus status;
@@ -80,15 +106,7 @@ int main(int argc, char* argv[]) {
         } else if (seen_pending) {
             std::printf("typed\n");
             watch_context.TryCancel();
-            // What the machine made of it, a few seconds on.
-            std::this_thread::sleep_for(std::chrono::seconds(4));
-            auto video = beebium::VideoService::NewStub(channel);
-            grpc::ClientContext screen_context;
-            screen_context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
-            beebium::ScreenText screen;
-            if (video->GetScreenText(&screen_context, {}, &screen).ok()) {
-                std::printf("--- the screen:\n%s\n---\n", screen.text().c_str());
-            }
+            print_screen(channel);
             return 0;
         }
     }
