@@ -14,76 +14,36 @@
 
 #include "video.grpc.pb.h"
 
-#include <chrono>
-#include <optional>
-
-#if defined(__linux__)
-#include <pthread.h>
-#endif
-
 namespace beebium::linux_client {
 
 VideoStream::VideoStream(std::shared_ptr<grpc::Channel> channel, FrameMailbox& mailbox,
                          Callbacks callbacks)
-    : channel_(std::move(channel)), mailbox_(mailbox), callbacks_(std::move(callbacks)) {}
+    : mailbox_(mailbox), frame_ready_(std::move(callbacks.frame_ready)),
+      reader_("bbm-video",
+              [stub = std::shared_ptr<beebium::VideoService::Stub>(
+                   beebium::VideoService::NewStub(channel))](grpc::ClientContext& context) {
+                  return stub->SubscribeFrames(&context, beebium::SubscribeFramesRequest{});
+              },
+              {[this](beebium::Frame& wire) { on_frame(wire); },
+               std::move(callbacks.finished)}) {}
 
-VideoStream::~VideoStream() {
-    stop();
-}
-
-void VideoStream::start() {
-    if (reader_.joinable() || stop_requested_.load()) {
-        return;
+void VideoStream::on_frame(beebium::Frame& wire) {
+    const auto received_at = std::chrono::steady_clock::now();
+    if (previous_arrival_) {
+        arrival_intervals_.record(
+            std::chrono::duration<double, std::milli>(received_at - *previous_arrival_).count());
     }
-    reader_ = std::thread([this] { run(); });
-}
-
-void VideoStream::stop() {
-    stop_requested_.store(true);
-    context_.TryCancel();
-    if (reader_.joinable()) {
-        reader_.join();
-    }
-}
-
-void VideoStream::run() {
-#if defined(__linux__)
-    // Named so per-thread CPU measurements can find it (15 characters at most).
-    pthread_setname_np(pthread_self(), "bbm-video");
-#endif
-    auto stub = beebium::VideoService::NewStub(channel_);
-    beebium::SubscribeFramesRequest request;
-    auto reader = stub->SubscribeFrames(&context_, request);
-
-    beebium::Frame wire;
-    std::optional<std::chrono::steady_clock::time_point> previous_arrival;
-    while (reader->Read(&wire)) {
-        const auto received_at = std::chrono::steady_clock::now();
-        if (previous_arrival) {
-            arrival_intervals_.record(
-                std::chrono::duration<double, std::milli>(received_at - *previous_arrival).count());
+    previous_arrival_ = received_at;
+    auto decoded = decode_frame(wire, received_at);
+    if (auto* frame = std::get_if<std::unique_ptr<DecodedFrame>>(&decoded)) {
+        frames_received_.fetch_add(1);
+        if (mailbox_.publish(std::move(*frame)) && frame_ready_) {
+            frame_ready_();
         }
-        previous_arrival = received_at;
-        auto decoded = decode_frame(wire, received_at);
-        if (auto* frame = std::get_if<std::unique_ptr<DecodedFrame>>(&decoded)) {
-            frames_received_.fetch_add(1);
-            if (mailbox_.publish(std::move(*frame)) && callbacks_.frame_ready) {
-                callbacks_.frame_ready();
-            }
-        } else {
-            // A malformed frame is skipped, never drawn; the count makes it
-            // visible rather than silent.
-            frames_refused_.fetch_add(1);
-        }
-    }
-
-    const grpc::Status status = reader->Finish();
-    StreamEnd end;
-    end.code = status.error_code();
-    end.message = status.error_message();
-    end.cancelled_by_client = stop_requested_.load();
-    if (callbacks_.finished) {
-        callbacks_.finished(end);
+    } else {
+        // A malformed frame is skipped, never drawn; the count makes it
+        // visible rather than silent.
+        frames_refused_.fetch_add(1);
     }
 }
 

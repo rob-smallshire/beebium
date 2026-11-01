@@ -14,27 +14,21 @@
 #define BEEBIUM_LINUX_CONNECTION_VIDEO_STREAM_HPP
 
 #include "connection/FrameMailbox.hpp"
+#include "connection/StreamReader.hpp"
 #include "metrics/IntervalStats.hpp"
+
+#include "video.pb.h"
 
 #include <grpcpp/grpcpp.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <string>
-#include <thread>
+#include <optional>
 
 namespace beebium::linux_client {
-
-// How a stream ended. cancelled_by_client separates our own stop() from a
-// loss: the status code alone cannot, since a server may also end a stream
-// as CANCELLED (lifecycle-management.md section 2).
-struct StreamEnd {
-    grpc::StatusCode code = grpc::StatusCode::OK;
-    std::string message;
-    bool cancelled_by_client = false;
-};
 
 // VideoService.SubscribeFrames on a thread of its own (client specification
 // 6.1). Each frame is decoded and left in the mailbox; frame_ready runs on
@@ -53,15 +47,14 @@ public:
 
     VideoStream(std::shared_ptr<grpc::Channel> channel, FrameMailbox& mailbox,
                 Callbacks callbacks);
-    ~VideoStream();
 
     VideoStream(const VideoStream&) = delete;
     VideoStream& operator=(const VideoStream&) = delete;
 
-    void start();
+    void start() { reader_.start(); }
 
     // Cancel the call and join the reader. Idempotent; safe before start().
-    void stop();
+    void stop() { reader_.stop(); }
 
     std::uint64_t frames_received() const { return frames_received_.load(); }
     std::uint64_t frames_refused() const { return frames_refused_.load(); }
@@ -70,17 +63,15 @@ public:
     IntervalRecorder& arrival_intervals() { return arrival_intervals_; }
 
 private:
-    void run();
+    void on_frame(beebium::Frame& wire);
 
-    std::shared_ptr<grpc::Channel> channel_;
     FrameMailbox& mailbox_;
-    Callbacks callbacks_;
-    grpc::ClientContext context_;
-    std::atomic<bool> stop_requested_{false};
+    std::function<void()> frame_ready_;
     std::atomic<std::uint64_t> frames_received_{0};
     std::atomic<std::uint64_t> frames_refused_{0};
     IntervalRecorder arrival_intervals_;
-    std::thread reader_;
+    std::optional<std::chrono::steady_clock::time_point> previous_arrival_;  // reader thread only
+    StreamReader<beebium::Frame> reader_;
 };
 
 }  // namespace beebium::linux_client
