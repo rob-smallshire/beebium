@@ -703,10 +703,37 @@ class PresetManager: ObservableObject {
 
         NSLog("[PresetManager] Launched \(executablePath) with args: \(arguments.joined(separator: " "))")
 
-        return await Self.awaitListeningPort(process: process,
-                                             stdoutPipe: stdoutPipe,
-                                             stderrPipe: stderrPipe,
-                                             provenanceUUID: provenanceUUID)
+        let result = await Self.awaitListeningPort(process: process,
+                                                   stdoutPipe: stdoutPipe,
+                                                   stderrPipe: stderrPipe,
+                                                   provenanceUUID: provenanceUUID)
+
+        // The port-wait reads stdout only until the listening-port line; once
+        // the server is up, keep draining both streams for the life of the
+        // process so the server never blocks on a full pipe (macOS pipes hold
+        // 64 KiB) -- and, until the server is handed off, so a closed read end
+        // cannot kill it with SIGPIPE. On launch failure the process is already
+        // gone, so there is nothing to drain.
+        if case .success = result {
+            Self.drainForLifetime(stdoutPipe)
+            Self.drainForLifetime(stderrPipe)
+        }
+
+        return result
+    }
+
+    /// Read and discard a launched server's stdout or stderr until the stream
+    /// ends, so the server's console output cannot fill its pipe and block it.
+    /// The client has no use for the output once the listening port is known.
+    /// The handler clears itself at end of file -- an empty read, which the
+    /// process's exit and the write end's close produce -- so the dispatch
+    /// source stops and the handle can close.
+    private static func drainForLifetime(_ pipe: Pipe) {
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            if handle.availableData.isEmpty {
+                handle.readabilityHandler = nil
+            }
+        }
     }
 
     /// The `start` arguments for launching a preset file (a quick-launch of a
