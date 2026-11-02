@@ -16,6 +16,7 @@
 #include <beebium/PlatformUtils.hpp>
 
 #include <atomic>
+#include <cstdio>
 #include <functional>
 #include <optional>
 #include <string>
@@ -24,6 +25,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <fcntl.h>
 #include <io.h>
 #include <chrono>
 #include <string>
@@ -93,6 +95,14 @@ inline void remove_shutdown_handler() {
     EnterCriticalSection(&detail::g_callback_lock);
     detail::g_shutdown_callback = nullptr;
     LeaveCriticalSection(&detail::g_callback_lock);
+}
+
+/// Ask for shutdown from inside the process, exactly as a console break
+/// would: the handler's own path, child termination included.
+inline void request_shutdown() {
+    if (detail::g_callback_lock_initialized) {
+        detail::console_ctrl_handler(CTRL_BREAK_EVENT);
+    }
 }
 
 /// Register a child process handle for automatic termination when this
@@ -309,6 +319,13 @@ inline void remove_shutdown_handler() {
     detail::g_shutdown_callback = nullptr;
 }
 
+/// Ask for shutdown from inside the process, exactly as SIGTERM would: the
+/// signal handler's own path (forward to the child, wake the dispatch
+/// thread), so the shutdown that follows is the signal's in every respect.
+inline void request_shutdown() {
+    detail::signal_handler(SIGTERM);
+}
+
 /// Register a child process PID for automatic SIGTERM when this process
 /// receives a shutdown signal. This ensures the child is signalled even
 /// if the parent is killed before reaching normal cleanup code.
@@ -363,6 +380,75 @@ inline bool is_stdout_tty() {
 }
 
 #endif  // _WIN32
+
+namespace detail {
+    // The end-of-input watch (--exit-with-parent): whether it is armed, and
+    // whether ReleaseFromLauncher has since let the server go.
+    inline std::atomic<bool> g_input_watch_armed{false};
+    inline std::atomic<bool> g_released_from_launcher{false};
+}  // namespace detail
+
+/// Request shutdown once `fd` reaches end of file, or fails, on a thread of
+/// its own. For --exit-with-parent, `fd` is stdin, a pipe the launching
+/// process holds open: when that process ends, however it ends (SIGKILL
+/// included), the system closes its end and the read here returns, so the
+/// server cannot outlive it. Whatever arrives before then is discarded. A
+/// release (release_from_launcher) stops the end meaning shutdown. The
+/// thread is detached; it spends its life blocked in read().
+inline void request_shutdown_at_end_of_input(int fd) {
+    detail::g_input_watch_armed = true;
+    std::thread([fd] {
+        char buffer[256];
+        for (;;) {
+#ifdef _WIN32
+            const int count = _read(fd, buffer, static_cast<unsigned>(sizeof buffer));
+#else
+            const ssize_t count = ::read(fd, buffer, sizeof buffer);
+            if (count < 0 && errno == EINTR) {
+                continue;
+            }
+#endif
+            if (count <= 0) {
+                break;
+            }
+        }
+        if (!detail::g_released_from_launcher) {
+            request_shutdown();
+        }
+    }).detach();
+}
+
+/// Let a server outlive the client that launched it
+/// (SystemService.ReleaseFromLauncher, which only that client may call). The
+/// end of stdin no longer means shutdown, where --exit-with-parent armed the
+/// watch; and stdout and stderr, pipes the launcher holds whether or not it
+/// asked for the watch, are pointed at the null device: once the launcher has
+/// gone a write to them would otherwise raise SIGPIPE (POSIX) or block on a
+/// full pipe (Windows). Done once; a second release changes nothing. Returns
+/// whether an armed watch was released.
+inline bool release_from_launcher() {
+    if (detail::g_released_from_launcher.exchange(true)) {
+        return false;
+    }
+    std::fflush(stdout);
+    std::fflush(stderr);
+#ifdef _WIN32
+    const int null_fd = _open("NUL", _O_WRONLY);
+    if (null_fd >= 0) {
+        _dup2(null_fd, 1);
+        _dup2(null_fd, 2);
+        _close(null_fd);
+    }
+#else
+    const int null_fd = ::open("/dev/null", O_WRONLY);
+    if (null_fd >= 0) {
+        ::dup2(null_fd, STDOUT_FILENO);
+        ::dup2(null_fd, STDERR_FILENO);
+        ::close(null_fd);
+    }
+#endif
+    return detail::g_input_watch_armed.load();
+}
 
 // Delegate to beebium::platform utilities in core.
 inline int get_pid() { return beebium::platform::get_pid(); }

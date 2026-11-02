@@ -686,6 +686,13 @@ TEST_CASE("apply_startup_options: sets auto-boot when specified", "[server_main]
 #include <future>
 #include <thread>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace {
 
 // Deliver a shutdown request the way the operating system would, so these
@@ -737,6 +744,150 @@ TEST_CASE("shutdown handler: no callback runs without a signal",
     REQUIRE_FALSE(callback_called.load());
 
     beebium::server::platform::remove_shutdown_handler();
+}
+
+TEST_CASE("shutdown handler: request_shutdown takes the signal's path",
+          "[server_main][signal][exit-with-parent]") {
+    // A shutdown asked for from inside the process (#254) runs the installed
+    // callback exactly as SIGTERM does, on the dispatch thread.
+    std::promise<void> called;
+    auto called_future = called.get_future();
+    std::atomic<bool> fired{false};
+    beebium::server::platform::install_shutdown_handler([&called, &fired] {
+        if (!fired.exchange(true)) {
+            called.set_value();
+        }
+    });
+
+    beebium::server::platform::request_shutdown();
+
+    REQUIRE(called_future.wait_for(std::chrono::seconds(2)) ==
+            std::future_status::ready);
+    beebium::server::platform::remove_shutdown_handler();
+}
+
+TEST_CASE("shutdown handler: the end of the watched input requests shutdown",
+          "[server_main][signal][exit-with-parent]") {
+    // --exit-with-parent: the server watches stdin, a pipe its launcher
+    // holds. Bytes on it change nothing; its end, however the launcher
+    // ended, is a shutdown. A pipe stands in for stdin here.
+    int fds[2];
+#ifdef _WIN32
+    REQUIRE(_pipe(fds, 256, _O_BINARY) == 0);
+#else
+    REQUIRE(::pipe(fds) == 0);
+#endif
+    std::promise<void> called;
+    auto called_future = called.get_future();
+    std::atomic<bool> fired{false};
+    beebium::server::platform::install_shutdown_handler([&called, &fired] {
+        if (!fired.exchange(true)) {
+            called.set_value();
+        }
+    });
+
+    beebium::server::platform::request_shutdown_at_end_of_input(fds[0]);
+    const char bytes[] = "anything";
+#ifdef _WIN32
+    REQUIRE(_write(fds[1], bytes, sizeof bytes) == static_cast<int>(sizeof bytes));
+#else
+    REQUIRE(::write(fds[1], bytes, sizeof bytes) == static_cast<ssize_t>(sizeof bytes));
+#endif
+    CHECK(called_future.wait_for(std::chrono::milliseconds(200)) ==
+          std::future_status::timeout);
+
+#ifdef _WIN32
+    _close(fds[1]);
+#else
+    ::close(fds[1]);
+#endif
+    REQUIRE(called_future.wait_for(std::chrono::seconds(2)) ==
+            std::future_status::ready);
+    beebium::server::platform::remove_shutdown_handler();
+    // The watcher has returned, so its end of the pipe is free to close.
+#ifdef _WIN32
+    _close(fds[0]);
+#else
+    ::close(fds[0]);
+#endif
+}
+
+namespace {
+
+// Descriptor helpers spelled once for the CRT on Windows and POSIX.
+#ifdef _WIN32
+int make_pipe(int fds[2]) { return _pipe(fds, 256, _O_BINARY); }
+void close_fd(int fd) { _close(fd); }
+int dup_fd(int fd) { return _dup(fd); }
+void dup2_fd(int from, int to) { _dup2(from, to); }
+long write_fd(int fd, const char* bytes, unsigned count) { return _write(fd, bytes, count); }
+#else
+int make_pipe(int fds[2]) { return ::pipe(fds); }
+void close_fd(int fd) { ::close(fd); }
+int dup_fd(int fd) { return ::dup(fd); }
+void dup2_fd(int from, int to) { ::dup2(from, to); }
+long write_fd(int fd, const char* bytes, unsigned count) {
+    return static_cast<long>(::write(fd, bytes, count));
+}
+#endif
+
+}  // namespace
+
+TEST_CASE("shutdown handler: a released server outlives its launcher's pipes",
+          "[server_main][signal][exit-with-parent]") {
+    // ReleaseFromLauncher (#254): the end of the watched input no longer
+    // means shutdown, and a write to stderr, a pipe whose reader (the
+    // launcher) has gone, still succeeds -- it goes to the null device --
+    // where it would otherwise raise SIGPIPE and end the process.
+    namespace platform = beebium::server::platform;
+    std::atomic<bool> fired{false};
+    platform::install_shutdown_handler([&fired] { fired = true; });
+
+    int watched[2];
+    REQUIRE(make_pipe(watched) == 0);
+    platform::request_shutdown_at_end_of_input(watched[0]);
+
+    const int saved_stdout = dup_fd(1);
+    const int saved_stderr = dup_fd(2);
+    int orphaned[2];
+    REQUIRE(make_pipe(orphaned) == 0);
+    dup2_fd(orphaned[1], 2);
+    close_fd(orphaned[1]);
+    close_fd(orphaned[0]);  // the launcher, reading stderr, has gone
+
+    CHECK(platform::release_from_launcher());
+    CHECK_FALSE(platform::release_from_launcher());  // once only
+    const long written = write_fd(2, "x", 1);
+
+    close_fd(watched[1]);  // the launcher's end of stdin closes
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    dup2_fd(saved_stdout, 1);
+    dup2_fd(saved_stderr, 2);
+    close_fd(saved_stdout);
+    close_fd(saved_stderr);
+    close_fd(watched[0]);
+    platform::remove_shutdown_handler();
+    // Process-wide state: leave the next test a launcher still attached.
+    platform::detail::g_released_from_launcher = false;
+    platform::detail::g_input_watch_armed = false;
+
+    CHECK(written == 1);
+    CHECK_FALSE(fired.load());
+}
+
+TEST_CASE("validate_config: --exit-with-parent is refused with --wait=cli",
+          "[server_main][validate_config][exit-with-parent]") {
+    ServerConfig<MachineType> config;
+    config.launch.exit_with_parent = true;
+    config.launch.wait_mode = WaitMode::Api;
+    CHECK_FALSE(validate_config<MachineType>(config).has_value());
+
+    config.launch.wait_mode = WaitMode::Cli;
+    const auto error = validate_config<MachineType>(config);
+    REQUIRE(error.has_value());
+    CHECK(error->find("--exit-with-parent") != std::string::npos);
+    CHECK(error->find("--wait=cli") != std::string::npos);
 }
 
 TEST_CASE("shutdown handler: remove_shutdown_handler leaves no callback in flight",

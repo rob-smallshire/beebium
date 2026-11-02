@@ -40,6 +40,16 @@ service SystemService {
     //         or only one client connected, or --allow-shutdown flag was set.
     rpc RequestShutdown(ShutdownRequest) returns (ShutdownResponse);
 
+    // Let the server outlive the client that launched it, so that client can
+    // hand it off and leave it running. A server launched with
+    // --exit-with-parent stops watching for its launcher's end; and every
+    // released server points its stdout and stderr, pipes the launcher holds,
+    // at the null device, so its writes cannot fail once the launcher has
+    // gone. Only the launching client (the requester's instance UUID matches
+    // the launch provenance) may release it; anyone else gets
+    // PERMISSION_DENIED. Releasing twice changes nothing.
+    rpc ReleaseFromLauncher(ReleaseFromLauncherRequest) returns (ReleaseFromLauncherResponse);
+
     // Get current mDNS service advertisement state
     rpc GetAdvertisementState(GetAdvertisementStateRequest) returns (GetAdvertisementStateResponse);
 
@@ -394,6 +404,17 @@ message ShutdownResponse {
     // Human-readable explanation
     // On success: "Shutdown initiated"
     // On failure: "Shutdown refused: multiple clients connected"
+    string message = 2;
+}
+
+message ReleaseFromLauncherRequest {}
+
+message ReleaseFromLauncherResponse {
+    // Whether this call released a --exit-with-parent watch. False for a
+    // server launched without the flag, and for one already released.
+    bool watch_released = 1;
+
+    // Human-readable account of what was done.
     string message = 2;
 }
 

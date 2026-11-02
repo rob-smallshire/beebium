@@ -163,6 +163,10 @@ void print_usage(const char* program_name) {
               << "  --machine-ordinal <n>    This machine's instance number from its\n"
               << "                           launcher, added to the default name as ' #n'\n"
               << "  --allow-shutdown         Allow any client to shut down the server\n"
+              << "  --exit-with-parent       Exit, as on SIGTERM, when stdin reaches end of\n"
+              << "                           file. A launching program holds a pipe there,\n"
+              << "                           so the server ends when it does, however it\n"
+              << "                           ends. Not with --wait=cli, which reads stdin\n"
               << "  --advertise              Enable mDNS service advertisement\n"
               << "  --extension-dir <path>   Add an extension search directory. Repeatable;\n"
               << "                           later paths override earlier (and the auto-\n"
@@ -437,6 +441,8 @@ inline OptionParse parse_launch_option(const std::string& arg, int& i, int argc,
         launch.machine_ordinal = static_cast<unsigned>(ordinal);
     } else if (arg == "--allow-shutdown") {
         launch.allow_shutdown = true;
+    } else if (arg == "--exit-with-parent") {
+        launch.exit_with_parent = true;
     } else if (arg == "--advertise") {
         launch.advertise = true;
     } else {

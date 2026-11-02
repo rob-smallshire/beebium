@@ -81,6 +81,16 @@ class SystemServiceStub:
     Policy: accept if requester's instance UUID matches launch provenance,
             or only one client connected, or --allow-shutdown flag was set.
     """
+    ReleaseFromLauncher: _grpc.UnaryUnaryMultiCallable[_system_pb2.ReleaseFromLauncherRequest, _system_pb2.ReleaseFromLauncherResponse]
+    """Let the server outlive the client that launched it, so that client can
+    hand it off and leave it running. A server launched with
+    --exit-with-parent stops watching for its launcher's end; and every
+    released server points its stdout and stderr, pipes the launcher holds,
+    at the null device, so its writes cannot fail once the launcher has
+    gone. Only the launching client (the requester's instance UUID matches
+    the launch provenance) may release it; anyone else gets
+    PERMISSION_DENIED. Releasing twice changes nothing.
+    """
     GetAdvertisementState: _grpc.UnaryUnaryMultiCallable[_system_pb2.GetAdvertisementStateRequest, _system_pb2.GetAdvertisementStateResponse]
     """Get current mDNS service advertisement state"""
     SetAdvertisement: _grpc.UnaryUnaryMultiCallable[_system_pb2.SetAdvertisementRequest, _system_pb2.SetAdvertisementResponse]
@@ -165,6 +175,16 @@ class SystemServiceAsyncStub(SystemServiceStub):
     Returns whether the request was accepted based on shutdown policy.
     Policy: accept if requester's instance UUID matches launch provenance,
             or only one client connected, or --allow-shutdown flag was set.
+    """
+    ReleaseFromLauncher: _aio.UnaryUnaryMultiCallable[_system_pb2.ReleaseFromLauncherRequest, _system_pb2.ReleaseFromLauncherResponse]  # type: ignore[assignment]
+    """Let the server outlive the client that launched it, so that client can
+    hand it off and leave it running. A server launched with
+    --exit-with-parent stops watching for its launcher's end; and every
+    released server points its stdout and stderr, pipes the launcher holds,
+    at the null device, so its writes cannot fail once the launcher has
+    gone. Only the launching client (the requester's instance UUID matches
+    the launch provenance) may release it; anyone else gets
+    PERMISSION_DENIED. Releasing twice changes nothing.
     """
     GetAdvertisementState: _aio.UnaryUnaryMultiCallable[_system_pb2.GetAdvertisementStateRequest, _system_pb2.GetAdvertisementStateResponse]  # type: ignore[assignment]
     """Get current mDNS service advertisement state"""
@@ -289,6 +309,22 @@ class SystemServiceServicer(metaclass=_abc_1.ABCMeta):
         Returns whether the request was accepted based on shutdown policy.
         Policy: accept if requester's instance UUID matches launch provenance,
                 or only one client connected, or --allow-shutdown flag was set.
+        """
+
+    @_abc_1.abstractmethod
+    def ReleaseFromLauncher(
+        self,
+        request: _system_pb2.ReleaseFromLauncherRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_system_pb2.ReleaseFromLauncherResponse, _abc.Awaitable[_system_pb2.ReleaseFromLauncherResponse]]:
+        """Let the server outlive the client that launched it, so that client can
+        hand it off and leave it running. A server launched with
+        --exit-with-parent stops watching for its launcher's end; and every
+        released server points its stdout and stderr, pipes the launcher holds,
+        at the null device, so its writes cannot fail once the launcher has
+        gone. Only the launching client (the requester's instance UUID matches
+        the launch provenance) may release it; anyone else gets
+        PERMISSION_DENIED. Releasing twice changes nothing.
         """
 
     @_abc_1.abstractmethod

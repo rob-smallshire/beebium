@@ -730,6 +730,11 @@ template<typename MachineType>
 std::optional<std::string> validate_config(const ServerConfig<MachineType>& config) {
     if (auto err = validate_startup_links(config)) return err;
     if (auto err = validate_sideways_slots(config)) return err->message;
+    if (config.launch.exit_with_parent && config.launch.wait_mode == WaitMode::Cli) {
+        // Both read stdin: one waits for a line, the other for end of file.
+        return "--exit-with-parent watches stdin, which --wait=cli reads; "
+               "use --wait=api";
+    }
     return std::nullopt;
 }
 

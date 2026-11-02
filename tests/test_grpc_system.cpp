@@ -136,6 +136,7 @@ public:
     }
 
     beebium::ModelB& machine() { return machine_; }
+    beebium::service::Server<beebium::ModelB>& server() { return *server_; }
     beebium::SystemService::Stub& system() { return *system_stub_; }
     beebium::PacingClock& pacing_clock() { return *pacing_clock_; }
 
@@ -151,6 +152,66 @@ private:
 };
 
 } // anonymous namespace
+
+//////////////////////////////////////////////////////////////////////////////
+// ReleaseFromLauncher Tests (#254)
+//////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+constexpr const char* kLauncherUuid = "550e8400-e29b-41d4-a716-446655440000";
+
+beebium::service::Provenance launched_by_a_client() {
+    return {"python-client", kLauncherUuid, "1.2.3", std::chrono::system_clock::now()};
+}
+
+grpc::Status release(SystemTestFixture& fixture, const std::string& requester_uuid,
+                     beebium::ReleaseFromLauncherResponse& response) {
+    grpc::ClientContext context;
+    if (!requester_uuid.empty()) {
+        context.AddMetadata("x-beebium-instance-uuid", requester_uuid);
+    }
+    return fixture.system().ReleaseFromLauncher(
+        &context, beebium::ReleaseFromLauncherRequest{}, &response);
+}
+
+}  // namespace
+
+TEST_CASE("SystemService ReleaseFromLauncher is refused to any client but the launcher",
+          "[grpc][system][exit-with-parent]") {
+    SystemTestFixture fixture(launched_by_a_client());
+    int releases = 0;
+    fixture.server().set_release_from_launcher([&releases] { ++releases; return true; });
+
+    beebium::ReleaseFromLauncherResponse response;
+    auto stranger = release(fixture, "00000000-0000-4000-8000-000000000000", response);
+    CHECK(stranger.error_code() == grpc::StatusCode::PERMISSION_DENIED);
+    auto anonymous = release(fixture, "", response);
+    CHECK(anonymous.error_code() == grpc::StatusCode::PERMISSION_DENIED);
+    CHECK(releases == 0);
+}
+
+TEST_CASE("SystemService ReleaseFromLauncher releases for the launcher",
+          "[grpc][system][exit-with-parent]") {
+    SystemTestFixture fixture(launched_by_a_client());
+    int releases = 0;
+    bool watch_was_armed = GENERATE(true, false);
+    fixture.server().set_release_from_launcher([&] { ++releases; return watch_was_armed; });
+
+    beebium::ReleaseFromLauncherResponse response;
+    REQUIRE(release(fixture, kLauncherUuid, response).ok());
+    CHECK(releases == 1);
+    CHECK(response.watch_released() == watch_was_armed);
+    CHECK_FALSE(response.message().empty());
+}
+
+TEST_CASE("SystemService ReleaseFromLauncher with nothing to release still answers",
+          "[grpc][system][exit-with-parent]") {
+    SystemTestFixture fixture(launched_by_a_client());
+    beebium::ReleaseFromLauncherResponse response;
+    REQUIRE(release(fixture, kLauncherUuid, response).ok());
+    CHECK_FALSE(response.watch_released());
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // GetSystemInfo Tests (Legacy - verifying old fields are removed)

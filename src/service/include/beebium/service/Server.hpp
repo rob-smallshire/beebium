@@ -42,6 +42,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -165,6 +166,14 @@ public:
     void set_initial_speed_multiplier(double multiplier) {
         if (impl_->system_service) {
             impl_->system_service->set_initial_speed_multiplier(multiplier);
+        }
+    }
+
+    /// What SystemService.ReleaseFromLauncher does once authorised: let the
+    /// server outlive its launcher, returning whether a watch was released.
+    void set_release_from_launcher(std::function<bool()> release) {
+        if (impl_->system_service) {
+            impl_->system_service->set_release_from_launcher(std::move(release));
         }
     }
 

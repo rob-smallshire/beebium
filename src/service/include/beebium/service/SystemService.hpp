@@ -130,6 +130,13 @@ public:
         configured_speed_multiplier_.store(multiplier, std::memory_order_relaxed);
     }
 
+    /// What ReleaseFromLauncher does once authorised (the server's platform
+    /// release): returns whether a --exit-with-parent watch was released.
+    /// Set before the server accepts connections.
+    void set_release_from_launcher(std::function<bool()> release) {
+        release_from_launcher_ = std::move(release);
+    }
+
     /// Set the pacing clock for stats monitoring. Call after construction.
     /// Adopts the configured multiplier so any speed set before the clock
     /// existed (e.g. during the brief startup window) takes effect.
@@ -175,6 +182,11 @@ public:
         grpc::ServerContext* context,
         const ShutdownRequest* request,
         ShutdownResponse* response) override;
+
+    grpc::Status ReleaseFromLauncher(
+        grpc::ServerContext* context,
+        const ReleaseFromLauncherRequest* request,
+        ReleaseFromLauncherResponse* response) override;
 
     grpc::Status GetAdvertisementState(
         grpc::ServerContext* context,
@@ -314,6 +326,7 @@ private:
     ShutdownPolicyEvaluator policy_evaluator_;
     ShutdownCoordinator* shutdown_coordinator_;
     ShutdownCallback shutdown_callback_;
+    std::function<bool()> release_from_launcher_;
     uint16_t server_port_;
     uint32_t clock_speed_hz_;
     PacingClock* pacing_clock_ = nullptr;
@@ -952,6 +965,27 @@ grpc::Status SystemServiceImpl<MachineType>::RequestShutdown(
         }).detach();
     }
 
+    return grpc::Status::OK;
+}
+
+template<typename MachineType>
+grpc::Status SystemServiceImpl<MachineType>::ReleaseFromLauncher(
+    grpc::ServerContext* context,
+    const ReleaseFromLauncherRequest* /*request*/,
+    ReleaseFromLauncherResponse* response) {
+    // Only the client that launched the server owns its lifetime, so only it
+    // may hand the server off. A sole client or --allow-shutdown, which may
+    // stop a server, may not take it over.
+    const std::string requester_uuid = extract_instance_uuid(context);
+    if (requester_uuid.empty() || requester_uuid != provenance_.instance_uuid) {
+        return {grpc::StatusCode::PERMISSION_DENIED,
+                "only the client that launched the server may release it"};
+    }
+    const bool watch_released = release_from_launcher_ && release_from_launcher_();
+    response->set_watch_released(watch_released);
+    response->set_message(watch_released
+        ? "Released: the server no longer exits with its launcher"
+        : "Released: the server's output no longer goes to its launcher");
     return grpc::Status::OK;
 }
 

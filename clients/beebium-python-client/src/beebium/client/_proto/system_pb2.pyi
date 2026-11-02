@@ -895,6 +895,47 @@ class ShutdownResponse(_message.Message):
 Global___ShutdownResponse: _TypeAlias = ShutdownResponse  # noqa: Y015
 
 @_typing.final
+class ReleaseFromLauncherRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ReleaseFromLauncherRequest: _TypeAlias = ReleaseFromLauncherRequest  # noqa: Y015
+
+@_typing.final
+class ReleaseFromLauncherResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    WATCH_RELEASED_FIELD_NUMBER: _builtins.int
+    MESSAGE_FIELD_NUMBER: _builtins.int
+    watch_released: _builtins.bool
+    """Whether this call released a --exit-with-parent watch. False for a
+    server launched without the flag, and for one already released.
+    """
+    message: _builtins.str
+    """Human-readable account of what was done."""
+    def __init__(
+        self,
+        *,
+        watch_released: _builtins.bool = ...,
+        message: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["message", b"message", "watch_released", b"watch_released"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ReleaseFromLauncherResponse: _TypeAlias = ReleaseFromLauncherResponse  # noqa: Y015
+
+@_typing.final
 class ShutdownConditionStatus(_message.Message):
     """Status of a shutdown condition (subsystem preparing for shutdown)"""
 

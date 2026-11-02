@@ -131,6 +131,13 @@ public:
             // (owned by `assembly`, declared above the services below) is alive.
             ScopedShutdownHandler<MachineType> shutdown_handler(machine);
 
+            // With --exit-with-parent, the end of stdin is a SIGTERM (#254).
+            // Started only now the handler is installed, so an end that came
+            // during assembly is seen at once rather than lost.
+            if (config.launch.exit_with_parent) {
+                platform::request_shutdown_at_end_of_input(0);
+            }
+
             // Create core discovery services for frontends to enumerate
             // extensions. PeripheralExtensionService lists peripheral
             // extensions; EconetTransportService lists econet transport
@@ -259,6 +266,7 @@ public:
             // emulation loop starts, below.
             server.set_initial_speed_multiplier(
                 config.machine.speed_multiplier_override.value_or(1.0));
+            server.set_release_from_launcher([] { return platform::release_from_launcher(); });
 
             // Placeholders the loaded extensions offer for the machine's
             // description template. A plugin that breaks the registration rules loses its

@@ -165,6 +165,9 @@ struct LaunchSettings {
 
     // Shutdown policy
     bool allow_shutdown = false;
+    // Exit, as on SIGTERM, when stdin reaches end of file: a launching
+    // client holds a pipe there, so the server does not outlive it (#254).
+    bool exit_with_parent = false;
 
     // mDNS advertisement
     bool advertise = false;
