@@ -178,6 +178,60 @@ final class FocusLossKeyReleaseTests: XCTestCase {
         XCTAssertFalse(client.hasKeysHeld)
     }
 
+    // MARK: - Resync held modifiers (silent takeover, e.g. the screenshot overlay)
+
+    func testResyncReleasesAStrandedModifier() {
+        // The screenshot overlay ate the SHIFT up and no focus-loss release
+        // fired, so the client still holds SHIFT while the host reports nothing
+        // down. The next event's resync must release it.
+        press(MacKeyCode.shift)
+        XCTAssertTrue(client.hasKeysHeld)
+
+        client.resyncHeldModifiers { _ in false }
+
+        XCTAssertFalse(client.hasKeysHeld,
+                       "a modifier the host no longer holds must be released")
+    }
+
+    func testResyncKeepsAModifierTheHostStillHolds() {
+        // SHIFT genuinely still down: the host reports it, so resync leaves it.
+        press(MacKeyCode.shift)
+
+        client.resyncHeldModifiers { $0 == MacKeyCode.shift }
+
+        XCTAssertTrue(client.hasKeysHeld,
+                      "a modifier the host still holds must not be released")
+    }
+
+    func testResyncLeavesNonModifierKeysAlone() {
+        // Only held host modifier keys are reconciled against the modifier
+        // flags; an ordinary key is released by its own key-up, never by a
+        // modifier resync. Here the host reports SHIFT up but 'A' is still held.
+        press(MacKeyCode.shift)
+        press(0)  // 'A', not a modifier
+
+        client.resyncHeldModifiers { _ in false }
+
+        XCTAssertTrue(client.hasKeysHeld, "the non-modifier key 'A' is still held")
+        release(0)
+        XCTAssertFalse(client.hasKeysHeld,
+                       "with 'A' up and SHIFT already resynced away, nothing remains")
+    }
+
+    func testResyncOfNothingHeldIsHarmless() {
+        client.resyncHeldModifiers { _ in false }
+        XCTAssertFalse(client.hasKeysHeld)
+    }
+
+    func testStrandedModifierKeyCodesFiltersByHostState() {
+        // Pure: of the held host modifiers, the stranded ones are those the host
+        // no longer reports down.
+        let stranded = KeyboardClient.strandedModifierKeyCodes(
+            heldHostModifierKeyCodes: [MacKeyCode.shift, MacKeyCode.control],
+            isDownInHost: { $0 == MacKeyCode.control })
+        XCTAssertEqual(stranded, [MacKeyCode.shift])
+    }
+
     // MARK: - Touch Bar keys share the held-key set
 
     func testTouchBarKeyIsHeldUntilReleased() {

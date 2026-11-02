@@ -181,6 +181,16 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
     }
 
     override func keyDown(with event: NSEvent) {
+        // A silent input takeover (the Cmd-Shift-4 screenshot overlay) can have
+        // eaten a modifier's release without the window resigning key, so no
+        // focus-loss release fired. This keyDown carries the host's current
+        // modifier flags: reconcile any stranded modifier the client still holds
+        // before anything else (rule R6), including before the Command early
+        // return so it runs even when the key is part of a host chord.
+        keyboardClient?.resyncHeldModifiers {
+            Self.modifierKeyIsDown(keyCode: $0, rawFlags: event.modifierFlags.rawValue)
+        }
+
         // Command-key combinations are handled by performKeyEquivalent for menu shortcuts
         if event.modifierFlags.contains(.command) {
             return
@@ -241,6 +251,14 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
               + " current=[\(formatModifiers(current))]"
               + " prev=[\(formatModifiers(lastModifiers))]"
               + " diff=[\(formatModifiers(diff))]")
+
+        // Reconcile against the truth this event carries before acting on it: a
+        // silent input takeover (the Cmd-Shift-4 screenshot overlay) can have
+        // eaten a modifier's release without the window resigning key, leaving a
+        // modifier the client holds that the host no longer does (rule R6).
+        keyboardClient?.resyncHeldModifiers {
+            Self.modifierKeyIsDown(keyCode: $0, rawFlags: current.rawValue)
+        }
 
         // While a host drag owns the screen, further modifiers qualify the
         // selection rather than reaching the machine. Update the interpretation

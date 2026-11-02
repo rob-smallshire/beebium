@@ -111,6 +111,16 @@ synthesise `down` events for keys the user "might still be holding". Require a
 fresh press. A missing key is recoverable; a fabricated stuck key is not. Prefer
 the release-and-repress direction every time.
 
+Not every input takeover trips a focus-loss callback (R4). A system overlay --
+the macOS Cmd-Shift-4 screenshot tool is the example -- can grab the keyboard
+without the window ever resigning key, so the modifier up is delivered to the
+overlay and no release fires. The first event you see after input returns -- the
+next modifier change or key press, each carrying the host's current modifier
+state -- is your first chance to notice. On it, reconcile the modifiers you hold
+against that state and release any the host no longer reports down. This is the
+same reconcile-not-fabricate direction, applied to a takeover you were never
+told about.
+
 **R7 -- Ignore host auto-repeat.** The MOS runs its own key auto-repeat. Forward
 only genuine down/up transitions; drop repeat events.
 
@@ -204,6 +214,13 @@ resolved character is the unshifted face.
   observers take `queue: .main` and run their body synchronously, the resign
   one through `MainActor.assumeIsolated`; `FocusLossKeyReleaseTests` fails if
   the release is deferred instead.
+- **Silent takeover resync (R6).** The screenshot overlay takes input without
+  the window resigning key, so R4 does not fire. `keyDown(with:)` and
+  `flagsChanged(with:)` therefore call `KeyboardClient.resyncHeldModifiers`
+  first, passing `KeyboardMTKView.modifierKeyIsDown` over the event's
+  `modifierFlags.rawValue`: the held host modifiers the host no longer reports
+  down are released. The raw-bit decoding stays with the NSEvent; the held-set
+  reconciliation stays in the client.
 - **Selection / host takeover (R5).** When a Cmd-drag selection begins, release
   all held keys before it starts swallowing qualifier `flagsChanged`.
 - **Caps Lock** is a toggle, not a held key -- handle it via its own

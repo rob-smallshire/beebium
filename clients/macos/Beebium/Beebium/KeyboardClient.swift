@@ -171,6 +171,57 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         bbcCtrlIsDown = false
     }
 
+    /// Reconcile the held host modifier keys to the host's current modifier
+    /// state, releasing any the client still holds that the host no longer
+    /// reports down.
+    ///
+    /// A silent input takeover releases nothing through us. The Cmd-Shift-4
+    /// screenshot overlay is the motivating case: it takes the keyboard without
+    /// the window ever resigning key, so the focus-loss release (R4) never
+    /// fires, and the matching modifier up is delivered to the overlay rather
+    /// than to us -- leaving BBC SHIFT (or CTRL) stuck down. The first event
+    /// after input returns -- a flagsChanged or a keyDown, each carrying the
+    /// host's current modifier flags -- is the first chance to see the truth.
+    /// Releasing a stranded modifier here, and never fabricating a press, is
+    /// rule R6 applied at that moment; it is the safety net behind the Cmd-chord
+    /// rule that stops most of these from being sent in the first place.
+    ///
+    /// `isDownInHost` answers, for a host modifier key code, whether the host
+    /// still reports it down. The caller decodes that from the event's modifier
+    /// flags (`KeyboardMTKView.modifierKeyIsDown`), so the raw-bit decoding stays
+    /// with the NSEvent and the held-set reconciliation stays here. Only
+    /// physical-keyboard modifier presses are reconciled: a non-modifier key is
+    /// released by its own key-up, and a Touch Bar key has no host modifier
+    /// identity.
+    func resyncHeldModifiers(isDownInHost: (UInt16) -> Bool) {
+        let stranded = Self.strandedModifierKeyCodes(
+            heldHostModifierKeyCodes: heldHostModifierKeyCodes(),
+            isDownInHost: isDownInHost)
+        for keyCode in stranded {
+            release(id: .host(keyCode))
+        }
+    }
+
+    /// Host modifier key codes the client currently holds. A Touch Bar key names
+    /// a BBC key and has no host modifier identity, so it is never included.
+    private func heldHostModifierKeyCodes() -> [UInt16] {
+        pressedKeys.keys.compactMap { id in
+            guard case let .host(keyCode) = id,
+                  MacKeyCode.isHostModifierKey(keyCode) else { return nil }
+            return keyCode
+        }
+    }
+
+    /// The held host modifier key codes the host no longer reports down -- the
+    /// ones `resyncHeldModifiers` releases. Pure, so the reconciliation is
+    /// unit-tested without an NSEvent.
+    static func strandedModifierKeyCodes(
+        heldHostModifierKeyCodes: [UInt16],
+        isDownInHost: (UInt16) -> Bool
+    ) -> [UInt16] {
+        heldHostModifierKeyCodes.filter { !isDownInHost($0) }
+    }
+
     /// The wire operations that releasing `pressed` requires, in the order the
     /// BBC must see them.
     ///
