@@ -180,17 +180,30 @@ DriveRow::DriveRow(SessionDiscs& discs, int number, ClientSettings* settings, Sh
     message_line_->hide();
 
     auto* actions = new QHBoxLayout;
+    // Browse and Eject as bare icons, as the macOS client's: a folder whose
+    // click browses, with a small arrow beside it for the menu (Recent, New
+    // Blank Disc), and an eject glyph. Flat until the pointer is over them.
     browse_ = new QToolButton(this);
     browse_->setObjectName(QStringLiteral("browse"));
     browse_->setText(tr("Browse..."));
-    browse_->setIcon(QIcon::fromTheme(QStringLiteral("document-open"),
-                                      style()->standardIcon(QStyle::SP_DirOpenIcon)));
-    browse_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    browse_->setToolTip(tr("Choose a disc image to insert; the arrow offers recent and blank "
+                           "discs"));
+    browse_->setIcon(QIcon::fromTheme(QStringLiteral("folder"),
+                                      style()->standardIcon(QStyle::SP_DirIcon)));
     browse_->setPopupMode(QToolButton::MenuButtonPopup);
     menu_ = new QMenu(browse_);
     browse_->setMenu(menu_);
-    eject_ = new QPushButton(QIcon::fromTheme(QStringLiteral("media-eject")), tr("Eject"), this);
+    eject_ = new QToolButton(this);
+    eject_->setObjectName(QStringLiteral("eject"));
+    eject_->setText(tr("Eject"));
     eject_->setToolTip(tr("Eject disc"));
+    eject_->setIcon(QIcon::fromTheme(QStringLiteral("media-eject"),
+                                     style()->standardIcon(QStyle::SP_ArrowUp)));
+    for (QToolButton* button : {browse_, eject_}) {
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        button->setAutoRaise(true);
+        button->setIconSize(QSize(20, 20));
+    }
     cancel_ = new QPushButton(tr("Cancel"), this);
     cancel_->setToolTip(tr("Stop ejecting and keep the disc in the drive"));
     force_ = new QPushButton(tr("Force Eject"), this);
@@ -208,7 +221,7 @@ DriveRow::DriveRow(SessionDiscs& discs, int number, ClientSettings* settings, Sh
 
     connect(browse_, &QToolButton::clicked, this, &DriveRow::browse);
     connect(menu_, &QMenu::aboutToShow, this, &DriveRow::rebuild_menu);
-    connect(eject_, &QPushButton::clicked, this, [this] { discs_.eject(number_, false); });
+    connect(eject_, &QToolButton::clicked, this, [this] { discs_.eject(number_, false); });
     connect(cancel_, &QPushButton::clicked, this, [this] { discs_.cancel_eject(number_); });
     connect(force_, &QPushButton::clicked, this, [this] { discs_.eject(number_, true); });
     connect(details_, &QPushButton::clicked, this, &DriveRow::show_details);

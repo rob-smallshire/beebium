@@ -200,6 +200,21 @@ struct Shown {
 
 }  // namespace
 
+TEST_CASE("A drive's Browse and Eject are bare icons, Browse with its menu arrow",
+          "[storage][sidebar]") {
+    Shown s;
+    QToolButton* browse = s.row(0)->browse_button();
+    QToolButton* eject = s.row(0)->eject_button();
+    for (QToolButton* button : {browse, eject}) {
+        CHECK(button->autoRaise());  // no border until the pointer is over it
+        CHECK(button->toolButtonStyle() == Qt::ToolButtonIconOnly);
+        CHECK_FALSE(button->icon().isNull());
+        CHECK_FALSE(button->toolTip().isEmpty());
+    }
+    CHECK(browse->popupMode() == QToolButton::MenuButtonPopup);
+    CHECK(browse->menu() != nullptr);
+}
+
 TEST_CASE("Each drive has its row, offering Browse only for a local server",
           "[storage][sidebar]") {
     Shown s;

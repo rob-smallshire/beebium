@@ -87,7 +87,7 @@ public:
     QString state_text() const;
     bool eject_stalled() const { return eject_stalled_; }
     QToolButton* browse_button() const { return browse_; }
-    QPushButton* eject_button() const { return eject_; }
+    QToolButton* eject_button() const { return eject_; }
     QPushButton* cancel_button() const { return cancel_; }
     QPushButton* force_button() const { return force_; }
     QMenu* browse_menu() const { return menu_; }
@@ -133,7 +133,7 @@ private:
     QToolButton* dismiss_;
     QToolButton* browse_;
     QMenu* menu_;
-    QPushButton* eject_;
+    QToolButton* eject_;
     QPushButton* cancel_;
     QPushButton* force_;
     QTimer notice_timer_;
