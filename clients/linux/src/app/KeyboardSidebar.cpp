@@ -13,12 +13,12 @@
 #include "app/KeyboardSidebar.hpp"
 
 #include <QCheckBox>
+#include <QFrame>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPalette>
 #include <QListWidget>
 #include <QSignalBlocker>
-#include <QStyle>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -39,6 +39,7 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     list_ = new QListWidget(this);
     list_->setObjectName(QStringLiteral("mappings"));
     list_->setFocusPolicy(Qt::NoFocus);  // the keys stay the machine's
+    list_->setSelectionMode(QAbstractItemView::SingleSelection);
     layout->addWidget(list_, 2);
 
     reference_title_ = new QLabel(tr("Labelled keys"), this);
@@ -69,7 +70,7 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     connect(list_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
         const QVariant index = item->data(CHOICE_ROLE);
         if (!index.isValid()) {
-            return;  // a heading
+            return;  // the divider
         }
         const MappingChoice& choice = choices_[static_cast<std::size_t>(index.toInt())];
         if (!choice.usable() || choice.id == active_id_) {
@@ -105,30 +106,30 @@ void KeyboardSidebar::showEvent(QShowEvent* event) {
 }
 
 void KeyboardSidebar::rebuild() {
+    // A plain list: the built-ins, then the user's mappings after a divider
+    // with no text, the active mapping its selected row.
     list_->clear();
-    std::optional<bool> heading_for;
+    bool divided = false;
     for (std::size_t i = 0; i < choices_.size(); ++i) {
         const MappingChoice& choice = choices_[i];
-        if (heading_for != choice.built_in) {
-            auto* heading = new QListWidgetItem(choice.built_in ? tr("Beebium") : tr("Custom"), list_);
-            heading->setFlags(Qt::NoItemFlags);
-            QFont font = heading->font();
-            font.setBold(true);
-            heading->setFont(font);
-            heading_for = choice.built_in;
+        if (!choice.built_in && !divided) {
+            auto* divider = new QListWidgetItem(list_);
+            divider->setFlags(Qt::NoItemFlags);
+            divider->setSizeHint(QSize(0, 9));
+            auto* line = new QFrame(list_);
+            line->setFrameShape(QFrame::HLine);
+            line->setFrameShadow(QFrame::Sunken);
+            list_->setItemWidget(divider, line);
+            divided = true;
         }
         auto* item = new QListWidgetItem(choice.name, list_);
         item->setData(CHOICE_ROLE, static_cast<int>(i));
         if (!choice.usable()) {
             item->setFlags(Qt::NoItemFlags);
             item->setToolTip(tr("This mapping cannot be used: %1").arg(choice.problem));
-            item->setIcon(style()->standardIcon(QStyle::SP_MessageBoxWarning));
         } else {
             item->setToolTip(choice.built_in ? choice.name : choice.filepath);
-            item->setIcon(choice.id == active_id_
-                              ? QIcon::fromTheme(QStringLiteral("object-select"),
-                                                 style()->standardIcon(QStyle::SP_DialogApplyButton))
-                              : QIcon());
+            item->setSelected(choice.id == active_id_);
         }
     }
     show_reference();

@@ -146,6 +146,45 @@ TEST_CASE("The mode shows the hint under the table only for a mapping with Shift
     CHECK_FALSE(sidebar.reference_hint()->isVisibleTo(&sidebar));
 }
 
+TEST_CASE("The mappings are a plain list, the active one its selected row", "[keyboard][mode]") {
+    QTemporaryDir directory;
+    KeyboardSidebar sidebar(directory.path());
+    const auto thrust = built_in_mapping(QStringLiteral("Thrust"));
+    sidebar.set_active(QString::fromStdString(thrust->id));
+    QListWidget* list = sidebar.chooser();
+    REQUIRE(list->count() > 0);
+    QStringList selected;
+    for (int i = 0; i < list->count(); ++i) {
+        QListWidgetItem* item = list->item(i);
+        CHECK(item->icon().isNull());  // nothing to push the names out of line
+        CHECK_FALSE(item->text().isEmpty());  // no divider without user mappings
+        CHECK(item->font().bold() == false);  // no headings
+        if (item->isSelected()) {
+            selected << item->text();
+        }
+    }
+    CHECK(selected == QStringList{QStringLiteral("Thrust")});
+}
+
+TEST_CASE("The user's mappings follow the built-ins after a divider with no text",
+          "[keyboard][mode]") {
+    QTemporaryDir directory;
+    QByteArray mine = corpus("Thrust.json");
+    mine.replace("\"Thrust\"", "\"My Thrust\"");
+    write(directory.filePath(QStringLiteral("mine.json")), mine);
+    KeyboardSidebar sidebar(directory.path());
+    QListWidget* list = sidebar.chooser();
+    QStringList texts;
+    for (int i = 0; i < list->count(); ++i) {
+        texts << list->item(i)->text();
+    }
+    const auto divider = texts.indexOf(QString());
+    REQUIRE(divider > 0);
+    CHECK(texts.count(QString()) == 1);
+    CHECK(texts.at(divider + 1) == QStringLiteral("My Thrust"));
+    CHECK_FALSE(list->item(divider)->flags() & Qt::ItemIsSelectable);
+}
+
 TEST_CASE("The mode has no buttons: the mappings folder is managed elsewhere", "[keyboard][mode]") {
     QTemporaryDir directory;
     KeyboardSidebar sidebar(directory.path());
