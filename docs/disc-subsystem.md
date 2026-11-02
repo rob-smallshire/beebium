@@ -176,6 +176,29 @@ Emulates the Western Digital WD1770 Floppy Disc Controller. This is a large head
 | III | Read Address, Read Track, Write Track | Track-level I/O |
 | IV | Force Interrupt | Command termination/interrupt control |
 
+#### Address marks when writing
+
+In MFM, Write Sector writes three A1 sync bytes, each with its missing clock
+transition (raw 0x4489), before the data address mark, as the chip does. A
+read finds a data field only after those syncs, so without them a sector
+written in double density, which is every ADFS write, cannot be read back,
+and the image write-back rejects it (#246). In FM the data mark carries the
+0xC7 clock instead.
+
+Write Track interprets the formatter's byte stream as the datasheet describes:
+
+| Byte | FM | MFM |
+|------|----|-----|
+| 0xF5 | written as data | A1 sync, missing clock (0x4489); CRC preset |
+| 0xF6 | written as data | C2 sync, missing clock (0x5224) |
+| 0xF7 | the two CRC bytes | the two CRC bytes |
+| 0xF8-0xFB | data address mark, clock 0xC7; CRC preset | written as data |
+| 0xFC | index address mark, clock 0xD7 | written as data |
+| 0xFE | ID address mark, clock 0xC7; CRC preset | written as data |
+
+So a formatter's sector data must stay clear of 0xF5-0xF7 in MFM, and of
+0xF5-0xFE in FM, which is true of the real chip too.
+
 #### Status Register Bits
 
 The meaning of status bits depends on command type:
@@ -948,7 +971,6 @@ The following features are not implemented. They may be needed for compatibility
 ### Low Priority (copy protection)
 
 - **Track-level synthesis from sector images**: Read Track currently returns concatenated raw sector data. Real hardware (and correctly-emulating emulators) returns the full track structure: gap bytes, sync bytes, ID address marks, sector ID fields (track/side/sector/size + CRC), data address marks, sector data, data CRC, and inter-sector gaps. Software that uses Read Track to inspect track structure (e.g. QuicDisc, copy protection checks) will see incorrect data. Implementing this requires synthesizing a standard DFS track layout from the sector data in SSD/DSD images. See [Stardot discussion](https://stardot.org.uk/forums/viewtopic.php?p=479299#p479299) for context on emulator differences.
-- **Write Track format parsing**: Format data stream not parsed for sync bytes, address marks.
 - **Deleted data address mark**: RECORD_TYPE status bit not supported.
 - **I0/I1 ready transition detection**: Rarely used by BBC software.
 

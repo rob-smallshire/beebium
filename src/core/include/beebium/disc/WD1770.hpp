@@ -71,6 +71,9 @@ public:
     static constexpr uint8_t FLAG_UPDATE_TRACK  = 0x10;
     static constexpr uint8_t FLAG_MULTI_SECTOR  = 0x10;
 
+    // FM clock pattern of the index address mark (0xFC) in Write Track
+    static constexpr uint8_t k_fm_index_mark_clock_pattern = 0xD7;
+
     // Density mode
     enum class Density { SingleFM, DoubleMFM };
 
@@ -406,9 +409,21 @@ private:
 
     // Write one MFM byte to the disc at current position and advance.
     void write_mfm_byte_to_disc(uint8_t data) {
+        write_mfm_raw_to_disc(ibm_disc_format::mfm_to_2us_pulses(write_last_mfm_bit_, data));
+    }
+
+    // Write an MFM sync byte: A1 (raw 0x4489) or C2 (raw 0x5224), each with
+    // one clock transition missing, which is what marks it as a sync rather
+    // than data. `data` is the byte it stands for, whose last bit sets the
+    // next byte's first clock.
+    void write_mfm_sync_to_disc(uint16_t raw, uint8_t data) {
+        write_mfm_raw_to_disc(raw);
+        write_last_mfm_bit_ = (data & 0x01) != 0;
+    }
+
+    void write_mfm_raw_to_disc(uint16_t mfm_pulses) {
         DiscDrive* drive = get_current_drive();
         if (!drive) return;
-        uint16_t mfm_pulses = ibm_disc_format::mfm_to_2us_pulses(write_last_mfm_bit_, data);
 
         uint32_t word = drive->read_pulses();
         if (drive->pulse_sub_position() == 0) {
@@ -809,6 +824,8 @@ private:
                 if (id_track == track_ && id_sector == sector_ && id_crc_ok_) {
                     data_size_ = 128u << id_field_buf_[3];
                     byte_counter_ = 0;
+                    // The gap follows the ID field's last CRC bit.
+                    write_last_mfm_bit_ = (id_field_buf_[5] & 0x01) != 0;
                     // Write gap2 + sync + data mark, then request data bytes
                     gap_counter_ = 0;
                     phase_ = Phase::WritingGap2;
@@ -854,9 +871,11 @@ private:
                 if (!is_double_density()) {
                     write_fm_byte_to_disc(mark, ibm_disc_format::k_mark_clock_pattern);
                 } else {
-                    // 3xA1 sync then mark
-                    // For simplicity, write the mark directly
-                    // (A1 sync writes would need raw pulse access)
+                    // MFM: three A1 syncs, then the mark (#246). Without the
+                    // syncs no read finds the data field again.
+                    for (int i = 0; i < 3; ++i) {
+                        write_mfm_sync_to_disc(ibm_disc_format::k_mfm_a1_sync, 0xA1);
+                    }
                     write_mfm_byte_to_disc(mark);
                 }
                 data_crc_ = ibm_disc_format::crc_add_byte(data_crc_, mark);
@@ -1103,23 +1122,24 @@ private:
         // In Write Track, the WD1770 interprets certain byte values specially
         // to generate sync patterns and address marks. This is the format command.
         if (!is_double_density()) {
-            // FM Write Track special bytes:
-            // 0xF5 -> missing clock address mark (clock=0xC7, data=0xFE or per context)
-            // 0xF6 -> missing clock (not standard, but some formatters use it)
-            // 0xF7 -> write 2 CRC bytes
+            // FM Write Track special bytes (WD1770 datasheet):
+            // 0xF7       -> the two CRC bytes
+            // 0xF8..0xFB -> data address marks, clock 0xC7, CRC preset
+            // 0xFC       -> index address mark, clock 0xD7
+            // 0xFE       -> ID address mark, clock 0xC7, CRC preset
+            // Everything else, 0xF5 and 0xF6 included, is written as data.
             if (byte == 0xF7) {
                 // Write CRC
                 uint8_t crc_hi = static_cast<uint8_t>(data_crc_ >> 8);
                 uint8_t crc_lo = static_cast<uint8_t>(data_crc_ & 0xFF);
                 write_fm_byte_to_disc(crc_hi);
                 write_fm_byte_to_disc(crc_lo);
-            } else if (byte == 0xF5 || byte == 0xF6) {
-                // Write address mark with missing clock
-                // The actual data byte follows in the next write
-                // For simplicity, write as a special clock pattern
+            } else if ((byte >= 0xF8 && byte <= 0xFB) || byte == 0xFE) {
                 write_fm_byte_to_disc(byte, ibm_disc_format::k_mark_clock_pattern);
                 data_crc_ = ibm_disc_format::crc_init(false);
                 data_crc_ = ibm_disc_format::crc_add_byte(data_crc_, byte);
+            } else if (byte == 0xFC) {
+                write_fm_byte_to_disc(byte, k_fm_index_mark_clock_pattern);
             } else {
                 write_fm_byte_to_disc(byte);
                 data_crc_ = ibm_disc_format::crc_add_byte(data_crc_, byte);
@@ -1135,12 +1155,13 @@ private:
                 write_mfm_byte_to_disc(crc_hi);
                 write_mfm_byte_to_disc(crc_lo);
             } else if (byte == 0xF5) {
-                // A1 sync - write raw sync pattern and init CRC
-                // (This should write the special 0x4489 pattern)
-                write_mfm_byte_to_disc(0xA1);  // Simplified
+                // A1 with its missing clock (#246). The CRC presets so
+                // that after the usual three it holds CRC(A1, A1, A1).
+                write_mfm_sync_to_disc(ibm_disc_format::k_mfm_a1_sync, 0xA1);
                 data_crc_ = ibm_disc_format::crc_init(true);
             } else if (byte == 0xF6) {
-                write_mfm_byte_to_disc(0xC2);  // Simplified
+                // C2 with its missing clock, before the index mark.
+                write_mfm_sync_to_disc(ibm_disc_format::k_mfm_c2_sync, 0xC2);
             } else {
                 write_mfm_byte_to_disc(byte);
                 data_crc_ = ibm_disc_format::crc_add_byte(data_crc_, byte);

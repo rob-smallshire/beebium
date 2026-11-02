@@ -12,9 +12,13 @@
 
 #include <beebium/disc/WD1770.hpp>
 #include <beebium/disc/DiscDrive.hpp>
+#include <beebium/disc/formats/AdfsFormatHandler.hpp>
 #include <beebium/disc/formats/SsdFormatHandler.hpp>
 #include <beebium/disc/TrackDecoder.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include <array>
+#include <vector>
 
 using namespace beebium;
 
@@ -268,6 +272,182 @@ TEST_CASE("WD1770 Write Sector then Read back", "[disc][wd1770p][write]") {
     for (int i = 0; i < 256; ++i) {
         CHECK(buffer[i] == static_cast<uint8_t>(0xFF - i));
     }
+}
+
+TEST_CASE("WD1770 MFM Write Sector then Read back on both sides of an ADL disc",
+          "[disc][wd1770p][write][mfm]") {
+    // ADFS writes in double density (#246). A written sector must keep the
+    // 3xA1 sync before its data mark, or the controller cannot find its data
+    // again and ADFS fails on the next read of that sector.
+    WD1770 fdc;
+    DiscDrive drive;
+    fdc.set_spin_up_delay_enabled(false);
+    fdc.attach_drive(0, &drive);
+    fdc.set_drive(0);
+    fdc.set_density(true);  // MFM
+    AdfsFormatHandler handler;
+    auto result = handler.load(std::vector<uint8_t>(80 * 2 * 16 * 256), "wd1770-mfm-test.adl");
+    REQUIRE(result.disc);
+    drive.insert(std::move(result.disc));
+
+    auto run_until_complete = [&] {
+        for (int i = 0; i < 500'000 && fdc.busy(); ++i) fdc.tick();
+    };
+    auto wait_for_drq = [&] {
+        for (int i = 0; i < 500'000; ++i) {
+            fdc.tick();
+            if (fdc.drq()) return true;
+            if (!fdc.busy()) return false;
+        }
+        return false;
+    };
+
+    for (const uint8_t side : {0, 1}) {
+        CAPTURE(side);
+        fdc.set_side(side);
+        drive.set_side(side);
+        const uint8_t sector = side == 0 ? 2 : 5;
+
+        fdc.write(2, sector);
+        fdc.write(0, 0xA0);  // Write Sector
+        for (int i = 0; i < 256; ++i) {
+            REQUIRE(wait_for_drq());
+            fdc.write(3, static_cast<uint8_t>(i ^ (side ? 0x5A : 0xA5)));
+        }
+        run_until_complete();
+        CHECK((fdc.read(0) & 0x5C) == 0);  // no WP, RNF, CRC or lost data
+
+        fdc.write(2, sector);
+        fdc.write(0, 0x80);  // Read Sector
+        std::array<uint8_t, 256> buffer{};
+        for (int i = 0; i < 256; ++i) {
+            REQUIRE(wait_for_drq());
+            buffer[i] = fdc.read(3);
+        }
+        run_until_complete();
+        CHECK((fdc.read(0) & 0x1C) == 0);  // no RNF, CRC or lost data
+        for (int i = 0; i < 256; ++i) {
+            CHECK(buffer[i] == static_cast<uint8_t>(i ^ (side ? 0x5A : 0xA5)));
+        }
+
+        // The decoder that writes the image back must see a sound sector too.
+        TrackDecoder decoder(drive.disc()->track(side == 1, 0));
+        bool persisted = false;
+        for (const auto& sec : decoder.find_sectors()) {
+            if (sec.sector == sector) {
+                persisted = sec.has_data_field && !sec.has_data_crc_error;
+            }
+        }
+        CHECK(persisted);
+    }
+}
+
+namespace {
+
+// A sector's contents in the format tests. Write Track reads 0xF5 to 0xFE
+// as control bytes, so a formatter's data stays below them.
+uint8_t sector_byte(uint8_t sector, int i) {
+    return static_cast<uint8_t>((sector * 7 + i) & 0x7F);
+}
+
+// The byte stream a formatter gives Write Track for one track, laid out as
+// the WD1770 datasheet recommends.
+std::vector<uint8_t> format_stream(bool mfm, uint8_t track, uint8_t sectors) {
+    std::vector<uint8_t> out;
+    auto put = [&](uint8_t byte, size_t count) { out.insert(out.end(), count, byte); };
+    const uint8_t gap = mfm ? 0x4E : 0xFF;
+    const size_t sync = mfm ? 12 : 6;
+    auto marks = [&] {
+        if (mfm) put(0xF5, 3);
+    };
+    put(gap, mfm ? 60 : 16);
+    for (uint8_t sector = 0; sector < sectors; ++sector) {
+        put(0x00, sync);
+        marks();
+        out.insert(out.end(), {0xFE, track, 0x00, sector, 0x01, 0xF7});
+        put(gap, mfm ? 22 : 11);
+        put(0x00, sync);
+        marks();
+        put(0xFB, 1);
+        for (int i = 0; i < 256; ++i) put(sector_byte(sector, i), 1);
+        put(0xF7, 1);
+        put(gap, mfm ? 24 : 16);  // FM: under DFS's 21, so the track has room to spare
+    }
+    return out;
+}
+
+// Format track 0 side 0 through Write Track, then read every sector back
+// through Read Sector and through the decoder the image write-back uses.
+void check_format_reads_back(WD1770& fdc, DiscDrive& drive, bool mfm, uint8_t sectors) {
+    auto run_until_complete = [&] {
+        for (int i = 0; i < 2'000'000 && fdc.busy(); ++i) fdc.tick();
+    };
+    auto wait_for_drq = [&] {
+        for (int i = 0; i < 500'000; ++i) {
+            fdc.tick();
+            if (fdc.drq()) return true;
+            if (!fdc.busy()) return false;
+        }
+        return false;
+    };
+
+    const auto stream = format_stream(mfm, 0, sectors);
+    fdc.write(0, 0xF0);  // Write Track
+    size_t next = 0;
+    while (wait_for_drq()) {
+        fdc.write(3, next < stream.size() ? stream[next] : (mfm ? 0x4E : 0xFF));
+        ++next;
+    }
+    run_until_complete();
+    REQUIRE(next > stream.size());  // the whole format fitted the track
+    CHECK((fdc.read(0) & 0x5C) == 0);
+
+    for (uint8_t sector = 0; sector < sectors; ++sector) {
+        CAPTURE(sector);
+        fdc.write(2, sector);
+        fdc.write(0, 0x80);  // Read Sector
+        for (int i = 0; i < 256; ++i) {
+            REQUIRE(wait_for_drq());
+            CAPTURE(i);
+            REQUIRE(int(fdc.read(3)) == int(sector_byte(sector, i)));
+        }
+        run_until_complete();
+        CHECK((fdc.read(0) & 0x1C) == 0);
+    }
+
+    TrackDecoder decoder(drive.disc()->track(false, 0));
+    size_t sound = 0;
+    for (const auto& sec : decoder.find_sectors()) {
+        if (!sec.has_header_crc_error && sec.has_data_field && !sec.has_data_crc_error) ++sound;
+    }
+    CHECK(sound == sectors);
+}
+
+}  // namespace
+
+TEST_CASE("WD1770 MFM Write Track formats sectors that read back", "[disc][wd1770p][format][mfm]") {
+    // ADFS *FORMAT writes 16 sectors a track in MFM, each ID and data mark
+    // after three F5 bytes, which the controller writes as A1 syncs (#246).
+    WD1770 fdc;
+    DiscDrive drive;
+    fdc.set_spin_up_delay_enabled(false);
+    fdc.attach_drive(0, &drive);
+    fdc.set_drive(0);
+    fdc.set_side(0);
+    fdc.set_density(true);
+    AdfsFormatHandler handler;
+    auto result = handler.load(std::vector<uint8_t>(80 * 2 * 16 * 256), "wd1770-format-test.adl");
+    REQUIRE(result.disc);
+    drive.insert(std::move(result.disc));
+    drive.set_side(0);
+    check_format_reads_back(fdc, drive, true, 16);
+}
+
+TEST_CASE("WD1770 FM Write Track formats sectors that read back", "[disc][wd1770p][format]") {
+    // In FM the controller writes 0xFE and 0xFB as address marks with the
+    // 0xC7 clock, and starts each mark's CRC afresh.
+    TestRig rig;
+    check_format_reads_back(rig.fdc, rig.drive, false, 10);
 }
 
 TEST_CASE("WD1770 flushes dirty tracks after write inactivity",
