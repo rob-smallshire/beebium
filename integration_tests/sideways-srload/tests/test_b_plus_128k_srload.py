@@ -172,6 +172,7 @@ def test_srload_amx_into_sram_z_shows_in_help_after_break(
     bbc.keyboard.press_return()
     bbc.run_for_emulated_seconds(8.0)
 
+    bbc.debugger.ensure_running()  # press_break holds keys for running time
     bbc.keyboard.press_break()
     ok = bbc.run_until_or_timeout(
         lambda: screen_contains(bbc, ">"),
@@ -211,6 +212,7 @@ def test_srload_comal_into_sram_z_shows_in_help_after_break(
     bbc.keyboard.press_return()
     bbc.run_for_emulated_seconds(8.0)
 
+    bbc.debugger.ensure_running()  # press_break holds keys for running time
     bbc.keyboard.press_break()
     ok = bbc.run_until_or_timeout(
         lambda: screen_contains(bbc, ">"),
@@ -270,6 +272,7 @@ def test_srload_anfs_into_sram_z_works_through_break(
     # For now, simply confirm that *plain* break (without an SRLOADed
     # service ROM) reaches the BASIC prompt cleanly - i.e. the Break
     # plumbing isn't the cause of the hang we just saw.
+    bbc.debugger.ensure_running()  # press_break holds keys for running time
     bbc.keyboard.press_break()
     ok = bbc.run_until_or_timeout(
         lambda: screen_contains(bbc, ">"),
@@ -332,6 +335,7 @@ def test_srload_adfs_into_sram_z_is_visible_to_mos(
     # Press Break and look at what the MOS does. Don't assume we
     # reach a prompt - the user-reported failure mode is "Bad sum"
     # printed by something during init.
+    bbc.debugger.ensure_running()  # press_break holds keys for running time
     bbc.keyboard.press_break()
     bbc.run_for_emulated_seconds(8.0)
     post_break_screen = dump_screen(bbc)
