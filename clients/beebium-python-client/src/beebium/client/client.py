@@ -29,7 +29,6 @@ from beebium.client.basic import Basic
 from beebium.client.connection import Connection
 from beebium.client.cpu import CPU
 from beebium.client.crtc import Crtc
-from beebium.client.real_time_clock import RealTimeClock
 from beebium.client.debugger import Debugger, ExecutionState, wall_timeout_for
 from beebium.client.disc import Disc
 from beebium.client.econet import Econet
@@ -51,6 +50,7 @@ from beebium.client.installation import ServerInstallation
 from beebium.client.keyboard import Keyboard
 from beebium.client.latch import AddressableLatch
 from beebium.client.memory import Memory
+from beebium.client.real_time_clock import RealTimeClock
 from beebium.client.serial import Serial
 from beebium.client.server import ServerProcess
 from beebium.client.sideways import Sideways

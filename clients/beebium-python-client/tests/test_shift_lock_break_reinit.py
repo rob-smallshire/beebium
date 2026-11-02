@@ -46,8 +46,6 @@ from __future__ import annotations
 import itertools
 import time
 
-import pytest
-
 from beebium.client import Beebium
 
 HOST_CLOCK_HZ = 2_000_000

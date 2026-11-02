@@ -19,9 +19,9 @@ typed Python dataclasses correctly.
 
 from __future__ import annotations
 
-import pytest
-
 from pathlib import Path
+
+import pytest
 
 from beebium.client import Beebium
 from beebium.client.exceptions import (

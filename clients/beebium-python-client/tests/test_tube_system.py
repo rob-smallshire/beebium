@@ -24,7 +24,6 @@ from pathlib import Path
 
 import pytest
 
-from beebium.client import Beebium
 from beebium.client.exceptions import DebuggerError
 from beebium.client.tube_system import TubeSystem
 

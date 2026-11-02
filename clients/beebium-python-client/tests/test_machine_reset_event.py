@@ -24,8 +24,6 @@ from __future__ import annotations
 import queue
 import threading
 
-import pytest
-
 from beebium.client.system import ResetKind, ServerStatus
 
 
