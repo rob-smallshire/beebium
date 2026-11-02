@@ -3665,6 +3665,11 @@ internal protocol Beebium_DeviceInspectionClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_GetTubeStateRequest, Beebium_TubeState>
 
+  func setTubeTraceConfig(
+    _ request: Beebium_SetTubeTraceConfigRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_SetTubeTraceConfigRequest, Beebium_SetTubeTraceConfigResponse>
+
   func getRealTimeClockState(
     _ request: Beebium_GetRealTimeClockStateRequest,
     callOptions: CallOptions?
@@ -3802,6 +3807,24 @@ extension Beebium_DeviceInspectionClientProtocol {
     )
   }
 
+  /// Unary call to SetTubeTraceConfig
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to SetTubeTraceConfig.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func setTubeTraceConfig(
+    _ request: Beebium_SetTubeTraceConfigRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_SetTubeTraceConfigRequest, Beebium_SetTubeTraceConfigResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_DeviceInspectionClientMetadata.Methods.setTubeTraceConfig.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetTubeTraceConfigInterceptors() ?? []
+    )
+  }
+
   /// Unary call to GetRealTimeClockState
   ///
   /// - Parameters:
@@ -3920,6 +3943,11 @@ internal protocol Beebium_DeviceInspectionAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_GetTubeStateRequest, Beebium_TubeState>
 
+  func makeSetTubeTraceConfigCall(
+    _ request: Beebium_SetTubeTraceConfigRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_SetTubeTraceConfigRequest, Beebium_SetTubeTraceConfigResponse>
+
   func makeGetRealTimeClockStateCall(
     _ request: Beebium_GetRealTimeClockStateRequest,
     callOptions: CallOptions?
@@ -4017,6 +4045,18 @@ extension Beebium_DeviceInspectionAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetTubeStateInterceptors() ?? []
+    )
+  }
+
+  internal func makeSetTubeTraceConfigCall(
+    _ request: Beebium_SetTubeTraceConfigRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_SetTubeTraceConfigRequest, Beebium_SetTubeTraceConfigResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DeviceInspectionClientMetadata.Methods.setTubeTraceConfig.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetTubeTraceConfigInterceptors() ?? []
     )
   }
 
@@ -4119,6 +4159,18 @@ extension Beebium_DeviceInspectionAsyncClientProtocol {
     )
   }
 
+  internal func setTubeTraceConfig(
+    _ request: Beebium_SetTubeTraceConfigRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_SetTubeTraceConfigResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DeviceInspectionClientMetadata.Methods.setTubeTraceConfig.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetTubeTraceConfigInterceptors() ?? []
+    )
+  }
+
   internal func getRealTimeClockState(
     _ request: Beebium_GetRealTimeClockStateRequest,
     callOptions: CallOptions? = nil
@@ -4172,6 +4224,9 @@ internal protocol Beebium_DeviceInspectionClientInterceptorFactoryProtocol: Send
   /// - Returns: Interceptors to use when invoking 'getTubeState'.
   func makeGetTubeStateInterceptors() -> [ClientInterceptor<Beebium_GetTubeStateRequest, Beebium_TubeState>]
 
+  /// - Returns: Interceptors to use when invoking 'setTubeTraceConfig'.
+  func makeSetTubeTraceConfigInterceptors() -> [ClientInterceptor<Beebium_SetTubeTraceConfigRequest, Beebium_SetTubeTraceConfigResponse>]
+
   /// - Returns: Interceptors to use when invoking 'getRealTimeClockState'.
   func makeGetRealTimeClockStateInterceptors() -> [ClientInterceptor<Beebium_GetRealTimeClockStateRequest, Beebium_RealTimeClockState>]
 }
@@ -4188,6 +4243,7 @@ internal enum Beebium_DeviceInspectionClientMetadata {
       Beebium_DeviceInspectionClientMetadata.Methods.getAddressableLatchState,
       Beebium_DeviceInspectionClientMetadata.Methods.getSoundGeneratorState,
       Beebium_DeviceInspectionClientMetadata.Methods.getTubeState,
+      Beebium_DeviceInspectionClientMetadata.Methods.setTubeTraceConfig,
       Beebium_DeviceInspectionClientMetadata.Methods.getRealTimeClockState,
     ]
   )
@@ -4232,6 +4288,12 @@ internal enum Beebium_DeviceInspectionClientMetadata {
     internal static let getTubeState = GRPCMethodDescriptor(
       name: "GetTubeState",
       path: "/beebium.DeviceInspection/GetTubeState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let setTubeTraceConfig = GRPCMethodDescriptor(
+      name: "SetTubeTraceConfig",
+      path: "/beebium.DeviceInspection/SetTubeTraceConfig",
       type: GRPCCallType.unary
     )
 
@@ -6380,6 +6442,8 @@ internal protocol Beebium_DeviceInspectionProvider: CallHandlerProvider {
 
   func getTubeState(request: Beebium_GetTubeStateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_TubeState>
 
+  func setTubeTraceConfig(request: Beebium_SetTubeTraceConfigRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SetTubeTraceConfigResponse>
+
   func getRealTimeClockState(request: Beebium_GetRealTimeClockStateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RealTimeClockState>
 }
 
@@ -6458,6 +6522,15 @@ extension Beebium_DeviceInspectionProvider {
         userFunction: self.getTubeState(request:context:)
       )
 
+    case "SetTubeTraceConfig":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_SetTubeTraceConfigRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SetTubeTraceConfigResponse>(),
+        interceptors: self.interceptors?.makeSetTubeTraceConfigInterceptors() ?? [],
+        userFunction: self.setTubeTraceConfig(request:context:)
+      )
+
     case "GetRealTimeClockState":
       return UnaryServerHandler(
         context: context,
@@ -6516,6 +6589,11 @@ internal protocol Beebium_DeviceInspectionAsyncProvider: CallHandlerProvider, Se
     request: Beebium_GetTubeStateRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_TubeState
+
+  func setTubeTraceConfig(
+    request: Beebium_SetTubeTraceConfigRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_SetTubeTraceConfigResponse
 
   func getRealTimeClockState(
     request: Beebium_GetRealTimeClockStateRequest,
@@ -6605,6 +6683,15 @@ extension Beebium_DeviceInspectionAsyncProvider {
         wrapping: { try await self.getTubeState(request: $0, context: $1) }
       )
 
+    case "SetTubeTraceConfig":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_SetTubeTraceConfigRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SetTubeTraceConfigResponse>(),
+        interceptors: self.interceptors?.makeSetTubeTraceConfigInterceptors() ?? [],
+        wrapping: { try await self.setTubeTraceConfig(request: $0, context: $1) }
+      )
+
     case "GetRealTimeClockState":
       return GRPCAsyncServerHandler(
         context: context,
@@ -6650,6 +6737,10 @@ internal protocol Beebium_DeviceInspectionServerInterceptorFactoryProtocol: Send
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetTubeStateInterceptors() -> [ServerInterceptor<Beebium_GetTubeStateRequest, Beebium_TubeState>]
 
+  /// - Returns: Interceptors to use when handling 'setTubeTraceConfig'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeSetTubeTraceConfigInterceptors() -> [ServerInterceptor<Beebium_SetTubeTraceConfigRequest, Beebium_SetTubeTraceConfigResponse>]
+
   /// - Returns: Interceptors to use when handling 'getRealTimeClockState'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetRealTimeClockStateInterceptors() -> [ServerInterceptor<Beebium_GetRealTimeClockStateRequest, Beebium_RealTimeClockState>]
@@ -6667,6 +6758,7 @@ internal enum Beebium_DeviceInspectionServerMetadata {
       Beebium_DeviceInspectionServerMetadata.Methods.getAddressableLatchState,
       Beebium_DeviceInspectionServerMetadata.Methods.getSoundGeneratorState,
       Beebium_DeviceInspectionServerMetadata.Methods.getTubeState,
+      Beebium_DeviceInspectionServerMetadata.Methods.setTubeTraceConfig,
       Beebium_DeviceInspectionServerMetadata.Methods.getRealTimeClockState,
     ]
   )
@@ -6711,6 +6803,12 @@ internal enum Beebium_DeviceInspectionServerMetadata {
     internal static let getTubeState = GRPCMethodDescriptor(
       name: "GetTubeState",
       path: "/beebium.DeviceInspection/GetTubeState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let setTubeTraceConfig = GRPCMethodDescriptor(
+      name: "SetTubeTraceConfig",
+      path: "/beebium.DeviceInspection/SetTubeTraceConfig",
       type: GRPCCallType.unary
     )
 
