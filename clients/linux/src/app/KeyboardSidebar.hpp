@@ -30,7 +30,8 @@ namespace beebium::linux_client {
 // client's: the mapping chooser, the built-ins then the user's files, a file
 // that would not load listed but disabled with the reason in its tooltip;
 // the active mapping's labelled keys (#234), built-ins included; the Caps
-// Lock synchronise toggle; and the folder the user's files go in. This
+// Lock synchronise toggle. The user's files are read again each time the
+// mode is shown; managing their folder belongs to the settings. This
 // client's own settings, so never stale.
 class KeyboardSidebar : public QWidget {
     Q_OBJECT

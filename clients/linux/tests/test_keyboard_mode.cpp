@@ -25,6 +25,7 @@
 #include <QFile>
 #include <QLabel>
 #include <QListWidget>
+#include <QPushButton>
 #include <QTemporaryDir>
 #include <QTreeWidget>
 
@@ -143,6 +144,12 @@ TEST_CASE("The mode shows the hint under the table only for a mapping with Shift
     CHECK(sidebar.reference_hint()->text().startsWith(QStringLiteral("Most PC keyboards have no F13")));
     sidebar.set_active(QString::fromStdString(built_in_mapping(QStringLiteral("Thrust"))->id));
     CHECK_FALSE(sidebar.reference_hint()->isVisibleTo(&sidebar));
+}
+
+TEST_CASE("The mode has no buttons: the mappings folder is managed elsewhere", "[keyboard][mode]") {
+    QTemporaryDir directory;
+    KeyboardSidebar sidebar(directory.path());
+    CHECK(sidebar.findChildren<QPushButton*>().isEmpty());
 }
 
 TEST_CASE("The mode shows the active mapping's labels and switches on a choice",

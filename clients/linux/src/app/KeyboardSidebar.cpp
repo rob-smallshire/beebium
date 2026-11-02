@@ -13,18 +13,13 @@
 #include "app/KeyboardSidebar.hpp"
 
 #include <QCheckBox>
-#include <QDesktopServices>
-#include <QDir>
-#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPalette>
 #include <QListWidget>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QStyle>
 #include <QTreeWidget>
-#include <QUrl>
 #include <QVBoxLayout>
 
 namespace beebium::linux_client {
@@ -45,21 +40,6 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     list_->setObjectName(QStringLiteral("mappings"));
     list_->setFocusPolicy(Qt::NoFocus);  // the keys stay the machine's
     layout->addWidget(list_, 2);
-
-    auto* buttons = new QHBoxLayout;
-    auto* refresh = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")),
-                                    tr("Refresh"), this);
-    refresh->setToolTip(tr("Read the mapping files in the folder again"));
-    auto* folder = new QPushButton(QIcon::fromTheme(QStringLiteral("folder-open")),
-                                   tr("Open Mappings Folder"), this);
-    folder->setToolTip(user_dirpath_);
-    for (QPushButton* button : {refresh, folder}) {
-        button->setFocusPolicy(Qt::NoFocus);
-    }
-    buttons->addWidget(refresh);
-    buttons->addWidget(folder);
-    buttons->addStretch(1);
-    layout->addLayout(buttons);
 
     reference_title_ = new QLabel(tr("Labelled keys"), this);
     QFont bold = reference_title_->font();
@@ -86,11 +66,6 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     caps_->setFocusPolicy(Qt::NoFocus);
     layout->addWidget(caps_);
 
-    connect(refresh, &QPushButton::clicked, this, &KeyboardSidebar::rescan);
-    connect(folder, &QPushButton::clicked, this, [this] {
-        QDir().mkpath(user_dirpath_);
-        QDesktopServices::openUrl(QUrl::fromLocalFile(user_dirpath_));
-    });
     connect(list_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
         const QVariant index = item->data(CHOICE_ROLE);
         if (!index.isValid()) {
