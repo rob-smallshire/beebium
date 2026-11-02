@@ -55,6 +55,11 @@ internal protocol Beebium_SystemServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_ShutdownRequest, Beebium_ShutdownResponse>
 
+  func releaseFromLauncher(
+    _ request: Beebium_ReleaseFromLauncherRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_ReleaseFromLauncherRequest, Beebium_ReleaseFromLauncherResponse>
+
   func getAdvertisementState(
     _ request: Beebium_GetAdvertisementStateRequest,
     callOptions: CallOptions?
@@ -242,6 +247,31 @@ extension Beebium_SystemServiceClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeRequestShutdownInterceptors() ?? []
+    )
+  }
+
+  /// Let the server outlive the client that launched it, so that client can
+  /// hand it off and leave it running. A server launched with
+  /// --exit-with-parent stops watching for its launcher's end; and every
+  /// released server points its stdout and stderr, pipes the launcher holds,
+  /// at the null device, so its writes cannot fail once the launcher has
+  /// gone. Only the launching client (the requester's instance UUID matches
+  /// the launch provenance) may release it; anyone else gets
+  /// PERMISSION_DENIED. Releasing twice changes nothing.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ReleaseFromLauncher.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func releaseFromLauncher(
+    _ request: Beebium_ReleaseFromLauncherRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_ReleaseFromLauncherRequest, Beebium_ReleaseFromLauncherResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.releaseFromLauncher.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReleaseFromLauncherInterceptors() ?? []
     )
   }
 
@@ -516,6 +546,11 @@ internal protocol Beebium_SystemServiceAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_ShutdownRequest, Beebium_ShutdownResponse>
 
+  func makeReleaseFromLauncherCall(
+    _ request: Beebium_ReleaseFromLauncherRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_ReleaseFromLauncherRequest, Beebium_ReleaseFromLauncherResponse>
+
   func makeGetAdvertisementStateCall(
     _ request: Beebium_GetAdvertisementStateRequest,
     callOptions: CallOptions?
@@ -648,6 +683,18 @@ extension Beebium_SystemServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeRequestShutdownInterceptors() ?? []
+    )
+  }
+
+  internal func makeReleaseFromLauncherCall(
+    _ request: Beebium_ReleaseFromLauncherRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_ReleaseFromLauncherRequest, Beebium_ReleaseFromLauncherResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.releaseFromLauncher.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReleaseFromLauncherInterceptors() ?? []
     )
   }
 
@@ -834,6 +881,18 @@ extension Beebium_SystemServiceAsyncClientProtocol {
     )
   }
 
+  internal func releaseFromLauncher(
+    _ request: Beebium_ReleaseFromLauncherRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ReleaseFromLauncherResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_SystemServiceClientMetadata.Methods.releaseFromLauncher.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReleaseFromLauncherInterceptors() ?? []
+    )
+  }
+
   internal func getAdvertisementState(
     _ request: Beebium_GetAdvertisementStateRequest,
     callOptions: CallOptions? = nil
@@ -971,6 +1030,9 @@ internal protocol Beebium_SystemServiceClientInterceptorFactoryProtocol: Sendabl
   /// - Returns: Interceptors to use when invoking 'requestShutdown'.
   func makeRequestShutdownInterceptors() -> [ClientInterceptor<Beebium_ShutdownRequest, Beebium_ShutdownResponse>]
 
+  /// - Returns: Interceptors to use when invoking 'releaseFromLauncher'.
+  func makeReleaseFromLauncherInterceptors() -> [ClientInterceptor<Beebium_ReleaseFromLauncherRequest, Beebium_ReleaseFromLauncherResponse>]
+
   /// - Returns: Interceptors to use when invoking 'getAdvertisementState'.
   func makeGetAdvertisementStateInterceptors() -> [ClientInterceptor<Beebium_GetAdvertisementStateRequest, Beebium_GetAdvertisementStateResponse>]
 
@@ -1008,6 +1070,7 @@ internal enum Beebium_SystemServiceClientMetadata {
       Beebium_SystemServiceClientMetadata.Methods.previewMachineDescription,
       Beebium_SystemServiceClientMetadata.Methods.watchServerStatus,
       Beebium_SystemServiceClientMetadata.Methods.requestShutdown,
+      Beebium_SystemServiceClientMetadata.Methods.releaseFromLauncher,
       Beebium_SystemServiceClientMetadata.Methods.getAdvertisementState,
       Beebium_SystemServiceClientMetadata.Methods.setAdvertisement,
       Beebium_SystemServiceClientMetadata.Methods.getPacingStats,
@@ -1059,6 +1122,12 @@ internal enum Beebium_SystemServiceClientMetadata {
     internal static let requestShutdown = GRPCMethodDescriptor(
       name: "RequestShutdown",
       path: "/beebium.SystemService/RequestShutdown",
+      type: GRPCCallType.unary
+    )
+
+    internal static let releaseFromLauncher = GRPCMethodDescriptor(
+      name: "ReleaseFromLauncher",
+      path: "/beebium.SystemService/ReleaseFromLauncher",
       type: GRPCCallType.unary
     )
 
@@ -1153,6 +1222,16 @@ internal protocol Beebium_SystemServiceProvider: CallHandlerProvider {
   /// Policy: accept if requester's instance UUID matches launch provenance,
   ///         or only one client connected, or --allow-shutdown flag was set.
   func requestShutdown(request: Beebium_ShutdownRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ShutdownResponse>
+
+  /// Let the server outlive the client that launched it, so that client can
+  /// hand it off and leave it running. A server launched with
+  /// --exit-with-parent stops watching for its launcher's end; and every
+  /// released server points its stdout and stderr, pipes the launcher holds,
+  /// at the null device, so its writes cannot fail once the launcher has
+  /// gone. Only the launching client (the requester's instance UUID matches
+  /// the launch provenance) may release it; anyone else gets
+  /// PERMISSION_DENIED. Releasing twice changes nothing.
+  func releaseFromLauncher(request: Beebium_ReleaseFromLauncherRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ReleaseFromLauncherResponse>
 
   /// Get current mDNS service advertisement state
   func getAdvertisementState(request: Beebium_GetAdvertisementStateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_GetAdvertisementStateResponse>
@@ -1276,6 +1355,15 @@ extension Beebium_SystemServiceProvider {
         responseSerializer: ProtobufSerializer<Beebium_ShutdownResponse>(),
         interceptors: self.interceptors?.makeRequestShutdownInterceptors() ?? [],
         userFunction: self.requestShutdown(request:context:)
+      )
+
+    case "ReleaseFromLauncher":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ReleaseFromLauncherRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ReleaseFromLauncherResponse>(),
+        interceptors: self.interceptors?.makeReleaseFromLauncherInterceptors() ?? [],
+        userFunction: self.releaseFromLauncher(request:context:)
       )
 
     case "GetAdvertisementState":
@@ -1421,6 +1509,19 @@ internal protocol Beebium_SystemServiceAsyncProvider: CallHandlerProvider, Senda
     request: Beebium_ShutdownRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_ShutdownResponse
+
+  /// Let the server outlive the client that launched it, so that client can
+  /// hand it off and leave it running. A server launched with
+  /// --exit-with-parent stops watching for its launcher's end; and every
+  /// released server points its stdout and stderr, pipes the launcher holds,
+  /// at the null device, so its writes cannot fail once the launcher has
+  /// gone. Only the launching client (the requester's instance UUID matches
+  /// the launch provenance) may release it; anyone else gets
+  /// PERMISSION_DENIED. Releasing twice changes nothing.
+  func releaseFromLauncher(
+    request: Beebium_ReleaseFromLauncherRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ReleaseFromLauncherResponse
 
   /// Get current mDNS service advertisement state
   func getAdvertisementState(
@@ -1578,6 +1679,15 @@ extension Beebium_SystemServiceAsyncProvider {
         wrapping: { try await self.requestShutdown(request: $0, context: $1) }
       )
 
+    case "ReleaseFromLauncher":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ReleaseFromLauncherRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ReleaseFromLauncherResponse>(),
+        interceptors: self.interceptors?.makeReleaseFromLauncherInterceptors() ?? [],
+        wrapping: { try await self.releaseFromLauncher(request: $0, context: $1) }
+      )
+
     case "GetAdvertisementState":
       return GRPCAsyncServerHandler(
         context: context,
@@ -1686,6 +1796,10 @@ internal protocol Beebium_SystemServiceServerInterceptorFactoryProtocol: Sendabl
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeRequestShutdownInterceptors() -> [ServerInterceptor<Beebium_ShutdownRequest, Beebium_ShutdownResponse>]
 
+  /// - Returns: Interceptors to use when handling 'releaseFromLauncher'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeReleaseFromLauncherInterceptors() -> [ServerInterceptor<Beebium_ReleaseFromLauncherRequest, Beebium_ReleaseFromLauncherResponse>]
+
   /// - Returns: Interceptors to use when handling 'getAdvertisementState'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetAdvertisementStateInterceptors() -> [ServerInterceptor<Beebium_GetAdvertisementStateRequest, Beebium_GetAdvertisementStateResponse>]
@@ -1731,6 +1845,7 @@ internal enum Beebium_SystemServiceServerMetadata {
       Beebium_SystemServiceServerMetadata.Methods.previewMachineDescription,
       Beebium_SystemServiceServerMetadata.Methods.watchServerStatus,
       Beebium_SystemServiceServerMetadata.Methods.requestShutdown,
+      Beebium_SystemServiceServerMetadata.Methods.releaseFromLauncher,
       Beebium_SystemServiceServerMetadata.Methods.getAdvertisementState,
       Beebium_SystemServiceServerMetadata.Methods.setAdvertisement,
       Beebium_SystemServiceServerMetadata.Methods.getPacingStats,
@@ -1782,6 +1897,12 @@ internal enum Beebium_SystemServiceServerMetadata {
     internal static let requestShutdown = GRPCMethodDescriptor(
       name: "RequestShutdown",
       path: "/beebium.SystemService/RequestShutdown",
+      type: GRPCCallType.unary
+    )
+
+    internal static let releaseFromLauncher = GRPCMethodDescriptor(
+      name: "ReleaseFromLauncher",
+      path: "/beebium.SystemService/ReleaseFromLauncher",
       type: GRPCCallType.unary
     )
 
