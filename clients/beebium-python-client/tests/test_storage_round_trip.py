@@ -301,3 +301,44 @@ def test_files_written_in_the_guest_reach_the_image_and_survive_a_relaunch(
         assert bbc.memory.address.peek.read(LOAD_ADDRESS, len(text)) == text, (
             f"{row.text_name} read back in the guest"
         )
+
+
+# The write-inactivity flush (DiscWriteBack): about 0.25 s of emulated time
+# after the last write, well short of the drive motor's spin-down of about
+# 2 s, the controller writes its dirty tracks to the image file.
+AFTER_SAVE_SECONDS = 0.6
+FLUSH_ROWS = [row for row in ROWS if row.id in ("dfs-8271-ssd", "dfs-1770-ssd", "adfs-1770-l")]
+
+
+@pytest.mark.parametrize("row", FLUSH_ROWS, ids=[row.id for row in FLUSH_ROWS])
+def test_a_save_reaches_the_image_file_while_the_motor_still_runs(
+    row: Row,
+    beebium_roms_dirpath: Path,
+    beebium_server_filepath: Path | None,
+    tmp_path: Path,
+) -> None:
+    """Writes reach the image on the controller's own settle timer.
+
+    Not at motor-off, not at eject, not at shutdown: the save is on the host,
+    readable by another program, while the server runs and the motor turns.
+    The time is emulated, stepped by the debugger, so a slow host cannot
+    stretch it past the motor's spin-down.
+    """
+    with _launch(row, beebium_roms_dirpath, beebium_server_filepath, []) as maker:
+        image_filepath = row.make_image(maker, tmp_path)
+
+    with _launch(row, beebium_roms_dirpath, beebium_server_filepath,
+                 row.image_args(image_filepath)) as bbc:
+        bbc.wait_until_ready()
+        _run_and_wait(bbc, row.select, "SELECTED")
+        bbc.memory.address.bus.write(BIG_ADDRESS, BIG_DATA)
+        sentinel = f"SAVED{next(_sentinel_numbers)}"
+        bbc.keyboard.type(f'*SAVE BIG {BIG_ADDRESS:X} +{BIG_LENGTH:X}\r'
+                          f'PRINT "{sentinel[:3]}";"{sentinel[3:]}"\r')
+        assert bbc.run_until_or_timeout(
+            lambda: sentinel in bbc.video.screen_text().text, emulated_seconds=30.0
+        ), f"*SAVE did not return:\n{bbc.video.screen_text().text}"
+
+        bbc.run_for_emulated_seconds(AFTER_SAVE_SECONDS)
+        assert bbc.disc.drive0.motor_on, "the motor stopped first, so the flush is not shown apart from it"
+        assert row.read_image(image_filepath, "BIG") == BIG_DATA

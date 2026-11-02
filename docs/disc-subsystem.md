@@ -883,9 +883,10 @@ swapping the disc silently.
 
 The in-memory dirty layer is why this machinery is needed: without it, a track
 written and then stepped away from would sit unflushed in process memory and be
-invisible to external tools. (This was a real bug; see the
-`integration_tests/dfs-writeback` suite, which verifies the host image with
-`oaknut-dfs` out of process.)
+invisible to external tools. (This was a real bug. The Python client's
+`tests/test_storage_round_trip.py` reads the host image with oaknut, out of
+process, after each save: while the server still runs and the motor still
+turns, after a shutdown, and across a relaunch.)
 
 ### Hard disc (HDD) write-through
 
