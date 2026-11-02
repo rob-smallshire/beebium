@@ -1,8 +1,10 @@
 #!/bin/sh
-# The Linux client's build dependencies on Debian trixie (and so Raspberry Pi
-# OS trixie), from the distribution: the one list the CI job and the release
-# build both install, as root, in a debian:trixie container. The package's
-# runtime Depends are derived from what these link (dpkg-shlibdeps).
+# The Linux client's build dependencies, from the distribution: the one list
+# the CI job and the release build both install, as root, in a container of
+# each distribution the client is packaged for (Debian 13 trixie, which serves
+# Raspberry Pi OS trixie too, and Ubuntu 26.04); the names are the same on
+# both. The package's runtime Depends are derived from what these link
+# (dpkg-shlibdeps).
 set -eu
 export DEBIAN_FRONTEND=noninteractive
 apt-get update

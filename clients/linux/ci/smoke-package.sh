@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install the client .deb with apt so its Depends resolve, run it, validate
 # its desktop entry and metainfo, and remove it, leaving nothing in /usr.
-# Run as root in a clean debian:trixie container.
+# Run as root in a clean container of the distribution it was built for.
 # Usage: clients/linux/ci/smoke-package.sh path/to/beebium-client_V_ARCH.deb
 set -eu
 export DEBIAN_FRONTEND=noninteractive
