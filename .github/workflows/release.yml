@@ -52,8 +52,9 @@ jobs:
     needs: build-env
     uses: ./.github/workflows/linux-packages.yml
 
-  # The Linux client .deb (beebium-client), built on Debian trixie against the
-  # archive's current Qt and smoked in a fresh trixie container.
+  # The Linux client .debs (beebium-client), one per distribution and
+  # architecture (Debian 13 and Ubuntu 26.04), each built against its archive's
+  # current Qt and smoked in a fresh container of that distribution.
   linux-client:
     uses: ./.github/workflows/linux-client-package.yml
 
@@ -456,7 +457,8 @@ jobs:
           path: _artifacts
           merge-multiple: true
 
-      # The Linux client .debs (one per arch) join the release asset set.
+      # The Linux client .debs (one per distribution and arch) join the release
+      # asset set.
       - uses: actions/download-artifact@v8
         with:
           pattern: linux-client-*
@@ -490,8 +492,10 @@ jobs:
             "beebium-server_${V}_arm64.deb" \
             "beebium-server-${V}-1.x86_64.rpm" \
             "beebium-server-${V}-1.aarch64.rpm" \
-            "beebium-client_${V}_amd64.deb" \
-            "beebium-client_${V}_arm64.deb" \
+            "beebium-client_${V}.debian13_amd64.deb" \
+            "beebium-client_${V}.debian13_arm64.deb" \
+            "beebium-client_${V}.ubuntu26.04_amd64.deb" \
+            "beebium-client_${V}.ubuntu26.04_arm64.deb" \
             "Beebium-${V}-macos-arm64.dmg" \
             "Beebium-${V}-macos-x86_64.dmg" | sort)"
           actual="$(ls -1 | sort)"
@@ -519,16 +523,20 @@ jobs:
             [ "${a}" = "${arch}" ] || { echo "::error::${d} Architecture=${a}, expected ${arch}"; exit 1; }
           done
 
-          # 3a. Each client .deb is the beebium-client package, at this version,
-          #     for the architecture its filename names.
-          for arch in amd64 arm64; do
-            d="beebium-client_${V}_${arch}.deb"
-            p="$(dpkg-deb -f "${d}" Package)"
-            v="$(dpkg-deb -f "${d}" Version)"
-            a="$(dpkg-deb -f "${d}" Architecture)"
-            [ "${p}" = beebium-client ] || { echo "::error::${d} Package=${p}, expected beebium-client"; exit 1; }
-            [ "${v}" = "${V}" ] || { echo "::error::${d} Version=${v}, expected ${V}"; exit 1; }
-            [ "${a}" = "${arch}" ] || { echo "::error::${d} Architecture=${a}, expected ${arch}"; exit 1; }
+          # 3a. Each client .deb is the beebium-client package, at this version
+          #     with the tilde suffix of the distribution its filename names
+          #     (the filename has a dot there, as GitHub publishes it), for the
+          #     architecture its filename names.
+          for distro in debian13 ubuntu26.04; do
+            for arch in amd64 arm64; do
+              d="beebium-client_${V}.${distro}_${arch}.deb"
+              p="$(dpkg-deb -f "${d}" Package)"
+              v="$(dpkg-deb -f "${d}" Version)"
+              a="$(dpkg-deb -f "${d}" Architecture)"
+              [ "${p}" = beebium-client ] || { echo "::error::${d} Package=${p}, expected beebium-client"; exit 1; }
+              [ "${v}" = "${V}~${distro}" ] || { echo "::error::${d} Version=${v}, expected ${V}~${distro}"; exit 1; }
+              [ "${a}" = "${arch}" ] || { echo "::error::${d} Architecture=${a}, expected ${arch}"; exit 1; }
+            done
           done
 
           # 3b. Each .rpm's declared arch matches its filename. RPM names arches

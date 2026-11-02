@@ -19,13 +19,24 @@ Requires macOS 13 (Ventura) or newer.
 
 ### Linux
 
-For Debian trixie and Raspberry Pi OS trixie (`amd64` or `arm64`): download the app and the servers for your architecture, then install both with apt, which fetches the app's Qt and gRPC libraries from the distribution.
+Each Linux distribution has its own app package, built against that distribution's own Qt and gRPC; choose the one for your system. Download the app and the servers for your architecture, then install both with apt, which fetches the app's libraries from the distribution. The example installs arm64; use the amd64 files on a PC.
 
-- **amd64**: [beebium-client_@@V@@_amd64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-client_@@V@@_amd64.deb) and [beebium-server_@@V@@_amd64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_amd64.deb)
-- **arm64**: [beebium-client_@@V@@_arm64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-client_@@V@@_arm64.deb) and [beebium-server_@@V@@_arm64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_arm64.deb)
+#### Debian 13 (trixie) and Raspberry Pi OS (trixie)
+
+- **amd64**: [beebium-client_@@V@@.debian13_amd64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-client_@@V@@.debian13_amd64.deb) and [beebium-server_@@V@@_amd64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_amd64.deb)
+- **arm64**: [beebium-client_@@V@@.debian13_arm64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-client_@@V@@.debian13_arm64.deb) and [beebium-server_@@V@@_arm64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_arm64.deb)
 
 ```
-sudo apt install ./beebium-client_@@V@@_arm64.deb ./beebium-server_@@V@@_arm64.deb
+sudo apt install ./beebium-client_@@V@@.debian13_arm64.deb ./beebium-server_@@V@@_arm64.deb
+```
+
+#### Ubuntu 26.04 LTS
+
+- **amd64**: [beebium-client_@@V@@.ubuntu26.04_amd64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-client_@@V@@.ubuntu26.04_amd64.deb) and [beebium-server_@@V@@_amd64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_amd64.deb)
+- **arm64**: [beebium-client_@@V@@.ubuntu26.04_arm64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-client_@@V@@.ubuntu26.04_arm64.deb) and [beebium-server_@@V@@_arm64.deb](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_arm64.deb)
+
+```
+sudo apt install ./beebium-client_@@V@@.ubuntu26.04_arm64.deb ./beebium-server_@@V@@_arm64.deb
 ```
 
 *A Windows application is planned. For now, Windows runs Beebium through the headless servers below.*
