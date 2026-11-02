@@ -380,7 +380,23 @@ install(DIRECTORY packaging/icons/hicolor
 set(CPACK_GENERATOR "DEB")
 set(CPACK_PACKAGE_NAME "beebium-client")
 set(CPACK_PACKAGE_VENDOR "Robert Smallshire")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+# The distribution the .deb is built for, as a tilde suffix on its version
+# (0.16.0~debian13): a package built for one distribution's libraries is a
+# different package from one built for another's, and the suffix says which.
+# The tilde sorts it below a plain 0.16.0. CI sets it per distribution; a local
+# build leaves it empty and gets the plain version.
+set(BEEBIUM_CLIENT_PACKAGE_DISTRIBUTION "" CACHE STRING
+    "Distribution suffix for the .deb version, e.g. debian13 or ubuntu26.04; empty for none")
+if(BEEBIUM_CLIENT_PACKAGE_DISTRIBUTION)
+    if(NOT BEEBIUM_CLIENT_PACKAGE_DISTRIBUTION MATCHES "^[a-z][a-z0-9.]*$")
+        message(FATAL_ERROR
+            "BEEBIUM_CLIENT_PACKAGE_DISTRIBUTION '${BEEBIUM_CLIENT_PACKAGE_DISTRIBUTION}' "
+            "must be lower-case letters, digits and dots, starting with a letter")
+    endif()
+    set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}~${BEEBIUM_CLIENT_PACKAGE_DISTRIBUTION}")
+else()
+    set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+endif()
 set(CPACK_PACKAGE_CONTACT "Robert Smallshire <robert@smallshire.org.uk>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Beebium BBC Micro emulator, the desktop application")
 set(CPACK_DEBIAN_PACKAGE_DESCRIPTION
