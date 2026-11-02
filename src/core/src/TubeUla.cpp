@@ -110,6 +110,7 @@ uint8_t TubeUla::host_read(uint8_t offset)
             r1_p2h_.head = (head + 1) % 24;
             --r1_p2h_.count;
             ++counters_.r1_p2h_reads;
+            trace_event(0x18, result);  // R1 P2H host-read
         } else {
             result = coprocessor_bus_latch_;
         }
@@ -289,6 +290,7 @@ void TubeUla::host_write(uint8_t offset, uint8_t value)
         r1_h2p_.available = true;
         r1_h2p_.full = true;
         ++counters_.r1_h2p_writes;
+        trace_event(0x10, value);  // R1 H2P host-write
         break;
     }
 
@@ -369,6 +371,7 @@ uint8_t TubeUla::coprocessor_read(uint8_t offset)
             r1_h2p_.available = false;
             r1_h2p_.full = false;
             ++counters_.r1_h2p_reads;
+            trace_event(0x14, result);  // R1 H2P coprocessor-read
         }
         break;
     }
@@ -527,6 +530,7 @@ void TubeUla::coprocessor_write(uint8_t offset, uint8_t value)
             r1_p2h_.tail = (tail + 1) % 24;
             ++r1_p2h_.count;
             ++counters_.r1_p2h_writes;
+            trace_event(0x1C, value);  // R1 P2H coprocessor-write
         }
         break;
     }

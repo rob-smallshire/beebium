@@ -136,6 +136,37 @@ TEST_CASE("TubeInspection: fifo_snapshot reports the whole R1 P-to-H FIFO in ord
     CHECK(small[7] == 11);
 }
 
+TEST_CASE("TubeInspection: the protocol trace records register 1 like the others",
+          "[tube][inspection]") {
+    // Issue #250: register 1 was never hooked, so its OSWRCH/Escape/event
+    // traffic was invisible in the trace while registers 2-4 were recorded.
+    TubeUla ula;
+    ula.reset();
+
+    // One access on each register 1 path, in both directions and on both sides.
+    ula.host_write(1, 0xA1);          // R1 H-to-P host write   -> tag 0x10
+    (void)ula.coprocessor_read(1);    // R1 H-to-P coprocessor read -> tag 0x14
+    ula.coprocessor_write(1, 0xB2);   // R1 P-to-H coprocessor write -> tag 0x1C
+    (void)ula.host_read(1);           // R1 P-to-H host read    -> tag 0x18
+
+    TubeInspection::TraceEntry buf[TubeInspection::TRACE_SIZE];
+    size_t n = ula.trace_snapshot(buf, TubeInspection::TRACE_SIZE);
+    REQUIRE(n == 4);
+
+    // All four entries are register 1 (tag bits 7-4), in access order.
+    CHECK(buf[0].tag == 0x10);
+    CHECK(buf[0].value == 0xA1);
+    CHECK(buf[1].tag == 0x14);
+    CHECK(buf[1].value == 0xA1);
+    CHECK(buf[2].tag == 0x1C);
+    CHECK(buf[2].value == 0xB2);
+    CHECK(buf[3].tag == 0x18);
+    CHECK(buf[3].value == 0xB2);
+    for (size_t i = 0; i < n; ++i) {
+        CHECK((buf[i].tag >> 4) == 1);  // register 1
+    }
+}
+
 TEST_CASE("TubeInspection: fifo_snapshot reports the two-byte R3 registers",
           "[tube][inspection]") {
     TubeUla ula;
