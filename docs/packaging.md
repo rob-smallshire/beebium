@@ -797,7 +797,9 @@ from the link flag, not the input objects, so `macos-bundle.yml` sets an explici
 `CMAKE_OSX_DEPLOYMENT_TARGET` (11.0 arm64 — the first Apple-Silicon macOS; 12.0
 x86_64 — a defensible modern Intel floor) *while still reusing CI's warm caches*,
 and asserts the built binary's `minos` equals it. The wheel tag matches that
-floor, so it is honest.
+floor, so it is honest. The cache key includes the runner's `ImageVersion`, so
+after a hosted image update a tag's arm64 bundle starts warm only if CI has run
+on master since; otherwise it rebuilds gRPC from source (about 30 min).
 
 The `beebium[server]` extra (a pin to the exact same version) is deferred — an
 exact pin on a sibling published later in the same release cannot resolve during
