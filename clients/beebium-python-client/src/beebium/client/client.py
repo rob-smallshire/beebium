@@ -178,7 +178,6 @@ class Beebium:
         return client
 
     @classmethod
-    @contextlib.contextmanager
     def launch(
         cls,
         mos_filepath: str | Path | None = None,
@@ -191,13 +190,19 @@ class Beebium:
         extra_args: list[str] | None = None,
         preset: str | Path | None = None,
         start_stopped: bool = False,
-    ) -> Iterator[Beebium]:
-        """Start a beebium-server process and connect to it.
+    ) -> Beebium:
+        """Start a beebium-server process, connect to it and return the client.
 
         The server waits for this client, which starts the machine once it has
         connected and verified the protocol, so a launch means the same thing
-        in emulated time however long the host took to connect. The server is
-        automatically stopped when the context manager exits.
+        in emulated time however long the host took to connect.
+
+        Like connect(), it returns the client, usable bare or under ``with``:
+        ``bbc = Beebium.launch()`` then ``bbc.close()``, or
+        ``with Beebium.launch() as bbc:``. Either way, closing the client shuts
+        down the server it started. If the server starts but the client cannot
+        connect to it or verify it, the server is stopped before the error is
+        raised.
 
         Requires: nothing.
         Leaves the machine: RUNNING.
@@ -229,8 +234,8 @@ class Beebium:
                 ``run(stop_at_current=True)`` to stop on one at the reset
                 vector itself.)
 
-        Yields:
-            A connected Beebium client.
+        Returns:
+            A connected Beebium client, which owns the server.
 
         Raises:
             ServerStartupError: If the server fails to start.
@@ -262,8 +267,7 @@ class Beebium:
             # announces its port, so nothing here can race that.
             if not start_stopped:
                 client.debugger.run()
-            yield client
-        finally:
+        except BaseException:
             # Shut the server down as a user would, so it keeps what a
             # graceful shutdown keeps (a saved machine's battery-backed state
             # and screen); stopping the process alone is a hard kill on
@@ -272,6 +276,8 @@ class Beebium:
                 client.close()
             else:
                 process.stop()
+            raise
+        return client
 
     def _verify_protocol(self, installation_description: str | None = None) -> None:
         """Assert the server's wire protocol matches this client's.

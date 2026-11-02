@@ -86,6 +86,9 @@ with Beebium.launch() as bbc:
     print(bbc.expect("4"))         # -> 4
 ```
 
+`launch()` returns the client itself, so it works without `with` too, as in a
+REPL: `bbc = Beebium.launch()`, and `bbc.close()` when done stops the server.
+
 ### Connect to a running server
 
 ```python
