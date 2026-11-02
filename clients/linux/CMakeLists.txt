@@ -37,6 +37,12 @@ get_filename_component(BEEBIUM_REPO_DIRPATH "${CMAKE_CURRENT_SOURCE_DIR}/../.." 
 include(${BEEBIUM_REPO_DIRPATH}/cmake/BeebiumGrpc.cmake)
 
 find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets DBus Network ShaderTools)
+# QRhi's headers come through Qt6::GuiPrivate (see the display library). Qt 6.9
+# and later declare private modules only when asked for by name; earlier Qt
+# declares them with the public module.
+if(NOT TARGET Qt6::GuiPrivate)
+    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+endif()
 # Sound output (client specification 8): optional, so the rest builds and
 # is tested where Qt Multimedia is not installed; without it the client
 # says it has no sound output.
