@@ -50,6 +50,7 @@ elseif(MSVC)
         /permissive-        # Strict conformance mode
         /Zc:__cplusplus     # Correct __cplusplus macro value
         /utf-8              # Source and execution charset UTF-8
+        /bigobj             # Large object format: big test files exceed the default section limit
         /wd4324             # Structure padding due to alignas (intentional for cache-line alignment)
         /wd4251             # dll-interface for std:: members; unavoidable in the generated protobuf headers and benign with a single shared runtime
         /wd4275             # non dll-interface base class; same origin and rationale as 4251
