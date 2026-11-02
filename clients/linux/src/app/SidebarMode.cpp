@@ -32,23 +32,36 @@ QString sidebar_mode_label(SidebarMode mode) {
     return {};
 }
 
-QIcon sidebar_mode_icon(SidebarMode mode) {
-    // Freedesktop icon names, with the style's own where a theme lacks one.
-    const auto themed = [](const char* name, QStyle::StandardPixmap fallback) {
-        return QIcon::fromTheme(QString::fromLatin1(name),
-                                QApplication::style()->standardIcon(fallback));
-    };
+QString sidebar_mode_icon_name(SidebarMode mode) {
     switch (mode) {
-    case SidebarMode::storage: return themed("drive-harddisk", QStyle::SP_DriveHDIcon);
-    case SidebarMode::memory: return themed("media-flash", QStyle::SP_DriveFDIcon);
-    case SidebarMode::peripherals: return themed("preferences-plugin", QStyle::SP_DirIcon);
-    case SidebarMode::video: return themed("video-display", QStyle::SP_ComputerIcon);
-    case SidebarMode::sound: return themed("audio-volume-high", QStyle::SP_MediaVolume);
-    case SidebarMode::keyboard: return themed("input-keyboard", QStyle::SP_ComputerIcon);
-    case SidebarMode::processor: return themed("cpu", QStyle::SP_ComputerIcon);
-    case SidebarMode::network: return themed("network-wired", QStyle::SP_DriveNetIcon);
+    case SidebarMode::storage: return QStringLiteral("drive-harddisk");
+    case SidebarMode::memory: return QStringLiteral("media-flash");
+    case SidebarMode::peripherals: return QStringLiteral("preferences-plugin");
+    case SidebarMode::video: return QStringLiteral("video-display");
+    case SidebarMode::sound: return QStringLiteral("audio-card");
+    case SidebarMode::keyboard: return QStringLiteral("input-keyboard");
+    case SidebarMode::processor: return QStringLiteral("cpu");
+    case SidebarMode::network: return QStringLiteral("network-wired");
     }
     return {};
+}
+
+QIcon sidebar_mode_icon(SidebarMode mode) {
+    const auto fallback = [mode] {
+        switch (mode) {
+        case SidebarMode::storage: return QStyle::SP_DriveHDIcon;
+        case SidebarMode::memory: return QStyle::SP_DriveFDIcon;
+        case SidebarMode::peripherals: return QStyle::SP_DirIcon;
+        case SidebarMode::sound: return QStyle::SP_MediaVolume;
+        case SidebarMode::network: return QStyle::SP_DriveNetIcon;
+        case SidebarMode::video:
+        case SidebarMode::keyboard:
+        case SidebarMode::processor: break;
+        }
+        return QStyle::SP_ComputerIcon;
+    };
+    return QIcon::fromTheme(sidebar_mode_icon_name(mode),
+                            QApplication::style()->standardIcon(fallback()));
 }
 
 bool shows_server_state(SidebarMode mode) {

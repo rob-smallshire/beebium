@@ -36,6 +36,10 @@ enum class SidebarMode {
 };
 
 QString sidebar_mode_label(SidebarMode mode);
+// The mode's freedesktop icon name, from the theme's devices where one
+// fits, so the modes' icons are one set; and the icon, the style's own
+// where the theme lacks the name.
+QString sidebar_mode_icon_name(SidebarMode mode);
 QIcon sidebar_mode_icon(SidebarMode mode);
 // Whether the mode shows or drives the server's state, rather than this
 // client's own settings (display style, keyboard mapping).
