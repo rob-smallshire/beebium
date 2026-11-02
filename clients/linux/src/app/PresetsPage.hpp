@@ -57,7 +57,6 @@ public:
     std::optional<PresetListing> chosen() const;
     const std::vector<PresetListing>& presets() const { return presets_; }
     CardGrid* grid() const { return grid_; }
-    QPushButton* launch_button() const { return launch_; }
     QString status_text() const;
     // The server's own words, when reading the presets failed.
     QString detail_text() const;
@@ -73,7 +72,6 @@ private:
     void show_presets(const std::vector<PresetListing>& presets);
     void fetch_thumbnail(QListWidgetItem* item, const PresetListing& preset);
     void launch_chosen();
-    void update_launch();
 
     std::optional<ServerLocation> servers_;
     QString thumbnail_cache_dirpath_;
@@ -82,7 +80,6 @@ private:
     QLabel* status_;
     QLabel* detail_;
     QPushButton* configure_;
-    QPushButton* launch_;
     std::vector<PresetListing> presets_;
     // Presets whose thumbnail could not be made: never asked for again.
     QSet<QString> thumbnail_failed_;

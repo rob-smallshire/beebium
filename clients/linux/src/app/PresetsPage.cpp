@@ -68,17 +68,11 @@ PresetsPage::PresetsPage(QString thumbnail_cache_dirpath, QWidget* parent)
     configure_->hide();
     buttons->addWidget(configure_);
     buttons->addStretch(1);
-    launch_ = new QPushButton(tr("&Launch"), this);
-    launch_->setObjectName(QStringLiteral("launch"));
-    launch_->setDefault(true);
-    launch_->setEnabled(false);
-    buttons->addWidget(launch_);
     layout->addLayout(buttons);
 
     connect(configure_, &QPushButton::clicked, this, &PresetsPage::configure_requested);
-    connect(launch_, &QPushButton::clicked, this, &PresetsPage::launch_chosen);
-    connect(grid_, &QListWidget::currentItemChanged, this, &PresetsPage::update_launch);
-    // Double-click or Enter on a card launches it, as Launch does.
+    // Activating a card launches it: a click or a double-click, as the
+    // desktop is set, or Return.
     connect(grid_, &QListWidget::itemActivated, this, &PresetsPage::launch_chosen);
 }
 
@@ -89,7 +83,6 @@ void PresetsPage::set_servers(std::optional<ServerLocation> servers) {
 
 void PresetsPage::set_launching(bool launching) {
     launching_ = launching;
-    update_launch();
 }
 
 QString PresetsPage::status_text() const {
@@ -102,10 +95,6 @@ QString PresetsPage::detail_text() const {
 
 bool PresetsPage::offering_configure() const {
     return !configure_->isHidden();
-}
-
-void PresetsPage::update_launch() {
-    launch_->setEnabled(!launching_ && chosen().has_value());
 }
 
 void PresetsPage::launch_chosen() {
@@ -121,7 +110,6 @@ void PresetsPage::load() {
     const int generation = ++generation_;
     presets_.clear();
     grid_->clear();
-    update_launch();
     detail_->hide();
     if (!servers_) {
         status_->setText(tr("Beebium could not find its servers on this computer. Install the "
@@ -176,7 +164,6 @@ void PresetsPage::show_presets(const std::vector<PresetListing>& presets) {
     }
     status_->setText(presets_.empty() ? tr("No presets can be launched with the servers found.")
                                       : QString());
-    update_launch();
 }
 
 void PresetsPage::fetch_thumbnail(QListWidgetItem* item, const PresetListing& preset) {

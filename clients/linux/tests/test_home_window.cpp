@@ -164,7 +164,7 @@ TEST_CASE("Without servers the presets page says so and offers Configure", "[hom
     page.set_servers(std::nullopt);
     CHECK(page.status_text().contains(QStringLiteral("could not find its servers")));
     CHECK(page.offering_configure());
-    CHECK_FALSE(page.launch_button()->isEnabled());
+    CHECK(page.grid()->count() == 0);
 }
 
 TEST_CASE("Servers that cannot list the presets are named, in their own words, with Configure",
@@ -191,7 +191,7 @@ TEST_CASE("Servers that cannot list the presets are named, in their own words, w
     CHECK(page.grid()->count() == 0);
 }
 
-TEST_CASE("The presets page shows the catalogue as cards, and Launch asks for the chosen",
+TEST_CASE("The presets page shows the catalogue as cards, and activating one launches it",
           "[home][presets]") {
     FakeServers servers(1);
     QTemporaryDir cache;
@@ -201,21 +201,22 @@ TEST_CASE("The presets page shows the catalogue as cards, and Launch asks for th
     CHECK(page.grid()->item(0)->text().startsWith(QStringLiteral("Model B")));
     CHECK_FALSE(page.offering_configure());
     CHECK(page.detail_text().isEmpty());
-    // Chosen at once, so Launch, the default, is one press away.
-    REQUIRE(page.launch_button()->isEnabled());
-    CHECK(page.launch_button()->isDefault());
+    // The card is the control: no Launch button beside the grid.
+    CHECK(page.findChildren<QPushButton*>(QStringLiteral("launch")).isEmpty());
 
     std::optional<PresetListing> asked;
     QObject::connect(&page, &PresetsPage::launch_requested,
                      [&](const PresetListing& preset) { asked = preset; });
-    page.launch_button()->click();
+    // As a click or Return does, by the desktop's own setting.
+    Q_EMIT page.grid()->itemActivated(page.grid()->item(0));
     REQUIRE(asked);
     CHECK(asked->id == QStringLiteral("model-b"));
 
     // Nothing more while a launch is under way.
     asked.reset();
     page.set_launching(true);
-    CHECK_FALSE(page.launch_button()->isEnabled());
+    Q_EMIT page.grid()->itemActivated(page.grid()->item(0));
+    CHECK_FALSE(asked);
 }
 
 // --- recent machines -----------------------------------------------------------
@@ -469,7 +470,7 @@ TEST_CASE("Connect on the discovered machines page opens a window on that machin
     REQUIRE(wait_until([&] { return client.windows().empty(); }));
 }
 
-TEST_CASE("Launch on the presets page starts the preset's server and opens its window",
+TEST_CASE("Activating a preset starts the preset's server and opens its window",
           "[home][presets][launch]") {
     FakeServer server;
     FakeServers servers(server.port);
@@ -477,8 +478,8 @@ TEST_CASE("Launch on the presets page starts the preset's server and opens its w
     reset(client, servers.dirpath());
     client.show_home(HomePage::presets);
     PresetsPage* page = client.home_window()->presets_page();
-    REQUIRE(wait_until([&] { return page->launch_button()->isEnabled(); }));
-    page->launch_button()->click();
+    REQUIRE(wait_until([&] { return page->grid()->count() == 1; }));
+    Q_EMIT page->grid()->itemActivated(page->grid()->item(0));
     REQUIRE(wait_until([&] { return client.windows().size() == 1; }));
     MainWindow* window = client.windows().front();
     REQUIRE(wait_until([&] { return window->session().connected(); }));
@@ -491,7 +492,7 @@ TEST_CASE("Launch on the presets page starts the preset's server and opens its w
     REQUIRE(wait_until([&] { return client.windows().empty(); }, 15000ms));
 }
 
-TEST_CASE("Open on the recent machines page opens that machine, and it is remembered",
+TEST_CASE("Activating a recent machine opens it, and it is remembered",
           "[home][saved][launch]") {
     FakeServer server;
     FakeServers servers(server.port);
@@ -507,8 +508,10 @@ TEST_CASE("Open on the recent machines page opens that machine, and it is rememb
     // A user with a saved machine lands on them.
     REQUIRE(client.home_window()->page() == HomePage::saved_machines);
     SavedMachinesPage* page = client.home_window()->saved_machines_page();
-    REQUIRE(wait_until([&] { return page->open_button()->isEnabled(); }));
-    page->open_button()->click();
+    // The card is the control: no Open button beside the grid.
+    CHECK(page->findChildren<QPushButton*>(QStringLiteral("open")).isEmpty());
+    REQUIRE(wait_until([&] { return page->grid()->count() == 1; }));
+    Q_EMIT page->grid()->itemActivated(page->grid()->item(0));
     REQUIRE(wait_until([&] { return client.windows().size() == 1; }));
     MainWindow* window = client.windows().front();
     REQUIRE(wait_until([&] { return window->session().connected(); }));

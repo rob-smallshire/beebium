@@ -72,31 +72,19 @@ SavedMachinesPage::SavedMachinesPage(SavedMachines& machines, QWidget* parent)
     layout->addWidget(area, 1);
 
     auto* buttons = new QHBoxLayout;
-    // Clear well away from Open: it empties the whole list.
+    // A card's own actions are on its context menu.
     clear_ = new QPushButton(tr("C&lear List"), this);
-    remove_ = new QPushButton(tr("&Remove from List"), this);
     auto* browse = new QPushButton(tr("Open &Other..."), this);
-    open_ = new QPushButton(tr("&Open"), this);
-    open_->setObjectName(QStringLiteral("open"));
-    open_->setDefault(true);
     buttons->addWidget(clear_);
-    buttons->addWidget(remove_);
     buttons->addStretch(1);
     buttons->addWidget(browse);
-    buttons->addWidget(open_);
     layout->addLayout(buttons);
 
     connect(clear_, &QPushButton::clicked, &machines_, &SavedMachines::clear);
-    connect(remove_, &QPushButton::clicked, this, [this] {
-        const QString dirpath = chosen();
-        if (!dirpath.isEmpty()) {
-            machines_.forget(dirpath);
-        }
-    });
     connect(browse, &QPushButton::clicked, this, &SavedMachinesPage::browse_requested);
-    connect(open_, &QPushButton::clicked, this, &SavedMachinesPage::open_chosen);
+    // Activating a card opens it: a click or a double-click, as the
+    // desktop is set, or Return.
     connect(grid_, &QListWidget::itemActivated, this, &SavedMachinesPage::open_chosen);
-    connect(grid_, &QListWidget::currentItemChanged, this, &SavedMachinesPage::update_buttons);
     connect(grid_, &QWidget::customContextMenuRequested, this,
             &SavedMachinesPage::show_context_menu);
     connect(&machines_, &SavedMachines::changed, this, &SavedMachinesPage::rebuild);
@@ -149,9 +137,6 @@ void SavedMachinesPage::rebuild() {
 }
 
 void SavedMachinesPage::update_buttons() {
-    const bool any = !chosen().isEmpty();
-    open_->setEnabled(any);
-    remove_->setEnabled(any);
     clear_->setEnabled(!machines_.machines().empty());
 }
 

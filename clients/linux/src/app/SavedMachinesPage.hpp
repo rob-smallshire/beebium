@@ -47,7 +47,6 @@ public:
     QString chosen() const;
 
     CardGrid* grid() const { return grid_; }
-    QPushButton* open_button() const { return open_; }
     bool showing_empty_state() const;
 
 Q_SIGNALS:
@@ -69,8 +68,6 @@ private:
     CardGrid* grid_;
     QWidget* empty_;
     QPushButton* clear_;
-    QPushButton* remove_;
-    QPushButton* open_;
     QTimer refresh_;
 };
 
