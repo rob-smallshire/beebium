@@ -177,8 +177,11 @@ std::vector<SerialPortInfo> enumerate_serial_ports_apple() {
     if (!matching) return infos;
 
     io_iterator_t iterator = IO_OBJECT_NULL;
-    // IOServiceGetMatchingServices consumes a reference on `matching`.
-    if (IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) !=
+    // IOServiceGetMatchingServices consumes a reference on `matching`. A null
+    // main port means the default one, which is all kIOMainPortDefault names
+    // (IOKitLib.h); that constant needs macOS 12 and its older name is
+    // deprecated from 12, and the bundle supports macOS 11 upwards (#242).
+    if (IOServiceGetMatchingServices(MACH_PORT_NULL, matching, &iterator) !=
         KERN_SUCCESS) {
         return infos;
     }
