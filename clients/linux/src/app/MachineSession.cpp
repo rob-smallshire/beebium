@@ -160,6 +160,7 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
     machine_name_ = QString::fromStdString(result.machine_name);
     machine_uuid_ = QString::fromStdString(result.machine_uuid);
     machine_description_ = QString::fromStdString(result.machine_description);
+    model_name_ = QString::fromStdString(result.model_name);
     server_shares_filesystem_ =
         shares_filesystem(result.server_is_local, current_sandbox());
     std::fprintf(stderr, "beebium: the server %s this filesystem\n",

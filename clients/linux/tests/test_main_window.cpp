@@ -10,14 +10,24 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
+#include "app/DisplayWidget.hpp"
+#include "app/KeyboardInput.hpp"
+#include "app/MachineSession.hpp"
 #include "app/MainWindow.hpp"
 
+#include "FakeBeebiumServer.hpp"
+#include "WaitUntil.hpp"
+
 #include <QAction>
+#include <QLabel>
 #include <QMenuBar>
+#include <QStatusBar>
 
 #include <catch2/catch_test_macros.hpp>
 
 using beebium::linux_client::MainWindow;
+using beebium::linux_client::testing::FakeServer;
+using beebium::linux_client::testing::wait_until;
 
 TEST_CASE("A machine window has a menu bar and a display area", "[app][window]") {
     MainWindow window;
@@ -38,4 +48,31 @@ TEST_CASE("A machine window shows under the offscreen platform", "[app][window]"
     MainWindow window;
     window.show();
     CHECK(window.isVisible());
+}
+
+TEST_CASE("The status bar holds the LEDs, then the keyboard mapping and the machine's model",
+          "[app][window][status]") {
+    FakeServer server;
+    MainWindow window(QRhiWidget::Api::OpenGL);
+    window.show();
+    window.connect_to(server.endpoint());
+    REQUIRE(wait_until([&] { return window.session().connected(); }));
+    auto* model = window.findChild<QLabel*>(QStringLiteral("modelName"));
+    auto* mapping = window.findChild<QLabel*>(QStringLiteral("mappingName"));
+    REQUIRE(model);
+    REQUIRE(mapping);
+    REQUIRE(wait_until([&] { return model->text() == QStringLiteral("BBC Model B"); }));
+    CHECK(mapping->text() ==
+          QString::fromStdString(window.display().keyboard().mapping().name));
+    // Right of the LEDs, the mapping then the model.
+    auto* leds = window.findChild<QWidget*>(QStringLiteral("indicators"));
+    REQUIRE(leds);
+    CHECK(leds->x() < mapping->x());
+    CHECK(mapping->x() < model->x());
+    // Nothing the macOS bar does not show.
+    for (const char* gone : {"breakButton", "keysLabel", "unsavedLabel", "descriptionLabel"}) {
+        CHECK(window.findChild<QWidget*>(QString::fromLatin1(gone)) == nullptr);
+    }
+    window.set_quitting(true);
+    window.close();
 }

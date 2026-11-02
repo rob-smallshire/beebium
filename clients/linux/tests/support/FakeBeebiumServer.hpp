@@ -87,6 +87,7 @@ public:
         info->set_host_fingerprint(host_fingerprint);
         info->mutable_identity()->set_name("Model B #1");
         info->mutable_identity()->set_description("Station 1.254");
+        info->mutable_identity()->set_model_name("BBC Model B");
         info->mutable_connections()->set_client_count(client_count);
         {
             std::lock_guard lock(calls_mutex);

@@ -138,9 +138,9 @@ private:
     // Edit > Paste (7.5).
     void paste();
     static constexpr int TAP_HOLD_MS = 50;
-    QLabel* description_label_ = nullptr;
+    QLabel* mapping_label_ = nullptr;
+    QLabel* model_label_ = nullptr;
     ClientSettings* settings_ = nullptr;
-    QLabel* unsaved_label_ = nullptr;
     DisplayFrame* frame_ = nullptr;
     ImmersiveExit* immersive_exit_ = nullptr;
     QAction* status_bar_action_ = nullptr;

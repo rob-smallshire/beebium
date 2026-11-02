@@ -92,6 +92,8 @@ public:
     QString machine_name() const { return machine_name_; }
     QString machine_uuid() const { return machine_uuid_; }
     QString machine_description() const { return machine_description_; }
+    // The machine's model as the server names it, such as "BBC Model B".
+    QString model_name() const { return model_name_; }
 
     // Whether the server can open paths this client exchanges with it (3.2):
     // the fingerprints matched for this connection; false when disconnected.
@@ -218,6 +220,7 @@ private:
     QTimer liveness_ticker_;
     QString machine_name_;
     QString machine_description_;
+    QString model_name_;
     QString machine_uuid_;
     bool server_shares_filesystem_ = false;
     bool template_media_written_ = false;

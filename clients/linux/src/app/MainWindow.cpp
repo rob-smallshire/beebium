@@ -108,6 +108,9 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     connect(keyboard_mode, &KeyboardSidebar::mapping_chosen, this,
             [this, keyboard_mode](const MappingChoice& choice) {
                 display_->keyboard().set_mapping(*choice.mapping);
+                if (mapping_label_) {
+                    mapping_label_->setText(choice.name);
+                }
                 keyboard_mode->set_caps_lock_sync(display_->keyboard().caps_lock_sync_enabled());
                 if (settings_) {
                     settings_->store().setValue(QStringLiteral("keyboard/mapping"), choice.id);
@@ -243,48 +246,22 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     // Close goes through the window's own close, so it gets the same
     // teardown as the window manager's close button (4.5).
     connect(overlay_, &ConnectionOverlay::close_requested, this, &QWidget::close);
-    // The title is the machine's name, exactly (5.7). Qt has no window
-    // subtitle, so the description goes at the start of the status bar.
-    // Everything the status bar shows is in one strip, which immersive mode
-    // can lift over the picture whole (6.4).
+    // The status bar as the macOS client's (13.3): the machine's LEDs on
+    // the left; on the right a paste under way, the keyboard mapping and the
+    // machine's model. Everything it shows is in one strip, which immersive
+    // mode can lift over the picture whole (6.4).
     status_strip_ = new QWidget(this);
     status_strip_->setObjectName(QStringLiteral("statusStrip"));
     auto* strip_layout = new QHBoxLayout(status_strip_);
     strip_layout->setContentsMargins(4, 0, 4, 0);
+    strip_layout->setSpacing(8);
     statusBar()->addWidget(status_strip_, 1);
-    description_label_ = new QLabel(status_strip_);
-    strip_layout->addWidget(description_label_, 1);
-    // The unsaved-changes mark (5.3), beside rather than in the title, which
-    // is exactly the machine's name (5.7).
-    unsaved_label_ = new QLabel(tr("Unsaved changes"), this);
-    unsaved_label_->setToolTip(tr("This machine has written to its discs since it was launched; "
-                                  "save it to keep them."));
-    unsaved_label_->hide();
-    strip_layout->addWidget(unsaved_label_);
-    connect(session_, &MachineSession::unsaved_changes_changed, unsaved_label_,
-            [this](bool unsaved) {
-                unsaved_label_->setVisible(unsaved && !session_->machine_saved());
-            });
+    // The LEDs, in the strip so they ride the immersive overlay too (10).
+    indicator_strip_ = new IndicatorStrip(session_->indicators(), status_strip_);
+    strip_layout->addWidget(indicator_strip_);
+    connect(indicator_strip_, &IndicatorStrip::key_tapped, this, &MainWindow::tap_named_key);
+    strip_layout->addStretch(1);
 
-    // BREAK as a control, not only a menu item (5.5): held while pressed,
-    // like the key, with its shortcut said in the tooltip.
-    auto* break_button = new QToolButton(this);
-    break_button->setObjectName(QStringLiteral("breakButton"));
-    break_button->setText(tr("Break"));
-    break_button->setToolTip(tr("Break (Alt+F12): reset the machine; hold to keep it in reset"));
-    break_button->setFocusPolicy(Qt::TabFocus);
-    break_button->setEnabled(false);
-    connect(break_button, &QToolButton::pressed, this, [this] { display_->keyboard().press_break(); });
-    connect(break_button, &QToolButton::released, this, [this] { display_->keyboard().release_break(); });
-    strip_layout->addWidget(break_button);
-
-    // Where keys go (7.1), and how to change it.
-    auto* keys_label = new QLabel(this);
-    keys_label->setObjectName(QStringLiteral("keysLabel"));
-    keys_label->setToolTip(tr("Click the display to type into the machine; Ctrl+Tab leaves it. "
-                              "While the display has the keys, every key the keyboard mapping "
-                              "uses goes to the machine, Ctrl shortcuts included; F11, Alt with "
-                              "a menu letter and the mouse still reach Beebium."));
     // A paste under way, and its Cancel (7.5): Escape is the machine's while
     // the display has the keys, so the control is the way to stop it.
     auto* pasting_label = new QLabel(tr("Pasting..."), status_strip_);
@@ -294,6 +271,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     cancel_paste->setText(tr("Cancel"));
     cancel_paste->setToolTip(tr("Stop typing the rest; what has been typed stays"));
     cancel_paste->setFocusPolicy(Qt::NoFocus);
+    cancel_paste->setAutoRaise(true);
     pasting_label->hide();
     cancel_paste->hide();
     strip_layout->addWidget(pasting_label);
@@ -326,23 +304,34 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                 }
                 }
             });
-    strip_layout->addWidget(keys_label);
-    // The machine's LEDs, after the macOS client's status bar, in the strip
-    // so they ride the immersive overlay too (10).
-    indicator_strip_ = new IndicatorStrip(session_->indicators(), status_strip_);
-    strip_layout->addWidget(indicator_strip_);
-    connect(indicator_strip_, &IndicatorStrip::key_tapped, this, &MainWindow::tap_named_key);
-    const auto show_keys = [keys_label, break_button, this](KeysGoTo destination) {
-        keys_label->setText(destination == KeysGoTo::machine ? tr("Keys: machine")
-                                                             : tr("Keys: Beebium"));
-        break_button->setEnabled(display_->keyboard().attached());
-    };
-    show_keys(display_->keys_go_to());
-    connect(display_, &DisplayWidget::keys_go_to_changed, this, show_keys);
+
+    // The keyboard mapping in use, after a small keyboard glyph, then the
+    // machine's model as the server names it, both in the secondary colour.
+    const int glyph_size = status_strip_->fontMetrics().height();
+    auto* keyboard_glyph = new QLabel(status_strip_);
+    keyboard_glyph->setPixmap(QIcon::fromTheme(QStringLiteral("input-keyboard"))
+                                  .pixmap(glyph_size, glyph_size));
+    mapping_label_ = new QLabel(status_strip_);
+    mapping_label_->setObjectName(QStringLiteral("mappingName"));
+    mapping_label_->setToolTip(tr("The keyboard mapping in use"));
+    model_label_ = new QLabel(status_strip_);
+    model_label_->setObjectName(QStringLiteral("modelName"));
+    for (QLabel* label : {mapping_label_, model_label_}) {
+        label->setForegroundRole(QPalette::PlaceholderText);
+    }
+    auto* mapping_group = new QHBoxLayout;
+    mapping_group->setSpacing(3);
+    mapping_group->addWidget(keyboard_glyph);
+    mapping_group->addWidget(mapping_label_);
+    strip_layout->addLayout(mapping_group);
+    strip_layout->addWidget(model_label_);
+    mapping_label_->setText(QString::fromStdString(display_->keyboard().mapping().name));
+    connect(session_, &MachineSession::connected_to_server, this,
+            [this] { model_label_->setText(session_->model_name()); });
+    // The title is the machine's name, exactly (5.7).
     connect(session_, &MachineSession::identity_changed, this,
-            [this](const QString& name, const QString& description) {
+            [this](const QString& name, const QString&) {
                 setWindowTitle(name.isEmpty() ? QStringLiteral("Beebium") : name);
-                description_label_->setText(description);
             });
 
     build_menus();
@@ -649,9 +638,7 @@ void MainWindow::save_as(std::function<void(bool saved)> then) {
     *connection = connect(session_, &MachineSession::save_finished, this,
                           [this, then, connection, destination](const CallOutcome& outcome) {
                               disconnect(*connection);
-                              if (outcome.ok) {
-                                  unsaved_label_->hide();
-                              } else {
+                              if (!outcome.ok) {
                                   ServerMessageDialog dialog(
                                       tr("Could Not Save"),
                                       tr("Beebium could not save the machine to %1.").arg(destination),
