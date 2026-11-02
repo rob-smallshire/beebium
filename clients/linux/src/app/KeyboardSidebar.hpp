@@ -19,7 +19,9 @@
 
 #include <vector>
 
+class QAbstractItemView;
 class QCheckBox;
+class QFrame;
 class QLabel;
 class QListWidget;
 class QTreeWidget;
@@ -62,12 +64,13 @@ protected:
 private:
     void rebuild();
     void show_reference();
+    static void fit_to_rows(QAbstractItemView* view);
 
     QString user_dirpath_;
     std::vector<MappingChoice> choices_;
     QString active_id_;
     QListWidget* list_;
-    QLabel* reference_title_;
+    QFrame* divider_;
     QTreeWidget* reference_;
     QLabel* hint_;
     QCheckBox* caps_;

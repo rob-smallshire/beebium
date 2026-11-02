@@ -23,6 +23,7 @@
 #include <QCheckBox>
 #include <QDir>
 #include <QFile>
+#include <QFrame>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
@@ -183,6 +184,36 @@ TEST_CASE("The user's mappings follow the built-ins after a divider with no text
     CHECK(texts.count(QString()) == 1);
     CHECK(texts.at(divider + 1) == QStringLiteral("My Thrust"));
     CHECK_FALSE(list->item(divider)->flags() & Qt::ItemIsSelectable);
+}
+
+TEST_CASE("The labelled keys are a bare table at the foot of the mode, the free space above it",
+          "[keyboard][mode]") {
+    QTemporaryDir directory;
+    KeyboardSidebar sidebar(directory.path());
+    sidebar.set_active(QString::fromStdString(built_in_mapping(QStringLiteral("Logical"))->id));
+    sidebar.resize(300, 900);
+    sidebar.show();
+    QTreeWidget* table = sidebar.reference();
+    CHECK(table->isHeaderHidden());
+    for (QLabel* label : sidebar.findChildren<QLabel*>()) {
+        CHECK(label->text() != QStringLiteral("Labelled keys"));
+    }
+    // As tall as its rows, no more.
+    int rows_height = 0;
+    for (int i = 0; i < table->topLevelItemCount(); ++i) {
+        rows_height += table->visualItemRect(table->topLevelItem(i)).height();
+    }
+    CHECK(table->height() <= rows_height + 2 * table->frameWidth() + 2);
+    // The mapping list above, the free space, a divider, then the table.
+    QListWidget* list = sidebar.chooser();
+    CHECK(table->y() - (list->y() + list->height()) > 200);
+    auto* divider = sidebar.findChild<QFrame*>(QStringLiteral("referenceDivider"));
+    REQUIRE(divider);
+    CHECK(divider->y() > list->y() + list->height());
+    CHECK(divider->y() < table->y());
+    // The hint, then the Caps Lock toggle, below the table.
+    CHECK(sidebar.reference_hint()->y() > table->y());
+    CHECK(sidebar.caps_lock_sync()->y() > sidebar.reference_hint()->y());
 }
 
 TEST_CASE("The mode has no buttons: the mappings folder is managed elsewhere", "[keyboard][mode]") {

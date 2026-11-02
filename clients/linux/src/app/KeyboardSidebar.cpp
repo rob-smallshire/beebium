@@ -40,21 +40,29 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     list_->setObjectName(QStringLiteral("mappings"));
     list_->setFocusPolicy(Qt::NoFocus);  // the keys stay the machine's
     list_->setSelectionMode(QAbstractItemView::SingleSelection);
-    layout->addWidget(list_, 2);
+    layout->addWidget(list_);
+    // The free space sits between the mappings and the labelled keys, which
+    // keep to the foot of the mode, as on macOS.
+    layout->addStretch(1);
 
-    reference_title_ = new QLabel(tr("Labelled keys"), this);
-    QFont bold = reference_title_->font();
-    bold.setBold(true);
-    reference_title_->setFont(bold);
-    layout->addWidget(reference_title_);
+    // The active mapping's labelled keys: a divider, then bare rows of key
+    // and function, as tall as they are.
+    divider_ = new QFrame(this);
+    divider_->setObjectName(QStringLiteral("referenceDivider"));
+    divider_->setFrameShape(QFrame::HLine);
+    divider_->setFrameShadow(QFrame::Sunken);
+    layout->addWidget(divider_);
     reference_ = new QTreeWidget(this);
     reference_->setObjectName(QStringLiteral("mappingReference"));
-    reference_->setHeaderLabels({tr("Key"), tr("Function")});
+    reference_->setColumnCount(2);
+    reference_->setHeaderHidden(true);
     reference_->setRootIsDecorated(false);
+    reference_->setFrameShape(QFrame::NoFrame);
+    reference_->viewport()->setAutoFillBackground(false);
     reference_->setFocusPolicy(Qt::NoFocus);
     reference_->setSelectionMode(QAbstractItemView::NoSelection);
     reference_->header()->setStretchLastSection(true);
-    layout->addWidget(reference_, 3);
+    layout->addWidget(reference_);
     hint_ = new QLabel(this);
     hint_->setObjectName(QStringLiteral("mappingReferenceHint"));
     hint_->setWordWrap(true);
@@ -133,6 +141,20 @@ void KeyboardSidebar::rebuild() {
         }
     }
     show_reference();
+    fit_to_rows(list_);
+}
+
+void KeyboardSidebar::fit_to_rows(QAbstractItemView* view) {
+    // No taller than its rows, so the free space is the mode's, not the view's.
+    int height = 2 * view->frameWidth();
+    const int rows = view->model()->rowCount();
+    for (int row = 0; row < rows; ++row) {
+        height += view->sizeHintForRow(row);
+    }
+    if (auto* list = qobject_cast<QListWidget*>(view)) {
+        height += 2 * list->spacing() * rows;
+    }
+    view->setMaximumHeight(height);
 }
 
 void KeyboardSidebar::show_reference() {
@@ -155,8 +177,9 @@ void KeyboardSidebar::show_reference() {
     hint_->setText(hint);
     hint_->setVisible(!hint.isEmpty());
     reference_->resizeColumnToContents(0);
+    fit_to_rows(reference_);
     // Only a mapping that labels its keys has a table to show.
-    reference_title_->setVisible(!rows.empty());
+    divider_->setVisible(!rows.empty());
     reference_->setVisible(!rows.empty());
 }
 
