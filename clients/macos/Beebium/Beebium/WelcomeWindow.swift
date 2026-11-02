@@ -56,7 +56,7 @@ struct WelcomeWindowContent: View {
 
             // Saved machines to reopen, or the presets and the custom builder.
             Picker("", selection: $page) {
-                Text("Machines").tag(WelcomePage.machines)
+                Text("Recent Machines").tag(WelcomePage.machines)
                 Text("Presets").tag(WelcomePage.presets)
             }
             .pickerStyle(.segmented)
