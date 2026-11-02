@@ -40,6 +40,14 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     list_->setObjectName(QStringLiteral("mappings"));
     list_->setFocusPolicy(Qt::NoFocus);  // the keys stay the machine's
     list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    // The selected row is the active mapping, so it shows whether or not the
+    // window has the focus: some palettes draw an inactive selection in the
+    // base colour.
+    QPalette marked = list_->palette();
+    for (const auto role : {QPalette::Highlight, QPalette::HighlightedText}) {
+        marked.setColor(QPalette::Inactive, role, marked.color(QPalette::Active, role));
+    }
+    list_->setPalette(marked);
     layout->addWidget(list_);
     // The free space sits between the mappings and the labelled keys, which
     // keep to the foot of the mode, as on macOS.

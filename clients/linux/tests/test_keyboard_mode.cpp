@@ -152,6 +152,8 @@ TEST_CASE("The mappings are a plain list, the active one its selected row", "[ke
     KeyboardSidebar sidebar(directory.path());
     const auto thrust = built_in_mapping(QStringLiteral("Thrust"));
     sidebar.set_active(QString::fromStdString(thrust->id));
+    // Shown, as in a window: showing reads the files again.
+    sidebar.show();
     QListWidget* list = sidebar.chooser();
     REQUIRE(list->count() > 0);
     QStringList selected;
@@ -165,6 +167,13 @@ TEST_CASE("The mappings are a plain list, the active one its selected row", "[ke
         }
     }
     CHECK(selected == QStringList{QStringLiteral("Thrust")});
+    // Marked whether or not the window has the focus: some palettes draw an
+    // inactive selection in the base colour, which would hide it.
+    const QPalette palette = list->palette();
+    CHECK(palette.color(QPalette::Inactive, QPalette::Highlight) ==
+          palette.color(QPalette::Active, QPalette::Highlight));
+    CHECK(palette.color(QPalette::Inactive, QPalette::HighlightedText) ==
+          palette.color(QPalette::Active, QPalette::HighlightedText));
 }
 
 TEST_CASE("The user's mappings follow the built-ins after a divider with no text",
