@@ -1,11 +1,13 @@
 # Build the self-contained macOS server bundles (arm64 + x86_64).
 #
 # Like the Linux/Windows bundles this is a from-source static build
-# (gRPC/protobuf/abseil via the *-osx-static triplets), so it is expensive and
-# runs only on demand or as a reusable job in the release flow. It reuses the
-# SAME vcpkg actions/cache as ci.yml's server-macos-* jobs (identical keys), so
-# a release hits the caches everyday CI keeps warm; there is no GHCR build-env on
-# macOS.
+# (gRPC/protobuf/abseil), so it is expensive and runs only on demand or as a
+# reusable job in the release flow. Its static deps come from triplets of its own
+# (arm64-osx11-static, x64-osx12-static) that compile them for the bundle's
+# deployment floor, so the floor holds in every linked object and not only in
+# the binary's load command (#243). Those deps are cached under a key of their
+# own, separate from ci.yml's: a bundle run is warm when an earlier bundle run on
+# the same runner image filled the cache. There is no GHCR build-env on macOS.
 #
 # The result is beebium-server-<version>-macos-<arch>.tar.gz: a relocatable
 # single-directory tree (bin/ lib/ share/beebium) with every Mach-O ad-hoc
@@ -29,16 +31,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # arch, runner, triplet, and the vcpkg cache-key arch token MUST match
-          # ci.yml's server-macos-* jobs so this reuses their warm caches.
+          # The triplet's VCPKG_OSX_DEPLOYMENT_TARGET MUST equal
+          # deployment_target; a step below asserts it.
           - arch: arm64
             runner: macos-15
-            triplet: arm64-osx-static
-            cache_arch: arm64
+            triplet: arm64-osx11-static
             # 11.0 (Big Sur) is the first macOS on Apple Silicon, so it is the
-            # lowest floor that means anything for arm64. ld64 sets the binary's
-            # LC_BUILD_VERSION minos from this link flag regardless of the (warm-
-            # cached) static deps' own object minos, so the floor is honest.
+            # lowest floor that means anything for arm64.
             deployment_target: "11.0"
             self_hosted: false
             # The hosted macOS runners are RAM-starved for a static gRPC/protobuf
@@ -47,8 +46,7 @@ jobs:
           # The self-hosted Intel macOS runner (#223).
           - arch: x86_64
             runner: [self-hosted, macOS, X64]
-            triplet: x64-osx-static
-            cache_arch: x64
+            triplet: x64-osx12-static
             # 12.0 (Monterey) is a defensible modern Intel floor: Catalina/Big Sur
             # are past their support window, and it keeps the wheel's reach broad
             # without claiming an OS we cannot reason about.
@@ -94,21 +92,31 @@ jobs:
             exit 1
           }
 
+      - name: Check the triplet's floor matches the deployment target
+        run: |
+          set -euo pipefail
+          triplet_filepath="triplets/${{ matrix.triplet }}.cmake"
+          floor="$(sed -nE 's/^set\(VCPKG_OSX_DEPLOYMENT_TARGET ([0-9.]+)\)$/\1/p' "${triplet_filepath}")"
+          echo "${{ matrix.triplet }} VCPKG_OSX_DEPLOYMENT_TARGET=${floor}, deployment_target=${{ matrix.deployment_target }}"
+          [ "${floor}" = "${{ matrix.deployment_target }}" ] \
+            || { echo "::error::${triplet_filepath} builds the deps for ${floor:-no floor}, but the binary links for ${{ matrix.deployment_target }}"; exit 1; }
+
       - name: Set VCPKG_INSTALLED_DIR
         run: |
-          echo "VCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed" >> $GITHUB_ENV
-          # Same runner-image-version key component as ci.yml, so an image bump
-          # rotates the key identically and the caches stay shared and warm.
-          # A self-hosted runner has no ImageVersion; ci.yml uses the same fallback.
-          echo "IMAGE_VERSION=${ImageVersion:-selfhosted}" >> $GITHUB_ENV
+          echo "VCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed" >> "$GITHUB_ENV"
+          # The key rotates with the runner image, as ci.yml's does. A
+          # self-hosted runner has no ImageVersion; ci.yml uses the same fallback.
+          echo "IMAGE_VERSION=${ImageVersion:-selfhosted}" >> "$GITHUB_ENV"
 
+      # Keyed on the floor triplet's name and contents, so it never shares an
+      # entry with ci.yml's *-osx-static caches in either direction.
       - name: Cache vcpkg installed packages
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/vcpkg_installed
-          key: vcpkg-${{ runner.os }}-${{ matrix.cache_arch }}-static-${{ env.IMAGE_VERSION }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ env.IMAGE_VERSION }}-${{ hashFiles('vcpkg.json', format('triplets/{0}.cmake', matrix.triplet)) }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-${{ matrix.cache_arch }}-static-${{ env.IMAGE_VERSION }}-
+            vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ env.IMAGE_VERSION }}-
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -145,11 +153,24 @@ jobs:
           exit 1
 
       - name: Build the servers
-        run: cmake --build build --target beebium-servers --parallel "${CMAKE_BUILD_PARALLEL_LEVEL}"
+        run: |
+          set -euo pipefail
+          cmake --build build --target beebium-servers --parallel "${CMAKE_BUILD_PARALLEL_LEVEL}" 2>&1 \
+            | tee "${RUNNER_TEMP}/build-servers.log"
 
+      # ld64 sets the binary's minos from the link flag whatever the inputs were
+      # built for, so the load command alone does not prove the floor. It warns
+      # for each object built for a newer macOS; there must be none.
       - name: Verify the binary's deployment floor
         run: |
           set -euo pipefail
+          newer="$(grep -c "was built for newer 'macOS' version" "${RUNNER_TEMP}/build-servers.log" || true)"
+          echo "link warnings for objects built for a newer macOS: ${newer}"
+          if [ "${newer}" != 0 ]; then
+            grep -m 20 "was built for newer 'macOS' version" "${RUNNER_TEMP}/build-servers.log"
+            echo "::error::${newer} linked objects were built for a macOS newer than ${{ matrix.deployment_target }}"
+            exit 1
+          fi
           got="$(vtool -show-build build/src/server/beebium-model-b | awk '/minos/{print $2}')"
           echo "beebium-model-b minos=${got}, expected ${{ matrix.deployment_target }}"
           [ "${got}" = "${{ matrix.deployment_target }}" ] \
