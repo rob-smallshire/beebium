@@ -155,3 +155,39 @@ final class PresetCatalogBuildTests: XCTestCase {
         XCTAssertEqual(result.skipped, ["exotic"])
     }
 }
+
+/// The full-sentence messages shown when discovery finds a server it cannot use
+/// or finds none (issue #240). Pure, so they are pinned here; the views
+/// (NewMachineDialog, WelcomeWindow, Settings > Machines) just display them.
+final class ServerDiscoveryMessageTests: XCTestCase {
+
+    func testIncompatibleMessageNamesFoundVersionAndWhatIsNeeded() {
+        let message = PresetManager.incompatibleServerMessage(
+            serversDirpath: "/srv", foundVersion: "0.1.0", appVersion: "0.15.0")
+        XCTAssertTrue(message.contains("/srv"), "names where the server was found")
+        XCTAssertTrue(message.contains("0.1.0"), "names the found version")
+        XCTAssertTrue(message.contains("0.15.0"), "names what this app needs")
+        XCTAssertTrue(message.hasSuffix("."), "a full sentence")
+    }
+
+    func testIncompatibleMessageWithoutAFoundVersionStillExplains() {
+        let message = PresetManager.incompatibleServerMessage(
+            serversDirpath: "/srv", foundVersion: nil, appVersion: "0.15.0")
+        XCTAssertTrue(message.contains("/srv"))
+        XCTAssertTrue(message.contains("incompatible"))
+        XCTAssertTrue(message.contains("0.15.0"))
+    }
+
+    func testIncompatibleMessageWithoutAnAppVersionDegradesGracefully() {
+        let message = PresetManager.incompatibleServerMessage(
+            serversDirpath: "/srv", foundVersion: "0.1.0", appVersion: "")
+        XCTAssertFalse(message.contains("Beebom"), "no malformed version text")
+        XCTAssertTrue(message.contains("same version of Beebium"))
+    }
+
+    func testMissingServerMessageNamesTheDirectory() {
+        let message = PresetManager.missingServerMessage(serversDirpath: "/srv")
+        XCTAssertTrue(message.contains("/srv"))
+        XCTAssertTrue(message.hasSuffix("."), "a full sentence")
+    }
+}

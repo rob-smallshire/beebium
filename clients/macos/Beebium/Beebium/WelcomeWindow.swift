@@ -119,9 +119,17 @@ struct WelcomeWindowContent: View {
             ProgressView("Discovering presets...")
                 .padding()
         } else if presetManager.systemPresets.isEmpty && presetManager.userPresets.isEmpty {
-            Text("No presets found")
-                .foregroundColor(.secondary)
-                .padding()
+            // Discovery turned up nothing. If a server was found but could not be
+            // used (e.g. too old to list presets), say why in full here, not only
+            // in Settings > Machines (issue #240); otherwise it is a plain empty.
+            if let error = presetManager.discoveryError {
+                ServerErrorView(message: error)
+                    .padding()
+            } else {
+                Text("No presets found")
+                    .foregroundColor(.secondary)
+                    .padding()
+            }
         } else {
             let allPresets = presetManager.systemPresets + presetManager.userPresets
             ScrollView {

@@ -93,15 +93,23 @@ class PresetManager: ObservableObject {
         guard FileManager.default.isExecutableFile(atPath: listingExecutablePath) else {
             NSLog("[PresetManager] No server executable to list presets at: \(listingExecutablePath)")
             isDiscovering = false
-            discoveryError = "No server executable found in \(dirpath)"
+            discoveryError = Self.missingServerMessage(serversDirpath: dirpath)
             return
         }
 
         let (rows, error) = await coreCLI.listPresets(allModels: true, executablePath: listingExecutablePath)
         if let error = error {
+            // A server that was found and runs but cannot answer list-presets is
+            // almost always too old for this client (issue #240). Read its own
+            // version from its --help banner -- it prints that even without the
+            // subcommand -- and tell the user which server was found, its version
+            // and what this app needs, as a full sentence. The raw stderr (the
+            // server's usage text) stays in the log for diagnosis.
             NSLog("[PresetManager] list-presets failed: \(error)")
+            let foundVersion = await coreCLI.serverVersion(executablePath: listingExecutablePath)
             isDiscovering = false
-            discoveryError = "Could not list presets: \(error)"
+            discoveryError = Self.incompatibleServerMessage(
+                serversDirpath: dirpath, foundVersion: foundVersion, appVersion: Self.appVersion())
             return
         }
         NSLog("[PresetManager] Listed \(rows.count) preset(s)")
@@ -137,6 +145,37 @@ class PresetManager: ObservableObject {
                 ? "No presets found"
                 : "Found \(rows.count) preset(s) but no matching server executable"
         }
+    }
+
+    /// The running app's marketing version (CFBundleShortVersionString), or ""
+    /// if unreadable. The server this app needs is the one built from the same
+    /// Beebium version.
+    nonisolated static func appVersion() -> String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
+    /// A full-sentence explanation, for the places that show a discovery
+    /// failure, of a server that was found but cannot be used -- the #240 case
+    /// of a server too old to answer list-presets. It names where the server was
+    /// found, its version when known, and what this app needs. Pure, so it is
+    /// unit-tested without a server.
+    nonisolated static func incompatibleServerMessage(
+        serversDirpath: String, foundVersion: String?, appVersion: String
+    ) -> String {
+        let needs = appVersion.isEmpty
+            ? "It needs a server built from the same version of Beebium."
+            : "It needs a server from Beebium \(appVersion); reinstalling Beebium restores one."
+        if let foundVersion {
+            return "The emulator server in \(serversDirpath) is Beebium \(foundVersion), "
+                + "which this copy of Beebium cannot use. \(needs)"
+        }
+        return "The emulator server in \(serversDirpath) could not be used by this copy of "
+            + "Beebium and may be an incompatible version. \(needs)"
+    }
+
+    /// A full-sentence explanation when no server executable was found at all.
+    nonisolated static func missingServerMessage(serversDirpath: String) -> String {
+        "No emulator server was found in \(serversDirpath). Reinstall Beebium to restore it."
     }
 
     /// The display name of each distinct model among `rows` (e.g. "model-b" ->

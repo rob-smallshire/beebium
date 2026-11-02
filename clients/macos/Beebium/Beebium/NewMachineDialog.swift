@@ -72,6 +72,7 @@ struct NewMachineDialog: View {
         VStack(spacing: 0) {
             // Content
             VStack(alignment: .leading, spacing: 16) {
+                discoveryErrorSection
                 presetPickerSection
                 descriptionSection
                 machineDescriptionSection
@@ -310,6 +311,18 @@ struct NewMachineDialog: View {
     private var errorSection: some View {
         if let error = launchError {
             ServerErrorView(message: error) { launchError = nil }
+        }
+    }
+
+    /// Discovery failed and no presets are available, so the picker is empty and
+    /// launching is impossible: say why, in full, here -- not only in Settings >
+    /// Machines (issue #240). Persistent (no dismiss), since it is the reason the
+    /// dialog cannot do anything.
+    @ViewBuilder
+    private var discoveryErrorSection: some View {
+        if presetManager.systemPresets.isEmpty, !presetManager.isDiscovering,
+           let error = presetManager.discoveryError {
+            ServerErrorView(message: error)
         }
     }
 

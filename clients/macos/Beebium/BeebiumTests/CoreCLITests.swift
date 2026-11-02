@@ -62,4 +62,38 @@ final class CoreCLITests: XCTestCase {
         XCTAssertEqual(stdout, "")
         XCTAssertNotNil(error)
     }
+
+    // MARK: - parseServerVersion (#240)
+
+    func testParsesVersionFromHelpBanner() {
+        let help = """
+        Usage: beebium-model-b [global-options] <subcommand> [subcommand-options]
+
+        Beebium 0.15.0 - BBC Model B emulator server
+
+        Global options:
+          --help, -h          Show this help message
+        """
+        XCTAssertEqual(CoreCLI.parseServerVersion(help), "0.15.0")
+    }
+
+    func testParsesVersionFromAnOlderBanner() {
+        XCTAssertEqual(
+            CoreCLI.parseServerVersion("Beebium 0.1.0 - BBC Model B emulator server"), "0.1.0")
+    }
+
+    func testIgnoresTheGPLBannerLines() {
+        // The version token must start with a digit, so license prose beginning
+        // "Beebium is ..." is not mistaken for a version.
+        let gpl = """
+        Beebium is free software: you can redistribute it and/or modify it
+        Beebium is distributed in the hope that it will be useful
+        """
+        XCTAssertNil(CoreCLI.parseServerVersion(gpl))
+    }
+
+    func testReturnsNilWhenNoBanner() {
+        XCTAssertNil(CoreCLI.parseServerVersion("Unknown argument: --help\nUsage: ...\n"))
+        XCTAssertNil(CoreCLI.parseServerVersion(""))
+    }
 }

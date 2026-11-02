@@ -253,6 +253,35 @@ struct CoreCLI {
         return out
     }
 
+    // MARK: - Server version
+
+    /// The server's own version, read from its `--help` banner
+    /// ("Beebium X.Y.Z - ..."). nil when the executable could not be run or no
+    /// version line was found. Used to tell the user which server was found when
+    /// it is too old to answer list-presets (#240): even a server that lacks a
+    /// subcommand still prints its banner.
+    func serverVersion(executablePath: String) async -> String? {
+        let (output, error) = await run(executablePath: executablePath, arguments: ["--help"])
+        return Self.parseServerVersion(output.isEmpty ? (error ?? "") : output)
+    }
+
+    /// Extract the version from a server `--help` banner such as
+    /// "Beebium 0.15.0 - BBC Model B emulator server". Pure, so it is pinned
+    /// against samples without running a server. nil if no "Beebium <version>"
+    /// line is present; the version token must start with a digit, so a GPL
+    /// banner's "Beebium is free software ..." lines are not mistaken for it.
+    nonisolated static func parseServerVersion(_ text: String) -> String? {
+        for rawLine in text.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard line.hasPrefix("Beebium ") else { continue }
+            let token = line.dropFirst("Beebium ".count).prefix { $0 != " " }
+            if let first = token.first, first.isNumber {
+                return String(token)
+            }
+        }
+        return nil
+    }
+
     // MARK: - Preset thumbnail
 
     /// `show-preset <idOrPath> --thumbnail --output <png>`, which writes the
