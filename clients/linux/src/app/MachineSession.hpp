@@ -151,6 +151,10 @@ public:
     // this client's provenance as its authority (4.5). The channel stays
     // open for the answer; disconnect afterwards.
     void request_shutdown();
+    // Let the server this client launched outlive it (SystemService
+    // ReleaseFromLauncher), so it can be left running; answered by
+    // released_from_launcher. Only the launcher may.
+    void release_from_launcher();
 
     // For tests: drive the liveness watchdog from a clock of their own.
     void tick_liveness(LivenessTracker::Clock::time_point now);
@@ -179,6 +183,7 @@ Q_SIGNALS:
     void name_set(const beebium::linux_client::CallOutcome& outcome);
     void battery_reset(const beebium::linux_client::CallOutcome& outcome, const QStringList& units);
     void shutdown_answered(const beebium::linux_client::CallOutcome& outcome);
+    void released_from_launcher(const beebium::linux_client::CallOutcome& outcome);
 
 private:
     void on_handshake(unsigned generation, const HandshakeResult& result, BbcKeyTable table);

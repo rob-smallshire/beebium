@@ -49,6 +49,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
+#include <QPainter>
 #include <QMessageBox>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -59,6 +60,33 @@
 #include <cstdio>
 
 namespace beebium::linux_client {
+
+namespace {
+
+// Two links of a chain at a slant, joined or, unlinked, pulled apart; drawn
+// here since icon themes have no broken link (the macOS client draws its
+// own too).
+QPixmap link_glyph(bool linked, const QColor& colour, int size, qreal device_ratio) {
+    QPixmap pixmap(QSize(size, size) * device_ratio);
+    pixmap.setDevicePixelRatio(device_ratio);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(colour, size / 9.0, Qt::SolidLine, Qt::RoundCap));
+    painter.setBrush(Qt::NoBrush);
+    painter.translate(size / 2.0, size / 2.0);
+    painter.rotate(-45);
+    const qreal length = size * 0.42;
+    const qreal width = size * 0.26;
+    const qreal apart = linked ? length * 0.32 : length * 0.62;
+    for (const qreal centre : {-apart, apart}) {
+        painter.drawRoundedRect(QRectF(centre - length / 2, -width / 2, length, width), width / 2,
+                                width / 2);
+    }
+    return pixmap;
+}
+
+}  // namespace
 
 MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                        ClientSettings* settings, QWidget* parent)
@@ -308,6 +336,24 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     // The keyboard mapping in use, after a small keyboard glyph, then the
     // machine's model as the server names it, both in the secondary colour.
     const int glyph_size = status_strip_->fontMetrics().height();
+    // Linked to a machine this client launched (as the macOS client): the
+    // window's close shuts it down. Unlinking asks for it to be left running
+    // when the window closes instead; nothing happens until then.
+    link_button_ = new QToolButton(status_strip_);
+    link_button_->setObjectName(QStringLiteral("linkControl"));
+    link_button_->setAutoRaise(true);
+    link_button_->setFocusPolicy(Qt::NoFocus);
+    link_button_->hide();
+    strip_layout->addWidget(link_button_);
+    connect(link_button_, &QToolButton::clicked, this, [this] {
+        unlink_requested_ = !unlink_requested_;
+        update_link_control();
+    });
+    connect(session_, &MachineSession::connected_to_server, this, [this] {
+        link_button_->setVisible(session_->launched_server().has_value());
+        update_link_control();
+    });
+
     auto* keyboard_glyph = new QLabel(status_strip_);
     keyboard_glyph->setPixmap(QIcon::fromTheme(QStringLiteral("input-keyboard"))
                                   .pixmap(glyph_size, glyph_size));
@@ -790,11 +836,28 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     }
 }
 
+void MainWindow::update_link_control() {
+    const int size = status_strip_->fontMetrics().height();
+    link_button_->setIcon(QIcon(link_glyph(!unlink_requested_,
+                                           palette().color(QPalette::PlaceholderText), size,
+                                           devicePixelRatioF())));
+    link_button_->setIconSize(QSize(size, size));
+    link_button_->setToolTip(
+        unlink_requested_
+            ? tr("Unlinked: the machine will keep running when this window closes. Click to "
+                 "re-link.")
+            : tr("Linked: closing this window will shut down the machine. Click to unlink."));
+}
+
 void MainWindow::begin_close() {
     const auto server = session_->launched_server();
     if (!server) {
         // Not ours: the server is left as it is.
         finish_close();
+        return;
+    }
+    if (unlink_requested_) {
+        leave_running();
         return;
     }
     if (!session_->connected() || !is_live(recovery_->verdict())) {
@@ -825,6 +888,40 @@ void MainWindow::begin_close() {
         }
     });
     session_->refresh_system_info();
+}
+
+void MainWindow::leave_running() {
+    // Unlinked: released, so it outlives this client, and left running.
+    recovery_->window_closing();
+    display_->keyboard().detach();
+    if (!session_->connected() || !is_live(recovery_->verdict())) {
+        session_->disconnect_from_server();
+        finish_close();
+        return;
+    }
+    auto done = std::make_shared<bool>(false);
+    const auto close_once = [this, done] {
+        if (*done) {
+            return;
+        }
+        *done = true;
+        session_->disconnect_from_server();
+        finish_close();
+    };
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(session_, &MachineSession::released_from_launcher, this,
+                          [connection, close_once](const CallOutcome& outcome) {
+                              disconnect(*connection);
+                              if (!outcome.ok) {
+                                  std::fprintf(stderr,
+                                               "beebium: the server could not be released, "
+                                               "and is left running: %s\n",
+                                               qPrintable(outcome.message));
+                              }
+                              close_once();
+                          });
+    QTimer::singleShot(3000, this, close_once);
+    session_->release_from_launcher();
 }
 
 void MainWindow::decide_close(int client_count) {

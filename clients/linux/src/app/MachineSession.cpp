@@ -476,6 +476,31 @@ void MachineSession::request_shutdown() {
     });
 }
 
+void MachineSession::release_from_launcher() {
+    const std::string authority = launched_ ? launched_->provenance_uuid.toStdString() : std::string();
+    if (!rpc_ || !channel_ || authority.empty()) {
+        Q_EMIT released_from_launcher({false, grpc::StatusCode::UNAVAILABLE, tr("not connected")});
+        return;
+    }
+    const unsigned generation = generation_;
+    rpc_->post([this, generation, channel = channel_, authority](grpc::ClientContext& context) {
+        auto stub = beebium::SystemService::NewStub(channel);
+        set_deadline(context);
+        context.AddMetadata("x-beebium-instance-uuid", authority);
+        beebium::ReleaseFromLauncherResponse response;
+        const CallOutcome outcome = outcome_of(
+            stub->ReleaseFromLauncher(&context, beebium::ReleaseFromLauncherRequest{}, &response));
+        QMetaObject::invokeMethod(
+            this,
+            [this, generation, outcome] {
+                if (generation == generation_) {
+                    Q_EMIT released_from_launcher(outcome);
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
 void MachineSession::tick_liveness(LivenessTracker::Clock::time_point now) {
     const Liveness before = liveness_.state();
     liveness_.on_tick(now);

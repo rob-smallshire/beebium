@@ -22,6 +22,7 @@
 
 #include <QElapsedTimer>
 #include <QPointer>
+#include <QToolButton>
 #include <QProcess>
 #include <QTimer>
 
@@ -94,6 +95,55 @@ TEST_CASE("A cancelled quit leaves later closes ordinary closes", "[close][quit]
     answers.shared = ClosePrompts::Shared::leave_running;
     window->close();
     REQUIRE(wait_until([&] { return window.isNull(); }, 5000ms));
+}
+
+TEST_CASE("The link control shows only for a machine this client launched, and toggles",
+          "[close][link]") {
+    FakeServer server;
+    {
+        // Connected to, not launched: nothing to link.
+        MainWindow window(QRhiWidget::Api::OpenGL);
+        window.show();
+        window.connect_to(server.endpoint());
+        REQUIRE(wait_until([&] { return window.session().connected(); }));
+        auto* link = window.findChild<QToolButton*>(QStringLiteral("linkControl"));
+        REQUIRE(link);
+        CHECK_FALSE(link->isVisibleTo(&window));
+        window.set_quitting(true);
+        window.close();
+    }
+    Answers answers;
+    QPointer<MainWindow> window = launched_window(server, answers);
+    auto* link = window->findChild<QToolButton*>(QStringLiteral("linkControl"));
+    REQUIRE(link);
+    CHECK(link->isVisibleTo(window));
+    CHECK(link->toolTip() ==
+          QStringLiteral("Linked: closing this window will shut down the machine. Click to unlink."));
+    link->click();
+    CHECK(link->toolTip() == QStringLiteral(
+                                 "Unlinked: the machine will keep running when this window closes. "
+                                 "Click to re-link."));
+    link->click();
+    CHECK(link->toolTip().startsWith(QStringLiteral("Linked:")));
+    window->set_quitting(true);
+    window->close();
+    REQUIRE(wait_until([&] { return window.isNull(); }, 10000ms));
+}
+
+TEST_CASE("An unlinked machine is released and left running when its window closes",
+          "[close][link]") {
+    FakeServer server;
+    Answers answers;
+    QPointer<MainWindow> window = launched_window(server, answers);
+    window->findChild<QToolButton*>(QStringLiteral("linkControl"))->click();
+    window->close();
+    REQUIRE(wait_until([&] { return window.isNull(); }, 5000ms));
+    std::lock_guard lock(server.system.calls_mutex);
+    CHECK(server.system.release_requests == 1);
+    CHECK(server.system.release_authority == "prov-close");
+    CHECK(server.system.shutdown_requests == 0);
+    CHECK(answers.unsaved_asked == 0);
+    CHECK(answers.shared_asked == 0);
 }
 
 namespace {

@@ -64,6 +64,8 @@ public:
     std::string last_name;
     std::string shutdown_authority;  // x-beebium-instance-uuid
     int shutdown_requests = 0;
+    std::string release_authority;  // x-beebium-instance-uuid
+    int release_requests = 0;
     bool save_fails = false;
     std::atomic<int> client_count{1};
     // GetSystemInfo blocks, as a stalled server's would, while this is set,
@@ -144,6 +146,19 @@ public:
             shutdown_authority = std::string(found->second.data(), found->second.size());
         }
         response->set_accepted(true);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status ReleaseFromLauncher(grpc::ServerContext* context,
+                                     const beebium::ReleaseFromLauncherRequest*,
+                                     beebium::ReleaseFromLauncherResponse* response) override {
+        std::lock_guard lock(calls_mutex);
+        ++release_requests;
+        const auto found = context->client_metadata().find("x-beebium-instance-uuid");
+        if (found != context->client_metadata().end()) {
+            release_authority = std::string(found->second.data(), found->second.size());
+        }
+        response->set_message("released");
         return grpc::Status::OK;
     }
 

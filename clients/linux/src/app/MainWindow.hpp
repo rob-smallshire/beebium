@@ -22,6 +22,7 @@
 #include <functional>
 
 class QLabel;
+class QToolButton;
 
 namespace beebium::linux_client {
 
@@ -116,6 +117,8 @@ private:
     // and it ends by closing the window for real.
     enum class ClosePhase { open, closing, closed };
     void begin_close();
+    void leave_running();
+    void update_link_control();
     void decide_close(int client_count);
     void shut_down_server();
     // Signal a process this client launched (SIGTERM, a graceful shutdown)
@@ -162,6 +165,10 @@ private:
     void update_immersive_enabled();
     ClosePhase close_phase_ = ClosePhase::open;
     bool quitting_ = false;
+    // The link to a machine this client launched (13.3), and whether the
+    // user has asked for it to be left running when this window closes.
+    QToolButton* link_button_ = nullptr;
+    bool unlink_requested_ = false;
     ClosePrompts prompts_ = ClosePrompts::message_boxes();
 };
 
