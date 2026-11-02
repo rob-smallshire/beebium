@@ -13,21 +13,39 @@
 #ifndef BEEBIUM_LINUX_APP_CARD_GRID_HPP
 #define BEEBIUM_LINUX_APP_CARD_GRID_HPP
 
+#include <QFont>
 #include <QListWidget>
 #include <QPixmap>
 #include <QString>
+#include <QStringList>
 
 namespace beebium::linux_client {
 
-// The home window's grid of cards (client specification 13.4, after the
-// macOS welcome window): each card a picture, the screen thumbnail or a
-// placeholder, over a name and one further line.
+// `text` broken into at most `max_lines` lines no wider than `width`,
+// the last elided if the text runs on.
+QStringList card_lines(const QString& text, const QFont& font, int width, int max_lines);
+
+// The home window's grid of cards (client specification 13.4), laid out as
+// the macOS welcome window lays its presets: fixed cells of even spacing,
+// each card a picture (the screen thumbnail or a placeholder) over its name
+// and a description of up to two lines apiece, in an area with no frame of
+// its own whose scroll bar shows only when the cards overflow it.
 class CardGrid : public QListWidget {
     Q_OBJECT
 
 public:
     static constexpr int PICTURE_WIDTH = 160;
     static constexpr int PICTURE_HEIGHT = 120;
+    static constexpr int CARD_WIDTH = PICTURE_WIDTH;
+    // The name and the description, two lines apiece, with their padding.
+    static constexpr int LABEL_HEIGHT = 76;
+    static constexpr int CARD_HEIGHT = PICTURE_HEIGHT + LABEL_HEIGHT;
+    static constexpr int SPACING = 16;
+    static constexpr int CELL_WIDTH = CARD_WIDTH + SPACING;
+    // Between the cards and the area's sides.
+    static constexpr int MARGIN = 24;
+    // The card's description; its text is its name.
+    static constexpr int DETAIL_ROLE = Qt::UserRole + 32;
 
     explicit CardGrid(QWidget* parent = nullptr);
 
