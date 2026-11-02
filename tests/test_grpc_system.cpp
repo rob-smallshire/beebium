@@ -30,6 +30,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <random>
@@ -81,7 +82,8 @@ public:
         beebium::service::Provenance provenance = {},
         beebium::service::MachineIdentity identity = {},
         bool wire_pacing_clock = true,
-        beebium::service::MachineStore* machine_store = nullptr)
+        beebium::service::MachineStore* machine_store = nullptr,
+        std::function<bool()> release_before_start = nullptr)
         : provenance_(std::move(provenance))
         , identity_(std::move(identity))
         , wire_pacing_clock_(wire_pacing_clock) {
@@ -112,6 +114,9 @@ public:
         // Start server on a dynamically allocated port
         server_ = std::make_unique<beebium::service::Server<beebium::ModelB>>(machine_, "127.0.0.1", 0);
         server_->set_machine_store(machine_store);
+        if (release_before_start) {
+            server_->set_release_from_launcher(std::move(release_before_start));
+        }
         server_->start(provenance_, identity_);
 
         // Wiring the clock is optional: leaving it unwired models the brief
@@ -203,6 +208,19 @@ TEST_CASE("SystemService ReleaseFromLauncher releases for the launcher",
     CHECK(releases == 1);
     CHECK(response.watch_released() == watch_was_armed);
     CHECK_FALSE(response.message().empty());
+}
+
+TEST_CASE("SystemService ReleaseFromLauncher uses a release set before the server starts",
+          "[grpc][system][exit-with-parent]") {
+    // The server sets the release before start() creates the service, as
+    // the launch does; it must reach the service, or the RPC releases nothing.
+    int releases = 0;
+    SystemTestFixture fixture(launched_by_a_client(), {}, true, nullptr,
+                              [&releases] { ++releases; return true; });
+    beebium::ReleaseFromLauncherResponse response;
+    REQUIRE(release(fixture, kLauncherUuid, response).ok());
+    CHECK(releases == 1);
+    CHECK(response.watch_released());
 }
 
 TEST_CASE("SystemService ReleaseFromLauncher with nothing to release still answers",

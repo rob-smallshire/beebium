@@ -171,7 +171,9 @@ public:
 
     /// What SystemService.ReleaseFromLauncher does once authorised: let the
     /// server outlive its launcher, returning whether a watch was released.
+    /// Kept until start() creates the service, or passed on if it exists.
     void set_release_from_launcher(std::function<bool()> release) {
+        impl_->release_from_launcher = release;
         if (impl_->system_service) {
             impl_->system_service->set_release_from_launcher(std::move(release));
         }
@@ -219,6 +221,7 @@ private:
         std::unique_ptr<IndicatorServiceImpl<MachineType>> indicator_service;
         std::unique_ptr<SystemServiceImpl<MachineType>> system_service;
         MachineStore* machine_store = nullptr;
+        std::function<bool()> release_from_launcher;
         std::optional<std::filesystem::path> blank_discs_dirpath;
         std::unique_ptr<AudioServiceImpl<MachineType>> audio_service;
         std::unique_ptr<SidewaysServiceImpl<MachineType>> sideways_service;
@@ -381,6 +384,7 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         policy_config, nullptr, std::move(shutdown_callback));
 
     impl_->system_service->set_machine_store(impl_->machine_store);
+    impl_->system_service->set_release_from_launcher(impl_->release_from_launcher);
 
     // Render the name template before anyone can ask for the name.
     impl_->econet_name_placeholders.set_transport_registry(transport_registry);
