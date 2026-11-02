@@ -609,14 +609,13 @@ Key implementation details discovered during ADFS compatibility testing:
 
 ### Running Beebium with SCSI Hard Disc
 
-The SCSI adapter and hard disc target are **plugin extensions** (no BBC Micro model except the Master AIV had a built-in SCSI adapter). Both must be loaded explicitly via `--extension-dir` and their respective CLI flags.
+The SCSI adapter and hard disc target are **plugin extensions** (no BBC Micro model except the Master AIV had a built-in SCSI adapter). Both are loaded from the server's own `extensions` directory (add others with `--extension-dir`) and fitted with their CLI flags.
 
 **Model B+ with one hard disc:**
 
 ```bash
 beebium-model-b-plus start \
-    --sideways 11:rom:acorn-adfs_1_30.rom \
-    --extension-dir build/src/extensions \
+    --sideways slot=11:type=rom:image=acorn-adfs_1_30.rom \
     --acorn-scsi \
     --scsi-hdd 0:/path/to/scsi0.dat
 ```
@@ -630,8 +629,7 @@ This:
 
 ```bash
 beebium-model-b-plus start \
-    --sideways 11:rom:acorn-adfs_1_30.rom \
-    --extension-dir build/src/extensions \
+    --sideways slot=11:type=rom:image=acorn-adfs_1_30.rom \
     --acorn-scsi \
     --scsi-hdd 0:/path/to/system.dat \
     --scsi-hdd 1:/path/to/data.dat
@@ -643,8 +641,7 @@ ADFS sees these as drives 0 and 1. Floppy drives are at drives 4-5.
 
 ```bash
 beebium-model-b start \
-    --sideways 5:rom:acorn-adfs_1_30.rom \
-    --extension-dir build/src/extensions \
+    --sideways slot=5:type=rom:image=acorn-adfs_1_30.rom \
     --acorn-scsi \
     --scsi-hdd 0:/path/to/scsi0.dat
 ```

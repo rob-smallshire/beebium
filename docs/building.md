@@ -104,7 +104,7 @@ Extension plugins (for `--acorn-rtc`, `--acorn-scsi`, etc.) are also built per-t
 ```bash
 # Run Release server with Debug-built extensions
 build-release/src/server/beebium-model-b-romram \
-    --extension-dir build/src/extensions \
+    --extension-dir build/src/server/extensions \
     --acorn-rtc layout=7bit-year-in-r7
 ```
 
@@ -314,7 +314,7 @@ After building, you need:
 1. A server executable (`beebium-model-b`, `beebium-model-b-plus`, or `beebium-model-b-romram`)
 2. The client app (`Beebium.app`)
 3. ROM files in the expected location (see `docs/deployment.md`)
-4. Extension plugins (in `src/extensions/` within the build tree, or specified via `--extension-dir`)
+4. Extension plugins (in `src/server/extensions/` within the build tree, beside the server, or specified via `--extension-dir`)
 
 Both server and client must be built for the same architecture as the target Mac.
 

@@ -570,14 +570,14 @@ adapter's register interface and [disc-subsystem.md](disc-subsystem.md) for
 how the image is written back.
 
 ```bash
-beebium-model-b --acorn-scsi --scsi-hdd image=adfs.dat
+beebium-model-b --acorn-scsi --scsi-hdd scsi-id=0:image=adfs.dat
 beebium-model-b --acorn-scsi --scsi-hdd scsi-id=0:image=boot.dat --scsi-hdd scsi-id=1:image=data.dat
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--acorn-scsi` | (omitted = no adapter) | Fit the Acorn SCSI host adapter to the 1 MHz bus. |
-| `--scsi-hdd image=<file>[:key=value...]` | (omitted = no disc) | Attach a SCSI hard disc to the adapter. |
+| `--scsi-hdd scsi-id=<0-7>:image=<file>[:key=value...]` | (omitted = no disc) | Attach a SCSI hard disc to the adapter. |
 
 `--scsi-hdd` parameters (colon-separated, the generic extension grammar):
 
@@ -586,6 +586,11 @@ beebium-model-b --acorn-scsi --scsi-hdd scsi-id=0:image=boot.dat --scsi-hdd scsi
 | `image=<file>` | required | The disc's `.dat` image; its `.dsc` geometry file sits beside it. |
 | `scsi-id=<0-7>` | `0` | The disc's SCSI target ID. |
 | `adapter-id=<id>` | (the only adapter) | Which adapter the disc attaches to, when more than one is fitted. |
+
+`scsi-id` and `image` are positional parameters 0 and 1, and a positional
+parameter given by name must still sit at its position. So `scsi-id` comes
+first even at its default: `--scsi-hdd image=adfs.dat` is refused, and
+`scsi-id=0:image=adfs.dat` or the plain positional `0:adfs.dat` is accepted.
 
 #### Music 5000
 
