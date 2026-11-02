@@ -1450,7 +1450,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.15.0;
+				MARKETING_VERSION = 0.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.beebium.Beebium;
 				SDKROOT = macosx;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -1469,7 +1469,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.15.0;
+				MARKETING_VERSION = 0.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.beebium.Beebium;
 				SDKROOT = macosx;
 				SWIFT_STRICT_CONCURRENCY = targeted;
