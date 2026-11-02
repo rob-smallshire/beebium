@@ -231,6 +231,46 @@ TEST_CASE("PacingController catch-up clamp scales with speed", "[pacing]") {
     }
 }
 
+TEST_CASE("PacingController keeps real time when every tick is late", "[pacing]") {
+    // #241: on a loaded host the emulation thread can wake well after each
+    // quantum. With the ceiling fixed at max_ratio quanta of cycles, ticks
+    // four quanta apart ran the machine at 0.75x with the host idle. The
+    // ceiling now spans the time since the last tick.
+    constexpr int64_t quantum_ns = 500'000;
+    constexpr int64_t late_ns = 4 * quantum_ns;
+    auto run = [&](bool pass_span) {
+        PacingController ctrl(2'000'000, quantum_ns);
+        int64_t wall_ns = 0;
+        uint64_t total = 0;
+        for (int i = 0; i < 2000; ++i) {
+            wall_ns += late_ns;
+            total += ctrl.update(wall_ns, total, 1.0, pass_span ? late_ns : 0);
+        }
+        return static_cast<double>(total) / (static_cast<double>(wall_ns) / 1e9);
+    };
+    CHECK_THAT(run(true), WithinAbs(2'000'000.0, 2'000.0));
+    // Without the span the ceiling holds it at three quanta per four.
+    CHECK_THAT(run(false), WithinAbs(1'500'000.0, 2'000.0));
+}
+
+TEST_CASE("PacingController ceiling is unchanged for on-time ticks", "[pacing]") {
+    // A tick one quantum after the last keeps the fixed ceiling of max_ratio
+    // quanta, so catch-up after a short stall is still spread out.
+    PacingController ctrl(2'000'000, 500'000);
+    REQUIRE(ctrl.update(1'000'000'000, 0, 1.0, 500'000) == 3000);
+    REQUIRE(ctrl.update(1'000'000'000, 0, 1.0, 100'000) == 3000);
+}
+
+TEST_CASE("PacingController late-tick ceiling spans at most kMaxSpanNs", "[pacing]") {
+    // A tick 0.9 s late (below the suspend threshold) must not run 0.9 s of
+    // emulation in one go: the span is clamped to 50 ms, 3 x 2 MHz x 50 ms.
+    PacingController ctrl(2'000'000, 500'000);
+    REQUIRE(ctrl.update(1'000'000'000, 0, 1.0, 900'000'000) == 300'000);
+    REQUIRE(ctrl.update(1'000'000'000, 0, 1.0, PacingController::kMaxSpanNs) == 300'000);
+    // At 4x the span scales with the speed, as the fixed ceiling does.
+    REQUIRE(ctrl.update(1'000'000'000, 0, 4.0, 10'000'000) == 240'000);
+}
+
 // A hard reset (debugger.reset) zeroes the machine's cycle counter while the
 // pacing clock still holds the pre-reset total from its last report_cycles.
 // rebase() must re-anchor the baseline to the machine's actual (post-reset)

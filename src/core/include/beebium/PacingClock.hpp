@@ -161,7 +161,8 @@ public:
 
         uint64_t cycles =
             total_cycles_.load(std::memory_order_acquire) - baseline_cycles_;
-        return controller_.update(static_cast<int64_t>(effective_elapsed_ns_), cycles, s);
+        return controller_.update(static_cast<int64_t>(effective_elapsed_ns_), cycles, s,
+                                  static_cast<int64_t>(dt_ns));
     }
 
     /// Legacy: fixed cycles per tick for non-paced mode.

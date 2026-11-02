@@ -36,6 +36,9 @@ namespace beebium {
 ///
 class PacingController {
 public:
+    /// The longest tick span the catch-up ceiling covers.
+    static constexpr int64_t kMaxSpanNs = 50'000'000;  // 50 ms
+
     /// @param target_clock_hz  Target crystal frequency (e.g., 2000000)
     /// @param quantum_ns       Sleep quantum in nanoseconds (from measurement)
     /// @param max_ratio        Maximum cycles as multiple of nominal per-quantum
@@ -46,7 +49,8 @@ public:
         : target_clock_hz_(target_clock_hz)
         , nominal_cycles_(static_cast<uint32_t>(
               static_cast<double>(target_clock_hz) * quantum_ns / 1e9))
-        , max_cycles_(static_cast<uint32_t>(nominal_cycles_ * max_ratio)) {}
+        , max_cycles_(static_cast<uint32_t>(nominal_cycles_ * max_ratio))
+        , max_ratio_(max_ratio) {}
 
     /// Compute cycles to execute in the next tick.
     ///
@@ -58,9 +62,12 @@ public:
     ///                          steady S>1 rate isn't clamped down to the 1x
     ///                          ceiling (which would cap paced speed at max_ratio
     ///                          regardless of request). Defaults to 1.0.
+    /// @param since_last_ns     Wall nanoseconds since the previous tick. The
+    ///                          catch-up ceiling covers at least this span (up
+    ///                          to kMaxSpanNs), so late ticks keep real time.
     /// @return Number of cycles to execute. Zero if ahead of real-time.
     uint32_t update(int64_t wall_elapsed_ns, uint64_t total_cycles,
-                    double speed_multiplier = 1.0) {
+                    double speed_multiplier = 1.0, int64_t since_last_ns = 0) {
         double target = (static_cast<double>(wall_elapsed_ns) / 1e9)
                       * target_clock_hz_;
         double deficit = target - static_cast<double>(total_cycles);
@@ -71,6 +78,16 @@ public:
         if (deficit <= 0.0) return 1;  // Always run at least 1 cycle
         double max_cycles = static_cast<double>(max_cycles_)
                           * std::max(1.0, speed_multiplier);
+        // A late tick spans more wall time than a quantum, so its ceiling
+        // spans that time too; otherwise ticks arriving more than max_ratio
+        // quanta apart cap the machine below real time with the host idle
+        // (#241). The span is clamped so that one late tick never runs long
+        // enough to delay a debugger or quiesce request noticeably.
+        const double span_ns = std::min(static_cast<double>(since_last_ns),
+                                        static_cast<double>(kMaxSpanNs));
+        double span_cycles = max_ratio_ * static_cast<double>(target_clock_hz_)
+                           * std::max(1.0, speed_multiplier) * span_ns / 1e9;
+        max_cycles = std::max(max_cycles, span_cycles);
         if (deficit > max_cycles) return static_cast<uint32_t>(max_cycles);
         return static_cast<uint32_t>(deficit);
     }
@@ -90,6 +107,7 @@ private:
     uint64_t target_clock_hz_;
     uint32_t nominal_cycles_;   // cycles per quantum at 1x speed
     uint32_t max_cycles_;       // ceiling per tick
+    double max_ratio_;
 
     double last_deficit_ = 0.0;
     uint64_t tick_count_ = 0;
