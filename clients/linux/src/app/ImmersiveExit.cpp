@@ -95,7 +95,10 @@ void ImmersiveExit::rest() {
 }
 
 bool ImmersiveExit::pointer_over_bar() const {
-    return isVisible() && rect().contains(mapFromGlobal(QCursor::pos()));
+    // By the enter and leave the bar has been sent, not QCursor::pos(): on
+    // Wayland that is no place on the screen (it read 0,0 on labwc, inside
+    // the bar's strip, and the bar never rested).
+    return isVisible() && underMouse();
 }
 
 void ImmersiveExit::place() {

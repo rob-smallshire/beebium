@@ -13,6 +13,8 @@
 #ifndef BEEBIUM_LINUX_APP_PRESENTATION_HPP
 #define BEEBIUM_LINUX_APP_PRESENTATION_HPP
 
+#include <QtCore/qnamespace.h>
+
 namespace beebium::linux_client {
 
 // How a machine window presents itself (client specification 6.4).
@@ -42,6 +44,14 @@ Presentation after_immersive_command(Presentation current);
 // Immersive is only meaningful while live: a connection that is lost takes
 // the window back to its normal layout, where the overlay explains (6.4).
 Presentation after_connection_lost(Presentation current);
+
+// Whether a window state change is the desktop taking the window out of full
+// screen by its own means (a compositor binding), which the presentation
+// follows: full screen before and not after. Not every state change that
+// finds the window short of full screen: entering it, labwc reports an
+// interim change from no state to no state, which must not be taken for an
+// exit.
+bool left_full_screen(Qt::WindowStates old_state, Qt::WindowStates new_state);
 
 }  // namespace beebium::linux_client
 

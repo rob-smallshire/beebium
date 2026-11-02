@@ -31,6 +31,10 @@ Presentation after_immersive_command(Presentation current) {
     return current == Presentation::immersive ? Presentation::windowed : Presentation::immersive;
 }
 
+bool left_full_screen(Qt::WindowStates old_state, Qt::WindowStates new_state) {
+    return old_state.testFlag(Qt::WindowFullScreen) && !new_state.testFlag(Qt::WindowFullScreen);
+}
+
 Presentation after_connection_lost(Presentation current) {
     return current == Presentation::immersive ? Presentation::windowed : current;
 }

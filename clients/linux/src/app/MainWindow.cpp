@@ -52,6 +52,7 @@
 #include <QMessageBox>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QEvent>
 #include <QScreen>
 #include <QStatusBar>
 
@@ -816,10 +817,16 @@ void MainWindow::place_overlays() {
 
 void MainWindow::changeEvent(QEvent* event) {
     QMainWindow::changeEvent(event);
+    if (event->type() != QEvent::WindowStateChange) {
+        return;
+    }
+    const auto old_state = static_cast<QWindowStateChangeEvent*>(event)->oldState();
+    std::fprintf(stderr, "beebium: window state %#x -> %#x\n", static_cast<unsigned>(old_state),
+                 static_cast<unsigned>(windowState()));
     // The desktop left full screen by its own means (a compositor binding):
     // follow it, as the macOS client does its window's (6.4).
-    if (event->type() == QEvent::WindowStateChange && !isFullScreen() &&
-        presentation_ != Presentation::windowed && isVisible()) {
+    if (left_full_screen(old_state, windowState()) && presentation_ != Presentation::windowed &&
+        isVisible()) {
         presentation_ = Presentation::windowed;
         apply_presentation();
     }
