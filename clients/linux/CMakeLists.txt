@@ -420,7 +420,19 @@ set(CPACK_DEBIAN_PACKAGE_DEPENDS "qt6-wayland, libvulkan1")
 # Recommended, not depended on: the client runs without it.
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS
     "beebium-server, avahi-daemon, libavahi-client3, qt6-gtk-platformtheme")
-set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+# With a distribution, the file name puts a dot where the version has its
+# tilde (beebium-client_0.16.0.debian13_amd64.deb): GitHub rewrites "~" to "."
+# in release asset names, so the file is named as it will be published.
+if(BEEBIUM_CLIENT_PACKAGE_DISTRIBUTION)
+    execute_process(COMMAND dpkg --print-architecture
+        OUTPUT_VARIABLE beebium_client_deb_arch
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        COMMAND_ERROR_IS_FATAL ANY)
+    set(CPACK_DEBIAN_FILE_NAME
+        "beebium-client_${PROJECT_VERSION}.${BEEBIUM_CLIENT_PACKAGE_DISTRIBUTION}_${beebium_client_deb_arch}.deb")
+else()
+    set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+endif()
 # Debug information stays with the build, not the package.
 set(CPACK_STRIP_FILES ON)
 include(CPack)
