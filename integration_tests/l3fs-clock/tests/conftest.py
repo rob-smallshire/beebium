@@ -75,7 +75,7 @@ def basic_filepath(roms_dirpath):
 
 @pytest.fixture(scope="session")
 def server_filepath():
-    """Path to the beebium-model-b-romram server executable."""
+    """Path to the beebium-model-b server executable, the model the L3FS preset is for."""
     env = os.environ.get("BEEBIUM_SERVER")
     if env:
         p = Path(env)
@@ -85,41 +85,13 @@ def server_filepath():
     repo_root = Path(__file__).parent.parent.parent.parent
     exe_suffix = ".exe" if sys.platform == "win32" else ""
     candidates = [
-        repo_root / "build-release" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-        repo_root / "build" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-        repo_root / "cmake-build-debug" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
+        repo_root / "build-release" / "src" / "server" / f"beebium-model-b{exe_suffix}",
+        repo_root / "build" / "src" / "server" / f"beebium-model-b{exe_suffix}",
+        repo_root / "cmake-build-debug" / "src" / "server" / f"beebium-model-b{exe_suffix}",
     ]
     for c in candidates:
         if c.exists():
             return c
     pytest.skip(
-        "beebium-model-b-romram not found. Set BEEBIUM_SERVER or build the server."
+        "beebium-model-b not found. Set BEEBIUM_SERVER or build the server."
     )
-
-
-@pytest.fixture(scope="session")
-def l3fs_ssd_filepath():
-    """Path to the FS3v126.ssd disc image."""
-    env = os.environ.get("L3FS_SSD")
-    if env:
-        p = Path(env)
-        if p.exists():
-            return p
-        raise FileNotFoundError(f"L3FS_SSD={env} not found")
-    repo_root = Path(__file__).parent.parent.parent.parent
-    committed = repo_root / "tests" / "assets" / "discs" / "FS3v126.ssd"
-    if committed.exists():
-        return committed
-    pytest.skip("FS3v126.ssd not found. Set L3FS_SSD environment variable.")
-
-
-@pytest.fixture(scope="session")
-def scsi_hdd_filepath():
-    """Path to a SCSI HDD image."""
-    env = os.environ.get("SCSI_HDD")
-    if env:
-        p = Path(env)
-        if p.exists():
-            return p
-        raise FileNotFoundError(f"SCSI_HDD={env} not found")
-    pytest.skip("No SCSI HDD image. Set the SCSI_HDD environment variable.")

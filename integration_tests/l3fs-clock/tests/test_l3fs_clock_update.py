@@ -25,19 +25,19 @@ excluded from default test runs. Run with:
 
 from __future__ import annotations
 
-import sys
 import threading
 import time
-from pathlib import Path
 
 import grpc
 import pytest
 
 from beebium.client import Beebium
 from beebium.client.screen import screen_contains, dump_screen, read_mode7_screen
+from beebium.ext.peripheral.acorn_rtc import AcornRtc, RtcEventType
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "clients" / "python" / "src"))
-from beebium.ext.peripheral.acorn_rtc._proto import acorn_rtc_pb2, acorn_rtc_pb2_grpc
+# The server's Level 3 file server preset: ANFS, ADFS, Acorn SCSI with the
+# bundled l3fs-v1_26b hard disc, the RTC, a 65C02 coprocessor, station 254.
+L3FS_PRESET = "model-b-l3fs-aun"
 
 
 def _wait_for_screen_text(bbc, text, timeout_seconds=120.0, poll_interval=0.5):
@@ -50,30 +50,6 @@ def _wait_for_screen_text(bbc, text, timeout_seconds=120.0, poll_interval=0.5):
             return True
         time.sleep(poll_interval)
     return False
-
-
-def _collect_activity_events(stub, duration_seconds, stop_event):
-    """Collect RTC activity events for the given duration.
-
-    Returns a list of (timestamp_us, event_type, register, value) tuples.
-    """
-    events = []
-    try:
-        request = acorn_rtc_pb2.WatchActivityRequest()
-        stream = stub.WatchActivity(request, timeout=duration_seconds + 30)
-        for event in stream:
-            if stop_event.is_set():
-                stream.cancel()
-                break
-            events.append((
-                event.timestamp_us,
-                "READ" if event.type == acorn_rtc_pb2.RtcActivityEvent.REGISTER_READ else "WRITE",
-                event.register_number,
-                event.value,
-            ))
-    except grpc.RpcError:
-        pass
-    return events
 
 
 def _group_rddong_calls(events):
@@ -101,109 +77,55 @@ def _group_rddong_calls(events):
 
 @pytest.mark.slow
 @pytest.mark.timeout(600)
-def test_l3fs_clock_update_interval(
-    server_filepath, mos_filepath, basic_filepath,
-    roms_dirpath, l3fs_ssd_filepath, scsi_hdd_filepath,
-):
+def test_l3fs_clock_update_interval(server_filepath, roms_dirpath):
     """The L3FS should poll the RTC dongle approximately every 30 seconds.
 
-    This test boots the L3FS, monitors the RTC activity stream for ~3 minutes,
-    and verifies that RDDONG calls (groups of 6 register reads) occur at
-    approximately 30-second intervals, not the broken 3-5 minute intervals.
+    This test boots the L3FS from the server's Level 3 file server preset,
+    whose bundled hard disc (l3fs-v1_26b, a fresh copy per launch) starts
+    the file server with no keystrokes. It monitors the RTC activity stream
+    for ~3 minutes, and verifies that RDDONG calls (groups of 6 register
+    reads) occur at approximately 30-second intervals, not the broken 3-5
+    minute intervals.
     """
-    anfs_filepath = roms_dirpath / "acorn-anfs_4_18.rom"
-    adfs_filepath = roms_dirpath / "acorn-adfs_1_30.rom"
-    dfs_filepath = roms_dirpath / "acorn-dfs_2_26.rom"
-
-    for rom, name in [(anfs_filepath, "ANFS 4.18"), (adfs_filepath, "ADFS 1.30"), (dfs_filepath, "DFS 2.26")]:
-        if not rom.exists():
-            pytest.skip(f"{name} ROM not found: {rom}")
-
-    extra_args = [
-        "--sideways", f"slot=9:type=rom:image={anfs_filepath}",
-        "--sideways", f"slot=10:type=rom:image={adfs_filepath}",
-        "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
-        "--fdc", "acorn-1770",
-        "--floppy", f"0:{l3fs_ssd_filepath}",
-        "--acorn-scsi",
-        "--scsi-hdd", f"0:{scsi_hdd_filepath}",
-        "--station", "254",
-        "--aun", "port=0",  # Auto-assign port
-        "--machine-name", "L3FS-TEST",
-        "--acorn-rtc", "layout=7bit-year-in-r7:time=1985-10-26T0121",
-        "--tube-65c02",
-        "--advertise",
-    ]
+    for rom_filename in ("acorn-anfs_4_18.rom", "acorn-adfs_1_30.rom"):
+        if not (roms_dirpath / rom_filename).exists():
+            pytest.skip(f"ROM not found: {roms_dirpath / rom_filename}")
 
     with Beebium.launch(
-        mos_filepath=mos_filepath,
-        basic_filepath=basic_filepath,
         server=server_filepath,
-        extra_args=extra_args,
+        preset=L3FS_PRESET,
         startup_timeout=30.0,
     ) as bbc:
-        # Wait for BASIC prompt (Tube boot is slower)
-        assert _wait_for_screen_text(bbc, ">", timeout_seconds=30), \
-            f"Boot to BASIC prompt failed:\n{dump_screen(bbc)}"
-
-        # Type *RUN FS3v126 to start the file server
-        bbc.keyboard.type("*RUN FS3v126\r")
-
-        # Wait for "Number of drives:" prompt
-        assert _wait_for_screen_text(bbc, "Number of drives:", timeout_seconds=120), \
-            f"FS did not reach 'Number of drives:' prompt:\n{dump_screen(bbc)}"
-
-        # Type 1 <RETURN>
-        bbc.keyboard.type("1\r")
-
-        # Wait for "Command :" prompt
-        assert _wait_for_screen_text(bbc, "Command :", timeout_seconds=30), \
-            f"FS did not reach 'Command :' prompt:\n{dump_screen(bbc)}"
-
-        # Type S (no RETURN needed)
-        bbc.keyboard.type("S")
-
-        # Wait for "Stations:" prompt
-        assert _wait_for_screen_text(bbc, "Stations:", timeout_seconds=10), \
-            f"FS did not reach 'Stations:' prompt:\n{dump_screen(bbc)}"
-
-        # Type 2 <RETURN>
-        bbc.keyboard.type("2\r")
-
-        # Wait for the time display (the initial time should be 01:21)
-        assert _wait_for_screen_text(bbc, "01:21", timeout_seconds=60), \
-            f"FS did not display initial time 01:21:\n{dump_screen(bbc)}"
+        # The preset auto-boots the disc, whose !BOOT starts the file server
+        # and answers its questions; it prints this once it serves.
+        assert _wait_for_screen_text(bbc, "Starting - Ready", timeout_seconds=180), \
+            f"The file server did not start:\n{dump_screen(bbc)}"
 
         print("\nL3FS is running. Monitoring RTC activity...")
 
-        # Connect to the AcornRtcService for WatchActivity
-        channel = grpc.insecure_channel(bbc.target)
-        stub = acorn_rtc_pb2_grpc.AcornRtcServiceStub(channel)
-
-        # Collect activity events for ~3 minutes
+        # The RTC's activity stream, through the client's adapter, which
+        # reaches the extension's service over ExtensionRpc. The stream blocks
+        # between the server's reads of the clock, so events are kept as they
+        # arrive and taken after the observation period.
+        rtc = bbc.extensions[AcornRtc]
         observation_seconds = 180
-        stop_event = threading.Event()
-
-        collector_thread = threading.Thread(
-            target=lambda: None,  # Will be replaced
-            daemon=True,
-        )
-
-        events = []
+        events: list[tuple[int, str, int, int]] = []
 
         def collect():
-            nonlocal events
-            events = _collect_activity_events(stub, observation_seconds, stop_event)
+            try:
+                for event in rtc.watch_activity():
+                    events.append((
+                        event.timestamp_us,
+                        "READ" if event.type == RtcEventType.REGISTER_READ else "WRITE",
+                        event.register_number,
+                        event.value,
+                    ))
+            except grpc.RpcError:
+                pass  # the stream ends when the server shuts down
 
-        collector_thread = threading.Thread(target=collect, daemon=True)
-        collector_thread.start()
-
-        # Wait for the observation period
+        threading.Thread(target=collect, daemon=True).start()
         time.sleep(observation_seconds)
-        stop_event.set()
-        collector_thread.join(timeout=10)
-
-        channel.close()
+        events = list(events)
 
         # Analyse the collected events
         rddong_timestamps = _group_rddong_calls(events)
