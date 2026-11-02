@@ -111,27 +111,6 @@ def model_b_server_filepath():
     )
 
 
-@pytest.fixture(scope="session")
-def extension_dirpath():
-    """Path to the directory containing extension plugin shared libraries."""
-    env = os.environ.get("BEEBIUM_EXTENSION_DIR")
-    if env:
-        p = Path(env)
-        if p.is_dir():
-            return p
-        raise FileNotFoundError(f"BEEBIUM_EXTENSION_DIR={env} is not a directory")
-    repo_root = Path(__file__).parent.parent.parent.parent
-    candidates = [
-        repo_root / "build" / "src" / "extensions" / "acorn-rtc",
-    ]
-    for c in candidates:
-        if c.is_dir():
-            return c
-    pytest.skip(
-        "Extension directory not found. Set BEEBIUM_EXTENSION_DIR or build."
-    )
-
-
 DFS_SLOT = 13  # IC88 on Model B
 
 
@@ -145,7 +124,7 @@ def test_disc_ssd(basictool_filepath):
 
 @pytest.fixture
 def bbc_rtc(model_b_server_filepath, mos_filepath, basic_filepath,
-            dfs_rom_filepath, extension_dirpath, test_disc_ssd, tmp_path):
+            dfs_rom_filepath, test_disc_ssd, tmp_path):
     """Launch Model B with DFS + RTC extension + test program.
 
     The RTC is initialised to 1985-06-15T14:30 for deterministic testing.
@@ -157,8 +136,10 @@ def bbc_rtc(model_b_server_filepath, mos_filepath, basic_filepath,
         "--sideways", f"slot={DFS_SLOT}:type=rom:image={dfs_rom_filepath}",
         "--fdc", "acorn-1770",
         "--floppy", f"0:{ssd_filepath}",
-        "--extension-dir", str(extension_dirpath),
-        "--acorn-rtc", "time=1985-06-15T1430",
+        # The plugin loads from the server's own extensions directory. The
+        # test program reads the year from register 1, the Acorn original
+        # layout's place for it, which is no longer the default.
+        "--acorn-rtc", "layout=4bit-year-in-r1:time=1985-06-15T1430",
     ]
 
     with Beebium.launch(
