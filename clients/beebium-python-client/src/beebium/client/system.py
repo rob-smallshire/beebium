@@ -20,7 +20,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
+import grpc
+
 from beebium.client._proto import system_pb2, system_pb2_grpc
+from beebium.client.exceptions import BeebiumError
 from beebium.client.host import is_local_host
 
 if TYPE_CHECKING:
@@ -822,6 +825,32 @@ class System:
             accepted=response.accepted,
             message=response.message,
         )
+
+    def release_from_launcher(self) -> bool:
+        """Let the server outlive the client that launched it.
+
+        The server stops exiting with its launcher (if it was launched with
+        ``--exit-with-parent``) and stops writing to its launcher's pipes.
+        Only the launching client may do this; ``Beebium.detach()`` calls it.
+
+        Returns:
+            Whether a ``--exit-with-parent`` watch was released.
+
+        Raises:
+            BeebiumError: This client did not launch the server.
+        """
+        metadata: list[tuple[str, str]] = []
+        if self._instance_uuid:
+            metadata.append(("x-beebium-instance-uuid", self._instance_uuid))
+        try:
+            response = self._stub.ReleaseFromLauncher(
+                system_pb2.ReleaseFromLauncherRequest(), metadata=tuple(metadata)
+            )
+        except grpc.RpcError as e:
+            if e.code() == grpc.StatusCode.PERMISSION_DENIED:
+                raise BeebiumError(f"cannot release the server: {e.details()}") from e
+            raise
+        return response.watch_released
 
     def get_advertisement_state(self) -> AdvertisementState:
         """Get current mDNS service advertisement state.

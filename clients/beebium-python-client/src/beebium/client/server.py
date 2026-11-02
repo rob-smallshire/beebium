@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import atexit
 import os
 import signal
 import socket
@@ -54,6 +55,7 @@ class ServerProcess:
         port: int = 0,
         extra_args: list[str] | None = None,
         preset: str | Path | None = None,
+        exit_with_parent: bool = False,
     ):
         """Create a server process manager.
 
@@ -74,7 +76,12 @@ class ServerProcess:
                 ``--preset``: a preset file path, or the id of a system or user
                 preset as reported by ``list-presets`` (e.g. "model-b-disc").
                 Command-line options, including ``extra_args``, override it.
+            exit_with_parent: Launch with ``--exit-with-parent`` and hold a pipe
+                on the server's stdin for as long as this process manages it,
+                so the server exits when this Python process ends, however it
+                ends (SIGKILL included). ``release()`` lets it go.
         """
+        self._exit_with_parent = exit_with_parent
         self._mos_filepath = Path(mos_filepath) if mos_filepath is not None else None
         self._basic_filepath = Path(basic_filepath) if basic_filepath else None
         self._variant = variant
@@ -168,6 +175,8 @@ class ServerProcess:
         )
         if self._preset is not None:
             cmd.extend(["--preset", self._preset])
+        if self._exit_with_parent:
+            cmd.append("--exit-with-parent")
         cmd.extend(self._extra_args)
         return cmd
 
@@ -194,11 +203,16 @@ class ServerProcess:
 
         # Start the server process
         started = time.monotonic()
+        # With exit_with_parent the server watches stdin, and this pipe's
+        # write end, held here and by nothing else, is what it watches: when
+        # this process ends, the system closes it.
         self._process = subprocess.Popen(
             cmd,
+            stdin=subprocess.PIPE if self._exit_with_parent else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        _MANAGED.add(self)
         self._start_readers()
 
         # Wait for the server to be ready
@@ -277,11 +291,38 @@ class ServerProcess:
         for thread in self._reader_threads:
             thread.join(timeout=2.0)
         self._reader_threads = []
+        if proc.stdin is not None:
+            proc.stdin.close()
         self.last_exit_code = proc.returncode
         self._process = None
+        _MANAGED.discard(self)
 
         if died_unexpectedly and report_unexpected_exit:
             self._report_unexpected_exit(proc.returncode)
+
+    def release(self) -> None:
+        """Stop managing the server without stopping it.
+
+        Call once the server has been released (SystemService.
+        ReleaseFromLauncher), so it no longer exits with this process or
+        writes to its pipes. The stdin pipe is closed, the output readers
+        end, and the server is left running, not stopped here or at exit.
+        """
+        proc = self._process
+        if proc is None:
+            return
+        if proc.stdin is not None:
+            proc.stdin.close()
+        # The released server writes to the null device now, so its pipes
+        # are at EOF and the readers finish.
+        for thread in self._reader_threads:
+            thread.join(timeout=2.0)
+        self._reader_threads = []
+        self._process = None
+        _MANAGED.discard(self)
+        # Kept, so the Popen is not finalised (with a "still running"
+        # warning) while the server it names runs on.
+        _RELEASED.append(proc)
 
     def _start_readers(self) -> None:
         """Spawn daemon threads to drain the server's stdout/stderr pipes.
@@ -414,3 +455,16 @@ class ServerProcess:
 
     def __exit__(self, *args: object) -> None:
         self.stop()
+
+
+# Servers this interpreter launched and still manages. Those still running at
+# a normal interpreter exit are stopped, so an unclosed launch() cannot leave
+# one behind; --exit-with-parent covers the exits that run no Python at all.
+_MANAGED: set[ServerProcess] = set()  # strong: a dropped, unclosed client still counts
+_RELEASED: list[subprocess.Popen[bytes]] = []
+
+
+@atexit.register
+def _stop_managed_servers() -> None:
+    for process in list(_MANAGED):
+        process.stop()

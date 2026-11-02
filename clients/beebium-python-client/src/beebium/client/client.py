@@ -190,6 +190,7 @@ class Beebium:
         extra_args: list[str] | None = None,
         preset: str | Path | None = None,
         start_stopped: bool = False,
+        exit_with_client: bool = True,
     ) -> Beebium:
         """Start a beebium-server process, connect to it and return the client.
 
@@ -203,6 +204,11 @@ class Beebium:
         down the server it started. If the server starts but the client cannot
         connect to it or verify it, the server is stopped before the error is
         raised.
+
+        The server does not outlive this Python process: by default it exits
+        when the process ends, however it ends (a SIGKILL or a crash
+        included), and servers still running at a normal interpreter exit are
+        stopped. ``detach()`` hands the server off to run on by itself.
 
         Requires: nothing.
         Leaves the machine: RUNNING.
@@ -233,6 +239,10 @@ class Beebium:
                 steps over a breakpoint at the PC it starts from; use
                 ``run(stop_at_current=True)`` to stop on one at the reset
                 vector itself.)
+            exit_with_client: Launch the server with ``--exit-with-parent``,
+                so it exits when this process does, however it ends (the
+                default). False launches it without, so only ``close()`` or
+                the interpreter's normal exit stops it.
 
         Returns:
             A connected Beebium client, which owns the server.
@@ -249,6 +259,7 @@ class Beebium:
             port=port,
             extra_args=["--wait=api", *(extra_args or [])],
             preset=preset,
+            exit_with_parent=exit_with_client,
         )
 
         client: Beebium | None = None
@@ -838,6 +849,23 @@ class Beebium:
             return predicate()
         finally:
             self.debugger.ensure_stopped()
+
+    def detach(self) -> None:
+        """Hand the server this client launched off, to run on by itself.
+
+        The server is released (SystemService.ReleaseFromLauncher): it no
+        longer exits with this process, nor writes to its pipes. This client
+        stops managing it, so ``close()`` then only disconnects, and nothing
+        stops it at exit. Reach it again with ``Beebium.connect(target)``.
+
+        Raises:
+            BeebiumError: This client did not launch the server.
+        """
+        if self._server is None:
+            raise BeebiumError("cannot detach: this client did not launch the server")
+        self.system.release_from_launcher()
+        self._server.release()
+        self._server = None
 
     def close(self) -> None:
         """Close the connection and stop any managed server.
