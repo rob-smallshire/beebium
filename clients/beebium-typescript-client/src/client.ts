@@ -15,7 +15,7 @@ import { Memory } from "./memory.js";
 import { Keyboard } from "./keyboard.js";
 import { Video } from "./video.js";
 import { System } from "./system.js";
-import { ProtocolMismatchError } from "./exceptions.js";
+import { BeebiumError, ProtocolMismatchError } from "./exceptions.js";
 import { PROTOCOL_FINGERPRINT } from "./protocol_fingerprint.js";
 import { Disc } from "./disc.js";
 import { Econet } from "./econet.js";
@@ -200,16 +200,29 @@ export class Beebium {
      *     `debugger.run()` see everything the guest does. (`run()` steps over
      *     a breakpoint at the PC it starts from; use
      *     `run({ stopAtCurrent: true })` to stop on one at the reset vector
-     *     itself.)
+     *     itself.) exitWithClient (default true) launches the server with
+     *     --exit-with-parent, so it exits when this Node process ends, however
+     *     it ends (a SIGKILL or a crash included); false launches it without,
+     *     so only close() or this process's normal exit stops it. detach()
+     *     hands the server off to run on by itself.
      * @returns A connected Beebium client managing the server process.
      * @throws ServerStartupError if the server fails to start.
      * @throws TimeoutError if the connection cannot be established.
      */
     static async launch(
-        options: ServerProcessOptions & { timeoutMs?: number; startStopped?: boolean },
+        options: ServerProcessOptions & {
+            timeoutMs?: number;
+            startStopped?: boolean;
+            exitWithClient?: boolean;
+        },
     ): Promise<Beebium> {
-        const { timeoutMs = 5000, startStopped = false, ...serverOptions } = options;
-        const server = new ServerProcess(serverOptions);
+        const {
+            timeoutMs = 5000,
+            startStopped = false,
+            exitWithClient = true,
+            ...serverOptions
+        } = options;
+        const server = new ServerProcess({ ...serverOptions, exitWithParent: exitWithClient });
         await server.start(serverOptions.timeout ?? timeoutMs);
 
         // From here on the server is running, and on failure no Beebium is
@@ -725,6 +738,25 @@ export class Beebium {
                 await this.debugger.stop();
             }
         }
+    }
+
+    /**
+     * Hand the server this client launched off, to run on by itself.
+     *
+     * The server is released (SystemService.ReleaseFromLauncher): it no
+     * longer exits with this process, nor writes to its pipes. This client
+     * stops managing it, so close() then only disconnects, and nothing stops
+     * it when this process exits. Reach it again with Beebium.connect(target).
+     *
+     * @throws BeebiumError if this client did not launch the server.
+     */
+    async detach(): Promise<void> {
+        if (this.server === null) {
+            throw new BeebiumError("cannot detach: this client did not launch the server");
+        }
+        await this.system.releaseFromLauncher();
+        this.server.release();
+        this.server = null;
     }
 
     /**

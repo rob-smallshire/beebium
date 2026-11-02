@@ -32,6 +32,13 @@ export interface ServerProcessOptions {
     provenanceType?: string;
     /** Provenance version string (default: the client VERSION). */
     provenanceVersion?: string;
+    /**
+     * Launch with --exit-with-parent and hold a pipe on the server's stdin
+     * while this process manages it, so the server exits when this Node
+     * process ends, however it ends (SIGKILL included). release() lets it
+     * go. Default false here; Beebium.launch() turns it on.
+     */
+    exitWithParent?: boolean;
 }
 
 /**
@@ -57,12 +64,14 @@ export class ServerProcess {
     private readonly extraArgs: string[];
     private readonly provenanceType: string;
     private readonly provenanceVersion: string;
+    private readonly exitWithParent: boolean;
 
     constructor(options?: ServerProcessOptions) {
         this.provenanceUuid = randomUUID();
         this.provenanceType = options?.provenanceType ?? "typescript-client";
         this.provenanceVersion = options?.provenanceVersion ?? VERSION;
         this.extraArgs = options?.args ?? [];
+        this.exitWithParent = options?.exitWithParent ?? false;
 
         if (options?.executableFilepath) {
             this.executableFilepath = options.executableFilepath;
@@ -95,13 +104,19 @@ export class ServerProcess {
             "--provenance-type", this.provenanceType,
             "--provenance-uuid", this.provenanceUuid,
             "--provenance-version", this.provenanceVersion,
+            ...(this.exitWithParent ? ["--exit-with-parent"] : []),
             ...this.extraArgs,
         ];
 
         return new Promise<number>((resolve, reject) => {
+            // With exitWithParent the server watches stdin, and this pipe's
+            // write end, held here and by nothing else, is what it watches:
+            // when this process ends, the system closes it. Unreferenced, so
+            // the pipe alone never keeps Node running.
             const child = spawn(this.executableFilepath, args, {
-                stdio: ["ignore", "pipe", "pipe"],
+                stdio: [this.exitWithParent ? "pipe" : "ignore", "pipe", "pipe"],
             });
+            (child.stdin as unknown as { unref?: () => void } | null)?.unref?.();
 
             this._process = child;
 
@@ -204,12 +219,39 @@ export class ServerProcess {
 
             child.once("exit", () => {
                 clearTimeout(forceKillTimer);
+                child.stdin?.destroy();
                 this._process = null;
                 resolve();
             });
 
             child.kill("SIGTERM");
         });
+    }
+
+    /**
+     * Stop managing the server without stopping it.
+     *
+     * Call once the server has been released (SystemService.
+     * ReleaseFromLauncher), so it no longer exits with this process or
+     * writes to its pipes. The stdin pipe is closed and the server left
+     * running: not stopped here, nor when this process exits.
+     */
+    release(): void {
+        const child = this._process;
+        if (child === null) {
+            return;
+        }
+        if (this._exitCleanup !== null) {
+            process.removeListener("exit", this._exitCleanup);
+            this._exitCleanup = null;
+        }
+        child.stdin?.destroy();
+        // The released server writes to the null device, so its output
+        // pipes end; nothing here should keep Node running for it.
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        child.unref();
+        this._process = null;
     }
 
     /** The port the server is listening on (0 if not started). */

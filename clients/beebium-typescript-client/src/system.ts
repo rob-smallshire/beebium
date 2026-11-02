@@ -5,7 +5,8 @@
  * and service advertisement management.
  */
 
-import { Metadata } from "@grpc/grpc-js";
+import { Metadata, status as grpcStatus } from "@grpc/grpc-js";
+import { BeebiumError } from "./exceptions.js";
 import type { SystemServiceClient } from "./generated/system.js";
 import type {
     SystemInfo,
@@ -538,6 +539,39 @@ export class System {
             accepted: response.accepted,
             message: response.message,
         };
+    }
+
+    /**
+     * Let the server outlive the client that launched it.
+     *
+     * The server stops exiting with its launcher (if it was launched with
+     * --exit-with-parent) and stops writing to its launcher's pipes. Only
+     * the launching client may do this; Beebium.detach() calls it.
+     *
+     * @returns Whether a --exit-with-parent watch was released.
+     * @throws BeebiumError if this client did not launch the server.
+     */
+    async releaseFromLauncher(): Promise<boolean> {
+        const metadata = new Metadata();
+        if (this.instanceUuid) {
+            metadata.set("x-beebium-instance-uuid", this.instanceUuid);
+        }
+        try {
+            const response = await promisifyWithMetadata<{}, { watchReleased: boolean }>(
+                this.stub as unknown as Record<string, Function>,
+                "releaseFromLauncher",
+                {},
+                metadata,
+            );
+            return response.watchReleased;
+        } catch (error) {
+            if ((error as { code?: number }).code === grpcStatus.PERMISSION_DENIED) {
+                throw new BeebiumError(
+                    `cannot release the server: ${(error as { details?: string }).details ?? ""}`,
+                );
+            }
+            throw error;
+        }
     }
 
     /** Get the current mDNS service advertisement state. */
