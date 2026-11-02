@@ -371,7 +371,7 @@ std::vector<uint8_t> format_stream(bool mfm, uint8_t track, uint8_t sectors) {
         put(0xFB, 1);
         for (int i = 0; i < 256; ++i) put(sector_byte(sector, i), 1);
         put(0xF7, 1);
-        put(gap, mfm ? 24 : 16);  // FM: under DFS's 21, so the track has room to spare
+        put(gap, mfm ? 24 : 21);  // FM: Acorn DFS's gap3, which fills the track
     }
     return out;
 }
