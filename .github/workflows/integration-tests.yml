@@ -1,0 +1,135 @@
+name: Integration Tests (weekly)
+
+# The scenario suites under integration_tests/ drive whole machines through
+# the Python client: ADFS on SCSI, Econet file servers over AUN loopback, the
+# Tube, real-time clocks, sideways RAM loading. They run for long enough that,
+# by decision (#47), they are not part of per-push CI. They run here once a
+# week, and on demand from the Actions tab (Run workflow) or with
+#   gh workflow run integration-tests.yml --ref master
+# A dispatch runs the code on the chosen ref of the remote, not local commits.
+#
+# Each suite is its own uv project with its own dependencies (oaknut-disc,
+# adfs-disc-tools, ...), so each runs from its own directory in its own step,
+# and a failure names the suite. Every suite runs whatever the others did.
+#
+# In: acorn-rtc, adfs, l3fs, l3fs-clock, sideways-srload, tube-save, wfsinit.
+# Out:
+#   comal-soak, games-soak  soak drivers (console scripts), with no tests to run
+#   pieb-aun                needs a real PiEconetBridge (native binary or
+#                           Docker recipe) on the runner
+#
+# The servers are built here, from the commit under test, as ci.yml's Linux
+# server job builds them (distribution gRPC, the GCC 12 floor), without the
+# C++ tests. Each suite finds the variant it needs in build/src/server, so
+# BEEBIUM_SERVER is left unset.
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"  # Mondays 03:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: integration-tests-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  integration-tests:
+    name: Integration Tests (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      # As ci.yml's server-linux job: capped compiles for the runner's RAM,
+      # and the GCC 12 compiler floor.
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
+      CC: gcc-12
+      CXX: g++-12
+      BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
+      BEEBIUM_SERVER_DIR: ${{ github.workspace }}/build/src/server
+      # Every test in a suite: the l3fs, l3fs-clock and wfsinit suites skip
+      # their slow tests unless -m names "slow", and -m slow alone would
+      # deselect the rest.
+      PYTEST_ARGS: -m "slow or not slow" -v --durations=0 --timeout=900
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-12 g++-12 cmake pkg-config libgrpc++-dev libprotobuf-dev \
+            protobuf-compiler-grpc uuid-dev libavahi-client-dev
+
+      # Retry configure, as ci.yml does: FetchContent downloads at configure
+      # time intermittently fail.
+      - name: Configure CMake
+        run: |
+          for attempt in 1 2 3; do
+            if cmake -B build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DBEEBIUM_BUILD_TESTS=OFF \
+                -DBEEBIUM_BUILD_SERVICE=ON \
+                -DBEEBIUM_BUILD_SERVER=ON; then
+              exit 0
+            fi
+            echo "::warning::CMake configure failed (attempt ${attempt}/3); retrying."
+            rm -rf build
+            sleep $((attempt * 20))
+          done
+          echo "::error::CMake configure failed after 3 attempts"
+          exit 1
+
+      - name: Build servers and extensions
+        id: build
+        run: cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          version: "0.12.3"
+
+      # One step per suite. Each runs if the build succeeded, whatever the
+      # suites before it did, so one failure never hides another.
+      - name: acorn-rtc
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: integration_tests/acorn-rtc
+        run: eval uv run pytest "${PYTEST_ARGS}"
+
+      - name: adfs
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: integration_tests/adfs
+        run: eval uv run pytest "${PYTEST_ARGS}"
+
+      - name: l3fs
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: integration_tests/l3fs
+        run: eval uv run pytest "${PYTEST_ARGS}"
+
+      - name: l3fs-clock
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: integration_tests/l3fs-clock
+        run: eval uv run pytest "${PYTEST_ARGS}"
+
+      - name: sideways-srload
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: integration_tests/sideways-srload
+        run: eval uv run pytest "${PYTEST_ARGS}"
+
+      - name: tube-save
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: integration_tests/tube-save
+        run: eval uv run pytest "${PYTEST_ARGS}"
+
+      - name: wfsinit
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: integration_tests/wfsinit
+        run: eval uv run pytest "${PYTEST_ARGS}"
