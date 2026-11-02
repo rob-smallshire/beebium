@@ -391,6 +391,36 @@ final class SystemClient: ObservableObject, Disconnectable {
         }
     }
 
+    // MARK: - Launcher hand-off
+
+    /// Release this server from the client that launched it, so it keeps
+    /// running once this client is gone. The server stops watching for its
+    /// launcher's exit and points its own stdout and stderr at the null
+    /// device, so a closed pipe can no longer kill it with SIGPIPE. Authorized
+    /// by the launch-provenance UUID, like shutdown; a server we did not launch
+    /// refuses it.
+    /// - Returns: true if the server accepted the release.
+    @discardableResult
+    func releaseFromLauncher() async -> Bool {
+        guard let client = client else { return false }
+
+        var callOptions = CallOptions()
+        if let uuid = provenanceUUID {
+            callOptions.customMetadata.add(name: "x-beebium-instance-uuid", value: uuid)
+        }
+
+        do {
+            let response = try await client.releaseFromLauncher(
+                Beebium_ReleaseFromLauncherRequest(), callOptions: callOptions).response.get()
+            NSLog("[SystemClient] ReleaseFromLauncher: watchReleased=%d message=%@",
+                  response.watchReleased, response.message)
+            return true
+        } catch {
+            NSLog("[SystemClient] ReleaseFromLauncher failed: %@", error.localizedDescription)
+            return false
+        }
+    }
+
     // MARK: - Client Count
 
     /// Fetch the current client count from the server

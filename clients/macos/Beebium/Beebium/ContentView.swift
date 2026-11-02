@@ -1261,13 +1261,23 @@ class WindowCloseCoordinator: NSObject {
             machineManager.shutdownServer(forAddress: address)
             window.close()
         case .disconnect:
-            // Finalize any pending unlink request
+            // Finalize any pending unlink request. Hand the server off first,
+            // while the connection is still up, so it redirects its own output
+            // and a closed pipe cannot kill it once we are gone; then drop the
+            // connection and close. A machine we did not launch (or one with no
+            // pending unlink) is just disconnected.
             if let machine = machineManager.machine(forAddress: address), machine.unlinkRequested {
-                machineManager.unlink(id: machine.id)
+                Task { @MainActor in
+                    await machineManager.releaseFromLauncher(forAddress: address, using: systemClient)
+                    ConnectionRegistry.shared.unregister(address: address)
+                    clientGroup.disconnectAll()
+                    window.close()
+                }
+            } else {
+                ConnectionRegistry.shared.unregister(address: address)
+                clientGroup.disconnectAll()
+                window.close()
             }
-            ConnectionRegistry.shared.unregister(address: address)
-            clientGroup.disconnectAll()
-            window.close()
         case .promptUser(let count):
             showMultiClientAlert(window: window, address: address, clientCount: count)
         }
@@ -1325,10 +1335,11 @@ class WindowCloseCoordinator: NSObject {
                     self.clientGroup.disconnectAll()
                     window.close()
                 case .alertSecondButtonReturn:
-                    // Leave Running: unlink, then close
-                    if let machine = self.machineManager.machine(forAddress: address) {
-                        self.machineManager.unlink(id: machine.id)
-                    }
+                    // Leave Running: hand the server off (release it from this
+                    // launcher so it redirects its own output and survives our
+                    // exit), then disconnect and close.
+                    await self.machineManager.releaseFromLauncher(
+                        forAddress: address, using: self.systemClient)
                     ConnectionRegistry.shared.unregister(address: address)
                     self.clientGroup.disconnectAll()
                     window.close()

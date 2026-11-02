@@ -90,6 +90,34 @@ final class MachineManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testReleaseFromLauncherUnlinksEvenWhenServerUnreachable() async {
+        // Releasing hands the server off so it keeps running. The local unlink
+        // must happen whether or not the server accepted the release: an
+        // unreachable server (here, a SystemClient with no connection) must
+        // still be left running, not terminated on quit. The machine stays
+        // tracked but is no longer lifetime-linked.
+        let manager = MachineManager()
+        let id = manager.register(process: Process(), port: 50000, provenanceUUID: "uuid")
+        manager.setUnlinkRequested(id: id, requested: true)
+
+        let accepted = await manager.releaseFromLauncher(
+            forAddress: "127.0.0.1:50000", using: SystemClient())
+
+        XCTAssertFalse(accepted)  // no connection, so the server could not accept
+        XCTAssertFalse(manager.isLifetimeLinked(address: "127.0.0.1:50000"))
+        XCTAssertFalse(manager.isUnlinkRequested(address: "127.0.0.1:50000"))
+        XCTAssertNotNil(manager.machines[id])  // still tracked
+    }
+
+    @MainActor
+    func testReleaseFromLauncherForUnknownAddressReturnsFalse() async {
+        let manager = MachineManager()
+        let accepted = await manager.releaseFromLauncher(
+            forAddress: "127.0.0.1:99999", using: SystemClient())
+        XCTAssertFalse(accepted)
+    }
+
+    @MainActor
     func testSetUnlinkRequestedTogglesFlag() async {
         let manager = MachineManager()
         let process = Process()

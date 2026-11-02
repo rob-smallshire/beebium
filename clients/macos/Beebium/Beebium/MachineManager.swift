@@ -117,6 +117,30 @@ class MachineManager: ObservableObject {
         NSLog("[MachineManager] Unlinked machine %@ at %@", id.uuidString, machine.target.address)
     }
 
+    /// Hand a launched server off so it keeps running without this app: ask the
+    /// server to release itself from its launcher (stop watching for our exit
+    /// and redirect its own output, so a closed pipe cannot kill it later),
+    /// then unlink it locally. The local unlink happens whether or not the
+    /// server accepted the release -- this app's intent not to shut the server
+    /// down does not depend on the round-trip succeeding -- so a server that is
+    /// momentarily unreachable is still left running rather than terminated on
+    /// quit.
+    ///
+    /// Call this before dropping the gRPC connection, while the channel the
+    /// release travels on is still up.
+    ///
+    /// - Returns: true if the server accepted the release.
+    @discardableResult
+    func releaseFromLauncher(forAddress address: String, using systemClient: SystemClient) async -> Bool {
+        guard let machine = machine(forAddress: address) else {
+            NSLog("[MachineManager] releaseFromLauncher: no machine found at %@", address)
+            return false
+        }
+        let released = await systemClient.releaseFromLauncher()
+        unlink(id: machine.id)
+        return released
+    }
+
     /// Set or clear the deferred unlink request for a machine.
     /// The actual unlink is deferred until the window closes.
     func setUnlinkRequested(id: UUID, requested: Bool) {
