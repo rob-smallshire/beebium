@@ -51,10 +51,10 @@ Requires macOS 13 (Ventura) or newer.
 
 ### The Linux app
 
-On Debian trixie and Raspberry Pi OS trixie, `amd64` or `arm64`, download `beebium-client` and `beebium-server` from the [latest release](https://github.com/rob-smallshire/beebium/releases/latest) and install both with `apt`, so their dependencies come too:
+On Debian 13 (trixie) and Raspberry Pi OS (trixie), or Ubuntu 26.04 LTS, `amd64` or `arm64`, download the `beebium-client` package for your distribution (`.debian13` or `.ubuntu26.04` in its name) and `beebium-server` from the [latest release](https://github.com/rob-smallshire/beebium/releases/latest), and install both with `apt`, so their dependencies come too:
 
 ```bash
-sudo apt install ./beebium-client_*_arm64.deb ./beebium-server_*_arm64.deb
+sudo apt install ./beebium-client_*.debian13_arm64.deb ./beebium-server_*_arm64.deb
 ```
 
 Then start **Beebium** from the desktop's menu. The app finds the servers by itself; if you keep them somewhere else, say where in *Settings > Configure Beebium*.

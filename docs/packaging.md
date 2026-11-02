@@ -16,7 +16,7 @@ the macOS `.app`, see [macOS App Packaging](macos-app-packaging.md).
 | Server (headless core) | Self-contained `.deb` (apt) + `.tar.gz` (everything else) | **Done** (Linux, both arches) |
 | Server (macOS) | Homebrew tap `rob-smallshire/homebrew-beebium`, formula `beebium-server` | **Done** (arm64 CI-gated; Intel best-effort); tap pinned to each release automatically on publish |
 | Server (Windows) | Self-contained `.zip` (built + smoke-tested in CI, attached to the release) + Scoop bucket + WinGet | **Done** (`.zip` in CI/release); Scoop bucket + WinGet pending |
-| App (Linux GUI) | Per-arch `.deb` (`beebium-client`, release asset) for Debian trixie and Raspberry Pi OS trixie | **Done** (built and smoked in CI on every push, attached to the release) |
+| App (Linux GUI) | Per-distribution, per-arch `.deb` (`beebium-client`, release asset) for Debian 13 (trixie) with Raspberry Pi OS trixie, and Ubuntu 26.04 | **Done** (built and smoked in CI on every push, attached to the release) |
 | App (macOS GUI) | Signed + notarized per-arch DMG (release asset) + Homebrew cask `beebium-gui` | **Done** (cask + DMG); Developer ID signed/notarized, cask synced automatically on publish; needs macOS 13+ |
 | Python client | PyPI (`beebium`) | Planned |
 | TypeScript client | npm (`@beebium/client`) | Planned |
@@ -208,10 +208,17 @@ Ubuntu for Pi); the 32-bit default image is not supported.
 
 ## The Linux desktop client (`beebium-client`)
 
-The Linux app (`clients/linux`, Qt 6) ships as a `.deb` of its own,
-`beebium-client_<version>_<arch>.deb` for `amd64` and `arm64`, beside the
-server packages and never overlapping them. Unlike the server it is an
-ordinary distribution package:
+The Linux app (`clients/linux`, Qt 6) ships as a `.deb` of its own for each
+distribution it is built for, `beebium-client_<version>.<distro>_<arch>.deb`
+for `debian13` and `ubuntu26.04`, each for `amd64` and `arm64`, beside the
+server packages and never overlapping them. The package's Version carries the
+distribution as a tilde suffix (`0.16.0~debian13`), which sorts below a plain
+`0.16.0`; the file name has a dot there instead, because GitHub rewrites `~`
+to `.` in release asset names, so the file is named as it is published. The
+suffix comes from the CMake cache variable `BEEBIUM_CLIENT_PACKAGE_DISTRIBUTION`,
+the third argument of `build-package.sh`; a local build without it gets the
+plain version and file name. Unlike the server it is an ordinary distribution
+package:
 
 - **What it installs, under `/usr`:** the program, `/usr/bin/beebium`; its
   desktop entry, `/usr/share/applications/org.beebium.Beebium.desktop`, which
@@ -223,10 +230,11 @@ ordinary distribution package:
   in `clients/linux/packaging/`, the install rules and the CPack stanza at the
   end of `clients/linux/CMakeLists.txt`.
 - **Built per distribution, not static:** it links the distribution's Qt 6
-  and gRPC, so it is built on the distribution it is for: Debian trixie,
-  which serves Raspberry Pi OS trixie too, as they share the archive's
-  libraries. Ubuntu 24.04 and Debian bookworm ship a Qt older than the 6.7 it
-  needs.
+  and gRPC, so it is built on each distribution it is for: Debian 13
+  (trixie), which serves Raspberry Pi OS trixie too, as they share the
+  archive's libraries, and Ubuntu 26.04 (#259). A package for one cannot
+  install on the other: their abseil, gRPC and Qt are different builds.
+  Ubuntu 24.04 and Debian bookworm ship a Qt older than the 6.7 it needs.
 - **Depends:** derived by `dpkg-shlibdeps` from the program, never written by
   hand, apart from what Qt loads at run time, which it cannot see: the
   Wayland platform plugin (`qt6-wayland`) and the Vulkan loader
@@ -250,31 +258,36 @@ ordinary distribution package:
 
 **The Qt private-ABI pin.** The display draws with `QRhiWidget`, part of Qt's
 semi-private QRhi API, which Qt does not keep binary-compatible across its own
-builds. `dpkg-shlibdeps` therefore adds `qt6-base-private-abi (= 6.8.2)`: the
-`.deb` installs only beside the exact Qt build it was compiled against. Debian
+builds; Qt exports it as private API (the `Qt_6_PRIVATE_API` symbol version)
+even in Qt 6.10. `dpkg-shlibdeps` therefore adds `qt6-base-private-abi (=
+6.8.2)` on trixie and `(= 6.10.2)` on Ubuntu 26.04: the `.deb` installs only
+beside the exact Qt build it was compiled against, which is why it is built
+per distribution even though its other libraries could be bundled. Debian
 stable (trixie) and Raspberry Pi OS trixie hold Qt at 6.8.2 for the life of the
-release, taking patch fixes without changing that version, so users of stable
-are unaffected. On testing or unstable, whose Qt moves on, the package becomes
-uninstallable until it is rebuilt, and that is not supported. If Debian ever
-moves stable to a new Qt point release, the client must be rebuilt and
-re-released against it. That is why CI installs the archive's current packages
+release, taking patch fixes without changing that version, and an Ubuntu LTS
+does the same, so their users are unaffected. On testing or unstable, whose Qt moves on, the package becomes
+uninstallable until it is rebuilt, and that is not supported. If either
+distribution ever moves its release to a new Qt point release, the client must
+be rebuilt and re-released against it. That is why CI installs the archive's current packages
 on every run and caches nothing built. The smoke job prints the Qt version the
 package resolved to, so a mismatch shows in the log.
 
 `.github/workflows/linux-client-package.yml` (on `workflow_dispatch`, and on
 `workflow_call` from `ci.yml` on every push and from `release.yml`) runs these
-steps in a `debian:trixie` container on `ubuntu-latest` (`amd64`) and
-`ubuntu-24.04-arm` (`arm64`). It checks the `.deb`'s Package, Version and
-Architecture against its file name, uploads it as `linux-client-<arch>`, and
-smokes it in a fresh `debian:trixie` container, so the build's `-dev` packages
-cannot satisfy a dependency the `.deb` fails to declare.
+steps for each distribution, in its container (`debian:trixie`,
+`ubuntu:26.04`), on `ubuntu-latest` (`amd64`) and `ubuntu-24.04-arm`
+(`arm64`). It checks the `.deb`'s Package, Version and Architecture against
+its file name, uploads it as `linux-client-<distro>-<arch>`, and smokes it in
+a fresh container of the same distribution, so the build's `-dev` packages
+cannot satisfy a dependency the `.deb` fails to declare. Both distributions
+use the same scripts and the same package names.
 
-To build and check it locally, as CI does, in a Debian trixie container from
-the repository root:
+To build and check it locally, as CI does, in a Debian trixie or Ubuntu 26.04
+container from the repository root:
 
 ```bash
 clients/linux/ci/install-build-deps.sh      # as root: the build dependencies
-clients/linux/ci/build-package.sh build 4   # configure, build, test, cpack
+clients/linux/ci/build-package.sh build 4   # configure, build, test, cpack (add debian13 or ubuntu26.04 for the suffix)
 clients/linux/ci/smoke-package.sh build/beebium-client_*.deb  # as root, ideally a fresh container
 ```
 
@@ -728,7 +741,8 @@ published assets.
    be attached*: exactly the expected filenames (no missing/extra/dupes),
    each Linux `.tar.gz` is a single relocatable top-level directory (not `/opt`),
    each `.deb`'s `Architecture` and each `.rpm`'s arch match their filenames, each
-   client `.deb` is `beebium-client` at the release version, and
+   client `.deb` is `beebium-client` at the release version with the tilde
+   suffix of the distribution its file name names, and
    the shipped amd64 server actually runs (`smoke-installed-tree.sh`). If any
    check fails the job stops and no draft is created with bad assets. This closes
    the gap that once published stale `/opt`-rooted tarballs while every smoke job
