@@ -163,6 +163,20 @@ follows that a character-mapped key must never *forbid* CTRL either -- unlike
 SHIFT, which legitimately suppresses a physically-held modifier when the
 resolved character is the unshifted face.
 
+**R11 -- A modifier pressed into a host-shortcut chord is not machine input.**
+The platform has a shortcut modifier with no BBC equivalent -- Command on macOS,
+Super/Meta elsewhere. A SHIFT or CTRL that goes *down* while that modifier is
+already held is part of a host chord (the screenshot tool, a menu shortcut), not
+something the user is typing at the Beeb, so do not send it. This matters
+because the chord often hands input to a system overlay that never trips a
+focus-loss callback, so the modifier's *up* is delivered elsewhere and the BBC
+modifier would stick (R4 cannot save it; R6's resync then has to). Suppress only
+a *fresh* down under the shortcut modifier: a modifier already down when the
+shortcut modifier arrives keeps its state and gets its own up as usual, and the
+suppressed down's later up is harmless -- the held-set guard (R8) drops it. This
+is R5 (a host interaction owns this input) narrowed to the one edge a chord
+actually produces.
+
 
 ## 3. The server contract
 
@@ -206,6 +220,10 @@ resolved character is the unshifted face.
   `KeyboardMTKView.modifierKeyIsDown(keyCode:rawFlags:)`.
 - **Command combinations** are returned to the menu system via
   `performKeyEquivalent(with:)`; `keyDown` early-returns while Command is held.
+  A modifier change under Command is handled in `flagsChanged`:
+  `KeyboardMTKView.shouldForwardModifierDown(keyCode:commandHeld:)` withholds a
+  SHIFT/CTRL/Option *down* while Command is held (R11), so Cmd-Shift-4 never
+  presses BBC SHIFT in the first place.
 - **Focus (R4).** Observe `NSWindow.didResignKeyNotification` -> release all
   keys (`KeyboardMTKView.releaseHeldKeysOnFocusLoss()`, which calls
   `KeyboardClient.releaseAllKeys()`); observe `didBecomeKeyNotification` ->

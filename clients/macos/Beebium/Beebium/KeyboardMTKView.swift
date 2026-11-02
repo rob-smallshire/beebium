@@ -283,7 +283,17 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
             print("[KBD][in.flags] -> keyCode=\(keyCode) isDown=\(isDown)")
 
             if isDown {
-                keyboardClient?.keyDown(input: input)
+                // A modifier going down while Command is held is part of a host
+                // chord (Cmd-Shift-4 and the like), not machine input, so it is
+                // not sent. Its up is still forwarded below and harmlessly
+                // dropped by the held-set guard, and a modifier already down
+                // when Command arrived keeps its state.
+                if Self.shouldForwardModifierDown(
+                    keyCode: keyCode, commandHeld: current.contains(.command)) {
+                    keyboardClient?.keyDown(input: input)
+                } else {
+                    print("[KBD][in.flags] -> suppressed (Command chord)")
+                }
             } else {
                 keyboardClient?.keyUp(input: input)
             }
@@ -345,6 +355,23 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
     /// Determine if a specific modifier key is pressed based on its keyCode and current flags
     private func isModifierPressed(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Bool {
         return Self.modifierKeyIsDown(keyCode: keyCode, rawFlags: flags.rawValue)
+    }
+
+    /// Whether a modifier going DOWN should reach the machine, given whether the
+    /// host Command key is currently held.
+    ///
+    /// A Command chord -- Cmd-Shift-4, Cmd-Option-anything -- is the app's, not
+    /// the machine's. A SHIFT or CTRL that goes down while Command is already
+    /// held belongs to a host shortcut, so it is not sent to the BBC: otherwise
+    /// the system overlay the chord invokes (the Cmd-Shift-4 screenshot tool)
+    /// swallows the matching up and the BBC modifier sticks (issue #75). Only a
+    /// fresh down under Command is suppressed -- a modifier already down when
+    /// Command arrived keeps its state and gets its own up as usual. Command's
+    /// own keys are never machine input (Command has no BBC key), so they are
+    /// not treated as chord members to suppress.
+    static func shouldForwardModifierDown(keyCode: UInt16, commandHeld: Bool) -> Bool {
+        guard commandHeld else { return true }
+        return keyCode == MacKeyCode.command || keyCode == MacKeyCode.rightCommand
     }
 
     /// Whether a specific physical modifier keyCode is currently down, from a

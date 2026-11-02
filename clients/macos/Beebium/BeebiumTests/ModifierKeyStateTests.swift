@@ -75,4 +75,31 @@ final class ModifierKeyStateTests: XCTestCase {
     func testNonModifierKeyIsNeverDown() {
         XCTAssertFalse(down(0x00 /* 'a' */, lShift | shiftFlag))
     }
+
+    // MARK: - Cmd-chord suppression (R11)
+
+    private func forwardDown(_ keyCode: UInt16, commandHeld: Bool) -> Bool {
+        KeyboardMTKView.shouldForwardModifierDown(keyCode: keyCode, commandHeld: commandHeld)
+    }
+
+    func testModifierDownForwardedWhenCommandNotHeld() {
+        XCTAssertTrue(forwardDown(MacKeyCode.shift, commandHeld: false))
+        XCTAssertTrue(forwardDown(MacKeyCode.control, commandHeld: false))
+    }
+
+    func testModifierDownSuppressedWhileCommandHeld() {
+        // The Cmd-Shift-4 case: a SHIFT (or CTRL, Option) going down into a
+        // Command chord must not reach the BBC, or its lost up strands it.
+        XCTAssertFalse(forwardDown(MacKeyCode.shift, commandHeld: true))
+        XCTAssertFalse(forwardDown(MacKeyCode.rightShift, commandHeld: true))
+        XCTAssertFalse(forwardDown(MacKeyCode.control, commandHeld: true))
+        XCTAssertFalse(forwardDown(MacKeyCode.option, commandHeld: true))
+    }
+
+    func testCommandKeyItselfIsNeverSuppressed() {
+        // Command is unmapped on the BBC and harmless; it is not a chord member
+        // to drop, so it is always forwarded.
+        XCTAssertTrue(forwardDown(MacKeyCode.command, commandHeld: true))
+        XCTAssertTrue(forwardDown(MacKeyCode.rightCommand, commandHeld: true))
+    }
 }
