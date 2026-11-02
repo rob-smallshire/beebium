@@ -19,6 +19,11 @@ down, and oaknut, an implementation independent of Beebium, reads both files
 from the image file. A new server then runs on the same image and the guest
 reads them back.
 
+The DFS rows marked as formatting first fill the blank image with junk, and
+the guest formats it with dfs_format.bas (OSWORD &7F, the 8271 Format Track
+command, which the 1770 DFS emulates) before writing to it, so a format in
+the guest must reach the image file too (#249).
+
 A check made only inside one guest session reads back the emulator's own
 in-memory track, and passes even when nothing correct reaches the file: #246
 went unnoticed that way for every ADFS floppy write.
@@ -50,6 +55,10 @@ LOAD_ADDRESS = 0x5800
 BIG_DATA = bytes((i * 7 + (i >> 8) * 13 + 1) & 0xFF for i in range(BIG_LENGTH))
 HELP_TEXT = "OS 1.20"  # every *HELP on a Model B prints the MOS version
 TIMEOUT = 60.0
+FORMAT_TIMEOUT = 240.0  # 80 tracks, a revolution or two each, at real time
+FORMATTER_FILEPATH = Path(__file__).parent / "dfs_format.bas"
+FORMAT_FILL = 0xE5  # what an 8271-style format leaves in every sector
+DFS_SECTORS = 800  # 80 tracks of 10
 
 
 @dataclass(frozen=True)
@@ -65,6 +74,7 @@ class Row:
     image_args: Callable[[Path], list[str]] = field(compare=False)
     read_image: Callable[[Path, str], bytes] = field(compare=False)
     needs_server_for_blank: bool = True
+    format_in_guest: bool = False
 
 
 def _blank(label: str, filename: str) -> Callable[[Beebium | None, Path], Path]:
@@ -123,6 +133,30 @@ ROWS = [
         read_image=_read_dfs(ACORN_DFS_80T_SINGLE_SIDED),
     ),
     Row(
+        id="dfs-8271-ssd-formatted",
+        sideways={14: "acorn-dnfs_1_20.rom"},
+        args=("--fdc", "acorn-8271"),
+        select="*DISC\r",
+        big_names=("BIG",),
+        text_name="TEXT",
+        make_image=_blank("Acorn DFS 80T SS 200K", "disc.ssd"),
+        image_args=_floppy,
+        read_image=_read_dfs(ACORN_DFS_80T_SINGLE_SIDED),
+        format_in_guest=True,
+    ),
+    Row(
+        id="dfs-1770-ssd-formatted",
+        sideways={14: "acorn-dfs_2_26.rom"},
+        args=("--fdc", "acorn-1770"),
+        select="*DISC\r",
+        big_names=("BIG",),
+        text_name="TEXT",
+        make_image=_blank("Acorn DFS 80T SS 200K", "disc.ssd"),
+        image_args=_floppy,
+        read_image=_read_dfs(ACORN_DFS_80T_SINGLE_SIDED),
+        format_in_guest=True,
+    ),
+    Row(
         id="dfs-1770-ssd",
         sideways={14: "acorn-dfs_2_26.rom"},
         args=("--fdc", "acorn-1770"),
@@ -178,7 +212,7 @@ def _launch(row: Row, roms_dirpath: Path, server: Path | None, extra: list[str])
 _sentinel_numbers = itertools.count()
 
 
-def _run_and_wait(bbc: Beebium, commands: str, label: str) -> None:
+def _run_and_wait(bbc: Beebium, commands: str, label: str, timeout: float = TIMEOUT) -> None:
     """Type `commands`, then a PRINT that shows a sentinel only once they are done.
 
     The typed PRINT line shows the sentinel split in two, so it matches only
@@ -189,7 +223,7 @@ def _run_and_wait(bbc: Beebium, commands: str, label: str) -> None:
     sentinel = f"{label}{next(_sentinel_numbers)}"
     half = len(label) // 2
     bbc.keyboard.type(f'{commands}PRINT "{sentinel[:half]}";"{sentinel[half:]}"\r')
-    bbc.expect(sentinel, timeout=TIMEOUT)
+    bbc.expect(sentinel, timeout=timeout)
 
 
 @pytest.mark.parametrize("row", ROWS, ids=[row.id for row in ROWS])
@@ -207,10 +241,34 @@ def test_files_written_in_the_guest_reach_the_image_and_survive_a_relaunch(
         with _launch(row, beebium_roms_dirpath, beebium_server_filepath, []) as maker:
             image_filepath = row.make_image(maker, tmp_path)
 
+    if row.format_in_guest:
+        # Junk, not a blank: only a format in the guest makes it a disc.
+        size = image_filepath.stat().st_size
+        image_filepath.write_bytes(bytes((i * 151 + 89) & 0xFF for i in range(size)))
+
     with _launch(row, beebium_roms_dirpath, beebium_server_filepath,
                  row.image_args(image_filepath)) as bbc:
         bbc.wait_until_ready()
         _run_and_wait(bbc, row.select, "SELECTED")
+        if row.format_in_guest:
+            # Typed without its comment lines, which only slow the typing.
+            program = "".join(
+                f"{line}\r" for line in FORMATTER_FILEPATH.read_text().splitlines()
+                if line.split(" ", 1)[1:] and not line.split(" ", 1)[1].startswith("REM")
+            )
+            _run_and_wait(bbc, f"NEW\r{program}", "ENTERED", FORMAT_TIMEOUT)
+            # Nothing is typed while it runs, so the run is fast-forwarded.
+            # It prints its last line in two parts, so the listing never
+            # shows it whole; Caps Lock upper-cases what was typed.
+            bbc.keyboard.type("CLS\rRUN\r")
+            bbc.keyboard.wait_until_typing_complete()
+            bbc.system.set_speed_multiplier(0.0)
+            try:
+                bbc.expect("FORMATTED", "FAILED", timeout=FORMAT_TIMEOUT)
+            finally:
+                bbc.system.set_speed_multiplier(1.0)
+            screen = bbc.video.screen_text().text
+            assert "FORMATTED" in screen and "FAILED" not in screen, screen
         bbc.memory.address.bus.write(BIG_ADDRESS, BIG_DATA)
         saves = "".join(f"*SAVE {name} {BIG_ADDRESS:X} +{BIG_LENGTH:X}\r" for name in row.big_names)
         _run_and_wait(bbc, f"{saves}*SPOOL {row.text_name}\r*HELP\r*SPOOL\r", "WRITTEN")
@@ -220,6 +278,11 @@ def test_files_written_in_the_guest_reach_the_image_and_survive_a_relaunch(
         assert row.read_image(image_filepath, name) == BIG_DATA, f"{name} on the image"
     text = row.read_image(image_filepath, row.text_name)
     assert HELP_TEXT.encode() in text, f"{row.text_name} on the image: {text!r}"
+    if row.format_in_guest:
+        # The last sector holds no file, so it shows the format's fill.
+        image = image_filepath.read_bytes()
+        assert len(image) == DFS_SECTORS * 256
+        assert image[-256:] == bytes([FORMAT_FILL]) * 256, "the format did not reach the image"
 
     with _launch(row, beebium_roms_dirpath, beebium_server_filepath,
                  row.image_args(image_filepath)) as bbc:
