@@ -49,6 +49,10 @@ discovery = [
 test = [
     "pytest>=7.0.0",
     "pytest-timeout>=2.0.0",
+    # Independent readers of Acorn DFS and ADFS images, the oracle the storage
+    # round-trip tests check the emulator's image files against (#247).
+    "oaknut-dfs>=12.9.0",
+    "oaknut-adfs>=12.9.0",
 ]
 dev = [
     { include-group = "test" },
