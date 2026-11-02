@@ -105,8 +105,9 @@ cmake -B build-static \
   -DCMAKE_OSX_ARCHITECTURES=arm64 \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
   -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-  -DVCPKG_TARGET_TRIPLET=arm64-osx-static \
-  -DVCPKG_HOST_TRIPLET=arm64-osx-static
+  -DVCPKG_OVERLAY_TRIPLETS="$PWD/triplets" \
+  -DVCPKG_TARGET_TRIPLET=arm64-osx11-static \
+  -DVCPKG_HOST_TRIPLET=arm64-osx11-static
 cmake --build build-static --target beebium-servers
 cmake --install build-static --prefix /tmp/beebium-servers-staging
 
