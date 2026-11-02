@@ -406,6 +406,9 @@ The plugin links `beebium_core` and the 6502 library into its shared object
 with hidden visibility, so its private copies of the ULA and runner never
 interpose on the server's own. The server reaches it only through the
 exported interfaces; it has no compiled-in knowledge of any coprocessor.
+Because the plugin carries its own copy of the core, a change to shared core
+code such as the ULA is reflected under a coprocessor only once the plugin is
+rebuilt, not the server alone.
 
 ### Fidelity notes
 
