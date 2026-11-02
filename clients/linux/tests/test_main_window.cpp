@@ -37,8 +37,9 @@ TEST_CASE("A machine window has a menu bar and a display area", "[app][window]")
     for (QAction* action : window.menuBar()->actions()) {
         menus << action->text().remove(QLatin1Char('&'));
     }
+    // As the macOS client's: no menu of its own beyond the standard set.
     CHECK(menus == QStringList{QStringLiteral("File"), QStringLiteral("Edit"), QStringLiteral("View"),
-                               QStringLiteral("Machine"), QStringLiteral("Help")});
+                               QStringLiteral("Window"), QStringLiteral("Help")});
 
     REQUIRE(window.centralWidget() != nullptr);
     CHECK(window.centralWidget()->findChild<QWidget*>(QStringLiteral("display")) != nullptr);

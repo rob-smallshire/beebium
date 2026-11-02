@@ -438,22 +438,28 @@ TEST_CASE("Showing the home window brings the one forward, never a second", "[ho
     REQUIRE(wait_until([&] { return client.windows().empty(); }));
 }
 
-TEST_CASE("A machine window has no application commands, and can show Beebium",
+TEST_CASE("A machine window has no application commands, and its Window menu shows Beebium",
           "[home][window]") {
     MainWindow window;
-    QStringList file_items;
-    for (QAction* menu : window.menuBar()->actions()) {
-        if (menu->text().remove(QLatin1Char('&')) == QStringLiteral("File")) {
-            for (QAction* item : menu->menu()->actions()) {
-                if (!item->isSeparator()) {
-                    file_items << item->text().remove(QLatin1Char('&'));
+    const auto items_of = [&](const QString& title) {
+        QStringList items;
+        for (QAction* menu : window.menuBar()->actions()) {
+            if (menu->text().remove(QLatin1Char('&')) == title) {
+                for (QAction* item : menu->menu()->actions()) {
+                    if (!item->isSeparator()) {
+                        items << item->text().remove(QLatin1Char('&'));
+                    }
                 }
             }
         }
-    }
-    CHECK(file_items == QStringList{QStringLiteral("Show Beebium"), QStringLiteral("Save"),
-                                    QStringLiteral("Save As..."), QStringLiteral("Rename Machine..."),
-                                    QStringLiteral("Close Window"), QStringLiteral("Quit")});
+        return items;
+    };
+    CHECK(items_of(QStringLiteral("File")) ==
+          QStringList{QStringLiteral("Save"), QStringLiteral("Save As..."),
+                      QStringLiteral("Rename Machine..."), QStringLiteral("Close Window"),
+                      QStringLiteral("Quit")});
+    CHECK(items_of(QStringLiteral("Window")) ==
+          QStringList{QStringLiteral("Minimize"), QStringLiteral("Show Beebium")});
 }
 
 // --- the pages drive the launch, open and connect paths -------------------------

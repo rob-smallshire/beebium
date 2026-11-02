@@ -300,8 +300,8 @@ void MachineSession::set_launched_server(const LaunchedServer& server) {
 }
 
 void MachineSession::run() {
-    // An explicit Run (Machine > Run) during a hold for the sound is that
-    // Run: the hold must not send another.
+    // A Run during a hold for the sound is that Run: the hold must not
+    // send another.
     run_hold_.cancel();
     post_call<CallOutcome>(
         [](const std::shared_ptr<grpc::Channel>& channel, grpc::ClientContext& context) {

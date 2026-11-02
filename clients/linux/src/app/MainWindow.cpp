@@ -342,17 +342,9 @@ void MainWindow::build_menus() {
     // shortcuts. While the display has focus a key the machine takes goes to
     // the machine first (DisplayWidget::event), so these shortcuts apply
     // when it does not; F11 is always the window's.
+    // File, Edit, View, Window and Help, as the macOS client's (13.2); the
+    // application's own commands are the home window's (13.4).
     QMenu* file = menuBar()->addMenu(tr("&File"));
-    // The application's own commands are the home window's (13.4).
-    QAction* home_action = file->addAction(tr("Show &Beebium"));
-    home_action->setToolTip(tr("Bring the Beebium window forward, to start, open or connect to "
-                               "another machine"));
-    home_action->setShortcut(QKeySequence(tr("Ctrl+Shift+H")));
-    connect(home_action, &QAction::triggered, this, &MainWindow::home_requested);
-    // On the window too: the menu bar is hidden while immersive (6.4).
-    home_action->setShortcutContext(Qt::WindowShortcut);
-    addAction(home_action);
-    file->addSeparator();
     QAction* save_action = file->addAction(tr("&Save"));
     save_action->setShortcut(QKeySequence::Save);
     connect(save_action, &QAction::triggered, this, [this] { save(); });
@@ -492,59 +484,21 @@ void MainWindow::build_menus() {
     }
     apply_presentation();
 
-    QMenu* machine = menuBar()->addMenu(tr("&Machine"));
-    QAction* run_action = machine->addAction(tr("&Run"));
-    run_action->setToolTip(tr("Start a machine that is waiting to run"));
-    run_action->setEnabled(false);
-    connect(run_action, &QAction::triggered, session_, &MachineSession::run);
-    connect(session_, &MachineSession::running_changed, run_action,
-            [run_action](bool running) { run_action->setEnabled(!running); });
-    QAction* break_action = machine->addAction(tr("&Break"));
-    // Alt+F12 is BREAK in the built-in mappings: while the display has the
-    // keys it reaches the machine as a key; elsewhere this shortcut taps it.
-    break_action->setShortcut(QKeySequence(tr("Alt+F12")));
-    connect(break_action, &QAction::triggered, this, [this] {
-        display_->keyboard().press_break();
-        QTimer::singleShot(100, this, [this] { display_->keyboard().release_break(); });
-    });
-    machine->addSeparator();
-    QAction* battery_action = machine->addAction(tr("&Forget Battery-Backed State..."));
-    connect(battery_action, &QAction::triggered, this, [this] {
-        const auto answer = QMessageBox::question(
-            this, tr("Forget Battery-Backed State"),
-            tr("Forget what %1 keeps while it is off, such as its clock and settings? "
-               "It takes effect the next time the machine starts.")
-                .arg(session_->machine_name()),
-            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
-        if (answer != QMessageBox::Yes) {
-            return;
-        }
-        auto connection = std::make_shared<QMetaObject::Connection>();
-        *connection = connect(session_, &MachineSession::battery_reset, this,
-                              [this, connection](const CallOutcome& outcome, const QStringList& units) {
-                                  disconnect(*connection);
-                                  if (!outcome.ok) {
-                                      ServerMessageDialog dialog(
-                                          tr("Could Not Forget"),
-                                          tr("The battery-backed state could not be forgotten."),
-                                          outcome.message, this);
-                                      dialog.exec();
-                                      return;
-                                  }
-                                  QMessageBox::information(
-                                      this, tr("Forget Battery-Backed State"),
-                                      units.isEmpty()
-                                          ? tr("This machine keeps no battery-backed state.")
-                                          : tr("At the next start this machine will forget: %1.")
-                                                .arg(units.join(QStringLiteral(", "))));
-                              });
-        session_->reset_battery();
-    });
-    for (QAction* action : {break_action, battery_action}) {
-        action->setEnabled(false);
-        connect(session_, &MachineSession::connected_to_server, action,
-                [action] { action->setEnabled(true); });
-    }
+    // Window: Minimize, and Show Beebium, which brings the home window
+    // forward to start, open or connect to another machine.
+    QMenu* window = menuBar()->addMenu(tr("&Window"));
+    QAction* minimize_action = window->addAction(tr("&Minimize"));
+    minimize_action->setShortcut(QKeySequence(tr("Ctrl+M")));
+    connect(minimize_action, &QAction::triggered, this, &QWidget::showMinimized);
+    window->addSeparator();
+    QAction* home_action = window->addAction(tr("Show &Beebium"));
+    home_action->setToolTip(tr("Bring the Beebium window forward, to start, open or connect to "
+                               "another machine"));
+    home_action->setShortcut(QKeySequence(tr("Ctrl+Shift+H")));
+    connect(home_action, &QAction::triggered, this, &MainWindow::home_requested);
+    // On the window too: the menu bar is hidden while immersive (6.4).
+    home_action->setShortcutContext(Qt::WindowShortcut);
+    addAction(home_action);
 
     QMenu* help = menuBar()->addMenu(tr("&Help"));
     QAction* about_action = help->addAction(tr("&About Beebium"));
