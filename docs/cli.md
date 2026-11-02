@@ -630,6 +630,7 @@ beebium-model-b --hybrid-music-5000 --hybrid-music-5000 unit=music-3000
 | `--wait` | Delay emulation start (mode auto-detected) |
 | `--wait=cli` | Wait for RETURN keypress on stdin |
 | `--wait=api` | Wait for `Run()` RPC from client |
+| `--exit-with-parent` | Exit, as on SIGTERM, when stdin reaches end of file |
 
 The `--wait` option allows clients to connect and set up before emulation begins.
 
@@ -640,6 +641,8 @@ The `--wait` option allows clients to connect and set up before emulation begins
 **`--wait=cli`**: Waits for the user to press RETURN on the console before starting emulation.
 
 **`--wait=api`**: Pauses the machine immediately after the 6502 reset sequence completes (7 cycles). Call `DebuggerControl/Run` to start emulation.
+
+**`--exit-with-parent`**: The server watches its stdin and, when stdin reaches end of file, shuts down exactly as on SIGTERM (clients are sent `SHUTTING_DOWN`, discs are flushed). A program that launches the server holds the write end of a pipe there. When that program ends, however it ends (a SIGKILL, a crash, a tool's timeout killing the process tree), the system closes its end, so the server cannot outlive it. Bytes written to stdin are ignored. Not with `--wait=cli`, which reads stdin too (exit code 78). The Python and TypeScript clients' `launch()` pass it by default. `SystemService.ReleaseFromLauncher` turns it off at run time, so a launcher can hand the server off and leave it running; see [lifecycle-management.md](lifecycle-management.md#a-server-does-not-outlive-its-launcher-unless-released).
 
 #### Startup Options (Keyboard Links)
 
@@ -1369,7 +1372,7 @@ beebium-model-b start --help        # Start subcommand help
 2. **Ready**: Prints "BBC Model B ready. Press Ctrl+C to stop."
 3. **Wait** (if `--wait`): Blocks until condition met
 4. **Running**: Main emulation loop at ~2MHz (paced) or maximum speed
-5. **Shutdown**: On SIGINT/SIGTERM, notifies clients via `WatchServerStatus`, then exits
+5. **Shutdown**: On SIGINT/SIGTERM, `RequestShutdown`, or (with `--exit-with-parent`) the end of stdin, notifies clients via `WatchServerStatus`, then exits
 
 Clients can subscribe to `SystemService/WatchServerStatus` to receive:
 - `SERVER_STATUS_READY` immediately on subscription

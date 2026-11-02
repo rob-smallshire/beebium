@@ -229,6 +229,42 @@ emulation loop is skipped. This is the internal twin of the rule that no
 external peer may stall the emulator — here it is an internal wait ignoring
 termination.
 
+### A server does not outlive its launcher unless released
+
+A client that launches a server can end without its cleanup running: a tool's
+timeout killing the process tree, a crash, or a script that leaves a launch
+unclosed. Before #254 the server then sat in `--wait=api` indefinitely, with
+nothing to stop it.
+
+**The watch.** `--exit-with-parent` makes the server watch its stdin, a pipe
+whose write end the launcher holds and nothing else does. When the launcher
+ends, however it ends, the system closes that end. The server's read returns,
+and it calls `platform::request_shutdown()`, which takes the signal's own path:
+the SIGTERM handler body on POSIX, the console control handler on Windows. The
+shutdown that follows is the signal's in every respect. The watch starts once
+the shutdown handler is installed, so a launcher that died during start-up is
+still seen. It is opt-in on each launch, never the server's default, and
+refused with `--wait=cli`, which reads stdin too.
+
+**The release.** A launcher may hand its server off to run on by itself, as the
+macOS client's unlink does. `SystemService.ReleaseFromLauncher` stops the watch,
+and points the server's stdout and stderr at the null device. Those are pipes
+the launcher holds, with or without the flag. The server does not ignore
+SIGPIPE, so once the launcher had gone, a released server would otherwise be
+killed by its next write, or block on a full pipe on Windows. Only the client
+whose instance UUID matches the launch provenance may release; anyone else gets
+`PERMISSION_DENIED`, even a sole client, which may stop the server but not take
+it over. Releasing twice changes nothing.
+
+**The clients.** The Python and TypeScript clients' `launch()` pass the flag by
+default (`exit_with_client` / `exitWithClient`) and hold the pipe for as long as
+they manage the server. `detach()` releases the server, then stops managing it
+without stopping it, so `close()` only disconnects and the process's exit
+leaves it running. The Python client also stops every server it still manages
+at a normal interpreter exit (`atexit`), and the TypeScript client does the same
+from a process `exit` hook. `connect()` to a server someone else started is
+unaffected. The macOS client launches without the flag.
+
 ### Recovery semantics
 
 Two layers. **Passive**, for `unreachable`: while heartbeats have stopped but the
@@ -344,3 +380,7 @@ fingerprint; all four constants were regenerated together.
 8. **Never make shutdown conditional on the emulation loop running.** A blocking
    wait on the main thread must be interruptible, and its exit condition must
    never be something only code downstream of that wait can set.
+9. **A launched server must not outlive its launcher unless released.** A
+   launching client passes `--exit-with-parent` and holds the stdin pipe; it
+   hands the server off only through `ReleaseFromLauncher`, never by simply
+   dropping the pipe, which is a shutdown.

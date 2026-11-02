@@ -88,6 +88,9 @@ with Beebium.launch() as bbc:
 
 `launch()` returns the client itself, so it works without `with` too, as in a
 REPL: `bbc = Beebium.launch()`, and `bbc.close()` when done stops the server.
+The server never outlives your Python process: it exits when the process does,
+however it ends. To leave it running, call `bbc.detach()` and reach it later
+with `Beebium.connect()`.
 
 ### Connect to a running server
 
