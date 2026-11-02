@@ -269,6 +269,44 @@ configure starts from an empty build directory. The build runs at
 - `typescript-client`, `typescript-integration-linux`, `typescript-integration-macos-arm64`, `typescript-integration-macos-x86_64`
 - `python-client`, `python-integration-linux`, `python-integration-windows`, `python-integration-macos-arm64`, `python-integration-macos-x86_64`
 
+### Weekly integration tests
+
+The scenario suites under `integration_tests/` drive whole machines for minutes
+at a time, so by decision they are not part of per-push CI
+([#47](https://github.com/rob-smallshire/beebium/issues/47)). The workflow
+`.github/workflows/integration-tests.yml` runs them on Linux every Monday at
+03:17 UTC, and on demand:
+
+```bash
+gh workflow run integration-tests.yml --ref master
+```
+
+or **Run workflow** on the workflow's page in the Actions tab. A dispatch runs
+the code on that ref of the GitHub repository, so push first. The workflow
+builds the servers from that commit and then runs each suite in its own step
+with every test selected (`-m "slow or not slow"`), so a failure names its
+suite and does not stop the others:
+
+| Suite | Covers |
+|-------|--------|
+| `acorn-rtc` | The User Port real-time clock extension, from BASIC |
+| `adfs` | ADFS 1.30 commands on a SCSI hard disc (B+) |
+| `l3fs`, `l3fs-clock` | The Level 3 file server over Econet, and its clock updates |
+| `sideways-srload` | `*SRLOAD` of a ROM image into sideways RAM |
+| `tube-save` | LOAD and SAVE over DFS with and without the Tube |
+| `wfsinit` | The WFSINIT utility with the Tube, SCSI and DFS |
+
+Not run: `comal-soak` and `games-soak` are soak drivers with no tests, and
+`pieb-aun` needs a real PiEconetBridge.
+
+The exception today is `ci.yml`'s `scenario-integration-linux` job, which runs
+`tube-save` and the slow tests of `wfsinit` and `l3fs` on every push.
+
+Storage round trips (every filing system, controller and image format, checked
+against the image file and across a relaunch) are not among these: they are
+part of the Python client's own tests (`tests/test_storage_round_trip.py`),
+which run on every push.
+
 ## Deployment
 
 After building, you need:
