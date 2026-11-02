@@ -126,7 +126,7 @@ void RunningMachinesPage::rebuild() {
     if (!machines_.available()) {
         list_note_->setText(tr("Machines cannot be discovered on this computer; type an address."));
     } else if (machines_.machines().empty()) {
-        list_note_->setText(tr("No running machines found yet; type an address, or wait for one "
+        list_note_->setText(tr("No machines discovered yet; type an address, or wait for one "
                                "to appear."));
     } else {
         list_note_->clear();

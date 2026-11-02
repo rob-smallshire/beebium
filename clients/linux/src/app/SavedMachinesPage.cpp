@@ -58,7 +58,7 @@ SavedMachinesPage::SavedMachinesPage(SavedMachines& machines, QWidget* parent)
     empty_ = new QWidget(area);
     empty_->setObjectName(QStringLiteral("noSavedMachines"));
     auto* empty_layout = new QVBoxLayout(empty_);
-    auto* empty_title = new QLabel(tr("No saved machines yet"), empty_);
+    auto* empty_title = new QLabel(tr("No recent machines yet"), empty_);
     auto* empty_hint = new QLabel(tr("Save a running machine and it appears here."), empty_);
     for (QLabel* label : {empty_title, empty_hint}) {
         label->setAlignment(Qt::AlignCenter);

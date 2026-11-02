@@ -32,6 +32,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLabel>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QPushButton>
@@ -117,13 +119,13 @@ Endpoint endpoint_of(const FakeServer& server) {
 
 // --- the pages ---------------------------------------------------------------
 
-TEST_CASE("The first page is saved machines for a user with some, else the presets",
+TEST_CASE("The first page is the recent machines for a user with some, else the presets",
           "[home]") {
     CHECK(initial_home_page(true) == HomePage::saved_machines);
     CHECK(initial_home_page(false) == HomePage::presets);
 }
 
-TEST_CASE("The running machines page defaults to localhost and offers the recents",
+TEST_CASE("The discovered machines page defaults to localhost and offers the recents",
           "[home][connect]") {
     DiscoveredMachines machines;
     RunningMachinesPage page(machines, {});
@@ -216,9 +218,9 @@ TEST_CASE("The presets page shows the catalogue as cards, and Launch asks for th
     CHECK_FALSE(page.launch_button()->isEnabled());
 }
 
-// --- saved machines ------------------------------------------------------------
+// --- recent machines -----------------------------------------------------------
 
-TEST_CASE("Saved machines are described in recents order, the undescribable left out",
+TEST_CASE("Recent machines are described in recents order, the undescribable left out",
           "[home][saved]") {
     QTemporaryDir directory;
     ClientSettings settings(directory.filePath(QStringLiteral("Beebium.conf")));
@@ -309,6 +311,30 @@ TEST_CASE("Launched with no request, the client shows the home window", "[home][
     REQUIRE(home_shown(client));
     CHECK(client.home_window()->page() == HomePage::presets);
     CHECK(client.windows().empty());
+}
+
+TEST_CASE("The home window's pages are the presets, the recent and the discovered machines",
+          "[home]") {
+    Application client(QRhiWidget::Api::OpenGL);
+    reset(client);
+    client.handle_arguments({});
+    REQUIRE(home_shown(client));
+    auto* pages = client.home_window()->findChild<QListWidget*>(QStringLiteral("homePages"));
+    REQUIRE(pages);
+    QStringList names;
+    for (int row = 0; row < pages->count(); ++row) {
+        names << pages->item(row)->text();
+    }
+    CHECK(names == QStringList{QStringLiteral("Presets"), QStringLiteral("Recent Machines"),
+                               QStringLiteral("Discovered Machines")});
+    auto* no_recents = client.home_window()->findChild<QWidget*>(QStringLiteral("noSavedMachines"));
+    REQUIRE(no_recents);
+    QStringList notes;
+    for (QLabel* label : no_recents->findChildren<QLabel*>()) {
+        notes << label->text();
+    }
+    CHECK(notes.contains(QStringLiteral("No recent machines yet")));
+    client.home_window()->close();
 }
 
 TEST_CASE("Launched with a request, the client opens that machine's window only",
@@ -428,7 +454,7 @@ TEST_CASE("A machine window has no application commands, and can show Beebium",
 
 // --- the pages drive the launch, open and connect paths -------------------------
 
-TEST_CASE("Connect on the running machines page opens a window on that machine",
+TEST_CASE("Connect on the discovered machines page opens a window on that machine",
           "[home][connect]") {
     FakeServer server;
     Application client(QRhiWidget::Api::OpenGL);
@@ -465,7 +491,7 @@ TEST_CASE("Launch on the presets page starts the preset's server and opens its w
     REQUIRE(wait_until([&] { return client.windows().empty(); }, 15000ms));
 }
 
-TEST_CASE("Open on the saved machines page opens that machine, and it is remembered",
+TEST_CASE("Open on the recent machines page opens that machine, and it is remembered",
           "[home][saved][launch]") {
     FakeServer server;
     FakeServers servers(server.port);

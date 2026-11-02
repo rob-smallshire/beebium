@@ -74,9 +74,9 @@ HomeWindow::HomeWindow(QString thumbnail_cache_dirpath, SavedMachines& saved_mac
         auto* entry = new QListWidgetItem(style()->standardIcon(icon), name, pages_list_);
         entry->setSizeHint(QSize(entry->sizeHint().width(), 44));
     };
-    add_page_entry(tr("New Machine"), QStyle::SP_FileDialogNewFolder);
-    add_page_entry(tr("Saved Machines"), QStyle::SP_DirIcon);
-    add_page_entry(tr("Running Machines"), QStyle::SP_DriveNetIcon);
+    add_page_entry(tr("Presets"), QStyle::SP_FileDialogNewFolder);
+    add_page_entry(tr("Recent Machines"), QStyle::SP_DirIcon);
+    add_page_entry(tr("Discovered Machines"), QStyle::SP_DriveNetIcon);
     pages_list_->setFixedWidth(pages_list_->sizeHintForColumn(0) + 24);
     body->addWidget(pages_list_);
 
