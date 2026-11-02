@@ -95,3 +95,68 @@ TEST_CASE("GetTubeState: an empty socket reports disabled with no inspection sur
     TubeSocket socket;
     CHECK(socket.tube_inspection() == nullptr);  // EmptyTubeBackend offers none
 }
+
+TEST_CASE("TubeInspection: fifo_snapshot reports the whole R1 P-to-H FIFO in order",
+          "[tube][inspection]") {
+    TubeUla ula;
+    ula.reset();
+
+    // Fill the 24-byte P-to-H FIFO from the coprocessor side.
+    for (int i = 0; i < 24; ++i) {
+        ula.coprocessor_write(1, static_cast<uint8_t>(i));
+    }
+
+    uint8_t buf[24] = {};
+    size_t count = ula.fifo_snapshot(TubeInspection::Fifo::R1_P2H, buf, sizeof(buf));
+    REQUIRE(count == 24);
+    for (int i = 0; i < 24; ++i) {
+        CHECK(buf[i] == static_cast<uint8_t>(i));  // head-to-tail read order
+    }
+
+    // Draining from the head then writing more wraps the ring; the snapshot
+    // must still read head-to-tail, not from index 0 of the backing array.
+    for (int i = 0; i < 4; ++i) {
+        (void)ula.host_read(1);  // drains values 0,1,2,3; head advances to 4
+    }
+    for (int i = 0; i < 4; ++i) {
+        ula.coprocessor_write(1, static_cast<uint8_t>(100 + i));  // wraps the tail
+    }
+    count = ula.fifo_snapshot(TubeInspection::Fifo::R1_P2H, buf, sizeof(buf));
+    REQUIRE(count == 24);
+    CHECK(buf[0] == 4);     // new head is the old fifth byte
+    CHECK(buf[19] == 23);   // last of the originals
+    CHECK(buf[20] == 100);  // first of the wrapped-in bytes
+    CHECK(buf[23] == 103);
+
+    // A short buffer takes only what fits but still reports the true count.
+    uint8_t small[8] = {};
+    count = ula.fifo_snapshot(TubeInspection::Fifo::R1_P2H, small, sizeof(small));
+    CHECK(count == 24);
+    CHECK(small[0] == 4);
+    CHECK(small[7] == 11);
+}
+
+TEST_CASE("TubeInspection: fifo_snapshot reports the two-byte R3 registers",
+          "[tube][inspection]") {
+    TubeUla ula;
+    ula.reset();
+    ula.host_write(0, TubeInspection::FLAG_S | TubeInspection::FLAG_V);  // two-byte R3
+
+    // Reset seeds R3 P-to-H with one dummy byte (to suppress a spurious PNMI);
+    // drain it so the two bytes below are the whole of the register. Draining
+    // then refilling also leaves the ring head wrapped, so the snapshot must
+    // read head-to-tail rather than from index 0.
+    (void)ula.host_read(5);
+
+    ula.coprocessor_write(5, 0xAA);
+    ula.coprocessor_write(5, 0xBB);
+
+    uint8_t buf[2] = {};
+    size_t count = ula.fifo_snapshot(TubeInspection::Fifo::R3_P2H, buf, sizeof(buf));
+    REQUIRE(count == 2);
+    CHECK(buf[0] == 0xAA);
+    CHECK(buf[1] == 0xBB);
+
+    // The other direction is empty.
+    CHECK(ula.fifo_snapshot(TubeInspection::Fifo::R3_H2P, buf, sizeof(buf)) == 0);
+}

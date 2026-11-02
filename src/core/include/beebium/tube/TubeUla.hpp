@@ -12,6 +12,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cstddef>
+
 #include "TubeHostBackend.hpp"
 #include "TubeInspection.hpp"
 #include "TubeCoprocessorBackend.hpp"
@@ -172,6 +175,29 @@ public:
     }
 
     size_t trace_count() const override { return trace_count_; }
+
+    // Snapshot a queued register head-to-tail. The ring stores the next byte
+    // to be read at head and advances head on each read, so reading count
+    // bytes from head reproduces the consumer's read order.
+    size_t fifo_snapshot(Fifo which, uint8_t* out, size_t max_bytes) const override {
+        auto copy_ring = [&](const auto& ring) -> size_t {
+            const size_t capacity = ring.data.size();
+            const size_t n = std::min(static_cast<size_t>(ring.count), max_bytes);
+            for (size_t i = 0; i < n; ++i) {
+                out[i] = ring.data[(ring.head + i) % capacity];
+            }
+            return ring.count;
+        };
+        switch (which) {
+            case Fifo::R1_P2H:
+                return copy_ring(r1_p2h_);
+            case Fifo::R3_H2P:
+                return copy_ring(r3_h2p_);
+            case Fifo::R3_P2H:
+                return copy_ring(r3_p2h_);
+        }
+        return 0;
+    }
 
 private:
     void trace_event(uint8_t tag, uint8_t value) {

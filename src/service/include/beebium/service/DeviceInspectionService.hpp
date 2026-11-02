@@ -18,6 +18,9 @@
 #include <beebium/tube/TubeSocket.hpp>
 #include <beebium/tube/TubeInspection.hpp>
 #include <grpcpp/grpcpp.h>
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <string>
 
@@ -90,23 +93,14 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
     // Data available = coprocessor can read from H-to-P
     r1_h2p->set_data_available((ula.coprocessor_peek(0) & TubeInspection::DATA_AVAILABLE) != 0);
 
-    // R1 P-to-H FIFO.
+    // R1 P-to-H FIFO: snapshot all queued bytes, head to tail.
     auto* r1_p2h = response->mutable_r1_p2h();
-    // Status from host side tells us about P-to-H
-    uint8_t r1_host_status = ula.host_peek(0);
-    r1_p2h->set_data_available((r1_host_status & TubeInspection::DATA_AVAILABLE) != 0);
-    // We can peek the head of the FIFO, but to get all data we need to read
-    // from the TubeUla's internal state. Since host_peek(1) only shows the head,
-    // we set count from status and show what's visible.
-    // For the in-process model, count isn't directly exposed through peek,
-    // but we can infer from data_available.
-    // For a proper implementation, we should expose a snapshot method.
-    // For now, show the head byte via peek.
-    uint8_t head_byte = ula.host_peek(1);
-    r1_p2h->set_count(r1_p2h->data_available() ? 1 : 0);  // Minimum visible count
-    if (r1_p2h->data_available()) {
-        r1_p2h->set_data(std::string(1, static_cast<char>(head_byte)));
-    }
+    uint8_t r1_fifo[24];
+    size_t r1_count = ula.fifo_snapshot(TubeInspection::Fifo::R1_P2H, r1_fifo, sizeof(r1_fifo));
+    size_t r1_written = std::min(r1_count, sizeof(r1_fifo));
+    r1_p2h->set_count(static_cast<uint32_t>(r1_count));
+    r1_p2h->set_data(std::string(reinterpret_cast<const char*>(r1_fifo), r1_written));
+    r1_p2h->set_data_available(r1_count > 0);
 
     // R2 H-to-P latch.
     auto* r2_h2p = response->mutable_r2_h2p();
@@ -124,11 +118,11 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
     uint8_t coprocessor_r3_status = ula.coprocessor_peek(4);
     bool h2p_has_data = (coprocessor_r3_status & TubeInspection::DATA_AVAILABLE) != 0;
     r3_h2p->set_pending(h2p_has_data);
-    uint8_t h2p_head = ula.coprocessor_peek(5);
-    r3_h2p->set_count(h2p_has_data ? 1 : 0);  // Minimum visible count
-    if (h2p_has_data) {
-        r3_h2p->set_data(std::string(1, static_cast<char>(h2p_head)));
-    }
+    uint8_t r3_h2p_fifo[2];
+    size_t r3_h2p_count = ula.fifo_snapshot(TubeInspection::Fifo::R3_H2P, r3_h2p_fifo, sizeof(r3_h2p_fifo));
+    r3_h2p->set_count(static_cast<uint32_t>(r3_h2p_count));
+    r3_h2p->set_data(std::string(reinterpret_cast<const char*>(r3_h2p_fifo),
+                                 std::min(r3_h2p_count, sizeof(r3_h2p_fifo))));
 
     // R3 P-to-H register.
     auto* r3_p2h = response->mutable_r3_p2h();

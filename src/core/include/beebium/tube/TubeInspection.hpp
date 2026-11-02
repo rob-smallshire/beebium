@@ -83,6 +83,23 @@ public:
     virtual uint8_t host_peek(uint8_t offset) const = 0;
     virtual uint8_t coprocessor_peek(uint8_t offset) const = 0;
 
+    // The queued registers that hold more than one latched byte: R1 P-to-H is
+    // a 24-byte FIFO, R3 is a two-byte FIFO in each direction. The R1/R2/R4
+    // latches are described in full by host_peek/coprocessor_peek.
+    enum class Fifo { R1_P2H, R3_H2P, R3_P2H };
+
+    // Side-effect-free snapshot of a queued register's contents in read order
+    // (head, the next byte the consumer will read, to tail). Writes
+    // min(count, max_bytes) bytes into out and returns the queued byte count.
+    // The default reports an empty queue, so an inspection surface that keeps
+    // no multi-byte queue need not override it.
+    virtual size_t fifo_snapshot(Fifo which, uint8_t* out, size_t max_bytes) const {
+        (void)which;
+        (void)out;
+        (void)max_bytes;
+        return 0;
+    }
+
     // Interrupt outputs.
     virtual bool hirq() const = 0;
     virtual bool pirq() const = 0;
