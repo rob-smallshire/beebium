@@ -328,6 +328,9 @@ TEST_CASE("The home window's pages are the presets, the recent and the discovere
     }
     CHECK(names == QStringList{QStringLiteral("Presets"), QStringLiteral("Recent Machines"),
                                QStringLiteral("Discovered Machines")});
+    for (int row = 0; row < pages->count(); ++row) {
+        CHECK(pages->item(row)->icon().isNull());  // names alone, as on macOS
+    }
     auto* no_recents = client.home_window()->findChild<QWidget*>(QStringLiteral("noSavedMachines"));
     REQUIRE(no_recents);
     QStringList notes;

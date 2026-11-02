@@ -25,8 +25,10 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QStackedWidget>
-#include <QStyle>
+#include <QFontMetrics>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace beebium::linux_client {
 
@@ -68,16 +70,22 @@ HomeWindow::HomeWindow(QString thumbnail_cache_dirpath, SavedMachines& saved_mac
     auto* body = new QHBoxLayout;
     pages_list_ = new QListWidget(central);
     pages_list_->setObjectName(QStringLiteral("homePages"));
-    pages_list_->setIconSize(QSize(32, 32));
-    pages_list_->setSpacing(2);
-    const auto add_page_entry = [this](const QString& name, QStyle::StandardPixmap icon) {
-        auto* entry = new QListWidgetItem(style()->standardIcon(icon), name, pages_list_);
-        entry->setSizeHint(QSize(entry->sizeHint().width(), 44));
-    };
-    add_page_entry(tr("Presets"), QStyle::SP_FileDialogNewFolder);
-    add_page_entry(tr("Recent Machines"), QStyle::SP_DirIcon);
-    add_page_entry(tr("Discovered Machines"), QStyle::SP_DriveNetIcon);
-    pages_list_->setFixedWidth(pages_list_->sizeHintForColumn(0) + 24);
+    // A navigation list of the page names alone, as on macOS: a little
+    // larger than body text, in rows tall enough to read as a list of places.
+    pages_list_->setFrameShape(QFrame::NoFrame);
+    pages_list_->setSpacing(4);
+    QFont pages_font = pages_list_->font();
+    pages_font.setPointSizeF(pages_font.pointSizeF() * 1.15);
+    pages_list_->setFont(pages_font);
+    const QFontMetrics metrics(pages_font);
+    const int row_height = metrics.height() * 2;
+    int widest = 0;
+    for (const QString& name : {tr("Presets"), tr("Recent Machines"), tr("Discovered Machines")}) {
+        auto* entry = new QListWidgetItem(name, pages_list_);
+        entry->setSizeHint(QSize(metrics.horizontalAdvance(name) + 24, row_height));
+        widest = std::max(widest, metrics.horizontalAdvance(name));
+    }
+    pages_list_->setFixedWidth(widest + 48);
     body->addWidget(pages_list_);
 
     pages_ = new QStackedWidget(central);
