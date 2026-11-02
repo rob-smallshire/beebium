@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <optional>
 #include <limits>
 #include <memory>
 #include <random>
@@ -83,7 +84,8 @@ public:
         beebium::service::MachineIdentity identity = {},
         bool wire_pacing_clock = true,
         beebium::service::MachineStore* machine_store = nullptr,
-        std::function<bool()> release_before_start = nullptr)
+        std::function<bool()> release_before_start = nullptr,
+        std::optional<double> speed_before_start = std::nullopt)
         : provenance_(std::move(provenance))
         , identity_(std::move(identity))
         , wire_pacing_clock_(wire_pacing_clock) {
@@ -116,6 +118,9 @@ public:
         server_->set_machine_store(machine_store);
         if (release_before_start) {
             server_->set_release_from_launcher(std::move(release_before_start));
+        }
+        if (speed_before_start) {
+            server_->set_initial_speed_multiplier(*speed_before_start);
         }
         server_->start(provenance_, identity_);
 
@@ -599,6 +604,20 @@ TEST_CASE("SystemService GetPacingStats reports the configured speed multiplier"
 // server accepts connections before that. The configured speed multiplier must
 // remain queryable and settable throughout that startup window, rather than
 // failing with UNAVAILABLE and racing fast clients.
+
+TEST_CASE("SystemService keeps a speed set before the server starts (#256)",
+          "[grpc][system][pacing]") {
+    // The launch sets --speed before start() creates the service. It must
+    // reach the service, and through it the pacing clock once wired, or the
+    // clock is set to the default 1.0 and --speed is ignored.
+    SystemTestFixture fixture({}, {}, true, nullptr, nullptr, 2.0);
+
+    grpc::ClientContext context;
+    beebium::PacingStats stats;
+    REQUIRE(fixture.system().GetPacingStats(&context, beebium::GetPacingStatsRequest{}, &stats).ok());
+    CHECK(stats.speed_multiplier() == 2.0);
+    CHECK(fixture.pacing_clock().speed_multiplier() == 2.0);
+}
 
 TEST_CASE("SystemService GetPacingStats reports configured speed before the clock is wired",
           "[grpc][system][pacing]") {

@@ -163,7 +163,11 @@ public:
 
     /// Seed the configured speed multiplier before the pacing clock exists,
     /// so clients can query and set the speed as soon as the server listens.
+    /// Kept until start() creates the service, or passed on if it exists:
+    /// the launch sets it before start(), and the service is what hands it
+    /// to the pacing clock once that is wired.
     void set_initial_speed_multiplier(double multiplier) {
+        impl_->initial_speed_multiplier = multiplier;
         if (impl_->system_service) {
             impl_->system_service->set_initial_speed_multiplier(multiplier);
         }
@@ -222,6 +226,7 @@ private:
         std::unique_ptr<SystemServiceImpl<MachineType>> system_service;
         MachineStore* machine_store = nullptr;
         std::function<bool()> release_from_launcher;
+        std::optional<double> initial_speed_multiplier;
         std::optional<std::filesystem::path> blank_discs_dirpath;
         std::unique_ptr<AudioServiceImpl<MachineType>> audio_service;
         std::unique_ptr<SidewaysServiceImpl<MachineType>> sideways_service;
@@ -385,6 +390,9 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
 
     impl_->system_service->set_machine_store(impl_->machine_store);
     impl_->system_service->set_release_from_launcher(impl_->release_from_launcher);
+    if (impl_->initial_speed_multiplier) {
+        impl_->system_service->set_initial_speed_multiplier(*impl_->initial_speed_multiplier);
+    }
 
     // Render the name template before anyone can ask for the name.
     impl_->econet_name_placeholders.set_transport_registry(transport_registry);

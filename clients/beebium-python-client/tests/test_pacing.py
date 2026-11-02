@@ -90,6 +90,26 @@ def test_runs_at_double_speed(bbc: Beebium) -> None:
     assert 1.6 <= stats.achieved_speed_multiplier <= 2.4
 
 
+def test_speed_given_at_launch_is_configured(launch_bbc) -> None:
+    """--speed at launch is the configured multiplier (#256): it was dropped
+    before the server's services existed, leaving 1.0."""
+    bbc = launch_bbc(extra_args=["--speed", "2"])
+    assert bbc.system.get_pacing_stats().speed_multiplier == 2.0
+
+
+@_skip_throughput_in_ci
+def test_speed_given_at_launch_is_achieved(launch_bbc) -> None:
+    """The machine launched with --speed 2 runs at ~2x real time (#256), not
+    at the real-time default the pacing clock was reset to."""
+    bbc = launch_bbc(extra_args=["--speed", "2"])
+    assert bbc.debugger.is_running
+    time.sleep(_SETTLE_SECONDS)
+
+    stats = bbc.system.get_pacing_stats()
+    assert stats.speed_multiplier == 2.0
+    assert 1.6 <= stats.achieved_speed_multiplier <= 2.4
+
+
 @_skip_throughput_in_ci
 def test_runs_at_half_speed(bbc: Beebium) -> None:
     """Setting 0.5x paces the emulator at ~half real time (always attainable)."""
