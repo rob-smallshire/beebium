@@ -76,7 +76,8 @@ struct AudioSample {
 // Circular buffer for audio samples (wraps OutputQueue)
 //
 // Producer (core thread): pushes samples as they're generated
-// Consumer (gRPC thread): reads chunks for streaming
+// Consumer (one thread at a time): reads chunks for streaming. The server's
+// AudioFanOut is the only consumer and shares the samples among its streams.
 //
 // Capacity: ~1 second @ 48 kHz = 48000 samples × 16 bytes = 768 KB
 class AudioBuffer {
@@ -112,7 +113,7 @@ public:
         sequence_ += n;
     }
 
-    // --- Consumer interface (gRPC thread) ---
+    // --- Consumer interface (one thread at a time) ---
 
     // Read up to max_count samples into dest buffer
     // Returns actual number of samples read

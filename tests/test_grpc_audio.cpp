@@ -26,8 +26,10 @@
 #include "audio.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 
+#include <atomic>
 #include <thread>
 #include <chrono>
+#include <mutex>
 #include <fstream>
 #include <vector>
 #include <cmath>
@@ -314,4 +316,170 @@ TEST_CASE("AudioService sample unpacking", "[grpc][audio]") {
     // Values are within the int16 range and unipolar (silence 0). Just verify we
     // can unpack without crashing; concrete values depend on chip state.
     CHECK(true);
+}
+
+namespace {
+
+// Fills audio field 2 with the frame's produced index, so every sample says
+// where in the stream it belongs.
+struct CountingSource : beebium::AudioFieldSource {
+    uint32_t next = 0;
+    uint32_t take_field() override { return next++; }
+};
+
+// One SubscribeAudio stream read on its own thread. It records each chunk's
+// sequence and count, and checks each sample's field 2 is its produced index,
+// so a chunk's sequence is where its samples really are in the stream. With
+// `stall_after_chunks` set it stops reading after that many chunks, as a slow
+// client does, until `release` is set.
+struct AudioStream {
+    static constexpr uint32_t kChunkSize = 256;
+
+    grpc::ClientContext context;
+    std::unique_ptr<grpc::ClientReader<beebium::AudioChunk>> reader;
+    std::vector<std::pair<uint64_t, uint32_t>> chunks;  // (sequence, sample_count)
+    std::atomic<uint64_t> end_index{0};                 // the last chunk's sequence + count
+    std::atomic<uint64_t> misplaced_samples{0};
+    size_t stall_after_chunks = 0;
+    std::atomic<bool> stalled{false};
+    std::atomic<bool> release{false};
+    std::thread thread;
+
+    void start(beebium::AudioService::Stub& stub) {
+        beebium::SubscribeAudioRequest request;
+        request.set_chunk_size(kChunkSize);
+        reader = stub.SubscribeAudio(&context, request);
+        thread = std::thread([this] {
+            beebium::AudioChunk chunk;
+            while (reader->Read(&chunk)) {
+                const auto* bytes = reinterpret_cast<const uint8_t*>(chunk.samples().data());
+                for (uint32_t i = 0; i < chunk.sample_count(); ++i) {
+                    const uint8_t* field2 = bytes + (i * beebium::AudioSample::MAX_SOURCES + 2) * 4;
+                    const uint32_t value = field2[0] | (field2[1] << 8) | (field2[2] << 16) |
+                                           (static_cast<uint32_t>(field2[3]) << 24);
+                    if (value != static_cast<uint32_t>(chunk.sequence() + i)) ++misplaced_samples;
+                }
+                chunks.emplace_back(chunk.sequence(), chunk.sample_count());
+                end_index = chunk.sequence() + chunk.sample_count();
+                if (stall_after_chunks != 0 && chunks.size() == stall_after_chunks) {
+                    stalled = true;
+                    while (!release) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            }
+        });
+    }
+
+    void finish() {
+        release = true;  // a stream still stalled must reach Read() to see the cancel
+        context.TryCancel();
+        thread.join();
+    }
+
+    // Samples missing between consecutive chunks; chunks never overlap.
+    uint64_t gap_samples() const {
+        uint64_t gaps = 0;
+        for (size_t i = 0; i + 1 < chunks.size(); ++i) {
+            const uint64_t expected = chunks[i].first + chunks[i].second;
+            REQUIRE(chunks[i + 1].first >= expected);
+            gaps += chunks[i + 1].first - expected;
+        }
+        return gaps;
+    }
+};
+
+// Drive two streams: run the machine until both are delivering, then while
+// `keep_running` holds, at roughly 25x real time (a 1 ms sleep each 50000
+// cycles); then wait, with the machine stopped, until each has delivered what
+// was made short of one partial chunk. Returns the count produced.
+template <typename KeepRunning>
+uint64_t drive(AudioTestFixture& fixture, AudioStream (&streams)[2], KeepRunning keep_running) {
+    auto run_chunk = [&] {
+        fixture.run_cycles(50000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    };
+    // Generous: a sanitizer build runs the machine several times slower.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(180);
+    while ((streams[0].end_index == 0 || streams[1].end_index == 0) &&
+           std::chrono::steady_clock::now() < deadline) {
+        run_chunk();
+    }
+    while (keep_running() && std::chrono::steady_clock::now() < deadline) run_chunk();
+    CHECK(std::chrono::steady_clock::now() < deadline);
+
+    auto& buffer = fixture.machine().state().memory.audio_buffer.value();
+    const uint64_t produced = buffer.sequence() + buffer.dropped();
+    for (auto& stream : streams) {
+        while (stream.end_index + AudioStream::kChunkSize <= produced &&
+               std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    }
+    for (auto& stream : streams) stream.finish();
+    return produced;
+}
+
+}  // namespace
+
+TEST_CASE("AudioService gives two concurrent subscribers each the whole stream", "[grpc][audio]") {
+    // Two SubscribeAudio streams on one server (#236). Each must see every
+    // sample produced while it is subscribed, once, each in its place: chunk
+    // sequences contiguous and no more samples than the machine made. Sharing
+    // one read cursor, each took the other's samples (a sequence gap the size
+    // of the other's reads) and, racing on it, read far more than was made.
+    AudioTestFixture fixture;
+    CountingSource counter;
+    beebium::AudioFieldInfo info;
+    info.name = "Counter";
+    fixture.machine().state().memory.audio_source_port().register_source(2, counter, info);
+
+    AudioStream streams[2];
+    for (auto& stream : streams) stream.start(fixture.stub());
+    int remaining = 40;  // about one emulated second
+    const uint64_t produced = drive(fixture, streams, [&] { return remaining-- > 0; });
+
+    for (auto& stream : streams) {
+        REQUIRE(stream.chunks.size() > 100);
+        CHECK(stream.gap_samples() == 0);
+        CHECK(stream.misplaced_samples == 0);
+        CHECK(stream.end_index <= produced);
+        CHECK(stream.end_index + AudioStream::kChunkSize > produced);
+    }
+}
+
+TEST_CASE("AudioService drops only a slow subscriber's own samples", "[grpc][audio]") {
+    // One stream stops reading while the machine makes ten emulated seconds
+    // of audio, far more than its one-second queue and the transport's
+    // flow-control window hold together. It drops
+    // what it cannot hold: its sequence shows a gap, and every sample it does
+    // receive is still in its place, so the gap is exactly what it dropped.
+    // The other stream, read throughout, misses nothing.
+    AudioTestFixture fixture;
+    CountingSource counter;
+    beebium::AudioFieldInfo info;
+    info.name = "Counter";
+    fixture.machine().state().memory.audio_source_port().register_source(2, counter, info);
+
+    AudioStream streams[2];
+    AudioStream& fast = streams[0];
+    AudioStream& slow = streams[1];
+    slow.stall_after_chunks = 4;
+    for (auto& stream : streams) stream.start(fixture.stub());
+    int while_stalled = 400;  // 20M cycles, ten emulated seconds
+    int after_stall = 40;
+    const uint64_t produced = drive(fixture, streams, [&] {
+        if (!slow.stalled) return true;
+        if (while_stalled-- > 0) return true;
+        slow.release = true;
+        return after_stall-- > 0;
+    });
+
+    REQUIRE(fast.chunks.size() > 100);
+    CHECK(fast.gap_samples() == 0);
+    CHECK(fast.misplaced_samples == 0);
+    CHECK(fast.end_index + AudioStream::kChunkSize > produced);
+
+    CHECK(slow.gap_samples() > 0);
+    CHECK(slow.misplaced_samples == 0);
+    CHECK(slow.end_index <= produced);
+    CHECK(slow.end_index + AudioStream::kChunkSize > produced);
 }

@@ -78,6 +78,8 @@ See [deployment.md](deployment.md) for ROM discovery and installation details.
 
 All core services are defined in `src/service/proto/`. The major services are documented below. Additional services (AudioService, DiscService, IndicatorService, SidewaysService, TubeService, SerialService, CoprocessorDebuggerControl) are defined in their respective proto files; ExtensionUiService, which serves extensions' control panels, is in `src/core/extension-api/proto/extension_ui.proto`. Extension-provided APIs (e.g. `AunService`) are not gRPC services of their own: they are reached through [ExtensionRpc](#extensionrpc).
 
+`AudioService.SubscribeAudio` serves several streams at once: each subscriber sees its own continuous 48 kHz stream, with its own drops and `sequence` as the global produced index of each chunk's first sample (see `docs/sound-subsystem.md`, Several subscribers).
+
 ### VideoService
 
 Streams video frames from the emulator.

@@ -15,6 +15,7 @@
 
 #include "audio.grpc.pb.h"
 #include "beebium/AudioBuffer.hpp"
+#include "beebium/service/AudioFanOut.hpp"
 #include "beebium/extension/AudioSourcePort.hpp"
 #include "beebium/devices/Sn76489.hpp"
 #include <grpcpp/grpcpp.h>
@@ -51,6 +52,8 @@ public:
 
 private:
     MachineType& machine_;
+    // The audio buffer's one consumer, sharing it among the streams.
+    AudioFanOut fan_out_;
 
     static constexpr size_t DEFAULT_CHUNK_SIZE = 1024;
     static constexpr uint32_t SAMPLE_RATE = 48000;
@@ -72,6 +75,17 @@ grpc::Status AudioServiceImpl<MachineType>::SubscribeAudio(
     size_t chunk_size = request->chunk_size() > 0 ? request->chunk_size() : DEFAULT_CHUNK_SIZE;
     std::vector<AudioSample> samples(chunk_size);
 
+    // Each stream takes chunks from its own queue in the fan-out, which this
+    // loop and every other stream's keep filled from the audio buffer. The
+    // Write happens outside the fan-out's lock, so a stream its client reads
+    // slowly holds up no other.
+    auto subscriber = fan_out_.subscribe();
+    struct Unsubscribe {
+        AudioFanOut& fan_out;
+        const std::shared_ptr<AudioFanOut::Subscriber>& subscriber;
+        ~Unsubscribe() { fan_out.unsubscribe(subscriber); }
+    } unsubscribe{fan_out_, subscriber};
+
     while (!context->IsCancelled()) {
         // Check if audio buffer is available
         if (!machine_.state().memory.audio_buffer) {
@@ -81,15 +95,17 @@ grpc::Status AudioServiceImpl<MachineType>::SubscribeAudio(
 
         auto& audio_buffer = machine_.state().memory.audio_buffer.value();
 
-        if (audio_buffer.available() >= chunk_size) {
-            size_t count = audio_buffer.read(samples.data(), chunk_size);
-
+        uint64_t first_index = 0;
+        size_t count = fan_out_.drain_and_take(audio_buffer, *subscriber, samples.data(),
+                                               chunk_size, chunk_size, first_index);
+        if (count > 0) {
             AudioChunk chunk;
-            // sequence is the produced index of this chunk's first sample
-            // (delivered plus dropped so far), so a consumer that sees it jump
-            // beyond the previous chunk's sample_count has detected dropped
-            // samples. cycle_count is reserved and left zero.
-            chunk.set_sequence(audio_buffer.last_read_index());
+            // sequence is the produced index of this chunk's first sample, so
+            // a consumer that sees it jump beyond the previous chunk's
+            // sample_count has detected samples dropped, by the audio buffer
+            // or by this stream's own queue. cycle_count is reserved and left
+            // zero.
+            chunk.set_sequence(first_index);
             chunk.set_sample_count(static_cast<uint32_t>(count));
             chunk.set_cycle_count(0);
 

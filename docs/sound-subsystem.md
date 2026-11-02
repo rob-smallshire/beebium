@@ -277,7 +277,12 @@ auto producer = buffer.get_producer_buffer();
 buffer.produce(count);
 ```
 
-### Consumer Interface (gRPC thread)
+### Consumer Interface (one consumer at a time)
+
+The buffer has a single read cursor, so only one thread may read it at a
+time. In the server that reader is the AudioService's `AudioFanOut` (see
+[Several subscribers](#several-subscribers)); a test that owns the buffer may
+read it directly:
 
 ```cpp
 std::vector<AudioSample> samples(1024);
@@ -293,7 +298,10 @@ The buffer tracks a monotonically increasing sequence number for drop detection:
 uint64_t seq = buffer.sequence();  // Total samples ever produced
 ```
 
-Frontends can detect dropped samples by comparing `AudioChunk.sequence` values.
+Frontends can detect dropped samples by comparing `AudioChunk.sequence` values:
+a chunk's `sequence` is the produced index of its first sample (samples
+delivered plus samples dropped before it), so one that jumps past the previous
+chunk's end shows a drop.
 
 ## C++ API Usage
 
@@ -375,6 +383,30 @@ message AudioChunk {
 }
 ```
 
+### Several subscribers
+
+Any number of clients may hold a `SubscribeAudio` stream at once, and each
+sees its own continuous 48 kHz stream (#236). `AudioFanOut`
+(`src/service/include/beebium/service/AudioFanOut.hpp`) is the
+`AudioBuffer`'s one consumer. Each stream's loop, under the fan-out's mutex,
+drains the buffer into every stream's own queue, then takes a chunk from its
+own; it writes the chunk to its client outside the lock, so a client that
+reads slowly holds up no other stream.
+
+- **Per-stream queue and drops.** Each stream's queue holds one second
+  (48000 samples). A stream whose queue is full drops the samples it cannot
+  hold and counts them; no other stream loses anything, and the producer is
+  never made to wait.
+- **Sequence.** A chunk's `sequence` stays the global produced index of its
+  first sample, the same index every stream shares. A chunk never spans a gap
+  in its stream's queue, so a gap between chunks is exactly what that stream
+  dropped. Drops by the `AudioBuffer` itself, which in practice happen only
+  when no stream is draining it, are attributed to the first chunk after them.
+- **Joining.** A stream that subscribes while another is running starts at
+  the current position. With no stream subscribed nothing drains the buffer:
+  it fills and the producer drops, and the first stream to subscribe receives
+  up to a second of what was buffered.
+
 ### GetAudioFormat
 
 Returns metadata for interpreting samples:
@@ -453,6 +485,7 @@ for tone0, tone1, tone2, noise in unpack_samples(chunk, format):
 | `src/core/include/beebium/AudioBuffer.hpp` | Circular buffer for samples |
 | `src/service/proto/audio.proto` | gRPC service definitions |
 | `src/service/include/beebium/service/AudioService.hpp` | Service implementation |
+| `src/service/include/beebium/service/AudioFanOut.hpp` | Shares the buffer among several streams |
 | `tests/test_sn76489.cpp` | Core unit tests (register protocol, frequency, volume) |
 | `tests/test_sn76489_dc_bias.cpp` | DC bias metadata tests |
 | `tests/test_sn76489_mame.cpp` | MAME-verified behavior tests |
@@ -461,7 +494,8 @@ for tone0, tone1, tone2, noise in unpack_samples(chunk, format):
 | `tests/test_sound_edge_cases.cpp` | Edge cases and boundary conditions |
 | `tests/test_sound_state.cpp` | State introspection tests |
 | `tests/test_sound_timing.cpp` | Timing and sample rate tests |
-| `tests/test_grpc_audio.cpp` | gRPC service tests |
+| `tests/test_grpc_audio.cpp` | gRPC service tests, including concurrent and slow subscribers |
+| `tests/test_audio_fan_out.cpp` | Per-subscriber queues, drops and sequence |
 
 ## Useful References
 

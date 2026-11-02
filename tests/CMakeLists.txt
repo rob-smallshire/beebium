@@ -1808,6 +1808,14 @@ if(BEEBIUM_BUILD_SERVICE)
     catch_discover_tests(test_grpc_indicator)
 
     # Audio service tests
+    # AudioFanOut: one AudioBuffer shared among audio streams (#236)
+    add_executable(test_audio_fan_out test_audio_fan_out.cpp)
+    target_link_libraries(test_audio_fan_out PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_audio_fan_out)
+
     add_executable(test_grpc_audio test_grpc_audio.cpp)
     target_link_libraries(test_grpc_audio PRIVATE
         beebium_service
