@@ -186,6 +186,50 @@ class TubeTransferCounters:
 
 
 @dataclass
+class TubeTraceConfig:
+    """Which register/direction events the protocol trace records.
+
+    A muted entry still advances the transfer counters; only the trace ring
+    stops recording it. Every field defaults False, so the default records
+    every register, as the trace always did (issue #250).
+    """
+
+    mute_r1_h2p: bool = False
+    mute_r1_p2h: bool = False
+    mute_r2_h2p: bool = False
+    mute_r2_p2h: bool = False
+    mute_r3_h2p: bool = False
+    mute_r3_p2h: bool = False
+    mute_r4_h2p: bool = False
+    mute_r4_p2h: bool = False
+
+    def to_proto(self) -> debugger_pb2.TubeTraceConfig:
+        return debugger_pb2.TubeTraceConfig(
+            mute_r1_h2p=self.mute_r1_h2p,
+            mute_r1_p2h=self.mute_r1_p2h,
+            mute_r2_h2p=self.mute_r2_h2p,
+            mute_r2_p2h=self.mute_r2_p2h,
+            mute_r3_h2p=self.mute_r3_h2p,
+            mute_r3_p2h=self.mute_r3_p2h,
+            mute_r4_h2p=self.mute_r4_h2p,
+            mute_r4_p2h=self.mute_r4_p2h,
+        )
+
+    @classmethod
+    def from_proto(cls, pb: debugger_pb2.TubeTraceConfig) -> TubeTraceConfig:
+        return cls(
+            mute_r1_h2p=pb.mute_r1_h2p,
+            mute_r1_p2h=pb.mute_r1_p2h,
+            mute_r2_h2p=pb.mute_r2_h2p,
+            mute_r2_p2h=pb.mute_r2_p2h,
+            mute_r3_h2p=pb.mute_r3_h2p,
+            mute_r3_p2h=pb.mute_r3_p2h,
+            mute_r4_h2p=pb.mute_r4_h2p,
+            mute_r4_p2h=pb.mute_r4_p2h,
+        )
+
+
+@dataclass
 class TubeUlaState:
     """Complete Tube ULA state snapshot."""
 
@@ -206,6 +250,7 @@ class TubeUlaState:
     interrupts: TubeInterrupts = field(default_factory=TubeInterrupts)
 
     counters: TubeTransferCounters = field(default_factory=TubeTransferCounters)
+    trace_config: TubeTraceConfig = field(default_factory=TubeTraceConfig)
 
     def __str__(self) -> str:
         if not self.enabled:
@@ -250,6 +295,22 @@ class TubeUlaInspection:
         request = debugger_pb2.GetTubeStateRequest()
         response = self._stub.GetTubeState(request)
         return _from_proto(response)
+
+    def set_trace_config(self, config: TubeTraceConfig) -> TubeTraceConfig:
+        """Choose which register/direction events the protocol trace records.
+
+        A muted register still advances the transfer counters; only the trace
+        ring stops recording it, which keeps the busy register 1 OSWRCH stream
+        from crowding the other registers out of the ring. Returns the config
+        now in effect.
+
+        Usage::
+
+            bbc.tube_ula.set_trace_config(TubeTraceConfig(mute_r1_p2h=True))
+        """
+        request = debugger_pb2.SetTubeTraceConfigRequest(config=config.to_proto())
+        response = self._stub.SetTubeTraceConfig(request)
+        return TubeTraceConfig.from_proto(response.config)
 
 
 def _from_proto(pb: debugger_pb2.TubeState) -> TubeUlaState:
@@ -338,4 +399,5 @@ def _from_proto(pb: debugger_pb2.TubeState) -> TubeUlaState:
             r4_p2h_writes=pb.counters.r4_p2h_writes,
             r4_p2h_reads=pb.counters.r4_p2h_reads,
         ),
+        trace_config=TubeTraceConfig.from_proto(pb.trace_config),
     )

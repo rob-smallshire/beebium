@@ -70,6 +70,34 @@ void fill_via_state(ViaType& via, ViaState* response) {
     response->set_cb2(state.port_b.c2 != 0);
 }
 
+// Convert the core trace configuration to and from its protobuf form. The
+// proto carries one mute flag per register and direction; the core mask is
+// indexed [register-1][direction], direction 0 = H-to-P, 1 = P-to-H.
+inline void fill_trace_config_proto(const TubeInspection::TraceConfig& config,
+                                    TubeTraceConfig* out) {
+    out->set_mute_r1_h2p(config.mute[0][0]);
+    out->set_mute_r1_p2h(config.mute[0][1]);
+    out->set_mute_r2_h2p(config.mute[1][0]);
+    out->set_mute_r2_p2h(config.mute[1][1]);
+    out->set_mute_r3_h2p(config.mute[2][0]);
+    out->set_mute_r3_p2h(config.mute[2][1]);
+    out->set_mute_r4_h2p(config.mute[3][0]);
+    out->set_mute_r4_p2h(config.mute[3][1]);
+}
+
+inline TubeInspection::TraceConfig trace_config_from_proto(const TubeTraceConfig& in) {
+    TubeInspection::TraceConfig config;
+    config.mute[0][0] = in.mute_r1_h2p();
+    config.mute[0][1] = in.mute_r1_p2h();
+    config.mute[1][0] = in.mute_r2_h2p();
+    config.mute[1][1] = in.mute_r2_p2h();
+    config.mute[2][0] = in.mute_r3_h2p();
+    config.mute[2][1] = in.mute_r3_p2h();
+    config.mute[3][0] = in.mute_r4_h2p();
+    config.mute[3][1] = in.mute_r4_p2h();
+    return config;
+}
+
 // Helper to fill TubeState from a Tube ULA's read-only diagnostic surface.
 // Works for the socket's own in-process ULA and for a coprocessor extension's
 // installed backend alike, so GetTubeState output is identical for both.
@@ -198,6 +226,8 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
         }
         response->set_trace_total_count(ula.trace_count());
     }
+
+    fill_trace_config_proto(ula.trace_config(), response->mutable_trace_config());
 
     response->set_enabled(true);
 }
@@ -434,6 +464,31 @@ public:
 
             // Backend offers no inspection surface.
             response->set_enabled(true);
+        });
+
+        return grpc::Status::OK;
+    }
+
+    grpc::Status SetTubeTraceConfig(
+        grpc::ServerContext* /*context*/,
+        const SetTubeTraceConfigRequest* request,
+        SetTubeTraceConfigResponse* response) override
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        // The trace mask is read on the emulation thread for every Tube access,
+        // so apply it with that thread paused, like the other inspection writes.
+        machine_.with_emulation_paused([&] {
+            auto& tube = machine_.memory().tube_socket;
+            if (!tube.enabled()) {
+                response->set_enabled(false);
+                return;
+            }
+            tube.set_tube_trace_config(trace_config_from_proto(request->config()));
+            response->set_enabled(true);
+            if (const auto* insp = tube.tube_inspection()) {
+                fill_trace_config_proto(insp->trace_config(), response->mutable_config());
+            }
         });
 
         return grpc::Status::OK;

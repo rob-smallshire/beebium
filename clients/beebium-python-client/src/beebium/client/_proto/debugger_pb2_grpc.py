@@ -2488,6 +2488,11 @@ class DeviceInspectionStub(object):
                 request_serializer=debugger__pb2.GetTubeStateRequest.SerializeToString,
                 response_deserializer=debugger__pb2.TubeState.FromString,
                 _registered_method=True)
+        self.SetTubeTraceConfig = channel.unary_unary(
+                '/beebium.DeviceInspection/SetTubeTraceConfig',
+                request_serializer=debugger__pb2.SetTubeTraceConfigRequest.SerializeToString,
+                response_deserializer=debugger__pb2.SetTubeTraceConfigResponse.FromString,
+                _registered_method=True)
         self.GetRealTimeClockState = channel.unary_unary(
                 '/beebium.DeviceInspection/GetRealTimeClockState',
                 request_serializer=debugger__pb2.GetRealTimeClockStateRequest.SerializeToString,
@@ -2542,6 +2547,12 @@ class DeviceInspectionServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SetTubeTraceConfig(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetRealTimeClockState(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -2585,6 +2596,11 @@ def add_DeviceInspectionServicer_to_server(servicer, server):
                     servicer.GetTubeState,
                     request_deserializer=debugger__pb2.GetTubeStateRequest.FromString,
                     response_serializer=debugger__pb2.TubeState.SerializeToString,
+            ),
+            'SetTubeTraceConfig': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetTubeTraceConfig,
+                    request_deserializer=debugger__pb2.SetTubeTraceConfigRequest.FromString,
+                    response_serializer=debugger__pb2.SetTubeTraceConfigResponse.SerializeToString,
             ),
             'GetRealTimeClockState': grpc.unary_unary_rpc_method_handler(
                     servicer.GetRealTimeClockState,
@@ -2783,6 +2799,33 @@ class DeviceInspection(object):
             '/beebium.DeviceInspection/GetTubeState',
             debugger__pb2.GetTubeStateRequest.SerializeToString,
             debugger__pb2.TubeState.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetTubeTraceConfig(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DeviceInspection/SetTubeTraceConfig',
+            debugger__pb2.SetTubeTraceConfigRequest.SerializeToString,
+            debugger__pb2.SetTubeTraceConfigResponse.FromString,
             options,
             channel_credentials,
             insecure,

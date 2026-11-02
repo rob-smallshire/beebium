@@ -274,6 +274,12 @@ public:
         return active_backend()->inspection();
     }
 
+    // Configure which register/direction events the protocol trace records,
+    // on the active backend. Mutating; callers reach it with emulation paused.
+    void set_tube_trace_config(const TubeInspection::TraceConfig& config) {
+        active_backend()->set_trace_config(config);
+    }
+
     // Access the socket's OWNED in-process TubeUla, used by the enable() test
     // path. Returns nullptr when a coprocessor extension has installed its own
     // backend -- the socket never casts an installed backend to TubeUla.

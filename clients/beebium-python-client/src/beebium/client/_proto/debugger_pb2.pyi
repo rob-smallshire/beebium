@@ -1871,6 +1871,7 @@ class TubeState(_message.Message):
     COUNTERS_FIELD_NUMBER: _builtins.int
     TRACE_FIELD_NUMBER: _builtins.int
     TRACE_TOTAL_COUNT_FIELD_NUMBER: _builtins.int
+    TRACE_CONFIG_FIELD_NUMBER: _builtins.int
     enabled: _builtins.bool
     """Whether the Tube socket is populated (has a second processor attached)."""
     trace_total_count: _builtins.int
@@ -1930,6 +1931,12 @@ class TubeState(_message.Message):
         Each entry is a tag byte (register/direction/side) and a data byte.
         """
 
+    @_builtins.property
+    def trace_config(self) -> Global___TubeTraceConfig:
+        """Which register/direction events the protocol trace is currently
+        recording (set via SetTubeTraceConfig). Default records all.
+        """
+
     def __init__(
         self,
         *,
@@ -1949,14 +1956,107 @@ class TubeState(_message.Message):
         counters: Global___TubeTransferCounters | None = ...,
         trace: _abc.Iterable[Global___TubeTraceEntry] | None = ...,
         trace_total_count: _builtins.int = ...,
+        trace_config: Global___TubeTraceConfig | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "coprocessor_status", b"coprocessor_status", "counters", b"counters", "host_status", b"host_status", "interrupts", b"interrupts", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "coprocessor_status", b"coprocessor_status", "counters", b"counters", "host_status", b"host_status", "interrupts", b"interrupts", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h", "trace_config", b"trace_config"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "coprocessor_status", b"coprocessor_status", "counters", b"counters", "enabled", b"enabled", "host_status", b"host_status", "interrupts", b"interrupts", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h", "trace", b"trace", "trace_total_count", b"trace_total_count"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "coprocessor_status", b"coprocessor_status", "counters", b"counters", "enabled", b"enabled", "host_status", b"host_status", "interrupts", b"interrupts", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h", "trace", b"trace", "trace_config", b"trace_config", "trace_total_count", b"trace_total_count"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___TubeState: _TypeAlias = TubeState  # noqa: Y015
+
+@_typing.final
+class TubeTraceConfig(_message.Message):
+    """Selects which register/direction events the protocol trace records. A muted
+    entry still advances the transfer counters; only the trace ring stops
+    recording it. Every field defaults false, so an unset config -- and any
+    caller that never sets one -- records every register, as before.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    MUTE_R1_H2P_FIELD_NUMBER: _builtins.int
+    MUTE_R1_P2H_FIELD_NUMBER: _builtins.int
+    MUTE_R2_H2P_FIELD_NUMBER: _builtins.int
+    MUTE_R2_P2H_FIELD_NUMBER: _builtins.int
+    MUTE_R3_H2P_FIELD_NUMBER: _builtins.int
+    MUTE_R3_P2H_FIELD_NUMBER: _builtins.int
+    MUTE_R4_H2P_FIELD_NUMBER: _builtins.int
+    MUTE_R4_P2H_FIELD_NUMBER: _builtins.int
+    mute_r1_h2p: _builtins.bool
+    mute_r1_p2h: _builtins.bool
+    mute_r2_h2p: _builtins.bool
+    mute_r2_p2h: _builtins.bool
+    mute_r3_h2p: _builtins.bool
+    mute_r3_p2h: _builtins.bool
+    mute_r4_h2p: _builtins.bool
+    mute_r4_p2h: _builtins.bool
+    def __init__(
+        self,
+        *,
+        mute_r1_h2p: _builtins.bool = ...,
+        mute_r1_p2h: _builtins.bool = ...,
+        mute_r2_h2p: _builtins.bool = ...,
+        mute_r2_p2h: _builtins.bool = ...,
+        mute_r3_h2p: _builtins.bool = ...,
+        mute_r3_p2h: _builtins.bool = ...,
+        mute_r4_h2p: _builtins.bool = ...,
+        mute_r4_p2h: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["mute_r1_h2p", b"mute_r1_h2p", "mute_r1_p2h", b"mute_r1_p2h", "mute_r2_h2p", b"mute_r2_h2p", "mute_r2_p2h", b"mute_r2_p2h", "mute_r3_h2p", b"mute_r3_h2p", "mute_r3_p2h", b"mute_r3_p2h", "mute_r4_h2p", b"mute_r4_h2p", "mute_r4_p2h", b"mute_r4_p2h"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___TubeTraceConfig: _TypeAlias = TubeTraceConfig  # noqa: Y015
+
+@_typing.final
+class SetTubeTraceConfigRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    CONFIG_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def config(self) -> Global___TubeTraceConfig: ...
+    def __init__(
+        self,
+        *,
+        config: Global___TubeTraceConfig | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["config", b"config"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["config", b"config"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SetTubeTraceConfigRequest: _TypeAlias = SetTubeTraceConfigRequest  # noqa: Y015
+
+@_typing.final
+class SetTubeTraceConfigResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ENABLED_FIELD_NUMBER: _builtins.int
+    CONFIG_FIELD_NUMBER: _builtins.int
+    enabled: _builtins.bool
+    """whether a second processor is attached"""
+    @_builtins.property
+    def config(self) -> Global___TubeTraceConfig:
+        """the configuration now in effect"""
+
+    def __init__(
+        self,
+        *,
+        enabled: _builtins.bool = ...,
+        config: Global___TubeTraceConfig | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["config", b"config"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["config", b"config", "enabled", b"enabled"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SetTubeTraceConfigResponse: _TypeAlias = SetTubeTraceConfigResponse  # noqa: Y015
 
 @_typing.final
 class TubeTraceEntry(_message.Message):

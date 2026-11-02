@@ -14,9 +14,9 @@
 
 #include <cstdint>
 
-namespace beebium {
+#include "TubeInspection.hpp"
 
-class TubeInspection;
+namespace beebium {
 
 // Abstract host-side interface for the Tube ULA.
 //
@@ -50,6 +50,11 @@ public:
     // Tube state it reports is identical whether the backend is the socket's
     // own in-process ULA or one installed by a coprocessor extension.
     virtual const TubeInspection* inspection() const { return nullptr; }
+
+    // Configure which register/direction events the protocol trace records.
+    // The default ignores it; TubeUla applies the mask. Mutating, so callers
+    // reach it with emulation paused, like the other inspection-time writes.
+    virtual void set_trace_config(const TubeInspection::TraceConfig& /*config*/) {}
 
     // Full hardware reset (HRST).
     virtual void reset() = 0;

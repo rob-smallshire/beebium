@@ -390,6 +390,13 @@ returns a client whose debugger calls go to the coprocessor;
 the interrupt lines, `cpu.descriptor` the description. TypeScript mirrors
 this. The macOS app uses the host debugger only.
 
+The Tube protocol trace, a ring of the most recent register data events read
+through `GetTubeState`, records every register by default; `SetTubeTraceConfig`
+mutes chosen register/direction pairs -- a muted pair still advances the
+transfer counters, only the ring stops recording it -- so the busy register 1
+P-to-H OSWRCH stream need not crowd the register 2-4 handshake out of the ring
+(#250).
+
 ### Plugins and firmware
 
 Each coprocessor is a plugin in `<exe-dir>/extensions/<name>/`, holding the

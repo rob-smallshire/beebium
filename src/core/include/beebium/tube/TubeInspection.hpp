@@ -76,6 +76,23 @@ public:
         uint8_t value;  // data byte
     };
 
+    // Which register/direction events the protocol trace records. A muted
+    // entry still advances the transfer counters; only the ring stops
+    // recording it. Indexed [register-1][direction], direction 0 = H-to-P,
+    // 1 = P-to-H; a muted pair silences both the host and coprocessor side.
+    // Default all false records every register.
+    struct TraceConfig {
+        bool mute[4][2] = {};
+
+        // Whether the event with this trace tag is muted (not recorded).
+        bool muted(uint8_t tag) const {
+            const uint8_t reg = (tag >> 4) & 0x0F;  // 1..4
+            const uint8_t dir = (tag >> 3) & 0x01;  // 0=H2P, 1=P2H
+            if (reg < 1 || reg > 4) return false;
+            return mute[reg - 1][dir];
+        }
+    };
+
     // Control flags (bits 0-5: Q, I, J, M, V, P).
     virtual uint8_t control_flags() const = 0;
 
@@ -115,6 +132,10 @@ public:
     // Total trace events recorded this session (may exceed TRACE_SIZE; the
     // ring keeps only the most recent TRACE_SIZE).
     virtual size_t trace_count() const = 0;
+
+    // The protocol trace configuration now in effect. The default records
+    // every register, so a surface that cannot be configured need not override.
+    virtual TraceConfig trace_config() const { return {}; }
 };
 
 }  // namespace beebium

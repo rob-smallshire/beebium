@@ -167,6 +167,72 @@ TEST_CASE("TubeInspection: the protocol trace records register 1 like the others
     }
 }
 
+TEST_CASE("TubeInspection: a muted register is kept out of the trace but still counted",
+          "[tube][inspection]") {
+    // Issue #250 follow-up: a per-register/direction trace mute. A muted event
+    // advances the transfer counters as before; only the ring stops recording.
+    TubeUla ula;
+    ula.reset();
+
+    TubeInspection::TraceConfig config;
+    config.mute[0][0] = true;  // R1 H-to-P
+    config.mute[0][1] = true;  // R1 P-to-H
+    ula.set_trace_config(config);
+    CHECK(ula.trace_config().muted(0x10));  // R1 H2P host-write
+    CHECK(ula.trace_config().muted(0x1C));  // R1 P2H coprocessor-write
+
+    // Drive every R1 path, and one R2 path for contrast.
+    ula.host_write(1, 0xA1);        // R1 H-to-P host write
+    (void)ula.coprocessor_read(1);  // R1 H-to-P coprocessor read
+    ula.coprocessor_write(1, 0xB2); // R1 P-to-H coprocessor write
+    (void)ula.host_read(1);         // R1 P-to-H host read
+    ula.host_write(3, 0xC3);        // R2 H-to-P host write (not muted)
+
+    TubeInspection::TraceEntry buf[TubeInspection::TRACE_SIZE];
+    size_t n = ula.trace_snapshot(buf, TubeInspection::TRACE_SIZE);
+    for (size_t i = 0; i < n; ++i) {
+        CHECK((buf[i].tag >> 4) != 1);  // no register 1 entries
+    }
+    REQUIRE(n == 1);                    // only the R2 write was recorded
+    CHECK(buf[0].tag == 0x20);
+
+    // But the transfer counters moved for the muted register.
+    CHECK(ula.counters().r1_h2p_writes == 1);
+    CHECK(ula.counters().r1_h2p_reads == 1);
+    CHECK(ula.counters().r1_p2h_writes == 1);
+    CHECK(ula.counters().r1_p2h_reads == 1);
+
+    // Re-enabling records register 1 again.
+    ula.set_trace_config(TubeInspection::TraceConfig{});
+    ula.host_write(1, 0xD4);        // R1 H-to-P host write
+    n = ula.trace_snapshot(buf, TubeInspection::TRACE_SIZE);
+    REQUIRE(n == 2);
+    CHECK(buf[1].tag == 0x10);
+    CHECK(buf[1].value == 0xD4);
+}
+
+TEST_CASE("TubeInspection: the trace mute is per direction",
+          "[tube][inspection]") {
+    // Muting only R1 P-to-H (the OSWRCH flood) keeps R1 H-to-P, which carries
+    // the host's Escape and event bytes, recorded.
+    TubeUla ula;
+    ula.reset();
+
+    TubeInspection::TraceConfig config;
+    config.mute[0][1] = true;  // R1 P-to-H only
+    ula.set_trace_config(config);
+
+    ula.coprocessor_write(1, 0x55);  // R1 P-to-H write -> muted
+    (void)ula.host_read(1);          // R1 P-to-H read  -> muted
+    ula.host_write(1, 0x66);         // R1 H-to-P write -> recorded
+
+    TubeInspection::TraceEntry buf[TubeInspection::TRACE_SIZE];
+    size_t n = ula.trace_snapshot(buf, TubeInspection::TRACE_SIZE);
+    REQUIRE(n == 1);
+    CHECK(buf[0].tag == 0x10);  // R1 H-to-P survived
+    CHECK(buf[0].value == 0x66);
+}
+
 TEST_CASE("TubeInspection: fifo_snapshot reports the two-byte R3 registers",
           "[tube][inspection]") {
     TubeUla ula;

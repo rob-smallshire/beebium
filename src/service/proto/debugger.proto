@@ -95,6 +95,7 @@ service DeviceInspection {
     rpc GetAddressableLatchState(GetAddressableLatchStateRequest) returns (AddressableLatchState);
     rpc GetSoundGeneratorState(GetSoundGeneratorStateRequest) returns (SoundGeneratorState);
     rpc GetTubeState(GetTubeStateRequest) returns (TubeState);
+    rpc SetTubeTraceConfig(SetTubeTraceConfigRequest) returns (SetTubeTraceConfigResponse);
     rpc GetRealTimeClockState(GetRealTimeClockStateRequest) returns (RealTimeClockState);
 }
 
@@ -638,6 +639,34 @@ message TubeState {
     // Each entry is a tag byte (register/direction/side) and a data byte.
     repeated TubeTraceEntry trace = 16;
     uint64 trace_total_count = 17;
+
+    // Which register/direction events the protocol trace is currently
+    // recording (set via SetTubeTraceConfig). Default records all.
+    TubeTraceConfig trace_config = 18;
+}
+
+// Selects which register/direction events the protocol trace records. A muted
+// entry still advances the transfer counters; only the trace ring stops
+// recording it. Every field defaults false, so an unset config -- and any
+// caller that never sets one -- records every register, as before.
+message TubeTraceConfig {
+    bool mute_r1_h2p = 1;
+    bool mute_r1_p2h = 2;
+    bool mute_r2_h2p = 3;
+    bool mute_r2_p2h = 4;
+    bool mute_r3_h2p = 5;
+    bool mute_r3_p2h = 6;
+    bool mute_r4_h2p = 7;
+    bool mute_r4_p2h = 8;
+}
+
+message SetTubeTraceConfigRequest {
+    TubeTraceConfig config = 1;
+}
+
+message SetTubeTraceConfigResponse {
+    bool enabled = 1;            // whether a second processor is attached
+    TubeTraceConfig config = 2;  // the configuration now in effect
 }
 
 // A single entry in the Tube protocol trace ring buffer.

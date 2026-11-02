@@ -626,6 +626,7 @@ class DeviceInspectionStub:
     GetAddressableLatchState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetAddressableLatchStateRequest, _debugger_pb2.AddressableLatchState]
     GetSoundGeneratorState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetSoundGeneratorStateRequest, _debugger_pb2.SoundGeneratorState]
     GetTubeState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetTubeStateRequest, _debugger_pb2.TubeState]
+    SetTubeTraceConfig: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.SetTubeTraceConfigRequest, _debugger_pb2.SetTubeTraceConfigResponse]
     GetRealTimeClockState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetRealTimeClockStateRequest, _debugger_pb2.RealTimeClockState]
 
 @_typing.type_check_only
@@ -642,6 +643,7 @@ class DeviceInspectionAsyncStub(DeviceInspectionStub):
     GetAddressableLatchState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetAddressableLatchStateRequest, _debugger_pb2.AddressableLatchState]  # type: ignore[assignment]
     GetSoundGeneratorState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetSoundGeneratorStateRequest, _debugger_pb2.SoundGeneratorState]  # type: ignore[assignment]
     GetTubeState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetTubeStateRequest, _debugger_pb2.TubeState]  # type: ignore[assignment]
+    SetTubeTraceConfig: _aio.UnaryUnaryMultiCallable[_debugger_pb2.SetTubeTraceConfigRequest, _debugger_pb2.SetTubeTraceConfigResponse]  # type: ignore[assignment]
     GetRealTimeClockState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetRealTimeClockStateRequest, _debugger_pb2.RealTimeClockState]  # type: ignore[assignment]
 
 class DeviceInspectionServicer(metaclass=_abc_1.ABCMeta):
@@ -697,6 +699,13 @@ class DeviceInspectionServicer(metaclass=_abc_1.ABCMeta):
         request: _debugger_pb2.GetTubeStateRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_debugger_pb2.TubeState, _abc.Awaitable[_debugger_pb2.TubeState]]: ...
+
+    @_abc_1.abstractmethod
+    def SetTubeTraceConfig(
+        self,
+        request: _debugger_pb2.SetTubeTraceConfigRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_debugger_pb2.SetTubeTraceConfigResponse, _abc.Awaitable[_debugger_pb2.SetTubeTraceConfigResponse]]: ...
 
     @_abc_1.abstractmethod
     def GetRealTimeClockState(

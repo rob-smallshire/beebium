@@ -199,8 +199,16 @@ public:
         return 0;
     }
 
+    // Configure which register/direction events the trace records (issue #250).
+    // A muted event is still counted in the transfer counters; only the ring
+    // stops recording it. The counters live on the access paths, separate from
+    // trace_event, so muting here leaves them untouched.
+    void set_trace_config(const TraceConfig& config) override { trace_config_ = config; }
+    TraceConfig trace_config() const override { return trace_config_; }
+
 private:
     void trace_event(uint8_t tag, uint8_t value) {
+        if (trace_config_.muted(tag)) return;
         trace_[trace_pos_] = {tag, value};
         trace_pos_ = (trace_pos_ + 1) % TRACE_SIZE;
         ++trace_count_;
@@ -210,6 +218,7 @@ private:
     std::array<TraceEntry, TRACE_SIZE> trace_{};
     size_t trace_pos_ = 0;
     size_t trace_count_ = 0;
+    TraceConfig trace_config_;
 };
 
 }  // namespace beebium
