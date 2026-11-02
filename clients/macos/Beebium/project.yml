@@ -130,15 +130,25 @@ targets:
           # fallback (BEEBIUM_SERVERS_DIRPATH, else the CMake build tree) -- see
           # PresetManager.serversDirpath and docs/macos-app-packaging.md.
           SERVERS_DIR="${BEEBIUM_SERVERS_BUILD_DIR:-}"
+          SERVERS_DEST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/servers"
           if [ -z "$SERVERS_DIR" ] || [ ! -f "$SERVERS_DIR/bin/beebium-model-b" ]; then
             echo "note: BEEBIUM_SERVERS_BUILD_DIR is unset or does not point at an installed static tree (no bin/beebium-model-b)."
             echo "note: skipping server embedding; the app will launch servers from the runtime dev fallback."
             echo "note: to embed a distributable payload, install a vcpkg-static build to a staging prefix and set BEEBIUM_SERVERS_BUILD_DIR to it (see docs/macos-app-packaging.md)."
+            # A build that reuses derived data from an earlier embedding build
+            # would otherwise keep that payload: this phase only writes one when
+            # embedding, so the skip path must remove a stale one. serversDirpath()
+            # prefers a bundled servers/bin over the dev fallback, so a payload
+            # left here is launched silently in place of the developer's own
+            # build, from whatever commit it happened to be (issue #244).
+            if [ -e "$SERVERS_DEST" ]; then
+              rm -rf "$SERVERS_DEST"
+              echo "note: removed a stale embedded server payload left by an earlier build ($SERVERS_DEST)."
+            fi
             exit 0
           fi
 
           echo "Embedding static server bundle from: $SERVERS_DIR"
-          SERVERS_DEST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/servers"
           # Rebuild from scratch each time so a previous build's payload does not
           # accumulate stale files.
           rm -rf "$SERVERS_DEST"
