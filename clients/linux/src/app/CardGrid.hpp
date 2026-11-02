@@ -37,9 +37,6 @@ public:
     static constexpr int PICTURE_WIDTH = 160;
     static constexpr int PICTURE_HEIGHT = 120;
     static constexpr int CARD_WIDTH = PICTURE_WIDTH;
-    // The name and the description, two lines apiece, with their padding.
-    static constexpr int LABEL_HEIGHT = 76;
-    static constexpr int CARD_HEIGHT = PICTURE_HEIGHT + LABEL_HEIGHT;
     static constexpr int SPACING = 16;
     static constexpr int CELL_WIDTH = CARD_WIDTH + SPACING;
     // Between the cards and the area's sides.
@@ -48,6 +45,12 @@ public:
     static constexpr int DETAIL_ROLE = Qt::UserRole + 32;
 
     explicit CardGrid(QWidget* parent = nullptr);
+
+    // A card's height in `font`: the picture over two lines of name and
+    // two of description, with their padding.
+    static int card_height(const QFont& font);
+    // The description's font: smaller than the name's.
+    static QFont detail_font(const QFont& font);
 
     // A card; `thumbnail` null shows the placeholder.
     QListWidgetItem* add_card(const QString& name, const QString& detail,
@@ -58,6 +61,12 @@ public:
     // The picture a card shows: the thumbnail fitted on black, or the
     // placeholder, and a "Running" badge when the machine is.
     static QPixmap picture(const QPixmap& thumbnail, bool running, const QWidget* style_from);
+
+protected:
+    void changeEvent(QEvent* event) override;
+
+private:
+    void fit_cells();
 };
 
 }  // namespace beebium::linux_client

@@ -12,6 +12,7 @@
 
 #include "app/CardGrid.hpp"
 
+#include <QEvent>
 #include <QFontMetrics>
 #include <QIcon>
 #include <QPainter>
@@ -37,8 +38,8 @@ class CardDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
 
-    QSize sizeHint(const QStyleOptionViewItem&, const QModelIndex&) const override {
-        return {CardGrid::CELL_WIDTH, CardGrid::CARD_HEIGHT + CardGrid::SPACING};
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const override {
+        return {CardGrid::CELL_WIDTH, CardGrid::card_height(option.font) + CardGrid::SPACING};
     }
 
     void paint(QPainter* painter, const QStyleOptionViewItem& option,
@@ -46,7 +47,7 @@ public:
         const QPalette& palette = option.palette;
         const QRectF card(option.rect.x() + (option.rect.width() - CardGrid::CARD_WIDTH) / 2.0,
                           option.rect.y() + CardGrid::SPACING / 2.0, CardGrid::CARD_WIDTH,
-                          CardGrid::CARD_HEIGHT);
+                          CardGrid::card_height(option.font));
         const bool chosen = option.state & QStyle::State_Selected;
         const bool focused = option.state & QStyle::State_HasFocus;
 
@@ -64,8 +65,7 @@ public:
 
         QFont name_font = option.font;
         name_font.setWeight(QFont::Medium);
-        QFont detail_font = option.font;
-        detail_font.setPointSizeF(detail_font.pointSizeF() * 0.85);
+        const QFont detail_font = CardGrid::detail_font(option.font);
         const int text_width = CardGrid::CARD_WIDTH - 2 * LABEL_PADDING_X;
         qreal y = card.top() + CardGrid::PICTURE_HEIGHT + LABEL_PADDING_Y;
         const auto draw_lines = [&](const QString& text, const QFont& font, const QColor& colour) {
@@ -124,6 +124,19 @@ QStringList card_lines(const QString& text, const QFont& font, int width, int ma
     return lines;
 }
 
+int CardGrid::card_height(const QFont& font) {
+    QFont name_font = font;
+    name_font.setWeight(QFont::Medium);
+    return PICTURE_HEIGHT + 2 * LABEL_PADDING_Y + 2 * QFontMetrics(name_font).lineSpacing() +
+           2 * QFontMetrics(detail_font(font)).lineSpacing();
+}
+
+QFont CardGrid::detail_font(const QFont& font) {
+    QFont smaller = font;
+    smaller.setPointSizeF(font.pointSizeF() * 0.85);
+    return smaller;
+}
+
 CardGrid::CardGrid(QWidget* parent) : QListWidget(parent) {
     setViewMode(QListView::IconMode);
     setFlow(QListView::LeftToRight);
@@ -133,7 +146,7 @@ CardGrid::CardGrid(QWidget* parent) : QListWidget(parent) {
     setUniformItemSizes(true);
     setSelectionMode(QAbstractItemView::SingleSelection);
     setItemDelegate(new CardDelegate(this));
-    setGridSize(QSize(CELL_WIDTH, CARD_HEIGHT + SPACING));
+    fit_cells();
     // No frame or fill of its own: the cards sit on the window, and the
     // scroll bar shows only when they overflow it.
     setFrameShape(QFrame::NoFrame);
@@ -141,6 +154,17 @@ CardGrid::CardGrid(QWidget* parent) : QListWidget(parent) {
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setViewportMargins(MARGIN - SPACING / 2, 0, MARGIN - SPACING / 2, 0);
+}
+
+void CardGrid::changeEvent(QEvent* event) {
+    QListWidget::changeEvent(event);
+    if (event->type() == QEvent::FontChange) {
+        fit_cells();
+    }
+}
+
+void CardGrid::fit_cells() {
+    setGridSize(QSize(CELL_WIDTH, card_height(font()) + SPACING));
 }
 
 QListWidgetItem* CardGrid::add_card(const QString& name, const QString& detail,

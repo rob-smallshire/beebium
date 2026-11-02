@@ -35,12 +35,30 @@ TEST_CASE("A card's text is its name, its description held apart", "[home][cards
 
 TEST_CASE("Cards sit in fixed cells of even spacing in an area with no frame", "[home][cards]") {
     CardGrid grid;
-    CHECK(grid.gridSize() == QSize(CardGrid::CELL_WIDTH, CardGrid::CARD_HEIGHT + CardGrid::SPACING));
+    CHECK(grid.gridSize() ==
+          QSize(CardGrid::CELL_WIDTH, CardGrid::card_height(grid.font()) + CardGrid::SPACING));
     CHECK(CardGrid::CELL_WIDTH == CardGrid::CARD_WIDTH + CardGrid::SPACING);
     CHECK(grid.frameShape() == QFrame::NoFrame);
     CHECK_FALSE(grid.viewport()->autoFillBackground());
     CHECK(grid.verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded);
     CHECK(grid.horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff);
+}
+
+TEST_CASE("A card has room for two lines of name and two of description in the font in use",
+          "[home][cards]") {
+    CardGrid grid;
+    for (const qreal points : {9.0, 12.0, 16.0}) {
+        QFont font = grid.font();
+        font.setPointSizeF(points);
+        grid.setFont(font);
+        QFont name_font = font;
+        name_font.setWeight(QFont::Medium);
+        const int needed = CardGrid::PICTURE_HEIGHT +
+                           2 * QFontMetrics(name_font).lineSpacing() +
+                           2 * QFontMetrics(CardGrid::detail_font(font)).lineSpacing();
+        CHECK(CardGrid::card_height(font) >= needed);
+        CHECK(grid.gridSize().height() == CardGrid::card_height(font) + CardGrid::SPACING);
+    }
 }
 
 TEST_CASE("A card's text stops at two lines, the last elided", "[home][cards]") {
