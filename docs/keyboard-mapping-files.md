@@ -141,6 +141,42 @@ untouched when it writes the file. `platform` values: `"macOS"`, `"linux"`,
 `platform` entry for a key that has a `code`; a conformance check rejects a
 file that does.
 
+### 3.5 Conditional entries: `when`
+
+Any entry may carry a `when` object saying where it applies. Its members are
+predicates; the entry applies only where every predicate holds. An entry
+without `when` applies everywhere.
+
+```json
+{ "code": "F13", "bbc": { "key": "Shift Lock", "action": "Shift Lock" } },
+{ "code": "F11", "with": ["Alt"], "when": { "platform": ["linux", "windows"] },
+                 "bbc": { "key": "Shift Lock", "action": "Shift Lock" } }
+```
+
+The predicates:
+
+| Predicate | Value | Holds when |
+|-----------|-------|------------|
+| `platform` | a platform name, or an array of them: `"macOS"`, `"linux"`, `"windows"` (the names of 3.4) | the client runs on one of the named platforms |
+
+A predicate the client does not know (a name this document does not list,
+or a value of a shape it does not describe) does not hold. So an entry with
+an unknown predicate does not apply, and the client keeps it untouched when
+it writes the file, exactly as it keeps other platforms' 3.4 entries. That is
+how the format grows: a later predicate (a keyboard layout, say) reaches old
+clients as entries they skip, never as a parse error or a wrong key.
+
+Everything a client does with a mapping sees only the entries that apply:
+resolution (section 4), the keyboard view's labelled keys (client
+specification 7.4), and any editing. The example above is Logical's Shift
+Lock: on F13 everywhere, and also on Alt+F11 on the platforms whose
+keyboards mostly lack F13, without a second Shift Lock row in the macOS
+keyboard view or an Option+F11 there.
+
+`when` is a condition on an entry; the `platform` field of a 3.4 entry is
+not, it names the namespace of the entry's native identifier. A 3.4 entry
+may carry `when` as well, though it rarely needs to.
+
 ## 4. Resolution
 
 Given a host key event with its physical `code` and the host modifiers held
@@ -153,8 +189,9 @@ own press already carries it). Clients derive the set from their held-key
 tracking, not from the event's modifier flags.
 
 1. **Physical entries for this `code`** (and this platform's 3.4 entries for
-   this native key), considering only entries whose `with` set is a subset of
-   the held modifiers (an entry needing Shift does not match without Shift):
+   this native key), among the entries that apply here (3.5), considering
+   only entries whose `with` set is a subset of the held modifiers (an entry
+   needing Shift does not match without Shift):
    - an entry whose `with` set equals the held modifiers exactly;
    - else the first entry, in file order, whose `with` set is a proper
      subset of the held modifiers;
@@ -204,6 +241,11 @@ Break is on Alt+F12 (Option+F12 on macOS) in every built-in: F11 is the BBC
 Copy key in the Logical mapping and is the desktop full-screen key under the
 KDE conventions the Linux client follows, so it is not Break anywhere.
 
+Shift Lock is on F13 in Logical, and also on Alt+F11 (3.5) on Linux and
+Windows, whose keyboards mostly have no F13; Alt+F11 is beside Break and is
+not a desktop binding under labwc, KDE or GNOME. The macOS client keeps F13
+alone.
+
 Logical carries an `action` label (3.3) on the BBC keys that have no host
 namesake - f0, Break, Copy, Shift Lock and Delete - so a client's keyboard view
 names the host key that reaches each even for this general mapping; the game
@@ -213,13 +255,14 @@ labels for built-in mappings as well as user ones (client specification 7.4, #23
 ## 6. Conformance
 
 - A client reads any version 2 file, applies the entries it can, preserves
-  what it cannot (3.4, unknown fields) when writing, and reports, not
-  silently drops, entries it declined (3.2).
+  what it cannot (3.4, 3.5, unknown fields) when writing, and reports, not
+  silently drops, entries it declined (3.2). An entry whose `when` does not
+  hold is not declined; it is simply not for this client.
 - A client writes version 2 only. It never writes a native code for a key
   that has a `code` value.
 - A shared corpus under `tests/assets/keyboard-mappings/` (the built-ins and
-  a file exercising every rule above, with the expected resolution for a
-  list of host events) is the conformance test: every client's tests load it
+  a file exercising every rule above, 3.5 included, with the expected
+  resolution for a list of host events) is the conformance test: every client's tests load it
   and must resolve identically. The Linux client's `KeyboardInput` tests and
   the macOS `KeyboardMapping` tests both run it.
 
