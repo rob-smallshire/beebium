@@ -21,6 +21,8 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 
+#include <algorithm>
+
 namespace beebium::linux_client {
 
 const std::vector<QString>& built_in_mapping_names() {
@@ -34,6 +36,34 @@ const std::vector<QString>& built_in_mapping_names() {
 QString user_mappings_dirpath() {
     return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation))
         .filePath(QStringLiteral("Beebium/keyboard-mappings"));
+}
+
+QString logical_mapping_id() {
+    static const QString id = [] {
+        const auto logical = built_in_mapping(QStringLiteral("Logical"));
+        return logical ? QString::fromStdString(logical->id) : QString();
+    }();
+    return id;
+}
+
+void MappingHistory::activate(const QString& id) {
+    if (id != active_) {
+        previous_ = active_;
+        active_ = id;
+    }
+}
+
+void MappingHistory::keep_only(const std::vector<MappingChoice>& choices) {
+    const bool present = std::any_of(choices.begin(), choices.end(), [this](const MappingChoice& c) {
+        return c.usable() && c.id == previous_;
+    });
+    if (!present) {
+        previous_.clear();
+    }
+}
+
+QString MappingHistory::target() const {
+    return active_ == logical_mapping_id() ? previous_ : logical_mapping_id();
 }
 
 std::vector<MappingChoice> mapping_choices(const QString& user_dirpath) {

@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_APP_MAIN_WINDOW_HPP
 #define BEEBIUM_LINUX_APP_MAIN_WINDOW_HPP
 
+#include "app/MappingCatalogue.hpp"
 #include "app/Presentation.hpp"
 
 #include <QMainWindow>
@@ -35,6 +36,7 @@ class SystemPowerMonitor;
 class DisplayFrame;
 class Sidebar;
 class IndicatorStrip;
+class KeyboardSidebar;
 class ImmersiveExit;
 
 // A machine window: one per connection to a server. It holds the menu bar
@@ -140,6 +142,18 @@ private:
     void tap_named_key(const QString& name);
     // Edit > Paste (7.5).
     void paste();
+    // Make a mapping the active one, from the sidebar or the Edit menu's
+    // switch (7.4): the keys, the sidebar's selection, the status bar and
+    // the stored choice follow, and the one it replaces is recorded.
+    void activate_mapping(const MappingChoice& choice);
+    // Edit > Switch to ... Keyboard Mapping: its title names where it goes;
+    // with nowhere to go it is disabled. The user's files are read again,
+    // so a deleted previous mapping is forgotten.
+    void update_mapping_switch();
+    void switch_mapping();
+    KeyboardSidebar* keyboard_mode_ = nullptr;
+    MappingHistory mapping_history_;
+    QAction* switch_mapping_action_ = nullptr;
     static constexpr int TAP_HOLD_MS = 50;
     QLabel* mapping_label_ = nullptr;
     QLabel* model_label_ = nullptr;

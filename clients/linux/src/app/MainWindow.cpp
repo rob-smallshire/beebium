@@ -123,7 +123,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                                           sidebar_));
     sidebar_->add_mode(SidebarMode::sound, new SoundSidebar(session_->audio(), sidebar_));
     // The keyboard mapping, as chosen last time (7.4).
-    auto* keyboard_mode = new KeyboardSidebar(user_mappings_dirpath(), sidebar_);
+    auto* keyboard_mode = keyboard_mode_ = new KeyboardSidebar(user_mappings_dirpath(), sidebar_);
     if (settings_) {
         const QString chosen = settings_->store().value(QStringLiteral("keyboard/mapping")).toString();
         for (const MappingChoice& choice : keyboard_mode->choices()) {
@@ -134,18 +134,9 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     }
     keyboard_mode->set_active(QString::fromStdString(display_->keyboard().mapping().id));
     keyboard_mode->set_caps_lock_sync(display_->keyboard().caps_lock_sync_enabled());
-    connect(keyboard_mode, &KeyboardSidebar::mapping_chosen, this,
-            [this, keyboard_mode](const MappingChoice& choice) {
-                display_->keyboard().set_mapping(*choice.mapping);
-                if (mapping_label_) {
-                    mapping_label_->setText(choice.name);
-                }
-                keyboard_mode->set_caps_lock_sync(display_->keyboard().caps_lock_sync_enabled());
-                if (settings_) {
-                    settings_->store().setValue(QStringLiteral("keyboard/mapping"), choice.id);
-                }
-                std::fprintf(stderr, "beebium: keyboard mapping %s\n", qPrintable(choice.name));
-            });
+    // Nothing before the mapping a window opens with.
+    mapping_history_ = MappingHistory(QString::fromStdString(display_->keyboard().mapping().id));
+    connect(keyboard_mode, &KeyboardSidebar::mapping_chosen, this, &MainWindow::activate_mapping);
     connect(keyboard_mode, &KeyboardSidebar::caps_lock_sync_toggled, this,
             [this](bool on) { display_->keyboard().set_caps_lock_sync_override(on); });
     sidebar_->add_mode(SidebarMode::keyboard, keyboard_mode);
@@ -384,6 +375,55 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     build_menus();
 }
 
+void MainWindow::activate_mapping(const MappingChoice& choice) {
+    if (!choice.mapping) {
+        return;
+    }
+    display_->keyboard().set_mapping(*choice.mapping);
+    mapping_history_.activate(choice.id);
+    if (mapping_label_) {
+        mapping_label_->setText(choice.name);
+    }
+    keyboard_mode_->set_active(choice.id);
+    keyboard_mode_->set_caps_lock_sync(display_->keyboard().caps_lock_sync_enabled());
+    if (settings_) {
+        settings_->store().setValue(QStringLiteral("keyboard/mapping"), choice.id);
+    }
+    update_mapping_switch();
+    std::fprintf(stderr, "beebium: keyboard mapping %s\n", qPrintable(choice.name));
+}
+
+void MainWindow::update_mapping_switch() {
+    if (!switch_mapping_action_) {
+        return;
+    }
+    keyboard_mode_->rescan();
+    mapping_history_.keep_only(keyboard_mode_->choices());
+    const QString target = mapping_history_.target();
+    QString name;
+    for (const MappingChoice& choice : keyboard_mode_->choices()) {
+        if (choice.usable() && choice.id == target) {
+            name = choice.name;
+        }
+    }
+    switch_mapping_action_->setEnabled(!name.isEmpty());
+    switch_mapping_action_->setText(name.isEmpty()
+                                        ? tr("Switch to Previous Keyboard Mapping")
+                                        : tr("Switch to %1 Keyboard Mapping").arg(name));
+}
+
+void MainWindow::switch_mapping() {
+    // Read again first: the file may have gone since the title was set.
+    update_mapping_switch();
+    const QString target = mapping_history_.target();
+    for (const MappingChoice& choice : keyboard_mode_->choices()) {
+        if (choice.usable() && choice.id == target) {
+            activate_mapping(choice);
+            return;
+        }
+    }
+}
+
 void MainWindow::build_menus() {
     // Client specification 13.2, as a KDE-style menu bar. The BBC Micro has
     // Ctrl and Shift but no Alt or Meta, so every shortcut here carries one
@@ -449,6 +489,18 @@ void MainWindow::build_menus() {
             });
     connect(&session_->typing(), &SessionTyping::pasting_changed, paste_action,
             [paste_action](bool pasting) { paste_action->setEnabled(!pasting); });
+    // Last, under a separator, as the macOS client's Command-K: Logical and
+    // back (7.4).
+    edit->addSeparator();
+    switch_mapping_action_ = edit->addAction(QString());
+    set_session_shortcuts(switch_mapping_action_, QKeySequence(QStringLiteral("Meta+K")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+K")));
+    connect(switch_mapping_action_, &QAction::triggered, this, &MainWindow::switch_mapping);
+    // On the window too, for a game played immersive, its menu bar hidden.
+    switch_mapping_action_->setShortcutContext(Qt::WindowShortcut);
+    addAction(switch_mapping_action_);
+    connect(edit, &QMenu::aboutToShow, this, &MainWindow::update_mapping_switch);
+    update_mapping_switch();
     QMenu* view = menuBar()->addMenu(tr("&View"));
     status_bar_action_ = view->addAction(tr("Show &Status Bar"));
     status_bar_action_->setCheckable(true);

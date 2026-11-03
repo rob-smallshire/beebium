@@ -38,6 +38,33 @@ struct MappingChoice {
 // The built-in names, Logical first, as every client ships them.
 const std::vector<QString>& built_in_mapping_names();
 
+// Logical's id, the default mapping's (docs/keyboard-mapping-files.md 5).
+QString logical_mapping_id();
+
+// The mapping active before the current one, for Edit > Switch to ...
+// Keyboard Mapping, as the macOS client keeps it: recorded on every change
+// of active mapping, whatever made it, and held in memory only.
+class MappingHistory {
+public:
+    explicit MappingHistory(QString active_id = {}) : active_(std::move(active_id)) {}
+
+    // A change of active mapping: the one it replaces becomes the previous.
+    void activate(const QString& id);
+    // Keep the previous only while it is among the usable choices: a mapping
+    // whose file has gone is forgotten, not switched to.
+    void keep_only(const std::vector<MappingChoice>& choices);
+
+    const QString& active() const { return active_; }
+    const QString& previous() const { return previous_; }
+    // Where the switch goes: from any mapping but Logical, to Logical; from
+    // Logical, to the previous. Empty when there is nowhere to go.
+    QString target() const;
+
+private:
+    QString active_;
+    QString previous_;
+};
+
 // Where the user's mapping files are: $XDG_CONFIG_HOME/Beebium/keyboard-mappings.
 QString user_mappings_dirpath();
 
