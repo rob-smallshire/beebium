@@ -15,7 +15,6 @@
 #include <QCheckBox>
 #include <QFrame>
 #include <QHeaderView>
-#include <QLabel>
 #include <QPalette>
 #include <QListWidget>
 #include <QSignalBlocker>
@@ -71,12 +70,6 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     reference_->setSelectionMode(QAbstractItemView::NoSelection);
     reference_->header()->setStretchLastSection(true);
     layout->addWidget(reference_);
-    hint_ = new QLabel(this);
-    hint_->setObjectName(QStringLiteral("mappingReferenceHint"));
-    hint_->setWordWrap(true);
-    hint_->setForegroundRole(QPalette::PlaceholderText);
-    hint_->hide();
-    layout->addWidget(hint_);
 
     caps_ = new QCheckBox(tr("Synchronise Caps Lock"), this);
     caps_->setToolTip(tr("Keep the machine's Caps Lock the same as this computer's"));
@@ -173,17 +166,9 @@ void KeyboardSidebar::show_reference() {
             rows = mapping_reference(*choice.mapping);
         }
     }
-    QString hint;
     for (const ReferenceRow& row : rows) {
-        auto* item = new QTreeWidgetItem(reference_, {row.host_key, row.action});
-        if (!row.hint.isEmpty()) {
-            item->setToolTip(0, row.hint);
-            item->setToolTip(1, row.hint);
-            hint = row.hint;
-        }
+        new QTreeWidgetItem(reference_, {row.host_key, row.action});
     }
-    hint_->setText(hint);
-    hint_->setVisible(!hint.isEmpty());
     reference_->resizeColumnToContents(0);
     fit_to_rows(reference_);
     // Only a mapping that labels its keys has a table to show.

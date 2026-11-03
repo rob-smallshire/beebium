@@ -110,41 +110,22 @@ TEST_CASE("Logical labels its five keys with no host namesake", "[keyboard][mode
                               QStringLiteral("Backspace = Delete")});
 }
 
-TEST_CASE("Shift Lock on F13 carries a hint that a user mapping reaches it", "[keyboard][mode]") {
-    const auto mapping = built_in_mapping(QStringLiteral("Logical"));
-    REQUIRE(mapping);
-    QStringList hinted;
-    for (const auto& row : mapping_reference(*mapping)) {
-        if (!row.hint.isEmpty()) {
-            hinted << row.action;
-            CHECK(row.hint == QStringLiteral(
-                                  "Most PC keyboards have no F13: to reach Shift Lock, copy this "
-                                  "mapping and put it on a key you have, as Break is on Alt+F12."));
-        }
-    }
-    CHECK(hinted == QStringList{QStringLiteral("Shift Lock")});
-    // Shift Lock on a key the keyboard has needs no hint.
-    MappingFile moved = *mapping;
-    for (auto& entry : moved.keys) {
-        if (entry.bbc_key == "Shift Lock") {
-            entry.code = "ScrollLock";
-        }
-    }
-    for (const auto& row : mapping_reference(moved)) {
-        CHECK(row.hint.isEmpty());
-    }
-}
-
-TEST_CASE("The mode shows the hint under the table only for a mapping with Shift Lock on F13",
+TEST_CASE("The labelled keys carry no prose, not even for a key most keyboards lack",
           "[keyboard][mode]") {
     QTemporaryDir directory;
     KeyboardSidebar sidebar(directory.path());
+    // Logical puts Shift Lock on F13.
     sidebar.set_active(QString::fromStdString(built_in_mapping(QStringLiteral("Logical"))->id));
-    REQUIRE(sidebar.reference_hint());
-    CHECK(sidebar.reference_hint()->isVisibleTo(&sidebar));
-    CHECK(sidebar.reference_hint()->text().startsWith(QStringLiteral("Most PC keyboards have no F13")));
-    sidebar.set_active(QString::fromStdString(built_in_mapping(QStringLiteral("Thrust"))->id));
-    CHECK_FALSE(sidebar.reference_hint()->isVisibleTo(&sidebar));
+    sidebar.show();
+    for (QLabel* label : sidebar.findChildren<QLabel*>()) {
+        CHECK_FALSE(label->isVisibleTo(&sidebar));
+    }
+    QTreeWidget* table = sidebar.reference();
+    REQUIRE(table->topLevelItemCount() > 0);
+    for (int i = 0; i < table->topLevelItemCount(); ++i) {
+        CHECK(table->topLevelItem(i)->toolTip(0).isEmpty());
+        CHECK(table->topLevelItem(i)->toolTip(1).isEmpty());
+    }
 }
 
 TEST_CASE("The mappings are a plain list, the active one its selected row", "[keyboard][mode]") {
@@ -220,9 +201,8 @@ TEST_CASE("The labelled keys are a bare table at the foot of the mode, the free 
     REQUIRE(divider);
     CHECK(divider->y() > list->y() + list->height());
     CHECK(divider->y() < table->y());
-    // The hint, then the Caps Lock toggle, below the table.
-    CHECK(sidebar.reference_hint()->y() > table->y());
-    CHECK(sidebar.caps_lock_sync()->y() > sidebar.reference_hint()->y());
+    // The Caps Lock toggle below the table.
+    CHECK(sidebar.caps_lock_sync()->y() > table->y());
 }
 
 TEST_CASE("The mode has no buttons: the mappings folder is managed elsewhere", "[keyboard][mode]") {

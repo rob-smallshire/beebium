@@ -168,17 +168,7 @@ std::vector<ReferenceRow> mapping_reference(const MappingFile& mapping) {
         if (host.isEmpty()) {
             continue;
         }
-        QString hint;
-        // Logical's Shift Lock is on F13, which most PC keyboards (a Raspberry
-        // Pi 400's among them) do not have; which key a built-in should use
-        // instead is for the mapping configuration to settle.
-        if (QString::fromStdString(entry.bbc_key).compare(QStringLiteral("Shift Lock"),
-                                                          Qt::CaseInsensitive) == 0 &&
-            entry.code == "F13" && entry.with == 0) {
-            hint = QObject::tr("Most PC keyboards have no F13: to reach Shift Lock, copy this "
-                               "mapping and put it on a key you have, as Break is on Alt+F12.");
-        }
-        rows.push_back({host, QString::fromStdString(*entry.action), hint});
+        rows.push_back({host, QString::fromStdString(*entry.action)});
     }
     return rows;
 }

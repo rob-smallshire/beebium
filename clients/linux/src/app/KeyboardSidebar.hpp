@@ -22,7 +22,6 @@
 class QAbstractItemView;
 class QCheckBox;
 class QFrame;
-class QLabel;
 class QListWidget;
 class QTreeWidget;
 
@@ -51,7 +50,6 @@ public:
     const std::vector<MappingChoice>& choices() const { return choices_; }
     QListWidget* chooser() const { return list_; }
     QTreeWidget* reference() const { return reference_; }
-    QLabel* reference_hint() const { return hint_; }
     QCheckBox* caps_lock_sync() const { return caps_; }
 
 Q_SIGNALS:
@@ -72,7 +70,6 @@ private:
     QListWidget* list_;
     QFrame* divider_;
     QTreeWidget* reference_;
-    QLabel* hint_;
     QCheckBox* caps_;
 };
 
