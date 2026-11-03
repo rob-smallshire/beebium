@@ -272,6 +272,7 @@ add_library(beebium_linux_app STATIC
     src/app/SessionIndicators.cpp
     src/app/SessionTyping.cpp
     src/app/SettingsDialog.cpp
+    src/app/Shortcuts.cpp
     src/app/WindowGeometry.cpp
     src/app/Sidebar.cpp
     src/app/SidebarMode.cpp

@@ -149,6 +149,10 @@ beebium_linux_add_test(test_keyboard_mode QT
     SOURCES test_keyboard_mode.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_shortcuts QT
+    SOURCES test_shortcuts.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_graphics_api
     SOURCES test_graphics_api.cpp
     LIBRARIES beebium_linux_app)
