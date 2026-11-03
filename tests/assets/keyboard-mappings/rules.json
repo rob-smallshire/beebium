@@ -230,6 +230,18 @@
         "ik": 71,
         "needsShift": false,
         "name": "@"
+      },
+      {
+        "character": "",
+        "ik": 80,
+        "needsShift": false,
+        "name": "Shift Lock"
+      },
+      {
+        "character": "",
+        "ik": 105,
+        "needsShift": false,
+        "name": "Copy"
       }
     ]
   },
@@ -1170,6 +1182,74 @@
       "expect": {
         "key": "f3",
         "ik": 115,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "id": "R48",
+      "name": "5: Logical puts Shift Lock on F13 everywhere",
+      "mapping": "Logical.json",
+      "event": {
+        "code": "F13"
+      },
+      "expect": {
+        "key": "Shift Lock",
+        "ik": 80,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "id": "R49",
+      "name": "5, 3.5: Logical also puts Shift Lock on Alt+F11 on Linux",
+      "mapping": "Logical.json",
+      "event": {
+        "platform": "linux",
+        "code": "F11",
+        "modifiers": [
+          "Alt"
+        ]
+      },
+      "expect": {
+        "key": "Shift Lock",
+        "ik": 80,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "id": "R50",
+      "name": "5, 3.5: Logical also puts Shift Lock on Alt+F11 on Windows",
+      "mapping": "Logical.json",
+      "event": {
+        "platform": "windows",
+        "code": "F11",
+        "modifiers": [
+          "Alt"
+        ]
+      },
+      "expect": {
+        "key": "Shift Lock",
+        "ik": 80,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "id": "R51",
+      "name": "5, 3.5: on macOS Logical has no Shift Lock on Option+F11: F11 is Copy",
+      "mapping": "Logical.json",
+      "event": {
+        "platform": "macOS",
+        "code": "F11",
+        "modifiers": [
+          "Alt"
+        ]
+      },
+      "expect": {
+        "key": "Copy",
+        "ik": 105,
         "shift": false,
         "ctrl": false
       }

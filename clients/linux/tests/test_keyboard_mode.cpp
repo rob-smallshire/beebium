@@ -98,7 +98,7 @@ TEST_CASE("A host key is named as a person would", "[keyboard][mode]") {
     CHECK(host_key_label(entry).isEmpty());  // another platform's key
 }
 
-TEST_CASE("Logical labels its five keys with no host namesake", "[keyboard][mode]") {
+TEST_CASE("Logical labels its five keys with no host namesake, Shift Lock twice on Linux", "[keyboard][mode]") {
     const auto mapping = built_in_mapping(QStringLiteral("Logical"));
     REQUIRE(mapping);
     QStringList rows;
@@ -107,6 +107,7 @@ TEST_CASE("Logical labels its five keys with no host namesake", "[keyboard][mode
     }
     CHECK(rows == QStringList{QStringLiteral("F10 = f0"), QStringLiteral("F11 = Copy"),
                               QStringLiteral("Alt+F12 = Break"), QStringLiteral("F13 = Shift Lock"),
+                              QStringLiteral("Alt+F11 = Shift Lock"),
                               QStringLiteral("Backspace = Delete")});
 }
 
@@ -236,7 +237,7 @@ TEST_CASE("The mode shows the active mapping's labels and switches on a choice",
     KeyboardSidebar sidebar(directory.path());
     const auto default_mapping = built_in_mapping(QStringLiteral("Logical"));
     sidebar.set_active(QString::fromStdString(default_mapping->id));
-    CHECK(reference_rows(sidebar).size() == 5);
+    CHECK(reference_rows(sidebar).size() == 6);  // Shift Lock twice on Linux
 
     std::optional<MappingChoice> chosen;
     QObject::connect(&sidebar, &KeyboardSidebar::mapping_chosen,

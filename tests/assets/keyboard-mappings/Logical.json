@@ -123,6 +123,22 @@
       }
     },
     {
+      "code": "F11",
+      "with": [
+        "Alt"
+      ],
+      "when": {
+        "platform": [
+          "linux",
+          "windows"
+        ]
+      },
+      "bbc": {
+        "key": "Shift Lock",
+        "action": "Shift Lock"
+      }
+    },
+    {
       "code": "Backspace",
       "bbc": {
         "key": "Delete",
