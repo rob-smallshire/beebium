@@ -1188,9 +1188,10 @@
     },
     {
       "id": "R48",
-      "name": "5: Logical puts Shift Lock on F13 everywhere",
+      "name": "5, 3.5: Logical puts Shift Lock on F13 on macOS",
       "mapping": "Logical.json",
       "event": {
+        "platform": "macOS",
         "code": "F13"
       },
       "expect": {
@@ -1198,6 +1199,30 @@
         "ik": 80,
         "shift": false,
         "ctrl": false
+      }
+    },
+    {
+      "id": "R52",
+      "name": "5, 3.5: on Linux Logical has no F13 entry, and F13 gives no character",
+      "mapping": "Logical.json",
+      "event": {
+        "platform": "linux",
+        "code": "F13"
+      },
+      "expect": {
+        "ignored": true
+      }
+    },
+    {
+      "id": "R53",
+      "name": "5, 3.5: on Windows Logical has no F13 entry, and F13 gives no character",
+      "mapping": "Logical.json",
+      "event": {
+        "platform": "windows",
+        "code": "F13"
+      },
+      "expect": {
+        "ignored": true
       }
     },
     {

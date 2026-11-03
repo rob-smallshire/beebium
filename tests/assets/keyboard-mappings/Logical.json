@@ -117,6 +117,9 @@
     },
     {
       "code": "F13",
+      "when": {
+        "platform": "macOS"
+      },
       "bbc": {
         "key": "Shift Lock",
         "action": "Shift Lock"
