@@ -330,7 +330,8 @@ final class KeyboardMapping: Identifiable {
     private static func disableableKeys(from entries: [KeyMappingEntry]) -> [String: Bool] {
         var disableableDict: [String: Bool] = [:]
         for entry in entries {
-            guard let bbcSpec = entry.bbc,
+            guard entry.appliesToThisHost,
+                  let bbcSpec = entry.bbc,
                   let disabledState = bbcSpec.disabled else {
                 continue
             }

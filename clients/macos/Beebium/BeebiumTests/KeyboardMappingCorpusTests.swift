@@ -127,19 +127,22 @@ final class KeyboardMappingCorpusTests: XCTestCase {
         XCTAssertGreaterThan(ran, 0, "no corpus cases ran")
     }
 
-    /// Build a KeyInput from a corpus event. A platform: macOS case uses its
-    /// native key code; a code case translates the W3C code to a macOS key code
-    /// (nil, and so unrunnable here, if this host has no such key). The host
-    /// character `text` already ignores Control, so it goes into both character
-    /// fields.
+    /// Build a KeyInput from a corpus event. A platform: macOS case with a
+    /// `native` key uses that key code (a 3.4 entry); a case with a `code`
+    /// translates the W3C code to a macOS key code (nil, and so unrunnable here,
+    /// if this host has no such key). A case carrying both a platform and a
+    /// `code` but no `native` is a 3.5 condition on the platform: the top-level
+    /// filter has already kept only macOS ones, so it too runs through the code
+    /// path. The host character `text` already ignores Control, so it goes into
+    /// both character fields.
     private func keyInput(from event: [String: Any]) -> KeyInput? {
         let modifiers = HostModifierName.flags(
             from: event["modifiers"] as? [String] ?? [])
         let text = event["text"] as? String ?? ""
 
-        if event["platform"] as? String == "macOS" {
-            guard let native = event["native"] as? [String: Any],
-                  let keyCode = native["keyCode"] as? Int else { return nil }
+        if event["platform"] as? String == "macOS",
+           let native = event["native"] as? [String: Any] {
+            guard let keyCode = native["keyCode"] as? Int else { return nil }
             return KeyInput(
                 keyCode: UInt16(keyCode),
                 characters: text,

@@ -109,11 +109,55 @@ struct KeyMappingEntry {
         return BBCKeySpec(dict: dict)
     }
 
+    /// This host's platform name, as the format's `when.platform` predicate and
+    /// 3.4 `platform` entries name it.
+    static let hostPlatform = "macOS"
+
+    /// Whether this entry's `when` condition holds on this host, so the entry
+    /// takes part in resolution, the keyboard view's labelled keys and editing.
+    /// An entry with no `when` applies everywhere; an empty `when` object holds
+    /// everywhere too. Each predicate must hold; a predicate this client does not
+    /// know -- an unrecognised name, or a value whose shape it does not describe
+    /// -- does not hold, so the entry does not apply. It is still kept untouched
+    /// on write, exactly as another platform's 3.4 entry is
+    /// (docs/keyboard-mapping-files.md section 3.5).
+    var appliesToThisHost: Bool {
+        guard let whenValue = rawJSON["when"] else { return true }
+        // A `when` of any shape other than an object is one this client does not
+        // understand, so no predicate can be read to hold: the entry does not apply.
+        guard let when = whenValue as? [String: Any] else { return false }
+        for (predicate, value) in when {
+            switch predicate {
+            case "platform":
+                guard Self.platformPredicateHolds(value) else { return false }
+            default:
+                // An unknown predicate does not hold.
+                return false
+            }
+        }
+        return true
+    }
+
+    /// Whether a `when.platform` value -- a single name or an array of names --
+    /// names this host. A value of any other shape is one this client does not
+    /// describe and does not hold.
+    private static func platformPredicateHolds(_ value: Any) -> Bool {
+        if let name = value as? String {
+            return name == hostPlatform
+        }
+        if let names = value as? [String] {
+            return names.contains(hostPlatform)
+        }
+        return false
+    }
+
     /// The macOS resolver view of this entry, or nil if it does not apply to this
     /// host: a portable `code` entry whose code this host has, or a
-    /// `platform: macOS` native entry. Entries for other platforms, and codes
-    /// this host lacks, return nil (and are preserved untouched on disk).
+    /// `platform: macOS` native entry, whose `when` (if any) also holds here.
+    /// Entries for other platforms, codes this host lacks, and entries a `when`
+    /// excludes return nil (and are preserved untouched on disk).
     var macOS: MacOSKeySpec? {
+        guard appliesToThisHost else { return nil }
         if let code = code {
             guard let keyCode = W3CKeyCode.macKeyCode(forCode: code) else { return nil }
             return MacOSKeySpec(

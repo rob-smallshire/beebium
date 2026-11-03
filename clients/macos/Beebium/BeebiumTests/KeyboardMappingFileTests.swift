@@ -168,4 +168,97 @@ final class KeyboardMappingFileTests: XCTestCase {
         XCTAssertNotNil(file.entries.first?.macOS)
         XCTAssertNil(file2.entries.first?.macOS, "a code with no macOS key does not resolve here")
     }
+
+    // MARK: - Conditional entries: when (section 3.5)
+
+    private func entry(_ raw: [String: Any]) -> KeyMappingEntry {
+        let file = KeyboardMappingFile(json: [
+            "version": 2, "id": UUID().uuidString, "name": "T", "keys": [raw]
+        ])
+        return file.entries[0]
+    }
+
+    func testEntryWithoutWhenAppliesHere() {
+        let e = entry(["code": "KeyZ", "bbc": ["key": "Z"]])
+        XCTAssertTrue(e.appliesToThisHost)
+        XCTAssertNotNil(e.macOS, "an unconditional entry resolves on this host")
+    }
+
+    func testWhenPlatformListIncludingMacOSApplies() {
+        let e = entry(["code": "KeyZ", "when": ["platform": ["macOS", "linux"]],
+                       "bbc": ["key": "Z"]])
+        XCTAssertTrue(e.appliesToThisHost)
+        XCTAssertNotNil(e.macOS)
+    }
+
+    func testWhenPlatformSingleNameMacOSApplies() {
+        let e = entry(["code": "KeyZ", "when": ["platform": "macOS"],
+                       "bbc": ["key": "Z"]])
+        XCTAssertTrue(e.appliesToThisHost)
+    }
+
+    func testWhenPlatformOtherPlatformsSkippedHere() {
+        // The Logical Alt+F11 Shift Lock, which is for the platforms whose
+        // keyboards lack F13: invisible to the macOS resolver.
+        let e = entry(["code": "F11", "with": ["Alt"],
+                       "when": ["platform": ["linux", "windows"]],
+                       "bbc": ["key": "Shift Lock", "action": "Shift Lock"]])
+        XCTAssertFalse(e.appliesToThisHost)
+        XCTAssertNil(e.macOS, "an entry for other platforms does not resolve here")
+    }
+
+    func testWhenPlatformSingleOtherNameSkippedHere() {
+        let e = entry(["code": "KeyZ", "when": ["platform": "linux"],
+                       "bbc": ["key": "Z"]])
+        XCTAssertFalse(e.appliesToThisHost)
+    }
+
+    func testUnknownPredicateDoesNotHold() {
+        let e = entry(["code": "KeyZ", "when": ["x-later-predicate": "ISO"],
+                       "bbc": ["key": "Z"]])
+        XCTAssertFalse(e.appliesToThisHost, "an unknown predicate does not hold")
+        XCTAssertNil(e.macOS)
+    }
+
+    func testUnknownPlatformValueShapeDoesNotHold() {
+        let e = entry(["code": "KeyZ", "when": ["platform": 42],
+                       "bbc": ["key": "Z"]])
+        XCTAssertFalse(e.appliesToThisHost, "a value of an unknown shape does not hold")
+    }
+
+    func testEveryPredicateMustHold() {
+        // A known predicate holding does not outweigh an unknown one alongside it.
+        let e = entry(["code": "KeyZ",
+                       "when": ["platform": ["macOS"], "x-later-predicate": "ISO"],
+                       "bbc": ["key": "Z"]])
+        XCTAssertFalse(e.appliesToThisHost)
+    }
+
+    func testEmptyWhenHoldsEverywhere() {
+        let e = entry(["code": "KeyZ", "when": [:], "bbc": ["key": "Z"]])
+        XCTAssertTrue(e.appliesToThisHost, "an empty when imposes no predicate")
+        XCTAssertNotNil(e.macOS)
+    }
+
+    func testSkippedConditionalEntryRoundTripsThroughSave() {
+        let raw: [String: Any] = [
+            "code": "F11", "with": ["Alt"],
+            "when": ["platform": ["linux", "windows"]],
+            "bbc": ["key": "Shift Lock", "action": "Shift Lock"]
+        ]
+        let v2: [String: Any] = [
+            "version": 2, "id": UUID().uuidString, "name": "T",
+            "keys": [["code": "KeyZ", "bbc": ["key": "Z"]], raw]
+        ]
+        let file = KeyboardMappingFile(json: v2)
+        // It does not resolve here, yet it is written back verbatim.
+        XCTAssertFalse(file.entries[1].appliesToThisHost)
+        let keys = file.toJSON()["keys"] as? [[String: Any]]
+        XCTAssertEqual(keys?.count, 2)
+        let kept = keys?.first(where: { ($0["when"] as? [String: Any]) != nil })
+        let when = kept?["when"] as? [String: Any]
+        XCTAssertEqual(when?["platform"] as? [String], ["linux", "windows"],
+                       "a skipped conditional entry survives a save untouched")
+        XCTAssertEqual(kept?["with"] as? [String], ["Alt"])
+    }
 }
