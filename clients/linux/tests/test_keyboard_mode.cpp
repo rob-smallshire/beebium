@@ -110,6 +110,24 @@ TEST_CASE("Logical labels its five keys with no host namesake", "[keyboard][mode
                               QStringLiteral("Backspace = Delete")});
 }
 
+TEST_CASE("The labelled keys leave out entries that do not apply on Linux", "[keyboard][mode]") {
+    auto parsed = parse_mapping_file(R"({"version": 2, "id": "x", "name": "n", "keys": [
+        {"code": "F13", "bbc": {"key": "Shift Lock", "action": "Shift Lock"}},
+        {"code": "F11", "with": ["Alt"], "when": {"platform": ["linux", "windows"]},
+         "bbc": {"key": "Shift Lock", "action": "Shift Lock"}},
+        {"code": "F10", "with": ["Alt"], "when": {"platform": "macOS"},
+         "bbc": {"key": "f0", "action": "f0"}},
+        {"code": "F9", "when": {"keyboardLayout": "ISO"}, "bbc": {"key": "f9", "action": "f9"}}
+    ]})");
+    REQUIRE(std::holds_alternative<MappingFile>(parsed));
+    QStringList rows;
+    for (const auto& row : mapping_reference(std::get<MappingFile>(parsed))) {
+        rows << row.host_key + QStringLiteral(" = ") + row.action;
+    }
+    CHECK(rows == QStringList{QStringLiteral("F13 = Shift Lock"),
+                              QStringLiteral("Alt+F11 = Shift Lock")});
+}
+
 TEST_CASE("The labelled keys carry no prose, not even for a key most keyboards lack",
           "[keyboard][mode]") {
     QTemporaryDir directory;

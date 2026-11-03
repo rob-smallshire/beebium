@@ -168,7 +168,8 @@ bool KeyboardInput::takes(const QKeyEvent& event) const {
     if (host_key->modifiers & MODIFIER_ALT) {
         const bool bound_with_alt =
             std::any_of(mapping_.keys.begin(), mapping_.keys.end(), [&](const MappingEntry& e) {
-                return e.code && *e.code == host_key->code && (e.with & MODIFIER_ALT);
+                return e.applies && e.code && *e.code == host_key->code &&
+                       (e.with & MODIFIER_ALT);
             });
         if (!bound_with_alt) {
             return false;

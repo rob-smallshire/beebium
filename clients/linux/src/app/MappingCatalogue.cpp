@@ -161,7 +161,7 @@ QString host_key_label(const MappingEntry& entry) {
 std::vector<ReferenceRow> mapping_reference(const MappingFile& mapping) {
     std::vector<ReferenceRow> rows;
     for (const MappingEntry& entry : mapping.keys) {
-        if (!entry.action || entry.action->empty()) {
+        if (!entry.applies || !entry.action || entry.action->empty()) {
             continue;
         }
         const QString host = host_key_label(entry);

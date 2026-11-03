@@ -28,6 +28,39 @@ constexpr std::pair<std::string_view, HostModifiers> MODIFIER_NAMES[] = {
     {"Meta", MODIFIER_META},
 };
 
+// Whether a "when" predicate's value names Linux among the platforms (3.5):
+// a name, or an array of names; any other shape does not hold.
+bool platform_holds(const Json& value) {
+    if (value.is_string()) {
+        return value.get<std::string>() == "linux";
+    }
+    if (!value.is_array()) {
+        return false;
+    }
+    bool named = false;
+    for (const auto& name : value) {
+        if (!name.is_string()) {
+            return false;
+        }
+        named = named || name.get<std::string>() == "linux";
+    }
+    return named;
+}
+
+// Whether every predicate of an entry's "when" holds here (3.5). A predicate
+// this client does not know does not hold.
+bool when_holds(const Json& when) {
+    if (!when.is_object()) {
+        return false;
+    }
+    for (const auto& [name, value] : when.items()) {
+        if (name != "platform" || !platform_holds(value)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::optional<MappingEntry> parse_entry(const Json& source, std::string& error) {
     if (!source.is_object()) {
         error = "an entry is not an object";
@@ -35,6 +68,10 @@ std::optional<MappingEntry> parse_entry(const Json& source, std::string& error) 
     }
     MappingEntry entry;
     entry.source = source;
+    if (source.contains("when") && !when_holds(source["when"])) {
+        entry.applies = false;
+        return entry;
+    }
 
     const bool has_code = source.contains("code");
     const bool has_platform = source.contains("platform");
@@ -105,6 +142,9 @@ std::optional<MappingEntry> parse_entry(const Json& source, std::string& error) 
 }
 
 Json write_entry(const MappingEntry& entry) {
+    if (!entry.applies) {
+        return entry.source;
+    }
     Json out = entry.source.is_object() ? entry.source : Json::object();
     if (entry.code) {
         out["code"] = *entry.code;

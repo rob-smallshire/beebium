@@ -44,6 +44,11 @@ HostModifiers modifier_for_code(std::string_view code);
 using Json = nlohmann::ordered_json;
 
 struct MappingEntry {
+    // Whether the entry's "when" holds on Linux (section 3.5). One that does
+    // not is kept as read, for writing back, and nothing else of it is read:
+    // resolution and the keyboard view see only the entries that apply.
+    bool applies = true;
+
     // Exactly one of code (portable) and platform (section 3.4).
     std::optional<std::string> code;
     std::optional<std::string> platform;
@@ -82,7 +87,8 @@ using MappingFileResult = std::variant<MappingFile, MappingFileError>;
 // Read a mapping file. Refuses a version other than 2 (a version 1 file is
 // reported as such, for conversion), a malformed entry, an unknown host
 // modifier, and an entry carrying both a code and a platform, or a "linux"
-// platform entry for a key that has a code (section 3.4).
+// platform entry for a key that has a code (section 3.4). An entry whose
+// "when" does not hold on Linux is not checked: it is not this client's.
 MappingFileResult parse_mapping_file(std::string_view json_text);
 
 // Write a mapping file as version 2: the known fields from `file`, every
