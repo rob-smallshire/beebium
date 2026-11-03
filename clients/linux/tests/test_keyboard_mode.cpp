@@ -175,6 +175,34 @@ TEST_CASE("The mappings are a plain list, the active one its selected row", "[ke
           palette.color(QPalette::Active, QPalette::HighlightedText));
 }
 
+TEST_CASE("The mappings list has no frame and is as tall as its rows, like the labelled keys",
+          "[keyboard][mode]") {
+    QTemporaryDir directory;
+    QByteArray mine = corpus("Thrust.json");
+    mine.replace("\"Thrust\"", "\"My Thrust\"");
+    write(directory.filePath(QStringLiteral("mine.json")), mine);
+    KeyboardSidebar sidebar(directory.path());
+    sidebar.set_active(QString::fromStdString(built_in_mapping(QStringLiteral("Logical"))->id));
+    sidebar.resize(300, 900);
+    sidebar.show();
+    QListWidget* list = sidebar.chooser();
+    // A plain list on the mode's background, as the table at the foot is.
+    CHECK(list->frameShape() == QFrame::NoFrame);
+    CHECK(list->frameWidth() == 0);
+    CHECK_FALSE(list->viewport()->autoFillBackground());
+    CHECK(list->verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff);
+    CHECK(list->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff);
+    // Every row shows, the divider's included, with no empty space below.
+    int rows_height = 0;
+    for (int i = 0; i < list->count(); ++i) {
+        const QRect rect = list->visualItemRect(list->item(i));
+        CHECK(rect.top() >= 0);
+        CHECK(rect.bottom() < list->viewport()->height());
+        rows_height += rect.height();
+    }
+    CHECK(list->height() == rows_height);
+}
+
 TEST_CASE("The user's mappings follow the built-ins after a divider with no text",
           "[keyboard][mode]") {
     QTemporaryDir directory;

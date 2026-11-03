@@ -26,6 +26,7 @@ namespace beebium::linux_client {
 namespace {
 
 constexpr int CHOICE_ROLE = Qt::UserRole;
+constexpr int DIVIDER_HEIGHT = 9;
 
 }  // namespace
 
@@ -39,6 +40,12 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     list_->setObjectName(QStringLiteral("mappings"));
     list_->setFocusPolicy(Qt::NoFocus);  // the keys stay the machine's
     list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    // A plain list on the mode's background, as tall as its rows, as the
+    // labelled keys are: no frame, and no scrolling past empty space.
+    list_->setFrameShape(QFrame::NoFrame);
+    list_->viewport()->setAutoFillBackground(false);
+    list_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     // The selected row is the active mapping, so it shows whether or not the
     // window has the focus: some palettes draw an inactive selection in the
     // base colour.
@@ -124,8 +131,11 @@ void KeyboardSidebar::rebuild() {
         if (!choice.built_in && !divided) {
             auto* divider = new QListWidgetItem(list_);
             divider->setFlags(Qt::NoItemFlags);
-            divider->setSizeHint(QSize(0, 9));
+            divider->setSizeHint(QSize(0, DIVIDER_HEIGHT));
             auto* line = new QFrame(list_);
+            // Its own height counts towards the row's until the list lays it
+            // out, so it is the row's from the start.
+            line->setFixedHeight(DIVIDER_HEIGHT);
             line->setFrameShape(QFrame::HLine);
             line->setFrameShadow(QFrame::Sunken);
             list_->setItemWidget(divider, line);
@@ -143,6 +153,8 @@ void KeyboardSidebar::rebuild() {
     }
     show_reference();
     fit_to_rows(list_);
+    // Every mapping shows: the list is never squeezed into scrolling.
+    list_->setFixedHeight(list_->maximumHeight());
 }
 
 void KeyboardSidebar::fit_to_rows(QAbstractItemView* view) {
