@@ -193,6 +193,27 @@ takes focus; Ctrl+Tab and Ctrl+Shift+Tab, which the built-in mappings leave
 alone, move focus out of it; F11, Alt with a menu letter and the mouse always
 reach the application.
 
+Application shortcuts (Rob, 2026-11-03). The BBC Micro has CTRL and SHIFT but
+no Alt and no Meta, and the client cannot hide a key from the machine, so
+every machine-window shortcut carries Alt or Meta; none is on Ctrl or Shift
+alone (Ctrl+V is VDU 22, Ctrl+S, W and Q are VDU 19, 23 and 17). Meta, the
+Super key that the Raspberry Pi 400 prints with a raspberry and other
+keyboards with a Windows logo, plays the role Command plays on macOS. Each
+action carries two bindings, a Meta form and a Ctrl+Alt form (Meta+K and
+Ctrl+Alt+K for Switch to Previous Keyboard Mapping, Meta+digit and
+Ctrl+Alt+digit for the sidebar modes); Qt shows only the first in a menu, so
+the client orders them by session: Meta first on the Raspberry Pi Desktop
+(DESKTOP_SESSION or XDG_SESSION_DESKTOP begins "rpd-"), where Meta is free
+apart from labwc's own handful, and Ctrl+Alt first elsewhere, since KDE and
+GNOME take Meta+digit, Meta+V and Meta+W for themselves. Menus never show
+both; the modifier is named as Qt prints it ("Meta"), not "Raspberry" or
+"Win", because a Pi is as likely to have an ordinary keyboard. The display
+keeps for the window any non-modifier key pressed with Alt or Meta that the
+active mapping does not itself bind with Alt or Meta (Alt+F12 Break and
+Alt+F11 Shift Lock stay the machine's), releasing the CTRL or SHIFT the
+machine received on the way down. The home window has no machine, so it
+keeps the desktop's Ctrl+N, Ctrl+O, Ctrl+Q with the Meta forms beside them.
+
 Mapping files. The macOS mapping JSON already keeps per-platform sections and
 preserves the ones it does not understand (`"macOS": {"keyCode": 6}`). The
 minimal Linux addition is a `"linux": {"evdev": 44}` section. A better

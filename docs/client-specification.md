@@ -1185,6 +1185,11 @@ Conformance:
   apply whenever the display does not have focus. (Rob, 2026-11-01. macOS is
   not affected in practice because its shortcuts use Command, which no mapping
   claims; Linux and Windows clients, whose conventions use Ctrl, are.)
+  Refinement (Rob, 2026-11-03): a client on such a platform puts its
+  machine-window shortcuts on modifiers the BBC Micro lacks, Alt or Meta,
+  never on Ctrl or Shift alone, so that they work with the display focused,
+  as Command shortcuts do on macOS; the Linux client's scheme is in
+  `docs/discussion/linux-client-architecture.md`.
 - LATITUDE: a two-stage resolver (direct scancode map then character map);
   whether the canonical table is cached; which keys outside the mapping the
   window keeps (F11, Alt mnemonics on Linux).
