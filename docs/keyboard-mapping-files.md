@@ -148,7 +148,8 @@ predicates; the entry applies only where every predicate holds. An entry
 without `when` applies everywhere.
 
 ```json
-{ "code": "F13", "bbc": { "key": "Shift Lock", "action": "Shift Lock" } },
+{ "code": "F13", "when": { "platform": "macOS" },
+                 "bbc": { "key": "Shift Lock", "action": "Shift Lock" } },
 { "code": "F11", "with": ["Alt"], "when": { "platform": ["linux", "windows"] },
                  "bbc": { "key": "Shift Lock", "action": "Shift Lock" } }
 ```
@@ -169,9 +170,9 @@ clients as entries they skip, never as a parse error or a wrong key.
 Everything a client does with a mapping sees only the entries that apply:
 resolution (section 4), the keyboard view's labelled keys (client
 specification 7.4), and any editing. The example above is Logical's Shift
-Lock: on F13 everywhere, and also on Alt+F11 on the platforms whose
-keyboards mostly lack F13, without a second Shift Lock row in the macOS
-keyboard view or an Option+F11 there.
+Lock: on F13 on macOS, and on Alt+F11 on the platforms whose keyboards
+mostly lack F13, so each platform's keyboard view shows one Shift Lock row
+and the key its users have.
 
 `when` is a condition on an entry; the `platform` field of a 3.4 entry is
 not, it names the namespace of the entry's native identifier. A 3.4 entry
@@ -241,10 +242,10 @@ Break is on Alt+F12 (Option+F12 on macOS) in every built-in: F11 is the BBC
 Copy key in the Logical mapping and is the desktop full-screen key under the
 KDE conventions the Linux client follows, so it is not Break anywhere.
 
-Shift Lock is on F13 in Logical, and also on Alt+F11 (3.5) on Linux and
-Windows, whose keyboards mostly have no F13; Alt+F11 is beside Break and is
-not a desktop binding under labwc, KDE or GNOME. The macOS client keeps F13
-alone.
+Shift Lock is on F13 on macOS and on Alt+F11 on Linux and Windows (3.5),
+whose keyboards mostly have no F13; Alt+F11 is beside Break and is not a
+desktop binding under labwc, KDE or GNOME. One entry per platform, so each
+keyboard view shows Shift Lock once.
 
 Logical carries an `action` label (3.3) on the BBC keys that have no host
 namesake - f0, Break, Copy, Shift Lock and Delete - so a client's keyboard view
