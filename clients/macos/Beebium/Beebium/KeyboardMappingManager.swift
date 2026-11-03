@@ -313,6 +313,14 @@ final class KeyboardMappingManager: ObservableObject {
         if activeMapping?.id == mapping.id {
             activeMapping = mappings.first
         }
+
+        // Drop the deleted mapping if it was the toggle's recorded "previous" --
+        // including the case where the switch just above recorded it as previous
+        // -- so Edit > Switch to Previous Keyboard Mapping reverts to its disabled
+        // state rather than pointing at a mapping that no longer exists (#260).
+        if previousMapping?.id == mapping.id {
+            previousMapping = nil
+        }
     }
 
     /// Get the file URL for a user-defined mapping (for Reveal in Finder)
