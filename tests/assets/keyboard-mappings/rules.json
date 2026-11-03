@@ -1,5 +1,5 @@
 {
-  "description": "Conformance cases, each with a stable id for reference across clients, for docs/keyboard-mapping-files.md section 4 (resolution), 3.3 (key names) and 3.4 (platform entries). Every client loads this file, resolves each case's event against the named mapping and the catalogue, and must get the expected result. Event fields: code (W3C), modifiers (host modifiers held, besides the key itself: Shift, Control, Alt, Meta), text (the character the host layout gives with those modifiers, ignoring Control), platform and native (for platform entries; a client runs a case with a platform only if it is its own). Expected: a BBC key by catalogue name and internal key number, with the BBC SHIFT and CTRL the entry or catalogue asks for; or break; or ignored. shift false from character mapping means the BBC SHIFT must be up for that key. A case's mapping is a key of `mappings`, or a file name in this directory (the built-ins).",
+  "description": "Conformance cases, each with a stable id for reference across clients, for docs/keyboard-mapping-files.md section 4 (resolution), 3.3 (key names), 3.4 (platform entries) and 3.5 (conditional entries). Every client loads this file, resolves each case's event against the named mapping and the catalogue, and must get the expected result. Event fields: code (W3C), modifiers (host modifiers held, besides the key itself: Shift, Control, Alt, Meta), text (the character the host layout gives with those modifiers, ignoring Control), platform and native (for platform entries; a client runs a case with a platform only if it is its own). A case with a platform and a code, but no native, exercises a 3.5 condition on the platform: it too is run only by that platform's clients. Expected: a BBC key by catalogue name and internal key number, with the BBC SHIFT and CTRL the entry or catalogue asks for; or break; or ignored. shift false from character mapping means the BBC SHIFT must be up for that key. A case's mapping is a key of `mappings`, or a file name in this directory (the built-ins).",
   "catalogue": {
     "description": "A slice of the server's character-to-key catalogue (KeyboardService.GetAllKeyMappings, src/core/src/KeyboardMapping.cpp): only the rows these cases use.",
     "entries": [
@@ -404,6 +404,81 @@
           "code": "Space",
           "bbc": {
             "key": "Space"
+          }
+        }
+      ]
+    },
+    "conditional": {
+      "version": 2,
+      "id": "3e8a1f42-7c6d-4b2e-9a15-d0c4b8e7f6a3",
+      "name": "Conditional entries",
+      "characterMapping": false,
+      "synchronizeCapsLock": false,
+      "keys": [
+        {
+          "code": "KeyQ",
+          "when": {
+            "platform": [
+              "linux",
+              "windows"
+            ]
+          },
+          "bbc": {
+            "key": "f0"
+          }
+        },
+        {
+          "code": "KeyQ",
+          "bbc": {
+            "key": "f1"
+          }
+        },
+        {
+          "code": "KeyW",
+          "when": {
+            "platform": "linux"
+          },
+          "bbc": {
+            "key": "f2"
+          }
+        },
+        {
+          "code": "KeyE",
+          "when": {
+            "x-later-predicate": "ISO"
+          },
+          "bbc": {
+            "key": "f3"
+          }
+        },
+        {
+          "code": "KeyR",
+          "when": {
+            "platform": 42
+          },
+          "bbc": {
+            "key": "f3"
+          }
+        },
+        {
+          "code": "KeyT",
+          "when": {
+            "platform": [
+              "linux",
+              "macOS",
+              "windows"
+            ],
+            "x-later-predicate": "ISO"
+          },
+          "bbc": {
+            "key": "f3"
+          }
+        },
+        {
+          "code": "KeyY",
+          "when": {},
+          "bbc": {
+            "key": "f3"
           }
         }
       ]
@@ -964,6 +1039,137 @@
       "expect": {
         "key": "@",
         "ik": 71,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "id": "R38",
+      "name": "3.5: an entry for linux and windows applies on Linux, ahead of the unconditional one",
+      "mapping": "conditional",
+      "event": {
+        "platform": "linux",
+        "code": "KeyQ"
+      },
+      "expect": {
+        "key": "f0",
+        "ik": 32,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "id": "R39",
+      "name": "3.5: an entry for linux and windows applies on Windows",
+      "mapping": "conditional",
+      "event": {
+        "platform": "windows",
+        "code": "KeyQ"
+      },
+      "expect": {
+        "key": "f0",
+        "ik": 32,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "id": "R40",
+      "name": "3.5: an entry for linux and windows does not apply on macOS: the unconditional one does",
+      "mapping": "conditional",
+      "event": {
+        "platform": "macOS",
+        "code": "KeyQ"
+      },
+      "expect": {
+        "key": "f1",
+        "ik": 113,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "id": "R41",
+      "name": "3.5: a single platform name as the value applies on that platform",
+      "mapping": "conditional",
+      "event": {
+        "platform": "linux",
+        "code": "KeyW"
+      },
+      "expect": {
+        "key": "f2",
+        "ik": 114,
+        "shift": false,
+        "ctrl": false
+      }
+    },
+    {
+      "id": "R42",
+      "name": "3.5: a single platform name does not apply on another platform (macOS)",
+      "mapping": "conditional",
+      "event": {
+        "platform": "macOS",
+        "code": "KeyW"
+      },
+      "expect": {
+        "ignored": true
+      }
+    },
+    {
+      "id": "R43",
+      "name": "3.5: a single platform name does not apply on another platform (Windows)",
+      "mapping": "conditional",
+      "event": {
+        "platform": "windows",
+        "code": "KeyW"
+      },
+      "expect": {
+        "ignored": true
+      }
+    },
+    {
+      "id": "R44",
+      "name": "3.5: an unknown predicate does not hold, on every platform",
+      "mapping": "conditional",
+      "event": {
+        "code": "KeyE"
+      },
+      "expect": {
+        "ignored": true
+      }
+    },
+    {
+      "id": "R45",
+      "name": "3.5: a platform value of an unknown shape does not hold, on every platform",
+      "mapping": "conditional",
+      "event": {
+        "code": "KeyR"
+      },
+      "expect": {
+        "ignored": true
+      }
+    },
+    {
+      "id": "R46",
+      "name": "3.5: every predicate must hold: a known one holding does not outweigh an unknown one",
+      "mapping": "conditional",
+      "event": {
+        "code": "KeyT"
+      },
+      "expect": {
+        "ignored": true
+      }
+    },
+    {
+      "id": "R47",
+      "name": "3.5: an empty when holds everywhere",
+      "mapping": "conditional",
+      "event": {
+        "code": "KeyY"
+      },
+      "expect": {
+        "key": "f3",
+        "ik": 115,
         "shift": false,
         "ctrl": false
       }
