@@ -137,8 +137,9 @@ TEST_CASE("Show Beebium is reachable while immersive, its menu bar hidden",
     live.immersive()->trigger();
     REQUIRE(live.window.presentation() == Presentation::immersive);
     QAction* home = view_action(live.window, QStringLiteral("Show Beebium"));
-    REQUIRE(home);  // on the window, so its Ctrl+Shift+H works with the menus hidden
-    CHECK(home->shortcut() == QKeySequence(QStringLiteral("Ctrl+Shift+H")));
+    REQUIRE(home);  // on the window, so its shortcuts work with the menus hidden
+    CHECK(home->shortcuts().contains(QKeySequence(QStringLiteral("Meta+Shift+H"))));
+    CHECK(home->shortcuts().contains(QKeySequence(QStringLiteral("Ctrl+Alt+H"))));
     CHECK(home->shortcutContext() == Qt::WindowShortcut);
     int requested = 0;
     QObject::connect(&live.window, &MainWindow::home_requested, [&] { ++requested; });

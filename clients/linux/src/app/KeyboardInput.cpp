@@ -151,10 +151,23 @@ HostModifiers KeyboardInput::held_modifiers() const {
     return held;
 }
 
+namespace {
+
+constexpr HostModifiers NOT_THE_MACHINES = MODIFIER_ALT | MODIFIER_META;
+
+bool bound_with_alt_or_meta(const MappingFile& mapping, const std::string& code) {
+    return std::any_of(mapping.keys.begin(), mapping.keys.end(), [&](const MappingEntry& e) {
+        return e.applies && e.code && *e.code == code && (e.with & NOT_THE_MACHINES);
+    });
+}
+
+}  // namespace
+
 bool KeyboardInput::window_chord(const QKeyEvent& event) const {
     const auto host_key = host_key_from_event(event, held_modifiers());
-    return host_key && host_key->code == "KeyH" &&
-           host_key->modifiers == (MODIFIER_CONTROL | MODIFIER_SHIFT);
+    return host_key && (host_key->modifiers & NOT_THE_MACHINES) &&
+           modifier_for_code(host_key->code) == 0 &&
+           !bound_with_alt_or_meta(mapping_, host_key->code);
 }
 
 bool KeyboardInput::takes(const QKeyEvent& event) const {
@@ -165,15 +178,9 @@ bool KeyboardInput::takes(const QKeyEvent& event) const {
     if (!host_key) {
         return false;
     }
-    if (host_key->modifiers & MODIFIER_ALT) {
-        const bool bound_with_alt =
-            std::any_of(mapping_.keys.begin(), mapping_.keys.end(), [&](const MappingEntry& e) {
-                return e.applies && e.code && *e.code == host_key->code &&
-                       (e.with & MODIFIER_ALT);
-            });
-        if (!bound_with_alt) {
-            return false;
-        }
+    if ((host_key->modifiers & NOT_THE_MACHINES) &&
+        !bound_with_alt_or_meta(mapping_, host_key->code)) {
+        return false;
     }
     if (host_key->code == "CapsLock" && caps_lock_sync_enabled()) {
         return true;

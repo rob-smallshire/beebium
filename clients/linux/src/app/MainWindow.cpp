@@ -24,6 +24,7 @@
 #include "app/KeyboardSidebar.hpp"
 #include "app/PictureDrop.hpp"
 #include "app/IndicatorStrip.hpp"
+#include "app/Shortcuts.hpp"
 #include "app/Sidebar.hpp"
 #include "app/SoundSidebar.hpp"
 #include "app/StorageSidebar.hpp"
@@ -384,18 +385,22 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
 }
 
 void MainWindow::build_menus() {
-    // Client specification 13.2, as a KDE-style menu bar with Ctrl
-    // shortcuts. While the display has focus a key the machine takes goes to
-    // the machine first (DisplayWidget::event), so these shortcuts apply
-    // when it does not; F11 is always the window's.
+    // Client specification 13.2, as a KDE-style menu bar. The BBC Micro has
+    // Ctrl and Shift but no Alt or Meta, so every shortcut here carries one
+    // of those and none is the machine's typing: each answers to a Meta form,
+    // Meta playing the part of the macOS client's Command, and a Ctrl+Alt
+    // form, ordered for the session (Shortcuts.hpp). F11 is always the
+    // window's.
     // File, Edit, View, Window and Help, as the macOS client's (13.2); the
     // application's own commands are the home window's (13.4).
     QMenu* file = menuBar()->addMenu(tr("&File"));
     QAction* save_action = file->addAction(tr("&Save"));
-    save_action->setShortcut(QKeySequence::Save);
+    set_session_shortcuts(save_action, QKeySequence(QStringLiteral("Meta+S")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+S")));
     connect(save_action, &QAction::triggered, this, [this] { save(); });
     QAction* save_as_action = file->addAction(tr("Save &As..."));
-    save_as_action->setShortcut(QKeySequence::SaveAs);
+    set_session_shortcuts(save_as_action, QKeySequence(QStringLiteral("Meta+Shift+S")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+Shift+S")));
     connect(save_as_action, &QAction::triggered, this, [this] { save_as(); });
     QAction* rename_action = file->addAction(tr("&Rename Machine..."));
     connect(rename_action, &QAction::triggered, this, &MainWindow::rename);
@@ -414,20 +419,22 @@ void MainWindow::build_menus() {
     connect(session_, &MachineSession::system_info_refreshed, this, enable_saving);
     file->addSeparator();
     QAction* close_action = file->addAction(tr("C&lose Window"));
-    close_action->setShortcut(QKeySequence::Close);
+    set_session_shortcuts(close_action, QKeySequence(QStringLiteral("Meta+W")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+W")));
     connect(close_action, &QAction::triggered, this, &QWidget::close);
     QAction* quit_action = file->addAction(tr("&Quit"));
-    quit_action->setShortcut(QKeySequence::Quit);
+    set_session_shortcuts(quit_action, QKeySequence(QStringLiteral("Meta+Q")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+Q")));
     quit_action->setMenuRole(QAction::QuitRole);
     connect(quit_action, &QAction::triggered, this, &MainWindow::quit_requested);
 
-    // Edit > Paste types the clipboard into the machine (7.5): Ctrl+Shift+V,
-    // the terminals' convention, since Ctrl+V is the machine's while the
-    // display has the keys.
+    // Edit > Paste types the clipboard into the machine (7.5). Ctrl+V is the
+    // machine's (VDU 22), so Paste is Meta+V or Ctrl+Alt+V.
     QMenu* edit = menuBar()->addMenu(tr("&Edit"));
     QAction* paste_action = edit->addAction(QIcon::fromTheme(QStringLiteral("edit-paste")),
                                             tr("&Paste"));
-    paste_action->setShortcut(QKeySequence(tr("Ctrl+Shift+V")));
+    set_session_shortcuts(paste_action, QKeySequence(QStringLiteral("Meta+V")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+V")));
     paste_action->setToolTip(tr("Type the clipboard's text into the machine"));
     paste_action->setEnabled(false);
     connect(paste_action, &QAction::triggered, this, &MainWindow::paste);
@@ -445,8 +452,9 @@ void MainWindow::build_menus() {
     QMenu* view = menuBar()->addMenu(tr("&View"));
     status_bar_action_ = view->addAction(tr("Show &Status Bar"));
     status_bar_action_->setCheckable(true);
-    // Ctrl+/ as the macOS client's Command-/.
-    status_bar_action_->setShortcut(QKeySequence(tr("Ctrl+/")));
+    // As the macOS client's Command-/.
+    set_session_shortcuts(status_bar_action_, QKeySequence(QStringLiteral("Meta+/")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+/")));
     const bool show_status_bar =
         settings_ ? settings_->store().value(QStringLiteral("view/statusBar"), true).toBool() : true;
     status_bar_action_->setChecked(show_status_bar);
@@ -462,10 +470,14 @@ void MainWindow::build_menus() {
         apply_presentation();
     });
     // The sidebar and its modes, as the macOS client's View menu has them:
-    // Control-Command-S is Ctrl+Alt+S, Command-digit Ctrl+digit.
+    // Command-digit is Meta+digit or Ctrl+Alt+digit, the mode's fixed
+    // number. Control-Command-S is Meta+Alt+S; its Ctrl+Alt form cannot be
+    // Ctrl+Alt+S, which is Save's, so it is Ctrl+Alt+0, the sidebar itself
+    // beside its numbered modes.
     sidebar_action_ = view->addAction(tr("Show S&idebar"));
     sidebar_action_->setCheckable(true);
-    sidebar_action_->setShortcut(QKeySequence(tr("Ctrl+Alt+S")));
+    set_session_shortcuts(sidebar_action_, QKeySequence(QStringLiteral("Meta+Alt+S")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+0")));
     sidebar_action_->setChecked(
         settings_ ? settings_->store().value(QStringLiteral("view/sidebar"), true).toBool() : true);
     connect(sidebar_action_, &QAction::toggled, this, [this](bool shown) {
@@ -481,8 +493,9 @@ void MainWindow::build_menus() {
     std::vector<QAction*> window_actions{status_bar_action_, sidebar_action_};
     for (SidebarMode mode : offered_sidebar_modes()) {
         QAction* mode_action = view->addAction(sidebar_mode_icon(mode), sidebar_mode_label(mode));
-        mode_action->setShortcut(QKeySequence(
-            QStringLiteral("Ctrl+%1").arg(static_cast<int>(mode))));
+        const int number = static_cast<int>(mode);
+        set_session_shortcuts(mode_action, QKeySequence(QStringLiteral("Meta+%1").arg(number)),
+                              QKeySequence(QStringLiteral("Ctrl+Alt+%1").arg(number)));
         // Shows that mode; pressed again with it showing, hides the sidebar.
         connect(mode_action, &QAction::triggered, this, [this, mode] {
             const bool immersive = presentation_ == Presentation::immersive;
@@ -504,12 +517,11 @@ void MainWindow::build_menus() {
         window_actions.push_back(mode_action);
     }
     view->addSeparator();
-    // Immersive as the macOS client has it, Ctrl+Shift+F for its
-    // Command-Shift-F; Shift+F11 too, since F11 with any modifier always
-    // reaches Beebium, the display's keys or not (7.1).
+    // Immersive as the macOS client has it, Meta+Shift+F for its
+    // Command-Shift-F.
     immersive_action_ = view->addAction(tr("Enter &Immersive Mode"));
-    immersive_action_->setShortcuts({QKeySequence(tr("Ctrl+Shift+F")),
-                                     QKeySequence(Qt::SHIFT | Qt::Key_F11)});
+    set_session_shortcuts(immersive_action_, QKeySequence(QStringLiteral("Meta+Shift+F")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+F")));
     update_immersive_enabled();
     connect(session_, &MachineSession::connected_to_server, this,
             &MainWindow::update_immersive_enabled);
@@ -534,13 +546,15 @@ void MainWindow::build_menus() {
     // forward to start, open or connect to another machine.
     QMenu* window = menuBar()->addMenu(tr("&Window"));
     QAction* minimize_action = window->addAction(tr("&Minimize"));
-    minimize_action->setShortcut(QKeySequence(tr("Ctrl+M")));
+    set_session_shortcuts(minimize_action, QKeySequence(QStringLiteral("Meta+M")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+M")));
     connect(minimize_action, &QAction::triggered, this, &QWidget::showMinimized);
     window->addSeparator();
     QAction* home_action = window->addAction(tr("Show &Beebium"));
     home_action->setToolTip(tr("Bring the Beebium window forward, to start, open or connect to "
                                "another machine"));
-    home_action->setShortcut(QKeySequence(tr("Ctrl+Shift+H")));
+    set_session_shortcuts(home_action, QKeySequence(QStringLiteral("Meta+Shift+H")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+H")));
     connect(home_action, &QAction::triggered, this, &MainWindow::home_requested);
     // On the window too: the menu bar is hidden while immersive (6.4).
     home_action->setShortcutContext(Qt::WindowShortcut);

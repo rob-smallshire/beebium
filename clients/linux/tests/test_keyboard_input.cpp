@@ -34,6 +34,7 @@ constexpr quint32 XKB_F12 = 88 + 8;
 constexpr quint32 XKB_CAPS_LOCK = 58 + 8;
 constexpr quint32 XKB_H = 35 + 8;
 constexpr quint32 XKB_LEFT_CONTROL = 29 + 8;
+constexpr quint32 XKB_LEFT_META = 125 + 8;
 
 QKeyEvent press(int key, quint32 scan_code, const QString& text = {},
                 Qt::KeyboardModifiers modifiers = Qt::NoModifier, bool auto_repeat = false) {
@@ -120,23 +121,24 @@ TEST_CASE("Host modifiers come from the keys tracked as down, not the event's fl
     CHECK(wire.events.empty());
 }
 
-TEST_CASE("Ctrl+Shift+H is the window's, and the machine is left holding nothing",
+TEST_CASE("A Ctrl+Alt chord is the window's, and the machine is left holding nothing",
           "[keyboard][qt]") {
     Wire wire;
     KeyboardInput input;
     input.attach(sample_key_table(), wire.sender());
-    // CTRL and SHIFT reach the machine as they go down, before the H that
-    // makes them a chord.
+    // CTRL reaches the machine as it goes down, before the Alt and the H
+    // that make it a chord.
     input.key_press(press(Qt::Key_Control, XKB_LEFT_CONTROL));
-    input.key_press(press(Qt::Key_Shift, XKB_LEFT_SHIFT));
+    input.key_press(press(Qt::Key_Alt, XKB_LEFT_ALT));
     REQUIRE_FALSE(input.held_keys().empty());
-    const QKeyEvent h = press(Qt::Key_H, XKB_H, {}, Qt::ControlModifier | Qt::ShiftModifier);
+    const QKeyEvent h = press(Qt::Key_H, XKB_H, QStringLiteral("h"),
+                              Qt::ControlModifier | Qt::AltModifier);
     CHECK(input.window_chord(h));
     CHECK_FALSE(input.takes(h));
     wire.events.clear();
     CHECK_FALSE(input.key_press(h));
     CHECK(wire.events.empty());  // no H for the machine
-    // Given to the window: CTRL and SHIFT come up at once.
+    // Given to the window: CTRL comes up at once.
     input.yield_to_window();
     CHECK(input.held_keys().empty());
     CHECK_FALSE(wire.events.empty());
@@ -144,19 +146,52 @@ TEST_CASE("Ctrl+Shift+H is the window's, and the machine is left holding nothing
     CHECK(input.window_chord(h));
     // And their own key-ups later send nothing more.
     wire.events.clear();
-    input.key_release(release(Qt::Key_Shift, XKB_LEFT_SHIFT));
+    input.key_release(release(Qt::Key_Alt, XKB_LEFT_ALT));
     input.key_release(release(Qt::Key_Control, XKB_LEFT_CONTROL));
     CHECK(wire.events.empty());
 }
 
-TEST_CASE("Ctrl+H alone and Shift+H alone are still the machine's", "[keyboard][qt]") {
+TEST_CASE("A Meta chord is the window's: the machine has no Meta key", "[keyboard][qt]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    input.key_press(press(Qt::Key_Meta, XKB_LEFT_META));
+    CHECK(wire.events.empty());
+    for (const auto modifiers : {Qt::KeyboardModifiers(Qt::MetaModifier),
+                                 Qt::MetaModifier | Qt::ShiftModifier}) {
+        const QKeyEvent h = press(Qt::Key_H, XKB_H, QStringLiteral("h"), modifiers);
+        CHECK(input.window_chord(h));
+        CHECK_FALSE(input.takes(h));
+        CHECK_FALSE(input.key_press(h));
+    }
+    CHECK(wire.events.empty());
+}
+
+TEST_CASE("An Alt chord the mapping binds stays the machine's", "[keyboard][qt]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    // Alt+F12 is Break under Logical.
+    input.key_press(press(Qt::Key_Alt, XKB_LEFT_ALT));
+    const QKeyEvent f12 = press(Qt::Key_F12, XKB_F12, {}, Qt::AltModifier);
+    CHECK_FALSE(input.window_chord(f12));
+    CHECK(input.takes(f12));
+}
+
+TEST_CASE("Ctrl and Shift chords without Alt or Meta are the machine's", "[keyboard][qt]") {
     Wire wire;
     KeyboardInput input;
     input.attach(sample_key_table(), wire.sender());
     input.key_press(press(Qt::Key_Control, XKB_LEFT_CONTROL));
-    const QKeyEvent ctrl_h = press(Qt::Key_H, XKB_H, {}, Qt::ControlModifier);
+    const QKeyEvent ctrl_h = press(Qt::Key_H, XKB_H, QStringLiteral("h"), Qt::ControlModifier);
     CHECK_FALSE(input.window_chord(ctrl_h));
     CHECK(input.takes(ctrl_h));
+    // Ctrl+Shift+H, once Show Beebium's, is typing now.
+    input.key_press(press(Qt::Key_Shift, XKB_LEFT_SHIFT));
+    const QKeyEvent ctrl_shift_h = press(Qt::Key_H, XKB_H, QStringLiteral("H"),
+                                         Qt::ControlModifier | Qt::ShiftModifier);
+    CHECK_FALSE(input.window_chord(ctrl_shift_h));
+    CHECK(input.takes(ctrl_shift_h));
 }
 
 TEST_CASE("Only the user's own presses count as reaching for the machine", "[keyboard][qt]") {

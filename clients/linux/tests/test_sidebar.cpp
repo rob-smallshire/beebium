@@ -190,10 +190,12 @@ TEST_CASE("A machine window shows the sidebar beside the picture, and Sound togg
     CHECK(live.window.sidebar().mode() == SidebarMode::storage);
     QAction* storage = action_named(live.window, QStringLiteral("Storage"));
     REQUIRE(storage);
-    CHECK(storage->shortcut() == QKeySequence(QStringLiteral("Ctrl+1")));
+    CHECK(storage->shortcuts().contains(QKeySequence(QStringLiteral("Meta+1"))));
+    CHECK(storage->shortcuts().contains(QKeySequence(QStringLiteral("Ctrl+Alt+1"))));
     QAction* sound = action_named(live.window, QStringLiteral("Sound"));
     REQUIRE(sound);
-    CHECK(sound->shortcut() == QKeySequence(QStringLiteral("Ctrl+5")));
+    CHECK(sound->shortcuts().contains(QKeySequence(QStringLiteral("Meta+5"))));
+    CHECK(sound->shortcuts().contains(QKeySequence(QStringLiteral("Ctrl+Alt+5"))));
     // Pressed with another mode showing, it shows Sound; pressed with Sound
     // showing, it hides the sidebar; again, it shows it.
     sound->trigger();

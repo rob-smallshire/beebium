@@ -634,6 +634,8 @@ public:
     std::atomic<int> typing_watchers{0};
     // TypeQuickly reports the text as typed already: nothing pending.
     std::atomic<bool> typed_at_once{false};
+    std::mutex keys_mutex;
+    std::vector<std::uint32_t> keys_down;  // KeyDown key numbers, in order (keys_mutex)
 
     void push_typing(std::optional<beebium::TypingStatus> status) {
         {
@@ -652,6 +654,10 @@ public:
             entry->set_name(name);
         };
         add("a", 0x41, "a");
+        add("h", 0x54, "h");
+        add("k", 0x46, "k");
+        add("v", 0x63, "v");
+        add("/", 0x68, "/");
         add("", 0x40, "Caps Lock");
         add("", 0x50, "Shift Lock");
         return grpc::Status::OK;
@@ -667,6 +673,10 @@ public:
 
     grpc::Status KeyDown(grpc::ServerContext*, const beebium::KeyRequest* request,
                          beebium::KeyResponse*) override {
+        {
+            std::lock_guard lock(keys_mutex);
+            keys_down.push_back(request->ik_number());
+        }
         if (request->ik_number() == 0x40) {
             ++caps_taps;
             caps_lock_on = !caps_lock_on;

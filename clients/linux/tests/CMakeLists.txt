@@ -153,6 +153,10 @@ beebium_linux_add_test(test_shortcuts QT
     SOURCES test_shortcuts.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_window_shortcuts QT
+    SOURCES test_window_shortcuts.cpp
+    LIBRARIES beebium_linux_app Qt6::GuiPrivate)
+
 beebium_linux_add_test(test_graphics_api
     SOURCES test_graphics_api.cpp
     LIBRARIES beebium_linux_app)

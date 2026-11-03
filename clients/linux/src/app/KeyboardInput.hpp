@@ -85,12 +85,14 @@ public:
 
     // Whether a key would go to the machine rather than to the application,
     // for deciding shortcut overrides. Not while detached; never F11 (full
-    // screen); and not with Alt held unless the mapping binds this key with
-    // Alt, Alt being the host's menu key here (frontend-modifier-keys.md R5).
+    // screen); and not with Alt or Meta held unless the mapping binds this
+    // key with one of them, Alt being the host's menu key here
+    // (frontend-modifier-keys.md R5).
     bool takes(const QKeyEvent& event) const;
-    // Ctrl+Shift+H (Show Beebium, the macOS client's Cmd+Shift+H): the
-    // window's whatever the mapping says, so the home window is always a
-    // chord away, immersive or not.
+    // A key other than a modifier, pressed with Alt or Meta, that the mapping
+    // does not bind with either: the window's. The BBC Micro has neither
+    // key, so every application shortcut of the machine window carries one
+    // (Shortcuts.hpp), and such a chord is never typed.
     bool window_chord(const QKeyEvent& event) const;
     // A window chord is about to fire: the CTRL and SHIFT that reached the
     // machine on their way down come up now, never left held. Which host
