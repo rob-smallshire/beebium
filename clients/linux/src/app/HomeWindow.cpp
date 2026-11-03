@@ -15,6 +15,7 @@
 #include "app/ApplicationInfo.hpp"
 #include "app/PresetsPage.hpp"
 #include "app/SavedMachinesPage.hpp"
+#include "app/Shortcuts.hpp"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -130,32 +131,42 @@ QWidget* HomeWindow::build_header() {
 }
 
 void HomeWindow::build_menus() {
+    // No machine here, so the standard Ctrl shortcuts stay; each has the
+    // machine window's Meta form beside it, so one habit works in both
+    // (Shortcuts.hpp).
     QMenu* file = menuBar()->addMenu(tr("&File"));
     QAction* new_action = file->addAction(tr("&New Machine..."));
-    new_action->setShortcut(QKeySequence::New);
+    set_session_shortcuts(new_action, QKeySequence(QStringLiteral("Meta+N")),
+                          QKeySequence(QStringLiteral("Ctrl+N")));
     connect(new_action, &QAction::triggered, this, [this] { show_page(HomePage::presets); });
     QAction* open_action = file->addAction(tr("&Open Machine..."));
-    open_action->setShortcut(QKeySequence::Open);
+    set_session_shortcuts(open_action, QKeySequence(QStringLiteral("Meta+O")),
+                          QKeySequence(QStringLiteral("Ctrl+O")));
     connect(open_action, &QAction::triggered, saved_, &SavedMachinesPage::browse_requested);
     QAction* recent_action = file->addAction(tr("Open &Recent..."));
     connect(recent_action, &QAction::triggered, this,
             [this] { show_page(HomePage::saved_machines); });
     QAction* connect_action = file->addAction(tr("&Connect to Machine..."));
-    connect_action->setShortcut(QKeySequence(tr("Ctrl+Shift+O")));
+    set_session_shortcuts(connect_action, QKeySequence(QStringLiteral("Meta+Shift+O")),
+                          QKeySequence(QStringLiteral("Ctrl+Shift+O")));
     connect(connect_action, &QAction::triggered, this,
             [this] { show_page(HomePage::running_machines); });
     file->addSeparator();
     QAction* close_action = file->addAction(tr("C&lose Window"));
-    close_action->setShortcut(QKeySequence::Close);
+    set_session_shortcuts(close_action, QKeySequence(QStringLiteral("Meta+W")),
+                          QKeySequence(QStringLiteral("Ctrl+W")));
     connect(close_action, &QAction::triggered, this, &QWidget::close);
     QAction* quit_action = file->addAction(tr("&Quit"));
-    quit_action->setShortcut(QKeySequence::Quit);
+    set_session_shortcuts(quit_action, QKeySequence(QStringLiteral("Meta+Q")),
+                          QKeySequence(QStringLiteral("Ctrl+Q")));
     quit_action->setMenuRole(QAction::QuitRole);
     connect(quit_action, &QAction::triggered, this, &HomeWindow::quit_requested);
 
     QMenu* settings = menuBar()->addMenu(tr("&Settings"));
     QAction* configure_action = settings->addAction(tr("&Configure Beebium..."));
-    configure_action->setShortcut(QKeySequence(tr("Ctrl+Shift+,")));
+    // Meta+, as the macOS client's Command-, (Settings).
+    set_session_shortcuts(configure_action, QKeySequence(QStringLiteral("Meta+,")),
+                          QKeySequence(QStringLiteral("Ctrl+Shift+,")));
     configure_action->setMenuRole(QAction::PreferencesRole);
     connect(configure_action, &QAction::triggered, this, &HomeWindow::configure_requested);
 

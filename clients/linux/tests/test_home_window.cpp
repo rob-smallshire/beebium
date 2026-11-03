@@ -37,6 +37,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QPushButton>
+#include <QSet>
 #include <QTemporaryDir>
 
 #include <catch2/catch_test_macros.hpp>
@@ -338,6 +339,40 @@ TEST_CASE("The home window's pages are the presets, the recent and the discovere
         notes << label->text();
     }
     CHECK(notes.contains(QStringLiteral("No recent machines yet")));
+    client.home_window()->close();
+}
+
+TEST_CASE("The home window keeps its Ctrl shortcuts and answers to the Meta forms too",
+          "[home][shortcuts]") {
+    Application client(QRhiWidget::Api::OpenGL);
+    reset(client);
+    client.handle_arguments({});
+    REQUIRE(home_shown(client));
+    // It has no machine, so Ctrl is free; the Meta forms make one habit
+    // work in both kinds of window.
+    const std::vector<std::pair<QString, QSet<QString>>> table{
+        {QStringLiteral("New Machine..."), {QStringLiteral("Ctrl+N"), QStringLiteral("Meta+N")}},
+        {QStringLiteral("Open Machine..."), {QStringLiteral("Ctrl+O"), QStringLiteral("Meta+O")}},
+        {QStringLiteral("Connect to Machine..."),
+         {QStringLiteral("Ctrl+Shift+O"), QStringLiteral("Meta+Shift+O")}},
+        {QStringLiteral("Close Window"), {QStringLiteral("Ctrl+W"), QStringLiteral("Meta+W")}},
+        {QStringLiteral("Quit"), {QStringLiteral("Ctrl+Q"), QStringLiteral("Meta+Q")}},
+        {QStringLiteral("Configure Beebium..."),
+         {QStringLiteral("Ctrl+Shift+,"), QStringLiteral("Meta+,")}},
+    };
+    const auto actions = client.home_window()->findChildren<QAction*>();
+    for (const auto& [text, expected] : table) {
+        INFO(text.toStdString());
+        const auto found = std::find_if(actions.begin(), actions.end(), [&](QAction* action) {
+            return action->text().remove(QLatin1Char('&')) == text;
+        });
+        REQUIRE(found != actions.end());
+        QSet<QString> forms;
+        for (const QKeySequence& sequence : (*found)->shortcuts()) {
+            forms.insert(sequence.toString(QKeySequence::PortableText));
+        }
+        CHECK(forms == expected);
+    }
     client.home_window()->close();
 }
 
