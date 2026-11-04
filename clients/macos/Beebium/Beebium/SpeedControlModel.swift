@@ -16,11 +16,12 @@ import Foundation
 ///
 /// Owns the speed state shown by the slider and the achieved-speed marker, and
 /// polls the server's pacing stats while the panel is visible. The numeric scale
-/// is a symmetric log2 axis with 1x at the centre: the upper bound is the
-/// session's running-max attainable speed rounded up to a power of two, and the
-/// lower bound is its reciprocal. The running max only grows, so the scale never
-/// jars by shrinking, but it expands when the host frees up and a higher speed
-/// becomes attainable.
+/// is a symmetric log2 axis with 1x at the centre: the upper bound is a
+/// spike-robust maximum of recently attainable speed rounded up to a power of
+/// two, and the lower bound is its reciprocal. That maximum is taken over a
+/// trailing window (see poll and sessionMaxAttainable), not latched, so the axis
+/// widens when a higher speed becomes attainable and narrows again once the fast
+/// samples age out of the window.
 @MainActor
 final class SpeedControlModel: ObservableObject {
     /// Configured multiplier the slider reflects (1.0 = real-time). The source
@@ -70,7 +71,7 @@ final class SpeedControlModel: ObservableObject {
     /// Labels sit at 2^(k*i) for i in -halfSpan...halfSpan, so seven labels span
     /// [b^-3, b^3] and nine span [b^-4, b^4] for base b = 2^k. Both families are
     /// candidates; the axis takes whichever covers the session max with the
-    /// tightest coverage, so it grows in small steps -- 8, 16, 64, 256, 512 --
+    /// tightest coverage, so it changes in small steps -- 8, 16, 64, 256, 512 --
     /// rather than the 8, 64, 512 that the seven-label family alone would jump
     /// through. A tie prefers nine (finer, smaller base). Floored at base 2.
     private var scaleShape: (halfSpan: Int, step: Int) {
