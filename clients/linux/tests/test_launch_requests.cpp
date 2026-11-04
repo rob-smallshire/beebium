@@ -20,11 +20,11 @@ using namespace beebium::linux_client;
 
 TEST_CASE("Options and positional arguments become explicit requests", "[arguments]") {
     const QStringList requests = launch_requests(
-        {QStringLiteral("pi400:48875")}, {QStringLiteral("model-b")},
+        {QStringLiteral("host-a:48875")}, {QStringLiteral("model-b")},
         {QStringLiteral("beebium://connect?host=a&port=1"), QStringLiteral("Elite.beebium-machine"),
          QStringLiteral("/abs/Other.beebium-machine")},
         QStringLiteral("/home/me"));
-    CHECK(requests == QStringList{QStringLiteral("--connect"), QStringLiteral("pi400:48875"),
+    CHECK(requests == QStringList{QStringLiteral("--connect"), QStringLiteral("host-a:48875"),
                                   QStringLiteral("--new-machine"), QStringLiteral("model-b"),
                                   QStringLiteral("beebium://connect?host=a&port=1"),
                                   QStringLiteral("--open"),

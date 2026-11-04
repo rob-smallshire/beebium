@@ -20,16 +20,16 @@
 using namespace beebium::linux_client;
 
 TEST_CASE("host:port parses", "[endpoint]") {
-    const auto endpoint = parse_endpoint("pi400.local:48876");
+    const auto endpoint = parse_endpoint("host-a.local:48876");
     REQUIRE(endpoint);
-    CHECK(endpoint->host == "pi400.local");
+    CHECK(endpoint->host == "host-a.local");
     CHECK(endpoint->port == 48876);
-    CHECK(endpoint->to_string() == "pi400.local:48876");
+    CHECK(endpoint->to_string() == "host-a.local:48876");
 }
 
 TEST_CASE("A bare host takes the default port", "[endpoint]") {
     CHECK(parse_endpoint("localhost") == Endpoint{"localhost", 48875});
-    CHECK(parse_endpoint("  192.168.1.20  ") == Endpoint{"192.168.1.20", 48875});
+    CHECK(parse_endpoint("  192.0.2.20  ") == Endpoint{"192.0.2.20", 48875});
 }
 
 TEST_CASE("IPv6 addresses are bracketed with a port", "[endpoint]") {

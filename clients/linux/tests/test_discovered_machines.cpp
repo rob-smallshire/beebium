@@ -35,39 +35,39 @@ beebium::discovery::DiscoveredService service(const char* name, const char* host
     return s;
 }
 
-const ThisHost HOST{QStringLiteral("pi400"), {QStringLiteral("192.168.1.20"),
-                                              QStringLiteral("127.0.0.1")}};
+const ThisHost HOST{QStringLiteral("host-a"), {QStringLiteral("192.0.2.20"),
+                                               QStringLiteral("127.0.0.1")}};
 
 }  // namespace
 
 TEST_CASE("A discovered service becomes a machine with its TXT keys", "[discovery]") {
     const auto machine =
-        machine_from_service(service("Elite", "studio.local.", "192.168.1.30", 48876), HOST);
+        machine_from_service(service("Elite", "host-b.local.", "192.0.2.30", 48876), HOST);
     CHECK(machine.instance_name == "Elite");
-    CHECK(machine.address == "192.168.1.30");
+    CHECK(machine.address == "192.0.2.30");
     CHECK(machine.port == 48876);
     CHECK(machine.uuid == "1234");
     CHECK(machine.model_name == "BBC Model B");
     CHECK_FALSE(machine.on_this_host);
-    CHECK(machine.endpoint() == Endpoint{"192.168.1.30", 48876});
+    CHECK(machine.endpoint() == Endpoint{"192.0.2.30", 48876});
 }
 
 TEST_CASE("A machine on this host is recognised by name or by address", "[discovery]") {
-    CHECK(machine_from_service(service("A", "PI400.local.", "10.0.0.9", 1), HOST).on_this_host);
-    CHECK(machine_from_service(service("B", "other.local.", "192.168.1.20", 1), HOST).on_this_host);
-    CHECK_FALSE(machine_from_service(service("C", "other.local.", "10.0.0.9", 1), HOST).on_this_host);
+    CHECK(machine_from_service(service("A", "HOST-A.local.", "198.51.100.9", 1), HOST).on_this_host);
+    CHECK(machine_from_service(service("B", "host-c.local.", "192.0.2.20", 1), HOST).on_this_host);
+    CHECK_FALSE(machine_from_service(service("C", "host-c.local.", "198.51.100.9", 1), HOST).on_this_host);
 }
 
 TEST_CASE("Without an IPv4 address the host name is dialled", "[discovery]") {
-    const auto machine = machine_from_service(service("D", "studio.local.", nullptr, 48875), HOST);
-    CHECK(machine.endpoint() == Endpoint{"studio.local", 48875});
+    const auto machine = machine_from_service(service("D", "host-b.local.", nullptr, 48875), HOST);
+    CHECK(machine.endpoint() == Endpoint{"host-b.local", 48875});
 }
 
 TEST_CASE("This host's machines come first, then by name", "[discovery]") {
     std::vector<DiscoveredMachine> machines{
-        machine_from_service(service("Zeta", "other.local.", "10.0.0.2", 1), HOST),
-        machine_from_service(service("Beta", "pi400.local.", "192.168.1.20", 2), HOST),
-        machine_from_service(service("Alpha", "other.local.", "10.0.0.3", 3), HOST),
+        machine_from_service(service("Zeta", "host-c.local.", "198.51.100.2", 1), HOST),
+        machine_from_service(service("Beta", "host-a.local.", "192.0.2.20", 2), HOST),
+        machine_from_service(service("Alpha", "host-c.local.", "198.51.100.3", 3), HOST),
     };
     sort_for_display(machines);
     CHECK(machines[0].instance_name == "Beta");

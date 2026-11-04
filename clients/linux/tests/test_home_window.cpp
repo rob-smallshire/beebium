@@ -133,9 +133,9 @@ TEST_CASE("The discovered machines page defaults to localhost and offers the rec
     CHECK(page.address_box()->currentText() == QStringLiteral("localhost:48875"));
     CHECK(page.connect_button()->isEnabled());
 
-    page.set_recents({{"studio", 48876}, {"pi400.local", 48875}});
+    page.set_recents({{"host-b", 48876}, {"host-a.local", 48875}});
     REQUIRE(page.address_box()->count() == 2);
-    CHECK(page.address_box()->itemText(0) == QStringLiteral("studio:48876"));
+    CHECK(page.address_box()->itemText(0) == QStringLiteral("host-b:48876"));
 }
 
 TEST_CASE("An address that does not parse disables Connect", "[home][connect]") {
@@ -143,9 +143,9 @@ TEST_CASE("An address that does not parse disables Connect", "[home][connect]") 
     RunningMachinesPage page(machines, {});
     page.address_box()->setEditText(QStringLiteral("host:99999"));
     CHECK_FALSE(page.connect_button()->isEnabled());
-    page.address_box()->setEditText(QStringLiteral("pi400.local"));
+    page.address_box()->setEditText(QStringLiteral("host-a.local"));
     CHECK(page.connect_button()->isEnabled());
-    CHECK(page.endpoint() == Endpoint{"pi400.local", 48875});
+    CHECK(page.endpoint() == Endpoint{"host-a.local", 48875});
 }
 
 TEST_CASE("Connect asks for the typed machine", "[home][connect]") {
@@ -154,9 +154,9 @@ TEST_CASE("Connect asks for the typed machine", "[home][connect]") {
     std::optional<Endpoint> asked;
     QObject::connect(&page, &RunningMachinesPage::connect_requested,
                      [&](const Endpoint& endpoint, const QString&) { asked = endpoint; });
-    page.address_box()->setEditText(QStringLiteral("studio:48876"));
+    page.address_box()->setEditText(QStringLiteral("host-b:48876"));
     page.connect_button()->click();
-    CHECK(asked == Endpoint{"studio", 48876});
+    CHECK(asked == Endpoint{"host-b", 48876});
 }
 
 TEST_CASE("Without servers the presets page says so and offers Configure", "[home][presets]") {

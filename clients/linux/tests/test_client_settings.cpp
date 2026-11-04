@@ -25,14 +25,14 @@ TEST_CASE("Remembered connections persist across runs, most recent first",
     {
         ClientSettings settings(filepath);
         settings.remember_connection({"localhost", 48875});
-        settings.remember_connection({"pi400.local", 48875});
+        settings.remember_connection({"host-a.local", 48875});
         settings.remember_connection({"localhost", 48875});
     }
     ClientSettings reopened(filepath);
     const auto recents = reopened.recent_connections();
     REQUIRE(recents.size() == 2);
     CHECK(recents[0] == Endpoint{"localhost", 48875});
-    CHECK(recents[1] == Endpoint{"pi400.local", 48875});
+    CHECK(recents[1] == Endpoint{"host-a.local", 48875});
 }
 
 TEST_CASE("The recents are capped", "[settings]") {

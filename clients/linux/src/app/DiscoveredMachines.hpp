@@ -29,7 +29,7 @@ namespace beebium::linux_client {
 // A machine advertising itself on _beebium._tcp (client specification 4.1).
 struct DiscoveredMachine {
     QString instance_name;  // the machine's name as announced; stable key
-    QString hostname;       // e.g. "pi400.local."
+    QString hostname;       // e.g. "host-a.local."
     QString address;        // IPv4, dotted; empty if only IPv6 was announced
     std::uint16_t port = 0;
     // From the TXT record.
