@@ -250,7 +250,7 @@ add_library(beebium_linux_app STATIC
     src/app/DisplayFrame.cpp
     src/app/DisplayWidget.cpp
     src/app/ErrorPresentation.cpp
-    src/app/FileManager.cpp
+    src/app/FileReveal.cpp
     src/app/FilesystemSharing.cpp
     src/app/GraphicsApi.cpp
     src/app/HomeWindow.cpp

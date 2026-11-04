@@ -14,7 +14,7 @@
 
 #include "app/ClientSettings.hpp"
 #include "app/ErrorPresentation.hpp"
-#include "app/FileManager.hpp"
+#include "app/FileReveal.hpp"
 #include "servers/CoreCli.hpp"
 #include "servers/ServerLocator.hpp"
 
@@ -499,7 +499,7 @@ void DriveRow::contextMenuEvent(QContextMenuEvent* event) {
     menu.addAction(tr("Copy Path"), this,
                    [path] { QApplication::clipboard()->setText(path); });
     if (shares_ && shares_()) {
-        menu.addAction(tr("Show in File Manager"), this, [path] { show_in_file_manager(path); });
+        menu.addAction(tr("Show in File Manager"), this, [path] { reveal_file(path); });
     }
     menu.exec(event->globalPos());
 }

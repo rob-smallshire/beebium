@@ -197,6 +197,10 @@ beebium_linux_add_test(test_client_settings QT
     SOURCES test_client_settings.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_file_reveal QT
+    SOURCES test_file_reveal.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_settings_dialog QT
     SOURCES test_settings_dialog.cpp
     LIBRARIES beebium_linux_app)

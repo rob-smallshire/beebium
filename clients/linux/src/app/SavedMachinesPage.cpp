@@ -13,7 +13,7 @@
 #include "app/SavedMachinesPage.hpp"
 
 #include "app/CardGrid.hpp"
-#include "app/FileManager.hpp"
+#include "app/FileReveal.hpp"
 #include "app/SavedMachines.hpp"
 
 #include <QDateTime>
@@ -162,7 +162,7 @@ void SavedMachinesPage::show_context_menu(const QPoint& position) {
     QMenu menu(this);
     menu.addAction(tr("&Open"), this, [this, dirpath] { Q_EMIT open_requested(dirpath); });
     menu.addAction(tr("Show in &File Manager"), this,
-                   [dirpath] { show_in_file_manager(dirpath); });
+                   [dirpath] { reveal_file(dirpath); });
     menu.addSeparator();
     // Only a list entry: the machine on disk is untouched, so no question.
     menu.addAction(tr("&Remove from List"), this, [this, dirpath] { machines_.forget(dirpath); });
