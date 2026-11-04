@@ -161,7 +161,7 @@ void SavedMachinesPage::show_context_menu(const QPoint& position) {
     const QString dirpath = item->data(DIRPATH_ROLE).toString();
     QMenu menu(this);
     menu.addAction(tr("&Open"), this, [this, dirpath] { Q_EMIT open_requested(dirpath); });
-    menu.addAction(tr("Show in &File Manager"), this,
+    menu.addAction(tr("Open &Containing Folder"), this,
                    [dirpath] { reveal_file(dirpath); });
     menu.addSeparator();
     // Only a list entry: the machine on disk is untouched, so no question.
