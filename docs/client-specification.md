@@ -629,8 +629,14 @@ document. Two disciplines are intrinsic:
   and starts the server from it, with no per-setting command-line overrides, so
   one representation carries the whole machine.
 
-An "exact record" rule governs editing: a field writes to the draft only when it
-differs from the default, so an untouched preset stays byte-exact.
+An "exact record" rule governs what is written: a saved or launched preset
+captures the configuration the user saw, so its meaning cannot change if a server
+default changes later. The draft is the resolved document edited in place; an
+edited value is written explicitly even when it equals the implicit default; a
+section is shown as changed against the resolved baseline; launch and Save As
+write the whole resolved document, verbose and deliberate. The source preset
+file itself is never rewritten by editing: Save As creates a new preset, so an
+untouched preset's bytes are untouched.
 
 Rests on (CLI): `resolve-preset --json` (oracle and validation),
 `import-preset` (save as a user preset), `start --preset <temp>` (launch).
@@ -640,8 +646,8 @@ Conformance:
 
 - MANDATORY: edit a resolved document; resolve-preset as validation and
   normalisation oracle; launch the edited document as a preset; lossless
-  unknown-key preservation; exact-record editing (an untouched preset stays
-  byte-exact).
+  unknown-key preservation; exact-record writing (the whole resolved document,
+  edited values explicit; the source preset file never rewritten).
 - LATITUDE: the unknown-key technique and the debounce interval.
 - MACOS-ONLY: the new-machine dialog and welcome window.
 
@@ -1959,8 +1965,8 @@ literal separators and a typed field list; the client converts between the objec
 field strings and a one-line display, and always writes objects (keeping an unparseable
 integer verbatim so the resolver can flag it). Mutually-exclusive parameter groups
 render as one picker; an exclusion pair disables the excluded field with a note; the
-exact-record rule (write only what differs from the default) keeps an untouched preset
-byte-exact.
+exact-record rule (the whole resolved document is written, edited values explicit,
+section 5.2) keeps a saved preset's meaning fixed against later default changes.
 
 Rests on: the extension manifest from `peripheral_extension.proto
 PeripheralExtensionService.ListExtensions` (and the preset schema); the live editable
@@ -1971,7 +1977,7 @@ Conformance:
 - MANDATORY: honour the manifest's parameter kinds, the filepath access semantics (a
   write parameter offers a create destination), the structured-list template and the
   typed fields; commit-on-end with the commit-release-act order; atomic editor
-  commits (no partial applies); never invent a server action; exact-record editing.
+  commits (no partial applies); never invent a server action; exact-record writing.
 - LATITUDE: the widgets; the add/remove affordance; the chooser type.
 - MACOS-ONLY: the open and save panels, the combo box, the segmented add/remove
   control, the NSText-backed commit machinery.
@@ -2181,12 +2187,13 @@ duplicate, edit-name, export to a preset archive, delete, reveal), keyboard (the
 mapping, per-key disables, the Caps-sync override), and video (pixel shape, display
 style, per-style options, background). The division of concerns and which settings are
 app-global versus per-machine is latitude. A client that edits presets must round-trip
-them as the server's preset archive format and keep an untouched preset byte-exact.
+them as the server's preset archive format and never rewrite a preset the user did
+not edit.
 
 Conformance:
 
-- MANDATORY: preset editing round-trips the server's archive format and keeps an
-  untouched preset byte-exact (the exact-record rule, section 5.2); client-only
+- MANDATORY: preset editing round-trips the server's archive format and never
+  rewrites an unedited preset (the exact-record rule, section 5.2); client-only
   preferences persist across sessions (section 3.5).
 - LATITUDE: the panes, the grouping, which settings are global versus per-machine, the
   storage.
