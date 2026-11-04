@@ -177,6 +177,7 @@ add_library(beebium_linux_connection STATIC
     src/connection/Handshake.cpp
     src/connection/KeySender.cpp
     src/connection/Liveness.cpp
+    src/connection/PeripheralTree.cpp
     src/connection/PictureGeometry.cpp
     src/connection/ReconnectPolicy.cpp
     src/connection/RpcWorker.cpp
@@ -266,6 +267,7 @@ add_library(beebium_linux_app STATIC
     src/app/MachineSession.cpp
     src/app/MappingCatalogue.cpp
     src/app/MainWindow.cpp
+    src/app/PeripheralsSidebar.cpp
     src/app/PictureDrop.cpp
     src/app/Presentation.cpp
     src/app/PresetsPage.cpp
@@ -277,6 +279,7 @@ add_library(beebium_linux_app STATIC
     src/app/SessionDiscs.cpp
     src/app/SessionIndicators.cpp
     src/app/SessionExtensions.cpp
+    src/app/SessionPeripherals.cpp
     src/app/SessionSideways.cpp
     src/app/SessionSpeed.cpp
     src/app/SpeedScale.cpp

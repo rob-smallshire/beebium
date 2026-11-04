@@ -25,6 +25,8 @@
 #include "extension_ui.grpc.pb.h"
 #include "indicator.grpc.pb.h"
 #include "keyboard.grpc.pb.h"
+#include "peripheral_extension.grpc.pb.h"
+#include "serial.grpc.pb.h"
 #include "sideways.grpc.pb.h"
 #include "system.grpc.pb.h"
 #include "video.grpc.pb.h"
@@ -994,8 +996,70 @@ private:
     std::vector<beebium::DispatchRequest> dispatched_;
 };
 
+// PeripheralExtensionService: the listing to answer with.
+class ScriptedPeripheralService final : public beebium::PeripheralExtensionService::Service {
+public:
+    std::mutex mutex;
+    beebium::ListExtensionsResponse listing;  // under mutex
+    std::atomic<int> list_requests{0};
+    std::atomic<bool> fail{false};
+
+    grpc::Status ListExtensions(grpc::ServerContext*, const beebium::ListExtensionsRequest*,
+                                beebium::ListExtensionsResponse* response) override {
+        ++list_requests;
+        if (fail) {
+            return {grpc::StatusCode::INTERNAL, "the listing failed"};
+        }
+        std::lock_guard lock(mutex);
+        *response = listing;
+        return grpc::Status::OK;
+    }
+};
+
+// SerialService: statuses to stream to whoever watches.
+class ScriptedSerialService final : public beebium::SerialService::Service {
+public:
+    std::atomic<int> watchers{0};
+
+    void push(const beebium::SerialStatus& status) {
+        {
+            std::lock_guard lock(mutex_);
+            script_.push_back(status);
+        }
+        changed_.notify_all();
+    }
+
+    grpc::Status WatchSerialStatus(grpc::ServerContext* context,
+                                   const beebium::WatchSerialStatusRequest*,
+                                   grpc::ServerWriter<beebium::SerialStatus>* writer) override {
+        ++watchers;
+        for (;;) {
+            std::unique_lock lock(mutex_);
+            changed_.wait_for(lock, 20ms, [this] { return !script_.empty(); });
+            if (context->IsCancelled()) {
+                --watchers;
+                return grpc::Status::CANCELLED;
+            }
+            if (script_.empty()) {
+                continue;
+            }
+            const beebium::SerialStatus next = script_.front();
+            script_.pop_front();
+            lock.unlock();
+            writer->Write(next);
+        }
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::deque<beebium::SerialStatus> script_;
+};
+
 struct FakeServer {
     ScriptedSystemService system;
+    ScriptedPeripheralService peripherals;
+    ScriptedSerialService serial;
     ScriptedExtensionUiService extension_ui;
     ScriptedSidewaysService sideways;
     QuietVideoService video;
@@ -1019,6 +1083,8 @@ struct FakeServer {
         builder.RegisterService(&indicators);
         builder.RegisterService(&sideways);
         builder.RegisterService(&extension_ui);
+        builder.RegisterService(&peripherals);
+        builder.RegisterService(&serial);
         server = builder.BuildAndStart();
     }
     ~FakeServer() { server->Shutdown(std::chrono::system_clock::now() + 1s); }

@@ -70,6 +70,10 @@ beebium_linux_add_test(test_extension_dispatch
     SOURCES test_extension_dispatch.cpp
     LIBRARIES beebium_linux_connection)
 
+beebium_linux_add_test(test_peripheral_tree
+    SOURCES test_peripheral_tree.cpp
+    LIBRARIES beebium_linux_connection)
+
 beebium_linux_add_test(test_video_stream
     SOURCES test_video_stream.cpp
     LIBRARIES beebium_linux_connection)
@@ -259,6 +263,10 @@ beebium_linux_add_test(test_memory_mode QT
 
 beebium_linux_add_test(test_extension_views QT
     SOURCES test_extension_views.cpp
+    LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_peripherals_mode QT
+    SOURCES test_peripherals_mode.cpp
     LIBRARIES beebium_linux_app)
 
 beebium_linux_add_test(test_picture_drop QT

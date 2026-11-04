@@ -22,6 +22,7 @@
 #include "app/HomeWindow.hpp"
 #include "app/ImmersiveExit.hpp"
 #include "app/KeyboardSidebar.hpp"
+#include "app/PeripheralsSidebar.hpp"
 #include "app/PictureDrop.hpp"
 #include "app/ProcessorSidebar.hpp"
 #include "app/IndicatorStrip.hpp"
@@ -134,6 +135,10 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                        new MemorySidebar(
                            session_->sideways(),
                            [this] { return session_->server_shares_filesystem(); }, sidebar_));
+    const auto shares = [this] { return session_->server_shares_filesystem(); };
+    sidebar_->add_mode(SidebarMode::peripherals,
+                       new PeripheralsSidebar(session_->peripherals(), session_->extensions(),
+                                              shares, sidebar_));
     auto* video_mode = new VideoSidebar(sidebar_);
     video_mode->set_settings(display_->video_settings());
     connect(video_mode, &VideoSidebar::changed, display_, &DisplayWidget::set_video_settings);
