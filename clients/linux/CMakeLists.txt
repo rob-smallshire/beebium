@@ -273,6 +273,7 @@ add_library(beebium_linux_app STATIC
     src/app/SessionIndicators.cpp
     src/app/SessionSpeed.cpp
     src/app/SpeedScale.cpp
+    src/app/ProcessorSidebar.cpp
     src/app/SessionTyping.cpp
     src/app/SettingsDialog.cpp
     src/app/Shortcuts.cpp

@@ -225,6 +225,10 @@ beebium_linux_add_test(test_speed_scale QT
     SOURCES test_speed_scale.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_processor_mode QT
+    SOURCES test_processor_mode.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_picture_drop QT
     SOURCES test_picture_drop.cpp
     LIBRARIES beebium_linux_app)

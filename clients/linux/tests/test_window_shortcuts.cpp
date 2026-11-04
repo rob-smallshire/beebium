@@ -164,6 +164,7 @@ TEST_CASE("Each machine-window action answers to a Meta form and a Ctrl+Alt form
         {QStringLiteral("Storage"), {QStringLiteral("Meta+1"), QStringLiteral("Ctrl+Alt+1")}},
         {QStringLiteral("Sound"), {QStringLiteral("Meta+5"), QStringLiteral("Ctrl+Alt+5")}},
         {QStringLiteral("Keyboard"), {QStringLiteral("Meta+6"), QStringLiteral("Ctrl+Alt+6")}},
+        {QStringLiteral("Processor"), {QStringLiteral("Meta+7"), QStringLiteral("Ctrl+Alt+7")}},
         {QStringLiteral("Enter Immersive Mode"),
          {QStringLiteral("Meta+Shift+F"), QStringLiteral("Ctrl+Alt+F")}},
         {QStringLiteral("Full Screen"), {QStringLiteral("F11")}},

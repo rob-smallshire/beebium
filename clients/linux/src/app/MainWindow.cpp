@@ -23,6 +23,7 @@
 #include "app/ImmersiveExit.hpp"
 #include "app/KeyboardSidebar.hpp"
 #include "app/PictureDrop.hpp"
+#include "app/ProcessorSidebar.hpp"
 #include "app/IndicatorStrip.hpp"
 #include "app/Shortcuts.hpp"
 #include "app/Sidebar.hpp"
@@ -141,6 +142,8 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     connect(keyboard_mode, &KeyboardSidebar::caps_lock_sync_toggled, this,
             [this](bool on) { display_->keyboard().set_caps_lock_sync_override(on); });
     sidebar_->add_mode(SidebarMode::keyboard, keyboard_mode);
+    sidebar_->add_mode(SidebarMode::processor,
+                       new ProcessorSidebar(session_->speed(), sidebar_));
     // Storage first, as the macOS client opens.
     sidebar_->set_mode(SidebarMode::storage);
     if (settings_) {
