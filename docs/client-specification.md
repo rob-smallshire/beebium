@@ -774,29 +774,28 @@ the CPU; releasing it begins a soft reset. The client sends a Break-down then a
 Break-up. A hard reset (full re-initialisation) exists server-side (power-on,
 Ctrl-Break, or a debugger reset); the client observes any reset through the
 machine-reset status event, which carries soft or hard, and resynchronises its
-lock mirror. "Forget battery-backed state" is a distinct call that takes effect
-at the next start and lists the units it will forget.
+lock mirror. Battery-backed state needs no command of its own: it is kept when
+the machine is saved and lost when the machine is closed unsaved (5.3), so no
+client offers a "forget battery-backed state" feature (Rob, 2026-11-04).
 
 Shutdown is covered in section 4.5.
 
 Rests on: `debugger.proto DebuggerControl.Run` (start and resume);
 `keyboard.proto KeyboardService.BreakDown` and `KeyboardService.BreakUp` (soft
 reset); `debugger.proto DebuggerControl.Reset` (hard reset, if a client offers
-one); `system.proto SystemService.ResetBattery`; the machine-reset and
-guest-ready status events.
+one); the machine-reset and guest-ready status events. `system.proto
+SystemService.ResetBattery` exists server-side but no client calls it.
 
 Conformance:
 
 - MANDATORY: issue the run call for a machine launched blocked; Break as
   down-then-up on the Break RPCs (never a matrix key up); observe resets through
-  the status event and resync; the battery-reset semantics (effective next
-  start).
+  the status event and resync; no battery-reset command in any client.
 - LATITUDE: whether to expose an explicit pause or hard-reset command; how Break
-  and battery-reset are presented. No client is expected to expose Pause or a
-  hard Reset at present; the reference client exposes neither, and a client may
-  omit both and still be conformant. The reference client has no on-screen
-  Break control and no battery-reset command: Break is the mapped key, held,
-  and `ResetBattery` has no caller in either client.
+  is presented. No client is expected to expose Pause or a hard Reset at
+  present; the reference client exposes neither, and a client may omit both and
+  still be conformant. The reference client has no on-screen Break control:
+  Break is the mapped key, held.
 
 Scenarios: press Break -> a soft machine-reset event, RAM preserved. Forget
 battery on a running machine -> the forgotten units are returned, the machine
