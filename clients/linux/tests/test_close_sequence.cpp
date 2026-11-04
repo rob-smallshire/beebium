@@ -36,6 +36,7 @@ namespace {
 struct Answers {
     int shared_asked = 0;
     int unsaved_asked = 0;
+    int unsaved_remote_asked = 0;
     ClosePrompts::Shared shared = ClosePrompts::Shared::cancel;
     ClosePrompts::Unsaved unsaved = ClosePrompts::Unsaved::cancel;
 
@@ -47,6 +48,10 @@ struct Answers {
         };
         prompts.unsaved = [this](QWidget*, const QString&) {
             ++unsaved_asked;
+            return unsaved;
+        };
+        prompts.unsaved_remote = [this](QWidget*, const QString&) {
+            ++unsaved_remote_asked;
             return unsaved;
         };
         return prompts;
@@ -95,6 +100,37 @@ TEST_CASE("A cancelled quit leaves later closes ordinary closes", "[close][quit]
     answers.shared = ClosePrompts::Shared::leave_running;
     window->close();
     REQUIRE(wait_until([&] { return window.isNull(); }, 5000ms));
+}
+
+TEST_CASE("Unsaved changes on a server on another host can only be lost, never saved",
+          "[close][quit][gating]") {
+    FakeServer server;
+    server.system.host_fingerprint = "somewhere-else";
+    Answers answers;
+    QPointer<MainWindow> window = launched_window(server, answers);
+    auto written = event(beebium::SERVER_STATUS_HEARTBEAT);
+    written.set_template_media_written(true);
+    server.system.push(written);
+    REQUIRE(wait_until([&] { return window->session().template_media_written(); }));
+
+    // Asked the question with no Save in it (#263); cancelling keeps it.
+    answers.unsaved = ClosePrompts::Unsaved::cancel;
+    window->set_quitting(true);
+    window->close();
+    REQUIRE(wait_until([&] { return answers.unsaved_remote_asked == 1; }));
+    CHECK(answers.unsaved_asked == 0);
+    wait_until([] { return false; }, 100ms);
+    REQUIRE(window);
+    CHECK(window->isVisible());
+
+    // Closing anyway shuts it down unsaved.
+    answers.unsaved = ClosePrompts::Unsaved::discard;
+    window->set_quitting(true);
+    window->close();
+    REQUIRE(wait_until([&] { return window.isNull(); }, 5000ms));
+    std::lock_guard lock(server.system.calls_mutex);
+    CHECK(server.system.shutdown_requests == 1);
+    CHECK(server.system.save_requests == 0);
 }
 
 TEST_CASE("The link control shows only for a machine this client launched, and toggles",

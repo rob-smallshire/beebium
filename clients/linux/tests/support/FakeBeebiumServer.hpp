@@ -68,6 +68,7 @@ public:
     std::string release_authority;  // x-beebium-instance-uuid
     int release_requests = 0;
     bool save_fails = false;
+    int save_requests = 0;
     std::string last_move_destination;
     // The code a move is refused with; OK lets it through.
     grpc::StatusCode move_refusal = grpc::StatusCode::OK;
@@ -132,6 +133,7 @@ public:
                              beebium::SaveMachineResponse* response) override {
         std::lock_guard lock(calls_mutex);
         last_save_destination = request->destination_dirpath();
+        ++save_requests;
         last_save_replace = request->replace_existing();
         if (save_fails) {
             return {grpc::StatusCode::ALREADY_EXISTS, "destination exists"};

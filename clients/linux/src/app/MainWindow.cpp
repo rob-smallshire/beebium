@@ -465,17 +465,25 @@ void MainWindow::build_menus() {
         action->setEnabled(false);
     }
     // A transient machine is not a document on disk (5.3): its first save is
-    // Save, so Save As and Move wait until it has been saved. A folder here
-    // means nothing to a server on another host (3.2).
+    // Save, so Save As and Move wait until it has been saved. A server on
+    // another host is not saved from here at all for now (3.2, #263): its
+    // folders cannot be chosen here. Rename needs no folder.
     const auto enable_saving = [this, save_action, save_as_action, rename_action, move_action] {
-        save_action->setEnabled(true);
+        const bool saved = session_->machine_saved();
+        const bool local = session_->server_shares_filesystem();
+        const auto explain = [local](QAction* action, const QString& reason) {
+            action->setToolTip(local ? QString() : reason);
+        };
+        save_action->setEnabled(local);
+        explain(save_action, tr("The server is on another host, so it cannot save the machine "
+                                "from here"));
         rename_action->setEnabled(true);
-        save_as_action->setEnabled(session_->machine_saved());
-        move_action->setEnabled(session_->machine_saved() && session_->server_shares_filesystem());
-        move_action->setToolTip(session_->server_shares_filesystem()
-                                    ? QString()
-                                    : tr("The server is on another host, so it cannot move the "
-                                         "machine to a folder here"));
+        save_as_action->setEnabled(saved && local);
+        explain(save_as_action, tr("The server is on another host, so it cannot save the "
+                                   "machine from here"));
+        move_action->setEnabled(saved && local);
+        explain(move_action, tr("The server is on another host, so it cannot move the "
+                                "machine to a folder here"));
     };
     connect(session_, &MachineSession::connected_to_server, this, enable_saving);
     connect(session_, &MachineSession::save_finished, this, enable_saving);
@@ -671,6 +679,13 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
 }
 
 void MainWindow::save(std::function<void(bool saved)> then) {
+    if (!session_->server_shares_filesystem()) {
+        // Never saved from here (3.2, #263); the commands are disabled.
+        if (then) {
+            then(false);
+        }
+        return;
+    }
     if (!session_->machine_saved()) {
         // A transient machine has nowhere to save in place (5.4): its first
         // save chooses where.
@@ -696,6 +711,12 @@ void MainWindow::save(std::function<void(bool saved)> then) {
 }
 
 void MainWindow::save_as(std::function<void(bool saved)> then) {
+    if (!session_->server_shares_filesystem()) {
+        if (then) {
+            then(false);
+        }
+        return;
+    }
     const QString suggested =
         QDir(QDir::homePath()).filePath(machine_dirpath_for(session_->machine_name()));
     const QString chosen = QFileDialog::getSaveFileName(
@@ -709,6 +730,8 @@ void MainWindow::save_as(std::function<void(bool saved)> then) {
     }
     const QString destination = machine_dirpath_for(chosen);
     bool replace = false;
+    // Asked of this host's filesystem: Save As is offered only when the
+    // server shares it (3.2), so the server sees the same folder.
     if (QFileInfo::exists(destination)) {
         // Replaced only on the user's say-so; the server removes the old one
         // once the new one is whole (5.4).
@@ -1067,11 +1090,18 @@ void MainWindow::decide_close(int client_count) {
     // Shutting it down. A transient machine's written media go with it
     // unless saved first (4.5).
     if (!session_->machine_saved() && session_->template_media_written()) {
-        switch (prompts_.unsaved(this, session_->machine_name())) {
+        // A server on another host cannot be saved from here (3.2, #263).
+        const auto& ask = session_->server_shares_filesystem() ? prompts_.unsaved
+                                                               : prompts_.unsaved_remote;
+        switch (ask(this, session_->machine_name())) {
         case ClosePrompts::Unsaved::cancel:
             cancel_close();
             return;
         case ClosePrompts::Unsaved::save:
+            if (!session_->server_shares_filesystem()) {
+                cancel_close();  // not offered; never saved from here
+                return;
+            }
             save_as([this](bool saved) {
                 if (saved) {
                     shut_down_server();
@@ -1165,6 +1195,19 @@ ClosePrompts ClosePrompts::message_boxes() {
             return Unsaved::save;
         }
         return answer == QMessageBox::Discard ? Unsaved::discard : Unsaved::cancel;
+    };
+    prompts.unsaved_remote = [](QWidget* window, const QString& machine) {
+        QMessageBox box(QMessageBox::Warning, QObject::tr("Close Machine"),
+                        QObject::tr("%1 has written to its discs, but its server is on another "
+                                    "host, so it cannot be saved from here. Closing it loses "
+                                    "those changes.")
+                            .arg(machine),
+                        QMessageBox::NoButton, window);
+        QPushButton* close = box.addButton(QObject::tr("Close"), QMessageBox::DestructiveRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(QMessageBox::Cancel);
+        box.exec();
+        return box.clickedButton() == close ? Unsaved::discard : Unsaved::cancel;
     };
     return prompts;
 }

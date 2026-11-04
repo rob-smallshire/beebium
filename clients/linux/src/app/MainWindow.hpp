@@ -52,6 +52,9 @@ struct ClosePrompts {
     std::function<Shared(QWidget* window, const QString& machine)> shared;
     // Ours, transient, written to, about to shut down: save it first?
     std::function<Unsaved(QWidget* window, const QString& machine)> unsaved;
+    // The same, for a server on another host, which cannot be saved from
+    // here (3.2, #263): close and lose the changes, or cancel; never save.
+    std::function<Unsaved(QWidget* window, const QString& machine)> unsaved_remote;
 
     static ClosePrompts message_boxes();
 };

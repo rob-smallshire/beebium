@@ -168,3 +168,71 @@ TEST_CASE("Move To is offered for a saved machine only, after Rename", "[app][wi
     window.set_quitting(true);
     window.close();
 }
+
+TEST_CASE("A server on another host cannot be sent a destination chosen here",
+          "[app][window][gating]") {
+    const QString remote_reason = QStringLiteral("The server is on another host");
+    {
+        // Transient: its first Save chooses a destination, so it waits.
+        FakeServer server;
+        server.system.host_fingerprint = "somewhere-else";
+        MainWindow window(QRhiWidget::Api::OpenGL);
+        window.show();
+        window.connect_to(server.endpoint());
+        QAction* rename = file_action(window, QStringLiteral("Rename Machine..."));
+        REQUIRE(rename);
+        REQUIRE(wait_until([&] { return rename->isEnabled(); }));
+        QAction* save = file_action(window, QStringLiteral("Save"));
+        CHECK_FALSE(save->isEnabled());
+        CHECK(save->toolTip().startsWith(remote_reason));
+        CHECK_FALSE(file_action(window, QStringLiteral("Save As..."))->isEnabled());
+        window.set_quitting(true);
+        window.close();
+    }
+    // Saved: no saving of any kind until a remote server's folders can be
+    // chosen (#263); Rename stays.
+    FakeServer server;
+    server.system.host_fingerprint = "somewhere-else";
+    {
+        std::lock_guard lock(server.system.calls_mutex);
+        server.system.saved_machine_dirpath = "/srv/Elite.beebium-machine";
+    }
+    MainWindow window(QRhiWidget::Api::OpenGL);
+    window.show();
+    window.connect_to(server.endpoint());
+    QAction* rename = file_action(window, QStringLiteral("Rename Machine..."));
+    REQUIRE(wait_until([&] { return rename->isEnabled(); }));
+    REQUIRE(wait_until([&] { return window.session().machine_saved(); }));
+    QAction* save = file_action(window, QStringLiteral("Save"));
+    CHECK_FALSE(save->isEnabled());
+    CHECK(save->toolTip().startsWith(remote_reason));
+    // Neither the shortcut nor the action can reach the server.
+    save->trigger();
+    wait_until([] { return false; }, std::chrono::milliseconds(200));
+    {
+        std::lock_guard lock(server.system.calls_mutex);
+        CHECK(server.system.save_requests == 0);
+    }
+    QAction* save_as = file_action(window, QStringLiteral("Save As..."));
+    CHECK_FALSE(save_as->isEnabled());
+    CHECK(save_as->toolTip().startsWith(remote_reason));
+    QAction* move = file_action(window, QStringLiteral("Move To..."));
+    CHECK_FALSE(move->isEnabled());
+    CHECK(move->toolTip().startsWith(remote_reason));
+    window.set_quitting(true);
+    window.close();
+}
+
+TEST_CASE("A server on this host gets every saving command", "[app][window][gating]") {
+    FakeServer server;
+    MainWindow window(QRhiWidget::Api::OpenGL);
+    window.show();
+    window.connect_to(server.endpoint());
+    QAction* save = file_action(window, QStringLiteral("Save"));
+    REQUIRE(wait_until([&] { return save->isEnabled(); }));
+    CHECK_FALSE(save->toolTip().startsWith(QStringLiteral("The server is on another host")));
+    // Transient: Save As waits for the first save, as before.
+    CHECK_FALSE(file_action(window, QStringLiteral("Save As..."))->isEnabled());
+    window.set_quitting(true);
+    window.close();
+}
