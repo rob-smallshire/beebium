@@ -169,6 +169,7 @@ target_link_libraries(beebium_linux_audio PUBLIC beebium_linux_protos)
 add_library(beebium_linux_connection STATIC
     src/connection/AudioStream.cpp
     src/connection/DiscStream.cpp
+    src/connection/EconetPresentation.cpp
     src/connection/ExtensionDispatch.cpp
     src/connection/IndicatorStream.cpp
     src/connection/Compatibility.cpp
@@ -267,6 +268,7 @@ add_library(beebium_linux_app STATIC
     src/app/MachineSession.cpp
     src/app/MappingCatalogue.cpp
     src/app/MainWindow.cpp
+    src/app/NetworkSidebar.cpp
     src/app/PeripheralsSidebar.cpp
     src/app/PictureDrop.cpp
     src/app/Presentation.cpp
@@ -278,6 +280,7 @@ add_library(beebium_linux_app STATIC
     src/app/SessionAudio.cpp
     src/app/SessionDiscs.cpp
     src/app/SessionIndicators.cpp
+    src/app/SessionEconet.cpp
     src/app/SessionExtensions.cpp
     src/app/SessionPeripherals.cpp
     src/app/SessionSideways.cpp

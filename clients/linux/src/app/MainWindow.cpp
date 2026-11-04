@@ -22,6 +22,7 @@
 #include "app/HomeWindow.hpp"
 #include "app/ImmersiveExit.hpp"
 #include "app/KeyboardSidebar.hpp"
+#include "app/NetworkSidebar.hpp"
 #include "app/PeripheralsSidebar.hpp"
 #include "app/PictureDrop.hpp"
 #include "app/ProcessorSidebar.hpp"
@@ -34,6 +35,7 @@
 #include "app/WindowGeometry.hpp"
 #include "app/MachineMove.hpp"
 #include "app/MachineSession.hpp"
+#include "app/MappingCatalogue.hpp"
 #include "app/MemorySidebar.hpp"
 
 #include <QAction>
@@ -165,6 +167,24 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     sidebar_->add_mode(SidebarMode::keyboard, keyboard_mode);
     sidebar_->add_mode(SidebarMode::processor,
                        new ProcessorSidebar(session_->speed(), sidebar_));
+    // Break pressed as the LEDs press their keys; its host key is the
+    // active mapping's, where the mapping labels it.
+    sidebar_->add_mode(
+        SidebarMode::network,
+        new NetworkSidebar(
+            session_->econet(), session_->extensions(),
+            [this] { return session_->server_shares_filesystem(); },
+            [this] { tap_named_key(QStringLiteral("Break")); },
+            [this] {
+                for (const ReferenceRow& row :
+                     mapping_reference(display_->keyboard().mapping())) {
+                    if (row.action == QStringLiteral("Break")) {
+                        return row.host_key;
+                    }
+                }
+                return QString();
+            },
+            sidebar_));
     // Storage first, as the macOS client opens.
     sidebar_->set_mode(SidebarMode::storage);
     if (settings_) {

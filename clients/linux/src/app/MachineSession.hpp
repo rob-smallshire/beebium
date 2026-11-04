@@ -16,6 +16,7 @@
 #include "app/RunHold.hpp"
 #include "app/SessionAudio.hpp"
 #include "app/SessionDiscs.hpp"
+#include "app/SessionEconet.hpp"
 #include "app/SessionExtensions.hpp"
 #include "app/SessionIndicators.hpp"
 #include "app/SessionPeripherals.hpp"
@@ -116,6 +117,7 @@ public:
     SessionSideways& sideways() { return *sideways_; }
     SessionExtensions& extensions() { return *extensions_; }
     SessionPeripherals& peripherals() { return *peripherals_; }
+    SessionEconet& econet() { return *econet_; }
     // The floppy drives (9).
     SessionDiscs& discs() { return *discs_; }
     // Typing: the guest_ready edge and pasting (7.3, 7.5).
@@ -219,6 +221,7 @@ private:
     SessionSideways* sideways_;
     SessionExtensions* extensions_;
     SessionPeripherals* peripherals_;
+    SessionEconet* econet_;
     SessionDiscs* discs_;
     SessionTyping* typing_;
     std::unique_ptr<KeySender> keys_;

@@ -65,7 +65,7 @@ TEST_CASE("The offered modes' icons are the theme's devices, one set by construc
     CHECK(names == QStringList{QStringLiteral("drive-harddisk"), QStringLiteral("media-flash"),
                                QStringLiteral("preferences-plugin"), QStringLiteral("video-display"),
                                QStringLiteral("audio-card"), QStringLiteral("input-keyboard"),
-                               QStringLiteral("cpu")});
+                               QStringLiteral("cpu"), QStringLiteral("network-wired")});
 }
 
 TEST_CASE("A mode showing the server's state is marked stale while the server is not live",

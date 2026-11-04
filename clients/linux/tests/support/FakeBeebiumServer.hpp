@@ -22,6 +22,8 @@
 
 #include "audio.grpc.pb.h"
 #include "disc.grpc.pb.h"
+#include "econet.grpc.pb.h"
+#include "econet_transport.grpc.pb.h"
 #include "extension_ui.grpc.pb.h"
 #include "indicator.grpc.pb.h"
 #include "keyboard.grpc.pb.h"
@@ -1056,8 +1058,125 @@ private:
     std::deque<beebium::SerialStatus> script_;
 };
 
+// EconetService: a status to report and stream, a station switch that
+// changes it within its bounds, and a way to end the stream.
+class ScriptedEconetService final : public beebium::EconetService::Service {
+public:
+    std::atomic<int> watchers{0};
+    std::atomic<int> set_station_requests{0};
+    std::atomic<std::uint32_t> last_station{0};
+
+    void set(const beebium::GetEconetStatusResponse& status) {
+        {
+            std::lock_guard lock(mutex_);
+            status_ = status;
+            ++generation_;
+        }
+        changed_.notify_all();
+    }
+    beebium::GetEconetStatusResponse status() {
+        std::lock_guard lock(mutex_);
+        return status_;
+    }
+    // End every watcher's stream with this code, as a lost stream would.
+    void end_watches(grpc::StatusCode code) {
+        {
+            std::lock_guard lock(mutex_);
+            ending_ = code;
+        }
+        changed_.notify_all();
+    }
+
+    grpc::Status GetEconetStatus(grpc::ServerContext*, const beebium::GetEconetStatusRequest*,
+                                 beebium::GetEconetStatusResponse* response) override {
+        std::lock_guard lock(mutex_);
+        *response = status_;
+        return grpc::Status::OK;
+    }
+
+    grpc::Status SetStationId(grpc::ServerContext*, const beebium::SetStationIdRequest* request,
+                              beebium::SetStationIdResponse* response) override {
+        ++set_station_requests;
+        last_station = request->station_id();
+        {
+            std::lock_guard lock(mutex_);
+            if (request->station_id() < status_.station_min() ||
+                request->station_id() > status_.station_max()) {
+                response->set_error("station out of range");
+                return grpc::Status::OK;
+            }
+            status_.set_station_id(request->station_id());
+            ++generation_;
+        }
+        changed_.notify_all();
+        response->set_success(true);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status WatchEconetStatus(grpc::ServerContext* context,
+                                   const beebium::WatchEconetStatusRequest*,
+                                   grpc::ServerWriter<beebium::GetEconetStatusResponse>* writer)
+        override {
+        ++watchers;
+        std::uint64_t sent = 0;
+        std::unique_lock lock(mutex_);
+        for (;;) {
+            if (ending_) {
+                --watchers;
+                return {*ending_, "ended by the fake"};
+            }
+            if (generation_ != sent) {
+                sent = generation_;
+                const auto status = status_;
+                lock.unlock();
+                writer->Write(status);
+                lock.lock();
+                continue;
+            }
+            changed_.wait_for(lock, 20ms);
+            if (context->IsCancelled()) {
+                --watchers;
+                return grpc::Status::CANCELLED;
+            }
+        }
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    beebium::GetEconetStatusResponse status_;
+    std::uint64_t generation_ = 1;
+    std::optional<grpc::StatusCode> ending_;
+};
+
+// EconetTransportService: the transports to list.
+class ScriptedTransportService final : public beebium::EconetTransportService::Service {
+public:
+    std::mutex mutex;
+    beebium::ListTransportsResponse transports;  // under mutex
+    std::atomic<bool> fail{false};
+    std::atomic<int> active_requests{0};
+
+    grpc::Status ListTransports(grpc::ServerContext*, const beebium::ListTransportsRequest*,
+                                beebium::ListTransportsResponse* response) override {
+        if (fail) {
+            return {grpc::StatusCode::INTERNAL, "no transports"};
+        }
+        std::lock_guard lock(mutex);
+        *response = transports;
+        return grpc::Status::OK;
+    }
+    grpc::Status GetActiveTransport(grpc::ServerContext*, const beebium::GetActiveTransportRequest*,
+                                    beebium::GetActiveTransportResponse*) override {
+        ++active_requests;
+        return grpc::Status::OK;
+    }
+};
+
 struct FakeServer {
     ScriptedSystemService system;
+    ScriptedEconetService econet;
+    ScriptedTransportService transports;
     ScriptedPeripheralService peripherals;
     ScriptedSerialService serial;
     ScriptedExtensionUiService extension_ui;
@@ -1085,6 +1204,8 @@ struct FakeServer {
         builder.RegisterService(&extension_ui);
         builder.RegisterService(&peripherals);
         builder.RegisterService(&serial);
+        builder.RegisterService(&econet);
+        builder.RegisterService(&transports);
         server = builder.BuildAndStart();
     }
     ~FakeServer() { server->Shutdown(std::chrono::system_clock::now() + 1s); }
