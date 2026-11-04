@@ -209,8 +209,13 @@ What gates and what does not (per `frontend-local-server-gating.md`):
 
 - Gated (offered only when the server shares the filesystem): browse-for and
   insert a disc image by picked path; drag-and-drop a disc image; create a
-  blank disc (it picks a host path for the server to write); reveal any
-  server-reported path in a file manager; reveal a FileReference's file.
+  blank disc (it picks a host path for the server to write); first Save of a
+  transient machine, Save As and Move To (each sends a client-chosen path as
+  the server's destination, and Save As's replace check must be made against
+  the server's filesystem, #263); reveal any server-reported path in a file
+  manager; reveal a FileReference's file.
+- Not gated: Save of an already-saved machine (an empty destination, the
+  server rewrites its own directory).
 - Not gated: a FileReference's server-side actions (the server opens its own
   path); editing values such as AUN peers or subnets; "Copy Path" (it hands the
   user a string, honest on any host); pre-launch configuration paths that become
