@@ -38,17 +38,52 @@ final class FileCommandsImportTests: XCTestCase {
 
     // MARK: - Save / Save As enable rules
 
-    func testSaveEnabledOnlyWithAFocusedMachineWindow() {
-        XCTAssertTrue(FileCommands.saveEnabled(hasFocusedMachineWindow: true))
-        XCTAssertFalse(FileCommands.saveEnabled(hasFocusedMachineWindow: false))
+    func testSaveEnabledForASavedMachineRegardlessOfServerLocality() {
+        // A saved machine saves in place -- no host path is handed over -- so it
+        // is available whether the server is local or remote.
+        XCTAssertTrue(FileCommands.saveEnabled(
+            hasFocusedMachineWindow: true, isSaved: true, isServerLocal: true))
+        XCTAssertTrue(FileCommands.saveEnabled(
+            hasFocusedMachineWindow: true, isSaved: true, isServerLocal: false))
     }
 
-    func testSaveAsEnabledOnlyForASavedFocusedMachine() {
-        XCTAssertTrue(FileCommands.saveAsEnabled(hasFocusedMachineWindow: true, isSaved: true))
+    func testFirstSaveOfATransientMachineNeedsALocalServer() {
+        // A transient machine's first save hands the server a directory chosen on
+        // this host, so it is offered only when the server shares this filesystem.
+        XCTAssertTrue(FileCommands.saveEnabled(
+            hasFocusedMachineWindow: true, isSaved: false, isServerLocal: true))
+        XCTAssertFalse(FileCommands.saveEnabled(
+            hasFocusedMachineWindow: true, isSaved: false, isServerLocal: false))
+    }
+
+    func testSaveDisabledWithNoFocusedMachineWindow() {
+        XCTAssertFalse(FileCommands.saveEnabled(
+            hasFocusedMachineWindow: false, isSaved: true, isServerLocal: true))
+    }
+
+    func testSaveAsEnabledOnlyForASavedFocusedMachineOnALocalServer() {
+        XCTAssertTrue(FileCommands.saveAsEnabled(
+            hasFocusedMachineWindow: true, isSaved: true, isServerLocal: true))
         // A transient machine has nothing to duplicate yet.
-        XCTAssertFalse(FileCommands.saveAsEnabled(hasFocusedMachineWindow: true, isSaved: false))
+        XCTAssertFalse(FileCommands.saveAsEnabled(
+            hasFocusedMachineWindow: true, isSaved: false, isServerLocal: true))
         // No machine window focused.
-        XCTAssertFalse(FileCommands.saveAsEnabled(hasFocusedMachineWindow: false, isSaved: true))
+        XCTAssertFalse(FileCommands.saveAsEnabled(
+            hasFocusedMachineWindow: false, isSaved: true, isServerLocal: true))
+        // Save As writes to a host path chosen here, so a remote server withholds it.
+        XCTAssertFalse(FileCommands.saveAsEnabled(
+            hasFocusedMachineWindow: true, isSaved: true, isServerLocal: false))
+    }
+
+    func testSaveAndSaveAsHelpExplainARemoteServer() {
+        // The tooltip explains why the item is withheld, only in the remote case.
+        XCTAssertTrue(FileCommands.saveHelp(isSaved: false, isServerLocal: false)
+            .contains("another host"))
+        XCTAssertEqual(FileCommands.saveHelp(isSaved: false, isServerLocal: true), "")
+        XCTAssertEqual(FileCommands.saveHelp(isSaved: true, isServerLocal: false), "",
+                       "a saved machine saves in place, so Save is not withheld")
+        XCTAssertTrue(FileCommands.saveAsHelp(isServerLocal: false).contains("another host"))
+        XCTAssertEqual(FileCommands.saveAsHelp(isServerLocal: true), "")
     }
 
     // MARK: - Rename enable rule

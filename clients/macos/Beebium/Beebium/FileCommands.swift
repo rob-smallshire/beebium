@@ -85,13 +85,20 @@ struct FileCommands: Commands {
             // machine, since it duplicates one into a new directory.
             Button("Save") { machineSaveActions?.save() }
             .keyboardShortcut("s", modifiers: .command)
-            .disabled(!Self.saveEnabled(hasFocusedMachineWindow: machineSaveActions != nil))
+            .disabled(!Self.saveEnabled(
+                hasFocusedMachineWindow: machineSaveActions != nil,
+                isSaved: machineSaveActions?.isSaved ?? false,
+                isServerLocal: machineSaveActions?.isServerLocal ?? false))
+            .help(Self.saveHelp(isSaved: machineSaveActions?.isSaved ?? false,
+                                isServerLocal: machineSaveActions?.isServerLocal ?? false))
 
             Button("Save As...") { machineSaveActions?.saveAs() }
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .disabled(!Self.saveAsEnabled(
                 hasFocusedMachineWindow: machineSaveActions != nil,
-                isSaved: machineSaveActions?.isSaved ?? false))
+                isSaved: machineSaveActions?.isSaved ?? false,
+                isServerLocal: machineSaveActions?.isServerLocal ?? false))
+            .help(Self.saveAsHelp(isServerLocal: machineSaveActions?.isServerLocal ?? false))
 
             Menu("Revert To") {
                 Text("No Saved Versions")
@@ -101,18 +108,40 @@ struct FileCommands: Commands {
         // Close (Cmd-W) provided automatically by SwiftUI
     }
 
-    /// Whether File > Save should be enabled: a machine window is focused, so
-    /// there is a machine -- transient or saved -- to save. Pure, so the rule is
-    /// testable; it is wired to the action with the SaveMachine RPC.
-    static func saveEnabled(hasFocusedMachineWindow: Bool) -> Bool {
-        hasFocusedMachineWindow
+    /// Whether File > Save should be enabled. A saved machine saves in place --
+    /// the server rewrites its own directory, no host path is handed over, so it
+    /// works whether the server is local or remote. A transient machine's first
+    /// save instead hands the server a directory chosen on this host, so it is
+    /// offered only when the server shares this filesystem (#263). Pure, so the
+    /// rule is testable; it is wired to the action with the SaveMachine RPC.
+    static func saveEnabled(hasFocusedMachineWindow: Bool, isSaved: Bool, isServerLocal: Bool) -> Bool {
+        hasFocusedMachineWindow && (isSaved || isServerLocal)
     }
 
-    /// Whether File > Save As... should be enabled: a machine window is focused
-    /// and its machine is already saved, since Save As duplicates a saved
-    /// machine into a new directory with a new UUID (section 4.8). Pure.
-    static func saveAsEnabled(hasFocusedMachineWindow: Bool, isSaved: Bool) -> Bool {
-        hasFocusedMachineWindow && isSaved
+    /// Whether File > Save As... should be enabled: a machine window is focused,
+    /// its machine is already saved (Save As duplicates a saved machine into a
+    /// new directory with a new UUID, section 4.8), and the server shares this
+    /// filesystem, since Save As hands it a host path chosen here (#263). Pure.
+    static func saveAsEnabled(hasFocusedMachineWindow: Bool, isSaved: Bool, isServerLocal: Bool) -> Bool {
+        hasFocusedMachineWindow && isSaved && isServerLocal
+    }
+
+    /// The reason Save is withheld, for the menu item's tooltip: only the
+    /// first save of a transient machine is gated on a local server, so this
+    /// explains that case and is empty otherwise. Mirrors the disc features'
+    /// wording for a remote server. Pure.
+    static func saveHelp(isSaved: Bool, isServerLocal: Bool) -> String {
+        (!isSaved && !isServerLocal)
+            ? "The server is on another host, so it cannot save a machine to this one"
+            : ""
+    }
+
+    /// The reason Save As is withheld, for the menu item's tooltip: it is gated
+    /// on a local server. Empty when the server is local. Pure.
+    static func saveAsHelp(isServerLocal: Bool) -> String {
+        isServerLocal
+            ? ""
+            : "The server is on another host, so it cannot save a machine to this one"
     }
 
     /// Whether File > Rename Machine... should be enabled: a not-yet-saved

@@ -427,6 +427,7 @@ struct ContentView: View {
         .focusedValue(\.renameMachine, { renameTransientMachine() })
         .focusedValue(\.machineSaveActions, MachineSaveActions(
             isSaved: systemClient.machineSaved,
+            isServerLocal: systemClient.isServerLocal,
             save: { Task { await MachineSaving.save(systemClient: systemClient) } },
             saveAs: { Task { await MachineSaving.saveAs(systemClient: systemClient) } }))
         .onChange(of: systemClient.machineSaved) { _ in

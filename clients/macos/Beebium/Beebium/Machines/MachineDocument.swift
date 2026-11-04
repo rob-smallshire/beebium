@@ -120,6 +120,21 @@ final class MachineDocument: NSDocument {
         (machineSaved && !machineDirpath.isEmpty) ? URL(fileURLWithPath: machineDirpath) : nil
     }
 
+    // MARK: - Withholding Move To for a remote server
+
+    /// The title bar popover's "Move To..." hands the server a destination
+    /// directory chosen on this host, so it means nothing when the server is on
+    /// another host (#263). Disabling its `moveDocument:` action is the
+    /// AppKit-native way to grey that one popover item out, rather than rebuilding
+    /// the title bar; the popover's inline Rename and Duplicate are left alone.
+    /// This mirrors the disc features' gating on a local server.
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(NSDocument.move(_:)) {
+            return (systemClient?.isServerLocal ?? false) && super.validateUserInterfaceItem(item)
+        }
+        return super.validateUserInterfaceItem(item)
+    }
+
     // MARK: - Rename and Move (the popover's inline rename and Where)
 
     /// Where the title bar's inline rename and Move To both land, with `url` the
@@ -134,6 +149,15 @@ final class MachineDocument: NSDocument {
     override func move(to url: URL, completionHandler: ((Error?) -> Void)? = nil) {
         guard let systemClient, fileURL != nil else {
             completionHandler?(fileURL == nil ? SystemClient.MachineMoveError.failed("") : nil)
+            return
+        }
+        // Move To is withheld from the popover when the server is remote
+        // (validateUserInterfaceItem, #263); guard the programmatic path too, so
+        // a destination on this host is never sent to a server that cannot reach
+        // it.
+        guard systemClient.isServerLocal else {
+            completionHandler?(SystemClient.MachineMoveError.invalidDestination(
+                "The server is on another host, so the machine cannot be moved to a folder on this one."))
             return
         }
         let previousDirpath = fileURL

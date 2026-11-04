@@ -164,9 +164,13 @@ extension FocusedValues {
 
 // Save and Save As act on the machine in the focused window, so they are
 // focused values too. `isSaved` gates Save As, since only an already-saved
-// machine can be duplicated into a new directory.
+// machine can be duplicated into a new directory. `isServerLocal` gates the
+// path-writing variants -- the first save of a transient machine and Save As --
+// since they hand the server a host path chosen on this machine, which only
+// means anything when the server shares this filesystem (#263).
 struct MachineSaveActions {
     let isSaved: Bool
+    let isServerLocal: Bool
     let save: () -> Void
     let saveAs: () -> Void
 }
