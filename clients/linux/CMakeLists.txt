@@ -159,13 +159,15 @@ target_link_libraries(beebium_linux_keyboard
 
 add_library(beebium_linux_preset STATIC
     src/preset/MachineDraft.cpp
+    src/preset/ParameterFormModel.cpp
     src/preset/PresetDocument.cpp
     src/preset/PresetResolution.cpp
     src/preset/PresetSchema.cpp
     src/preset/StructuredItem.cpp
 )
 target_include_directories(beebium_linux_preset PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(beebium_linux_preset PUBLIC nlohmann_json::nlohmann_json)
+# The forms are Views for the extension views' renderer.
+target_link_libraries(beebium_linux_preset PUBLIC nlohmann_json::nlohmann_json beebium_linux_protos)
 
 # --- Connection: everything between the wire and the UI, without Qt ---------
 

@@ -103,6 +103,13 @@ struct SchemaAttachmentPoint {
     std::vector<std::string> extensions;  // the names that attach here
 };
 
+// An image the server ships, which a bundled parameter may name.
+struct SchemaBundledImage {
+    std::string image;
+    std::string display_name;
+    std::string extension;  // the extension it belongs to; empty for any
+};
+
 struct SchemaFdcOption {
     std::string id;
     std::string label;
@@ -135,6 +142,8 @@ public:
     // Every extension and transport the model can take.
     std::vector<SchemaExtension> catalogue() const;
     std::optional<SchemaExtension> extension(std::string_view name) const;
+    // The bundled images of a kind ("rom", "hard-disc").
+    std::vector<SchemaBundledImage> bundled_images(std::string_view kind) const;
 
 private:
     nlohmann::ordered_json json_;

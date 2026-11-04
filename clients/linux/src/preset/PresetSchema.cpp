@@ -223,6 +223,23 @@ std::vector<SchemaExtension> PresetSchema::catalogue() const {
     return out;
 }
 
+std::vector<SchemaBundledImage> PresetSchema::bundled_images(std::string_view kind) const {
+    std::vector<SchemaBundledImage> out;
+    const ordered_json* s = section("extensions");
+    if (!s || !s->contains("bundled_images")) {
+        return out;
+    }
+    const ordered_json& images = (*s)["bundled_images"];
+    const auto found = images.find(std::string(kind));
+    if (found == images.end() || !found->is_array()) {
+        return out;
+    }
+    for (const auto& image : *found) {
+        out.push_back({text(image, "image"), text(image, "display_name"), text(image, "extension")});
+    }
+    return out;
+}
+
 std::optional<SchemaExtension> PresetSchema::extension(std::string_view name) const {
     for (auto& e : catalogue()) {
         if (e.name == name) {
