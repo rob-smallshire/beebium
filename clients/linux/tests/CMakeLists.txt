@@ -31,7 +31,9 @@ function(beebium_linux_add_test name)
     endif()
     target_link_libraries(${name} PRIVATE ${ARG_LIBRARIES})
     target_compile_definitions(${name} PRIVATE
-        BEEBIUM_KEYBOARD_CORPUS_DIRPATH="${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}")
+        BEEBIUM_KEYBOARD_CORPUS_DIRPATH="${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}"
+        BEEBIUM_PRESET_FIXTURES_DIRPATH="${BEEBIUM_PRESET_FIXTURES_DIRPATH}"
+        BEEBIUM_PRESET_SCHEMA_FIXTURES_DIRPATH="${BEEBIUM_PRESET_SCHEMA_FIXTURES_DIRPATH}")
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
     # A Catch2 SKIP exits 4: scored as skipped, not failed.
     catch_discover_tests(${name}
@@ -45,6 +47,10 @@ beebium_linux_add_test(test_application_info
 beebium_linux_add_test(test_main_window QT
     SOURCES test_main_window.cpp
     LIBRARIES beebium_linux_app)
+
+beebium_linux_add_test(test_preset_document
+    SOURCES test_preset_document.cpp
+    LIBRARIES beebium_linux_preset)
 
 beebium_linux_add_test(test_compatibility
     SOURCES test_compatibility.cpp

@@ -75,6 +75,8 @@ endif()
 # The keyboard mapping conformance corpus. Its built-ins are also the
 # built-ins the client ships (docs/keyboard-mapping-files.md 5, 6): one copy.
 set(BEEBIUM_KEYBOARD_CORPUS_DIRPATH ${BEEBIUM_REPO_DIRPATH}/tests/assets/keyboard-mappings)
+set(BEEBIUM_PRESET_FIXTURES_DIRPATH ${BEEBIUM_REPO_DIRPATH}/tests/assets/presets)
+set(BEEBIUM_PRESET_SCHEMA_FIXTURES_DIRPATH ${BEEBIUM_REPO_DIRPATH}/tests/assets/describe_preset_schema)
 qt_standard_project_setup()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
@@ -152,6 +154,14 @@ target_link_libraries(beebium_linux_keyboard
         beebium_linux_protos
         nlohmann_json::nlohmann_json
 )
+
+# --- Presets: the machine draft and its resolution, without Qt -------------
+
+add_library(beebium_linux_preset STATIC
+    src/preset/PresetDocument.cpp
+)
+target_include_directories(beebium_linux_preset PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(beebium_linux_preset PUBLIC nlohmann_json::nlohmann_json)
 
 # --- Connection: everything between the wire and the UI, without Qt ---------
 
