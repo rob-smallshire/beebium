@@ -33,6 +33,7 @@
 #include "app/WindowGeometry.hpp"
 #include "app/MachineMove.hpp"
 #include "app/MachineSession.hpp"
+#include "app/MemorySidebar.hpp"
 
 #include <QAction>
 #include <QMimeData>
@@ -129,6 +130,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                        new StorageSidebar(session_->discs(), settings_,
                                           [this] { return session_->server_shares_filesystem(); },
                                           sidebar_));
+    sidebar_->add_mode(SidebarMode::memory, new MemorySidebar(session_->sideways(), sidebar_));
     auto* video_mode = new VideoSidebar(sidebar_);
     video_mode->set_settings(display_->video_settings());
     connect(video_mode, &VideoSidebar::changed, display_, &DisplayWidget::set_video_settings);

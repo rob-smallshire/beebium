@@ -278,6 +278,7 @@ add_library(beebium_linux_app STATIC
     src/app/SpeedScale.cpp
     src/app/ProcessorSidebar.cpp
     src/app/VideoSidebar.cpp
+    src/app/MemorySidebar.cpp
     src/app/ColourChoice.cpp
     src/app/SessionTyping.cpp
     src/app/SettingsDialog.cpp

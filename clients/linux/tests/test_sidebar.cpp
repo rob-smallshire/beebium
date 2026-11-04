@@ -62,7 +62,8 @@ TEST_CASE("The offered modes' icons are the theme's devices, one set by construc
     for (SidebarMode mode : offered_sidebar_modes()) {
         names << sidebar_mode_icon_name(mode);
     }
-    CHECK(names == QStringList{QStringLiteral("drive-harddisk"), QStringLiteral("video-display"),
+    CHECK(names == QStringList{QStringLiteral("drive-harddisk"), QStringLiteral("media-flash"),
+                               QStringLiteral("video-display"),
                                QStringLiteral("audio-card"), QStringLiteral("input-keyboard"),
                                QStringLiteral("cpu")});
 }
