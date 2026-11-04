@@ -29,6 +29,7 @@
 #include "app/Sidebar.hpp"
 #include "app/SoundSidebar.hpp"
 #include "app/StorageSidebar.hpp"
+#include "app/VideoSidebar.hpp"
 #include "app/WindowGeometry.hpp"
 #include "app/MachineMove.hpp"
 #include "app/MachineSession.hpp"
@@ -123,6 +124,10 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                        new StorageSidebar(session_->discs(), settings_,
                                           [this] { return session_->server_shares_filesystem(); },
                                           sidebar_));
+    auto* video_mode = new VideoSidebar(sidebar_);
+    video_mode->set_settings(display_->video_settings());
+    connect(video_mode, &VideoSidebar::changed, display_, &DisplayWidget::set_video_settings);
+    sidebar_->add_mode(SidebarMode::video, video_mode);
     sidebar_->add_mode(SidebarMode::sound, new SoundSidebar(session_->audio(), sidebar_));
     // The keyboard mapping, as chosen last time (7.4).
     auto* keyboard_mode = keyboard_mode_ = new KeyboardSidebar(user_mappings_dirpath(), sidebar_);

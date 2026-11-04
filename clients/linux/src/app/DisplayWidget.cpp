@@ -128,6 +128,14 @@ bool DisplayWidget::focusNextPrevChild(bool) {
     return false;
 }
 
+void DisplayWidget::set_video_settings(const VideoSettings& settings) {
+    if (settings == renderer_.video_settings()) {
+        return;
+    }
+    renderer_.set_video_settings(settings);
+    update();
+}
+
 void DisplayWidget::frame_ready() {
     update();
 }

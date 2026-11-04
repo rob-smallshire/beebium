@@ -47,6 +47,10 @@ public:
     // Key events typed into the display go to the machine through this.
     KeyboardInput& keyboard() { return keyboard_; }
 
+    // This window's video settings (6.3, 6.6); a change repaints, even with
+    // the machine paused.
+    void set_video_settings(const VideoSettings& settings);
+    const VideoSettings& video_settings() const { return renderer_.video_settings(); }
     // The device QRhi is drawing with, once initialised.
     QString graphics_description() const { return graphics_description_; }
 
