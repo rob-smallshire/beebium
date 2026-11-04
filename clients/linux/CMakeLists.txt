@@ -285,6 +285,7 @@ add_library(beebium_linux_app STATIC
     src/app/PeripheralsSidebar.cpp
     src/app/PictureDrop.cpp
     src/app/Presentation.cpp
+    src/app/PresetResolver.cpp
     src/app/PresetsPage.cpp
     src/app/RunHold.cpp
     src/app/RunningMachinesPage.cpp
@@ -330,6 +331,7 @@ target_link_libraries(beebium_linux_app
         Qt6::DBus
         Qt6::Network
         beebium_linux_display
+        beebium_linux_preset
         beebium_linux_servers
         beebium_discovery
 )
