@@ -102,7 +102,7 @@ TEST_CASE("An editor's starting values are its leaves' values, by field id",
 TEST_CASE("Editable list events carry the item, action and commit the kind needs",
           "[extension][dispatch]") {
     const beebium::View view = view_with(3);
-    const EditorValues commit{{"host", std::string("192.168.1.10")}};
+    const EditorValues commit{{"host", std::string("192.0.2.10")}};
     const auto add = list_action(view, "peers", beebium::EditableListEvent::ADD, "", "", &commit);
     CHECK(add.editable_list_event().kind() == beebium::EditableListEvent::ADD);
     CHECK(add.editable_list_event().item_id().empty());

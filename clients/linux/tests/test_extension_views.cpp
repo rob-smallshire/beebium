@@ -83,9 +83,9 @@ beebium::View every_primitive(std::uint64_t revision, const QString& file_path =
     text->set_note("Saving pins the port");
     auto* combo = add(root, "host")->mutable_editable_choice();
     combo->set_label("Host");
-    combo->set_value("pi.local");
-    combo->add_options("pi.local");
-    combo->add_options("beeb.local");
+    combo->set_value("fileserver.example");
+    combo->add_options("fileserver.example");
+    combo->add_options("printserver.example");
     auto* modal_control = add(root, "station");
     auto* modal = modal_control->mutable_modal_editor();
     modal->mutable_anchor()->set_id("station-anchor");
@@ -187,7 +187,7 @@ TEST_CASE("Every primitive renders by its type, named by its control id", "[exte
     CHECK(r.inside<QCheckBox>("enabled")->text() == QStringLiteral("Enabled"));
     CHECK(r.inside<QPushButton>("connect")->text() == QStringLiteral("Connect"));
     CHECK(r.inside<QLineEdit>("name")->text() == QStringLiteral("old"));
-    CHECK(r.inside<QComboBox>("host")->currentText() == QStringLiteral("pi.local"));
+    CHECK(r.inside<QComboBox>("host")->currentText() == QStringLiteral("fileserver.example"));
     QListWidget* peers = r.inside<QListWidget>("peers");
     CHECK(peers->count() == 2);
     // As tall as its rows, not the panel's free space.
@@ -253,11 +253,11 @@ TEST_CASE("Text commits on the end of editing, and before any other control acts
 
     // Typed but not finished, then another control: the text lands first.
     QComboBox* host = r.inside<QComboBox>("host");
-    host->setEditText(QStringLiteral("beeb.local"));
+    host->setEditText(QStringLiteral("printserver.example"));
     r.inside<QCheckBox>("enabled")->click();
     REQUIRE(r.sent.size() == 3);
     CHECK(r.sent[1].control_id() == "host");
-    CHECK(r.sent[1].string_value() == "beeb.local");
+    CHECK(r.sent[1].string_value() == "printserver.example");
     CHECK(r.sent[2].control_id() == "enabled");
     CHECK(r.sent[1].view_revision() == 4);
 }
@@ -295,11 +295,11 @@ TEST_CASE("An editable list adds, edits, removes and acts, confirming a warning 
     CHECK(add_button->isEnabled());
     CHECK_FALSE(remove_button->isEnabled());  // nothing chosen
 
-    r.editor_answer = EditorValues{{"address", std::string("192.168.1.10")}};
+    r.editor_answer = EditorValues{{"address", std::string("192.0.2.10")}};
     add_button->click();
     REQUIRE(r.sent.size() == 1);
     CHECK(r.sent[0].editable_list_event().kind() == beebium::EditableListEvent::ADD);
-    CHECK(r.sent[0].editable_list_event().commit().fields(0).string_value() == "192.168.1.10");
+    CHECK(r.sent[0].editable_list_event().commit().fields(0).string_value() == "192.0.2.10");
 
     list->setCurrentRow(0);  // peer-1 is not removable
     CHECK_FALSE(remove_button->isEnabled());
