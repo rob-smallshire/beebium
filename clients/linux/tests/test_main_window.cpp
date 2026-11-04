@@ -77,3 +77,36 @@ TEST_CASE("The status bar holds the LEDs, then the keyboard mapping and the mach
     window.set_quitting(true);
     window.close();
 }
+
+TEST_CASE("The window marks unsaved changes the platform's way, from the server's signal",
+          "[app][window][unsaved]") {
+    FakeServer server;
+    MainWindow window(QRhiWidget::Api::OpenGL);
+    window.show();
+    window.connect_to(server.endpoint());
+    REQUIRE(wait_until([&] { return window.session().connected(); }));
+    const auto status = [](beebium::ServerStatusType kind) {
+        beebium::ServerStatusEvent event;
+        event.set_status(kind);
+        return event;
+    };
+    // The title is a template the platform fills with its own marker.
+    auto named = status(beebium::SERVER_STATUS_IDENTITY_CHANGED);
+    named.mutable_identity()->set_name("Elite [*] Box");
+    server.system.push(named);
+    REQUIRE(wait_until([&] { return window.windowTitle().startsWith(QStringLiteral("Elite")); }));
+    // A "[*]" in the name is the name's, not a marker.
+    CHECK(window.windowTitle() == QStringLiteral("Elite [*][*] Box[*]"));
+    CHECK_FALSE(window.isWindowModified());
+
+    auto written = status(beebium::SERVER_STATUS_HEARTBEAT);
+    written.set_template_media_written(true);
+    server.system.push(written);
+    REQUIRE(wait_until([&] { return window.isWindowModified(); }));
+
+    // Cleared when the server says so (after a save, say).
+    server.system.push(status(beebium::SERVER_STATUS_HEARTBEAT));
+    REQUIRE(wait_until([&] { return !window.isWindowModified(); }));
+    window.set_quitting(true);
+    window.close();
+}

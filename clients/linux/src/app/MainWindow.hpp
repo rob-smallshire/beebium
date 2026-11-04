@@ -142,6 +142,8 @@ private:
     void tap_named_key(const QString& name);
     // Edit > Paste (7.5).
     void paste();
+    // The machine's name as the title, with room for the unsaved marker.
+    void show_title(const QString& name);
     // Make a mapping the active one, from the sidebar or the Edit menu's
     // switch (7.4): the keys, the sidebar's selection, the status bar and
     // the stored choice follow, and the one it replaces is recorded.

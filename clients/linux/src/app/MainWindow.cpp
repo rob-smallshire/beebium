@@ -99,7 +99,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
       display_(new DisplayWidget(session_->mailbox(), this)),
       overlay_(new ConnectionOverlay(display_)) {
     settings_ = settings;
-    setWindowTitle(QStringLiteral("Beebium"));
+    show_title(QString());
     setAttribute(Qt::WA_DeleteOnClose);
 
     display_->setObjectName(QStringLiteral("display"));
@@ -368,11 +368,20 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
             [this] { model_label_->setText(session_->model_name()); });
     // The title is the machine's name, exactly (5.7).
     connect(session_, &MachineSession::identity_changed, this,
-            [this](const QString& name, const QString&) {
-                setWindowTitle(name.isEmpty() ? QStringLiteral("Beebium") : name);
-            });
+            [this](const QString& name, const QString&) { show_title(name); });
+    // Unsaved changes (5.3) are the platform's own marker in the title.
+    connect(session_, &MachineSession::unsaved_changes_changed, this,
+            &QWidget::setWindowModified);
 
     build_menus();
+}
+
+void MainWindow::show_title(const QString& name) {
+    // A template: the platform puts its unsaved-changes marker at "[*]",
+    // so one in the name itself is doubled to stay the name's.
+    QString title = name.isEmpty() ? QStringLiteral("Beebium") : name;
+    title.replace(QStringLiteral("[*]"), QStringLiteral("[*][*]"));
+    setWindowTitle(title + QStringLiteral("[*]"));
 }
 
 void MainWindow::activate_mapping(const MappingChoice& choice) {
