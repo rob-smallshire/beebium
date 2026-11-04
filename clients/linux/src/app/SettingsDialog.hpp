@@ -13,8 +13,12 @@
 #ifndef BEEBIUM_LINUX_APP_SETTINGS_DIALOG_HPP
 #define BEEBIUM_LINUX_APP_SETTINGS_DIALOG_HPP
 
+#include "app/ColourChoice.hpp"
+#include "display/VideoSettings.hpp"
+
 #include <QDialog>
 
+class QComboBox;
 class QLabel;
 class QLineEdit;
 
@@ -22,8 +26,9 @@ namespace beebium::linux_client {
 
 class ClientSettings;
 
-// Tools > Configure Beebium: where this host's servers and ROMs are
-// (client specification 13.3; docs/deployment.md). Saved on OK.
+// Settings > Configure Beebium (client specification 13.3): a Paths page,
+// where this host's servers and ROMs are (docs/deployment.md), and a Video
+// page, the defaults new machine windows start with (6.6). Saved on OK.
 class SettingsDialog : public QDialog {
     Q_OBJECT
 
@@ -31,6 +36,8 @@ public:
     explicit SettingsDialog(ClientSettings& settings, QWidget* parent = nullptr);
 
     void accept() override;
+    // The Video page's colour picker; the platform's by default.
+    void set_colour_chooser(const ColourChoice::Chooser& chooser) { boxing_->set_chooser(chooser); }
 
 private:
     void show_found();
@@ -39,6 +46,9 @@ private:
     QLineEdit* servers_;
     QLabel* servers_found_;
     QLineEdit* roms_;
+    QComboBox* default_style_;
+    QComboBox* default_pixels_;
+    ColourChoice* boxing_;
 };
 
 }  // namespace beebium::linux_client

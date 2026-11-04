@@ -118,3 +118,42 @@ TEST_CASE("Recent discs are kept newest first, one per path, ten at most",
     reopened.clear_discs();
     CHECK(reopened.recent_discs().isEmpty());
 }
+
+TEST_CASE("Video defaults for new windows persist across runs: style, pixels, boxing colour",
+          "[settings][video]") {
+    QTemporaryDir directory;
+    const QString filepath = directory.filePath(QStringLiteral("Beebium.conf"));
+    {
+        ClientSettings settings(filepath);
+        CHECK(settings.video_defaults() == VideoSettings{});
+        VideoSettings chosen;
+        chosen.style = DisplayStyle::debug;
+        chosen.pixels = PixelShape::crisp;
+        chosen.boxing = Rgb{200, 10, 20};
+        chosen.edge_margin_percent = 9;  // per window, never a default
+        settings.set_video_defaults(chosen);
+    }
+    ClientSettings reopened(filepath);
+    const VideoSettings defaults = reopened.video_defaults();
+    CHECK(defaults.style == DisplayStyle::debug);
+    CHECK(defaults.pixels == PixelShape::crisp);
+    CHECK(defaults.boxing == Rgb{200, 10, 20});
+    CHECK(defaults.edge_margin_percent == VideoSettings{}.edge_margin_percent);
+    CHECK(defaults.edge_margin_colour == VideoSettings{}.edge_margin_colour);
+    CHECK(reopened.store().value(QStringLiteral("video/defaultStyle")).toString() ==
+          QStringLiteral("debug"));
+    CHECK(reopened.store().value(QStringLiteral("video/defaultPixels")).toString() ==
+          QStringLiteral("crisp"));
+    CHECK(reopened.store().value(QStringLiteral("video/defaultBoxingColour")).toString() ==
+          QStringLiteral("#c80a14"));
+}
+
+TEST_CASE("Video defaults that no longer read fall back to the built-in ones",
+          "[settings][video]") {
+    QTemporaryDir directory;
+    ClientSettings settings(directory.filePath(QStringLiteral("Beebium.conf")));
+    settings.store().setValue(QStringLiteral("video/defaultStyle"), QStringLiteral("sepia"));
+    settings.store().setValue(QStringLiteral("video/defaultPixels"), 7);
+    settings.store().setValue(QStringLiteral("video/defaultBoxingColour"), QStringLiteral("blue-ish"));
+    CHECK(settings.video_defaults() == VideoSettings{});
+}

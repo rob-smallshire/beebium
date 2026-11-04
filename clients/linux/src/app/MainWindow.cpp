@@ -102,6 +102,11 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
       display_(new DisplayWidget(session_->mailbox(), this)),
       overlay_(new ConnectionOverlay(display_)) {
     settings_ = settings;
+    // A new window starts from the video defaults (6.6); later changes to
+    // them leave it be.
+    if (settings_) {
+        display_->set_video_settings(settings_->video_defaults());
+    }
     show_title(QString());
     setAttribute(Qt::WA_DeleteOnClose);
 

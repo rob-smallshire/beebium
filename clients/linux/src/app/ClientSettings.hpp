@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_APP_CLIENT_SETTINGS_HPP
 
 #include "connection/Endpoint.hpp"
+#include "display/VideoSettings.hpp"
 
 #include <QSettings>
 #include <QStringList>
@@ -64,6 +65,13 @@ public:
     // their own.
     QString rom_dirpath() const;
     void set_rom_dirpath(const QString& dirpath);
+
+    // The video settings a new machine window starts with (client
+    // specification 6.6), as the macOS client's defaults: the style, the
+    // pixel shape and the boxing colour. The edge margin is per window and
+    // always starts at its default. Open windows never follow a change.
+    VideoSettings video_defaults() const;
+    void set_video_defaults(const VideoSettings& defaults);
 
     QSettings& store() { return *settings_; }
 

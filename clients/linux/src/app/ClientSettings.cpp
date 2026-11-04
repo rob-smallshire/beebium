@@ -21,6 +21,9 @@ namespace {
 
 const QString RECENT_CONNECTIONS_KEY = QStringLiteral("connections/recent");
 const QString RECENT_MACHINES_KEY = QStringLiteral("machines/recent");
+const QString VIDEO_STYLE_KEY = QStringLiteral("video/defaultStyle");
+const QString VIDEO_PIXELS_KEY = QStringLiteral("video/defaultPixels");
+const QString VIDEO_BOXING_KEY = QStringLiteral("video/defaultBoxingColour");
 const QString RECENT_DISCS_KEY = QStringLiteral("discs/recent");
 
 QString cleaned(const QString& dirpath) {
@@ -81,6 +84,44 @@ void ClientSettings::forget_machine(const QString& machine_dirpath) {
 
 void ClientSettings::clear_machines() {
     settings_->remove(RECENT_MACHINES_KEY);
+    settings_->sync();
+}
+
+VideoSettings ClientSettings::video_defaults() const {
+    VideoSettings defaults;
+    const QString style = settings_->value(VIDEO_STYLE_KEY).toString();
+    if (style == QStringLiteral("debug")) {
+        defaults.style = DisplayStyle::debug;
+    }
+    const QString pixels = settings_->value(VIDEO_PIXELS_KEY).toString();
+    if (pixels == QStringLiteral("crisp")) {
+        defaults.pixels = PixelShape::crisp;
+    }
+    // "#rrggbb", as the macOS client keeps its boxing colour.
+    const QString boxing = settings_->value(VIDEO_BOXING_KEY).toString();
+    if (boxing.size() == 7 && boxing.startsWith(QLatin1Char('#'))) {
+        bool ok = false;
+        const uint rgb = boxing.mid(1).toUInt(&ok, 16);
+        if (ok) {
+            defaults.boxing = Rgb{static_cast<std::uint8_t>(rgb >> 16),
+                                  static_cast<std::uint8_t>(rgb >> 8),
+                                  static_cast<std::uint8_t>(rgb)};
+        }
+    }
+    return defaults;
+}
+
+void ClientSettings::set_video_defaults(const VideoSettings& defaults) {
+    settings_->setValue(VIDEO_STYLE_KEY, defaults.style == DisplayStyle::debug
+                                             ? QStringLiteral("debug")
+                                             : QStringLiteral("standard"));
+    settings_->setValue(VIDEO_PIXELS_KEY, defaults.pixels == PixelShape::crisp
+                                              ? QStringLiteral("crisp")
+                                              : QStringLiteral("authentic"));
+    settings_->setValue(VIDEO_BOXING_KEY, QStringLiteral("#%1%2%3")
+                                              .arg(defaults.boxing.r, 2, 16, QLatin1Char('0'))
+                                              .arg(defaults.boxing.g, 2, 16, QLatin1Char('0'))
+                                              .arg(defaults.boxing.b, 2, 16, QLatin1Char('0')));
     settings_->sync();
 }
 
