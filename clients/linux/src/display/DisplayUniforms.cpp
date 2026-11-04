@@ -16,16 +16,40 @@
 
 namespace beebium::linux_client {
 
-DisplayUniforms make_display_uniforms(const DecodedFrame& frame, double pixel_aspect,
+namespace {
+
+// The shader's own safety net; the controls stop at MAX_EDGE_MARGIN_PERCENT.
+constexpr double MAX_EDGE_MARGIN = 0.45;
+
+void set_colour(float (&target)[4], const Rgb& colour) {
+    target[0] = static_cast<float>(colour.r) / 255.0f;
+    target[1] = static_cast<float>(colour.g) / 255.0f;
+    target[2] = static_cast<float>(colour.b) / 255.0f;
+    target[3] = 1.0f;
+}
+
+}  // namespace
+
+DisplayUniforms make_display_uniforms(const DecodedFrame& frame, const VideoSettings& settings,
                                       double drawable_width, double drawable_height,
                                       bool ndc_y_up) {
     DisplayUniforms uniforms;
     const double aspect = picture_aspect(frame.display_width, frame.display_height,
-                                         frame.interlaced, pixel_aspect);
+                                         frame.interlaced, pixel_aspect(settings.pixels));
     const PictureFit fit = fit_picture(aspect, drawable_width, drawable_height);
     uniforms.quad[0] = static_cast<float>(fit.scale_x);
     uniforms.quad[1] = static_cast<float>(fit.scale_y);
     uniforms.quad[2] = ndc_y_up ? 1.0f : -1.0f;
+
+    // The margin is the same fraction of each edge, so the picture inside it
+    // keeps the quad's aspect.
+    const auto margin = static_cast<float>(
+        std::clamp(settings.edge_margin_percent / 100.0, 0.0, MAX_EDGE_MARGIN));
+    uniforms.inner[0] = margin;
+    uniforms.inner[1] = margin;
+    uniforms.inner[2] = 1.0f - margin;
+    uniforms.inner[3] = 1.0f - margin;
+    set_colour(uniforms.band_colour, settings.edge_margin_colour);
 
     uniforms.texture_size[0] = static_cast<float>(frame.width);
     uniforms.texture_size[1] = static_cast<float>(frame.height);

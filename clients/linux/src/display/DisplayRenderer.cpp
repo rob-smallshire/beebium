@@ -132,12 +132,13 @@ void DisplayRenderer::render(QRhiCommandBuffer* command_buffer, QRhiRenderTarget
             upload_pending_ = false;
         }
         const DisplayUniforms uniforms =
-            make_display_uniforms(*current_, pixel_aspect_, output_size.width(),
+            make_display_uniforms(*current_, settings_, output_size.width(),
                                   output_size.height(), rhi_->isYUpInNDC());
         updates->updateDynamicBuffer(uniforms_.get(), 0, sizeof(uniforms), &uniforms);
     }
 
-    command_buffer->beginPass(target, background_, {1.0f, 0}, updates);
+    const QColor boxing(settings_.boxing.r, settings_.boxing.g, settings_.boxing.b);
+    command_buffer->beginPass(target, boxing, {1.0f, 0}, updates);
     if (current_) {
         command_buffer->setGraphicsPipeline(pipeline_.get());
         command_buffer->setViewport(

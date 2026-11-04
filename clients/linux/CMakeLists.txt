@@ -208,6 +208,7 @@ target_link_libraries(beebium_linux_servers PUBLIC Qt6::Core)
 add_library(beebium_linux_display STATIC
     src/display/DisplayRenderer.cpp
     src/display/DisplayUniforms.cpp
+    src/display/VideoSettings.cpp
 )
 target_include_directories(beebium_linux_display PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # QRhi (rhi/qrhi.h) is semi-public API with limited compatibility promises.

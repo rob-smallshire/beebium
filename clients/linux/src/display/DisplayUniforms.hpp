@@ -15,6 +15,7 @@
 
 #include "connection/DecodedFrame.hpp"
 #include "connection/PictureGeometry.hpp"
+#include "display/VideoSettings.hpp"
 
 #include <cstdint>
 
@@ -33,14 +34,19 @@ struct DisplayUniforms {
     std::int32_t region_info[4] = {0, 0, 0, 0};
     // Per region: x first scanline, y one past the last, z logical pixel width.
     std::int32_t regions[MAX_DISPLAY_REGIONS][4] = {};
+    // The active picture within the quad, as u0, v0, u1, v1 (v from the top).
+    float inner[4] = {0, 0, 1, 1};
+    // What fills the quad outside `inner`: the edge margin's colour.
+    float band_colour[4] = {0, 0, 0, 1};
 };
 
-static_assert(sizeof(DisplayUniforms) == 176, "std140 layout of the display uniform block");
+static_assert(sizeof(DisplayUniforms) == 208, "std140 layout of the display uniform block");
 
 // Fill the uniforms for drawing `frame` into a drawable of the given pixel
-// size (client specification 6.2): the aspect-fitted quad, and split-screen
-// regions beyond the first eight dropped as the shader does.
-DisplayUniforms make_display_uniforms(const DecodedFrame& frame, double pixel_aspect,
+// size (client specification 6.2, 6.3): the aspect-fitted quad at the
+// settings' pixel shape, the picture inset by the edge margin, and
+// split-screen regions beyond the first eight dropped as the shader does.
+DisplayUniforms make_display_uniforms(const DecodedFrame& frame, const VideoSettings& settings,
                                       double drawable_width, double drawable_height,
                                       bool ndc_y_up);
 

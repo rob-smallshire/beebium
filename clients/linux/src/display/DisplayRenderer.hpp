@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_DISPLAY_DISPLAY_RENDERER_HPP
 
 #include "connection/DecodedFrame.hpp"
+#include "display/VideoSettings.hpp"
 
 #include <QColor>
 #include <QSize>
@@ -51,8 +52,10 @@ public:
     bool has_frame() const { return static_cast<bool>(current_); }
     const DecodedFrame* current_frame() const { return current_.get(); }
 
-    void set_pixel_aspect(double pixel_aspect) { pixel_aspect_ = pixel_aspect; }
-    void set_background(const QColor& colour) { background_ = colour; }
+    // The window's video settings (6.3): pixel shape, style, the boxing
+    // colour the pass clears to, and the edge margin.
+    void set_video_settings(const VideoSettings& settings) { settings_ = settings; }
+    const VideoSettings& video_settings() const { return settings_; }
 
     // Record one pass into `target`: clear to the background and, once a
     // frame has arrived, draw it aspect-fitted.
@@ -71,8 +74,7 @@ private:
 
     std::unique_ptr<DecodedFrame> current_;
     bool upload_pending_ = false;
-    double pixel_aspect_ = 0.96;
-    QColor background_ = QColor(16, 16, 16);
+    VideoSettings settings_;
 };
 
 }  // namespace beebium::linux_client

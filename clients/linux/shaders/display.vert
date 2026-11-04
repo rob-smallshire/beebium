@@ -10,6 +10,8 @@ layout(std140, binding = 0) uniform buf {
     vec4 texture_size;
     ivec4 region_info;
     ivec4 regions[8];
+    vec4 inner;
+    vec4 band_colour;
 };
 
 void main() {
