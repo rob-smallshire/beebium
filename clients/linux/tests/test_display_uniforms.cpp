@@ -49,7 +49,8 @@ TEST_CASE("The uniform block has the std140 offsets the shaders declare", "[disp
     CHECK(offsetof(DisplayUniforms, region_info) == 32);
     CHECK(offsetof(DisplayUniforms, regions) == 48);
     CHECK(offsetof(DisplayUniforms, inner) == 176);
-    CHECK(offsetof(DisplayUniforms, band_colour) == 192);
+    CHECK(offsetof(DisplayUniforms, band_colours) == 192);
+    CHECK(sizeof(DisplayUniforms) == 256);
 }
 
 TEST_CASE("The quad is the aspect-fitted picture", "[display]") {
@@ -122,10 +123,13 @@ TEST_CASE("The edge margin insets the picture by its fraction of each edge, the 
     CHECK(with.inner[1] == Approx(0.02f));
     CHECK(with.inner[2] == Approx(0.98f));
     CHECK(with.inner[3] == Approx(0.98f));
-    CHECK(with.band_colour[0] == Approx(1.0f));
-    CHECK(with.band_colour[1] == Approx(0.0f));
-    CHECK(with.band_colour[2] == Approx(0.2f));
-    CHECK(with.band_colour[3] == Approx(1.0f));
+    // Every side of the band is the margin's colour.
+    for (const auto& side : with.band_colours) {
+        CHECK(side[0] == Approx(1.0f));
+        CHECK(side[1] == Approx(0.0f));
+        CHECK(side[2] == Approx(0.2f));
+        CHECK(side[3] == Approx(1.0f));
+    }
 }
 
 TEST_CASE("The edge margin is kept within its range", "[display][video]") {
@@ -135,4 +139,43 @@ TEST_CASE("The edge margin is kept within its range", "[display][video]") {
     CHECK(make_display_uniforms(frame, settings, 100, 100, true).inner[0] == Approx(0.45f));
     settings.edge_margin_percent = -3;
     CHECK(make_display_uniforms(frame, settings, 100, 100, true).inner[0] == 0.0f);
+}
+
+TEST_CASE("Debug fits the active area inside its CRTC borders, each side its own colour",
+          "[display][video]") {
+    auto frame = mode_frame(320, 256, false);
+    frame.left_border = 64;
+    frame.right_border = 64;
+    frame.top_border = 32;
+    frame.bottom_border = 32;
+    VideoSettings settings = plain();
+    settings.style = DisplayStyle::debug;
+    settings.edge_margin_percent = 5;  // Standard's alone
+    const auto uniforms = make_display_uniforms(frame, settings, 8000, 1000, true);
+    // 768 x 320 line-doubled to 640 high, fitted to the height.
+    CHECK(uniforms.quad[1] == Approx(1.0f));
+    CHECK(uniforms.quad[0] == Approx((768.0f / 640.0f) * 1000.0f / 8000.0f));
+    CHECK(uniforms.inner[0] == Approx(64.0f / 768.0f));
+    CHECK(uniforms.inner[1] == Approx(32.0f / 320.0f));
+    CHECK(uniforms.inner[2] == Approx(704.0f / 768.0f));
+    CHECK(uniforms.inner[3] == Approx(288.0f / 320.0f));
+    // Top, bottom, left, right: the macOS client's colours.
+    const float expected[4][3] = {{0, 0, 0.5f}, {0.5f, 0.5f, 0}, {0.5f, 0, 0}, {0, 0.5f, 0}};
+    for (int side = 0; side < 4; ++side) {
+        for (int c = 0; c < 3; ++c) {
+            CHECK(uniforms.band_colours[side][c] == Approx(expected[side][c]));
+        }
+    }
+}
+
+TEST_CASE("Debug with no borders draws as Standard with no margin", "[display][video]") {
+    const auto frame = mode_frame(320, 256, false);
+    VideoSettings debug = plain();
+    debug.style = DisplayStyle::debug;
+    const auto drawn = make_display_uniforms(frame, debug, 1500, 900, false);
+    const auto standard = make_display_uniforms(frame, plain(), 1500, 900, false);
+    for (int i = 0; i < 4; ++i) {
+        CHECK(drawn.quad[i] == standard.quad[i]);
+        CHECK(drawn.inner[i] == standard.inner[i]);
+    }
 }

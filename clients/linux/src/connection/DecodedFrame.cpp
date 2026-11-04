@@ -35,6 +35,10 @@ FrameDecodeResult decode_frame(beebium::Frame& wire,
     frame->display_width = wire.display_width() != 0 ? wire.display_width() : wire.width();
     frame->display_height = wire.display_height() != 0 ? wire.display_height() : wire.height();
     frame->interlaced = wire.field_order() != beebium::PROGRESSIVE;
+    frame->left_border = wire.left_border();
+    frame->right_border = wire.right_border();
+    frame->top_border = wire.top_border();
+    frame->bottom_border = wire.bottom_border();
     frame->regions.reserve(static_cast<std::size_t>(wire.regions_size()));
     for (const auto& region : wire.regions()) {
         frame->regions.push_back({region.start_line(), region.end_line(), region.pixel_width()});

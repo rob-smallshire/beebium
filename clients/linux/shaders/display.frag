@@ -15,15 +15,28 @@ layout(std140, binding = 0) uniform buf {
     ivec4 region_info;
     ivec4 regions[8];
     vec4 inner;
-    vec4 band_colour;
+    vec4 band_colours[4];  // top, bottom, left, right
 };
 
 layout(binding = 1) uniform sampler2D frame_texture;
 
 void main() {
-    // Outside the active picture, within the quad: the edge margin.
-    if (v_uv.x < inner.x || v_uv.x >= inner.z || v_uv.y < inner.y || v_uv.y >= inner.w) {
-        frag_colour = band_colour;
+    // Outside the active picture, within the quad: the edge margin, or the
+    // CRTC borders. Top and bottom first, so they own the corners.
+    if (v_uv.y < inner.y) {
+        frag_colour = band_colours[0];
+        return;
+    }
+    if (v_uv.y >= inner.w) {
+        frag_colour = band_colours[1];
+        return;
+    }
+    if (v_uv.x < inner.x) {
+        frag_colour = band_colours[2];
+        return;
+    }
+    if (v_uv.x >= inner.z) {
+        frag_colour = band_colours[3];
         return;
     }
     vec2 uv = (v_uv - inner.xy) / (inner.zw - inner.xy);

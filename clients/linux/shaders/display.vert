@@ -11,7 +11,7 @@ layout(std140, binding = 0) uniform buf {
     ivec4 region_info;
     ivec4 regions[8];
     vec4 inner;
-    vec4 band_colour;
+    vec4 band_colours[4];  // top, bottom, left, right
 };
 
 void main() {

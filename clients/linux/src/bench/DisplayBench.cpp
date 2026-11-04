@@ -206,8 +206,14 @@ int main(int argc, char* argv[]) {
         QStringLiteral("caps-lock-test"),
         QStringLiteral("Sync the machine's Caps Lock off, on and on again through the key "
                        "sender, reading the latch back; exit 0 when each took."));
+    const QCommandLineOption style_option(
+        QStringLiteral("display-style"),
+        QStringLiteral("Draw in display <style>: standard (default) or debug, which shows the "
+                       "CRTC borders. Not --style, which Qt takes for the widget style."),
+        QStringLiteral("style"), QStringLiteral("standard"));
     parser.addOptions({connect_option, api_option, size_option, seconds_option, type_option,
-                       settle_option, save_option, key_test_option, caps_test_option});
+                       settle_option, save_option, key_test_option, caps_test_option,
+                       style_option});
     parser.process(application);
 
     const QStringList size_parts = parser.value(size_option).split(QLatin1Char('x'));
@@ -256,6 +262,11 @@ int main(int argc, char* argv[]) {
 
     DisplayRenderer renderer;
     renderer.initialize(rhi.get(), render_pass.get());
+    VideoSettings video;
+    if (parser.value(style_option) == QStringLiteral("debug")) {
+        video.style = DisplayStyle::debug;
+    }
+    renderer.set_video_settings(video);
 
     // --- The server -----------------------------------------------------
     auto channel = grpc::CreateChannel(parser.value(connect_option).toStdString(),

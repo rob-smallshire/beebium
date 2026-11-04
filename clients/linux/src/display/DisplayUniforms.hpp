@@ -36,16 +36,20 @@ struct DisplayUniforms {
     std::int32_t regions[MAX_DISPLAY_REGIONS][4] = {};
     // The active picture within the quad, as u0, v0, u1, v1 (v from the top).
     float inner[4] = {0, 0, 1, 1};
-    // What fills the quad outside `inner`: the edge margin's colour.
-    float band_colour[4] = {0, 0, 0, 1};
+    // What fills the quad outside `inner`, side by side: top, bottom, left,
+    // right. The top and bottom bands span the corners.
+    float band_colours[4][4] = {{0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}};
 };
 
-static_assert(sizeof(DisplayUniforms) == 208, "std140 layout of the display uniform block");
+static_assert(sizeof(DisplayUniforms) == 256, "std140 layout of the display uniform block");
 
 // Fill the uniforms for drawing `frame` into a drawable of the given pixel
-// size (client specification 6.2, 6.3): the aspect-fitted quad at the
-// settings' pixel shape, the picture inset by the edge margin, and
-// split-screen regions beyond the first eight dropped as the shader does.
+// size (client specification 6.2, 6.3), at the settings' pixel shape:
+// - Standard: the quad is the aspect-fitted active area, the picture inset
+//   by the edge margin, the band all the margin's colour;
+// - Debug: the quad is the active area with the CRTC borders around it,
+//   line-doubled and pixel-shaped alike, each border its own colour.
+// Split-screen regions beyond the first eight are dropped as the shader does.
 DisplayUniforms make_display_uniforms(const DecodedFrame& frame, const VideoSettings& settings,
                                       double drawable_width, double drawable_height,
                                       bool ndc_y_up);

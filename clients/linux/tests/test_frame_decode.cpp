@@ -58,6 +58,21 @@ TEST_CASE("A well-formed frame decodes with its geometry and pixels", "[connecti
     CHECK((*frame)->received_at == RECEIVED_AT);
 }
 
+TEST_CASE("A frame keeps the CRTC border sizes around its active area", "[connection][decode]") {
+    auto wire = wire_frame(320, 256);
+    wire.set_left_border(64);
+    wire.set_right_border(48);
+    wire.set_top_border(30);
+    wire.set_bottom_border(26);
+    const auto decoded = decode_frame(wire, {});
+    REQUIRE(std::holds_alternative<std::unique_ptr<DecodedFrame>>(decoded));
+    const auto& frame = *std::get<std::unique_ptr<DecodedFrame>>(decoded);
+    CHECK(frame.left_border == 64);
+    CHECK(frame.right_border == 48);
+    CHECK(frame.top_border == 30);
+    CHECK(frame.bottom_border == 26);
+}
+
 TEST_CASE("Decoding moves the pixel buffer out of the wire frame", "[connection][decode]") {
     auto wire = wire_frame(8, 8);
     auto result = decode_frame(wire, RECEIVED_AT);

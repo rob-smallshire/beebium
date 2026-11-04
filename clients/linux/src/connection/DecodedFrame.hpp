@@ -43,6 +43,13 @@ struct DecodedFrame {
     std::uint32_t display_width = 0;
     std::uint32_t display_height = 0;
     bool interlaced = false;   // field_order != PROGRESSIVE
+    // The CRTC's blanking around the active area, in the same units as
+    // display_width and display_height; the frame's pixels are the active
+    // area alone.
+    std::uint32_t left_border = 0;
+    std::uint32_t right_border = 0;
+    std::uint32_t top_border = 0;
+    std::uint32_t bottom_border = 0;
     std::vector<FrameRegion> regions;
 
     // BGRA32, width * height * 4 bytes, rows top to bottom.
