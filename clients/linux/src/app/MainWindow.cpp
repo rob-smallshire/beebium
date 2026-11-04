@@ -127,10 +127,11 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     splitter_ = new QSplitter(Qt::Horizontal, this);
     splitter_->setChildrenCollapsible(false);
     sidebar_ = new Sidebar(splitter_);
-    sidebar_->add_mode(SidebarMode::storage,
-                       new StorageSidebar(session_->discs(), settings_,
-                                          [this] { return session_->server_shares_filesystem(); },
-                                          sidebar_));
+    auto* storage = new StorageSidebar(
+        session_->discs(), settings_, [this] { return session_->server_shares_filesystem(); },
+        sidebar_);
+    storage->set_peripheral_storage(session_->peripherals(), session_->indicators());
+    sidebar_->add_mode(SidebarMode::storage, storage);
     sidebar_->add_mode(SidebarMode::memory,
                        new MemorySidebar(
                            session_->sideways(),

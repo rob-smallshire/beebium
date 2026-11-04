@@ -15,6 +15,8 @@
 #include "app/ClientSettings.hpp"
 #include "app/ErrorPresentation.hpp"
 #include "app/FileReveal.hpp"
+#include "app/SessionIndicators.hpp"
+#include "app/SessionPeripherals.hpp"
 #include "servers/CoreCli.hpp"
 #include "servers/ServerLocator.hpp"
 
@@ -518,6 +520,69 @@ void DriveRow::contextMenuEvent(QContextMenuEvent* event) {
     }
 }
 
+PeripheralStorageRow::PeripheralStorageRow(const PeripheralStorageDevice& device,
+                                           DriveRow::Shares shares, QWidget* parent)
+    : QWidget(parent), device_(device), shares_(std::move(shares)) {
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(12, 8, 12, 8);
+    layout->setSpacing(4);
+    auto* header = new QHBoxLayout;
+    title_ = new QLabel(QString::fromStdString(device_.name), this);
+    QFont bold = title_->font();
+    bold.setBold(true);
+    title_->setFont(bold);
+    activity_ = new QLabel(this);
+    activity_->setPixmap(motor_dot());
+    activity_->setToolTip(tr("Disc activity"));
+    activity_->hide();
+    header->addWidget(title_);
+    header->addWidget(activity_);
+    header->addStretch(1);
+    layout->addLayout(header);
+    const QString path = QString::fromStdString(device_.backing_path);
+    file_ = new QLabel(path.isEmpty() ? tr("No image") : QFileInfo(path).fileName(), this);
+    file_->setEnabled(!path.isEmpty());
+    layout->addWidget(file_);
+    setToolTip(path);
+}
+
+QString PeripheralStorageRow::title_text() const {
+    return title_->text();
+}
+
+QString PeripheralStorageRow::file_text() const {
+    return file_->text();
+}
+
+void PeripheralStorageRow::set_active(bool active) {
+    active_ = active;
+    activity_->setVisible(active);
+}
+
+QMenu* PeripheralStorageRow::make_path_menu() {
+    const QString path = QString::fromStdString(device_.backing_path);
+    auto* menu = new QMenu(this);
+    menu->setToolTipsVisible(true);
+    QAction* copy =
+        menu->addAction(tr("Copy Path"), this, [path] { QApplication::clipboard()->setText(path); });
+    copy->setEnabled(!path.isEmpty());
+    QAction* reveal =
+        menu->addAction(tr("Open Containing Folder"), this, [path] { reveal_file(path); });
+    if (path.isEmpty()) {
+        reveal->setEnabled(false);
+    } else {
+        const QString refusal = reveal_refusal(path, shares_ && shares_());
+        reveal->setEnabled(refusal.isEmpty());
+        reveal->setToolTip(refusal);
+    }
+    return menu;
+}
+
+void PeripheralStorageRow::contextMenuEvent(QContextMenuEvent* event) {
+    std::unique_ptr<QMenu> menu(make_path_menu());
+    menu->exec(event->globalPos());
+}
+
 StorageSidebar::StorageSidebar(SessionDiscs& discs, ClientSettings* settings,
                                DriveRow::Shares shares, QWidget* parent)
     : QWidget(parent), discs_(discs), settings_(settings), shares_(std::move(shares)),
@@ -547,6 +612,14 @@ StorageSidebar::StorageSidebar(SessionDiscs& discs, ClientSettings* settings,
     rows_layout_ = new QVBoxLayout;
     rows_layout_->setSpacing(0);
     layout->addLayout(rows_layout_);
+    peripheral_divider_ = new QFrame(content);
+    peripheral_divider_->setFrameShape(QFrame::HLine);
+    peripheral_divider_->setFrameShadow(QFrame::Sunken);
+    peripheral_divider_->hide();
+    layout->addWidget(peripheral_divider_);
+    peripheral_layout_ = new QVBoxLayout;
+    peripheral_layout_->setSpacing(0);
+    layout->addLayout(peripheral_layout_);
     layout->addStretch(1);
 
     connect(&discs_, &SessionDiscs::loaded_changed, this, &StorageSidebar::rebuild);
@@ -638,24 +711,63 @@ QString StorageSidebar::status_text() const {
     return status_->isHidden() ? QString() : status_->text();
 }
 
+void StorageSidebar::set_peripheral_storage(SessionPeripherals& peripherals,
+                                            SessionIndicators& indicators) {
+    peripherals_ = &peripherals;
+    indicators_ = &indicators;
+    connect(peripherals_, &SessionPeripherals::changed, this, &StorageSidebar::rebuild);
+    connect(indicators_, &SessionIndicators::value_changed, this, &StorageSidebar::show_activity);
+    rebuild();
+}
+
+void StorageSidebar::rebuild_peripherals() {
+    for (PeripheralStorageRow* row : peripheral_rows_) {
+        delete row;
+    }
+    peripheral_rows_.clear();
+    if (peripherals_) {
+        for (const auto& device : peripherals_->tree().storage_devices()) {
+            auto* row = new PeripheralStorageRow(device, shares_, this);
+            peripheral_layout_->addWidget(row);
+            peripheral_rows_.push_back(row);
+        }
+    }
+    show_activity();
+}
+
+void StorageSidebar::show_activity() {
+    for (PeripheralStorageRow* row : peripheral_rows_) {
+        const QString name = QString::fromStdString(row->device().activity_indicator);
+        row->set_active(indicators_ && !name.isEmpty() && indicators_->value(name) > 0);
+    }
+}
+
 void StorageSidebar::rebuild() {
     for (DriveRow* row : rows_) {
         delete row;
     }
     rows_.clear();
+    rebuild_peripherals();
+    const bool peripheral = !peripheral_rows_.empty();
     status_->show();
     status_detail_->hide();
+    peripheral_divider_->hide();
     if (!discs_.loaded()) {
         status_->setText(tr("Loading..."));
         return;
     }
     if (!discs_.has_controller() || discs_.drives().empty()) {
+        if (peripheral) {
+            status_->hide();  // the peripherals' storage is the machine's
+            return;
+        }
         status_->setText(tr("No Storage Devices"));
         status_detail_->setText(tr("This machine has no disc controller."));
         status_detail_->show();
         return;
     }
     status_->hide();
+    peripheral_divider_->setVisible(peripheral);
     load_formats();
     for (const DriveInfo& drive : discs_.drives()) {
         auto* row = new DriveRow(discs_, drive.number, settings_, shares_,

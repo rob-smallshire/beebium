@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_APP_STORAGE_SIDEBAR_HPP
 
 #include "app/SessionDiscs.hpp"
+#include "connection/PeripheralTree.hpp"
 
 #include <QStringList>
 #include <QTimer>
@@ -23,6 +24,7 @@
 #include <optional>
 #include <vector>
 
+class QFrame;
 class QLabel;
 class QMenu;
 class QPushButton;
@@ -33,6 +35,8 @@ namespace beebium::linux_client {
 
 class ClientSettings;
 class CoreCli;
+class SessionIndicators;
+class SessionPeripherals;
 
 // The short marker a failure shows inline, chosen by the server's
 // classification, never from its text (client specification 9.6); empty
@@ -149,10 +153,40 @@ private:
     bool highlighted_ = false;
 };
 
+// A storage device a peripheral publishes (a SCSI hard disc, a RAM disc),
+// as the macOS client lists it: its name, an activity dot while its
+// indicator is lit, and its image's file name, the path its tooltip.
+// Read-only: Copy Path and Open Containing Folder its only actions.
+class PeripheralStorageRow : public QWidget {
+    Q_OBJECT
+
+public:
+    PeripheralStorageRow(const PeripheralStorageDevice& device, DriveRow::Shares shares,
+                         QWidget* parent = nullptr);
+
+    const PeripheralStorageDevice& device() const { return device_; }
+    QString title_text() const;
+    QString file_text() const;
+    void set_active(bool active);
+    bool active() const { return active_; }
+    // Copy Path, and Open Containing Folder where the path is this host's.
+    QMenu* make_path_menu();
+
+protected:
+    void contextMenuEvent(QContextMenuEvent* event) override;
+
+private:
+    PeripheralStorageDevice device_;
+    DriveRow::Shares shares_;
+    QLabel* title_;
+    QLabel* activity_;
+    QLabel* file_;
+    bool active_ = false;
+};
+
 // The Storage mode (client specification 9): the floppy drives, a row each,
-// from the server's disc controller; a machine without one says so. The
-// machine's other storage, the peripherals', belongs to the Peripherals
-// mode, which this client does not have yet.
+// from the server's disc controller, then the storage the peripherals
+// publish; a machine with neither says so.
 class StorageSidebar : public QWidget {
     Q_OBJECT
 
@@ -162,6 +196,9 @@ public:
     ~StorageSidebar() override;
 
     std::vector<DriveRow*> rows() const { return rows_; }
+    std::vector<PeripheralStorageRow*> peripheral_rows() const { return peripheral_rows_; }
+    // Where the peripherals' storage and its activity come from.
+    void set_peripheral_storage(SessionPeripherals& peripherals, SessionIndicators& indicators);
     DriveRow* row(int number) const;
     QString status_text() const;
     // The disc formats' extensions, once read from a local server.
@@ -172,6 +209,8 @@ public:
 
 private:
     void rebuild();
+    void rebuild_peripherals();
+    void show_activity();
     void load_formats();
 
     SessionDiscs& discs_;
@@ -181,6 +220,11 @@ private:
     QLabel* status_detail_;
     QVBoxLayout* rows_layout_;
     std::vector<DriveRow*> rows_;
+    SessionPeripherals* peripherals_ = nullptr;
+    SessionIndicators* indicators_ = nullptr;
+    QFrame* peripheral_divider_;
+    QVBoxLayout* peripheral_layout_;
+    std::vector<PeripheralStorageRow*> peripheral_rows_;
     std::unique_ptr<CoreCli> cli_;
     QStringList extensions_;
     bool formats_asked_ = false;

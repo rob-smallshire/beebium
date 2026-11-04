@@ -15,6 +15,8 @@
 
 #include "app/ClientSettings.hpp"
 #include "app/SessionDiscs.hpp"
+#include "app/SessionIndicators.hpp"
+#include "app/SessionPeripherals.hpp"
 #include "app/StorageSidebar.hpp"
 
 #include "FakeBeebiumServer.hpp"
@@ -431,4 +433,139 @@ TEST_CASE("The disc's name is not selectable text; its menu is Copy Path and Ope
             delete action;
         }
     }
+}
+
+// --- storage a peripheral publishes -----------------------------------------------------
+
+namespace {
+
+beebium::ListExtensionsResponse scsi_listing(const QString& image) {
+    beebium::ListExtensionsResponse r;
+    auto* point = r.add_attachment_points();
+    point->set_id("1mhz-bus");
+    point->set_display_name("1 MHz Bus");
+    auto* adapter = r.add_extensions();
+    adapter->set_id("adapter");
+    adapter->set_label("Acorn SCSI Host Adapter");
+    adapter->add_attaches_to("1mhz-bus");
+    adapter->add_attachments()->set_point("1mhz-bus");
+    auto* disc = r.add_extensions();
+    disc->set_id("disc0");
+    disc->set_label("Hard Disc (SCSI ID 0)");
+    disc->add_attaches_to("scsi-bus");
+    auto* attachment = disc->add_attachments();
+    attachment->set_point("scsi-bus");
+    attachment->set_provider_id("adapter");
+    auto* device = disc->add_storage_devices();
+    device->set_id("hdd-0");
+    device->set_name("Hard Disc Drive 0");
+    device->set_backing_path(image.toStdString());
+    device->set_activity_indicator_name("hdd-0-activity-led");
+    auto* ram = disc->add_storage_devices();
+    ram->set_id("ram-0");
+    ram->set_name("RAM Disc Drive 0");
+    return r;
+}
+
+struct WithPeripherals {
+    FakeServer server;
+    QTemporaryDir directory;
+    QString image = directory.filePath(QStringLiteral("scsi0.dat"));
+    SessionDiscs discs;
+    SessionPeripherals peripherals;
+    SessionIndicators indicators;
+    ClientSettings settings{directory.filePath(QStringLiteral("Beebium.conf"))};
+    bool local = true;
+    std::unique_ptr<StorageSidebar> sidebar;
+
+    explicit WithPeripherals(bool controller = true) {
+        {
+            QFile file(image);
+            REQUIRE(file.open(QIODevice::WriteOnly));
+        }
+        server.disc.has_controller = controller;
+        {
+            std::lock_guard lock(server.peripherals.mutex);
+            server.peripherals.listing = scsi_listing(image);
+        }
+        const auto channel = channel_to(server);
+        discs.start(channel);
+        peripherals.start(channel);
+        indicators.start(channel);
+        sidebar = std::make_unique<StorageSidebar>(discs, &settings, [this] { return local; });
+        sidebar->set_peripheral_storage(peripherals, indicators);
+        sidebar->show();
+        REQUIRE(wait_until([&] { return sidebar->peripheral_rows().size() == 2; }));
+    }
+    ~WithPeripherals() {
+        discs.stop();
+        peripherals.stop();
+        indicators.stop();
+    }
+};
+
+}  // namespace
+
+TEST_CASE("Storage a peripheral publishes is listed below the floppy drives",
+          "[storage][sidebar][peripheral]") {
+    WithPeripherals w;
+    REQUIRE(wait_until([&] { return w.sidebar->rows().size() == 2; }));
+    const auto rows = w.sidebar->peripheral_rows();
+    CHECK(rows[0]->title_text() == QStringLiteral("Hard Disc Drive 0"));
+    CHECK(rows[0]->file_text() == QStringLiteral("scsi0.dat"));
+    CHECK(rows[0]->toolTip() == w.image);
+    CHECK(rows[1]->title_text() == QStringLiteral("RAM Disc Drive 0"));
+    CHECK(rows[1]->file_text() == QStringLiteral("No image"));
+    // Below the floppies.
+    CHECK(rows[0]->mapTo(w.sidebar.get(), QPoint()).y() >
+          w.sidebar->rows().back()->mapTo(w.sidebar.get(), QPoint()).y());
+    // Read-only: no Browse or Eject of their own.
+    CHECK(rows[0]->findChildren<QToolButton*>().isEmpty());
+}
+
+TEST_CASE("A peripheral drive's activity shows while its indicator is lit",
+          "[storage][sidebar][peripheral]") {
+    WithPeripherals w;
+    PeripheralStorageRow* row = w.sidebar->peripheral_rows()[0];
+    CHECK_FALSE(row->active());
+    w.server.indicators.push(std::vector<std::pair<std::string, std::uint32_t>>{
+        {"hdd-0-activity-led", 255}});
+    REQUIRE(wait_until([&] { return row->active(); }));
+    w.server.indicators.push(std::vector<std::pair<std::string, std::uint32_t>>{
+        {"hdd-0-activity-led", 0}});
+    REQUIRE(wait_until([&] { return !row->active(); }));
+}
+
+TEST_CASE("A peripheral drive's menu copies its path and opens its folder where it is here",
+          "[storage][sidebar][peripheral][reveal]") {
+    WithPeripherals w;
+    PeripheralStorageRow* row = w.sidebar->peripheral_rows()[0];
+    {
+        std::unique_ptr<QMenu> menu(row->make_path_menu());
+        REQUIRE(menu->actions().size() == 2);
+        CHECK(menu->actions()[0]->text() == QStringLiteral("Copy Path"));
+        CHECK(menu->actions()[1]->text() == QStringLiteral("Open Containing Folder"));
+        CHECK(menu->actions()[1]->isEnabled());
+        menu->actions()[0]->trigger();
+        CHECK(QApplication::clipboard()->text() == w.image);
+    }
+    w.local = false;
+    {
+        std::unique_ptr<QMenu> menu(row->make_path_menu());
+        CHECK_FALSE(menu->actions()[1]->isEnabled());
+        CHECK(menu->actions()[1]->toolTip() == QStringLiteral("The server is on another host"));
+    }
+    // No image: nothing to copy or open.
+    std::unique_ptr<QMenu> none(w.sidebar->peripheral_rows()[1]->make_path_menu());
+    CHECK_FALSE(none->actions()[0]->isEnabled());
+    CHECK_FALSE(none->actions()[1]->isEnabled());
+}
+
+TEST_CASE("Peripheral storage alone is not a machine without storage",
+          "[storage][sidebar][peripheral]") {
+    WithPeripherals w(false);
+    REQUIRE(wait_until([&] { return w.discs.loaded(); }));
+    CHECK(w.sidebar->rows().empty());
+    CHECK(w.sidebar->status_text().isEmpty());
+    CHECK(w.sidebar->peripheral_rows().size() == 2);
 }
