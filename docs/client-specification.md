@@ -214,8 +214,11 @@ What gates and what does not (per `frontend-local-server-gating.md`):
   the server's destination, and Save As's replace check must be made against
   the server's filesystem, #263); reveal any server-reported path in a file
   manager; reveal a FileReference's file.
-- Not gated: Save of an already-saved machine (an empty destination, the
-  server rewrites its own directory).
+- Also gated, for now: Save in place of an already-saved machine. It hands
+  over no path, but saving a machine that lives on another host is not
+  supported in the interim (Rob, 2026-11-04, #263), so a client offers Save
+  only when the server shares its filesystem, and a close prompt for a remote
+  machine with unsaved changes offers no Save.
 - Not gated: a FileReference's server-side actions (the server opens its own
   path); editing values such as AUN peers or subnets; "Copy Path" (it hands the
   user a string, honest on any host); pre-launch configuration paths that become
