@@ -371,8 +371,12 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     connect(session_, &MachineSession::connected_to_server, this,
             [this] { model_label_->setText(session_->model_name()); });
     // The title is the machine's name, exactly (5.7).
+    // The description is the sidebar's subtitle, not the title's (5.7).
     connect(session_, &MachineSession::identity_changed, this,
-            [this](const QString& name, const QString&) { show_title(name); });
+            [this](const QString& name, const QString& description) {
+                show_title(name);
+                sidebar_->set_description(description);
+            });
     // Unsaved changes (5.3) are the platform's own marker in the title.
     connect(session_, &MachineSession::unsaved_changes_changed, this,
             &QWidget::setWindowModified);

@@ -259,3 +259,80 @@ TEST_CASE("Losing the server marks the Sound mode stale", "[sidebar][window]") {
     CHECK(live.window.sidebar().showing_banner());
     CHECK_FALSE(live.window.sidebar().content_enabled());
 }
+
+// --- the machine's description, the sidebar's subtitle -------------------------------
+
+namespace {
+
+QLabel* description_of(QWidget& widget) {
+    return widget.findChild<QLabel*>(QStringLiteral("machineDescription"));
+}
+
+beebium::ServerStatusEvent identity(const char* name, const char* description) {
+    beebium::ServerStatusEvent event;
+    event.set_status(beebium::SERVER_STATUS_IDENTITY_CHANGED);
+    event.mutable_identity()->set_name(name);
+    event.mutable_identity()->set_description(description);
+    return event;
+}
+
+}  // namespace
+
+TEST_CASE("The sidebar's header carries the machine's description, the title its plain name",
+          "[sidebar][window][description]") {
+    LiveWindow live;
+    QLabel* description = description_of(live.window);
+    REQUIRE(description);
+    REQUIRE(wait_until([&] { return description->text() == QStringLiteral("Station 1.254"); }));
+    CHECK(description->isVisible());
+    CHECK(live.window.windowTitle() == QStringLiteral("Model B #1[*]"));
+    // Secondary, like a subtitle: smaller than the mode's header, and dimmer.
+    CHECK(description->font().pointSizeF() < live.window.font().pointSizeF());
+    CHECK(description->palette().color(QPalette::WindowText) ==
+          live.window.palette().color(QPalette::PlaceholderText));
+    // Above the mode's content, in every mode.
+    auto* sidebar = live.window.findChild<Sidebar*>();
+    REQUIRE(sidebar);
+    for (SidebarMode mode : offered_sidebar_modes()) {
+        sidebar->set_mode(mode);
+        CHECK(description->isVisible());
+    }
+}
+
+TEST_CASE("The description follows the identity event and leaves no band when empty",
+          "[sidebar][window][description]") {
+    LiveWindow live;
+    QLabel* description = description_of(live.window);
+    REQUIRE(description);
+    live.server.system.push(identity("Elite", "Station 1.200"));
+    REQUIRE(wait_until([&] { return description->text() == QStringLiteral("Station 1.200"); }));
+    CHECK(live.window.windowTitle() == QStringLiteral("Elite[*]"));
+    live.server.system.push(identity("Elite", ""));
+    REQUIRE(wait_until([&] { return description->isHidden(); }));
+    CHECK(live.window.windowTitle() == QStringLiteral("Elite[*]"));
+    live.server.system.push(identity("Elite", "Back again"));
+    REQUIRE(wait_until([&] { return description->isVisible(); }));
+}
+
+TEST_CASE("A long description is elided, never wrapped, with the whole as its tooltip",
+          "[sidebar][description]") {
+    Sidebar sidebar;
+    sidebar.add_mode(SidebarMode::sound, new QLabel(QStringLiteral("mixer")));
+    sidebar.resize(Sidebar::WIDTH, 400);
+    sidebar.show();
+    QLabel* description = description_of(sidebar);
+    REQUIRE(description);
+    CHECK(description->isHidden());  // nothing yet
+    const QString whole = QStringLiteral(
+        "Station 1.254 on the AUN network, Model B with a 6502 Second Processor and DFS 2.26");
+    sidebar.set_description(whole);
+    CHECK(description->isVisible());
+    CHECK_FALSE(description->wordWrap());
+    CHECK(description->text() != whole);
+    CHECK(description->text().endsWith(QChar(0x2026)));
+    CHECK(description->toolTip() == whole);
+    CHECK(sidebar.width() == Sidebar::WIDTH);  // not widened
+    sidebar.set_description(QStringLiteral("Station 1.254"));
+    CHECK(description->text() == QStringLiteral("Station 1.254"));
+    CHECK(description->toolTip().isEmpty());
+}

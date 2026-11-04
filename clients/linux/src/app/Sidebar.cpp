@@ -17,6 +17,8 @@
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPalette>
+#include <QResizeEvent>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QToolButton>
@@ -24,12 +26,60 @@
 
 namespace beebium::linux_client {
 
+namespace {
+
+// One line of text that elides with an ellipsis rather than wrapping or
+// widening its parent, the whole of it the tooltip when it does not fit.
+class ElidedLabel : public QLabel {
+public:
+    explicit ElidedLabel(QWidget* parent) : QLabel(parent) {
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        setMinimumWidth(0);
+    }
+
+    void set_whole(const QString& text) {
+        whole_ = text;
+        fit();
+    }
+
+protected:
+    void resizeEvent(QResizeEvent* event) override {
+        QLabel::resizeEvent(event);
+        fit();
+    }
+
+private:
+    void fit() {
+        const QString shown = fontMetrics().elidedText(whole_, Qt::ElideRight, contentsRect().width());
+        setText(shown);
+        setToolTip(shown == whole_ ? QString() : whole_);
+    }
+
+    QString whole_;
+};
+
+}  // namespace
+
 Sidebar::Sidebar(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("sidebar"));
     setAutoFillBackground(true);
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
+
+    // The machine's description, a subtitle above everything else: data
+    // only, smaller and dimmer than the text below it.
+    description_ = new ElidedLabel(this);
+    description_->setObjectName(QStringLiteral("machineDescription"));
+    QFont subtitle = description_->font();
+    subtitle.setPointSizeF(subtitle.pointSizeF() * 0.85);
+    description_->setFont(subtitle);
+    QPalette dimmed = description_->palette();
+    dimmed.setColor(QPalette::WindowText, dimmed.color(QPalette::PlaceholderText));
+    description_->setPalette(dimmed);
+    description_->setContentsMargins(16, 6, 16, 0);
+    description_->hide();
+    layout->addWidget(description_);
 
     buttons_row_ = new QWidget(this);
     auto* buttons_layout = new QHBoxLayout(buttons_row_);
@@ -78,6 +128,11 @@ Sidebar::Sidebar(QWidget* parent) : QWidget(parent) {
     layout->addWidget(stack_, 1);
     setMinimumWidth(220);
     resize(WIDTH, height());
+}
+
+void Sidebar::set_description(const QString& description) {
+    static_cast<ElidedLabel*>(description_)->set_whole(description);
+    description_->setVisible(!description.isEmpty());
 }
 
 void Sidebar::add_mode(SidebarMode mode, QWidget* content) {

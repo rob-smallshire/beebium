@@ -45,6 +45,10 @@ public:
     SidebarMode mode() const { return mode_; }
 
     void set_verdict(ConnectionVerdict verdict);
+    // The machine's server-rendered description (client specification 5.7),
+    // as a subtitle at the head of every mode: the Linux variation on the
+    // macOS window's subtitle. Empty hides it.
+    void set_description(const QString& description);
     bool showing_banner() const;
     bool content_enabled() const;
 
@@ -54,6 +58,7 @@ Q_SIGNALS:
 private:
     void present();
 
+    QLabel* description_;
     QWidget* buttons_row_;
     QButtonGroup* buttons_;
     QLabel* header_icon_;
