@@ -17,6 +17,8 @@
 
 #include <QWidget>
 
+#include <functional>
+
 #include <optional>
 #include <vector>
 
@@ -37,7 +39,11 @@ class MemoryRow : public QWidget {
     Q_OBJECT
 
 public:
-    MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, QWidget* parent);
+    // Whether the server shares this host's filesystem (3.2).
+    using Shares = std::function<bool()>;
+
+    MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, Shares shares,
+              QWidget* parent);
 
     QString priority_text() const;
     QString name_text() const;
@@ -55,6 +61,7 @@ public:
 private:
     SessionSideways& sideways_;
     SidewaysSocket socket_;
+    Shares shares_;
     // Copies, as the session replaces its topology on each read-back.
     std::optional<SidewaysProtectionGroup> write_group_;
     std::optional<SidewaysProtectionGroup> hide_group_;
@@ -73,7 +80,8 @@ class MemorySidebar : public QWidget {
     Q_OBJECT
 
 public:
-    explicit MemorySidebar(SessionSideways& sideways, QWidget* parent = nullptr);
+    explicit MemorySidebar(SessionSideways& sideways, MemoryRow::Shares shares = {},
+                           QWidget* parent = nullptr);
 
     int row_count() const { return static_cast<int>(rows_.size()); }
     MemoryRow* row(int index) const { return rows_.at(static_cast<std::size_t>(index)); }
@@ -86,6 +94,7 @@ private:
     void rebuild();
 
     SessionSideways& sideways_;
+    MemoryRow::Shares shares_;
     QLabel* status_;
     QLabel* header_;
     QWidget* rows_box_;

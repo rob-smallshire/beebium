@@ -22,13 +22,19 @@
 #include "FakeBeebiumServer.hpp"
 
 #include <QAction>
+#include <QApplication>
+#include <QClipboard>
+#include <QFile>
 #include <QLabel>
 #include <QMenu>
+#include <QTemporaryDir>
 #include <QToolButton>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <grpcpp/grpcpp.h>
+
+#include <memory>
 
 using namespace beebium::linux_client;
 using namespace beebium::linux_client::testing;
@@ -251,6 +257,74 @@ TEST_CASE("The row's menu has Write-Protect and Hide where a switch covers it",
     CHECK(menu_action(hidden_menu.get(), QStringLiteral("Hide"))->isChecked());
     // Nothing to do for an empty socket with no switch and no file.
     CHECK_FALSE(memory.row(2)->actionable());
+}
+
+TEST_CASE("A row's menu copies its image's path and opens its folder where the file is here",
+          "[memory][mode][reveal]") {
+    Fixture fixture;
+    QTemporaryDir directory;
+    const QString image = directory.filePath(QStringLiteral("wordwise.rom"));
+    {
+        QFile file(image);
+        REQUIRE(file.open(QIODevice::WriteOnly));
+    }
+    fixture.script([&](beebium::GetSlotStatusResponse& status) {
+        auto* loaded = fixture.add_socket(status, {15}, beebium::SIDEWAYS_SLOT_TYPE_ROM, "IC 15");
+        loaded->set_populated(true);
+        loaded->set_image_name(image.toStdString());
+        fixture.add_socket(status, {14}, beebium::SIDEWAYS_SLOT_TYPE_RAM, "RAM 14");
+        auto* write = status.add_protection_groups();
+        write->set_id("slot-14");
+        write->add_slots(14);
+        write->set_supports_write_protect(true);
+    });
+    bool local = true;
+    MemorySidebar memory(fixture.sideways, [&] { return local; });
+    memory.show();
+    REQUIRE(wait_until([&] { return memory.row_count() == 2; }));
+
+    {
+        std::unique_ptr<QMenu> menu(memory.row(0)->make_menu());
+        CHECK(menu->toolTipsVisible());
+        QAction* copy = menu_action(menu.get(), QStringLiteral("Copy Path"));
+        QAction* reveal = menu_action(menu.get(), QStringLiteral("Open Containing Folder"));
+        REQUIRE(copy);
+        REQUIRE(reveal);
+        CHECK(copy->isEnabled());
+        CHECK(reveal->isEnabled());
+        copy->trigger();
+        CHECK(QApplication::clipboard()->text() == image);
+    }
+    local = false;
+    {
+        std::unique_ptr<QMenu> menu(memory.row(0)->make_menu());
+        QAction* reveal = menu_action(menu.get(), QStringLiteral("Open Containing Folder"));
+        CHECK_FALSE(reveal->isEnabled());
+        CHECK(reveal->toolTip() == QStringLiteral("The server is on another host"));
+        CHECK(menu_action(menu.get(), QStringLiteral("Copy Path"))->isEnabled());
+    }
+    local = true;
+    QFile::remove(image);
+    {
+        std::unique_ptr<QMenu> menu(memory.row(0)->make_menu());
+        QAction* reveal = menu_action(menu.get(), QStringLiteral("Open Containing Folder"));
+        CHECK_FALSE(reveal->isEnabled());
+        CHECK(reveal->toolTip() == QStringLiteral("The file is not on this computer"));
+    }
+    // No file: nothing to copy or open, the switch still there, after a divider.
+    {
+        std::unique_ptr<QMenu> menu(memory.row(1)->make_menu());
+        QStringList texts;
+        for (QAction* action : menu->actions()) {
+            texts << (action->isSeparator() ? QStringLiteral("|")
+                                            : action->text().remove(QLatin1Char('&')));
+        }
+        CHECK(texts == QStringList{QStringLiteral("Write-Protect"), QStringLiteral("|"),
+                                   QStringLiteral("Copy Path"),
+                                   QStringLiteral("Open Containing Folder")});
+        CHECK_FALSE(menu_action(menu.get(), QStringLiteral("Copy Path"))->isEnabled());
+        CHECK_FALSE(menu_action(menu.get(), QStringLiteral("Open Containing Folder"))->isEnabled());
+    }
 }
 
 TEST_CASE("A machine window offers the Memory mode second, on Meta+2", "[memory][window]") {

@@ -12,8 +12,11 @@
 
 #include "app/MemorySidebar.hpp"
 
+#include "app/FileReveal.hpp"
 #include "app/SessionSideways.hpp"
 
+#include <QApplication>
+#include <QClipboard>
 #include <QContextMenuEvent>
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -153,8 +156,9 @@ QString tooltip(const SidewaysSocket& socket) {
 
 }  // namespace
 
-MemoryRow::MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, QWidget* parent)
-    : QWidget(parent), sideways_(sideways), socket_(socket) {
+MemoryRow::MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, Shares shares,
+                     QWidget* parent)
+    : QWidget(parent), sideways_(sideways), socket_(socket), shares_(std::move(shares)) {
     for (const SidewaysProtectionGroup* group : sideways_.topology().groups_covering(socket_)) {
         if (group->supports_write_protect && !write_group_) {
             write_group_ = *group;
@@ -258,6 +262,7 @@ bool MemoryRow::actionable() const {
 
 QMenu* MemoryRow::make_menu() {
     auto* menu = new QMenu;
+    menu->setToolTipsVisible(true);
     if (write_group_) {
         QAction* write = menu->addAction(tr("Write-Protect"));
         write->setCheckable(true);
@@ -278,11 +283,29 @@ QMenu* MemoryRow::make_menu() {
             sideways->set_protection(id, SidewaysProtection::hide, engaged);
         });
     }
+    if (write_group_ || hide_group_) {
+        menu->addSeparator();
+    }
+    // The image's path is worth quoting wherever the server is; its folder
+    // opens only where the path is this host's (3.2, 11).
+    const QString path = QString::fromStdString(socket_.image_filepath);
+    QAction* copy = menu->addAction(tr("Copy Path"));
+    copy->setEnabled(!path.isEmpty());
+    connect(copy, &QAction::triggered, menu, [path] { QApplication::clipboard()->setText(path); });
+    QAction* reveal = menu->addAction(tr("Open Containing Folder"));
+    if (path.isEmpty()) {
+        reveal->setEnabled(false);
+    } else {
+        const QString refusal = reveal_refusal(path, shares_ && shares_());
+        reveal->setEnabled(refusal.isEmpty());
+        reveal->setToolTip(refusal);
+    }
+    connect(reveal, &QAction::triggered, menu, [path] { reveal_file(path); });
     return menu;
 }
 
-MemorySidebar::MemorySidebar(SessionSideways& sideways, QWidget* parent)
-    : QWidget(parent), sideways_(sideways) {
+MemorySidebar::MemorySidebar(SessionSideways& sideways, MemoryRow::Shares shares, QWidget* parent)
+    : QWidget(parent), sideways_(sideways), shares_(std::move(shares)) {
     setObjectName(QStringLiteral("memoryMode"));
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
@@ -363,7 +386,7 @@ void MemorySidebar::rebuild() {
             line->setFrameShadow(QFrame::Sunken);
             rows_layout_->addWidget(line);
         }
-        auto* row = new MemoryRow(sideways_, topology.sockets[i], rows_box_);
+        auto* row = new MemoryRow(sideways_, topology.sockets[i], shares_, rows_box_);
         rows_layout_->addWidget(row);
         rows_.push_back(row);
     }
