@@ -158,6 +158,7 @@ target_link_libraries(beebium_linux_keyboard
 # --- Presets: the machine draft and its resolution, without Qt -------------
 
 add_library(beebium_linux_preset STATIC
+    src/preset/MachineDraft.cpp
     src/preset/PresetDocument.cpp
 )
 target_include_directories(beebium_linux_preset PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

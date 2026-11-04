@@ -52,6 +52,10 @@ beebium_linux_add_test(test_preset_document
     SOURCES test_preset_document.cpp
     LIBRARIES beebium_linux_preset)
 
+beebium_linux_add_test(test_machine_draft
+    SOURCES test_machine_draft.cpp
+    LIBRARIES beebium_linux_preset)
+
 beebium_linux_add_test(test_compatibility
     SOURCES test_compatibility.cpp
     LIBRARIES beebium_linux_connection)
