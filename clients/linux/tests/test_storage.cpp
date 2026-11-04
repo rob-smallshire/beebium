@@ -244,6 +244,9 @@ TEST_CASE("A loaded drive shows the disc's name and offers Eject; a taken insert
     CHECK(s.row(0)->eject_button()->isEnabled());
     CHECK_FALSE(s.row(0)->browse_button()->isEnabled());
     CHECK(s.row(0)->drop_refusal() == QStringLiteral("Eject disc first"));
+    // No format or sides under the name: the server knows them, the row
+    // does not need them.
+    CHECK(s.row(0)->detail_text().isEmpty());
     REQUIRE(wait_until([&] { return !s.settings.recent_discs().isEmpty(); }));
     CHECK(s.settings.recent_discs().front() == path);
 }

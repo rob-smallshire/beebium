@@ -112,16 +112,6 @@ QPixmap motor_dot() {
     return pixmap;
 }
 
-QString sides_text(int sides) {
-    if (sides == 1) {
-        return QObject::tr("single-sided");
-    }
-    if (sides == 2) {
-        return QObject::tr("double-sided");
-    }
-    return {};
-}
-
 }  // namespace
 
 DriveRow::DriveRow(SessionDiscs& discs, int number, ClientSettings* settings, Shares shares,
@@ -263,6 +253,10 @@ void DriveRow::refresh() {
     present();
 }
 
+QString DriveRow::detail_text() const {
+    return detail_line_->isVisibleTo(this) ? detail_line_->text() : QString();
+}
+
 QString DriveRow::state_text() const {
     return state_->text();
 }
@@ -280,7 +274,6 @@ void DriveRow::present() {
     details_->setVisible(message_.kind == DriveMessage::Kind::failure && !message_.detail.isEmpty());
     dismiss_->setVisible(message_.kind == DriveMessage::Kind::failure);
     state_->setVisible(!messaging);
-    detail_line_->setVisible(!messaging && state != DriveInfo::State::empty);
 
     QFont font = state_->font();
     font.setWeight(state == DriveInfo::State::loaded ? QFont::Medium : QFont::Normal);
@@ -299,21 +292,18 @@ void DriveRow::present() {
                             : info->disc_name);
         // The name only; the path is in the tooltip and the context menu.
         state_->setToolTip(path_for_disc_url(info->disc_url));
-        QStringList facts;
-        if (!info->format.isEmpty()) {
-            facts << info->format;
-        }
-        if (!sides_text(info->sides).isEmpty()) {
-            facts << sides_text(info->sides);
-        }
-        if (info->write_protected) {
-            facts << tr("Read-only");
-        }
+        // No format or sides: the server knows them, and the row reads
+        // better without them.
         detail_line_->setText(state == DriveInfo::State::ejecting ? info->disc_name
-                                                                  : facts.join(QStringLiteral(", ")));
+                              : info->write_protected             ? tr("Read-only")
+                                                                  : QString());
         break;
     }
     }
+
+    // Shown only with something to say, so no blank band.
+    detail_line_->setVisible(!messaging && state != DriveInfo::State::empty &&
+                             !detail_line_->text().isEmpty());
 
     // Browse hands the server a path: an empty drive, a server sharing this
     // filesystem (3.2).

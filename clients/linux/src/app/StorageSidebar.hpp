@@ -85,6 +85,8 @@ public:
 
     // For tests and the window: what the row shows.
     QString state_text() const;
+    // The line under it, when shown: read-only, or the disc being ejected.
+    QString detail_text() const;
     bool eject_stalled() const { return eject_stalled_; }
     QToolButton* browse_button() const { return browse_; }
     QToolButton* eject_button() const { return eject_; }
