@@ -13,32 +13,18 @@
 #include "app/VideoSidebar.hpp"
 
 #include <QButtonGroup>
-#include <QColorDialog>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QMenu>
-#include <QPainter>
-#include <QPixmap>
 #include <QSignalBlocker>
 #include <QSpinBox>
-#include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
 
 namespace beebium::linux_client {
 
 namespace {
-
-QColor to_qcolor(const Rgb& colour) {
-    return QColor(colour.r, colour.g, colour.b);
-}
-
-Rgb to_rgb(const QColor& colour) {
-    return Rgb{static_cast<std::uint8_t>(colour.red()), static_cast<std::uint8_t>(colour.green()),
-               static_cast<std::uint8_t>(colour.blue())};
-}
 
 QFrame* divider(QWidget* parent) {
     auto* line = new QFrame(parent);
@@ -81,12 +67,7 @@ QButtonGroup* segmented(const QStringList& choices, QWidget* parent, QVBoxLayout
 
 }  // namespace
 
-VideoSidebar::VideoSidebar(QWidget* parent)
-    : QWidget(parent),
-      choose_colour_([this](const QColor& current, const QString& title) -> std::optional<QColor> {
-          const QColor chosen = QColorDialog::getColor(current, this, title);
-          return chosen.isValid() ? std::optional<QColor>(chosen) : std::nullopt;
-      }) {
+VideoSidebar::VideoSidebar(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("videoMode"));
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(16, 12, 16, 12);
@@ -127,19 +108,18 @@ VideoSidebar::VideoSidebar(QWidget* parent)
         change([percent](VideoSettings& s) { s.edge_margin_percent = percent; });
     });
     rows->addWidget(margin_size_, 0, 2);
-    margin_size_reset_ = reset_button(QStringLiteral("edgeMarginSizeReset"), [this] {
+    margin_size_reset_ = make_reset_button(this, QStringLiteral("edgeMarginSizeReset"));
+    connect(margin_size_reset_, &QToolButton::clicked, this, [this] {
         change([](VideoSettings& s) { s.edge_margin_percent = VideoSettings{}.edge_margin_percent; });
     });
     rows->addWidget(margin_size_reset_, 0, 3);
     rows->addWidget(new QLabel(tr("Colour"), edge_margin_), 1, 0);
-    margin_colour_ = colour_well(QStringLiteral("edgeMarginColour"), tr("Edge Margin Colour"),
-                                 &VideoSettings::edge_margin_colour,
-                                 VideoSettings{}.edge_margin_colour);
-    rows->addWidget(margin_colour_, 1, 2, Qt::AlignRight);
-    margin_colour_reset_ = reset_button(QStringLiteral("edgeMarginColourReset"), [this] {
-        change([](VideoSettings& s) { s.edge_margin_colour = VideoSettings{}.edge_margin_colour; });
-    });
-    rows->addWidget(margin_colour_reset_, 1, 3);
+    margin_colour_ = new ColourChoice(QStringLiteral("edgeMarginColour"), tr("Edge Margin Colour"),
+                                      VideoSettings{}.edge_margin_colour, this);
+    connect(margin_colour_, &ColourChoice::chosen, this,
+            [this](Rgb colour) { change([colour](VideoSettings& s) { s.edge_margin_colour = colour; }); });
+    rows->addWidget(margin_colour_->well(), 1, 2, Qt::AlignRight);
+    rows->addWidget(margin_colour_->reset(), 1, 3);
     margin_layout->addLayout(rows);
     layout->addWidget(edge_margin_);
 
@@ -148,13 +128,12 @@ VideoSidebar::VideoSidebar(QWidget* parent)
     auto* boxing_row = new QGridLayout;
     boxing_row->setColumnStretch(1, 1);
     boxing_row->addWidget(new QLabel(tr("Boxing Colour"), this), 0, 0);
-    boxing_ = colour_well(QStringLiteral("boxingColour"), tr("Boxing Colour"),
-                          &VideoSettings::boxing, VideoSettings{}.boxing);
-    boxing_row->addWidget(boxing_, 0, 2, Qt::AlignRight);
-    boxing_reset_ = reset_button(QStringLiteral("boxingColourReset"), [this] {
-        change([](VideoSettings& s) { s.boxing = VideoSettings{}.boxing; });
-    });
-    boxing_row->addWidget(boxing_reset_, 0, 3);
+    boxing_ = new ColourChoice(QStringLiteral("boxingColour"), tr("Boxing Colour"),
+                               VideoSettings{}.boxing, this);
+    connect(boxing_, &ColourChoice::chosen, this,
+            [this](Rgb colour) { change([colour](VideoSettings& s) { s.boxing = colour; }); });
+    boxing_row->addWidget(boxing_->well(), 0, 2, Qt::AlignRight);
+    boxing_row->addWidget(boxing_->reset(), 0, 3);
     layout->addLayout(boxing_row);
     layout->addStretch(1);
     present();
@@ -176,44 +155,9 @@ void VideoSidebar::change(const std::function<void(VideoSettings&)>& edit) {
     Q_EMIT changed(settings_);
 }
 
-QToolButton* VideoSidebar::colour_well(const QString& object_name, const QString& title,
-                                       Rgb VideoSettings::*member, Rgb fallback) {
-    auto* well = new QToolButton(this);
-    well->setObjectName(object_name);
-    well->setFocusPolicy(Qt::NoFocus);
-    well->setIconSize(QSize(36, 14));
-    well->setToolTip(title);
-    connect(well, &QToolButton::clicked, this, [this, title, member] {
-        if (const auto chosen = choose_colour_(to_qcolor(settings_.*member), title)) {
-            const Rgb colour = to_rgb(*chosen);  // opaque: any alpha is dropped
-            change([member, colour](VideoSettings& s) { s.*member = colour; });
-        }
-    });
-    // As the macOS colour well's context menu.
-    well->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(well, &QWidget::customContextMenuRequested, this,
-            [this, well, member, fallback](const QPoint& at) {
-                QMenu menu(well);
-                QAction* reset = menu.addAction(tr("Reset to Default"));
-                reset->setEnabled(!(settings_.*member == fallback));
-                if (menu.exec(well->mapToGlobal(at)) == reset) {
-                    change([member, fallback](VideoSettings& s) { s.*member = fallback; });
-                }
-            });
-    return well;
-}
-
-QToolButton* VideoSidebar::reset_button(const QString& object_name,
-                                        const std::function<void()>& reset) {
-    auto* button = new QToolButton(this);
-    button->setObjectName(object_name);
-    button->setIcon(QIcon::fromTheme(QStringLiteral("edit-undo"),
-                                     style()->standardIcon(QStyle::SP_BrowserReload)));
-    button->setAutoRaise(true);
-    button->setFocusPolicy(Qt::NoFocus);
-    button->setToolTip(tr("Reset to default"));
-    connect(button, &QToolButton::clicked, this, reset);
-    return button;
+void VideoSidebar::set_colour_chooser(const ColourChooser& chooser) {
+    margin_colour_->set_chooser(chooser);
+    boxing_->set_chooser(chooser);
 }
 
 void VideoSidebar::present() {
@@ -226,18 +170,8 @@ void VideoSidebar::present() {
         margin_size_->setValue(settings_.edge_margin_percent);
     }
     margin_size_reset_->setEnabled(settings_.edge_margin_percent != defaults.edge_margin_percent);
-    margin_colour_reset_->setEnabled(!(settings_.edge_margin_colour == defaults.edge_margin_colour));
-    boxing_reset_->setEnabled(!(settings_.boxing == defaults.boxing));
-    for (auto [well, colour] : {std::pair{margin_colour_, settings_.edge_margin_colour},
-                                std::pair{boxing_, settings_.boxing}}) {
-        QPixmap swatch(well->iconSize());
-        swatch.fill(to_qcolor(colour));
-        QPainter frame(&swatch);
-        frame.setPen(palette().color(QPalette::Mid));
-        frame.drawRect(swatch.rect().adjusted(0, 0, -1, -1));
-        frame.end();
-        well->setIcon(QIcon(swatch));
-    }
+    margin_colour_->set_colour(settings_.edge_margin_colour);
+    boxing_->set_colour(settings_.boxing);
 }
 
 }  // namespace beebium::linux_client

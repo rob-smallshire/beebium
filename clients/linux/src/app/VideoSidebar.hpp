@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_APP_VIDEO_SIDEBAR_HPP
 #define BEEBIUM_LINUX_APP_VIDEO_SIDEBAR_HPP
 
+#include "app/ColourChoice.hpp"
 #include "display/VideoSettings.hpp"
 
 #include <QColor>
@@ -36,9 +37,7 @@ class VideoSidebar : public QWidget {
     Q_OBJECT
 
 public:
-    // Asks for a colour, titled; nothing when the user cancels.
-    using ColourChooser =
-        std::function<std::optional<QColor>(const QColor& current, const QString& title)>;
+    using ColourChooser = ColourChoice::Chooser;
 
     explicit VideoSidebar(QWidget* parent = nullptr);
 
@@ -46,7 +45,7 @@ public:
     // Show these settings, as a new window's starting ones; not a change.
     void set_settings(const VideoSettings& settings);
     // The platform's colour picker by default.
-    void set_colour_chooser(ColourChooser chooser) { choose_colour_ = std::move(chooser); }
+    void set_colour_chooser(const ColourChooser& chooser);
 
 Q_SIGNALS:
     void changed(const beebium::linux_client::VideoSettings& settings);
@@ -54,21 +53,15 @@ Q_SIGNALS:
 private:
     void change(const std::function<void(VideoSettings&)>& edit);
     void present();
-    QToolButton* colour_well(const QString& object_name, const QString& title,
-                             Rgb VideoSettings::*member, Rgb fallback);
-    QToolButton* reset_button(const QString& object_name, const std::function<void()>& reset);
 
     VideoSettings settings_;
-    ColourChooser choose_colour_;
     QButtonGroup* pixels_;
     QButtonGroup* style_;
     QWidget* edge_margin_;
     QSpinBox* margin_size_;
     QToolButton* margin_size_reset_;
-    QToolButton* margin_colour_;
-    QToolButton* margin_colour_reset_;
-    QToolButton* boxing_;
-    QToolButton* boxing_reset_;
+    ColourChoice* margin_colour_;
+    ColourChoice* boxing_;
 };
 
 }  // namespace beebium::linux_client
