@@ -100,6 +100,9 @@ public:
     QString drop_refusal() const;
     // As a drop of these files would go.
     void drop_files(const QStringList& paths);
+    // The loaded disc's menu: Copy Path, and Open Containing Folder where
+    // the path is this host's. The caller owns it; none for an empty drive.
+    QMenu* make_path_menu();
 
 Q_SIGNALS:
     // New Blank Disc has a name: make the disc and insert it here (9.3).

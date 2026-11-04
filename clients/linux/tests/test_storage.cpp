@@ -20,8 +20,11 @@
 #include "FakeBeebiumServer.hpp"
 
 #include <QAction>
+#include <QApplication>
+#include <QClipboard>
 #include <QDir>
 #include <QFile>
+#include <QLabel>
 #include <QMenu>
 #include <QPushButton>
 #include <QToolButton>
@@ -30,6 +33,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <memory>
 #include <optional>
 
 using namespace beebium::linux_client;
@@ -366,4 +370,65 @@ TEST_CASE("A blank disc is made, then inserted, then recent", "[storage][sidebar
     REQUIRE(wait_until([&] { return s.row(1)->state_text() == QStringLiteral("Blank.dsd"); }));
     REQUIRE(wait_until([&] { return !s.settings.recent_discs().isEmpty(); }));
     CHECK(s.settings.recent_discs().front() == s.directory.filePath(QStringLiteral("Blank.dsd")));
+}
+
+TEST_CASE("The disc's name is not selectable text; its menu is Copy Path and Open Containing "
+          "Folder",
+          "[storage][sidebar][reveal]") {
+    Shown s;
+    const QString path = s.touch(QStringLiteral("Elite.ssd"));
+    s.c.discs.insert(0, path);
+    REQUIRE(wait_until([&] { return s.row(0)->state_text() == QStringLiteral("Elite.ssd"); }));
+    for (QLabel* label : s.row(0)->findChildren<QLabel*>()) {
+        if (label->text() == QStringLiteral("Elite.ssd")) {
+            // So a right-click reaches the row's menu, not QLabel's own.
+            CHECK(label->textInteractionFlags() == Qt::NoTextInteraction);
+        }
+    }
+    const auto items = [&] {
+        std::unique_ptr<QMenu> menu(s.row(0)->make_path_menu());
+        REQUIRE(menu);
+        CHECK(menu->toolTipsVisible());
+        std::vector<std::pair<QString, QAction*>> found;
+        for (QAction* action : menu->actions()) {
+            action->setParent(nullptr);  // outlive the menu, for the checks below
+            found.emplace_back(action->text().remove(QLatin1Char('&')), action);
+        }
+        return found;
+    };
+    {
+        const auto found = items();
+        REQUIRE(found.size() == 2);
+        CHECK(found[0].first == QStringLiteral("Copy Path"));
+        CHECK(found[1].first == QStringLiteral("Open Containing Folder"));
+        CHECK(found[0].second->isEnabled());
+        CHECK(found[1].second->isEnabled());
+        found[0].second->trigger();
+        CHECK(QApplication::clipboard()->text() == path);
+        for (const auto& [text, action] : found) {
+            delete action;
+        }
+    }
+    // A server on another host: its path means nothing here.
+    s.local = false;
+    {
+        const auto found = items();
+        CHECK(found[0].second->isEnabled());
+        CHECK_FALSE(found[1].second->isEnabled());
+        CHECK(found[1].second->toolTip() == QStringLiteral("The server is on another host"));
+        for (const auto& [text, action] : found) {
+            delete action;
+        }
+    }
+    // Local, but the file has gone.
+    s.local = true;
+    QFile::remove(path);
+    {
+        const auto found = items();
+        CHECK_FALSE(found[1].second->isEnabled());
+        CHECK(found[1].second->toolTip() == QStringLiteral("The file is not on this computer"));
+        for (const auto& [text, action] : found) {
+            delete action;
+        }
+    }
 }

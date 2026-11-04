@@ -42,6 +42,8 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <memory>
+
 namespace beebium::linux_client {
 
 QString disc_error_marker(int kind) {
@@ -141,8 +143,10 @@ DriveRow::DriveRow(SessionDiscs& discs, int number, ClientSettings* settings, Sh
 
     // The one content line: the state, or instead of it a message (9.6),
     // never both, so the sidebar does not jump.
+    // Not selectable text: a right-click on the name brings the row's own
+    // menu, Copy Path among it.
     state_ = new QLabel(this);
-    state_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    state_->setTextInteractionFlags(Qt::NoTextInteraction);
     detail_line_ = new QLabel(this);
     detail_line_->setEnabled(false);  // the secondary text colour
     layout->addWidget(state_);
@@ -488,20 +492,30 @@ void DriveRow::dropEvent(QDropEvent* event) {
     drop_files(paths);
 }
 
-void DriveRow::contextMenuEvent(QContextMenuEvent* event) {
+QMenu* DriveRow::make_path_menu() {
     const DriveInfo* info = drive();
     if (!info || info->state == DriveInfo::State::empty || info->disc_url.isEmpty()) {
-        return;
+        return nullptr;
     }
     const QString path = path_for_disc_url(info->disc_url);
-    QMenu menu(this);
+    auto* menu = new QMenu(this);
+    menu->setToolTipsVisible(true);
     // Worth quoting wherever the server is.
-    menu.addAction(tr("Copy Path"), this,
-                   [path] { QApplication::clipboard()->setText(path); });
-    if (shares_ && shares_()) {
-        menu.addAction(tr("Show in File Manager"), this, [path] { reveal_file(path); });
+    menu->addAction(tr("Copy Path"), this, [path] { QApplication::clipboard()->setText(path); });
+    // Only where the path names this host's file (3.2, 11).
+    QAction* reveal =
+        menu->addAction(tr("Open Containing Folder"), this, [path] { reveal_file(path); });
+    const QString refusal = reveal_refusal(path, shares_ && shares_());
+    reveal->setEnabled(refusal.isEmpty());
+    reveal->setToolTip(refusal);
+    return menu;
+}
+
+void DriveRow::contextMenuEvent(QContextMenuEvent* event) {
+    std::unique_ptr<QMenu> menu(make_path_menu());
+    if (menu) {
+        menu->exec(event->globalPos());
     }
-    menu.exec(event->globalPos());
 }
 
 StorageSidebar::StorageSidebar(SessionDiscs& discs, ClientSettings* settings,
