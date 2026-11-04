@@ -179,6 +179,7 @@ add_library(beebium_linux_connection STATIC
     src/connection/PictureGeometry.cpp
     src/connection/ReconnectPolicy.cpp
     src/connection/RpcWorker.cpp
+    src/connection/SidewaysTopology.cpp
     src/connection/VideoStream.cpp
 )
 target_include_directories(beebium_linux_connection PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
