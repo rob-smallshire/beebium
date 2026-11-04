@@ -167,6 +167,35 @@ TEST_CASE("A Meta chord is the window's: the machine has no Meta key", "[keyboar
     CHECK(wire.events.empty());
 }
 
+TEST_CASE("Alt or Meta on the event itself makes a window chord, tracked or not",
+          "[keyboard][qt][issue264]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    // No Meta or Alt press seen: the event's own modifiers still decide.
+    for (const auto modifiers : {Qt::KeyboardModifiers(Qt::MetaModifier),
+                                 Qt::ControlModifier | Qt::AltModifier}) {
+        const QKeyEvent h = press(Qt::Key_H, XKB_H, QStringLiteral("h"), modifiers);
+        CHECK(input.window_chord(h));
+        CHECK_FALSE(input.takes(h));
+        CHECK_FALSE(input.key_press(h));
+    }
+    CHECK(wire.events.empty());
+}
+
+TEST_CASE("Changing mapping keeps the host modifiers still held", "[keyboard][qt][issue264]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    input.key_press(press(Qt::Key_Meta, XKB_LEFT_META));
+    input.key_press(press(Qt::Key_Shift, XKB_LEFT_SHIFT));
+    input.set_mapping(*built_in_mapping(QStringLiteral("Thrust")));
+    CHECK(input.held_modifiers() == (MODIFIER_META | MODIFIER_SHIFT));
+    // Leaving the window still forgets them: their releases will not come.
+    input.release_all();
+    CHECK(input.held_modifiers() == 0);
+}
+
 TEST_CASE("An Alt chord the mapping binds stays the machine's", "[keyboard][qt]") {
     Wire wire;
     KeyboardInput input;

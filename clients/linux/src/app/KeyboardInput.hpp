@@ -138,6 +138,9 @@ public:
     const HeldKeys& held_keys() const { return held_; }
 
 private:
+    // Release the keys held on the machine, keeping track of the host's
+    // modifiers, which are still down.
+    void release_machine_keys();
     MappingFile mapping_;
     BbcKeyTable table_;
     Sender send_;

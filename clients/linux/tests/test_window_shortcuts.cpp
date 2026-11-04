@@ -18,6 +18,8 @@
 
 #include "app/ConnectionRecovery.hpp"
 #include "app/DisplayWidget.hpp"
+#include "app/KeyboardInput.hpp"
+#include "app/KeyboardSidebar.hpp"
 #include "app/MachineSession.hpp"
 #include "app/MainWindow.hpp"
 
@@ -25,6 +27,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSet>
@@ -47,6 +50,8 @@ constexpr quint32 XKB_LEFT_ALT = 56 + 8;
 constexpr quint32 XKB_LEFT_META = 125 + 8;
 constexpr quint32 XKB_H = 35 + 8;
 constexpr quint32 XKB_SLASH = 53 + 8;
+constexpr quint32 XKB_K = 37 + 8;
+constexpr quint32 XKB_F11 = 87 + 8;
 
 struct LiveWindow {
     FakeServer server;
@@ -223,4 +228,76 @@ TEST_CASE("With the keys in the display, both forms fire and nothing reaches the
     }
     const auto keys = live.keys_down();
     CHECK(std::count(keys.begin(), keys.end(), 0x68u) == 0);
+}
+
+// #264: once a switch has changed the mapping, the chord that made it must
+// still be the window's, however the new mapping resolves its key.
+TEST_CASE("Meta+K and Ctrl+Alt+K switch mappings back and forth and never type K",
+          "[shortcuts][window][issue264]") {
+    LiveWindow live;
+    live.window.activateWindow();
+    live.window.display().setFocus();
+    REQUIRE(wait_until([&] { return live.window.isActiveWindow(); }));
+    QWindow* handle = live.window.windowHandle();
+    REQUIRE(handle);
+    const auto mapping = [&] {
+        return QString::fromStdString(live.window.display().keyboard().mapping().name);
+    };
+    // Start on another mapping, so the switch goes to Logical and back.
+    auto* keyboard = live.window.findChild<KeyboardSidebar*>();
+    REQUIRE(keyboard);
+    QListWidgetItem* thrust = nullptr;
+    for (int i = 0; i < keyboard->chooser()->count(); ++i) {
+        if (keyboard->chooser()->item(i)->text() == QStringLiteral("Thrust")) {
+            thrust = keyboard->chooser()->item(i);
+        }
+    }
+    REQUIRE(thrust);
+    Q_EMIT keyboard->chooser()->itemClicked(thrust);
+    REQUIRE(mapping() == QStringLiteral("Thrust"));
+    live.window.display().setFocus();
+
+    // Meta held throughout, K pressed three times: Logical, Thrust, Logical.
+    deliver(handle, QEvent::KeyPress, Qt::Key_Meta, XKB_LEFT_META, Qt::NoModifier);
+    const QStringList expected{QStringLiteral("Logical"), QStringLiteral("Thrust"),
+                               QStringLiteral("Logical")};
+    for (const QString& next : expected) {
+        deliver(handle, QEvent::KeyPress, Qt::Key_K, XKB_K, Qt::MetaModifier, QStringLiteral("k"));
+        deliver(handle, QEvent::KeyRelease, Qt::Key_K, XKB_K, Qt::MetaModifier, QStringLiteral("k"));
+        CHECK(mapping() == next);
+    }
+    deliver(handle, QEvent::KeyRelease, Qt::Key_Meta, XKB_LEFT_META, Qt::MetaModifier);
+
+    // A fresh chord each time, both forms, from Logical.
+    press_chord(handle, META, Qt::Key_K, XKB_K, QStringLiteral("k"));
+    CHECK(mapping() == QStringLiteral("Thrust"));
+    press_chord(handle, META, Qt::Key_K, XKB_K, QStringLiteral("k"));
+    CHECK(mapping() == QStringLiteral("Logical"));
+    press_chord(handle, CTRL_ALT, Qt::Key_K, XKB_K, QStringLiteral("k"));
+    CHECK(mapping() == QStringLiteral("Thrust"));
+    live.window.display().setFocus();
+    press_chord(handle, CTRL_ALT, Qt::Key_K, XKB_K, QStringLiteral("k"));
+    CHECK(mapping() == QStringLiteral("Logical"));
+    // Ctrl and Alt held throughout, as Meta was above.
+    live.window.display().setFocus();
+    deliver(handle, QEvent::KeyPress, Qt::Key_Control, XKB_LEFT_CONTROL, Qt::NoModifier);
+    deliver(handle, QEvent::KeyPress, Qt::Key_Alt, XKB_LEFT_ALT, Qt::ControlModifier);
+    for (const QString& next : {QStringLiteral("Thrust"), QStringLiteral("Logical")}) {
+        deliver(handle, QEvent::KeyPress, Qt::Key_K, XKB_K, CTRL_ALT.flags, QStringLiteral("k"));
+        deliver(handle, QEvent::KeyRelease, Qt::Key_K, XKB_K, CTRL_ALT.flags, QStringLiteral("k"));
+        CHECK(mapping() == next);
+    }
+    deliver(handle, QEvent::KeyRelease, Qt::Key_Alt, XKB_LEFT_ALT, CTRL_ALT.flags);
+    deliver(handle, QEvent::KeyRelease, Qt::Key_Control, XKB_LEFT_CONTROL, Qt::ControlModifier);
+
+    // Alt+F11 is Logical's Shift Lock, so it is the machine's.
+    live.window.display().setFocus();
+    press_chord(handle, Chord{{{Qt::Key_Alt, XKB_LEFT_ALT}}, Qt::AltModifier}, Qt::Key_F11,
+                XKB_F11, QString());
+    REQUIRE(wait_until([&] {
+        const auto keys = live.keys_down();
+        return std::count(keys.begin(), keys.end(), 0x50u) == 1;
+    }));
+    const auto keys = live.keys_down();
+    CHECK(std::count(keys.begin(), keys.end(), 0x46u) == 0);  // never a K
 }

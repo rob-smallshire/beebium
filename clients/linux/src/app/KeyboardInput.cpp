@@ -79,7 +79,10 @@ KeyboardInput::KeyboardInput() {
 }
 
 void KeyboardInput::set_mapping(MappingFile mapping) {
-    release_all();
+    // The machine's keys go up, but the host's modifiers are still down: a
+    // chord that switched the mapping, held for another press, is still a
+    // chord (#264).
+    release_machine_keys();
     mapping_ = std::move(mapping);
     // Switching synchronisation on is a sync point (7.3).
     sync_caps_lock();
@@ -161,13 +164,28 @@ bool bound_with_alt_or_meta(const MappingFile& mapping, const std::string& code)
     });
 }
 
+// Alt and Meta as the event itself carries them: the window's whatever the
+// tracking has seen, so the rule holds before any mapping resolves the key.
+HostModifiers alt_or_meta_of(const QKeyEvent& event) {
+    HostModifiers held = 0;
+    if (event.modifiers().testFlag(Qt::AltModifier)) {
+        held |= MODIFIER_ALT;
+    }
+    if (event.modifiers().testFlag(Qt::MetaModifier)) {
+        held |= MODIFIER_META;
+    }
+    return held;
+}
+
 }  // namespace
 
 bool KeyboardInput::window_chord(const QKeyEvent& event) const {
     const auto host_key = host_key_from_event(event, held_modifiers());
-    return host_key && (host_key->modifiers & NOT_THE_MACHINES) &&
-           modifier_for_code(host_key->code) == 0 &&
-           !bound_with_alt_or_meta(mapping_, host_key->code);
+    if (!host_key || modifier_for_code(host_key->code) != 0) {
+        return false;
+    }
+    const HostModifiers held = host_key->modifiers | alt_or_meta_of(event);
+    return (held & NOT_THE_MACHINES) && !bound_with_alt_or_meta(mapping_, host_key->code);
 }
 
 bool KeyboardInput::takes(const QKeyEvent& event) const {
@@ -176,10 +194,6 @@ bool KeyboardInput::takes(const QKeyEvent& event) const {
     }
     const auto host_key = host_key_from_event(event, held_modifiers());
     if (!host_key) {
-        return false;
-    }
-    if ((host_key->modifiers & NOT_THE_MACHINES) &&
-        !bound_with_alt_or_meta(mapping_, host_key->code)) {
         return false;
     }
     if (host_key->code == "CapsLock" && caps_lock_sync_enabled()) {
@@ -260,6 +274,10 @@ void KeyboardInput::release_break() {
 }
 
 void KeyboardInput::yield_to_window() {
+    release_machine_keys();
+}
+
+void KeyboardInput::release_machine_keys() {
     const auto events = held_.release_all();
     if (send_) {
         send_(events);
@@ -268,10 +286,7 @@ void KeyboardInput::yield_to_window() {
 
 void KeyboardInput::release_all() {
     host_modifiers_down_.clear();
-    const auto events = held_.release_all();
-    if (send_) {
-        send_(events);
-    }
+    release_machine_keys();
 }
 
 }  // namespace beebium::linux_client
