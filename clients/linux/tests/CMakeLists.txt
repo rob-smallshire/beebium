@@ -33,7 +33,8 @@ function(beebium_linux_add_test name)
     target_compile_definitions(${name} PRIVATE
         BEEBIUM_KEYBOARD_CORPUS_DIRPATH="${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}"
         BEEBIUM_PRESET_FIXTURES_DIRPATH="${BEEBIUM_PRESET_FIXTURES_DIRPATH}"
-        BEEBIUM_PRESET_SCHEMA_FIXTURES_DIRPATH="${BEEBIUM_PRESET_SCHEMA_FIXTURES_DIRPATH}")
+        BEEBIUM_PRESET_SCHEMA_FIXTURES_DIRPATH="${BEEBIUM_PRESET_SCHEMA_FIXTURES_DIRPATH}"
+        BEEBIUM_LINUX_FIXTURES_DIRPATH="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
     # A Catch2 SKIP exits 4: scored as skipped, not failed.
     catch_discover_tests(${name}
@@ -58,6 +59,10 @@ beebium_linux_add_test(test_machine_draft
 
 beebium_linux_add_test(test_preset_resolution
     SOURCES test_preset_resolution.cpp
+    LIBRARIES beebium_linux_preset)
+
+beebium_linux_add_test(test_preset_schema
+    SOURCES test_preset_schema.cpp
     LIBRARIES beebium_linux_preset)
 
 beebium_linux_add_test(test_compatibility

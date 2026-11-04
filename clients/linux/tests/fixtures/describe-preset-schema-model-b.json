@@ -1,0 +1,2181 @@
+{
+  "schema_version": 2,
+  "model": {
+    "id": "model-b",
+    "name": "BBC Model B",
+    "description": "The original BBC Microcomputer with 32KB RAM"
+  },
+  "sections": [
+    {
+      "type": "speed",
+      "label": "Speed",
+      "default": 1.0,
+      "unlimited": "unlimited",
+      "description": "Emulation speed as a positive multiple of real time, or \"unlimited\" to run flat out"
+    },
+    {
+      "type": "startup",
+      "label": "Keyboard links",
+      "screen_mode": {
+        "min": 0,
+        "max": 7,
+        "default": 7
+      },
+      "auto_boot": {
+        "default": false
+      },
+      "links": {
+        "min": 0,
+        "max": 255,
+        "default": 255,
+        "excludes": [
+          "screen_mode",
+          "auto_boot"
+        ],
+        "link_made_when": "clear",
+        "screen_mode_bits": [
+          0,
+          1,
+          2
+        ],
+        "auto_boot_bit": 3,
+        "auto_boot_true_when": "clear",
+        "bits": [
+          {
+            "bit": 7,
+            "link": "Link 1",
+            "label": "Filing system",
+            "description": "The DNFS ROM starts in the network filing system when this link is made and in the disc filing system when it is open; the MOS does not read it, and other ROMs may."
+          },
+          {
+            "bit": 6,
+            "link": "Link 2",
+            "label": "Not used",
+            "description": "The MOS does not use this link; it is reserved for applications, which may read it."
+          },
+          {
+            "bit": 5,
+            "link": "Link 3",
+            "label": "Disc timing (link 3)",
+            "description": "With link 4, sets the disc drive step and settle times; the times depend on the disc controller and the filing system ROM fitted."
+          },
+          {
+            "bit": 4,
+            "link": "Link 4",
+            "label": "Disc timing (link 4)",
+            "description": "With link 3, sets the disc drive step and settle times; the times depend on the disc controller and the filing system ROM fitted."
+          },
+          {
+            "bit": 3,
+            "link": "Link 5",
+            "label": "SHIFT+BREAK action",
+            "description": "When this link is made, a reset or BREAK boots the disc and SHIFT+reset or SHIFT+BREAK does not; when it is open, SHIFT+reset or SHIFT+BREAK boots as usual."
+          },
+          {
+            "bit": 2,
+            "link": "Link 6",
+            "label": "Screen mode bit 2",
+            "description": "Bit 2 of the screen mode the MOS selects at power-up and after BREAK."
+          },
+          {
+            "bit": 1,
+            "link": "Link 7",
+            "label": "Screen mode bit 1",
+            "description": "Bit 1 of the screen mode the MOS selects at power-up and after BREAK."
+          },
+          {
+            "bit": 0,
+            "link": "Link 8",
+            "label": "Screen mode bit 0",
+            "description": "Bit 0 of the screen mode the MOS selects at power-up and after BREAK."
+          }
+        ]
+      },
+      "description": "The startup keyboard links: screen_mode and auto_boot, or the whole links byte"
+    },
+    {
+      "type": "mos_image_uri",
+      "label": "MOS ROM",
+      "default": "acorn-mos_1_20.rom",
+      "description": "The MOS ROM: a ROM name (found on the ROM search path) or a path"
+    },
+    {
+      "type": "storage",
+      "label": "Storage",
+      "builtin": {
+        "cassette": true,
+        "fdc": null
+      },
+      "fdc_socket": {
+        "options": [
+          {
+            "id": "none",
+            "label": "Empty",
+            "device": null,
+            "description": "No disc controller"
+          },
+          {
+            "id": "acorn-1770",
+            "label": "Acorn 1770",
+            "device": "WD1770",
+            "description": "Standard Acorn disc controller upgrade for BBC Model B"
+          },
+          {
+            "id": "acorn-8271",
+            "label": "Acorn 8271",
+            "device": "8271",
+            "description": "Original Intel 8271 disc interface for BBC Model B (DFS 0.90-1.22)"
+          }
+        ]
+      },
+      "floppy_drives": [
+        {
+          "drive": 0,
+          "label": "Floppy drive 0",
+          "tracks": [
+            40,
+            80
+          ],
+          "sides": 2,
+          "image_types": [
+            "ssd",
+            "dsd",
+            "adf",
+            "adl",
+            "adm",
+            "ads",
+            "hfe"
+          ]
+        },
+        {
+          "drive": 1,
+          "label": "Floppy drive 1",
+          "tracks": [
+            40,
+            80
+          ],
+          "sides": 2,
+          "image_types": [
+            "ssd",
+            "dsd",
+            "adf",
+            "adl",
+            "adm",
+            "ads",
+            "hfe"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sideways_bank",
+      "label": "Sideways ROM / RAM",
+      "has_aliasing": true,
+      "sockets": [
+        {
+          "label": "IC52",
+          "slots": [
+            0,
+            4,
+            8,
+            12
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC88",
+          "slots": [
+            1,
+            5,
+            9,
+            13
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC100",
+          "slots": [
+            2,
+            6,
+            10,
+            14
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC101",
+          "slots": [
+            3,
+            7,
+            11,
+            15
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        }
+      ],
+      "default_roms": [
+        {
+          "slot": 15,
+          "image": "bbc-basic_2.rom",
+          "role": "language"
+        }
+      ]
+    },
+    {
+      "type": "econet",
+      "label": "Econet",
+      "station": {
+        "min": 1,
+        "max": 254,
+        "auto": true,
+        "auto_default_range": [
+          1,
+          253
+        ]
+      },
+      "transports": [
+        "aun",
+        "piconet"
+      ]
+    },
+    {
+      "type": "extensions",
+      "label": "Extensions",
+      "attachment_points": [
+        {
+          "id": "1mhz-bus",
+          "display_name": "1 MHz Bus",
+          "description": "The 1 MHz bus, the expansion connector for add-ons such as a SCSI host adapter.",
+          "min_occupancy": 0,
+          "max_occupancy": null,
+          "provided_by": null,
+          "extensions": [
+            "acorn-scsi",
+            "hybrid-music-5000",
+            "test-scratch-ram"
+          ]
+        },
+        {
+          "id": "user-port",
+          "display_name": "User Port",
+          "description": "The user port, a parallel connector for add-ons such as a real-time clock.",
+          "min_occupancy": 0,
+          "max_occupancy": 1,
+          "provided_by": null,
+          "extensions": [
+            "acorn-rtc"
+          ]
+        },
+        {
+          "id": "printer-port",
+          "display_name": "Printer Port",
+          "description": "The parallel printer port, a Centronics connector for a printer.",
+          "min_occupancy": 0,
+          "max_occupancy": 1,
+          "provided_by": null,
+          "extensions": [
+            "file-printer",
+            "job-file-printer",
+            "tcp-printer",
+            "host-parallel-printer"
+          ]
+        },
+        {
+          "id": "tube",
+          "display_name": "Coprocessor",
+          "description": "The Tube connector, which takes a second processor.",
+          "min_occupancy": 0,
+          "max_occupancy": 1,
+          "provided_by": null,
+          "extensions": [
+            "acorn-65c102-coprocessor",
+            "acorn-65c02-coprocessor"
+          ]
+        },
+        {
+          "id": "serial-port",
+          "display_name": "Serial Port",
+          "description": "The RS423 serial port, for modems, printers and other computers.",
+          "min_occupancy": 0,
+          "max_occupancy": 1,
+          "provided_by": null,
+          "extensions": [
+            "host-serial",
+            "rfc2217-server-serial",
+            "rfc2217-client-serial",
+            "loopback-serial",
+            "rpc-serial",
+            "ip232-serial"
+          ]
+        },
+        {
+          "id": "scsi",
+          "display_name": "SCSI Bus",
+          "description": "The SCSI bus of a host adapter, which holds up to seven hard discs.",
+          "min_occupancy": 0,
+          "max_occupancy": 7,
+          "provided_by": [
+            "acorn-scsi"
+          ],
+          "extensions": [
+            "scsi-hard-disc"
+          ]
+        }
+      ],
+      "catalogue": [
+        {
+          "name": "aun",
+          "display_name": "AUN",
+          "description": "Connects the Econet port to other machines over the network using AUN (Acorn Universal Networking).",
+          "cli_name": "aun",
+          "kind": "econet-transport",
+          "source": "built-in",
+          "attaches_to": [],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "port",
+              "label": "UDP port",
+              "description": "The UDP port this machine listens on for other AUN stations. Real AUN machines use 32768; several Beebium instances on one computer each need a different port. 0 lets the computer choose one, and 'none' keeps this machine off the network.",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "32768",
+              "default_from": "",
+              "effective_default": "32768",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "net",
+              "label": "Net number",
+              "description": "The Econet net this machine is on. Leave it at 0 unless it joins an AUN network whose nets are numbered.",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "0",
+              "default_from": "",
+              "effective_default": "0",
+              "min": 0,
+              "max": 255,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "map",
+              "label": "Peers",
+              "description": "The stations this machine can reach over AUN, each with the address and port of the computer that runs it. Stations found by discovery and those in the map file need no entry here.",
+              "type": "string",
+              "required": false,
+              "is_list": true,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "{net}.{station}@{host}@{port}",
+              "fields": [
+                {
+                  "key": "net",
+                  "label": "Econet net",
+                  "description": "The Econet net the station is on. Net 0 means this machine's own net.",
+                  "type": "integer",
+                  "required": false,
+                  "default": "0",
+                  "min": 0,
+                  "max": 255,
+                  "choices": []
+                },
+                {
+                  "key": "station",
+                  "label": "Econet station",
+                  "description": "The station's number on its net, from 1 to 254; 254 is the usual file server.",
+                  "type": "integer",
+                  "required": true,
+                  "default": "",
+                  "min": 1,
+                  "max": 254,
+                  "choices": []
+                },
+                {
+                  "key": "host",
+                  "label": "AUN host (IP address or name)",
+                  "description": "The IPv4 address or DNS name of the computer running the AUN station. A name is looked up on the computer running this emulator; one that does not resolve shows the peer as unreachable.",
+                  "type": "string",
+                  "required": true,
+                  "default": "",
+                  "min": null,
+                  "max": null,
+                  "choices": []
+                },
+                {
+                  "key": "port",
+                  "label": "AUN UDP port",
+                  "description": "The UDP port the station listens on. Real AUN machines and bridges use 32768. Several Beebium instances on one computer each need a different port.",
+                  "type": "integer",
+                  "required": true,
+                  "default": "",
+                  "min": 1,
+                  "max": 65535,
+                  "choices": []
+                }
+              ]
+            },
+            {
+              "key": "subnet",
+              "label": "Subnet rules",
+              "description": "Econet nets that are whole IPv4 subnets, as RISC OS machines on AUN arrange them: each computer on the subnet is a station of the net, numbered by the last part of its address and reached on port 32768.",
+              "type": "string",
+              "required": false,
+              "is_list": true,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "{net}@{address}",
+              "fields": [
+                {
+                  "key": "net",
+                  "label": "Econet net",
+                  "description": "The Econet net number this subnet stands for. AUN convention numbers these from 128 upwards; net 0 is this machine's own net and cannot be a subnet rule.",
+                  "type": "integer",
+                  "required": true,
+                  "default": "",
+                  "min": 1,
+                  "max": 255,
+                  "choices": []
+                },
+                {
+                  "key": "address",
+                  "label": "IPv4 subnet (a.b.c.0/24)",
+                  "description": "The subnet whose addresses are the stations of this net: the machine at a.b.c.40 is station 40.",
+                  "type": "string",
+                  "required": true,
+                  "default": "",
+                  "min": null,
+                  "max": null,
+                  "choices": []
+                }
+              ]
+            },
+            {
+              "key": "map-file",
+              "label": "Map file",
+              "description": "The file of AUN stations shared by every Beebium instance on this computer, which the Network sidebar edits. 'none' uses no map file.",
+              "type": "filepath",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "aun-map-file",
+              "effective_default": "/home/user/.config/beebium/aun-map.json",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": "read",
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "discovery",
+              "label": "Discovery",
+              "description": "Whether this machine finds other Beebium machines on the local network, and lets them find it, by mDNS.",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "on",
+              "default_from": "",
+              "effective_default": "on",
+              "min": null,
+              "max": null,
+              "choices": [
+                {
+                  "value": "on",
+                  "label": "Announce and browse",
+                  "description": ""
+                },
+                {
+                  "value": "announce",
+                  "label": "Announce only",
+                  "description": ""
+                },
+                {
+                  "value": "browse",
+                  "label": "Browse only",
+                  "description": ""
+                },
+                {
+                  "value": "off",
+                  "label": "Off",
+                  "description": ""
+                }
+              ],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "host-serial",
+          "display_name": "Host Serial",
+          "description": "Connects the serial port to a serial device or pseudo-terminal on this computer.",
+          "cli_name": "host-serial",
+          "kind": "peripheral",
+          "source": "built-in",
+          "attaches_to": [
+            "serial-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "mode",
+              "label": "Mode",
+              "description": "'pty' (create a pseudo-terminal) or 'device' (open an existing serial/pty device path)",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "pty",
+              "default_from": "",
+              "effective_default": "pty",
+              "min": null,
+              "max": null,
+              "choices": [
+                {
+                  "value": "pty",
+                  "label": "Pseudo-terminal",
+                  "description": ""
+                },
+                {
+                  "value": "device",
+                  "label": "Serial device",
+                  "description": ""
+                }
+              ],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "path",
+              "label": "Path",
+              "description": "pty: optional stable symlink to the pty slave; device: the serial device path to open",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "serial-ports",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "baud",
+              "label": "Baud rate",
+              "description": "device line speed (ignored for pty)",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "19200",
+              "default_from": "",
+              "effective_default": "19200",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "tx_buffer",
+              "label": "Transmit buffer (bytes)",
+              "description": "transmit buffer size in bytes; the BBC's /CTS asserts at/above it",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "4096",
+              "default_from": "",
+              "effective_default": "4096",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "file-printer",
+          "display_name": "File Printer",
+          "description": "Spools everything the BBC sends to its printer port into a file on the host.",
+          "cli_name": "file-printer",
+          "kind": "peripheral",
+          "source": "built-in",
+          "attaches_to": [
+            "printer-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "path",
+              "label": "File",
+              "description": "file to write; an existing file is replaced",
+              "type": "filepath",
+              "required": true,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": "write",
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "line_ending",
+              "label": "Line ending",
+              "description": "keep the bytes as sent, or translate the Beeb's CR line ends to LF or CR LF",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "raw",
+              "default_from": "",
+              "effective_default": "raw",
+              "min": null,
+              "max": null,
+              "choices": [
+                {
+                  "value": "raw",
+                  "label": "As sent",
+                  "description": ""
+                },
+                {
+                  "value": "lf",
+                  "label": "LF",
+                  "description": ""
+                },
+                {
+                  "value": "crlf",
+                  "label": "CR LF",
+                  "description": ""
+                }
+              ],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "buffer",
+              "label": "Buffer (bytes)",
+              "description": "receiver queue depth in bytes",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "256",
+              "default_from": "",
+              "effective_default": "256",
+              "min": 1,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "job-file-printer",
+          "display_name": "Job File Printer",
+          "description": "Writes what the BBC prints as one file per print job, a job ending after a quiet period.",
+          "cli_name": "job-file-printer",
+          "kind": "peripheral",
+          "source": "built-in",
+          "attaches_to": [
+            "printer-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "directory",
+              "label": "Directory",
+              "description": "directory to write job files into",
+              "type": "dirpath",
+              "required": true,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": "read",
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "idle",
+              "label": "Job ends after (seconds)",
+              "description": "seconds of quiet, in emulated time, that end a job",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "5",
+              "default_from": "",
+              "effective_default": "5",
+              "min": 1,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "line_ending",
+              "label": "Line ending",
+              "description": "keep the bytes as sent, or translate the Beeb's CR line ends to LF or CR LF",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "raw",
+              "default_from": "",
+              "effective_default": "raw",
+              "min": null,
+              "max": null,
+              "choices": [
+                {
+                  "value": "raw",
+                  "label": "As sent",
+                  "description": ""
+                },
+                {
+                  "value": "lf",
+                  "label": "LF",
+                  "description": ""
+                },
+                {
+                  "value": "crlf",
+                  "label": "CR LF",
+                  "description": ""
+                }
+              ],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "buffer",
+              "label": "Buffer (bytes)",
+              "description": "receiver queue depth in bytes",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "256",
+              "default_from": "",
+              "effective_default": "256",
+              "min": 1,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "acorn-scsi",
+          "display_name": "Acorn SCSI Host Adapter",
+          "description": "The Acorn SCSI host adapter, which connects SCSI hard discs to the 1 MHz bus.",
+          "cli_name": "acorn-scsi",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "1mhz-bus"
+          ],
+          "provides": [
+            "scsi"
+          ],
+          "parameters": [],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "rfc2217-server-serial",
+          "display_name": "RFC 2217 Serial (server)",
+          "description": "Makes the serial port available to RFC 2217 clients elsewhere on the network.",
+          "cli_name": "rfc2217-server-serial",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "serial-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "bind",
+              "label": "Listen address",
+              "description": "listen address; the service is UNAUTHENTICATED plain Telnet, so bind to a wider address only behind SSH/WireGuard",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "127.0.0.1",
+              "default_from": "",
+              "effective_default": "127.0.0.1",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "port",
+              "label": "Listen port",
+              "description": "TCP port to listen on",
+              "type": "integer",
+              "required": true,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": 0,
+              "max": 65535,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "tx_buffer",
+              "label": "Transmit buffer (bytes)",
+              "description": "transmit buffer size in bytes; the BBC's /CTS asserts at/above it",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "4096",
+              "default_from": "",
+              "effective_default": "4096",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "rfc2217-client-serial",
+          "display_name": "RFC 2217 Serial (client)",
+          "description": "Connects the serial port to a serial port server elsewhere on the network, using RFC 2217.",
+          "cli_name": "rfc2217-client-serial",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "serial-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "url",
+              "label": "Server URL",
+              "description": "Access-server endpoint as [scheme://]host:port (e.g. url=\"rfc2217://ser2net.local:4001\"); alternative to host/port, cannot be combined with them",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "host",
+                "port"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "host",
+              "label": "Server host",
+              "description": "RFC 2217 access-server hostname or address (alternative to url)",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "url"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "port",
+              "label": "Server port",
+              "description": "RFC 2217 access-server TCP port (alternative to url)",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": 1,
+              "max": 65535,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "url"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "baud",
+              "label": "Baud rate",
+              "description": "baud rate to set on the remote UART (real hardware)",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "19200",
+              "default_from": "",
+              "effective_default": "19200",
+              "min": 1,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "framing",
+              "label": "Framing",
+              "description": "remote UART framing as <data><parity><stop> (data 5-8; parity N/O/E/M/S; stop 1/2), e.g. 8N1 or 7E1",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "8N1",
+              "default_from": "",
+              "effective_default": "8N1",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "flow",
+              "label": "Flow control",
+              "description": "remote UART flow control: none, rtscts (hardware) or xonxoff",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "none",
+              "default_from": "",
+              "effective_default": "none",
+              "min": null,
+              "max": null,
+              "choices": [
+                {
+                  "value": "none",
+                  "label": "None",
+                  "description": ""
+                },
+                {
+                  "value": "rtscts",
+                  "label": "Hardware (RTS/CTS)",
+                  "description": ""
+                },
+                {
+                  "value": "xonxoff",
+                  "label": "Software (XON/XOFF)",
+                  "description": ""
+                }
+              ],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "dtr",
+              "label": "Assert DTR",
+              "description": "assert DTR on the remote UART (many devices/modems need it; the BBC connector has no DTR pin)",
+              "type": "boolean",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "true",
+              "default_from": "",
+              "effective_default": "true",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "tx_buffer",
+              "label": "Transmit buffer (bytes)",
+              "description": "transmit buffer size in bytes; the BBC's /CTS asserts at/above it",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "4096",
+              "default_from": "",
+              "effective_default": "4096",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "acorn-65c102-coprocessor",
+          "display_name": "Acorn 65C102 Co-processor",
+          "description": "An Acorn 65C102 Co-processor: a 4 MHz 65C102 with 64K of its own memory, connected through the Tube.",
+          "cli_name": "tube-65c102",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "tube"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "rom",
+              "label": "Client ROM",
+              "description": "The Tube client ROM: a full 4 KB image of the 2732 (F000-FFFF), as a path, or the name of a ROM this co-processor ships",
+              "type": "filepath",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "acorn-tube-65c102_1_20.rom",
+              "default_from": "",
+              "effective_default": "acorn-tube-65c102_1_20.rom",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "rom",
+              "media": "",
+              "access": "read",
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": [
+            {
+              "key": "client",
+              "filename": "acorn-tube-65c102_1_20.rom",
+              "size": 4096,
+              "display_name": "Acorn 65C102 Tube ROM 1.20"
+            }
+          ]
+        },
+        {
+          "name": "hybrid-music-5000",
+          "display_name": "Hybrid Music 5000",
+          "description": "The Hybrid Music 5000 synthesiser, or its Music 3000 expander, which adds sixteen channels of digital sound on the 1 MHz bus.",
+          "cli_name": "hybrid-music-5000",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "1mhz-bus"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "unit",
+              "label": "Unit",
+              "description": "Which board this is: the synthesiser itself, or the expander that adds a second set of channels.",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "music-5000",
+              "default_from": "",
+              "effective_default": "music-5000",
+              "min": null,
+              "max": null,
+              "choices": [
+                {
+                  "value": "music-5000",
+                  "label": "Music 5000 synthesiser",
+                  "description": "Answers to JIM pages &30-&3F; its sound is audio field 2."
+                },
+                {
+                  "value": "music-3000",
+                  "label": "Music 3000 expander",
+                  "description": "Answers to JIM pages &50-&5F; its sound is audio field 3."
+                }
+              ],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "tcp-printer",
+          "display_name": "Network Printer",
+          "description": "Sends everything the BBC prints to a raw TCP printer port on the network, such as a JetDirect printer or a printer emulator.",
+          "cli_name": "tcp-printer",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "printer-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "url",
+              "label": "Printer URL",
+              "description": "Printer endpoint as [scheme://]host:port (e.g. url=\"socket://printer.local:9100\"); alternative to host/port, cannot be combined with them",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "host",
+                "port"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "host",
+              "label": "Printer host",
+              "description": "Printer hostname or address (default localhost; alternative to url)",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "url"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "port",
+              "label": "Printer port",
+              "description": "Printer TCP port (default 9100, the JetDirect convention; alternative to url)",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": 1,
+              "max": 65535,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "url"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "buffer",
+              "label": "Buffer (bytes)",
+              "description": "receiver queue depth in bytes; when it is full the BBC waits for /ACK",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "256",
+              "default_from": "",
+              "effective_default": "256",
+              "min": 1,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "reconnect_ms",
+              "label": "Reconnect interval (ms)",
+              "description": "milliseconds between connection attempts while not connected; 0 makes one attempt and never retries",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "1000",
+              "default_from": "",
+              "effective_default": "1000",
+              "min": 0,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "acorn-65c02-coprocessor",
+          "display_name": "Acorn 65C02 Co-processor",
+          "description": "An Acorn 6502 Second Processor: a 3 MHz 65C02 with 64K of its own memory, connected through the Tube.",
+          "cli_name": "tube-65c02",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "tube"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "rom",
+              "label": "Client ROM",
+              "description": "The Tube client ROM: a full 4 KB image of the 2732 (F000-FFFF), as a path, or the name of a ROM this co-processor ships",
+              "type": "filepath",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "acorn-tube-6502_1_10.rom",
+              "default_from": "",
+              "effective_default": "acorn-tube-6502_1_10.rom",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "rom",
+              "media": "",
+              "access": "read",
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": [
+            {
+              "key": "client",
+              "filename": "acorn-tube-6502_1_10.rom",
+              "size": 4096,
+              "display_name": "Acorn 6502 Tube ROM 1.10"
+            }
+          ]
+        },
+        {
+          "name": "host-parallel-printer",
+          "display_name": "Host Printer Port",
+          "description": "Sends everything the BBC prints to a printer port on the host computer, such as /dev/usb/lp0 or LPT1.",
+          "cli_name": "host-parallel-printer",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "printer-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "device",
+              "label": "Device",
+              "description": "Host printer device: /dev/usb/lp0 or /dev/lp0 on Linux; on Windows a USB printer's \\\\?\\usb#... interface path (HostParallelPrinter.ListDevices lists them) or LPTn, opened as \\\\.\\LPTn",
+              "type": "string",
+              "required": true,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "buffer",
+              "label": "Buffer (bytes)",
+              "description": "receiver queue depth in bytes; when it is full the BBC waits for /ACK",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "256",
+              "default_from": "",
+              "effective_default": "256",
+              "min": 1,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "reconnect_ms",
+              "label": "Reopen interval (ms)",
+              "description": "milliseconds between attempts to open the device while it is not open; 0 makes one attempt and never retries",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "1000",
+              "default_from": "",
+              "effective_default": "1000",
+              "min": 0,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "loopback-serial",
+          "display_name": "Loopback Serial",
+          "description": "Sends every byte the BBC transmits on its serial port straight back to it, for testing serial software.",
+          "cli_name": "loopback-serial",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "serial-port"
+          ],
+          "provides": [],
+          "parameters": [],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "scsi-hard-disc",
+          "display_name": "SCSI Hard Disc",
+          "description": "A SCSI hard disc, kept in a pair of image files (.dat and .dsc).",
+          "cli_name": "scsi-hdd",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "scsi"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "scsi-id",
+              "label": "SCSI ID",
+              "description": "SCSI target ID (0-7)",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": 0,
+              "default": "0",
+              "default_from": "",
+              "effective_default": "0",
+              "min": 0,
+              "max": 7,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": true,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "image",
+              "label": "Disc image",
+              "description": "Path to DAT disc image file",
+              "type": "filepath",
+              "required": true,
+              "is_list": false,
+              "position": 1,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "hard-disc",
+              "access": "read",
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "adapter-id",
+              "label": "SCSI adapter",
+              "description": "ID of SCSI adapter to attach to",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "scsi",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "acorn-rtc",
+          "display_name": "Acorn Real-Time Clock",
+          "description": "The Acorn real-time clock module, which plugs into the user port and keeps the date and time.",
+          "cli_name": "acorn-rtc",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "user-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "time",
+              "label": "Start time",
+              "description": "Set emulated clock to absolute datetime (e.g. 1985-03-15T10:30)",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "offset"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "offset",
+              "label": "Offset from host time",
+              "description": "Offset from host local time (e.g. -10y, +5h, -365d)",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "time"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "layout",
+              "label": "Register layout",
+              "description": "How the file server software stores the year in the clock, which sets the years the clock can hold.",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "7bit-year-in-r7",
+              "default_from": "",
+              "effective_default": "7bit-year-in-r7",
+              "min": null,
+              "max": null,
+              "choices": [
+                {
+                  "value": "4bit-year-in-r1",
+                  "label": "Acorn original (4-bit year in R1)",
+                  "description": "Years 1981 to 1996, as the original Acorn file servers expect. Not Y2K compliant."
+                },
+                {
+                  "value": "7bit-year-in-r7",
+                  "label": "Level 3 File Server 1.26 (7-bit year in R7)",
+                  "description": "Years 1981 to 2099, as the Level 3 File Server 1.26 expects."
+                },
+                {
+                  "value": "7bit-year-in-r1r5",
+                  "label": "BeebMaster Y2KFIX (7-bit year in R1/R5)",
+                  "description": "Years 1981 to 2108, as file servers patched with BeebMaster's Y2KFIX expect."
+                }
+              ],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [
+            {
+              "key": "start",
+              "label": "Clock start",
+              "description": "Where the clock starts when the machine is switched on.",
+              "parameters": [
+                "time",
+                "offset"
+              ],
+              "none": {
+                "label": "Host time",
+                "description": "The clock follows this computer's clock."
+              }
+            }
+          ],
+          "roms": []
+        },
+        {
+          "name": "piconet",
+          "display_name": "Piconet",
+          "description": "Connects the Econet port to a real Econet network through a Piconet USB interface.",
+          "cli_name": "piconet",
+          "kind": "econet-transport",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "device_path",
+              "label": "Device",
+              "description": "The serial device of the Piconet bridge, for example /dev/cu.usbmodem101. 'auto' finds a connected Piconet.",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "auto",
+              "default_from": "",
+              "effective_default": "auto",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "serial-ports",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "rpc-serial",
+          "display_name": "RPC Serial",
+          "description": "A serial peer that a client program drives, sending and receiving bytes through the RpcSerial service; used by automated tests.",
+          "cli_name": "rpc-serial",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "serial-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "tx_buffer",
+              "label": "Transmit buffer (bytes)",
+              "description": "transmit buffer size in bytes; the BBC's /CTS asserts at/above it",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "4096",
+              "default_from": "",
+              "effective_default": "4096",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "test-scratch-ram",
+          "display_name": "Test Scratch RAM",
+          "description": "Eight bytes of scratch RAM at &FC50 on the 1 MHz bus, for testing the extension framework.",
+          "cli_name": "test-scratch-ram",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "1mhz-bus"
+          ],
+          "provides": [],
+          "parameters": [],
+          "groups": [],
+          "roms": []
+        },
+        {
+          "name": "ip232-serial",
+          "display_name": "IP232 Serial",
+          "description": "Connects the serial port to an IP232 modem emulator, such as tcpser, over the network.",
+          "cli_name": "ip232-serial",
+          "kind": "peripheral",
+          "source": "/home/user/linux-client/server/beebium-server-0.16.1-linux-arm64/bin/extensions",
+          "attaches_to": [
+            "serial-port"
+          ],
+          "provides": [],
+          "parameters": [
+            {
+              "key": "url",
+              "label": "Server URL",
+              "description": "IP232 server endpoint as [scheme://]host:port (e.g. url=\"ip232://bbs.example.com:25232\"); alternative to host/port, cannot be combined with them",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "host",
+                "port"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "host",
+              "label": "Server host",
+              "description": "IP232 server hostname or address (default localhost; alternative to url)",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "url"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "port",
+              "label": "Server port",
+              "description": "IP232 server TCP port (default 25232; alternative to url)",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "",
+              "default_from": "",
+              "effective_default": "",
+              "min": 1,
+              "max": 65535,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [
+                "url"
+              ],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "mode",
+              "label": "Mode",
+              "description": "'ip232' (0xFF-escaped, persistent connection) or 'raw' (pure byte pipe, connect/disconnect on RTS)",
+              "type": "string",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "ip232",
+              "default_from": "",
+              "effective_default": "ip232",
+              "min": null,
+              "max": null,
+              "choices": [
+                {
+                  "value": "ip232",
+                  "label": "IP232 (escaped, persistent connection)",
+                  "description": ""
+                },
+                {
+                  "value": "raw",
+                  "label": "Raw (connect on RTS)",
+                  "description": ""
+                }
+              ],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "handshake",
+              "label": "Convey RTS",
+              "description": "convey the BBC's RTS line to the server via the 0xFF escape (ip232 mode only)",
+              "type": "boolean",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "true",
+              "default_from": "",
+              "effective_default": "true",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            },
+            {
+              "key": "tx_buffer",
+              "label": "Transmit buffer (bytes)",
+              "description": "transmit buffer size in bytes; the BBC's /CTS asserts at/above it",
+              "type": "integer",
+              "required": false,
+              "is_list": false,
+              "position": null,
+              "default": "4096",
+              "default_from": "",
+              "effective_default": "4096",
+              "min": null,
+              "max": null,
+              "choices": [],
+              "choices_from": "",
+              "excludes": [],
+              "bundled": "",
+              "media": "",
+              "access": null,
+              "unique": false,
+              "provider_of": "",
+              "item_format": "",
+              "fields": []
+            }
+          ],
+          "groups": [],
+          "roms": []
+        }
+      ],
+      "bundled_images": {
+        "rom": [
+          {
+            "image": "acorn-tube-65c102_1_20.rom",
+            "display_name": "Acorn 65C102 Tube ROM 1.20",
+            "size_bytes": 4096,
+            "extension": "acorn-65c102-coprocessor"
+          },
+          {
+            "image": "acorn-tube-6502_1_10.rom",
+            "display_name": "Acorn 6502 Tube ROM 1.10",
+            "size_bytes": 4096,
+            "extension": "acorn-65c02-coprocessor"
+          }
+        ]
+      },
+      "bundled_image_kinds": [
+        {
+          "kind": "rom",
+          "display_name": "ROM"
+        }
+      ]
+    }
+  ]
+}
