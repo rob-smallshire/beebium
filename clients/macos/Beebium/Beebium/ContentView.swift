@@ -1289,21 +1289,40 @@ class WindowCloseCoordinator: NSObject {
     @MainActor
     private func showSaveOnClosePrompt(window: NSWindow,
                                        proceed: @escaping (SaveOnCloseDecision) -> Void) {
-        let name = systemClient.machineName.isEmpty ? "this machine" : "\"\(systemClient.machineName)\""
+        let content = MachineSaving.saveOnClosePrompt(
+            machineName: systemClient.machineName,
+            isServerLocal: systemClient.isServerLocal)
         let alert = NSAlert()
-        alert.messageText = "Do you want to save \(name)?"
-        alert.informativeText = "This machine has written to its discs. If you don't save it, that work is lost when it closes."
+        alert.messageText = content.messageText
+        alert.informativeText = content.informativeText
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Save...")
-        alert.addButton(withTitle: "Cancel")
-        let dontSave = alert.addButton(withTitle: "Don't Save")
-        dontSave.hasDestructiveAction = true
 
-        alert.beginSheetModal(for: window) { response in
-            switch response {
-            case .alertFirstButtonReturn:  proceed(.save)
-            case .alertThirdButtonReturn:  proceed(.dontSave)
-            default:                       proceed(.cancel)
+        if content.offersSave {
+            alert.addButton(withTitle: "Save...")
+            alert.addButton(withTitle: "Cancel")
+            let dontSave = alert.addButton(withTitle: "Don't Save")
+            dontSave.hasDestructiveAction = true
+
+            alert.beginSheetModal(for: window) { response in
+                switch response {
+                case .alertFirstButtonReturn:  proceed(.save)
+                case .alertThirdButtonReturn:  proceed(.dontSave)
+                default:                       proceed(.cancel)
+                }
+            }
+        } else {
+            // A remote machine cannot be saved from here (#263), so the prompt
+            // offers only discard or cancel -- the .save path, and so SaveMachine,
+            // is never reachable for a remote server.
+            let close = alert.addButton(withTitle: "Close")
+            close.hasDestructiveAction = true
+            alert.addButton(withTitle: "Cancel")
+
+            alert.beginSheetModal(for: window) { response in
+                switch response {
+                case .alertFirstButtonReturn:  proceed(.dontSave)
+                default:                       proceed(.cancel)
+                }
             }
         }
     }

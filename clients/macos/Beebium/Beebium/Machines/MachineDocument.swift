@@ -129,7 +129,11 @@ final class MachineDocument: NSDocument {
     /// the title bar; the popover's inline Rename and Duplicate are left alone.
     /// This mirrors the disc features' gating on a local server.
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
-        if item.action == #selector(NSDocument.move(_:)) {
+        // Move To hands the server a destination path, and Duplicate is Save As
+        // (both below); neither is supported against a remote server (#263), so
+        // disable their popover items when the server is not local.
+        if item.action == #selector(NSDocument.move(_:))
+            || item.action == #selector(NSDocument.duplicate(_:)) {
             return (systemClient?.isServerLocal ?? false) && super.validateUserInterfaceItem(item)
         }
         return super.validateUserInterfaceItem(item)
@@ -185,7 +189,7 @@ final class MachineDocument: NSDocument {
     /// File > Save As... does. The default NSDocument duplicate would copy the
     /// package's bytes, which the server owns, so it is replaced.
     override func duplicate(_ sender: Any?) {
-        guard let systemClient else { return }
+        guard let systemClient, systemClient.isServerLocal else { return }
         Task { @MainActor in await MachineSaving.saveAs(systemClient: systemClient) }
     }
 

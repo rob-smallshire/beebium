@@ -38,27 +38,19 @@ final class FileCommandsImportTests: XCTestCase {
 
     // MARK: - Save / Save As enable rules
 
-    func testSaveEnabledForASavedMachineRegardlessOfServerLocality() {
-        // A saved machine saves in place -- no host path is handed over -- so it
-        // is available whether the server is local or remote.
+    func testSaveNeedsALocalServerWhateverTheSavedState() {
+        // The macOS client does not save a machine on a remote server at all
+        // (#263): neither a transient machine's first save nor an already-saved
+        // machine's save in place.
         XCTAssertTrue(FileCommands.saveEnabled(
-            hasFocusedMachineWindow: true, isSaved: true, isServerLocal: true))
-        XCTAssertTrue(FileCommands.saveEnabled(
-            hasFocusedMachineWindow: true, isSaved: true, isServerLocal: false))
-    }
-
-    func testFirstSaveOfATransientMachineNeedsALocalServer() {
-        // A transient machine's first save hands the server a directory chosen on
-        // this host, so it is offered only when the server shares this filesystem.
-        XCTAssertTrue(FileCommands.saveEnabled(
-            hasFocusedMachineWindow: true, isSaved: false, isServerLocal: true))
+            hasFocusedMachineWindow: true, isServerLocal: true))
         XCTAssertFalse(FileCommands.saveEnabled(
-            hasFocusedMachineWindow: true, isSaved: false, isServerLocal: false))
+            hasFocusedMachineWindow: true, isServerLocal: false))
     }
 
     func testSaveDisabledWithNoFocusedMachineWindow() {
         XCTAssertFalse(FileCommands.saveEnabled(
-            hasFocusedMachineWindow: false, isSaved: true, isServerLocal: true))
+            hasFocusedMachineWindow: false, isServerLocal: true))
     }
 
     func testSaveAsEnabledOnlyForASavedFocusedMachineOnALocalServer() {
@@ -77,11 +69,8 @@ final class FileCommandsImportTests: XCTestCase {
 
     func testSaveAndSaveAsHelpExplainARemoteServer() {
         // The tooltip explains why the item is withheld, only in the remote case.
-        XCTAssertTrue(FileCommands.saveHelp(isSaved: false, isServerLocal: false)
-            .contains("another host"))
-        XCTAssertEqual(FileCommands.saveHelp(isSaved: false, isServerLocal: true), "")
-        XCTAssertEqual(FileCommands.saveHelp(isSaved: true, isServerLocal: false), "",
-                       "a saved machine saves in place, so Save is not withheld")
+        XCTAssertTrue(FileCommands.saveHelp(isServerLocal: false).contains("another host"))
+        XCTAssertEqual(FileCommands.saveHelp(isServerLocal: true), "")
         XCTAssertTrue(FileCommands.saveAsHelp(isServerLocal: false).contains("another host"))
         XCTAssertEqual(FileCommands.saveAsHelp(isServerLocal: true), "")
     }

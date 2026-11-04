@@ -37,4 +37,29 @@ final class MachineSavingCloseTests: XCTestCase {
         XCTAssertFalse(MachineSaving.shouldPromptToSaveOnClose(
             closeAction: .promptUser(clientCount: 2), templateMediaWritten: true))
     }
+
+    // MARK: - The prompt's variant by server locality (#263)
+
+    func testLocalServerPromptOffersSave() {
+        let prompt = MachineSaving.saveOnClosePrompt(machineName: "Elite", isServerLocal: true)
+        XCTAssertTrue(prompt.offersSave, "a local machine can be saved, so Save is offered")
+        XCTAssertTrue(prompt.messageText.contains("save"))
+        XCTAssertTrue(prompt.messageText.contains("\"Elite\""))
+    }
+
+    func testRemoteServerPromptOffersNoSave() {
+        let prompt = MachineSaving.saveOnClosePrompt(machineName: "Elite", isServerLocal: false)
+        XCTAssertFalse(prompt.offersSave,
+                       "a remote machine cannot be saved from here, so no Save is offered")
+        // The informative text says why, as a sentence.
+        XCTAssertTrue(prompt.informativeText.contains("another host"))
+        XCTAssertTrue(prompt.informativeText.hasSuffix("."))
+    }
+
+    func testPromptNamesAnUnnamedMachineGenerically() {
+        let local = MachineSaving.saveOnClosePrompt(machineName: "", isServerLocal: true)
+        XCTAssertTrue(local.messageText.contains("this machine"))
+        let remote = MachineSaving.saveOnClosePrompt(machineName: "", isServerLocal: false)
+        XCTAssertTrue(remote.messageText.contains("this machine"))
+    }
 }

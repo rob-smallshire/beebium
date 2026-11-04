@@ -33,6 +33,33 @@ enum MachineSaving {
         templateMediaWritten && closeAction == .shutdownServer
     }
 
+    /// The content of the save-on-close prompt, which depends on whether the
+    /// machine can be saved at all. A machine on a local server is offered Save;
+    /// one on a remote server cannot be saved from here (#263), so the prompt
+    /// only lets the user discard the unsaved work or cancel, and says why. Pure,
+    /// so both variants are testable without a window.
+    struct SaveOnClosePrompt: Equatable {
+        let messageText: String
+        let informativeText: String
+        /// Whether the prompt offers Save (Save.../Cancel/Don't Save). When false
+        /// it offers Close/Cancel only, so no save can be issued from it.
+        let offersSave: Bool
+    }
+
+    static func saveOnClosePrompt(machineName: String, isServerLocal: Bool) -> SaveOnClosePrompt {
+        let name = machineName.isEmpty ? "this machine" : "\"\(machineName)\""
+        if isServerLocal {
+            return SaveOnClosePrompt(
+                messageText: "Do you want to save \(name)?",
+                informativeText: "This machine has written to its discs. If you don't save it, that work is lost when it closes.",
+                offersSave: true)
+        }
+        return SaveOnClosePrompt(
+            messageText: "Close \(name) without saving?",
+            informativeText: "This machine has written to its discs, but the server is on another host, so it can't be saved from here. That work is lost when it closes.",
+            offersSave: false)
+    }
+
     /// Returns whether the machine was saved: false if the user cancelled the
     /// save panel or the save failed, so a caller closing the window can leave
     /// it open instead.

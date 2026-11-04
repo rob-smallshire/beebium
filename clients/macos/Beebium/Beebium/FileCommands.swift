@@ -87,10 +87,8 @@ struct FileCommands: Commands {
             .keyboardShortcut("s", modifiers: .command)
             .disabled(!Self.saveEnabled(
                 hasFocusedMachineWindow: machineSaveActions != nil,
-                isSaved: machineSaveActions?.isSaved ?? false,
                 isServerLocal: machineSaveActions?.isServerLocal ?? false))
-            .help(Self.saveHelp(isSaved: machineSaveActions?.isSaved ?? false,
-                                isServerLocal: machineSaveActions?.isServerLocal ?? false))
+            .help(Self.saveHelp(isServerLocal: machineSaveActions?.isServerLocal ?? false))
 
             Button("Save As...") { machineSaveActions?.saveAs() }
             .keyboardShortcut("s", modifiers: [.command, .shift])
@@ -108,14 +106,15 @@ struct FileCommands: Commands {
         // Close (Cmd-W) provided automatically by SwiftUI
     }
 
-    /// Whether File > Save should be enabled. A saved machine saves in place --
-    /// the server rewrites its own directory, no host path is handed over, so it
-    /// works whether the server is local or remote. A transient machine's first
-    /// save instead hands the server a directory chosen on this host, so it is
-    /// offered only when the server shares this filesystem (#263). Pure, so the
-    /// rule is testable; it is wired to the action with the SaveMachine RPC.
-    static func saveEnabled(hasFocusedMachineWindow: Bool, isSaved: Bool, isServerLocal: Bool) -> Bool {
-        hasFocusedMachineWindow && (isSaved || isServerLocal)
+    /// Whether File > Save should be enabled: a machine window is focused and the
+    /// server shares this filesystem. The macOS client does not support saving a
+    /// machine on a remote server at all (#263) -- not the first save of a
+    /// transient machine (it hands the server a host path chosen here), and not
+    /// saving an already-saved machine in place either -- so every save is gated
+    /// on a local server. Pure, so the rule is testable; it is wired to the
+    /// action with the SaveMachine RPC.
+    static func saveEnabled(hasFocusedMachineWindow: Bool, isServerLocal: Bool) -> Bool {
+        hasFocusedMachineWindow && isServerLocal
     }
 
     /// Whether File > Save As... should be enabled: a machine window is focused,
@@ -126,14 +125,13 @@ struct FileCommands: Commands {
         hasFocusedMachineWindow && isSaved && isServerLocal
     }
 
-    /// The reason Save is withheld, for the menu item's tooltip: only the
-    /// first save of a transient machine is gated on a local server, so this
-    /// explains that case and is empty otherwise. Mirrors the disc features'
-    /// wording for a remote server. Pure.
-    static func saveHelp(isSaved: Bool, isServerLocal: Bool) -> String {
-        (!isSaved && !isServerLocal)
-            ? "The server is on another host, so it cannot save a machine to this one"
-            : ""
+    /// The reason Save is withheld, for the menu item's tooltip: saving is gated
+    /// on a local server (#263). Empty when the server is local. Mirrors the disc
+    /// features' wording for a remote server. Pure.
+    static func saveHelp(isServerLocal: Bool) -> String {
+        isServerLocal
+            ? ""
+            : "The server is on another host, so it cannot save a machine to this one"
     }
 
     /// The reason Save As is withheld, for the menu item's tooltip: it is gated
