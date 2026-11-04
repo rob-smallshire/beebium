@@ -26,7 +26,9 @@ namespace beebium::linux_client {
 
 // A spike-robust estimate of the fastest the host can run the machine: of
 // the last WINDOW samples, the highest once the top tenth are set aside as
-// spikes, and 1x until anything is heard.
+// spikes, and 1x until anything is heard. The window trails, so the
+// estimate, and the axis sized from it, widens and narrows with the
+// samples: a fast spell is forgotten 30 s after it ends.
 class AttainableSpeed {
 public:
     static constexpr std::size_t WINDOW = 120;  // 30 s of 250 ms samples
