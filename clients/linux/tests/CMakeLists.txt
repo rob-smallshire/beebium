@@ -65,6 +65,10 @@ beebium_linux_add_test(test_preset_schema
     SOURCES test_preset_schema.cpp
     LIBRARIES beebium_linux_preset)
 
+beebium_linux_add_test(test_structured_item
+    SOURCES test_structured_item.cpp
+    LIBRARIES beebium_linux_preset)
+
 beebium_linux_add_test(test_preset_resolver QT
     SOURCES test_preset_resolver.cpp
     LIBRARIES beebium_linux_app)
