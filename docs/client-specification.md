@@ -1864,8 +1864,9 @@ Conformance:
 Gating: revealing a slot's image file requires both that the server shares the
 filesystem and that the path exists on this host.
 
-Scenarios: a Model B -> four sockets, each listing its aliased slots, with an aliasing
-note. A `*SRLOAD` on a running machine -> the live title updates without a full
+Scenarios: a Model B -> four sockets, each with its aliased slots and priority
+available on inspection (the reference client puts them in the row's tooltip, with
+no separate aliasing note). A `*SRLOAD` on a running machine -> the live title updates without a full
 refetch. Toggle a one-slot write group -> one slot flips; a whole-board group -> all
 covered slots flip together after the re-read. Hide a socket's ROM -> it is
 read-protected even though it is a ROM. A protection change against a machine with no
