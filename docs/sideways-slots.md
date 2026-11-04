@@ -73,7 +73,10 @@ Each socket carries these boolean capability flags:
 | `supports_ram` | The socket can be configured as sideways RAM. |
 | `supports_empty` | The socket can be left vacant. |
 | `runtime_configurable` | The socket *type* (ROM/RAM/empty) can be changed at runtime via `SidewaysService.ConfigureSlot`, without restarting the server. |
-| `supports_write_protect` | The socket has a RAM write-protect switch, so its RAM may be write-protected (at launch via `--write-protect`, or at runtime via `SidewaysService.SetSlotWriteProtect`). False for sideways RAM with no such switch (e.g. the B+ 128K SRAM banks), so a front-end offers the control only where it exists. |
+
+Write-protect and hide switches are not socket capabilities: they are
+reported as protection groups (see [gRPC API](#grpc-api)), since one
+board switch can cover a single slot, a pair of slots or the whole board.
 
 **Every present socket supports the ROM/RAM/empty trifecta.** Third-party
 sideways-RAM modules that plugged into a ROM socket (with a flying lead for
@@ -234,10 +237,10 @@ Slot 15 has two board-specific behaviours when fitted with RAM:
 - **Write-protect.** A switch (the board's S6 link) inhibits writes to the
   slot-15 RAM. Its power-on position is set with the `write-protect` flag on
   the slot's `--sideways` spec (`--sideways slot=15:type=ram:write-protect`),
-  and it can be toggled at runtime with `SidewaysService.SetSlotWriteProtect`;
-  the current state is reported in `SocketStatus.write_protected`. The flag is
-  accepted only on a RAM slot whose socket has the switch
-  (`supports_write_protect`).
+  and it can be toggled at runtime with `SidewaysService.SetSlotProtection`
+  on the protection group `slot-15`, whose current state `GetSlotStatus`
+  reports. The flag is accepted only on a RAM slot covered by a
+  write-protect group.
 
 BASIC defaults to slot 14 (the manual reserves slot 15 for RAM). Battery
 backup is not modelled.
@@ -320,8 +323,9 @@ saves the user a round-trip and a confusing error.
       bool has_aliasing = 1;
       uint32 num_physical_slots = 2;
       repeated SocketStatus sockets = 3;
-      uint32 selected_bank = 4;
       repeated MotherboardLink motherboard_links = 5;
+      repeated SidewaysProtectionGroup protection_groups = 6;
+      WriteSelectLatch write_select_latch = 7;
   }
 
   message SocketStatus {
@@ -333,7 +337,21 @@ saves the user a round-trip and a confusing error.
       string socket_label = 6;
       SocketCapabilities capabilities = 7;
       RomHeader rom_header = 8;
-      bool write_protected = 9;
+  }
+
+  message SidewaysProtectionGroup {
+      string id = 1;
+      string label = 2;
+      repeated uint32 slots = 3;
+      bool supports_write_protect = 4;
+      bool supports_hide = 5;
+      bool write_protected = 6;
+      bool hidden = 7;
+  }
+
+  message WriteSelectLatch {
+      bool present = 1;
+      uint32 socket = 2;
   }
   ```
 
@@ -343,14 +361,27 @@ saves the user a round-trip and a confusing error.
   Freshly fitted RAM reports `RAM`, unpopulated; a socket with nothing
   fitted reports `EMPTY`.
 
+  Write protection is reported per board switch, not per socket. Each
+  protection group is one switch covering a set of slots, which inhibits
+  writes (`supports_write_protect`), hides the slots from reads
+  (`supports_hide`), or both, with its current state alongside. The
+  ATPL Sidewise has a one-slot write group (`slot-15`); the Watford
+  board has a board-wide write group (`board`, S2) and a hide group
+  over socket 14 (`slot-14`, S1); the Integra-B has one write group per
+  RAM chip (`slots-4-5`, ...). Machines with no such switches report
+  none. `write_select_latch` reports the Watford board's `&FF30`
+  write-select latch, which routes writes to one socket independently of
+  ROMSEL; it is read-only and absent (`present` false) on other
+  machines.
+
 - **`ConfigureSlot`** changes a runtime-configurable socket's type
   and/or loads an image. Subject to the rules above.
 
-- **`SetSlotWriteProtect`** engages or releases a RAM slot's
-  write-protect switch (e.g. the ATPL Sidewise slot 15). Rejected for
-  slots that are not currently RAM, and for machines with no
-  write-protect control. The resulting state is also reported in
-  `SocketStatus.write_protected`.
+- **`SetSlotProtection`** engages or releases one protection group's
+  switch, naming the group by `group_id` and the protection by `kind`
+  (write-protect or hide). Rejected for an unknown group or a kind the
+  group does not support. The response carries the switch state after
+  the call, which `GetSlotStatus` also reports.
 
 - **`ReadSlotData`** reads bytes from a slot for inspection.
 
