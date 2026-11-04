@@ -485,6 +485,44 @@ final class PeripheralTreeTests: XCTestCase {
         XCTAssertEqual(devs[1].id, "combo/ramdisc")
     }
 
+    func testChildWithMissingProviderBecomesOrphan() {
+        // Spec 12.3: every listed extension is shown somewhere. A child whose
+        // provider_id names an instance absent from the listing is never reached
+        // by the walk from the machine connectors, so it must surface under
+        // Unattached rather than vanish.
+        let orphanedDisc = info(name: "scsi-hard-disc",
+                                id: "scsi-hdd#0",
+                                attachesTo: ["scsi"],
+                                attachments: [(point: "scsi", provider: "ghost-adapter#9")])
+
+        let tree = PeripheralTree.build(from: [orphanedDisc])
+
+        XCTAssertTrue(tree.groups.isEmpty)
+        XCTAssertEqual(tree.orphans.map { $0.id }, ["scsi-hdd#0"])
+    }
+
+    func testMissingProviderChildIsOrphanedWithoutDisturbingValidRoots() {
+        // A listing mixing a well-formed adapter+disc with a disc whose provider
+        // is absent: the good disc nests under its adapter, the lost disc goes to
+        // Unattached, and the valid root group is unaffected.
+        let scsi = info(name: "acorn-scsi", id: "acorn-scsi#1",
+                        attachesTo: ["1mhz-bus"], provides: ["scsi"])
+        let goodDisc = info(name: "scsi-hard-disc", id: "hdd-good",
+                            attachesTo: ["scsi"],
+                            attachments: [(point: "scsi", provider: "acorn-scsi#1")])
+        let lostDisc = info(name: "scsi-hard-disc", id: "hdd-lost",
+                            attachesTo: ["scsi"],
+                            attachments: [(point: "scsi", provider: "ghost#9")])
+
+        let tree = PeripheralTree.build(from: [scsi, goodDisc, lostDisc],
+                                        attachmentPoints: [point("1mhz-bus", "1 MHz Bus")])
+
+        XCTAssertEqual(tree.groups.count, 1)
+        XCTAssertEqual(tree.groups[0].nodes.map { $0.id }, ["acorn-scsi#1"])
+        XCTAssertEqual(tree.groups[0].nodes[0].children.map { $0.id }, ["hdd-good"])
+        XCTAssertEqual(tree.orphans.map { $0.id }, ["hdd-lost"])
+    }
+
     func testExtensionWithEmptyAttachesToBecomesOrphan() {
         // PeripheralExtension's contract is non-empty attachesTo. If
         // that's ever violated, surface the extension under `orphans`

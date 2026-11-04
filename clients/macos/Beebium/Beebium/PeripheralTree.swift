@@ -143,9 +143,12 @@ enum PeripheralNameFormatter {
 /// first, then provided points); nodes within a group preserve the order the
 /// server returned the extensions in (command-line / preset configuration order).
 ///
-/// `orphans` is a defensive bucket for extensions with an empty
-/// `attaches_to`; the server's PeripheralExtension contract requires at
-/// least one attachment so in practice it stays empty.
+/// `orphans` is the "Unattached" bucket: extensions with an empty
+/// `attaches_to`, plus any extension never reached by the walk from the
+/// machine connectors -- in particular a child whose `provider_id` names an
+/// instance absent from the listing. Spec 12.3 requires every listed
+/// extension to appear somewhere, so these surface here rather than vanish.
+/// The server's PeripheralExtension contract makes both cases rare.
 struct PeripheralTree: Equatable {
 
     struct ExtensionPointGroup: Equatable, Identifiable {
@@ -234,7 +237,9 @@ struct PeripheralTree: Equatable {
         // recursion would terminate naturally even without that
         // guarantee because a node's children are looked up by its id,
         // which never recurses back to itself.
+        var visitedIds: Set<String> = []
         func attachChildren(to nodeId: String) -> PeripheralNode {
+            visitedIds.insert(nodeId)
             var node = nodesById[nodeId]!
             let childIds = childIdsByParentId[nodeId, default: []]
             node.children = childIds.map { attachChildren(to: $0) }
@@ -259,7 +264,19 @@ struct PeripheralTree: Equatable {
             )
         }
 
-        let orphans = orphanIds.compactMap { nodesById[$0] }
+        // Every listed extension must appear somewhere (spec 12.3). A node the
+        // walk above never reached -- a child whose provider_id names an instance
+        // absent from the listing, or one otherwise orphaned from every machine
+        // connector -- would vanish, so collect any unvisited node here alongside
+        // the empty-attaches_to orphans. Input order is preserved and each node
+        // appears exactly once (the set guards against re-adding an orphan).
+        var orphanIdsResolved = orphanIds
+        let orphanIdSet = Set(orphanIds)
+        for ext in extensions where !visitedIds.contains(ext.id)
+            && !orphanIdSet.contains(ext.id) {
+            orphanIdsResolved.append(ext.id)
+        }
+        let orphans = orphanIdsResolved.compactMap { nodesById[$0] }
 
         return PeripheralTree(groups: groups, orphans: orphans,
                               pointDisplayNames: pointDisplayNames)
