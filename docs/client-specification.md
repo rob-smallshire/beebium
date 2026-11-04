@@ -2013,7 +2013,9 @@ Conformance:
 - MANDATORY: discover by the listing RPC, not hard-coded; a node's parent is the
   server-chosen provider, not re-derived; trust the server's labels and display names;
   non-cascading removal with server-diagnosed orphans; the chooser's content is
-  entirely manifest-derived.
+  entirely manifest-derived; every listed extension is shown somewhere: one whose
+  provider id names no listed extension appears under an unattached section rather
+  than being dropped.
 - LATITUDE: the tree layout, indentation, badges.
 - MACOS-ONLY: the tree and chooser widgets.
 
