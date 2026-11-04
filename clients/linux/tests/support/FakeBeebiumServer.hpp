@@ -36,6 +36,7 @@
 #include <QString>
 
 #include <atomic>
+#include <cstdint>
 #include <utility>
 #include <string>
 #include <vector>
@@ -85,6 +86,20 @@ public:
         }
         changed_.notify_all();
     }
+
+    // WatchPacingStats: how many watch now, the interval the last asked
+    // for, and the samples to send them.
+    std::atomic<int> pacing_watchers{0};
+    std::atomic<std::uint32_t> last_pacing_interval_ms{0};
+    void push_pacing(const beebium::PacingStats& stats) {
+        {
+            std::lock_guard lock(mutex_);
+            pacing_script_.push_back(stats);
+        }
+        changed_.notify_all();
+    }
+    // SetSpeedMultiplier: every multiplier asked for, in order (calls_mutex).
+    std::vector<double> speed_requests;
 
     grpc::Status GetSystemInfo(grpc::ServerContext* context, const beebium::GetSystemInfoRequest*,
                                beebium::SystemInfo* info) override {
@@ -198,10 +213,42 @@ public:
         }
     }
 
+    grpc::Status WatchPacingStats(grpc::ServerContext* context,
+                                  const beebium::WatchPacingStatsRequest* request,
+                                  grpc::ServerWriter<beebium::PacingStats>* writer) override {
+        last_pacing_interval_ms = request->interval_ms();
+        ++pacing_watchers;
+        for (;;) {
+            std::unique_lock lock(mutex_);
+            changed_.wait_for(lock, 20ms, [this] { return !pacing_script_.empty(); });
+            if (context->IsCancelled()) {
+                --pacing_watchers;
+                return grpc::Status::CANCELLED;
+            }
+            if (pacing_script_.empty()) {
+                continue;
+            }
+            const beebium::PacingStats next = pacing_script_.front();
+            pacing_script_.pop_front();
+            lock.unlock();
+            writer->Write(next);
+        }
+    }
+
+    grpc::Status SetSpeedMultiplier(grpc::ServerContext*,
+                                    const beebium::SetSpeedMultiplierRequest* request,
+                                    beebium::SetSpeedMultiplierResponse* response) override {
+        std::lock_guard lock(calls_mutex);
+        speed_requests.push_back(request->speed_multiplier());
+        response->set_speed_multiplier(request->speed_multiplier());
+        return grpc::Status::OK;
+    }
+
 private:
     std::mutex mutex_;
     std::condition_variable changed_;
     std::deque<std::optional<beebium::ServerStatusEvent>> script_;
+    std::deque<beebium::PacingStats> pacing_script_;
 };
 
 class QuietVideoService final : public beebium::VideoService::Service {
