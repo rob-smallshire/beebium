@@ -221,6 +221,10 @@ beebium_linux_add_test(test_session_speed QT
     SOURCES test_session_speed.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_speed_scale QT
+    SOURCES test_speed_scale.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_picture_drop QT
     SOURCES test_picture_drop.cpp
     LIBRARIES beebium_linux_app)
