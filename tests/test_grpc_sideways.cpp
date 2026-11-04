@@ -1579,3 +1579,147 @@ TEST_CASE("SidewaysService SetSlotProtection write-protects an Integra-B RAM chi
     auto status = fixture.sideways().SetSlotProtection(&ctx, req, &resp);
     CHECK_FALSE((status.ok() && resp.success()));
 }
+
+// --- #265: an unloaded RAM socket reports RAM, unpopulated; an unfitted socket
+// reports EMPTY. One case per board variant, through GetSlotStatus. ---
+
+namespace {
+
+// Launch a server over a freshly built machine of the given variant, after
+// `fit` has fitted its sockets, and return its GetSlotStatus response.
+template <typename MachineT, typename Fit>
+beebium::GetSlotStatusResponse slot_status_after(Fit fit) {
+    MachineT machine;
+    fit(machine.state().memory);
+    machine.reset();
+
+    beebium::service::Server<MachineT> server(machine, "127.0.0.1", 0);
+    server.start({}, {});
+    auto channel = grpc::CreateChannel(
+        "127.0.0.1:" + std::to_string(server.port()), grpc::InsecureChannelCredentials());
+    auto stub = beebium::SidewaysService::NewStub(channel);
+
+    grpc::ClientContext context;
+    beebium::GetSlotStatusResponse response;
+    const auto status = stub->GetSlotStatus(&context, beebium::GetSlotStatusRequest{}, &response);
+    server.stop();
+    REQUIRE(status.ok());
+    return response;
+}
+
+// The socket that answers the given slot.
+const beebium::SocketStatus& socket_for_slot(
+    const beebium::GetSlotStatusResponse& response, uint32_t slot)
+{
+    for (const auto& socket : response.sockets()) {
+        for (uint32_t s : socket.aliased_slots()) {
+            if (s == slot) return socket;
+        }
+    }
+    FAIL("no socket answers slot " << slot);
+    throw std::logic_error("unreachable");
+}
+
+void check_unloaded_ram(const beebium::SocketStatus& socket) {
+    INFO("socket " << socket.socket_label());
+    CHECK(socket.type() == beebium::SIDEWAYS_SLOT_TYPE_RAM);
+    CHECK_FALSE(socket.populated());
+}
+
+void check_unfitted(const beebium::SocketStatus& socket) {
+    INFO("socket " << socket.socket_label());
+    CHECK(socket.type() == beebium::SIDEWAYS_SLOT_TYPE_EMPTY);
+    CHECK_FALSE(socket.populated());
+}
+
+} // namespace
+
+TEST_CASE("GetSlotStatus reports unloaded RAM and unfitted sockets on a Model B",
+          "[grpc][sideways][slot_status]") {
+    const auto response = slot_status_after<beebium::ModelB>(
+        [](auto& memory) { memory.configure_slot_as_ram(0); });
+    check_unloaded_ram(socket_for_slot(response, 0));  // IC52
+    check_unfitted(socket_for_slot(response, 1));      // IC88, no DFS fitted
+    check_unfitted(socket_for_slot(response, 2));      // IC100
+}
+
+TEST_CASE("GetSlotStatus reports a Model B's IC88 as ROM once a DFS is fitted",
+          "[grpc][sideways][slot_status]") {
+    const std::vector<uint8_t> dfs(16384, 0x42);
+    const auto response = slot_status_after<beebium::ModelB>(
+        [&](auto& memory) { memory.load_dfs(dfs.data(), dfs.size()); });
+    const auto& ic88 = socket_for_slot(response, 1);
+    CHECK(ic88.type() == beebium::SIDEWAYS_SLOT_TYPE_ROM);
+    CHECK(ic88.populated());
+}
+
+TEST_CASE("GetSlotStatus reports unloaded RAM and unfitted sockets on a Model B+",
+          "[grpc][sideways][slot_status][model_b_plus]") {
+    const auto response = slot_status_after<beebium::ModelBPlus>(
+        [](auto& memory) { memory.configure_slot_as_ram(2); });
+    check_unloaded_ram(socket_for_slot(response, 2));  // IC35 (slot 2)
+    check_unfitted(socket_for_slot(response, 4));      // IC44 (slot 4)
+}
+
+TEST_CASE("GetSlotStatus reports unloaded SRAM W/X/Y/Z and unfitted sockets on a B+ 128K",
+          "[grpc][sideways][slot_status][model_b_plus_128k]") {
+    const auto response = slot_status_after<beebium::ModelBPlus128K>([](auto&) {});
+    for (const char* label : {"SRAM W", "SRAM X", "SRAM Y", "SRAM Z"}) {
+        const auto* sram = find_socket_by_label(response, label);
+        REQUIRE(sram != nullptr);
+        check_unloaded_ram(*sram);
+    }
+    check_unfitted(socket_for_slot(response, 4));      // IC44 (slot 4)
+}
+
+TEST_CASE("GetSlotStatus reports unloaded RAM and unfitted sockets on the ROM/RAM board",
+          "[grpc][sideways][slot_status][romram]") {
+    const auto response = slot_status_after<beebium::ModelBRomRamBoard>(
+        [](auto& memory) { memory.configure_slot_as_ram(0); });
+    check_unloaded_ram(socket_for_slot(response, 0));
+    check_unfitted(socket_for_slot(response, 1));
+}
+
+TEST_CASE("GetSlotStatus reports unloaded RAM and unfitted sockets on the ATPL Sidewise",
+          "[grpc][sideways][slot_status][atpl]") {
+    const auto response = slot_status_after<beebium::ModelBAtplSidewise>(
+        [](auto& memory) { memory.configure_slot_as_ram(15); });
+    check_unloaded_ram(socket_for_slot(response, 15));  // Sidewise RAM/ROM 15
+    check_unfitted(socket_for_slot(response, 4));       // Sidewise ROM 4
+}
+
+TEST_CASE("GetSlotStatus reports unloaded RAM and unfitted sockets on the Watford board",
+          "[grpc][sideways][slot_status][watford]") {
+    const auto response = slot_status_after<beebium::ModelBWatfordRomRam>(
+        [](auto& memory) {
+            memory.configure_slot_as_ram(0);
+            memory.configure_slot_as_ram(1);
+        });
+    check_unloaded_ram(socket_for_slot(response, 0));  // Sideways RAM 0
+    check_unloaded_ram(socket_for_slot(response, 1));  // Sideways RAM 1
+    check_unfitted(socket_for_slot(response, 2));      // Sideways RAM 2, no DRAM fitted
+    check_unfitted(socket_for_slot(response, 8));      // Motherboard ROM 8
+}
+
+TEST_CASE("GetSlotStatus reports unloaded RAM and unfitted sockets on the Integra-B",
+          "[grpc][sideways][slot_status][integra_b]") {
+    const auto response = slot_status_after<beebium::ModelBIntegraB>([](auto&) {});
+    for (uint32_t slot : {4u, 5u, 6u, 7u}) {             // Board RAM 4/5, 6/7
+        check_unloaded_ram(socket_for_slot(response, slot));
+    }
+    check_unfitted(socket_for_slot(response, 0));       // Motherboard IC52
+    check_unfitted(socket_for_slot(response, 8));       // Board socket 8
+}
+
+TEST_CASE("GetSlotStatus reports sideways RAM populated once written",
+          "[grpc][sideways][slot_status]") {
+    const auto response = slot_status_after<beebium::ModelBRomRamBoard>(
+        [](auto& memory) {
+            memory.configure_slot_as_ram(0);
+            const uint8_t byte = 0x5A;
+            memory.load_sideways_data(0, &byte, 1);
+        });
+    const auto& slot0 = socket_for_slot(response, 0);
+    CHECK(slot0.type() == beebium::SIDEWAYS_SLOT_TYPE_RAM);
+    CHECK(slot0.populated());
+}

@@ -311,13 +311,9 @@ public:
         // extensions; closing it before extensions can register would violate
         // the Indicators register-before-start contract.
 
-        // Configure default socket types (stock Model B: all ROM sockets)
-        // Socket 0 (IC52): Empty by default
-        // Socket 1 (IC88): ROM (DFS)
-        // Socket 2 (IC100): Empty by default
-        // Socket 3 (IC101): ROM (BASIC)
-        sideways.configure_socket(AliasedBankedMemory::SOCKET_IC88, SlotType::Rom);
-        sideways.configure_socket(AliasedBankedMemory::SOCKET_IC101, SlotType::Rom);
+        // All four sockets start unfitted: a socket becomes ROM when an image
+        // is loaded into it (load_basic fits BASIC in IC101, load_dfs a DFS
+        // in IC88) and RAM when configured so.
 
         // Wire 2MHz open bus regions to memory map's last bus value for open bus emulation
         econet_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
@@ -335,10 +331,6 @@ public:
         , memory_map_(make_memory_map())
         , irq_aggregator_(make_irq_aggregator())
     {
-        // Configure default socket types
-        sideways.configure_socket(AliasedBankedMemory::SOCKET_IC88, SlotType::Rom);
-        sideways.configure_socket(AliasedBankedMemory::SOCKET_IC101, SlotType::Rom);
-
         // Wire 2MHz open bus regions to memory map's last bus value for open bus emulation
         econet_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
         serial_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
