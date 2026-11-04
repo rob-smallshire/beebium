@@ -935,22 +935,23 @@ public:
         if (user_sockets_.owns(slot)) {
             return user_sockets_.slot_info(slot);
         }
+        // An SRAM bank is populated once it has been loaded or written.
+        const auto sram = [](const Ram<16384>& bank) {
+            return SlotInfo{SlotType::Ram,
+                            ConfigurableSlot::holds_content(
+                                bank.data(), Ram<16384>::size,
+                                ConfigurableSlot::blank_byte(SlotType::Ram)),
+                            ""};
+        };
+        const SlotInfo basic{SlotType::Rom, true, basic_rom_image_name_};
         switch (slot) {
-            case 12:
-            case 13:
-                return {SlotType::Ram, true, ""};
-            case 14:
-            case 15:
-                return s13_is_north_
-                    ? SlotInfo{SlotType::Ram, true, ""}
-                    : SlotInfo{SlotType::Rom, true, basic_rom_image_name_};
-            case 0:
-            case 1:
-                return s13_is_north_
-                    ? SlotInfo{SlotType::Rom, true, basic_rom_image_name_}
-                    : SlotInfo{SlotType::Ram, true, ""};
-            default:
-                return {};
+            case 12: return sram(sram_w);
+            case 13: return sram(sram_x);
+            case 14: return s13_is_north_ ? sram(sram_y) : basic;
+            case 15: return s13_is_north_ ? sram(sram_z) : basic;
+            case 0:  return s13_is_north_ ? basic : sram(sram_y);
+            case 1:  return s13_is_north_ ? basic : sram(sram_z);
+            default: return {};
         }
     }
 

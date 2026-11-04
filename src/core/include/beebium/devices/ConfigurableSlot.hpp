@@ -52,13 +52,13 @@ struct SlotInfo {
 };
 
 // A sideways bank's region, from what its slot holds, on every machine
-// alike: readable always; writable when it is RAM; populated when a ROM or
-// RAM is fitted there; active when it is the selected bank.
+// alike: readable always; writable when it is RAM; populated when RAM is
+// fitted there or a ROM is loaded; active when it is the selected bank.
 inline MemoryRegionDescriptor sideways_bank_region(std::string_view name, const SlotInfo& slot,
                                                    bool selected) {
     RegionFlags flags = RegionFlags::Readable;
     if (slot.type == SlotType::Ram) flags = flags | RegionFlags::Writable;
-    if (slot.populated) flags = flags | RegionFlags::Populated;
+    if (slot.type == SlotType::Ram || slot.populated) flags = flags | RegionFlags::Populated;
     if (selected) flags = flags | RegionFlags::Active;
     const auto extent = sideways_bank_extent(name);
     return {extent.name, extent.base_address, extent.size, flags};
@@ -82,14 +82,19 @@ class ConfigurableSlot {
 public:
     static constexpr size_t size = 16384;
 
+    // What a slot of the given type holds before anything is loaded or
+    // written: RAM powers up as 0x00 (as jsbeeb's Uint8Array does); an empty
+    // socket or an unloaded ROM reads as 0xFF (open bus).
+    static constexpr uint8_t blank_byte(SlotType type) {
+        return type == SlotType::Ram ? 0x00 : 0xFF;
+    }
+
     ConfigurableSlot() {
-        // Empty slots return 0xFF, initialise data to match
-        data_.fill(0xFF);
+        data_.fill(blank_byte(type_));
     }
 
     explicit ConfigurableSlot(SlotType type) : type_(type) {
-        // Empty slots return 0xFF, ROM slots typically filled with 0xFF until loaded
-        data_.fill(0xFF);
+        data_.fill(blank_byte(type_));
     }
 
     // Read from slot - behavior depends on type
@@ -117,24 +122,23 @@ public:
 
     void set_type(SlotType type) {
         type_ = type;
-        // Initialize data appropriately for the new type:
-        // - RAM: 0x00 (matches real hardware power-on state and jsbeeb Uint8Array default)
-        // - ROM/Empty: 0xFF (matches unpopulated socket / open bus behavior)
-        if (type == SlotType::Ram) {
-            data_.fill(0x00);
-        } else {
-            data_.fill(0xFF);
-        }
+        data_.fill(blank_byte(type_));
     }
 
-    // Check if slot has been populated (non-0xFF content for Rom, any data for Ram)
+    // Whether the slot holds content: a ROM image, or RAM that has been
+    // loaded or written since it was fitted. An empty socket, an unloaded ROM
+    // socket and freshly fitted RAM are not populated.
     bool is_populated() const {
         if (type_ == SlotType::Empty) {
             return false;
         }
-        // Check if any byte differs from 0xFF (empty ROM)
-        for (const auto& byte : data_) {
-            if (byte != 0xFF) return true;
+        return holds_content(data_.data(), data_.size(), blank_byte(type_));
+    }
+
+    // Whether any byte of a bank differs from its blank value.
+    static bool holds_content(const uint8_t* data, size_t len, uint8_t blank) {
+        for (size_t i = 0; i < len; ++i) {
+            if (data[i] != blank) return true;
         }
         return false;
     }
@@ -172,13 +176,9 @@ public:
         load(std::span<const uint8_t>(src, len));
     }
 
-    // Clear slot contents (0x00 for RAM, 0xFF for Empty/ROM)
+    // Clear slot contents to the type's blank value (see blank_byte)
     void clear() {
-        if (type_ == SlotType::Ram) {
-            data_.fill(0x00);
-        } else {
-            data_.fill(0xFF);
-        }
+        data_.fill(blank_byte(type_));
     }
 
     // Direct access for initialization/testing

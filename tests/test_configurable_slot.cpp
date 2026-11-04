@@ -114,8 +114,18 @@ TEST_CASE("ConfigurableSlot RAM behavior", "[configurable_slot][ram]") {
         REQUIRE(slot.is_writable());
     }
 
-    SECTION("Populated after writing non-0xFF data") {
+    SECTION("Freshly fitted RAM is blank and not populated") {
+        REQUIRE(slot.read(0x0000) == 0x00);
+        REQUIRE_FALSE(slot.is_populated());
+    }
+
+    SECTION("Populated after writing") {
         slot.write(0x0000, 0x42);
+        REQUIRE(slot.is_populated());
+    }
+
+    SECTION("Populated after writing 0xFF") {
+        slot.write(0x2000, 0xFF);
         REQUIRE(slot.is_populated());
     }
 
@@ -377,4 +387,17 @@ TEST_CASE("ConfigurableSlot direct data access", "[configurable_slot][direct]") 
         const uint8_t* data = const_slot.data();
         REQUIRE(data[0] == 0x42);
     }
+}
+
+TEST_CASE("ConfigurableSlot RAM fitted by set_type is blank and not populated",
+          "[configurable_slot][ram][populated]") {
+    ConfigurableSlot slot;
+    slot.set_type(SlotType::Ram);
+    REQUIRE_FALSE(slot.is_populated());
+
+    slot.write(0x3FFF, 0x01);
+    REQUIRE(slot.is_populated());
+
+    slot.clear();
+    REQUIRE_FALSE(slot.is_populated());
 }

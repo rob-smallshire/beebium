@@ -337,6 +337,12 @@ saves the user a round-trip and a confusing error.
   }
   ```
 
+  `type` is what is fitted in the socket (nothing, a ROM or RAM),
+  whatever it holds. `populated` is whether it holds anything: a loaded
+  ROM image, or RAM that has been loaded or written since it was fitted.
+  Freshly fitted RAM reports `RAM`, unpopulated; a socket with nothing
+  fitted reports `EMPTY`.
+
 - **`ConfigureSlot`** changes a runtime-configurable socket's type
   and/or loads an image. Subject to the rules above.
 
