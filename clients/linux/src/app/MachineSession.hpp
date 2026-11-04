@@ -16,6 +16,7 @@
 #include "app/RunHold.hpp"
 #include "app/SessionAudio.hpp"
 #include "app/SessionDiscs.hpp"
+#include "app/SessionExtensions.hpp"
 #include "app/SessionIndicators.hpp"
 #include "app/SessionSideways.hpp"
 #include "app/SessionSpeed.hpp"
@@ -112,6 +113,7 @@ public:
     SessionIndicators& indicators() { return *indicators_; }
     SessionSpeed& speed() { return *speed_; }
     SessionSideways& sideways() { return *sideways_; }
+    SessionExtensions& extensions() { return *extensions_; }
     // The floppy drives (9).
     SessionDiscs& discs() { return *discs_; }
     // Typing: the guest_ready edge and pasting (7.3, 7.5).
@@ -213,6 +215,7 @@ private:
     SessionIndicators* indicators_;
     SessionSpeed* speed_;
     SessionSideways* sideways_;
+    SessionExtensions* extensions_;
     SessionDiscs* discs_;
     SessionTyping* typing_;
     std::unique_ptr<KeySender> keys_;

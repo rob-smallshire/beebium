@@ -22,6 +22,7 @@
 
 #include "audio.grpc.pb.h"
 #include "disc.grpc.pb.h"
+#include "extension_ui.grpc.pb.h"
 #include "indicator.grpc.pb.h"
 #include "keyboard.grpc.pb.h"
 #include "sideways.grpc.pb.h"
@@ -45,6 +46,7 @@
 #include <cstring>
 #include <condition_variable>
 #include <deque>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -904,8 +906,97 @@ private:
     std::deque<beebium::SidewaysEvent> script_;
 };
 
+// ExtensionUiService: a current view per extension, sent on subscription
+// and again on each push; Dispatch accepted only at the current revision.
+class ScriptedExtensionUiService final : public beebium::ExtensionUiService::Service {
+public:
+    // Set (or replace) an extension's view; subscribers receive it.
+    void push(const beebium::View& view) {
+        {
+            std::lock_guard lock(mutex_);
+            current_[view.extension_id()] = view;
+            ++generation_[view.extension_id()];
+            ending_.erase(view.extension_id());
+        }
+        changed_.notify_all();
+    }
+    // End every subscription to an extension with this status.
+    void end(const std::string& extension_id, grpc::StatusCode code) {
+        {
+            std::lock_guard lock(mutex_);
+            ending_[extension_id] = code;
+            current_.erase(extension_id);
+        }
+        changed_.notify_all();
+    }
+    int subscribers(const std::string& extension_id) {
+        std::lock_guard lock(mutex_);
+        return subscribers_[extension_id];
+    }
+    std::vector<beebium::DispatchRequest> dispatched() {
+        std::lock_guard lock(mutex_);
+        return dispatched_;
+    }
+
+    grpc::Status SubscribeView(grpc::ServerContext* context,
+                               const beebium::SubscribeViewRequest* request,
+                               grpc::ServerWriter<beebium::View>* writer) override {
+        const std::string id = request->extension_id();
+        std::unique_lock lock(mutex_);
+        if (!current_.count(id)) {
+            return {grpc::StatusCode::NOT_FOUND, "no such extension"};
+        }
+        ++subscribers_[id];
+        std::uint64_t sent = 0;
+        for (;;) {
+            if (ending_.count(id)) {
+                --subscribers_[id];
+                return {ending_[id], "ended by the fake"};
+            }
+            if (current_.count(id) && generation_[id] != sent) {
+                sent = generation_[id];
+                const beebium::View view = current_[id];
+                lock.unlock();
+                writer->Write(view);
+                lock.lock();
+                continue;
+            }
+            changed_.wait_for(lock, 20ms);
+            if (context->IsCancelled()) {
+                --subscribers_[id];
+                return grpc::Status::CANCELLED;
+            }
+        }
+    }
+
+    grpc::Status Dispatch(grpc::ServerContext*, const beebium::DispatchRequest* request,
+                          beebium::DispatchResponse* response) override {
+        std::lock_guard lock(mutex_);
+        dispatched_.push_back(*request);
+        const auto found = current_.find(request->extension_id());
+        if (found == current_.end()) {
+            response->set_error("unknown extension");
+        } else if (found->second.view_revision() != request->view_revision()) {
+            response->set_error("stale view revision");
+        } else {
+            response->set_accepted(true);
+        }
+        return grpc::Status::OK;
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::map<std::string, beebium::View> current_;
+    std::map<std::string, std::uint64_t> generation_;
+    std::map<std::string, grpc::StatusCode> ending_;
+    std::map<std::string, int> subscribers_;
+    std::vector<beebium::DispatchRequest> dispatched_;
+};
+
 struct FakeServer {
     ScriptedSystemService system;
+    ScriptedExtensionUiService extension_ui;
     ScriptedSidewaysService sideways;
     QuietVideoService video;
     KeyTableService keyboard;
@@ -927,6 +1018,7 @@ struct FakeServer {
         builder.RegisterService(&disc);
         builder.RegisterService(&indicators);
         builder.RegisterService(&sideways);
+        builder.RegisterService(&extension_ui);
         server = builder.BuildAndStart();
     }
     ~FakeServer() { server->Shutdown(std::chrono::system_clock::now() + 1s); }
