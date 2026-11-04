@@ -59,6 +59,18 @@ void CoreCli::run(const QString& executable_filepath, const QStringList& argumen
     process->start(executable_filepath, arguments);
 }
 
+QStringList parse_serial_ports(const QByteArray& jsonl) {
+    QStringList paths;
+    for (const QByteArray& line : jsonl.split('\n')) {
+        const QJsonObject row = QJsonDocument::fromJson(line).object();
+        const QString path = row.value(QStringLiteral("path")).toString();
+        if (!path.isEmpty()) {
+            paths << path;
+        }
+    }
+    return paths;
+}
+
 std::vector<PresetListing> parse_preset_listing(const QByteArray& jsonl) {
     std::vector<PresetListing> presets;
     for (const QByteArray& line : jsonl.split('\n')) {

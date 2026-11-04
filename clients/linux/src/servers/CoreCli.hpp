@@ -68,6 +68,10 @@ struct PresetListing {
 // Parse the listing. A line that is not a preset is skipped.
 std::vector<PresetListing> parse_preset_listing(const QByteArray& jsonl);
 
+// The host's serial ports' paths from `list-serial-ports --format jsonl`,
+// the values a "serial-ports" parameter offers. A line without one is skipped.
+QStringList parse_serial_ports(const QByteArray& jsonl);
+
 // `describe-machine --format jsonl`, for Open (5.3).
 struct MachineDescription {
     QString machine_dirpath;

@@ -77,6 +77,10 @@ beebium_linux_add_test(test_preset_resolver QT
     SOURCES test_preset_resolver.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_parameter_form_widget QT
+    SOURCES test_parameter_form_widget.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_compatibility
     SOURCES test_compatibility.cpp
     LIBRARIES beebium_linux_connection)
