@@ -81,7 +81,7 @@ Section 3 states cross-cutting foundations that every later section assumes.
 | 5.2 | The machine draft and the configurator | Configuration editing |
 | 5.3 | The machine directory as a document | Core |
 | 5.4 | Save and Move | Core |
-| 5.5 | Machine control: run, Break, reset, battery, shutdown | Core |
+| 5.5 | Machine control: run, Break, reset, shutdown | Core |
 | 5.6 | Emulation speed | Core |
 | 5.7 | Names, titles and the description subtitle | Core |
 | 6.1 | Frame presentation | Core |
@@ -759,7 +759,7 @@ left intact and unlocked. Rename a running saved machine to a taken sibling name
 -> refused with a sentence, the machine runs on where it was. Move across
 volumes -> new directory, UUID and created-date preserved, old directory gone.
 
-### 5.5 Machine control: run, Break, reset, battery, shutdown
+### 5.5 Machine control: run, Break, reset, shutdown
 
 Profile: Core.
 
@@ -774,32 +774,28 @@ the CPU; releasing it begins a soft reset. The client sends a Break-down then a
 Break-up. A hard reset (full re-initialisation) exists server-side (power-on,
 Ctrl-Break, or a debugger reset); the client observes any reset through the
 machine-reset status event, which carries soft or hard, and resynchronises its
-lock mirror. Battery-backed state needs no command of its own: it is kept when
-the machine is saved and lost when the machine is closed unsaved (5.3), so no
-client offers a "forget battery-backed state" feature (Rob, 2026-11-04).
+lock mirror. Battery-backed state is kept when the machine is saved and lost
+when it is closed unsaved (5.3).
 
 Shutdown is covered in section 4.5.
 
 Rests on: `debugger.proto DebuggerControl.Run` (start and resume);
 `keyboard.proto KeyboardService.BreakDown` and `KeyboardService.BreakUp` (soft
 reset); `debugger.proto DebuggerControl.Reset` (hard reset, if a client offers
-one); the machine-reset and guest-ready status events. `system.proto
-SystemService.ResetBattery` exists server-side but no client calls it.
+one); the machine-reset and guest-ready status events.
 
 Conformance:
 
 - MANDATORY: issue the run call for a machine launched blocked; Break as
   down-then-up on the Break RPCs (never a matrix key up); observe resets through
-  the status event and resync; no battery-reset command in any client.
+  the status event and resync.
 - LATITUDE: whether to expose an explicit pause or hard-reset command; how Break
   is presented. No client is expected to expose Pause or a hard Reset at
   present; the reference client exposes neither, and a client may omit both and
   still be conformant. The reference client has no on-screen Break control:
   Break is the mapped key, held.
 
-Scenarios: press Break -> a soft machine-reset event, RAM preserved. Forget
-battery on a running machine -> the forgotten units are returned, the machine
-runs on, the next start begins from seed.
+Scenarios: press Break -> a soft machine-reset event, RAM preserved.
 
 ### 5.6 Emulation speed
 
@@ -2263,7 +2259,7 @@ home window open -> the client stays, showing the home window.
 
 | Proto | Service and representative RPCs | Capability sections |
 |-------|---------------------------------|---------------------|
-| system.proto | SystemService: GetSystemInfo, WatchServerStatus, RequestShutdown, SaveMachine, MoveMachine, SetMachineName, SetSpeedMultiplier, GetPacingStats, WatchPacingStats, ResetBattery, SetMachineDescription, ListDescriptionPlaceholders | 3.2, 4.1-4.5, 5.3-5.7 |
+| system.proto | SystemService: GetSystemInfo, WatchServerStatus, RequestShutdown, SaveMachine, MoveMachine, SetMachineName, SetSpeedMultiplier, GetPacingStats, WatchPacingStats, SetMachineDescription, ListDescriptionPlaceholders | 3.2, 4.1-4.5, 5.3-5.7 |
 | video.proto | VideoService: GetConfig, SubscribeFrames, HoldScreen, ReleaseScreen, GetScreenGeometry, GetScreenText | 6.1, 6.2, 6.5 |
 | keyboard.proto | KeyboardService: KeyDown, KeyUp, BreakDown, BreakUp, GetLockState, TypeQuickly, WatchTypingStatus, ClearTyping, GetAllKeyMappings | 5.5, 7.1-7.5 |
 | audio.proto | AudioService: GetAudioFormat, SubscribeAudio | 8.1-8.3 |
