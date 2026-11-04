@@ -69,6 +69,10 @@ beebium_linux_add_test(test_structured_item
     SOURCES test_structured_item.cpp
     LIBRARIES beebium_linux_preset)
 
+beebium_linux_add_test(test_startup_links
+    SOURCES test_startup_links.cpp
+    LIBRARIES beebium_linux_preset)
+
 beebium_linux_add_test(test_parameter_form
     SOURCES test_parameter_form.cpp
     LIBRARIES beebium_linux_preset beebium_linux_connection)

@@ -163,6 +163,7 @@ add_library(beebium_linux_preset STATIC
     src/preset/PresetDocument.cpp
     src/preset/PresetResolution.cpp
     src/preset/PresetSchema.cpp
+    src/preset/StartupLinks.cpp
     src/preset/StructuredItem.cpp
 )
 target_include_directories(beebium_linux_preset PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
