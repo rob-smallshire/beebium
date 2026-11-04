@@ -111,6 +111,13 @@ TEST_CASE("The catalogue gives each extension's parameters, typed", "[preset][sc
     CHECK(map->fields[0].key == "net");
     CHECK(map->fields[0].max == 255);
     CHECK_FALSE(schema.extension("nonesuch").has_value());
+
+    const auto rtc = schema.extension("acorn-rtc");
+    REQUIRE(rtc);
+    REQUIRE(rtc->groups.size() == 1);
+    CHECK(rtc->groups[0].label == "Clock start");
+    CHECK(rtc->groups[0].parameters == std::vector<std::string>{"time", "offset"});
+    CHECK(rtc->groups[0].none_label == "Host time");
 }
 
 TEST_CASE("The repository's recorded schemas all read", "[preset][schema]") {

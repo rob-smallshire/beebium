@@ -70,6 +70,17 @@ struct SchemaParameter {
     std::vector<SchemaField> fields;
 };
 
+// Parameters that are alternatives to one another: one picker, its "none"
+// meaning none of them is given.
+struct SchemaParameterGroup {
+    std::string key;
+    std::string label;
+    std::string description;
+    std::vector<std::string> parameters;  // member keys, in display order
+    std::string none_label;
+    std::string none_description;
+};
+
 struct SchemaExtension {
     std::string name;
     std::string display_name;
@@ -78,6 +89,7 @@ struct SchemaExtension {
     std::vector<std::string> attaches_to;
     std::vector<std::string> provides;
     std::vector<SchemaParameter> parameters;
+    std::vector<SchemaParameterGroup> groups;
 };
 
 struct SchemaAttachmentPoint {

@@ -107,6 +107,20 @@ SchemaExtension extension_of(const ordered_json& e) {
             out.parameters.push_back(parameter(p));
         }
     }
+    if (const auto gs = e.find("groups"); gs != e.end() && gs->is_array()) {
+        for (const auto& g : *gs) {
+            SchemaParameterGroup group;
+            group.key = text(g, "key");
+            group.label = text(g, "label");
+            group.description = text(g, "description");
+            group.parameters = strings(g, "parameters");
+            if (const auto none = g.find("none"); none != g.end() && none->is_object()) {
+                group.none_label = text(*none, "label");
+                group.none_description = text(*none, "description");
+            }
+            out.groups.push_back(std::move(group));
+        }
+    }
     return out;
 }
 
