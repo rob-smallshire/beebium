@@ -90,6 +90,39 @@ TEST_CASE("A refused save keeps the server's words and leaves the machine as it 
     CHECK_FALSE(session.machine_saved());
 }
 
+TEST_CASE("Move sends the destination and follows the machine to its new directory",
+          "[control][move]") {
+    FakeServer server;
+    MachineSession session;
+    connect_session(session, server);
+    std::optional<CallOutcome> moved;
+    QObject::connect(&session, &MachineSession::move_finished,
+                     [&](const CallOutcome& o) { moved = o; });
+    session.move(QStringLiteral("/home/me/games/Elite.beebium-machine"));
+    REQUIRE(wait_until([&] { return moved.has_value(); }));
+    CHECK(moved->ok);
+    CHECK(server.system.last_move_destination == "/home/me/games/Elite.beebium-machine");
+    CHECK(session.machine_dirpath() == QStringLiteral("/home/me/games/Elite.beebium-machine"));
+}
+
+TEST_CASE("A refused move keeps the server's code and leaves the machine where it was",
+          "[control][move]") {
+    FakeServer server;
+    server.system.move_refusal = grpc::StatusCode::ALREADY_EXISTS;
+    MachineSession session;
+    connect_session(session, server);
+    const QString before = session.machine_dirpath();
+    std::optional<CallOutcome> moved;
+    QObject::connect(&session, &MachineSession::move_finished,
+                     [&](const CallOutcome& o) { moved = o; });
+    session.move(QStringLiteral("/home/me/Taken.beebium-machine"));
+    REQUIRE(wait_until([&] { return moved.has_value(); }));
+    CHECK_FALSE(moved->ok);
+    CHECK(moved->code == grpc::StatusCode::ALREADY_EXISTS);
+    CHECK(moved->message == QStringLiteral("refused by the fake server"));
+    CHECK(session.machine_dirpath() == before);
+}
+
 TEST_CASE("Rename and battery reset reach the server", "[control]") {
     FakeServer server;
     MachineSession session;

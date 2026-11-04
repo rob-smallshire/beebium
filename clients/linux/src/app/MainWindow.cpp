@@ -29,6 +29,7 @@
 #include "app/SoundSidebar.hpp"
 #include "app/StorageSidebar.hpp"
 #include "app/WindowGeometry.hpp"
+#include "app/MachineMove.hpp"
 #include "app/MachineSession.hpp"
 
 #include <QAction>
@@ -453,18 +454,29 @@ void MainWindow::build_menus() {
     connect(save_as_action, &QAction::triggered, this, [this] { save_as(); });
     QAction* rename_action = file->addAction(tr("&Rename Machine..."));
     connect(rename_action, &QAction::triggered, this, &MainWindow::rename);
-    for (QAction* action : {save_action, save_as_action, rename_action}) {
+    // As the macOS client's document Move To: the machine keeps its name and
+    // goes to another folder (5.4).
+    QAction* move_action = file->addAction(tr("&Move To..."));
+    connect(move_action, &QAction::triggered, this, &MainWindow::move_to);
+    for (QAction* action : {save_action, save_as_action, rename_action, move_action}) {
         action->setEnabled(false);
     }
     // A transient machine is not a document on disk (5.3): its first save is
-    // Save, so Save As waits until it has been saved.
-    const auto enable_saving = [this, save_action, save_as_action, rename_action] {
+    // Save, so Save As and Move wait until it has been saved. A folder here
+    // means nothing to a server on another host (3.2).
+    const auto enable_saving = [this, save_action, save_as_action, rename_action, move_action] {
         save_action->setEnabled(true);
         rename_action->setEnabled(true);
         save_as_action->setEnabled(session_->machine_saved());
+        move_action->setEnabled(session_->machine_saved() && session_->server_shares_filesystem());
+        move_action->setToolTip(session_->server_shares_filesystem()
+                                    ? QString()
+                                    : tr("The server is on another host, so it cannot move the "
+                                         "machine to a folder here"));
     };
     connect(session_, &MachineSession::connected_to_server, this, enable_saving);
     connect(session_, &MachineSession::save_finished, this, enable_saving);
+    connect(session_, &MachineSession::move_finished, this, enable_saving);
     connect(session_, &MachineSession::system_info_refreshed, this, enable_saving);
     file->addSeparator();
     QAction* close_action = file->addAction(tr("C&lose Window"));
@@ -725,6 +737,35 @@ void MainWindow::save_as(std::function<void(bool saved)> then) {
                               }
                           });
     session_->save(destination, replace);
+}
+
+void MainWindow::move_to() {
+    const QString name = session_->machine_name();
+    const QString current_dirpath = session_->machine_dirpath();
+    const QString folder = QFileDialog::getExistingDirectory(
+        this, tr("Move %1 To").arg(name), QFileInfo(current_dirpath).path());
+    if (folder.isEmpty()) {
+        return;
+    }
+    const QString destination = move_destination(folder, name);
+    if (QDir(destination) == QDir(current_dirpath)) {
+        return;  // already there
+    }
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(session_, &MachineSession::move_finished, this,
+                          [this, connection, name](const CallOutcome& outcome) {
+                              disconnect(*connection);
+                              if (!outcome.ok) {
+                                  ServerMessageDialog dialog(
+                                      tr("Could Not Move"),
+                                      move_failure_sentence(outcome.code, name),
+                                      outcome.message, this);
+                                  dialog.exec();
+                              }
+                          });
+    // A machine of that name already in the folder is the server's to
+    // refuse: a move never replaces one.
+    session_->move(destination);
 }
 
 void MainWindow::rename() {

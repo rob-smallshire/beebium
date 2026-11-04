@@ -67,6 +67,9 @@ public:
     std::string release_authority;  // x-beebium-instance-uuid
     int release_requests = 0;
     bool save_fails = false;
+    std::string last_move_destination;
+    // The code a move is refused with; OK lets it through.
+    grpc::StatusCode move_refusal = grpc::StatusCode::OK;
     std::atomic<int> client_count{1};
     // GetSystemInfo blocks, as a stalled server's would, while this is set,
     // and answers again when it is cleared or the call is cancelled.
@@ -121,6 +124,17 @@ public:
         response->set_machine_dirpath(request->destination_dirpath().empty()
                                           ? std::string("/m/Saved.beebium-machine")
                                           : request->destination_dirpath());
+        return grpc::Status::OK;
+    }
+
+    grpc::Status MoveMachine(grpc::ServerContext*, const beebium::MoveMachineRequest* request,
+                             beebium::MoveMachineResponse* response) override {
+        std::lock_guard lock(calls_mutex);
+        last_move_destination = request->destination_dirpath();
+        if (move_refusal != grpc::StatusCode::OK) {
+            return {move_refusal, "refused by the fake server"};
+        }
+        response->set_machine_dirpath(request->destination_dirpath());
         return grpc::Status::OK;
     }
 

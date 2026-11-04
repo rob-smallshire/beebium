@@ -20,6 +20,7 @@
 
 #include <QAction>
 #include <QLabel>
+#include <QMenu>
 #include <QMenuBar>
 #include <QStatusBar>
 
@@ -107,6 +108,63 @@ TEST_CASE("The window marks unsaved changes the platform's way, from the server'
     // Cleared when the server says so (after a save, say).
     server.system.push(status(beebium::SERVER_STATUS_HEARTBEAT));
     REQUIRE(wait_until([&] { return !window.isWindowModified(); }));
+    window.set_quitting(true);
+    window.close();
+}
+
+namespace {
+
+QAction* file_action(MainWindow& window, const QString& text) {
+    for (QAction* menu : window.menuBar()->actions()) {
+        if (menu->text().remove(QLatin1Char('&')) != QStringLiteral("File")) {
+            continue;
+        }
+        for (QAction* action : menu->menu()->actions()) {
+            if (action->text().remove(QLatin1Char('&')) == text) {
+                return action;
+            }
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+TEST_CASE("Move To is offered for a saved machine only, after Rename", "[app][window][move]") {
+    const QString move_text = QStringLiteral("Move To...");
+    {
+        // Transient: there is no document to move (5.4).
+        FakeServer server;
+        MainWindow window(QRhiWidget::Api::OpenGL);
+        window.show();
+        window.connect_to(server.endpoint());
+        REQUIRE(wait_until([&] { return window.session().connected(); }));
+        QAction* move = file_action(window, move_text);
+        REQUIRE(move);
+        CHECK_FALSE(move->isEnabled());
+        window.set_quitting(true);
+        window.close();
+    }
+    FakeServer server;
+    {
+        std::lock_guard lock(server.system.calls_mutex);
+        server.system.saved_machine_dirpath = "/home/me/Elite.beebium-machine";
+    }
+    MainWindow window(QRhiWidget::Api::OpenGL);
+    window.show();
+    window.connect_to(server.endpoint());
+    QAction* move = file_action(window, move_text);
+    REQUIRE(move);
+    REQUIRE(wait_until([&] { return move->isEnabled(); }));
+    QStringList order;
+    for (QAction* menu : window.menuBar()->actions()) {
+        if (menu->text().remove(QLatin1Char('&')) == QStringLiteral("File")) {
+            for (QAction* action : menu->menu()->actions()) {
+                order << action->text().remove(QLatin1Char('&'));
+            }
+        }
+    }
+    CHECK(order.indexOf(move_text) == order.indexOf(QStringLiteral("Rename Machine...")) + 1);
     window.set_quitting(true);
     window.close();
 }

@@ -237,6 +237,10 @@ beebium_linux_add_test(test_close_decision QT
     SOURCES test_close_decision.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_machine_move QT
+    SOURCES test_machine_move.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_keyboard_focus QT
     SOURCES test_keyboard_focus.cpp
     LIBRARIES beebium_linux_app)

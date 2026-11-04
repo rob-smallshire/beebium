@@ -98,6 +98,8 @@ public:
     // the machine was saved.
     void save(std::function<void(bool saved)> then = {});
     void save_as(std::function<void(bool saved)> then = {});
+    // File > Move To: a saved machine to another folder, under its name.
+    void move_to();
     void rename();
 
 Q_SIGNALS:

@@ -491,7 +491,8 @@ TEST_CASE("A machine window has no application commands, and its Window menu sho
     };
     CHECK(items_of(QStringLiteral("File")) ==
           QStringList{QStringLiteral("Save"), QStringLiteral("Save As..."),
-                      QStringLiteral("Rename Machine..."), QStringLiteral("Close Window"),
+                      QStringLiteral("Rename Machine..."), QStringLiteral("Move To..."),
+                      QStringLiteral("Close Window"),
                       QStringLiteral("Quit")});
     CHECK(items_of(QStringLiteral("Window")) ==
           QStringList{QStringLiteral("Minimize"), QStringLiteral("Show Beebium")});
