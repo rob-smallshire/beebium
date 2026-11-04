@@ -273,6 +273,7 @@ add_library(beebium_linux_app STATIC
     src/app/SessionAudio.cpp
     src/app/SessionDiscs.cpp
     src/app/SessionIndicators.cpp
+    src/app/SessionSideways.cpp
     src/app/SessionSpeed.cpp
     src/app/SpeedScale.cpp
     src/app/ProcessorSidebar.cpp

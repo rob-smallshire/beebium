@@ -17,6 +17,7 @@
 #include "app/SessionAudio.hpp"
 #include "app/SessionDiscs.hpp"
 #include "app/SessionIndicators.hpp"
+#include "app/SessionSideways.hpp"
 #include "app/SessionSpeed.hpp"
 #include "app/SessionTyping.hpp"
 #include "connection/CallCanceller.hpp"
@@ -110,6 +111,7 @@ public:
     // The machine's LEDs (10).
     SessionIndicators& indicators() { return *indicators_; }
     SessionSpeed& speed() { return *speed_; }
+    SessionSideways& sideways() { return *sideways_; }
     // The floppy drives (9).
     SessionDiscs& discs() { return *discs_; }
     // Typing: the guest_ready edge and pasting (7.3, 7.5).
@@ -210,6 +212,7 @@ private:
     SessionAudio* audio_;
     SessionIndicators* indicators_;
     SessionSpeed* speed_;
+    SessionSideways* sideways_;
     SessionDiscs* discs_;
     SessionTyping* typing_;
     std::unique_ptr<KeySender> keys_;

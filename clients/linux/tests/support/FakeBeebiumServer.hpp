@@ -24,6 +24,7 @@
 #include "disc.grpc.pb.h"
 #include "indicator.grpc.pb.h"
 #include "keyboard.grpc.pb.h"
+#include "sideways.grpc.pb.h"
 #include "system.grpc.pb.h"
 #include "video.grpc.pb.h"
 #include "debugger.grpc.pb.h"
@@ -815,8 +816,97 @@ inline beebium::TypingStatus typing_status(bool guest_ready, std::uint32_t pendi
     return status;
 }
 
+// SidewaysService: a status to report, protection switches that change it,
+// and events to stream to whoever subscribes.
+class ScriptedSidewaysService final : public beebium::SidewaysService::Service {
+public:
+    std::mutex status_mutex;
+    beebium::GetSlotStatusResponse status;  // under status_mutex
+    std::atomic<int> status_requests{0};
+    std::atomic<int> watchers{0};
+    std::atomic<bool> last_monitor_header_changes{false};
+    // The last SetSlotProtection, and whether to refuse the next ones.
+    std::string last_group_id;
+    beebium::SidewaysProtectionKind last_kind = beebium::SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT;
+    bool last_engaged = false;
+    std::string refusal;  // non-empty: refuse with this error
+
+    void push(const beebium::SidewaysEvent& event) {
+        {
+            std::lock_guard lock(mutex_);
+            script_.push_back(event);
+        }
+        changed_.notify_all();
+    }
+
+    grpc::Status GetSlotStatus(grpc::ServerContext*, const beebium::GetSlotStatusRequest*,
+                               beebium::GetSlotStatusResponse* response) override {
+        std::lock_guard lock(status_mutex);
+        ++status_requests;
+        *response = status;
+        return grpc::Status::OK;
+    }
+
+    grpc::Status SetSlotProtection(grpc::ServerContext*,
+                                   const beebium::SetSlotProtectionRequest* request,
+                                   beebium::SetSlotProtectionResponse* response) override {
+        std::lock_guard lock(status_mutex);
+        last_group_id = request->group_id();
+        last_kind = request->kind();
+        last_engaged = request->engaged();
+        if (!refusal.empty()) {
+            response->set_success(false);
+            response->set_error(refusal);
+            return grpc::Status::OK;
+        }
+        for (auto& group : *status.mutable_protection_groups()) {
+            if (group.id() == request->group_id()) {
+                if (request->kind() == beebium::SIDEWAYS_PROTECTION_KIND_HIDE) {
+                    group.set_hidden(request->engaged());
+                } else {
+                    group.set_write_protected(request->engaged());
+                }
+                response->set_success(true);
+                response->set_engaged(request->engaged());
+                return grpc::Status::OK;
+            }
+        }
+        response->set_success(false);
+        response->set_error("unknown protection group");
+        return grpc::Status::OK;
+    }
+
+    grpc::Status SubscribeEvents(grpc::ServerContext* context,
+                                 const beebium::SubscribeEventsRequest* request,
+                                 grpc::ServerWriter<beebium::SidewaysEvent>* writer) override {
+        last_monitor_header_changes = request->monitor_header_changes();
+        ++watchers;
+        for (;;) {
+            std::unique_lock lock(mutex_);
+            changed_.wait_for(lock, 20ms, [this] { return !script_.empty(); });
+            if (context->IsCancelled()) {
+                --watchers;
+                return grpc::Status::CANCELLED;
+            }
+            if (script_.empty()) {
+                continue;
+            }
+            const beebium::SidewaysEvent next = script_.front();
+            script_.pop_front();
+            lock.unlock();
+            writer->Write(next);
+        }
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::deque<beebium::SidewaysEvent> script_;
+};
+
 struct FakeServer {
     ScriptedSystemService system;
+    ScriptedSidewaysService sideways;
     QuietVideoService video;
     KeyTableService keyboard;
     BlockedDebuggerService debugger;
@@ -836,6 +926,7 @@ struct FakeServer {
         builder.RegisterService(&audio);
         builder.RegisterService(&disc);
         builder.RegisterService(&indicators);
+        builder.RegisterService(&sideways);
         server = builder.BuildAndStart();
     }
     ~FakeServer() { server->Shutdown(std::chrono::system_clock::now() + 1s); }

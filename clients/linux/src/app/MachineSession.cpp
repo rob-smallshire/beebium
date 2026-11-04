@@ -83,7 +83,7 @@ ConnectionFailure classify(const HandshakeResult& result) {
 
 MachineSession::MachineSession(QObject* parent)
     : QObject(parent), audio_(new SessionAudio(this)), indicators_(new SessionIndicators(this)),
-      speed_(new SessionSpeed(this)),
+      speed_(new SessionSpeed(this)), sideways_(new SessionSideways(this)),
       discs_(new SessionDiscs(this)),
       typing_(new SessionTyping(this)) {
     liveness_ticker_.setInterval(LIVENESS_TICK);
@@ -202,6 +202,7 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
     audio_->start(channel_);
     indicators_->start(channel_);
     speed_->start(channel_);
+    sideways_->start(channel_);
     discs_->start(channel_);
     typing_->start(channel_);
 
@@ -535,6 +536,7 @@ void MachineSession::stop_streams() {
     audio_->stop();
     indicators_->stop();
     speed_->stop();
+    sideways_->stop();
     discs_->stop();
     typing_->stop();
 }
