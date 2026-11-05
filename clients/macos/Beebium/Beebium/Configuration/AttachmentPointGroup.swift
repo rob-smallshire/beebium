@@ -38,6 +38,11 @@ struct AttachmentPointGroup: View {
     /// discs that belong to this provider, so two same-kind adapters no longer
     /// share one pool.
     var providerInstance: ExtensionInstanceModel.Instance? = nil
+    /// Whether this group also shows the point's orphans -- children whose
+    /// `provider_of` parameter names a provider that is gone (spec 12.3). Set on
+    /// the point's last provider's group, so the orphans appear once, with the
+    /// resolver's diagnostic beside each and Remove available, rather than hidden.
+    var showsOrphans: Bool = false
 
     /// The Configurator's shared focus owner: Add/Change/Remove commit and release
     /// a focused parameter field before they act. The instance parameter forms and
@@ -81,6 +86,33 @@ struct AttachmentPointGroup: View {
                         .padding(.leading, Self.childIndent)
                 }
             }
+            if showsOrphans {
+                orphanSection
+            }
+        }
+    }
+
+    /// The point's orphans -- children naming a provider that is gone -- shown
+    /// as an "Unattached" group beneath the point. Each is a full instance node,
+    /// so the resolver's diagnostic appears beside it and Remove is available;
+    /// the draft is not changed, so the orphan is neither re-aimed nor hidden.
+    @ViewBuilder
+    private var orphanSection: some View {
+        let orphans = model.orphanInstances(onPoint: point.id, in: draft)
+        if !orphans.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Unattached")
+                    .font(.caption).fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+                Text("Attached to hardware that is no longer present.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                ForEach(orphans) { instance in
+                    instanceNode(instance)
+                }
+            }
+            .padding(.leading, Self.childIndent)
+            .padding(.top, 4)
         }
     }
 
@@ -223,7 +255,8 @@ struct AttachmentPointGroup: View {
                 AttachmentPointGroup(
                     draft: $draft, schema: schema, point: provided,
                     diagnostics: diagnostics, serialPorts: serialPorts,
-                    providerInstance: instance)
+                    providerInstance: instance,
+                    showsOrphans: model.isLastProvider(instance, ofPoint: provided.id, in: draft))
             }
         }
     }

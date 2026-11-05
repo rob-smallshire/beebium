@@ -178,6 +178,30 @@ final class ExtensionInstanceModelTests: XCTestCase {
         XCTAssertTrue(m.instances(onPoint: "scsi", under: second, in: draft).contains { $0.index == 5 })
     }
 
+    func testDanglingAdapterIdIsOrphanedNotReaimedOrHidden() {
+        let m = providerModel()
+        let draft = MachineDraft(model: "model-b", extensions: [
+            Ext(name: "acorn-scsi"),                                                                     // 0
+            Ext(name: "scsi-hard-disc", config: ["scsi-id": .int(0), "adapter-id": .string("ghost")]),   // 1: dangling
+            Ext(name: "scsi-hard-disc", config: ["scsi-id": .int(1)]),                                    // 2: no id -> last
+        ])
+        let adapter = m.instances(onPoint: "1mhz-bus", in: draft)[0]
+        // The dangling disc is NOT re-aimed to the adapter (only the no-id disc,
+        // which the "else last" rule puts there, belongs to it)...
+        XCTAssertEqual(m.instances(onPoint: "scsi", under: adapter, in: draft).map(\.index), [2])
+        // ...and it does NOT vanish: it is an orphan, to be shown for the resolver
+        // to diagnose and the user to remove.
+        XCTAssertEqual(m.orphanInstances(onPoint: "scsi", in: draft).map(\.index), [1])
+        // The sole adapter is the point's last provider, so its nested group is
+        // where the Unattached orphans are surfaced.
+        XCTAssertTrue(m.isLastProvider(adapter, ofPoint: "scsi", in: draft))
+    }
+
+    func testNoOrphansWhenEveryAdapterIdResolves() {
+        let m = providerModel()
+        XCTAssertTrue(m.orphanInstances(onPoint: "scsi", in: twoAdapterDraft()).isEmpty)
+    }
+
     func testAddBeneathASingleAdapterWritesNameAlone() {
         let m = providerModel()
         // One adapter, no discs yet.

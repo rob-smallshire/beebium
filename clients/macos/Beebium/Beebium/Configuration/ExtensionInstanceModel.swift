@@ -64,10 +64,38 @@ struct ExtensionInstanceModel {
         }
     }
 
+    /// Whether `instance` is the last provider of `pointId` (the one the server's
+    /// "else the last provider" rule resolves a child with no named provider to).
+    /// Its nested point group is where the point's orphans are surfaced.
+    func isLastProvider(_ instance: Instance, ofPoint pointId: String, in draft: MachineDraft) -> Bool {
+        providers(ofPoint: pointId, in: draft).last?.index == instance.index
+    }
+
     /// The config key by which an extension names a provider of `pointId` (its
     /// `provider_of` parameter, e.g. "adapter-id"), or nil when it declares none.
     func providerParameter(forExtension name: String, point pointId: String) -> String? {
         schema.manifest(forExtension: name).parameters.first { $0.providerOf == pointId }?.key
+    }
+
+    /// The children on a provided point whose `provider_of` parameter names a
+    /// provider that is not present -- orphans. The server's rule re-aims only a
+    /// child that names NO provider (to the last); one that names a provider which
+    /// has since gone is left dangling for the resolver to diagnose (spec 12.3).
+    /// These belong to no provider group, so they are shown under the point in an
+    /// "Unattached" group, with Remove, rather than silently re-aimed or hidden.
+    func orphanInstances(onPoint pointId: String, in draft: MachineDraft) -> [Instance] {
+        guard let point = schema.attachmentPoints.first(where: { $0.id == pointId }),
+              point.providedBy != nil else { return [] }
+        let hosted = Set(point.extensions)
+        let all = (draft.extensions ?? []).enumerated().compactMap { index, ext in
+            hosted.contains(ext.name) ? Instance(index: index, name: ext.name) : nil
+        }
+        let providers = providers(ofPoint: pointId, in: draft)
+        let providerIds = Set(providers.map { effectiveId(ofInstanceAt: $0.index, in: draft) })
+        return all.filter { child in
+            !providerIds.contains(chosenProviderId(forChildAt: child.index, name: child.name,
+                                                   onPoint: pointId, providers: providers, in: draft))
+        }
     }
 
     /// The framework id of the provider a child belongs to on a provided point:
