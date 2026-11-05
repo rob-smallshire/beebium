@@ -88,7 +88,9 @@ struct Fakes {
     std::vector<std::uint32_t> shown;  // the stills' widths
     int keys_released = 0;
     std::vector<std::string> clipboard;
-    std::vector<std::string> nothing;
+    int nothing_to_copy = 0;
+    std::vector<std::string> failures;
+    int holds_lost = 0;
     int changes = 0;
 
     SelectionServices services() {
@@ -117,7 +119,9 @@ struct Fakes {
         s.release_machine_keys = [this] { ++keys_released; };
         s.mode7_characters = [this] { return mode7; };
         s.write_clipboard = [this](const std::string& text) { clipboard.push_back(text); };
-        s.nothing_copied = [this](const std::string& reason) { nothing.push_back(reason); };
+        s.nothing_to_copy = [this] { ++nothing_to_copy; };
+        s.copy_failed = [this](const std::string& message) { failures.push_back(message); };
+        s.hold_lost = [this] { ++holds_lost; };
         s.changed = [this] { ++changes; };
         return s;
     }
@@ -294,6 +298,17 @@ TEST_CASE("A hold gone server-side ends the selection", "[selection][hold]") {
     f.drain();
     CHECK_FALSE(coordinator.selecting());
     CHECK(f.resumed == 1);
+    CHECK(f.holds_lost == 1);
+    // A copy that finds the hold gone ends the selection the same way.
+    f.read_failure.reset();
+    coordinator.begin(at(0.2, 0.2), Interpretation::columns, filling());
+    f.drain();
+    f.read_failure = ScreenReadFailure{true, "no screen is held under that id"};
+    coordinator.copy(Interpretation::columns);
+    f.drain();
+    CHECK_FALSE(coordinator.selecting());
+    CHECK(f.holds_lost == 2);
+    CHECK(f.failures.empty());
 }
 
 TEST_CASE("The mapping follows the window, not the drag's start", "[selection][mapping]") {
@@ -429,12 +444,38 @@ TEST_CASE("A copy that finds nothing copies nothing", "[selection][copy]") {
     coordinator.copy(Interpretation::rows);
     f.drain();
     CHECK(f.clipboard.empty());
-    CHECK(f.nothing == std::vector<std::string>{""});
-    // A failure says why, in the server's words.
-    f.read_failure = ScreenReadFailure{false, "the display is not readable"};
+    CHECK(f.nothing_to_copy == 1);
+    // Nor do blank rows alone.
+    f.reading.text = "\n\n\n";
     coordinator.copy(Interpretation::rows);
     f.drain();
-    CHECK(f.nothing.back() == "the display is not readable");
+    CHECK(f.clipboard.empty());
+    CHECK(f.nothing_to_copy == 2);
+    CHECK(f.failures.empty());
+}
+
+TEST_CASE("A copy whose read fails says so in the server's words", "[selection][copy]") {
+    Fakes f;
+    f.read_failure = ScreenReadFailure{false, "the display is not readable"};
+    SelectionCoordinator coordinator(f.services());
+    coordinator.copy(Interpretation::rows);
+    f.drain();
+    CHECK(f.failures == std::vector<std::string>{"the display is not readable"});
+    CHECK(f.nothing_to_copy == 0);
+}
+
+TEST_CASE("Copy Text from Graphics with no selection reads the whole screen anywhere",
+          "[selection][copy]") {
+    Fakes f;
+    SelectionCoordinator coordinator(f.services());
+    coordinator.copy(Interpretation::anywhere);
+    coordinator.copy(Interpretation::columns);
+    f.drain();
+    REQUIRE(f.reads.size() == 2);
+    CHECK(f.reads[0].search() == beebium::SCREEN_TEXT_SEARCH_ANYWHERE);
+    CHECK_FALSE(f.reads[0].has_region());
+    CHECK(f.reads[1].search() == beebium::SCREEN_TEXT_SEARCH_ALIGNED);
+    CHECK_FALSE(f.reads[1].has_region());
 }
 
 TEST_CASE("A stale highlight never paints over a newer one", "[selection][overlay]") {

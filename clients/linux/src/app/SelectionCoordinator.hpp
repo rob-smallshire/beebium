@@ -61,9 +61,12 @@ struct SelectionServices {
     // How Mode 7 copies, read afresh at each copy.
     std::function<Mode7Characters()> mode7_characters;
     std::function<void(const std::string& text)> write_clipboard;
-    // A copy found nothing to copy, or failed in these words (empty when
-    // nothing was found).
-    std::function<void(const std::string& reason)> nothing_copied;
+    // A copy found nothing to copy: no text, or only blank rows.
+    std::function<void()> nothing_to_copy;
+    // A copy's read failed, in the server's words.
+    std::function<void(const std::string& message)> copy_failed;
+    // The held still went server-side, and the selection with it.
+    std::function<void()> hold_lost;
 
     // The overlay has something new to show.
     std::function<void()> changed;
@@ -102,7 +105,8 @@ public:
     void cancel();
 
     // Copy in an interpretation: the selection's, read from the held
-    // still, or with no selection the whole live screen, aligned.
+    // still, or with no selection the whole live screen, aligned or, for
+    // anywhere, read wherever the text sits.
     void copy(Interpretation interpretation);
 
     bool selecting() const { return selecting_; }
@@ -127,6 +131,7 @@ private:
     void refresh();
     void read_selection(Interpretation interpretation, unsigned selection, unsigned highlight,
                         bool copying);
+    void deliver(const std::string& text);
     void notify();
 
     SelectionServices services_;

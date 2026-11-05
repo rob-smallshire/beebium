@@ -166,27 +166,26 @@ void SelectionCoordinator::copy(Interpretation interpretation) {
         return;
     }
     if (!services_.connected()) {
-        services_.nothing_copied({});
+        services_.nothing_to_copy();
         return;
     }
-    // No selection: the whole live screen, aligned, needing no hold.
-    services_.read(
-        screen_text_request(Interpretation::rows, services_.mode7_characters(), {}, {}),
-        [this, alive = alive_](ScreenReadResult result) {
-            if (!*alive) {
-                return;
-            }
-            if (const auto* failure = std::get_if<ScreenReadFailure>(&result)) {
-                services_.nothing_copied(failure->message);
-                return;
-            }
-            const std::string& text = std::get<ScreenReading>(result).text;
-            if (blank(text)) {
-                services_.nothing_copied({});
-            } else {
-                services_.write_clipboard(text);
-            }
-        });
+    // No selection: the whole live screen, needing no hold. Rows and
+    // columns of the whole screen are the same text; anywhere also reads
+    // what sits off the grid.
+    const Interpretation whole = interpretation == Interpretation::anywhere
+                                     ? Interpretation::anywhere
+                                     : Interpretation::rows;
+    services_.read(screen_text_request(whole, services_.mode7_characters(), {}, {}),
+                   [this, alive = alive_](ScreenReadResult result) {
+                       if (!*alive) {
+                           return;
+                       }
+                       if (const auto* failure = std::get_if<ScreenReadFailure>(&result)) {
+                           services_.copy_failed(failure->message);
+                           return;
+                       }
+                       deliver(std::get<ScreenReading>(result).text);
+                   });
 }
 
 std::optional<PictureMapping> SelectionCoordinator::mapping() const {
@@ -257,13 +256,12 @@ void SelectionCoordinator::read_selection(Interpretation interpretation, unsigne
                 return;
             }
             if (const auto* failure = std::get_if<ScreenReadFailure>(&result)) {
-                const std::string message = failure->message;
                 if (failure->hold_lost) {
                     // The still has gone server-side: the selection with it.
                     cancel();
-                }
-                if (copying) {
-                    services_.nothing_copied(message);
+                    services_.hold_lost();
+                } else if (copying) {
+                    services_.copy_failed(failure->message);
                 }
                 return;
             }
@@ -276,11 +274,7 @@ void SelectionCoordinator::read_selection(Interpretation interpretation, unsigne
                 runs = std::move(rows.runs);
             }
             if (copying) {
-                if (blank(text)) {
-                    services_.nothing_copied({});
-                } else {
-                    services_.write_clipboard(text);
-                }
+                deliver(text);
                 return;
             }
             if (highlight != highlight_generation_) {
@@ -289,6 +283,14 @@ void SelectionCoordinator::read_selection(Interpretation interpretation, unsigne
             text_ = matched_cell_rects(runs);
             notify();
         });
+}
+
+void SelectionCoordinator::deliver(const std::string& text) {
+    if (blank(text)) {
+        services_.nothing_to_copy();
+    } else {
+        services_.write_clipboard(text);
+    }
 }
 
 void SelectionCoordinator::notify() {
