@@ -701,6 +701,43 @@ final class SelectionCoordinatorTests: XCTestCase {
         XCTAssertTrue(text.calls.contains { $0.search == .anywhere })
     }
 
+    // MARK: - Whole-screen copy by variant (#267)
+
+    func testCopyRowsWithNoSelectionReadsWholeScreenAligned() async {
+        let (coordinator, text, _, _, _) = makeCoordinator()
+        _ = await coordinator.copy(.rows)
+        XCTAssertEqual(text.calls.count, 1)
+        XCTAssertNil(text.calls[0].region)
+        XCTAssertNil(text.calls[0].holdID)
+        XCTAssertEqual(text.calls[0].search, .aligned)
+        XCTAssertEqual(text.calls[0].layout, .rows)
+    }
+
+    func testCopyColumnsWithNoSelectionReadsWholeScreenAligned() async {
+        let (coordinator, text, _, _, _) = makeCoordinator()
+        _ = await coordinator.copy(.rectangle)
+        XCTAssertEqual(text.calls.count, 1)
+        XCTAssertNil(text.calls[0].region)
+        XCTAssertNil(text.calls[0].holdID)
+        XCTAssertEqual(text.calls[0].search, .aligned)
+        XCTAssertEqual(text.calls[0].layout, .rows)
+    }
+
+    func testCopyGraphicsWithNoSelectionReadsWholeScreenAnywhere() async {
+        // #267: with nothing selected, Copy Text from Graphics reads the whole
+        // live screen with the ANYWHERE search -- the whole-screen counterpart
+        // of a graphics selection -- rather than the aligned grid the other two
+        // read. Still the whole display (no region) and the live screen (no
+        // hold), rows layout.
+        let (coordinator, text, _, _, _) = makeCoordinator()
+        _ = await coordinator.copy(.anywhere)
+        XCTAssertEqual(text.calls.count, 1)
+        XCTAssertNil(text.calls[0].region)
+        XCTAssertNil(text.calls[0].holdID)
+        XCTAssertEqual(text.calls[0].search, .anywhere)
+        XCTAssertEqual(text.calls[0].layout, .rows)
+    }
+
     func testCopyRowsRequestsFullWidthWhenAGridIsKnown() async {
         let (coordinator, text, _, _, _) = makeCoordinator(bands: [band])
         coordinator.begin(atNormalizedPoint: CGPoint(x: 0.2, y: 0.2),

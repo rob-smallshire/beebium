@@ -562,7 +562,9 @@ final class SelectionCoordinator: ObservableObject {
     /// there was nothing to copy.
     @discardableResult
     func copy(_ interpretation: ScreenSelectionInterpretation) async -> String? {
-        guard isSelecting else { return await copyWholeScreen() }
+        guard isSelecting else {
+            return await copyWholeScreen(search: interpretation.search)
+        }
         guard let resolved = await resolveRuns(interpretation: interpretation) else {
             return nil
         }
@@ -572,12 +574,19 @@ final class SelectionCoordinator: ObservableObject {
         return text
     }
 
-    /// Copy the whole screen, aligned, from the current live frame. No freeze
-    /// and nothing to preview: the everyday "copy what is on the screen".
+    /// Copy the whole screen from the current live frame. No freeze and nothing
+    /// to preview: the everyday "copy what is on the screen".
+    ///
+    /// The search follows the command's interpretation (#267). Copy and Copy as
+    /// Columns read the aligned grid; Copy Text from Graphics reads anywhere --
+    /// the whole-screen counterpart of a graphics selection, which finds text
+    /// placed freely with VDU 5 that the aligned read would miss. Always the
+    /// whole display (no region) against the live screen (no hold), rows layout,
+    /// the Mode 7 repertoire as it stands.
     @discardableResult
-    func copyWholeScreen() async -> String? {
+    func copyWholeScreen(search: ScreenTextSearchMode = .aligned) async -> String? {
         guard let reading = await textService?.screenText(
-            region: nil, search: .aligned, layout: .rows,
+            region: nil, search: search, layout: .rows,
             characters: mode7Characters, holdID: nil) else { return nil }
         let text = reading.text
         guard !text.isEmpty else { return nil }
