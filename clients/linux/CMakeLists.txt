@@ -165,6 +165,7 @@ add_library(beebium_linux_preset STATIC
     src/preset/PresetSchema.cpp
     src/preset/EconetStation.cpp
     src/preset/ExtensionsDraft.cpp
+    src/preset/HardDiscsDraft.cpp
     src/preset/SidewaysDraft.cpp
     src/preset/StartupLinks.cpp
     src/preset/StructuredItem.cpp

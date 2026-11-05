@@ -571,3 +571,83 @@ TEST_CASE("Change Transport offers None first, and a transport starts afresh", "
     CHECK(network->transport_name()->text() == QStringLiteral("None"));
     CHECK_FALSE(network->transport_form());
 }
+
+TEST_CASE("Hard discs: the first disc fits an adapter, the last takes it out", "[configuration][storage]") {
+    ConfigurationFixture f(model_b_with_extensions("[]"));
+    auto* storage = f.section<StorageSection>();
+    REQUIRE(storage->hard_discs()->isVisibleTo(storage));
+    CHECK(shows(storage->hard_discs(), QStringLiteral("No hard discs.")));
+    storage->add_disc()->click();
+    CHECK(*f.dialog->draft().get("/extensions") == ordered_json::parse(R"([{"name": "acorn-scsi"},
+        {"name": "scsi-hard-disc", "config": {"scsi-id": 0}}])"));
+    REQUIRE(wait_until([&] { return storage->disc_count() == 1; }));
+    f.answer = QStringLiteral("/home/me/discs/scsi0.dat");
+    storage->disc_browse(0)->click();
+    CHECK(f.dialog->draft().get("/extensions/1/config/image") == ordered_json("/home/me/discs/scsi0.dat"));
+    REQUIRE(wait_until([&] { return storage->disc_field(0)->text() == QStringLiteral("/home/me/discs/scsi0.dat"); }));
+    storage->disc_clear(0)->click();
+    CHECK_FALSE(f.dialog->draft().get("/extensions/1/config/image").has_value());
+    REQUIRE(wait_until([&] { return storage->disc_field(0)->text().isEmpty(); }));
+    storage->disc_remove(0)->click();
+    CHECK(f.dialog->draft().get("/extensions")->empty());
+    REQUIRE(wait_until([&] { return storage->disc_count() == 0; }));
+}
+
+TEST_CASE("Hard discs: a duplicate ID is marked, and a bare name is a working copy",
+          "[configuration][storage]") {
+    ConfigurationFixture f(model_b_with_extensions(R"([{"name": "acorn-scsi"},
+        {"name": "scsi-hard-disc", "config": {"scsi-id": 0, "image": "l3fs-v1_26b.dat"}},
+        {"name": "scsi-hard-disc", "config": {"scsi-id": 1}}])"));
+    auto* storage = f.section<StorageSection>();
+    REQUIRE(storage->disc_count() == 2);
+    CHECK_FALSE(storage->disc_duplicate(1)->isVisibleTo(storage));
+    CHECK(shows(storage->hard_discs(), QStringLiteral("A per-machine working copy is used")));
+    CHECK_FALSE(storage->disc_adapter(0));  // one adapter
+    Q_EMIT storage->disc_id(1)->activated(storage->disc_id(1)->findData(0));
+    CHECK(f.dialog->draft().get("/extensions/2/config/scsi-id") == ordered_json(0));
+    REQUIRE(wait_until([&] { return storage->disc_count() == 2 && storage->disc_duplicate(1)->isVisibleTo(storage); }));
+    CHECK(storage->disc_duplicate(1)->toolTip() == QStringLiteral("Another disc uses SCSI ID 0"));
+}
+
+TEST_CASE("Hard discs: with several adapters, Add asks which and each disc names one",
+          "[configuration][storage]") {
+    ConfigurationFixture f(model_b_with_extensions(R"([{"name": "acorn-scsi", "config": {"id": "a"}},
+        {"name": "acorn-scsi", "config": {"id": "b"}}])"));
+    auto* storage = f.section<StorageSection>();
+    REQUIRE(storage->add_disc()->menu());
+    QStringList items;
+    for (QAction* a : storage->add_disc()->menu()->actions()) {
+        items << a->text();
+    }
+    CHECK(items == QStringList({QStringLiteral("On a"), QStringLiteral("On b")}));
+    storage->add_disc()->menu()->actions()[0]->trigger();
+    CHECK((*f.dialog->draft().get("/extensions"))[2] ==
+          ordered_json::parse(R"({"name": "scsi-hard-disc", "config": {"scsi-id": 0, "adapter-id": "a"}})"));
+    REQUIRE(wait_until([&] { return storage->disc_count() == 1; }));
+    REQUIRE(storage->disc_adapter(0));
+    CHECK(storage->disc_adapter(0)->currentText() == QStringLiteral("a"));
+    Q_EMIT storage->disc_adapter(0)->activated(0);  // Last adapter
+    CHECK_FALSE(f.dialog->draft().get("/extensions/2/config/adapter-id").has_value());
+}
+
+TEST_CASE("Hard discs: a full adapter adds no more", "[configuration][storage]") {
+    std::string discs = R"([{"name": "acorn-scsi"})";
+    for (int i = 0; i < 7; ++i) {
+        discs += R"(, {"name": "scsi-hard-disc", "config": {"scsi-id": )" + std::to_string(i) + "}}";
+    }
+    discs += "]";
+    ConfigurationFixture f(model_b_with_extensions(discs.c_str()));
+    auto* storage = f.section<StorageSection>();
+    CHECK_FALSE(storage->add_disc()->isEnabled());
+    CHECK(storage->add_disc()->toolTip() == QStringLiteral("This machine holds at most 7 hard discs"));
+}
+
+TEST_CASE("A floppy drive's Clear empties it", "[configuration][storage]") {
+    auto document = model_b_with_disc();
+    document["storage"]["floppy_drives"][0]["image_uri"] = "file:///home/me/discs/Elite.ssd";
+    ConfigurationFixture f(document);
+    auto* storage = f.section<StorageSection>();
+    storage->drive_clear(0)->click();
+    CHECK(f.dialog->draft().json()["storage"]["floppy_drives"][0]["image_uri"].is_null());
+    CHECK(storage->drive_field(0)->text().isEmpty());
+}
