@@ -18,6 +18,7 @@
 #include "app/configuration/KeyboardSection.hpp"
 #include "app/configuration/MemorySection.hpp"
 #include "app/configuration/PeripheralsSection.hpp"
+#include "app/configuration/ProcessorSection.hpp"
 #include "app/configuration/StorageSection.hpp"
 
 #include "ConfigurationFixture.hpp"
@@ -471,4 +472,38 @@ TEST_CASE("A refused byte shows the byte as it is", "[configuration][keyboard]")
     Q_EMIT keyboard->decimal()->editingFinished();
     CHECK(keyboard->decimal()->text() == QStringLiteral("255"));
     CHECK_FALSE(f.dialog->draft().changed("/startup"));
+}
+
+TEST_CASE("Processor holds the Tube's coprocessor and the speed", "[configuration][processor]") {
+    ConfigurationFixture f(model_b_with_extensions(R"([{"name": "acorn-65c02-coprocessor"}])"));
+    auto* processor = f.section<ProcessorSection>();
+    REQUIRE(processor->tube());
+    CHECK(processor->tube()->card("acorn-65c02-coprocessor"));
+    QStringList speeds;
+    for (int i = 0; i < processor->speed()->count(); ++i) {
+        speeds << processor->speed()->itemText(i);
+    }
+    CHECK(speeds == QStringList({QStringLiteral("1/4"), QStringLiteral("1/2"), QStringLiteral("1\u00d7"),
+                                 QStringLiteral("2\u00d7"), QStringLiteral("4\u00d7"),
+                                 QStringLiteral("8\u00d7"), QStringLiteral("Unlimited")}));
+    CHECK(processor->speed()->currentText() == QStringLiteral("1\u00d7"));
+    f.pick = "acorn-65c102-coprocessor";
+    processor->tube()->change_button("acorn-65c02-coprocessor")->click();
+    REQUIRE(f.asked);
+    CHECK(f.asked->commit == QStringLiteral("Change"));
+    CHECK(*f.dialog->draft().get("/extensions") == ordered_json::parse(R"([{"name": "acorn-65c102-coprocessor"}])"));
+    REQUIRE(wait_until([&] { return processor->tube()->card("acorn-65c102-coprocessor"); }));
+}
+
+TEST_CASE("Speed writes a multiplier or unlimited, and keeps a preset's own", "[configuration][processor]") {
+    auto document = model_b_with_disc();
+    document["speed"] = 3.0;
+    ConfigurationFixture f(document);
+    auto* processor = f.section<ProcessorSection>();
+    CHECK(processor->speed()->currentText() == QStringLiteral("3\u00d7"));
+    Q_EMIT processor->speed()->activated(processor->speed()->count() - 1);
+    CHECK(f.dialog->draft().get("/speed") == ordered_json("unlimited"));
+    Q_EMIT processor->speed()->activated(processor->speed()->findText(QStringLiteral("1/2")));
+    CHECK(f.dialog->draft().get("/speed") == ordered_json(0.5));
+    CHECK(f.section_names().contains(QStringLiteral("Processor \u2022")));
 }

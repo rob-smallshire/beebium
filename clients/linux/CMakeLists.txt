@@ -296,6 +296,7 @@ add_library(beebium_linux_app STATIC
     src/app/configuration/KeyboardSection.cpp
     src/app/configuration/MemorySection.cpp
     src/app/configuration/PeripheralsSection.cpp
+    src/app/configuration/ProcessorSection.cpp
     src/app/configuration/StorageSection.cpp
     src/app/ParameterForm.cpp
     src/app/PeripheralsSidebar.cpp
