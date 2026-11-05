@@ -16,6 +16,7 @@
 #include "system.grpc.pb.h"
 #include "beebium/PacingClock.hpp"
 #include "beebium/PlatformUtils.hpp"
+#include "beebium/ThreadName.hpp"
 #include "beebium/NamePlaceholderRegistry.hpp"
 #include "beebium/NameTemplate.hpp"
 #include "beebium/service/ConnectionTracker.hpp"
@@ -663,6 +664,7 @@ void SystemServiceImpl<MachineType>::start_description_refresh() {
     }
     description_refresh_stop_ = false;
     description_refresh_thread_ = std::thread([this] {
+        set_current_thread_name("desc-refresh");
         std::unique_lock<std::mutex> lock(description_refresh_mutex_);
         while (!description_refresh_cv_.wait_for(lock, kDescriptionRefreshInterval,
                                                  [this] { return description_refresh_stop_; })) {
@@ -961,6 +963,7 @@ grpc::Status SystemServiceImpl<MachineType>::RequestShutdown(
 
         // Execute shutdown in background thread
         std::thread([this, mode = request->mode(), grace_ms] {
+            set_current_thread_name("shutdown");
             execute_shutdown(mode, grace_ms);
         }).detach();
     }

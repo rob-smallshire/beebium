@@ -15,6 +15,7 @@
 
 #include "sideways.grpc.pb.h"
 #include "beebium/SlotProtection.hpp"
+#include "beebium/ThreadName.hpp"
 #include "beebium/SlotTopology.hpp"
 #include "beebium/SidewaysRomHeader.hpp"
 #include "beebium/devices/ConfigurableSlot.hpp"
@@ -129,7 +130,10 @@ public:
         // lifetime so subscribe/unsubscribe doesn't have to start/stop
         // threads. See docs/discussion/sideways-live-header-updates.md.
         if constexpr (HasSideways<Memory>) {
-            scanner_thread_ = std::thread([this] { run_header_scanner(); });
+            scanner_thread_ = std::thread([this] {
+                set_current_thread_name("sideways-scan");
+                run_header_scanner();
+            });
         }
     }
 

@@ -14,6 +14,7 @@
 #define BEEBIUM_SERVICE_SERVER_HPP
 
 #include "beebium/service/VideoService.hpp"
+#include "beebium/ThreadName.hpp"
 #include "beebium/service/KeyboardService.hpp"
 #include "beebium/service/DebuggerService.hpp"
 #include "beebium/service/HostDebugTarget.hpp"
@@ -253,6 +254,7 @@ private:
 
         // Background thread that consumes video_output queue and renders to frame_buffer
         void render_loop() {
+            set_current_thread_name("render-loop");
             // While the machine runs, batches arrive continuously and the
             // shortest sleep keeps up. With none arriving (a paused machine,
             // or one waiting for its first Run()) the sleep doubles, up to

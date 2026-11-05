@@ -14,6 +14,7 @@
 #define BEEBIUM_INDICATORS_INDICATORS_HPP
 
 #include "beebium/indicators/IndicatorFilter.hpp"
+#include "beebium/ThreadName.hpp"
 #include <moodycamel/readerwriterqueue.h>
 
 #include <atomic>
@@ -313,6 +314,7 @@ private:
     };
 
     void consumer_loop() {
+        set_current_thread_name("indicators");
         while (running_.load(std::memory_order_relaxed)) {
             auto now = Clock::now();
 

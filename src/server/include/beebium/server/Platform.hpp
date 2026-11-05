@@ -14,6 +14,7 @@
 #define BEEBIUM_SERVER_PLATFORM_HPP
 
 #include <beebium/PlatformUtils.hpp>
+#include <beebium/ThreadName.hpp>
 
 #include <atomic>
 #include <cstdio>
@@ -247,6 +248,7 @@ namespace detail {
     /// Body of the dispatch thread: block until the signal handler writes to
     /// the self-pipe, then run the shutdown callback.
     inline void dispatch_loop() {
+        set_current_thread_name("signal-dispatch");
         for (;;) {
             char byte = 0;
             ssize_t count = ::read(g_wakeup_read_fd, &byte, 1);
@@ -398,6 +400,7 @@ namespace detail {
 inline void request_shutdown_at_end_of_input(int fd) {
     detail::g_input_watch_armed = true;
     std::thread([fd] {
+        set_current_thread_name("input-watch");
         char buffer[256];
         for (;;) {
 #ifdef _WIN32

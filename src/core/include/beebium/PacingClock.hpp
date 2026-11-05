@@ -15,6 +15,7 @@
 #include "PacingConfig.hpp"
 #include "PacingController.hpp"
 #include "PlatformSleep.hpp"
+#include "ThreadName.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -296,6 +297,7 @@ private:
     }
 
     void timer_loop() {
+        set_current_thread_name("pacing-timer");
         while (running_) {
             // Handle pause
             {

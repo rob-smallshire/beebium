@@ -2357,6 +2357,11 @@ add_executable(test_pacing_controller test_pacing_controller.cpp)
 target_link_libraries(test_pacing_controller PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_pacing_controller)
 
+# Thread names for per-thread profiling (top -H, perf report --sort comm)
+add_executable(test_thread_name test_thread_name.cpp)
+target_link_libraries(test_thread_name PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_thread_name)
+
 # Sleep quantum measurement (platform-specific sleep techniques)
 add_executable(test_sleep_quantum test_sleep_quantum.cpp)
 target_link_libraries(test_sleep_quantum PRIVATE Catch2::Catch2WithMain)
