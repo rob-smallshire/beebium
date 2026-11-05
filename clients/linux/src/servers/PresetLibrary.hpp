@@ -27,6 +27,12 @@ namespace beebium::linux_client {
 // name as a person reads numbers in it.
 std::vector<PresetListing> library_order(std::vector<PresetListing> presets);
 
+// Names as a person reads them, whatever the locale: letters without
+// regard to case, a run of digits by its value (then the shorter run, so
+// "2" before "02"), anything else by code point. Negative, zero or
+// positive as a sorts before, with or after b.
+int natural_compare(const QString& a, const QString& b);
+
 // The preset library's commands, run by the preset's model's server:
 // create-preset from another under a new name (its description and date
 // come with it), export-preset to an archive, delete-preset of a user's.

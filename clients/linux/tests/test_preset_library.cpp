@@ -48,6 +48,30 @@ TEST_CASE("The library lists presets by release date, undated last, then by name
                                          QStringLiteral("Undated")}));
 }
 
+TEST_CASE("Preset names compare as a person reads them, in any locale",
+          "[presets][library]") {
+    // Numbers by value.
+    CHECK(natural_compare(QStringLiteral("B+ 2"), QStringLiteral("B+ 10")) < 0);
+    CHECK(natural_compare(QStringLiteral("B+ 10"), QStringLiteral("B+ 2")) > 0);
+    CHECK(natural_compare(QStringLiteral("Disc 9 side 2"), QStringLiteral("Disc 9 side 10")) < 0);
+    // Equal values: the fewer leading zeros first.
+    CHECK(natural_compare(QStringLiteral("Disc 2"), QStringLiteral("Disc 02")) < 0);
+    CHECK(natural_compare(QStringLiteral("Disc 02"), QStringLiteral("Disc 10")) < 0);
+    // Letters without regard to case.
+    CHECK(natural_compare(QStringLiteral("acorn"), QStringLiteral("BBC")) < 0);
+    CHECK(natural_compare(QStringLiteral("Model b"), QStringLiteral("Model B")) == 0);
+    // A prefix first.
+    CHECK(natural_compare(QStringLiteral("Model B"), QStringLiteral("Model B+")) < 0);
+    CHECK(natural_compare(QStringLiteral("Elite"), QStringLiteral("Elite")) == 0);
+}
+
+TEST_CASE("Presets of one date list by name regardless of case", "[presets][library]") {
+    const auto ordered = library_order({preset("beta", "1985"), preset("Alpha", "1985"),
+                                        preset("B+ 10", "1985"), preset("B+ 2", "1985")});
+    CHECK(names(ordered) == QStringList({QStringLiteral("Alpha"), QStringLiteral("B+ 2"),
+                                         QStringLiteral("B+ 10"), QStringLiteral("beta")}));
+}
+
 TEST_CASE("Duplicate suggests the first free copy name", "[presets][library]") {
     CHECK(duplicate_name(QStringLiteral("Elite"), {}) == QStringLiteral("Elite Copy"));
     CHECK(duplicate_name(QStringLiteral("Elite"), {QStringLiteral("Elite Copy")}) ==
