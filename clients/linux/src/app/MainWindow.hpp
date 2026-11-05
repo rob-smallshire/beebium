@@ -21,6 +21,7 @@
 #include <QRhiWidget>
 
 #include <functional>
+#include <memory>
 
 class QLabel;
 class QToolButton;
@@ -32,6 +33,7 @@ class ConnectionOverlay;
 class ConnectionRecovery;
 class DisplayWidget;
 class MachineSession;
+class SelectionCoordinator;
 class SystemPowerMonitor;
 class DisplayFrame;
 class Sidebar;
@@ -141,6 +143,9 @@ private:
     ConnectionRecovery* recovery_;
     DisplayWidget* display_;
     ConnectionOverlay* overlay_;
+    // Screen text selection and copy (6.5).
+    void build_selection();
+    std::unique_ptr<SelectionCoordinator> selection_;
     QWidget* status_strip_ = nullptr;
     IndicatorStrip* indicator_strip_ = nullptr;
     // An LED's related key, tapped (10).

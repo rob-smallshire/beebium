@@ -12,6 +12,11 @@
 
 #include "app/DisplayWidget.hpp"
 
+#include "app/SelectionCoordinator.hpp"
+#include "app/SelectionInput.hpp"
+
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <QTimer>
 
 #include <chrono>
@@ -55,6 +60,8 @@ DisplayWidget::DisplayWidget(FrameMailbox& mailbox, QWidget* parent)
             [this](bool) { keyboard_.sync_caps_lock(); });
 }
 
+DisplayWidget::~DisplayWidget() = default;
+
 void DisplayWidget::focusInEvent(QFocusEvent* event) {
     // The host Caps Lock may have changed while we were away (7.3).
     keyboard_.sync_caps_lock();
@@ -80,6 +87,9 @@ bool DisplayWidget::event(QEvent* event) {
 }
 
 void DisplayWidget::keyPressEvent(QKeyEvent* event) {
+    if (selection_input_ && selection_input_->key_press(*event)) {
+        return;
+    }
     if (keyboard_.key_press(*event)) {
         return;
     }
@@ -110,6 +120,9 @@ void DisplayWidget::keyboard_changed() {
 }
 
 void DisplayWidget::keyReleaseEvent(QKeyEvent* event) {
+    if (selection_input_ && selection_input_->key_release(*event)) {
+        return;
+    }
     if (!keyboard_.key_release(*event)) {
         QRhiWidget::keyReleaseEvent(event);
     }
@@ -128,11 +141,80 @@ bool DisplayWidget::focusNextPrevChild(bool) {
     return false;
 }
 
+void DisplayWidget::mousePressEvent(QMouseEvent* event) {
+    if (selection_input_ && selection_input_->mouse_press(*event)) {
+        event->accept();
+        return;
+    }
+    QRhiWidget::mousePressEvent(event);
+}
+
+void DisplayWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (selection_input_ && selection_input_->mouse_move(*event)) {
+        event->accept();
+        return;
+    }
+    QRhiWidget::mouseMoveEvent(event);
+}
+
+void DisplayWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (selection_input_ && selection_input_->mouse_release(*event)) {
+        event->accept();
+        return;
+    }
+    QRhiWidget::mouseReleaseEvent(event);
+}
+
+void DisplayWidget::resizeEvent(QResizeEvent* event) {
+    QRhiWidget::resizeEvent(event);
+    if (selection_) {
+        selection_->set_presentation(presentation());
+    }
+}
+
+void DisplayWidget::attach_selection(SelectionCoordinator* coordinator) {
+    selection_input_.reset();
+    selection_ = coordinator;
+    if (coordinator) {
+        selection_input_ = std::make_unique<SelectionInput>(*coordinator, keyboard_,
+                                                            [this] { return presentation(); });
+    }
+}
+
+std::optional<ScreenContent> DisplayWidget::live_content() const {
+    if (const DecodedFrame* frame = renderer_.current_frame()) {
+        return screen_content(*frame);
+    }
+    return std::nullopt;
+}
+
+ScreenPresentation DisplayWidget::presentation() const {
+    return {static_cast<double>(width()), static_cast<double>(height()),
+            renderer_.video_settings()};
+}
+
+void DisplayWidget::freeze() {
+    frozen_ = true;
+}
+
+void DisplayWidget::show_still(const DecodedFrame& still) {
+    renderer_.set_frame(std::make_unique<DecodedFrame>(still));
+    update();
+}
+
+void DisplayWidget::resume() {
+    frozen_ = false;
+    update();
+}
+
 void DisplayWidget::set_video_settings(const VideoSettings& settings) {
     if (settings == renderer_.video_settings()) {
         return;
     }
     renderer_.set_video_settings(settings);
+    if (selection_) {
+        selection_->set_presentation(presentation());
+    }
     update();
 }
 
@@ -151,7 +233,9 @@ void DisplayWidget::initialize(QRhiCommandBuffer*) {
 }
 
 void DisplayWidget::render(QRhiCommandBuffer* command_buffer) {
-    if (auto frame = mailbox_.take()) {
+    // Frozen, the stream's frames wait in the mailbox, the latest replacing
+    // the rest, until the display resumes.
+    if (auto frame = frozen_ ? nullptr : mailbox_.take()) {
         const auto now = std::chrono::steady_clock::now();
         receive_to_render_.record(
             std::chrono::duration<double, std::milli>(now - frame->received_at).count());

@@ -37,6 +37,7 @@
 #include "app/MachineSession.hpp"
 #include "app/MappingCatalogue.hpp"
 #include "app/MemorySidebar.hpp"
+#include "app/SelectionCoordinator.hpp"
 
 #include <QAction>
 #include <QMimeData>
@@ -236,6 +237,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     }
 
     connect(session_, &MachineSession::frame_ready, display_, &DisplayWidget::frame_ready);
+    build_selection();
     // A key or Break from the user, for a machine whose Run is held for its
     // sound, runs it now; the client's own lock syncs and releases do not.
     display_->keyboard().on_user_press([this] { session_->release_run_hold(); });
@@ -304,6 +306,9 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                 update_immersive_enabled();
                 sidebar_->set_verdict(verdict);
                 if (!is_live(verdict)) {
+                    // A selection's hold went with the connection; a
+                    // reconnect starts from the live stream.
+                    selection_->cancel();
                     set_presentation(after_connection_lost(presentation_));
                     // Nothing typed reaches a machine that is not there, and
                     // nothing stays held for when it returns.
@@ -702,6 +707,8 @@ void MainWindow::build_menus() {
 }
 
 MainWindow::~MainWindow() {
+    selection_->cancel();
+    display_->attach_selection(nullptr);
     // The keyboard's sender belongs to the session, which as the elder child
     // is destroyed first; detach while both still exist.
     display_->keyboard().detach();
@@ -709,6 +716,7 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::connect_to(const QString& endpoint) {
+    selection_->cancel();
     display_->keyboard().detach();
     session_->connect_to(endpoint);
 }
@@ -866,6 +874,45 @@ void MainWindow::rename() {
                               }
                           });
     session_->set_name(name);
+}
+
+void MainWindow::build_selection() {
+    SelectionServices services;
+    services.connected = [this] { return session_->screen_text().started(); };
+    services.hold = [this](SelectionServices::HoldDone done) {
+        session_->screen_text().hold(std::move(done));
+    };
+    services.read = [this](const beebium::GetScreenTextRequest& request,
+                           SelectionServices::ReadDone done) {
+        session_->screen_text().read(request, std::move(done));
+    };
+    services.release = [this](std::uint64_t hold_id) { session_->screen_text().release(hold_id); };
+    services.live_content = [this] { return display_->live_content(); };
+    services.freeze = [this] { display_->freeze(); };
+    services.show_still = [this](const DecodedFrame& still) { display_->show_still(still); };
+    services.resume = [this] { display_->resume(); };
+    services.release_machine_keys = [this] { display_->keyboard().yield_to_window(); };
+    // Character codes, the server's default, until the Edit menu offers the
+    // choice.
+    services.mode7_characters = [] { return Mode7Characters::codes; };
+    services.write_clipboard = [](const std::string& text) {
+        QGuiApplication::clipboard()->setText(QString::fromStdString(text));
+    };
+    services.nothing_to_copy = [] { QApplication::beep(); };
+    services.copy_failed = [this](const std::string& message) {
+        std::fprintf(stderr, "beebium: could not copy the screen's text: %s\n", message.c_str());
+        ServerMessageDialog dialog(tr("Could Not Copy"),
+                                   tr("The text on the screen could not be read."),
+                                   QString::fromStdString(message), this);
+        dialog.exec();
+    };
+    services.hold_lost = [] {
+        std::fprintf(stderr, "beebium: the held screen expired, ending the selection\n");
+        QApplication::beep();
+    };
+    services.changed = [this] { display_->update(); };
+    selection_ = std::make_unique<SelectionCoordinator>(std::move(services));
+    display_->attach_selection(selection_.get());
 }
 
 void MainWindow::paste() {
@@ -1043,6 +1090,7 @@ void MainWindow::update_link_control() {
 }
 
 void MainWindow::begin_close() {
+    selection_->cancel();
     const auto server = session_->launched_server();
     if (!server) {
         // Not ours: the server is left as it is.

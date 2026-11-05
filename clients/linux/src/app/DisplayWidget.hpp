@@ -17,14 +17,19 @@
 #include "app/KeyboardInput.hpp"
 #include "connection/FrameMailbox.hpp"
 #include "display/DisplayRenderer.hpp"
+#include "display/PictureMapping.hpp"
 #include "metrics/IntervalStats.hpp"
 
 #include <QRhiWidget>
 
 #include <chrono>
+#include <memory>
 #include <optional>
 
 namespace beebium::linux_client {
+
+class SelectionCoordinator;
+class SelectionInput;
 
 // The emulator display: a QRhiWidget drawing frames from the mailbox with
 // DisplayRenderer. It repaints when a frame arrives (frame_ready), on resize
@@ -35,6 +40,7 @@ class DisplayWidget : public QRhiWidget {
 
 public:
     explicit DisplayWidget(FrameMailbox& mailbox, QWidget* parent = nullptr);
+    ~DisplayWidget() override;
 
     // Time from a frame's arrival to the render that drew it, and between
     // renders that drew a new frame.
@@ -53,6 +59,22 @@ public:
     const VideoSettings& video_settings() const { return renderer_.video_settings(); }
     // The device QRhi is drawing with, once initialised.
     QString graphics_description() const { return graphics_description_; }
+
+    // Screen text selection (6.5): the mouse and the qualifier keys go to
+    // this coordinator's selection before the machine. The window owns it
+    // and detaches it before it goes.
+    void attach_selection(SelectionCoordinator* coordinator);
+    // What a selection lays its geometry out by: the frame showing now, and
+    // this widget's size and settings.
+    std::optional<ScreenContent> live_content() const;
+    ScreenPresentation presentation() const;
+    // While frozen the stream's frames wait unshown, so the picture holds
+    // still; a still may be shown in the meantime, and resuming draws the
+    // stream's latest frame.
+    void freeze();
+    void show_still(const DecodedFrame& still);
+    void resume();
+    bool frozen() const { return frozen_; }
 
 public Q_SLOTS:
     // A new frame is waiting in the mailbox. Call on the GUI thread (queue it
@@ -77,6 +99,10 @@ protected:
     bool event(QEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
     void focusInEvent(QFocusEvent* event) override;
     // Tab and Shift+Tab belong to the machine, not to widget focus.
@@ -93,6 +119,9 @@ private:
     IntervalRecorder receive_to_render_;
     IntervalRecorder render_intervals_;
     std::optional<std::chrono::steady_clock::time_point> previous_new_frame_render_;
+    SelectionCoordinator* selection_ = nullptr;
+    std::unique_ptr<SelectionInput> selection_input_;
+    bool frozen_ = false;
 };
 
 // A one-line description of the device a QRhi drives, and whether it is a
