@@ -35,7 +35,7 @@ std::optional<PresetResolution> parse_resolution(std::string_view output) {
     }
     PresetResolution resolution;
     if (const auto preset = json.find("preset"); preset != json.end() && preset->is_object()) {
-        resolution.preset = *preset;
+        resolution.preset.emplace(*preset);
     }
     if (const auto found = json.find("diagnostics");
         found != json.end() && found->is_array()) {

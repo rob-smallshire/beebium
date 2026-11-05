@@ -35,7 +35,7 @@ std::optional<ordered_json> MachineDraft::get(const std::string& pointer) const 
     if (!value || value->is_null()) {
         return std::nullopt;
     }
-    return *value;
+    return std::optional<ordered_json>(std::in_place, *value);
 }
 
 void MachineDraft::set(const std::string& pointer, ordered_json value) {

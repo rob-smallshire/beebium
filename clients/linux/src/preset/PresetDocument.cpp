@@ -64,7 +64,7 @@ std::optional<ordered_json> PresetDocument::get(const std::string& pointer) cons
     if (value.is_null()) {
         return std::nullopt;
     }
-    return value;
+    return std::optional<ordered_json>(std::in_place, value);
 }
 
 void PresetDocument::set(const std::string& pointer, ordered_json value) {
