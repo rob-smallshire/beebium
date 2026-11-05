@@ -159,11 +159,16 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     }
     keyboard_mode->set_active(QString::fromStdString(display_->keyboard().mapping().id));
     keyboard_mode->set_caps_lock_sync(display_->keyboard().caps_lock_sync_enabled());
+    keyboard_mode->set_key_switches(display_->keyboard().switchable_keys());
     // Nothing before the mapping a window opens with.
     mapping_history_ = MappingHistory(QString::fromStdString(display_->keyboard().mapping().id));
     connect(keyboard_mode, &KeyboardSidebar::mapping_chosen, this, &MainWindow::activate_mapping);
     connect(keyboard_mode, &KeyboardSidebar::caps_lock_sync_toggled, this,
             [this](bool on) { display_->keyboard().set_caps_lock_sync_override(on); });
+    connect(keyboard_mode, &KeyboardSidebar::key_switch_toggled, this,
+            [this](const QString& key, bool off) {
+                display_->keyboard().set_key_switched_off(key.toStdString(), off);
+            });
     sidebar_->add_mode(SidebarMode::keyboard, keyboard_mode);
     sidebar_->add_mode(SidebarMode::processor,
                        new ProcessorSidebar(session_->speed(), sidebar_));
@@ -444,6 +449,7 @@ void MainWindow::activate_mapping(const MappingChoice& choice) {
     }
     keyboard_mode_->set_active(choice.id);
     keyboard_mode_->set_caps_lock_sync(display_->keyboard().caps_lock_sync_enabled());
+    keyboard_mode_->set_key_switches(display_->keyboard().switchable_keys());
     if (settings_) {
         settings_->store().setValue(QStringLiteral("keyboard/mapping"), choice.id);
     }

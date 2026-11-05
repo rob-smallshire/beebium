@@ -17,6 +17,8 @@
 
 #include <QWidget>
 
+#include <string>
+#include <utility>
 #include <vector>
 
 class QAbstractItemView;
@@ -24,6 +26,7 @@ class QCheckBox;
 class QFrame;
 class QListWidget;
 class QTreeWidget;
+class QVBoxLayout;
 
 namespace beebium::linux_client {
 
@@ -44,6 +47,10 @@ public:
     // The mapping in use, by id, and whether Caps Lock is synchronised.
     void set_active(const QString& id);
     void set_caps_lock_sync(bool on);
+    // The keys the active mapping lets the user switch off, by BBC key
+    // name, and whether each is off: a "Disable <key>" box each.
+    void set_key_switches(const std::vector<std::pair<std::string, bool>>& keys);
+    QCheckBox* key_switch(const QString& key) const;
     // Read the user's files again.
     void rescan();
 
@@ -55,6 +62,7 @@ public:
 Q_SIGNALS:
     void mapping_chosen(const beebium::linux_client::MappingChoice& choice);
     void caps_lock_sync_toggled(bool on);
+    void key_switch_toggled(const QString& key, bool off);
 
 protected:
     void showEvent(QShowEvent* event) override;
@@ -71,6 +79,9 @@ private:
     QFrame* divider_;
     QTreeWidget* reference_;
     QCheckBox* caps_;
+    QWidget* switches_;
+    QVBoxLayout* switches_layout_;
+    std::vector<std::pair<QString, QCheckBox*>> key_boxes_;
 };
 
 }  // namespace beebium::linux_client

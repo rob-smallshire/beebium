@@ -383,3 +383,51 @@ TEST_CASE("Break by name keeps its own release message", "[keyboard][qt]") {
     CHECK(wire.events[0].action == WireAction::break_down);
     CHECK(wire.events[1].action == WireAction::break_up);
 }
+
+namespace {
+constexpr quint32 XKB_ESCAPE = 1 + 8;
+}  // namespace
+
+TEST_CASE("A switched-off key reaches nothing, and rings the bell", "[keyboard][qt][switches]") {
+    Wire wire;
+    KeyboardInput input;  // Logical
+    input.attach(sample_key_table(), wire.sender());
+    int rung = 0;
+    input.on_switched_off_press([&] { ++rung; });
+    CHECK(input.switchable_keys() ==
+          std::vector<std::pair<std::string, bool>>{{"Break", false}, {"Escape", false}});
+    input.set_key_switched_off("Escape", true);
+    CHECK(input.switchable_keys()[1].second);
+    const QKeyEvent escape = press(Qt::Key_Escape, XKB_ESCAPE);
+    // Still the machine's key, so not the window's; it does nothing.
+    CHECK(input.takes(escape));
+    CHECK(input.key_press(escape));
+    CHECK(wire.events.empty());
+    CHECK(input.held_keys().empty());
+    CHECK(rung == 1);
+    input.key_release(release(Qt::Key_Escape, XKB_ESCAPE));
+    CHECK(wire.events.empty());
+}
+
+TEST_CASE("A key held as it is switched off releases as usual", "[keyboard][qt][switches]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    input.key_press(press(Qt::Key_Escape, XKB_ESCAPE));
+    REQUIRE_FALSE(input.held_keys().empty());
+    const auto pressed = wire.events.size();
+    input.set_key_switched_off("Escape", true);
+    input.key_release(release(Qt::Key_Escape, XKB_ESCAPE));
+    CHECK(wire.events.size() > pressed);
+    CHECK(input.held_keys().empty());
+}
+
+TEST_CASE("Another mapping starts the switches again from its own defaults", "[keyboard][qt][switches]") {
+    KeyboardInput input;
+    input.set_key_switched_off("Escape", true);
+    input.set_mapping(*built_in_mapping(QStringLiteral("Logical")));
+    CHECK(input.switchable_keys() ==
+          std::vector<std::pair<std::string, bool>>{{"Break", false}, {"Escape", false}});
+    input.set_mapping(*built_in_mapping(QStringLiteral("Planetoid")));
+    CHECK(input.switchable_keys() == std::vector<std::pair<std::string, bool>>{{"Break", false}});
+}

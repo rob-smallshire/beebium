@@ -24,10 +24,13 @@ bool applies_to(const MappingEntry& entry, const HostKey& key) {
            *entry.linux_scancode == *key.evdev;
 }
 
-// Switchable entries start as the file says; the user's switches belong to
-// the keyboard view, which does not exist yet.
-bool switched_on(const MappingEntry& entry) {
-    return !entry.disabled.value_or(false);
+// A switchable entry is as the user switched its key, else as the file says.
+bool switched_on(const MappingEntry& entry, const KeySwitches& switches) {
+    if (!entry.disabled) {
+        return true;
+    }
+    const auto found = switches.find(entry.bbc_key);
+    return !(found != switches.end() ? found->second : *entry.disabled);
 }
 
 std::optional<ResolvedKey> resolve_entry(const MappingEntry& entry, const BbcKeyTable& table) {
@@ -53,8 +56,18 @@ std::optional<ResolvedKey> resolve_entry(const MappingEntry& entry, const BbcKey
 
 }  // namespace
 
+std::vector<std::pair<std::string, bool>> switchable_keys(const MappingFile& mapping) {
+    std::map<std::string, bool> keys;
+    for (const auto& entry : mapping.keys) {
+        if (entry.applies && entry.disabled && !keys.count(entry.bbc_key)) {
+            keys.emplace(entry.bbc_key, *entry.disabled);
+        }
+    }
+    return {keys.begin(), keys.end()};
+}
+
 std::optional<ResolvedKey> resolve_key(const MappingFile& mapping, const BbcKeyTable& table,
-                                       const HostKey& key) {
+                                       const HostKey& key, const KeySwitches& switches) {
     const MappingEntry* exact = nullptr;
     const MappingEntry* subset = nullptr;
     const MappingEntry* unqualified = nullptr;
@@ -81,8 +94,10 @@ std::optional<ResolvedKey> resolve_key(const MappingFile& mapping, const BbcKeyT
         // A switched-off entry still wins its key, and silences it: the user
         // switched it off to stop the key doing anything, so it does not fall
         // through to character mapping.
-        if (!switched_on(*entry)) {
-            return std::nullopt;
+        if (!switched_on(*entry, switches)) {
+            ResolvedKey off;
+            off.role = KeyRole::switched_off;
+            return off;
         }
         return resolve_entry(*entry, table);
     }

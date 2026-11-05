@@ -78,3 +78,33 @@ TEST_CASE("The host SHIFT and CTRL keys resolve to the modifier roles under Logi
         CHECK(resolve_key(mapping, sample_key_table(), key)->role == KeyRole::ctrl);
     }
 }
+
+TEST_CASE("The user's switches decide a switchable key, which never falls through",
+          "[keyboard][resolve][switches]") {
+    const auto mapping = mapping_of(R"({"code": "KeyA", "bbc": {"key": "A", "disabled": false}},
+        {"code": "KeyH", "bbc": {"key": "H", "disabled": true}}, {"code": "KeyM", "bbc": {"key": "M"}})");
+    CHECK(switchable_keys(mapping) ==
+          std::vector<std::pair<std::string, bool>>{{"A", false}, {"H", true}});
+    HostKey a;
+    a.code = "KeyA";
+    a.text = "a";  // the character path would also give A
+    REQUIRE(resolve_key(mapping, sample_key_table(), a));
+    CHECK(resolve_key(mapping, sample_key_table(), a)->role == KeyRole::matrix);
+    const auto off = resolve_key(mapping, sample_key_table(), a, {{"A", true}});
+    REQUIRE(off);
+    CHECK(off->role == KeyRole::switched_off);
+    // Off by the file, on by the user.
+    HostKey h;
+    h.code = "KeyH";
+    REQUIRE(resolve_key(mapping, sample_key_table(), h));
+    CHECK(resolve_key(mapping, sample_key_table(), h)->role == KeyRole::switched_off);
+    const auto on = resolve_key(mapping, sample_key_table(), h, {{"H", false}});
+    REQUIRE(on);
+    CHECK(on->role == KeyRole::matrix);
+}
+
+TEST_CASE("Logical lets Escape and Break be switched off, both on to start", "[keyboard][resolve][switches]") {
+    const auto logical = corpus_mapping("Logical.json");
+    CHECK(switchable_keys(logical) ==
+          std::vector<std::pair<std::string, bool>>{{"Break", false}, {"Escape", false}});
+}

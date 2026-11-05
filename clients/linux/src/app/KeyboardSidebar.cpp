@@ -78,6 +78,18 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     reference_->header()->setStretchLastSection(true);
     layout->addWidget(reference_);
 
+    // The keys the mapping lets the user switch off, one box each.
+    switches_ = new QWidget(this);
+    switches_->setObjectName(QStringLiteral("keySwitches"));
+    switches_layout_ = new QVBoxLayout(switches_);
+    switches_layout_->setContentsMargins(0, 0, 0, 0);
+    auto* rule = new QFrame(switches_);
+    rule->setFrameShape(QFrame::HLine);
+    rule->setFrameShadow(QFrame::Sunken);
+    switches_layout_->addWidget(rule);
+    switches_->hide();
+    layout->addWidget(switches_);
+
     caps_ = new QCheckBox(tr("Synchronise Caps Lock"), this);
     caps_->setToolTip(tr("Keep the machine's Caps Lock the same as this computer's"));
     caps_->setFocusPolicy(Qt::NoFocus);
@@ -103,6 +115,35 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
 void KeyboardSidebar::set_active(const QString& id) {
     active_id_ = id;
     rebuild();
+}
+
+void KeyboardSidebar::set_key_switches(const std::vector<std::pair<std::string, bool>>& keys) {
+    for (auto& [name, box] : key_boxes_) {
+        box->hide();
+        box->deleteLater();
+    }
+    key_boxes_.clear();
+    for (const auto& [name, off] : keys) {
+        const QString key = QString::fromStdString(name);
+        auto* box = new QCheckBox(tr("Disable %1").arg(key), switches_);
+        box->setObjectName(QStringLiteral("disable%1").arg(key));
+        box->setFocusPolicy(Qt::NoFocus);
+        box->setChecked(off);
+        connect(box, &QCheckBox::toggled, this,
+                [this, key](bool checked) { Q_EMIT key_switch_toggled(key, checked); });
+        switches_layout_->addWidget(box);
+        key_boxes_.emplace_back(key, box);
+    }
+    switches_->setVisible(!keys.empty());
+}
+
+QCheckBox* KeyboardSidebar::key_switch(const QString& key) const {
+    for (const auto& [name, box] : key_boxes_) {
+        if (name == key) {
+            return box;
+        }
+    }
+    return nullptr;
 }
 
 void KeyboardSidebar::set_caps_lock_sync(bool on) {

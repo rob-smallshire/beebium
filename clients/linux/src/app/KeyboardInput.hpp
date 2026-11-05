@@ -58,7 +58,8 @@ public:
     KeyboardInput();
 
     // Resolve with this mapping from now on. Keys already down are released
-    // first, so none is left resolved by the old one.
+    // first, so none is left resolved by the old one, and the user's key
+    // switches start again from the new mapping's defaults.
     void set_mapping(MappingFile mapping);
     const MappingFile& mapping() const { return mapping_; }
 
@@ -130,6 +131,17 @@ public:
         return caps_lock_sync_override_.value_or(mapping_.synchronize_caps_lock);
     }
 
+    // The keys the mapping lets the user switch off, by BBC key name in
+    // name order, each with whether it is off now (the Keyboard mode's
+    // Disable toggles, for this window's session). Switching affects the
+    // next press: a key already down releases as usual.
+    std::vector<std::pair<std::string, bool>> switchable_keys() const;
+    void set_key_switched_off(const std::string& key, bool off);
+    // A switched-off key was pressed: the desktop's bell by default.
+    void on_switched_off_press(std::function<void()> pressed) {
+        switched_off_pressed_ = std::move(pressed);
+    }
+
     // Align the guest's Caps Lock to the host's, if the mapping synchronises
     // it, the host state is known and the machine is attached. The guest is
     // tapped only if it differs.
@@ -151,6 +163,8 @@ private:
     std::map<std::string, HostModifiers> host_modifiers_down_;
     HostCapsLock host_caps_lock_;
     std::optional<bool> caps_lock_sync_override_;
+    KeySwitches switches_;
+    std::function<void()> switched_off_pressed_;
     std::function<void()> caps_lock_pressed_;
 };
 

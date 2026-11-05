@@ -14,6 +14,7 @@
 
 #include "keyboard/EvdevCodes.hpp"
 
+#include <QApplication>
 #include <QFile>
 
 #include <algorithm>
@@ -72,7 +73,7 @@ std::optional<MappingFile> built_in_mapping(const QString& name) {
     return std::nullopt;
 }
 
-KeyboardInput::KeyboardInput() {
+KeyboardInput::KeyboardInput() : switched_off_pressed_([] { QApplication::beep(); }) {
     if (auto mapping = built_in_mapping(QStringLiteral("Logical"))) {
         mapping_ = std::move(*mapping);
     }
@@ -84,8 +85,24 @@ void KeyboardInput::set_mapping(MappingFile mapping) {
     // chord (#264).
     release_machine_keys();
     mapping_ = std::move(mapping);
+    switches_.clear();
     // Switching synchronisation on is a sync point (7.3).
     sync_caps_lock();
+}
+
+std::vector<std::pair<std::string, bool>> KeyboardInput::switchable_keys() const {
+    auto keys = linux_client::switchable_keys(mapping_);
+    for (auto& [name, off] : keys) {
+        const auto found = switches_.find(name);
+        if (found != switches_.end()) {
+            off = found->second;
+        }
+    }
+    return keys;
+}
+
+void KeyboardInput::set_key_switched_off(const std::string& key, bool off) {
+    switches_[key] = off;
 }
 
 bool KeyboardInput::press_named_key(std::string_view source, std::string_view name) {
@@ -199,7 +216,9 @@ bool KeyboardInput::takes(const QKeyEvent& event) const {
     if (host_key->code == "CapsLock" && caps_lock_sync_enabled()) {
         return true;
     }
-    return resolve_key(mapping_, table_, *host_key).has_value();
+    // A switched-off key is still the machine's: it does nothing, rather
+    // than becoming the window's.
+    return resolve_key(mapping_, table_, *host_key, switches_).has_value();
 }
 
 bool KeyboardInput::key_press(const QKeyEvent& event) {
@@ -229,9 +248,15 @@ bool KeyboardInput::key_press(const QKeyEvent& event) {
         }
         return true;
     }
-    const auto resolved = resolve_key(mapping_, table_, *host_key);
+    const auto resolved = resolve_key(mapping_, table_, *host_key, switches_);
     if (!resolved) {
         return false;
+    }
+    if (resolved->role == KeyRole::switched_off) {
+        if (switched_off_pressed_) {
+            switched_off_pressed_();
+        }
+        return true;
     }
     if (user_pressed_) {
         user_pressed_();

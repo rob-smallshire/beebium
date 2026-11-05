@@ -17,8 +17,11 @@
 #include "keyboard/MappingFile.hpp"
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace beebium::linux_client {
 
@@ -40,7 +43,17 @@ enum class KeyRole {
     shift,      // the BBC SHIFT key itself: feeds the derived SHIFT
     ctrl,       // the BBC CTRL key itself: likewise
     break_key,  // the reset line, not a matrix position
+    switched_off,  // a key the user switched off: it does nothing
 };
+
+// The user's switches over a mapping's switchable keys, by BBC key name:
+// true for off. A key not named here is as the file says.
+using KeySwitches = std::map<std::string, bool>;
+
+// The keys a mapping lets the user switch off (its entries with
+// `disabled`), by BBC key name in name order, each with the state it
+// starts in: true for off.
+std::vector<std::pair<std::string, bool>> switchable_keys(const MappingFile& mapping);
 
 struct ResolvedKey {
     KeyRole role = KeyRole::matrix;
@@ -55,13 +68,14 @@ struct ResolvedKey {
 //  1. physical entries for this key (its code, or this platform's entry for
 //     its native key) whose `with` is a subset of the held modifiers: one
 //     equal to them; else the first, in file order, that is a proper subset;
-//     else the first with no `with`. If that entry is switched off, the key
-//     is ignored, without falling through;
+//     else the first with no `with`. If that entry is switched off, by the
+//     user's switches or else by the file, it resolves as switched off,
+//     without falling through;
 //  2. if the mapping allows, the character, through the server's catalogue;
 //  3. nothing.
 // An entry naming a key the catalogue does not know resolves to nothing.
 std::optional<ResolvedKey> resolve_key(const MappingFile& mapping, const BbcKeyTable& table,
-                                       const HostKey& key);
+                                       const HostKey& key, const KeySwitches& switches = {});
 
 }  // namespace beebium::linux_client
 

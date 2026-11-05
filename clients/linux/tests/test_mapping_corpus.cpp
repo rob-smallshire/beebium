@@ -89,7 +89,8 @@ TEST_CASE("Every portable and Linux case in the corpus resolves as expected",
 
         const Json& expect = item["expect"];
         if (expect.value("ignored", false)) {
-            CHECK_FALSE(resolved.has_value());
+            // Nothing, or a key the user switched off, which does nothing.
+            CHECK((!resolved || resolved->role == KeyRole::switched_off));
         } else if (expect.value("break", false)) {
             REQUIRE(resolved.has_value());
             CHECK(resolved->role == KeyRole::break_key);

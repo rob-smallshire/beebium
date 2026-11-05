@@ -326,3 +326,30 @@ TEST_CASE("Turning Caps Lock synchronisation off for the session stops the reads
     CHECK(sent.size() == 2);
     CHECK(sent.back().action == WireAction::caps_lock_sync);
 }
+
+TEST_CASE("The mode has a Disable box for each key the mapping lets the user switch off",
+          "[keyboard][mode][switches]") {
+    QTemporaryDir directory;
+    KeyboardSidebar sidebar(directory.path());
+    KeyboardInput input;  // Logical
+    sidebar.set_key_switches(input.switchable_keys());
+    REQUIRE(sidebar.key_switch(QStringLiteral("Break")));
+    REQUIRE(sidebar.key_switch(QStringLiteral("Escape")));
+    CHECK(sidebar.key_switch(QStringLiteral("Break"))->text() == QStringLiteral("Disable Break"));
+    CHECK_FALSE(sidebar.key_switch(QStringLiteral("Escape"))->isChecked());
+    std::vector<std::pair<QString, bool>> toggled;
+    QObject::connect(&sidebar, &KeyboardSidebar::key_switch_toggled,
+                     [&](const QString& key, bool off) { toggled.emplace_back(key, off); });
+    sidebar.key_switch(QStringLiteral("Escape"))->click();
+    REQUIRE(toggled.size() == 1);
+    CHECK(toggled[0] == std::pair(QStringLiteral("Escape"), true));
+    // Another mapping's keys replace them.
+    input.set_mapping(*built_in_mapping(QStringLiteral("Planetoid")));
+    sidebar.set_key_switches(input.switchable_keys());
+    CHECK_FALSE(sidebar.key_switch(QStringLiteral("Escape")));
+    REQUIRE(sidebar.key_switch(QStringLiteral("Break")));
+    CHECK_FALSE(sidebar.key_switch(QStringLiteral("Break"))->isChecked());
+    // A mapping with none shows none.
+    sidebar.set_key_switches({});
+    CHECK_FALSE(sidebar.findChild<QWidget*>(QStringLiteral("keySwitches"))->isVisibleTo(&sidebar));
+}
