@@ -326,7 +326,7 @@ Complete transcripts of BBC Micro documentation:
 - Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger
 - gRPC service layer (17 services)
 - macOS frontend with Metal rendering
-- Linux / Raspberry Pi frontend (Qt 6 Widgets, QRhi on Vulkan) built against `docs/client-specification.md`: all eight sidebar modes, the New Machine configurator, the preset library, Meta / Ctrl+Alt application shortcuts; per-distribution `.deb` packages (Debian 13, Ubuntu 26.04)
+- Linux / Raspberry Pi frontend (Qt 6 Widgets, QRhi on Vulkan) built against `docs/client-specification.md`: all eight sidebar modes, the New Machine configurator, the preset library, screen text selection and Copy As, Meta / Ctrl+Alt application shortcuts; per-distribution `.deb` packages (Debian 13, Ubuntu 26.04)
 - Service advertisement AND browse/discovery over mDNS on all platforms: macOS (Bonjour), Linux (Avahi, dlopen'd), Windows (dual-provider: Apple Bonjour dnssd.dll when installed, else native DnsService*, selected at runtime). Full bidirectional AUN peer discovery everywhere
 - Econet: MC6854 ADLC with the four-way handshake, and two transports as plugins: AUN (UDP; mDNS peer discovery, the per-user aun-map.json map file, `--station auto`) and Piconet (a USB bridge to a real Econet network). See `docs/networking.md`
 - Python test client
@@ -334,5 +334,5 @@ Complete transcripts of BBC Micro documentation:
 ### Future Work
 
 - Windows frontend
-- Linux client: screen text selection and Copy As (spec 6.5), Flatpak packaging
+- Linux client: Flatpak packaging
 - CRT shader pipeline
