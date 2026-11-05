@@ -203,14 +203,16 @@ it:
   real glyphs, so a run whose glyphs are all unreadable highlights nothing and
   the overlay says so honestly.
 
-**A blank row is a row.** The copied text has a line for every row the
-selection covers, blank ones included: if you dragged over three empty rows
-above the text, you get three empty lines. Leading blank rows are kept because
-they position everything after them; trailing blank rows are stripped, because
-a screen is 25 rows tall whatever is written on it and a copy should not end in
-the empty part (the row-to-line contract in `grpc-server.md`). The shape of the
-screen is part of what was selected, and a boot message whose gaps were closed
-up would come back as four solid lines instead of four separated by blanks.
+**A blank row is a row.** A rows selection copies a line for every row it
+covers, blank ones included, and nothing is trimmed at either end: if you
+dragged over three empty rows above the text, you get three empty lines. The
+row range *is* the selection, so there is nothing beyond it to strip. The shape
+of the screen is part of what was selected, and a boot message whose gaps were
+closed up would come back as four solid lines instead of four separated by
+blanks. (The server's own `text` field, which the whole-screen copy and the
+other two interpretations use verbatim, follows the row-to-line contract in
+`grpc-server.md`: leading blank rows kept, trailing ones stripped, because a
+screen is 25 rows tall whatever is written on it.)
 
 That has to be built from the **row range**, not from the runs. Taking a line
 per run drops any row that had nothing readable on it -- and the two strategies
