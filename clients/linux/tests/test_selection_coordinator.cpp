@@ -24,6 +24,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
+
 using namespace beebium::linux_client;
 using namespace beebium::linux_client::testing;
 
@@ -82,6 +84,23 @@ TEST_CASE("Rows show their range and no marquee; anywhere a marquee and no range
     coordinator.update(at(0.7, 0.7));
     CHECK(coordinator.overlay().marquee);
     CHECK(coordinator.overlay().range.empty());
+}
+
+TEST_CASE("The overlay says where the drag began and ended, and how it reads",
+          "[selection][overlay]") {
+    Fakes f;
+    SelectionCoordinator coordinator(f.services());
+    coordinator.begin(at(0.3, 0.4), Interpretation::rows, filling());
+    f.drain();
+    coordinator.update(at(0.7, 0.6));
+    coordinator.set_interpretation(Interpretation::columns);
+    const SelectionOverlay overlay = coordinator.overlay();
+    // On the picture's own pixel grid, within a pixel of where it was.
+    CHECK(std::abs(overlay.anchor.x - at(0.3, 0.4).x) < 2.0);
+    CHECK(std::abs(overlay.anchor.y - at(0.3, 0.4).y) < 4.0);
+    CHECK(std::abs(overlay.focus.x - at(0.7, 0.6).x) < 2.0);
+    CHECK(std::abs(overlay.focus.y - at(0.7, 0.6).y) < 4.0);
+    CHECK(overlay.interpretation == Interpretation::columns);
 }
 
 TEST_CASE("A selection holds the screen and shows the held still", "[selection][hold]") {

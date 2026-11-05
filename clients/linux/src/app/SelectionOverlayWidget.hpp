@@ -16,6 +16,10 @@
 #include "app/SelectionCoordinator.hpp"
 
 #include <QColor>
+#include <QFont>
+#include <QRectF>
+#include <QSizeF>
+#include <QString>
 #include <QWidget>
 
 class QPainter;
@@ -26,12 +30,27 @@ namespace beebium::linux_client {
 // one tint, the palette's highlight, as the macOS client draws it: the
 // selected range lightly, the cells that will copy more strongly on top,
 // and for anywhere the dragged marquee as a thin outline. Rects are
-// widened to whole pixels.
+// widened to whole pixels. A small label beside the selection names how
+// it reads, following the qualifiers as they change.
 inline constexpr double RANGE_ALPHA = 0.25;
 inline constexpr double TEXT_ALPHA = 0.50;
 inline constexpr double MARQUEE_ALPHA = 0.50;
 
 void paint_selection(QPainter& painter, const SelectionOverlay& overlay, const QColor& tint);
+
+// The name of how a selection reads, shown beside it while it lasts.
+QString interpretation_label(Interpretation interpretation);
+
+// Where a label of this size goes: behind the corner the drag began from,
+// clear of the selection, flipped to the selection's other side or beside
+// it where the widget's edge leaves no room, and always inside the widget.
+// Only a selection with no room around it at all is overlapped.
+QRectF interpretation_label_rect(const SelectionOverlay& overlay, QSizeF label, QSizeF widget);
+
+// The label, in the tint with its text in `ink`, in the small font.
+void paint_interpretation_label(QPainter& painter, const SelectionOverlay& overlay,
+                                QSizeF widget, const QColor& tint, const QColor& ink,
+                                const QFont& font);
 
 // The overlay as a transparent child of the display: it takes no input,
 // so the mouse goes on to the display beneath it, and shows only while a

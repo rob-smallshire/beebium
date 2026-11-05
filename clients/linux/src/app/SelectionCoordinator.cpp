@@ -210,6 +210,9 @@ SelectionOverlay SelectionCoordinator::overlay() const {
     if (interpretation_ == Interpretation::anywhere) {
         overlay.marquee = laid_out->view_rect(bounding_rect(anchor_, focus_));
     }
+    overlay.anchor = laid_out->view_point(anchor_);
+    overlay.focus = laid_out->view_point(focus_);
+    overlay.interpretation = interpretation_;
     return overlay;
 }
 

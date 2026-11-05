@@ -78,6 +78,10 @@ struct SelectionOverlay {
     std::vector<ViewRect> range;
     std::vector<ViewRect> text;
     std::optional<ViewRect> marquee;
+    // Where the drag began and where it is now, and how it reads.
+    ViewPoint anchor;
+    ViewPoint focus;
+    Interpretation interpretation = Interpretation::rows;
 };
 
 class SelectionCoordinator {
