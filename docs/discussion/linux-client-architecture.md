@@ -603,7 +603,7 @@ What it says:
 
 ## 11. As built
 
-The client as it stands, built test-first: about 635 Catch2 test cases, run
+The client as it stands, built test-first: about 745 Catch2 test cases, run
 headless under the offscreen platform. Sections 1 to 9 describe how it is
 built; this section records what it presents, and where it follows the macOS
 client or departs from it.
@@ -648,6 +648,9 @@ has no machine, so it keeps the desktop's Ctrl forms.
 | Close Window | Meta+W | Ctrl+Alt+W (Ctrl+W at home) |
 | Quit | Meta+Q | Ctrl+Alt+Q (Ctrl+Q at home) |
 | Paste | Meta+V | Ctrl+Alt+V |
+| Copy | Meta+C | Ctrl+Alt+C |
+| Copy as Columns | Meta+Alt+C | none (menu only) |
+| Copy Text from Graphics | Meta+Shift+C | Ctrl+Alt+Shift+C |
 | Switch to Previous Keyboard Mapping | Meta+K | Ctrl+Alt+K |
 | A sidebar mode | Meta+1 to Meta+8 | Ctrl+Alt+1 to Ctrl+Alt+8 |
 | Show Sidebar | Meta+Alt+S | Ctrl+Alt+0 |
@@ -657,7 +660,8 @@ has no machine, so it keeps the desktop's Ctrl forms.
 | Show Beebium (the home window) | Meta+Shift+H | Ctrl+Alt+H |
 
 F11 is the desktop's full screen. Rename Machine... and Move To... have no
-shortcut.
+shortcut. Copy as Columns has no Ctrl+Alt form because Alt, its qualifier,
+cannot be added to a chord that already holds it.
 
 ### Extension views, and the configurator that reuses them
 
@@ -718,6 +722,72 @@ not offer the interface, so on a Pi the folder opens without the file
 selected. A path is revealed only when the server shares this filesystem and
 the path exists here (`frontend-local-server-gating.md`); otherwise the
 command is disabled with the reason as its tooltip.
+
+### Selecting and copying screen text
+
+Client specification 6.5, as the macOS client's selection
+(`screen-text-selection-ui.md`) with the platform's changes. All recognition
+is the server's; the client never reads pixels.
+
+The gesture. A plain drag stays the machine's. The macOS client selects on a
+Command-drag, but on Linux both reference desktops take a Super-drag to move
+the window (labwc binds it in its default `rc.xml`, mutter by its
+`mouse-button-modifier`), so the gesture follows the shortcut rule: a
+Ctrl+Alt drag everywhere, and a Meta drag where the desktop lets it through.
+Modifiers held beyond the chord choose the reading, Shift for anywhere and
+Alt for columns, Shift winning. After the button comes up the selection stays
+live and any modifier qualifies, except a chord key still held from the drag,
+which counts only once it has been let go and pressed again: otherwise
+letting go of the mouse before Ctrl+Alt would flip the selection to columns.
+While a selection is live its modifiers are tracked but never sent, so Shift
+and Ctrl, which are BBC keys, do not reach the machine; beginning one also
+releases what the chord pressed on the machine on its way down. Escape and a
+plain click end it and reach nothing; other keys still type.
+
+The hold. A drag freezes the display at once (the stream's frames wait in the
+mailbox, the latest replacing the rest), asks `HoldScreen` for the still and
+shows it in place of the stream, then puts the drag onto that still, which
+may be a frame or two later than the picture under the pointer. Every read
+names the hold. A refused hold, or a read answered `NOT_FOUND` because the
+hold has expired, ends the selection rather than reading the live screen
+behind a frozen picture. A new drag, Escape, a plain click, losing the
+connection, connecting afresh and closing the window each release the hold
+and let the display run on. The calls run on a worker of their own, so a slow
+read never delays the window's other calls.
+
+Geometry. `PictureMapping` maps view points to frame pixels and back as the
+exact inverse of the display's own fit: it is built from the same
+`make_display_uniforms` the renderer draws with, so the quad, the edge margin
+or the CRTC borders, and each split-screen band's pixel width are the
+renderer's numbers, not a second copy of them. Its two inputs are kept apart:
+the content is the held still's shape, the presentation is the widget's size
+and video settings as they are now, so a resize or a style change mid-
+selection lays the same still out afresh and the highlight stays registered.
+A point in the boxing maps to nothing; a point in a margin or border clamps to
+the active edge. The selection's own geometry (`ScreenSelection`: the band a
+drag snaps to, the rows flow and the full-width region read for it, the trim
+to the flow, which cells to light) is Qt-free and carries the macOS client's
+test cases.
+
+Copying. Edit has Copy, Copy as Columns and Copy Text from Graphics directly
+beneath Paste, and Mode 7 Copies As (Character Codes, Displayed Characters)
+beneath them: a client setting each copy reads afresh, kept as
+`screenText/mode7Characters` (`codes` or `displayed`; anything else reads as
+codes), so every window follows a change at once. Rows are rebuilt from the
+runs, one line per row of the selection, blank rows kept; columns and
+anywhere take the server's text as it comes. With no selection, Copy and Copy
+as Columns read the whole live screen aligned, and Copy Text from Graphics
+reads it anywhere, the only way to copy a whole screen of text drawn at the
+graphics cursor. The clipboard gets plain text with LF line endings. A copy
+ends one of three ways besides succeeding: nothing to copy (no text, or only
+blank rows) is a beep; a read the server refuses is a "Could Not Copy"
+dialog with its words beneath; a hold that has expired ends the selection
+with a beep, the display running on.
+
+The overlay is a transparent child of the display that takes no input,
+painted in the palette's highlight: the range at a quarter, the cells that
+will copy at a half on top, and for anywhere the marquee as a one-pixel
+outline.
 
 ### Delivering a build to the Pi 400
 
