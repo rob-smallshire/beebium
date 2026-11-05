@@ -20,6 +20,7 @@
 #include "connection/Endpoint.hpp"
 #include "servers/CoreCli.hpp"
 #include "servers/ServerLauncher.hpp"
+#include "app/NewMachineDialog.hpp"
 #include "servers/ServerLocator.hpp"
 
 #include <QHash>
@@ -83,6 +84,10 @@ public:
     void launch_preset_file(const QString& filepath, QWidget* parent);
     // Settings > Configure Beebium.
     void configure(QWidget* parent);
+    // File > New Machine...: the configuration editor, one for the
+    // application, needing this host's servers (5.2).
+    void new_machine(QWidget* parent);
+    NewMachineDialog* new_machine_dialog() const { return new_machine_.get(); }
 
     // A launch's requests, this process's or a later one's, as
     // launch_requests() builds them: --connect <address>, --new-machine
@@ -115,8 +120,11 @@ private:
     std::optional<ServerLocation> servers(QWidget* parent);
     void browse_for_machine(QWidget* parent);
     void launch_preset(const ServerLocation& servers, const PresetListing& preset, QWidget* parent);
+    // `after` runs once the launch has succeeded or failed.
     void launch(const QString& executable_filepath, const QStringList& arguments,
-                const QString& provenance_uuid, const QString& what, QWidget* parent);
+                const QString& provenance_uuid, const QString& what, QWidget* parent,
+                std::function<void()> after = {});
+    NewMachineHost new_machine_host();
     void describe_machine(const QString& machine_dirpath, SavedMachines::Described done);
     // Keep the recents in step with a window's saved machine.
     void track_saved_machine(MainWindow* window);
@@ -138,6 +146,7 @@ private:
     std::function<void(MainWindow&)> window_hook_;
     CoreCli cli_;
     ServerLauncher launcher_;
+    std::unique_ptr<NewMachineDialog> new_machine_;
     std::unique_ptr<SavedMachines> saved_machines_;
     std::unique_ptr<HomeWindow> home_;
     int work_in_flight_ = 0;

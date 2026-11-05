@@ -24,6 +24,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMenuBar>
+#include <QPushButton>
 #include <QMessageBox>
 #include <QStackedWidget>
 #include <QFontMetrics>
@@ -138,7 +139,16 @@ void HomeWindow::build_menus() {
     QAction* new_action = file->addAction(tr("&New Machine..."));
     set_session_shortcuts(new_action, QKeySequence(QStringLiteral("Meta+N")),
                           QKeySequence(QStringLiteral("Ctrl+N")));
-    connect(new_action, &QAction::triggered, this, [this] { show_page(HomePage::presets); });
+    new_action->setObjectName(QStringLiteral("newMachine"));
+    connect(new_action, &QAction::triggered, this, &HomeWindow::new_machine_requested);
+    connect(presets_, &PresetsPage::new_machine_requested, this, &HomeWindow::new_machine_requested);
+    // As the presets page's button: only with this host's servers.
+    const auto follow = [this, new_action] {
+        new_action->setEnabled(presets_->new_machine_button()->isEnabled());
+        new_action->setToolTip(presets_->new_machine_button()->toolTip());
+    };
+    follow();
+    connect(presets_, &PresetsPage::servers_changed, this, follow);
     QAction* open_action = file->addAction(tr("&Open Machine..."));
     set_session_shortcuts(open_action, QKeySequence(QStringLiteral("Meta+O")),
                           QKeySequence(QStringLiteral("Ctrl+O")));

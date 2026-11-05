@@ -68,9 +68,15 @@ PresetsPage::PresetsPage(QString thumbnail_cache_dirpath, QWidget* parent)
     configure_->hide();
     buttons->addWidget(configure_);
     buttons->addStretch(1);
+    // It runs this host's servers, so it waits for them.
+    new_machine_ = new QPushButton(tr("&New Machine..."), this);
+    new_machine_->setEnabled(false);
+    new_machine_->setToolTip(tr("No Beebium servers were found on this computer"));
+    buttons->addWidget(new_machine_);
     layout->addLayout(buttons);
 
     connect(configure_, &QPushButton::clicked, this, &PresetsPage::configure_requested);
+    connect(new_machine_, &QPushButton::clicked, this, &PresetsPage::new_machine_requested);
     // Activating a card launches it: a click or a double-click, as the
     // desktop is set, or Return.
     connect(grid_, &QListWidget::itemActivated, this, &PresetsPage::launch_chosen);
@@ -78,6 +84,10 @@ PresetsPage::PresetsPage(QString thumbnail_cache_dirpath, QWidget* parent)
 
 void PresetsPage::set_servers(std::optional<ServerLocation> servers) {
     servers_ = std::move(servers);
+    new_machine_->setEnabled(servers_.has_value());
+    new_machine_->setToolTip(servers_ ? QString()
+                                      : tr("No Beebium servers were found on this computer"));
+    Q_EMIT servers_changed();
     load();
 }
 

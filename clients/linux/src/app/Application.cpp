@@ -207,6 +207,7 @@ void Application::show_home(std::optional<HomePage> page) {
                 });
         connect(home->presets_page(), &PresetsPage::configure_requested, this,
                 [this, home] { configure(home); });
+        connect(home, &HomeWindow::new_machine_requested, this, [this, home] { new_machine(home); });
         connect(home->saved_machines_page(), &SavedMachinesPage::open_requested, this,
                 [this, home](const QString& dirpath) { launch_saved_machine(dirpath, home); });
         connect(home->saved_machines_page(), &SavedMachinesPage::browse_requested, this,
@@ -307,6 +308,94 @@ void Application::launch_preset(const ServerLocation& servers, const PresetListi
            preset_launch_arguments(preset.filepath, ordinal, provenance_uuid,
                                    settings_.rom_dirpath()),
            provenance_uuid, preset.name, parent);
+}
+
+NewMachineHost Application::new_machine_host() {
+    NewMachineHost host;
+    const auto located = [this] { return locate_servers_on_this_host(settings_.servers_dirpath()); };
+    host.list_presets = [this, located](NewMachineHost::Presets done) {
+        const auto found = located();
+        if (!found) {
+            done({}, tr("No Beebium servers were found on this computer."));
+            return;
+        }
+        cli_.run(found->executable_filepath(QStringLiteral("model-b")),
+                 {QStringLiteral("--format"), QStringLiteral("jsonl"), QStringLiteral("list-presets"),
+                  QStringLiteral("--all-models")},
+                 [found, done = std::move(done)](const CliResult& result) {
+                     if (!result.ok()) {
+                         done({}, result.standard_error.trimmed().isEmpty()
+                                      ? tr("The presets could not be read.")
+                                      : result.standard_error.trimmed());
+                         return;
+                     }
+                     done(launchable_presets(parse_preset_listing(result.standard_output),
+                                             [&](const QString& model) {
+                                                 const QFileInfo server(
+                                                     found->executable_filepath(model));
+                                                 return server.isFile() && server.isExecutable();
+                                             }),
+                          {});
+                 });
+    };
+    host.executable = [located](const QString& model) {
+        const auto found = located();
+        return found ? found->executable_filepath(model) : QString();
+    };
+    host.describe_schema = [this, located](const QString& model, NewMachineHost::Schema done) {
+        const auto found = located();
+        if (!found) {
+            done(std::nullopt);
+            return;
+        }
+        cli_.run(found->executable_filepath(model), {QStringLiteral("describe-preset-schema")},
+                 [done = std::move(done)](const CliResult& result) {
+                     done(result.ok() ? PresetSchema::parse(result.standard_output.toStdString())
+                                      : std::nullopt);
+                 });
+    };
+    host.import_preset = [this, located](const QString& model, const QString& filepath,
+                                         NewMachineHost::Imported done) {
+        const auto found = located();
+        if (!found) {
+            done(false, tr("No Beebium servers were found on this computer."));
+            return;
+        }
+        cli_.run(found->executable_filepath(model), {QStringLiteral("import-preset"), filepath},
+                 [done = std::move(done)](const CliResult& result) {
+                     done(result.ok(), result.standard_error.trimmed());
+                 });
+    };
+    host.launch = [this, located](const PresetListing& preset, const QString& filepath) {
+        const auto found = located();
+        if (!found) {
+            QFile::remove(filepath);
+            return;
+        }
+        PresetListing draft = preset;
+        draft.filepath = filepath;
+        const int ordinal = ++next_ordinal_[preset.id];
+        const QString provenance_uuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        // The server has read the draft once it has started, or failed to.
+        launch(found->executable_filepath(preset.model),
+               preset_launch_arguments(filepath, ordinal, provenance_uuid, settings_.rom_dirpath()),
+               provenance_uuid, preset.name, home_.get(), [filepath] { QFile::remove(filepath); });
+    };
+    return host;
+}
+
+void Application::new_machine(QWidget* parent) {
+    if (!servers(parent)) {
+        return;
+    }
+    if (!new_machine_) {
+        new_machine_ = std::make_unique<NewMachineDialog>(new_machine_host(), &settings_);
+    } else if (new_machine_->isHidden()) {
+        new_machine_->reload();
+    }
+    new_machine_->show();
+    new_machine_->raise();
+    new_machine_->activateWindow();
 }
 
 void Application::launch_preset_by_id(const QString& id, QWidget* parent) {
@@ -445,14 +534,18 @@ void Application::launch_saved_machine(const QString& dirpath, QWidget* parent) 
 }
 
 void Application::launch(const QString& executable_filepath, const QStringList& arguments,
-                         const QString& provenance_uuid, const QString& what, QWidget* parent) {
+                         const QString& provenance_uuid, const QString& what, QWidget* parent,
+                         std::function<void()> after) {
     std::fprintf(stderr, "beebium: launching %s\n", qPrintable(what));
     begin_work();
     QApplication::setOverrideCursor(Qt::BusyCursor);
     QPointer<QWidget> guard(parent);
     launcher_.launch(executable_filepath, arguments, provenance_uuid,
-                     [this, what, guard](const LaunchResult& result) {
+                     [this, what, guard, after](const LaunchResult& result) {
                          QApplication::restoreOverrideCursor();
+                         if (after) {
+                             after();
+                         }
                          if (const auto* server = std::get_if<LaunchedServer>(&result)) {
                              open(Endpoint{"127.0.0.1", static_cast<std::uint16_t>(server->port)},
                                   {}, *server);

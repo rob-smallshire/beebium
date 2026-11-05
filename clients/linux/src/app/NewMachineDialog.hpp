@@ -1,0 +1,164 @@
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
+//
+// This file is part of Beebium.
+//
+// Beebium is free software: you can redistribute it and/or modify it under the terms of the
+// GNU General Public License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version. Beebium is distributed in the hope that it will
+// be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+// You should have received a copy of the GNU General Public License along with Beebium.
+// If not, see <https://www.gnu.org/licenses/>.
+
+#ifndef BEEBIUM_LINUX_APP_NEW_MACHINE_DIALOG_HPP
+#define BEEBIUM_LINUX_APP_NEW_MACHINE_DIALOG_HPP
+
+#include "app/PresetResolver.hpp"
+#include "app/SidebarMode.hpp"
+#include "preset/MachineDraft.hpp"
+#include "preset/PresetResolution.hpp"
+#include "preset/PresetSchema.hpp"
+#include "servers/CoreCli.hpp"
+
+#include <QDialog>
+
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <vector>
+
+class QCheckBox;
+class QComboBox;
+class QLabel;
+class QLineEdit;
+class QListWidget;
+class QPushButton;
+class QStackedWidget;
+class QVBoxLayout;
+
+namespace beebium::linux_client {
+
+class ClientSettings;
+
+// What the New Machine dialog needs of this host's servers, as functions so
+// tests can stand in for them.
+struct NewMachineHost {
+    using Presets = std::function<void(std::vector<PresetListing> presets, QString error)>;
+    using Schema = std::function<void(std::optional<PresetSchema> schema)>;
+    using Imported = std::function<void(bool ok, QString error)>;
+
+    // list-presets: every preset this host can launch.
+    std::function<void(Presets done)> list_presets;
+    // describe-preset-schema for a model.
+    std::function<void(const QString& model, Schema done)> describe_schema;
+    // The model's executable, which resolves its presets.
+    std::function<QString(const QString& model)> executable;
+    // resolve-preset's runner; CoreCli when empty.
+    PresetResolver::Runner resolve_runner;
+    // import-preset of a preset file, for Save as new preset.
+    std::function<void(const QString& model, const QString& filepath, Imported done)> import_preset;
+    // Start a machine from a preset file, as a preset card does: the listing
+    // names the preset it was made from, for the machine's name and ordinal.
+    std::function<void(const PresetListing& preset, const QString& filepath)> launch;
+};
+
+// One section of the configuration editor: an editor over part of the
+// draft, in the sidebar's order.
+class ConfigurationSection : public QWidget {
+    Q_OBJECT
+
+public:
+    using QWidget::QWidget;
+    virtual SidebarMode mode() const = 0;
+    // The draft's parts this section edits, for its changed marker.
+    virtual std::vector<std::string> pointers() const = 0;
+    // The draft or the schema is new: show them afresh.
+    virtual void reload() = 0;
+    virtual void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) {
+        (void)diagnostics;
+    }
+
+Q_SIGNALS:
+    void edited();
+};
+
+// File > New Machine... (client specification 5.1, 5.2), as the macOS
+// client's: pick a preset, its resolved document becomes the draft, edit it
+// section by section in the sidebar's order with the server judging each
+// edit, and Create launches it, optionally saving it as a new preset
+// first. Errors block Create; warnings do not.
+class NewMachineDialog : public QDialog {
+    Q_OBJECT
+
+public:
+    static constexpr const char* LAST_PRESET_KEY = "newMachine/lastPreset";
+
+    NewMachineDialog(NewMachineHost host, ClientSettings* settings, QWidget* parent = nullptr);
+    ~NewMachineDialog() override;
+
+    // Read the presets afresh and load the last one chosen.
+    void reload();
+
+    MachineDraft& draft() { return draft_; }
+    const std::optional<PresetSchema>& schema() const { return schema_; }
+    const std::optional<PresetListing>& preset() const { return preset_; }
+    const std::vector<PresetDiagnostic>& diagnostics() const { return diagnostics_; }
+    QPushButton* create_button() const { return create_; }
+    QComboBox* preset_picker() const { return picker_; }
+    QLineEdit* description_field() const { return description_; }
+    QCheckBox* save_as_box() const { return save_as_; }
+    QLineEdit* save_as_name() const { return save_as_name_; }
+    QListWidget* diagnostics_list() const { return diagnostics_list_; }
+    QListWidget* section_list() const { return sections_list_; }
+    QString launch_error() const;
+
+    // The draft changed through the dialog: ask the server again.
+    void draft_edited();
+
+    // The sections are built for each schema by these makers, in turn.
+    using SectionMaker = std::function<ConfigurationSection*(NewMachineDialog& dialog)>;
+    static void add_section_maker(SectionMaker maker);
+
+    void accept() override;
+    void reject() override;
+
+private:
+    void choose(int index);
+    void on_resolved(const PresetResolution& resolution);
+    void present_diagnostics();
+    void rebuild_sections();
+    void update_markers();
+    void create();
+    void launch_draft();
+    void show_launch_error(const QString& text);
+
+    NewMachineHost host_;
+    ClientSettings* settings_;
+    std::unique_ptr<PresetResolver> resolver_;
+    std::vector<PresetListing> presets_;
+    std::optional<PresetListing> preset_;
+    std::optional<PresetSchema> schema_;
+    MachineDraft draft_;
+    bool loading_ = false;  // the chosen preset's own resolution is awaited
+    bool settled_ = false;  // the last resolution is the draft's present one
+    std::vector<PresetDiagnostic> diagnostics_;
+    std::map<QString, PresetSchema> schemas_;
+
+    QLabel* banner_;
+    QComboBox* picker_;
+    QLabel* preset_description_;
+    QLineEdit* description_;
+    QListWidget* sections_list_;
+    QStackedWidget* sections_stack_;
+    std::vector<ConfigurationSection*> sections_;
+    QCheckBox* save_as_;
+    QLineEdit* save_as_name_;
+    QListWidget* diagnostics_list_;
+    QLabel* launch_error_;
+    QPushButton* create_;
+};
+
+}  // namespace beebium::linux_client
+
+#endif  // BEEBIUM_LINUX_APP_NEW_MACHINE_DIALOG_HPP

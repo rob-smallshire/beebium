@@ -61,11 +61,16 @@ public:
     // The server's own words, when reading the presets failed.
     QString detail_text() const;
     bool offering_configure() const;
+    QPushButton* new_machine_button() const { return new_machine_; }
 
 Q_SIGNALS:
     void launch_requested(const beebium::linux_client::PresetListing& preset);
     // No servers were found: the user may say where they are.
     void configure_requested();
+    // New Machine...: the configuration editor, from a preset (5.2).
+    void new_machine_requested();
+    // The servers were found, or lost.
+    void servers_changed();
 
 private:
     void load();
@@ -80,6 +85,7 @@ private:
     QLabel* status_;
     QLabel* detail_;
     QPushButton* configure_;
+    QPushButton* new_machine_;
     std::vector<PresetListing> presets_;
     // Presets whose thumbnail could not be made: never asked for again.
     QSet<QString> thumbnail_failed_;

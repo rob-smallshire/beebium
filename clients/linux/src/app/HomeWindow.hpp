@@ -61,6 +61,7 @@ public:
 
 Q_SIGNALS:
     void configure_requested();
+    void new_machine_requested();
     void quit_requested();
     // The window was closed (only hidden).
     void closed();
