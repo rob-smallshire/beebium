@@ -121,6 +121,10 @@ beebium_linux_add_test(test_frame_decode
     SOURCES test_frame_decode.cpp
     LIBRARIES beebium_linux_connection)
 
+beebium_linux_add_test(test_natural_order
+    SOURCES test_natural_order.cpp
+    LIBRARIES beebium_linux_text)
+
 beebium_linux_add_test(test_picture_geometry
     SOURCES test_picture_geometry.cpp
     LIBRARIES beebium_linux_connection)

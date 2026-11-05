@@ -222,6 +222,14 @@ target_link_libraries(beebium_linux_connection
 
 # --- Servers: finding, querying and launching this host's servers ----------
 
+# --- Text: locale-independent orderings, Qt Core only ----------------------
+
+add_library(beebium_linux_text STATIC
+    src/text/NaturalOrder.cpp
+)
+target_include_directories(beebium_linux_text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(beebium_linux_text PUBLIC Qt6::Core)
+
 add_library(beebium_linux_servers STATIC
     src/servers/CoreCli.cpp
     src/servers/PresetLibrary.cpp
@@ -229,7 +237,7 @@ add_library(beebium_linux_servers STATIC
     src/servers/ServerLocator.cpp
 )
 target_include_directories(beebium_linux_servers PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(beebium_linux_servers PUBLIC Qt6::Core)
+target_link_libraries(beebium_linux_servers PUBLIC Qt6::Core beebium_linux_text)
 
 # --- Display: the QRhi renderer, without widgets ----------------------------
 
