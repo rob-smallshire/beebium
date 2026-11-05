@@ -50,6 +50,19 @@ std::vector<PresetListing> library_order(std::vector<PresetListing> presets) {
     return presets;
 }
 
+QStringList duplicate_preset_arguments(const PresetListing& source, const QString& name) {
+    return {QStringLiteral("create-preset"), QStringLiteral("--name"), name, QStringLiteral("--from"),
+            source.id};
+}
+
+QStringList export_preset_arguments(const PresetListing& preset, const QString& filepath) {
+    return {QStringLiteral("export-preset"), preset.id, QStringLiteral("--output"), filepath};
+}
+
+QStringList delete_preset_arguments(const PresetListing& preset) {
+    return {QStringLiteral("delete-preset"), preset.id};
+}
+
 QString duplicate_name(const QString& name, const QStringList& taken) {
     static const QRegularExpression COPY(QStringLiteral("^(.*) Copy(?: (\\d+))?$"));
     const auto match = COPY.match(name);

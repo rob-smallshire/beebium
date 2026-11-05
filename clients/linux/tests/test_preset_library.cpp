@@ -59,3 +59,14 @@ TEST_CASE("Duplicate suggests the first free copy name", "[presets][library]") {
                          {QStringLiteral("Elite Copy"), QStringLiteral("Elite Copy 2")}) ==
           QStringLiteral("Elite Copy 3"));
 }
+
+TEST_CASE("The library's commands name the preset by its id", "[presets][library]") {
+    const PresetListing source = preset("Model B (8271 Disc)", "1982");
+    CHECK(duplicate_preset_arguments(source, QStringLiteral("Mine")) ==
+          QStringList({QStringLiteral("create-preset"), QStringLiteral("--name"), QStringLiteral("Mine"),
+                       QStringLiteral("--from"), source.id}));
+    CHECK(export_preset_arguments(source, QStringLiteral("/home/me/x.beebium-preset")) ==
+          QStringList({QStringLiteral("export-preset"), source.id, QStringLiteral("--output"),
+                       QStringLiteral("/home/me/x.beebium-preset")}));
+    CHECK(delete_preset_arguments(source) == QStringList({QStringLiteral("delete-preset"), source.id}));
+}

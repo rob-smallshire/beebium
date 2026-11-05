@@ -27,6 +27,13 @@ namespace beebium::linux_client {
 // name as a person reads numbers in it.
 std::vector<PresetListing> library_order(std::vector<PresetListing> presets);
 
+// The preset library's commands, run by the preset's model's server:
+// create-preset from another under a new name (its description and date
+// come with it), export-preset to an archive, delete-preset of a user's.
+QStringList duplicate_preset_arguments(const PresetListing& source, const QString& name);
+QStringList export_preset_arguments(const PresetListing& preset, const QString& filepath);
+QStringList delete_preset_arguments(const PresetListing& preset);
+
 // The name Duplicate suggests: "<base> Copy", then "<base> Copy 2" and on,
 // the first not taken, a copy's own "Copy N" giving way to the next.
 QString duplicate_name(const QString& name, const QStringList& taken);
