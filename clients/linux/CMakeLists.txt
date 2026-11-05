@@ -322,6 +322,7 @@ add_library(beebium_linux_app STATIC
     src/app/SessionEconet.cpp
     src/app/SessionExtensions.cpp
     src/app/SessionPeripherals.cpp
+    src/app/SessionScreenText.cpp
     src/app/SessionSideways.cpp
     src/app/SessionSpeed.cpp
     src/app/SpeedScale.cpp

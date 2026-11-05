@@ -20,6 +20,7 @@
 #include "app/SessionExtensions.hpp"
 #include "app/SessionIndicators.hpp"
 #include "app/SessionPeripherals.hpp"
+#include "app/SessionScreenText.hpp"
 #include "app/SessionSideways.hpp"
 #include "app/SessionSpeed.hpp"
 #include "app/SessionTyping.hpp"
@@ -115,6 +116,8 @@ public:
     SessionIndicators& indicators() { return *indicators_; }
     SessionSpeed& speed() { return *speed_; }
     SessionSideways& sideways() { return *sideways_; }
+    // Holding and reading the screen's text (6.5).
+    SessionScreenText& screen_text() { return *screen_text_; }
     SessionExtensions& extensions() { return *extensions_; }
     SessionPeripherals& peripherals() { return *peripherals_; }
     SessionEconet& econet() { return *econet_; }
@@ -219,6 +222,7 @@ private:
     SessionIndicators* indicators_;
     SessionSpeed* speed_;
     SessionSideways* sideways_;
+    SessionScreenText* screen_text_;
     SessionExtensions* extensions_;
     SessionPeripherals* peripherals_;
     SessionEconet* econet_;

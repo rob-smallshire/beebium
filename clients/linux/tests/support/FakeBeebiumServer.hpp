@@ -41,6 +41,7 @@
 #include <QCoreApplication>
 #include <QString>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <utility>
@@ -260,7 +261,64 @@ private:
     std::deque<beebium::PacingStats> pacing_script_;
 };
 
+// A frame stream that never sends, and scripted screen text: holds are
+// numbered from 42, and a hold released or listed as expired is unknown.
 class QuietVideoService final : public beebium::VideoService::Service {
+public:
+    std::mutex screen_mutex;
+    beebium::ScreenText reading;            // under screen_mutex
+    beebium::ScreenGeometry hold_geometry;  // under screen_mutex
+    std::vector<beebium::GetScreenTextRequest> text_requests;  // under screen_mutex
+    std::vector<std::uint64_t> released;    // under screen_mutex
+    std::vector<std::uint64_t> expired;     // under screen_mutex
+    std::atomic<std::uint64_t> next_hold{42};
+    std::atomic<int> holds{0};
+    std::atomic<bool> holds_asked_frame{false};
+    std::atomic<bool> refuse_hold{false};
+
+    grpc::Status HoldScreen(grpc::ServerContext*, const beebium::HoldScreenRequest* request,
+                            beebium::ScreenHold* hold) override {
+        if (refuse_hold) {
+            return {grpc::StatusCode::RESOURCE_EXHAUSTED, "too many holds"};
+        }
+        ++holds;
+        holds_asked_frame = request->include_frame();
+        hold->set_hold_id(next_hold++);
+        std::lock_guard lock(screen_mutex);
+        *hold->mutable_geometry() = hold_geometry;
+        if (request->include_frame()) {
+            auto* frame = hold->mutable_frame();
+            frame->set_frame_number(hold_geometry.frame_number());
+            frame->set_width(640);
+            frame->set_height(256);
+            frame->set_display_width(640);
+            frame->set_display_height(256);
+            frame->set_field_order(beebium::PROGRESSIVE);
+            frame->set_pixels(std::string(std::size_t{640} * 256 * 4, '\x20'));
+        }
+        return grpc::Status::OK;
+    }
+    grpc::Status ReleaseScreen(grpc::ServerContext*, const beebium::ReleaseScreenRequest* request,
+                               beebium::ReleaseScreenResponse*) override {
+        std::lock_guard lock(screen_mutex);
+        released.push_back(request->hold_id());
+        return grpc::Status::OK;
+    }
+    grpc::Status GetScreenText(grpc::ServerContext*, const beebium::GetScreenTextRequest* request,
+                               beebium::ScreenText* text) override {
+        std::lock_guard lock(screen_mutex);
+        text_requests.push_back(*request);
+        const auto unknown = [&](std::uint64_t id) {
+            return std::find(released.begin(), released.end(), id) != released.end() ||
+                   std::find(expired.begin(), expired.end(), id) != expired.end();
+        };
+        if (request->has_hold_id() && unknown(request->hold_id())) {
+            return {grpc::StatusCode::NOT_FOUND, "no screen is held under that id"};
+        }
+        *text = reading;
+        return grpc::Status::OK;
+    }
+
     grpc::Status GetConfig(grpc::ServerContext*, const beebium::GetConfigRequest*,
                            beebium::VideoConfig* config) override {
         config->set_width(640);

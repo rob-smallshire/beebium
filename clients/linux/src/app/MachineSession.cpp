@@ -84,6 +84,7 @@ ConnectionFailure classify(const HandshakeResult& result) {
 MachineSession::MachineSession(QObject* parent)
     : QObject(parent), audio_(new SessionAudio(this)), indicators_(new SessionIndicators(this)),
       speed_(new SessionSpeed(this)), sideways_(new SessionSideways(this)),
+      screen_text_(new SessionScreenText(this)),
       extensions_(new SessionExtensions(this)),
       peripherals_(new SessionPeripherals(this)),
       econet_(new SessionEconet(this)),
@@ -206,6 +207,7 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
     indicators_->start(channel_);
     speed_->start(channel_);
     sideways_->start(channel_);
+    screen_text_->start(channel_);
     extensions_->start(channel_);
     peripherals_->start(channel_);
     econet_->start(channel_);
@@ -543,6 +545,7 @@ void MachineSession::stop_streams() {
     indicators_->stop();
     speed_->stop();
     sideways_->stop();
+    screen_text_->stop();
     extensions_->stop();
     peripherals_->stop();
     econet_->stop();
