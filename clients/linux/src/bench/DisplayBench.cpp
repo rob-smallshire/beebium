@@ -378,7 +378,12 @@ int main(int argc, char* argv[]) {
                      readback.pixelSize.width(), readback.pixelSize.height(),
                      QImage::Format_RGBA8888);
         if (rhi->isYUpInFramebuffer()) {
+            // The guard goes when the minimum Qt reaches 6.9, which has flipped().
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+            image = image.flipped(Qt::Vertical);
+#else
             image = image.mirrored(false, true);
+#endif
         }
         const QString filepath = parser.value(save_option);
         std::fprintf(stderr, "bench: saved %s: %s\n", qPrintable(filepath),
