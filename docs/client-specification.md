@@ -651,11 +651,12 @@ Conformance:
 - LATITUDE: the unknown-key technique and the debounce interval.
 - MACOS-ONLY: the new-machine dialog and welcome window.
 
-Scenarios: load a preset with an unknown top-level key -> the key survives into
-the launched machine. Introduce an out-of-range value -> an error diagnostic at
-its path, Create disabled. Create a preset unedited -> the launched machine
-equals the preset resolved. Set a field back to its default -> the key is
-cleared from the draft.
+Scenarios: load a preset with an unknown top-level key -> resolve-preset drops it
+with a warning diagnostic, which the client shows; the source preset file keeps
+the key. Introduce an out-of-range value -> an error diagnostic at its path,
+Create disabled. Create a preset unedited -> the launched machine equals the
+preset resolved. Set a field back to its default -> the value is written
+explicitly and the section no longer reads as changed.
 
 ### 5.3 The machine directory as a document
 
@@ -1985,7 +1986,8 @@ Conformance:
 Scenarios: a write-access filepath opens a create-destination chooser, a read-access
 one an open chooser. Editing a field then clicking a checkbox commits the field first.
 A structured-list item edited in the configurator writes the identical object the live
-view would. Setting a field to its default clears the key from the draft.
+view would. Setting a field back to its default leaves it written explicitly, and
+the section no longer reads as changed.
 
 ### 12.3 Peripheral discovery tree
 
