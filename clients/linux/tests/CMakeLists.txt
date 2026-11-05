@@ -169,6 +169,10 @@ beebium_linux_add_test(test_display_uniforms
     SOURCES test_display_uniforms.cpp
     LIBRARIES beebium_linux_display)
 
+beebium_linux_add_test(test_picture_mapping
+    SOURCES test_picture_mapping.cpp
+    LIBRARIES beebium_linux_display)
+
 beebium_linux_add_test(test_evdev_codes
     SOURCES test_evdev_codes.cpp
     LIBRARIES beebium_linux_keyboard)
