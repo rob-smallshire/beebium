@@ -19,6 +19,7 @@
 #include "app/PresetsPage.hpp"
 #include "app/SavedMachinesPage.hpp"
 #include "app/SettingsDialog.hpp"
+#include "servers/PresetLibrary.hpp"
 #include "app/SystemPowerMonitor.hpp"
 
 #include <QApplication>
@@ -594,8 +595,38 @@ void Application::launch(const QString& executable_filepath, const QStringList& 
                      });
 }
 
+PresetLibraryHost Application::preset_library_host() {
+    PresetLibraryHost host;
+    host.list_presets = new_machine_host().list_presets;
+    const auto located = [this] { return locate_servers_on_this_host(settings_.servers_dirpath()); };
+    // Each runs on the preset's model's server and says what it said.
+    const auto run = [this, located](const PresetListing& preset, const QStringList& arguments,
+                                     PresetLibraryHost::Done done) {
+        const auto found = located();
+        if (!found) {
+            done(false, tr("No Beebium servers were found on this computer."));
+            return;
+        }
+        cli_.run(found->executable_filepath(preset.model), arguments,
+                 [done = std::move(done)](const CliResult& result) {
+                     done(result.ok(), result.standard_error.trimmed());
+                 });
+    };
+    host.duplicate = [run](const PresetListing& source, const QString& name, PresetLibraryHost::Done done) {
+        run(source, duplicate_preset_arguments(source, name), std::move(done));
+    };
+    host.export_preset = [run](const PresetListing& preset, const QString& filepath,
+                               PresetLibraryHost::Done done) {
+        run(preset, export_preset_arguments(preset, filepath), std::move(done));
+    };
+    host.remove = [run](const PresetListing& preset, PresetLibraryHost::Done done) {
+        run(preset, delete_preset_arguments(preset), std::move(done));
+    };
+    return host;
+}
+
 void Application::configure(QWidget* parent) {
-    SettingsDialog dialog(settings_, parent);
+    SettingsDialog dialog(settings_, preset_library_host(), parent);
     dialog.exec();
     // The servers may be somewhere else now.
     if (home_) {

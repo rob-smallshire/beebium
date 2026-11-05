@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_APP_SETTINGS_DIALOG_HPP
 
 #include "app/ColourChoice.hpp"
+#include "app/MachinesPage.hpp"
 #include "display/VideoSettings.hpp"
 
 #include <QDialog>
@@ -21,6 +22,7 @@
 class QComboBox;
 class QLabel;
 class QLineEdit;
+class QPushButton;
 
 namespace beebium::linux_client {
 
@@ -33,7 +35,13 @@ class SettingsDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit SettingsDialog(ClientSettings& settings, QWidget* parent = nullptr);
+    // With a library, a Machines page whose actions take effect at once:
+    // once one has, Cancel says Close, since it undoes none of them.
+    explicit SettingsDialog(ClientSettings& settings, PresetLibraryHost library = {},
+                            QWidget* parent = nullptr);
+
+    MachinesPage* machines() const { return machines_; }
+    QPushButton* cancel_button() const { return cancel_; }
 
     void accept() override;
     // The Video page's colour picker; the platform's by default.
@@ -49,6 +57,8 @@ private:
     QComboBox* default_style_;
     QComboBox* default_pixels_;
     ColourChoice* boxing_;
+    MachinesPage* machines_ = nullptr;
+    QPushButton* cancel_;
 };
 
 }  // namespace beebium::linux_client

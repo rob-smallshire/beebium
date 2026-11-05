@@ -49,7 +49,7 @@ QWidget* with_browse(QLineEdit* edit, QWidget* parent, const QString& caption) {
 
 }  // namespace
 
-SettingsDialog::SettingsDialog(ClientSettings& settings, QWidget* parent)
+SettingsDialog::SettingsDialog(ClientSettings& settings, PresetLibraryHost library, QWidget* parent)
     : QDialog(parent), settings_(settings) {
     setWindowTitle(tr("Configure Beebium"));
     auto* layout = new QVBoxLayout(this);
@@ -107,6 +107,12 @@ SettingsDialog::SettingsDialog(ClientSettings& settings, QWidget* parent)
     pages->addTab(video, tr("&Video"));
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    cancel_ = buttons->button(QDialogButtonBox::Cancel);
+    if (library.list_presets) {
+        machines_ = new MachinesPage(std::move(library), pages);
+        pages->addTab(machines_, tr("&Machines"));
+        connect(machines_, &MachinesPage::changed, this, [this] { cancel_->setText(tr("Close")); });
+    }
     layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);

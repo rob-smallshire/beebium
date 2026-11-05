@@ -304,6 +304,10 @@ beebium_linux_add_test(test_preset_library QT
     SOURCES test_preset_library.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_machines_page QT
+    SOURCES test_machines_page.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_machine_control QT
     SOURCES test_machine_control.cpp
     LIBRARIES beebium_linux_app)

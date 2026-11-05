@@ -20,6 +20,7 @@
 #include "connection/Endpoint.hpp"
 #include "servers/CoreCli.hpp"
 #include "servers/ServerLauncher.hpp"
+#include "app/MachinesPage.hpp"
 #include "app/NewMachineDialog.hpp"
 #include "servers/ServerLocator.hpp"
 
@@ -125,6 +126,7 @@ private:
                 const QString& provenance_uuid, const QString& what, QWidget* parent,
                 std::function<void()> after = {});
     NewMachineHost new_machine_host();
+    PresetLibraryHost preset_library_host();
     void describe_machine(const QString& machine_dirpath, SavedMachines::Described done);
     // Keep the recents in step with a window's saved machine.
     void track_saved_machine(MainWindow* window);

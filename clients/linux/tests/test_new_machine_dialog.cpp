@@ -56,14 +56,13 @@ struct Server {
     std::vector<std::pair<QString, QByteArray>> imported;
     bool import_ok = true;
     std::vector<std::pair<PresetListing, QByteArray>> launched;
+    std::vector<PresetListing> presets{listing("model-b", "BBC Model B", true),
+                                       listing("model-b-dfs", "BBC with DFS", true),
+                                       listing("mine", "My Model B", false)};
 
     NewMachineHost host() {
         NewMachineHost host;
-        host.list_presets = [](NewMachineHost::Presets done) {
-            done({listing("model-b", "BBC Model B", true), listing("model-b-dfs", "BBC with DFS", true),
-                  listing("mine", "My Model B", false)},
-                 {});
-        };
+        host.list_presets = [this](NewMachineHost::Presets done) { done(presets, {}); };
         host.executable = [](const QString& model) { return QStringLiteral("/opt/beebium/bin/beebium-") + model; };
         host.describe_schema = [](const QString&, NewMachineHost::Schema done) {
             done(PresetSchema::parse(R"({"schema_version": 2, "model": {"id": "model-b", "name": "BBC Model B"},
@@ -134,6 +133,27 @@ TEST_CASE("The dialog reopens on the preset last chosen", "[new-machine]") {
     Q_EMIT f.dialog->preset_picker()->activated(2);
     CHECK(f.settings.store().value(QString::fromLatin1(NewMachineDialog::LAST_PRESET_KEY)).toString() ==
           QStringLiteral("model-b-dfs"));
+}
+
+TEST_CASE("A deleted last preset leaves the dialog on the first built-in", "[new-machine]") {
+    Fixture f;
+    f.settings.store().setValue(QString::fromLatin1(NewMachineDialog::LAST_PRESET_KEY),
+                                QStringLiteral("mine"));
+    f.open();
+    REQUIRE(f.dialog->preset()->id == QStringLiteral("mine"));
+    // Deleted from the library while the dialog was closed.
+    f.server.presets.pop_back();
+    f.dialog->reload();
+    REQUIRE(wait_until([&] { return f.dialog->create_button()->isEnabled(); }));
+    CHECK(f.dialog->preset()->id == QStringLiteral("model-b"));
+    // And afresh.
+    Fixture g;
+    g.server.presets.pop_back();
+    g.settings.store().setValue(QString::fromLatin1(NewMachineDialog::LAST_PRESET_KEY),
+                                QStringLiteral("mine"));
+    g.open();
+    CHECK(g.dialog->preset()->id == QStringLiteral("model-b"));
+    CHECK(g.dialog->launch_error().isEmpty());
 }
 
 TEST_CASE("Errors block Create and are listed; warnings do not", "[new-machine][diagnostics]") {

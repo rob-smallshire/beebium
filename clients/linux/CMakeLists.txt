@@ -289,6 +289,7 @@ add_library(beebium_linux_app STATIC
     src/app/LedColour.cpp
     src/app/MachineSession.cpp
     src/app/MappingCatalogue.cpp
+    src/app/MachinesPage.cpp
     src/app/MainWindow.cpp
     src/app/NetworkSidebar.cpp
     src/app/NewMachineDialog.cpp
