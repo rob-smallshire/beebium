@@ -32,6 +32,12 @@ struct AttachmentPointGroup: View {
     let point: AttachmentPoint
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
+    /// The provider instance this point hangs beneath, when it is a point an
+    /// extension provides (e.g. the SCSI bus under one of several SCSI adapters).
+    /// nil for a model-built point. Scopes the children, occupancy and Add to the
+    /// discs that belong to this provider, so two same-kind adapters no longer
+    /// share one pool.
+    var providerInstance: ExtensionInstanceModel.Instance? = nil
 
     /// The Configurator's shared focus owner: Add/Change/Remove commit and release
     /// a focused parameter field before they act. The instance parameter forms and
@@ -44,13 +50,13 @@ struct AttachmentPointGroup: View {
 
     private var model: ExtensionInstanceModel { ExtensionInstanceModel(schema: schema) }
     private var instances: [ExtensionInstanceModel.Instance] {
-        model.instances(onPoint: point.id, in: draft)
+        model.instances(onPoint: point.id, under: providerInstance, in: draft)
     }
     private var isSingleOccupancy: Bool {
-        model.occupancy(onPoint: point.id, in: draft).max == 1
+        model.occupancy(onPoint: point.id, under: providerInstance, in: draft).max == 1
     }
     private var addable: [String] {
-        model.addableExtensions(onPoint: point.id, in: draft)
+        model.addableExtensions(onPoint: point.id, under: providerInstance, in: draft)
     }
 
     var body: some View {
@@ -98,7 +104,7 @@ struct AttachmentPointGroup: View {
     }
 
     private var occupancyLabel: String {
-        let occ = model.occupancy(onPoint: point.id, in: draft)
+        let occ = model.occupancy(onPoint: point.id, under: providerInstance, in: draft)
         if let max = occ.max { return "\(occ.count) of \(max)" }
         return "\(occ.count)"
     }
@@ -120,7 +126,7 @@ struct AttachmentPointGroup: View {
                 commitTitle: "Add",
                 onCommit: { name in
                     fieldEditCoordinator?.commitActiveEdit()
-                    draft = model.draft(adding: name, to: draft)
+                    draft = model.draft(adding: name, onPoint: point.id, under: providerInstance, to: draft)
                     showingAdd = false
                 },
                 onCancel: { showingAdd = false })
@@ -216,7 +222,8 @@ struct AttachmentPointGroup: View {
             ForEach(model.pointsProvided(by: instance)) { provided in
                 AttachmentPointGroup(
                     draft: $draft, schema: schema, point: provided,
-                    diagnostics: diagnostics, serialPorts: serialPorts)
+                    diagnostics: diagnostics, serialPorts: serialPorts,
+                    providerInstance: instance)
             }
         }
     }

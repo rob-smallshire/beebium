@@ -50,29 +50,80 @@ struct ExtensionInstanceModel {
         schema.attachmentPoints.filter { $0.providedBy?.contains(instance.name) ?? false }
     }
 
-    // MARK: - Instances on a point
+    // MARK: - Providers of a provided point
 
-    /// The draft instances attached to `pointId`, in draft order.
-    func instances(onPoint pointId: String, in draft: MachineDraft) -> [Instance] {
-        guard let point = schema.attachmentPoints.first(where: { $0.id == pointId }) else { return [] }
-        let hosted = Set(point.extensions)
+    /// The provider instances of a provided point: the draft instances whose
+    /// extension provides it (named in the point's `provided_by`), in draft
+    /// order. Empty for a model-built point.
+    func providers(ofPoint pointId: String, in draft: MachineDraft) -> [Instance] {
+        guard let point = schema.attachmentPoints.first(where: { $0.id == pointId }),
+              let names = point.providedBy else { return [] }
+        let providerNames = Set(names)
         return (draft.extensions ?? []).enumerated().compactMap { index, ext in
-            hosted.contains(ext.name) ? Instance(index: index, name: ext.name) : nil
+            providerNames.contains(ext.name) ? Instance(index: index, name: ext.name) : nil
         }
     }
 
-    /// Current and maximum occupancy of a point (max nil = unbounded).
-    func occupancy(onPoint pointId: String, in draft: MachineDraft) -> (count: Int, max: Int?) {
-        let count = instances(onPoint: pointId, in: draft).count
+    /// The config key by which an extension names a provider of `pointId` (its
+    /// `provider_of` parameter, e.g. "adapter-id"), or nil when it declares none.
+    func providerParameter(forExtension name: String, point pointId: String) -> String? {
+        schema.manifest(forExtension: name).parameters.first { $0.providerOf == pointId }?.key
+    }
+
+    /// The framework id of the provider a child belongs to on a provided point:
+    /// the id its `provider_of` parameter names, else the last provider of the
+    /// point -- the rule the server applies when it attaches the child. "" when
+    /// the point has no providers.
+    private func chosenProviderId(forChildAt index: Int, name: String, onPoint pointId: String,
+                                  providers: [Instance], in draft: MachineDraft) -> String {
+        if let key = providerParameter(forExtension: name, point: pointId) {
+            let named = configString(key, ofInstanceAt: index, in: draft)
+            if !named.isEmpty { return named }
+        }
+        guard let last = providers.last else { return "" }
+        return effectiveId(ofInstanceAt: last.index, in: draft)
+    }
+
+    // MARK: - Instances on a point
+
+    /// The draft instances attached to `pointId`, in draft order. On a provided
+    /// point, pass the `provider` whose children you want and only the instances
+    /// that belong to it are returned -- by the child's `provider_of` parameter,
+    /// else the last provider of the point (the server's rule). nil, or a
+    /// model-built point, returns every instance attached to the point.
+    func instances(onPoint pointId: String, under provider: Instance? = nil,
+                   in draft: MachineDraft) -> [Instance] {
+        guard let point = schema.attachmentPoints.first(where: { $0.id == pointId }) else { return [] }
+        let hosted = Set(point.extensions)
+        let all = (draft.extensions ?? []).enumerated().compactMap { index, ext in
+            hosted.contains(ext.name) ? Instance(index: index, name: ext.name) : nil
+        }
+        guard let provider = provider else { return all }
+        let providers = providers(ofPoint: pointId, in: draft)
+        let providerId = effectiveId(ofInstanceAt: provider.index, in: draft)
+        return all.filter {
+            chosenProviderId(forChildAt: $0.index, name: $0.name, onPoint: pointId,
+                             providers: providers, in: draft) == providerId
+        }
+    }
+
+    /// Current and maximum occupancy of a point (max nil = unbounded), counted
+    /// per provider when a provided point's `provider` is given.
+    func occupancy(onPoint pointId: String, under provider: Instance? = nil,
+                   in draft: MachineDraft) -> (count: Int, max: Int?) {
+        let count = instances(onPoint: pointId, under: provider, in: draft).count
         let max = schema.attachmentPoints.first { $0.id == pointId }?.maxOccupancy
         return (count, max)
     }
 
     /// The extensions that may still be added to `pointId`: those it hosts, if it
-    /// has room (an unbounded point always has room).
-    func addableExtensions(onPoint pointId: String, in draft: MachineDraft) -> [String] {
+    /// has room (an unbounded point always has room). Room is measured for the
+    /// given `provider` on a provided point, so one full adapter does not stop
+    /// another from taking discs.
+    func addableExtensions(onPoint pointId: String, under provider: Instance? = nil,
+                           in draft: MachineDraft) -> [String] {
         guard let point = schema.attachmentPoints.first(where: { $0.id == pointId }) else { return [] }
-        let occ = occupancy(onPoint: pointId, in: draft)
+        let occ = occupancy(onPoint: pointId, under: provider, in: draft)
         if let max = occ.max, occ.count >= max { return [] }
         return point.extensions
     }
@@ -89,20 +140,43 @@ struct ExtensionInstanceModel {
         return ext.name
     }
 
-    /// Add an extension instance (with no config) to the draft. The caller has
-    /// already decided the extension attaches somewhere with room.
+    /// The string config value of `key` on the instance at `index`, or "" when
+    /// absent or not a string.
+    private func configString(_ key: String, ofInstanceAt index: Int, in draft: MachineDraft) -> String {
+        guard let extensions = draft.extensions, extensions.indices.contains(index),
+              case .string(let value)? = extensions[index].config?[key] else { return "" }
+        return value
+    }
+
+    /// Add an extension instance to the draft, attached to `pointId`. The caller
+    /// has already decided the extension attaches there with room.
     ///
     /// When another instance of the same extension already exists, the new one
     /// is given a distinct framework id (name-1, name-2, ...) so it can be
     /// referenced immediately -- the first instance keeps the implicit id (its
     /// name), matching the server's own id assignment.
-    func draft(adding name: String, to draft: MachineDraft) -> MachineDraft {
+    ///
+    /// Beneath one of SEVERAL providers of a provided point (e.g. a second SCSI
+    /// adapter), the new instance's `provider_of` parameter names the chosen
+    /// provider, so the disc belongs to that adapter and not merely the last.
+    /// With a single provider nothing is written -- the server's "else the last
+    /// provider" rule already resolves to it -- so a one-adapter preset is
+    /// unchanged, byte for byte.
+    func draft(adding name: String, onPoint pointId: String, under provider: Instance? = nil,
+               to draft: MachineDraft) -> MachineDraft {
         var result = draft
         var extensions = result.extensions ?? []
-        var instance = MachineDraft.Extension(name: name)
+        var config: [String: JSONValue] = [:]
         if extensions.contains(where: { $0.name == name }) {
-            instance.config = ["id": .string(uniqueId(forName: name, in: extensions))]
+            config["id"] = .string(uniqueId(forName: name, in: extensions))
         }
+        if let provider = provider,
+           providers(ofPoint: pointId, in: result).count > 1,
+           let key = providerParameter(forExtension: name, point: pointId) {
+            config[key] = .string(effectiveId(ofInstanceAt: provider.index, in: result))
+        }
+        var instance = MachineDraft.Extension(name: name)
+        instance.config = config.isEmpty ? nil : config
         extensions.append(instance)
         result.extensions = extensions
         return result
