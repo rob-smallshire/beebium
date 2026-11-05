@@ -203,6 +203,7 @@ add_library(beebium_linux_connection STATIC
     src/connection/PictureGeometry.cpp
     src/connection/ReconnectPolicy.cpp
     src/connection/RpcWorker.cpp
+    src/connection/ScreenReading.cpp
     src/connection/SidewaysTopology.cpp
     src/connection/VideoStream.cpp
 )

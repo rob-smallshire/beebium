@@ -125,6 +125,10 @@ beebium_linux_add_test(test_picture_geometry
     SOURCES test_picture_geometry.cpp
     LIBRARIES beebium_linux_connection)
 
+beebium_linux_add_test(test_screen_reading
+    SOURCES test_screen_reading.cpp
+    LIBRARIES beebium_linux_connection)
+
 beebium_linux_add_test(test_sideways_topology
     SOURCES test_sideways_topology.cpp
     LIBRARIES beebium_linux_connection)
