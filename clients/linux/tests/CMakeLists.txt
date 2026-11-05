@@ -81,6 +81,10 @@ beebium_linux_add_test(test_extensions_draft
     SOURCES test_extensions_draft.cpp
     LIBRARIES beebium_linux_preset)
 
+beebium_linux_add_test(test_econet_station
+    SOURCES test_econet_station.cpp
+    LIBRARIES beebium_linux_preset)
+
 beebium_linux_add_test(test_parameter_form
     SOURCES test_parameter_form.cpp
     LIBRARIES beebium_linux_preset beebium_linux_connection)

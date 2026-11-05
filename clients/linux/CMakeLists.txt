@@ -163,6 +163,7 @@ add_library(beebium_linux_preset STATIC
     src/preset/PresetDocument.cpp
     src/preset/PresetResolution.cpp
     src/preset/PresetSchema.cpp
+    src/preset/EconetStation.cpp
     src/preset/ExtensionsDraft.cpp
     src/preset/SidewaysDraft.cpp
     src/preset/StartupLinks.cpp
@@ -295,6 +296,7 @@ add_library(beebium_linux_app STATIC
     src/app/configuration/AttachmentPointGroup.cpp
     src/app/configuration/KeyboardSection.cpp
     src/app/configuration/MemorySection.cpp
+    src/app/configuration/NetworkSection.cpp
     src/app/configuration/PeripheralsSection.cpp
     src/app/configuration/ProcessorSection.cpp
     src/app/configuration/StorageSection.cpp

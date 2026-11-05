@@ -13,6 +13,7 @@
 #include "app/NewMachineDialog.hpp"
 #include "app/configuration/KeyboardSection.hpp"
 #include "app/configuration/MemorySection.hpp"
+#include "app/configuration/NetworkSection.hpp"
 #include "app/configuration/PeripheralsSection.hpp"
 #include "app/configuration/ProcessorSection.hpp"
 #include "app/configuration/StorageSection.hpp"
@@ -40,6 +41,10 @@ configuration_section_makers() {
         [](NewMachineDialog& dialog) -> ConfigurationSection* {
             const auto& schema = dialog.schema();
             return schema && LinksLayout::from_schema(*schema) ? new KeyboardSection(dialog) : nullptr;
+        },
+        [](NewMachineDialog& dialog) -> ConfigurationSection* {
+            const auto& schema = dialog.schema();
+            return schema && schema->section("econet") ? new NetworkSection(dialog) : nullptr;
         },
         // Every model has a speed.
         [](NewMachineDialog& dialog) -> ConfigurationSection* {

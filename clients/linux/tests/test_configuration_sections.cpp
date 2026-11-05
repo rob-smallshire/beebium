@@ -17,6 +17,7 @@
 #include "app/configuration/AttachmentPointGroup.hpp"
 #include "app/configuration/KeyboardSection.hpp"
 #include "app/configuration/MemorySection.hpp"
+#include "app/configuration/NetworkSection.hpp"
 #include "app/configuration/PeripheralsSection.hpp"
 #include "app/configuration/ProcessorSection.hpp"
 #include "app/configuration/StorageSection.hpp"
@@ -29,6 +30,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
+#include <QRadioButton>
 #include <QToolButton>
 
 using namespace beebium::linux_client;
@@ -506,4 +508,66 @@ TEST_CASE("Speed writes a multiplier or unlimited, and keeps a preset's own", "[
     Q_EMIT processor->speed()->activated(processor->speed()->findText(QStringLiteral("1/2")));
     CHECK(f.dialog->draft().get("/speed") == ordered_json(0.5));
     CHECK(f.section_names().contains(QStringLiteral("Processor \u2022")));
+}
+
+TEST_CASE("Econet off leaves the rest disabled; on seeds a station and transport",
+          "[configuration][network]") {
+    ConfigurationFixture f(model_b_with_disc());  // "econet": null
+    auto* network = f.section<NetworkSection>();
+    CHECK_FALSE(network->econet()->isChecked());
+    CHECK_FALSE(network->station_number()->isEnabledTo(network));
+    CHECK_FALSE(network->change_transport()->isEnabledTo(network));
+    network->econet()->click();
+    CHECK(*f.dialog->draft().get("/econet") ==
+          ordered_json::parse(R"({"station": "auto", "transport": {"name": "aun", "parameters": {}}})"));
+    CHECK(network->station_mode(EconetStation::Mode::automatic)->isChecked());
+    CHECK(network->transport_name()->text() != QStringLiteral("None"));
+    CHECK(network->transport_form());
+    CHECK(f.section_names().contains(QStringLiteral("Network \u2022")));
+    network->econet()->click();
+    CHECK_FALSE(f.dialog->draft().get("/econet").has_value());  // absent, as null
+    CHECK_FALSE(network->transport_form());
+}
+
+TEST_CASE("The station is a number held in range, auto, or auto in a range", "[configuration][network]") {
+    auto document = model_b_with_disc();
+    document["econet"] = ordered_json::parse(R"({"station": 80, "transport": null})");
+    ConfigurationFixture f(document);
+    auto* network = f.section<NetworkSection>();
+    CHECK(network->station_mode(EconetStation::Mode::number)->isChecked());
+    CHECK(network->station_number()->text() == QStringLiteral("80"));
+    CHECK(network->transport_name()->text() == QStringLiteral("None"));
+    network->station_number()->setText(QStringLiteral("300"));
+    Q_EMIT network->station_number()->editingFinished();
+    CHECK(f.dialog->draft().get("/econet/station") == ordered_json(254));
+    CHECK(network->station_number()->text() == QStringLiteral("254"));
+    network->station_mode(EconetStation::Mode::range)->click();
+    CHECK(f.dialog->draft().get("/econet/station") == ordered_json("auto:1-253"));
+    network->station_low()->setText(QStringLiteral("10"));
+    Q_EMIT network->station_low()->editingFinished();
+    CHECK(f.dialog->draft().get("/econet/station") == ordered_json("auto:10-253"));
+}
+
+TEST_CASE("Change Transport offers None first, and a transport starts afresh", "[configuration][network]") {
+    auto document = model_b_with_disc();
+    document["econet"] = ordered_json::parse(
+        R"({"station": 80, "transport": {"name": "aun", "parameters": {"port": 32768}}})");
+    ConfigurationFixture f(document);
+    auto* network = f.section<NetworkSection>();
+    f.pick = "piconet";
+    network->change_transport()->click();
+    REQUIRE(f.asked);
+    CHECK(f.asked->title == QStringLiteral("Change Transport"));
+    CHECK(f.asked->commit == QStringLiteral("Change"));
+    CHECK(f.asked->selected == "aun");
+    REQUIRE(f.asked->entries.size() == 3);
+    CHECK(f.asked->entries[0].name.empty());
+    CHECK(f.asked->entries[0].display_name == "None");
+    CHECK(f.dialog->draft().get("/econet/transport") ==
+          ordered_json::parse(R"({"name": "piconet", "parameters": {}})"));
+    f.pick = "";
+    network->change_transport()->click();
+    CHECK_FALSE(f.dialog->draft().get("/econet/transport").has_value());  // absent, as null
+    CHECK(network->transport_name()->text() == QStringLiteral("None"));
+    CHECK_FALSE(network->transport_form());
 }
