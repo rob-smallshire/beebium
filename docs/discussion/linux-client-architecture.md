@@ -1,10 +1,11 @@
 # Linux client architecture
 
-Status: discussion. Proposals and open questions for the Linux client
-(`clients/linux`), written before any UI exists. It is not a specification:
-behaviour comes from `docs/client-specification.md` (being extracted from the
-macOS client), and this note only covers how a Qt 6 client on Linux would
-realise it. Decisions already taken are in
+Status: discussion, with a record of the client as built. Sections 1 to 10
+are the proposals and open questions written before the UI existed, with the
+spike's measurements; section 11 describes the client as it stands. It is not
+a specification: behaviour comes from `docs/client-specification.md`
+(extracted from the macOS client), and this note only covers how a Qt 6
+client on Linux realises it. Decisions already taken are in
 `raspberry-pi-linux-client-discussion.md`: Qt 6 Widgets, KDE-HIG-style
 interaction, the window manager owns decorations, Raspberry Pi OS (64-bit,
 Pi 4 and Pi 5) is the reference environment, a separate display renderer on
@@ -245,7 +246,10 @@ Proposal:
 - Behind a small `AudioOutput` interface, so a `QAudioSink` implementation can
   serve distributions without PipeWire.
 
-Not phase 0; the skeleton has no audio.
+As built, the output is Qt's `QAudioSink` in push mode: the client writes
+mixed samples to the sink's device on a worker thread. In pull mode the sink
+consumed about two per cent less than 48 kHz on PipeWire, so it is not
+used.
 
 
 ## 5. Server discovery and connection
@@ -595,3 +599,139 @@ What it says:
 - Followed up: the typing-status watcher now asks for status at most every
   250 ms (it had the stream's 20 ms default). That cuts the stream's
   traffic before the guest is ready; CPU was not measurably different.
+
+
+## 11. As built
+
+The client as it stands, built test-first: about 635 Catch2 test cases, run
+headless under the offscreen platform. Sections 1 to 9 describe how it is
+built; this section records what it presents, and where it follows the macOS
+client or departs from it.
+
+### The machine window and its eight modes
+
+A machine window is the display, a sidebar and a status bar. The sidebar has
+the eight modes of client specification 13.1, in its fixed order, each always
+offered:
+
+| Mode | What it shows |
+|------|---------------|
+| Storage | The disc controller's drives with their discs, eject (safe, cancel, force), recent and blank discs, drop targets; storage that peripherals provide (hard and RAM discs) beneath |
+| Memory | The sideways sockets, highest priority first, each ROM by the title the server reads from its header, write-protect and hide by the server's protection groups |
+| Peripherals | The live peripheral tree from `PeripheralExtensionService`, nested under the server's providers, an Unattached section for orphans, and each extension's own panel |
+| Video | Display style (Standard, Debug), pixels (Authentic, Crisp), boxing colour and edge margin, per window |
+| Sound | The group mixer: master, a sub-master per group, its channels, and buffer health |
+| Keyboard | The mappings, the active one's labelled keys, and Caps Lock synchronisation |
+| Processor | Emulation speed on a log2 scale, a caret marking the speed achieved, and Unlimited |
+| Network | Econet status, the station settled or pending, collisions, the transport's panel, and the pause a real-time transport imposes |
+
+A mode watches its streams only while it is shown (`showEvent` starts them,
+`hideEvent` ends them), so switching modes releases the extension
+subscriptions the specification requires. When the server is lost, every
+mode shows the same unavailable banner and dims its content.
+
+### Shortcuts as shipped
+
+The rule of section 3 holds: every machine-window shortcut carries Meta or
+Alt, never Ctrl or Shift alone, and each has a Meta form and a Ctrl+Alt
+form, the Meta form shown first on the Raspberry Pi Desktop. The home window
+has no machine, so it keeps the desktop's Ctrl forms.
+
+| Command | Meta form | Other form |
+|---------|-----------|------------|
+| New Machine... (home) | Meta+N | Ctrl+N |
+| Open Machine... (home) | Meta+O | Ctrl+O |
+| Connect to Machine... (home) | Meta+Shift+O | Ctrl+Shift+O |
+| Configure Beebium... (home) | Meta+, | Ctrl+Shift+, |
+| Save | Meta+S | Ctrl+Alt+S |
+| Save As... | Meta+Shift+S | Ctrl+Alt+Shift+S |
+| Close Window | Meta+W | Ctrl+Alt+W (Ctrl+W at home) |
+| Quit | Meta+Q | Ctrl+Alt+Q (Ctrl+Q at home) |
+| Paste | Meta+V | Ctrl+Alt+V |
+| Switch to Previous Keyboard Mapping | Meta+K | Ctrl+Alt+K |
+| A sidebar mode | Meta+1 to Meta+8 | Ctrl+Alt+1 to Ctrl+Alt+8 |
+| Show Sidebar | Meta+Alt+S | Ctrl+Alt+0 |
+| Show Status Bar | Meta+/ | Ctrl+Alt+/ |
+| Enter Immersive Mode | Meta+Shift+F | Ctrl+Alt+F |
+| Minimize | Meta+M | Ctrl+Alt+M |
+| Show Beebium (the home window) | Meta+Shift+H | Ctrl+Alt+H |
+
+F11 is the desktop's full screen. Rename Machine... and Move To... have no
+shortcut.
+
+### Extension views, and the configurator that reuses them
+
+`ExtensionViewWidget` renders an extension's view (`extension_ui.proto`) by
+control type, recursively: the eleven primitives, each a widget named by its
+control id and kept across views, so a new view patches the panel in place
+rather than rebuilding it. Every action carries the revision of the view on
+show and is committed before it is sent; nothing changes until the server's
+next view says so. A stream that ends with NOT_FOUND, OK or CANCELLED drops
+the view; any other loss keeps it, marked stale.
+
+The configurator reuses the renderer rather than having forms of its own. A
+`ParameterFormModel` builds a `beebium::View` from an extension's manifest
+(the schema's catalogue entry) over a part of the machine draft, and applies
+the renderer's actions to the draft instead of sending them to a server.
+`ParameterForm` puts the two together. So the same widget renders an Econet
+transport's live panel in the Network mode and its parameters in the New
+Machine dialog.
+
+### The machine draft and the preset library
+
+The configurator's model is Qt-free, in `src/preset` (`beebium_linux_preset`,
+which links only nlohmann_json and the generated protos):
+
+- `PresetDocument` and `MachineDraft`: the document `resolve-preset --json`
+  returns, edited in place, each part judged changed against the resolved
+  baseline, serialised whole for a launch or a save.
+- `PresetResolution`: the resolved document and its diagnostics (severity,
+  JSON-pointer path, location, message); an error blocks Create.
+- `PresetSchema`: `describe-preset-schema` read as the editors need it:
+  controllers, sideways sockets and their aliasing, Econet station bounds,
+  attachment points, the extension catalogue, bundled images.
+- Per-section models, each tested against the server's own output:
+  `SidewaysDraft` (sockets, move up and down, revert), `ExtensionsDraft` (the
+  draft's extensions as a tree of attachment points, attached as the server
+  attaches them), `HardDiscsDraft`, `StartupLinks` (the startup byte seen
+  four ways), `EconetStation`, `StructuredItem` (a list parameter's items),
+  and `ParameterFormModel`.
+
+`PresetResolver` (in the application layer) asks the server again 300 ms
+after the last edit and drops any answer a later edit has overtaken. The New
+Machine dialog lays the sections out in the sidebar's order, launches the
+draft as a temporary preset through the same launcher a preset card uses,
+and can save it as a new preset with `import-preset`. Settings > Machines is
+the user's preset library: the built-in and the user's presets by release
+date then name, with Duplicate (`create-preset --from`), Export
+(`export-preset`), Delete (`delete-preset`) and Open Containing Folder.
+
+### Revealing a file
+
+Copy Path and Open Containing Folder appear wherever the client names a
+file: a drive's disc, a socket's ROM, a preset. `FileReveal` asks the file
+manager to show the file selected, with the freedesktop
+`org.freedesktop.FileManager1.ShowItems` call that Nautilus, Dolphin, Nemo,
+Thunar and PCManFM-Qt answer, and opens the containing folder when nothing
+answers. The Raspberry Pi Desktop's file manager, PCManFM 1.4 (GTK), does
+not offer the interface, so on a Pi the folder opens without the file
+selected. A path is revealed only when the server shares this filesystem and
+the path exists here (`frontend-local-server-gating.md`); otherwise the
+command is disabled with the reason as its tooltip.
+
+### Delivering a build to the Pi 400
+
+Builds for the Pi 400 are Release builds made on the Pi 5 build host from a
+copy of the working tree, and copied to the Pi 400, never built there. Each
+check stops the copy if it fails:
+
+1. the Release build's own tests pass;
+2. the protocol fingerprint in `ProtocolFingerprint.hpp` appears in the
+   binary. A copy of the tree that missed that header once shipped a client
+   with a stale fingerprint, which every current server refused;
+3. `beebium-display-bench`, under `QT_QPA_PLATFORM=vkkhrdisplay`, connects
+   to the server release the Pi 400 runs, draws real frames for two seconds
+   and saves one as a PNG.
+
+The bench's server is started for the check and stopped after it, whatever
+the outcome. Nothing is run on the Pi 400 as part of a delivery.
