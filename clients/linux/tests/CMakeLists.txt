@@ -336,6 +336,10 @@ beebium_linux_add_test(test_selection_input QT
     SOURCES test_selection_input.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_selection_overlay QT
+    SOURCES test_selection_overlay.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_selection_window QT
     SOURCES test_selection_window.cpp
     LIBRARIES beebium_linux_app)

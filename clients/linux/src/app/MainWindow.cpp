@@ -38,6 +38,7 @@
 #include "app/MappingCatalogue.hpp"
 #include "app/MemorySidebar.hpp"
 #include "app/SelectionCoordinator.hpp"
+#include "app/SelectionOverlayWidget.hpp"
 
 #include <QAction>
 #include <QMimeData>
@@ -707,6 +708,9 @@ void MainWindow::build_menus() {
 }
 
 MainWindow::~MainWindow() {
+    // The overlay draws from the coordinator, which goes before the display.
+    delete selection_overlay_;
+    selection_overlay_ = nullptr;
     selection_->cancel();
     display_->attach_selection(nullptr);
     // The keyboard's sender belongs to the session, which as the elder child
@@ -730,6 +734,7 @@ void MainWindow::show_verdict() {
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     if (watched == display_ && event->type() == QEvent::Resize) {
         overlay_->setGeometry(display_->rect());
+        selection_overlay_->setGeometry(display_->rect());
     }
     if (watched == frame_ && event->type() == QEvent::Resize) {
         place_overlays();
@@ -910,8 +915,14 @@ void MainWindow::build_selection() {
         std::fprintf(stderr, "beebium: the held screen expired, ending the selection\n");
         QApplication::beep();
     };
-    services.changed = [this] { display_->update(); };
+    services.changed = [this] {
+        if (selection_overlay_) {
+            selection_overlay_->refresh();
+        }
+    };
     selection_ = std::make_unique<SelectionCoordinator>(std::move(services));
+    selection_overlay_ = new SelectionOverlayWidget(*selection_, display_);
+    selection_overlay_->setGeometry(display_->rect());
     display_->attach_selection(selection_.get());
 }
 

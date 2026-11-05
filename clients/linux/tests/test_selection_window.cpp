@@ -93,6 +93,11 @@ TEST_CASE("A chord drag holds the screen; Escape releases it and the stream resu
     const QPointF centre(display.width() / 2.0, display.height() / 2.0);
     send_mouse(&display, QEvent::MouseButtonPress, centre, Qt::ControlModifier | Qt::AltModifier);
     CHECK(display.frozen());
+    auto* overlay = display.findChild<QWidget*>(QStringLiteral("selectionOverlay"));
+    REQUIRE(overlay);
+    CHECK(overlay->isVisible());
+    CHECK(overlay->testAttribute(Qt::WA_TransparentForMouseEvents));
+    CHECK(overlay->geometry() == display.rect());
     REQUIRE(wait_until([&] { return server.video.holds == 1; }));
     send_mouse(&display, QEvent::MouseMove, centre + QPointF(40, 20),
                Qt::ControlModifier | Qt::AltModifier);
@@ -103,6 +108,7 @@ TEST_CASE("A chord drag holds the screen; Escape releases it and the stream resu
     QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier, 1 + 8, 0, 0);
     QCoreApplication::sendEvent(&display, &escape);
     CHECK_FALSE(display.frozen());
+    CHECK_FALSE(overlay->isVisible());
     REQUIRE(wait_until([&] {
         std::lock_guard lock(server.video.screen_mutex);
         return server.video.released == std::vector<std::uint64_t>{42};

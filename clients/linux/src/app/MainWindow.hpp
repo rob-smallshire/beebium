@@ -34,6 +34,7 @@ class ConnectionRecovery;
 class DisplayWidget;
 class MachineSession;
 class SelectionCoordinator;
+class SelectionOverlayWidget;
 class SystemPowerMonitor;
 class DisplayFrame;
 class Sidebar;
@@ -146,6 +147,7 @@ private:
     // Screen text selection and copy (6.5).
     void build_selection();
     std::unique_ptr<SelectionCoordinator> selection_;
+    SelectionOverlayWidget* selection_overlay_ = nullptr;
     QWidget* status_strip_ = nullptr;
     IndicatorStrip* indicator_strip_ = nullptr;
     // An LED's related key, tapped (10).
