@@ -293,6 +293,7 @@ add_library(beebium_linux_app STATIC
     src/app/configuration/SectionWidgets.cpp
     src/app/configuration/AttachmentChooser.cpp
     src/app/configuration/AttachmentPointGroup.cpp
+    src/app/configuration/KeyboardSection.cpp
     src/app/configuration/MemorySection.cpp
     src/app/configuration/PeripheralsSection.cpp
     src/app/configuration/StorageSection.cpp

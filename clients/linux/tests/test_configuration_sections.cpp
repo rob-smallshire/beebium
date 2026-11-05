@@ -15,12 +15,14 @@
 
 #include "app/configuration/AttachmentChooser.hpp"
 #include "app/configuration/AttachmentPointGroup.hpp"
+#include "app/configuration/KeyboardSection.hpp"
 #include "app/configuration/MemorySection.hpp"
 #include "app/configuration/PeripheralsSection.hpp"
 #include "app/configuration/StorageSection.hpp"
 
 #include "ConfigurationFixture.hpp"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -412,4 +414,61 @@ TEST_CASE("The chooser shows the selected entry's needs and provides", "[configu
     chooser.list()->setCurrentRow(1);
     CHECK(chooser.detail()->text() == QStringLiteral("Needs: Unit, Port"));
     CHECK(chooser.chosen() == "x");
+}
+
+namespace {
+
+ordered_json model_b_with_startup() {
+    auto document = model_b_with_disc();
+    document["startup"] = ordered_json::parse(R"({"screen_mode": 7, "auto_boot": false})");
+    return document;
+}
+
+}  // namespace
+
+TEST_CASE("Keyboard shows the startup byte four ways", "[configuration][keyboard]") {
+    ConfigurationFixture f(model_b_with_startup());
+    auto* keyboard = f.section<KeyboardSection>();
+    CHECK(keyboard->screen_mode()->count() == 8);
+    CHECK(keyboard->screen_mode()->currentText() == QStringLiteral("7"));
+    CHECK_FALSE(keyboard->auto_boot()->isChecked());
+    REQUIRE(keyboard->link(7));
+    CHECK(keyboard->link(7)->text() == QStringLiteral("Link 1: Filing system"));
+    CHECK(keyboard->hex()->text() == QStringLiteral("FF"));
+    CHECK(keyboard->decimal()->text() == QStringLiteral("255"));
+    CHECK(f.section_names().contains(QStringLiteral("Keyboard")));
+}
+
+TEST_CASE("A screen mode or auto-boot writes the friendly pair", "[configuration][keyboard]") {
+    ConfigurationFixture f(model_b_with_startup());
+    auto* keyboard = f.section<KeyboardSection>();
+    Q_EMIT keyboard->screen_mode()->activated(keyboard->screen_mode()->findData(3));
+    keyboard->auto_boot()->click();
+    CHECK(*f.dialog->draft().get("/startup") == ordered_json::parse(R"({"screen_mode": 3, "auto_boot": true})"));
+    CHECK(keyboard->hex()->text() != QStringLiteral("FF"));
+    CHECK(f.section_names().contains(QStringLiteral("Keyboard \u2022")));
+}
+
+TEST_CASE("A link away from its default writes the whole byte", "[configuration][keyboard]") {
+    ConfigurationFixture f(model_b_with_startup());
+    auto* keyboard = f.section<KeyboardSection>();
+    keyboard->link(7)->click();
+    const auto startup = *f.dialog->draft().get("/startup");
+    REQUIRE(startup.contains("links"));
+    CHECK_FALSE(startup.contains("screen_mode"));
+    CHECK(keyboard->decimal()->text() == QString::number(startup["links"].get<int>()));
+    // And back by the byte.
+    keyboard->hex()->setText(QStringLiteral("&FF"));
+    Q_EMIT keyboard->hex()->editingFinished();
+    CHECK(*f.dialog->draft().get("/startup") == ordered_json::parse(R"({"screen_mode": 7, "auto_boot": false})"));
+    CHECK(keyboard->hex()->text() == QStringLiteral("FF"));
+}
+
+TEST_CASE("A refused byte shows the byte as it is", "[configuration][keyboard]") {
+    ConfigurationFixture f(model_b_with_startup());
+    auto* keyboard = f.section<KeyboardSection>();
+    keyboard->decimal()->setText(QStringLiteral("256"));
+    Q_EMIT keyboard->decimal()->editingFinished();
+    CHECK(keyboard->decimal()->text() == QStringLiteral("255"));
+    CHECK_FALSE(f.dialog->draft().changed("/startup"));
 }

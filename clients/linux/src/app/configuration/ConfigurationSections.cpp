@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include "app/NewMachineDialog.hpp"
+#include "app/configuration/KeyboardSection.hpp"
 #include "app/configuration/MemorySection.hpp"
 #include "app/configuration/PeripheralsSection.hpp"
 #include "app/configuration/StorageSection.hpp"
@@ -34,6 +35,10 @@ configuration_section_makers() {
             const auto& schema = dialog.schema();
             return schema && PeripheralsSection::applies(*schema) ? new PeripheralsSection(dialog)
                                                                   : nullptr;
+        },
+        [](NewMachineDialog& dialog) -> ConfigurationSection* {
+            const auto& schema = dialog.schema();
+            return schema && LinksLayout::from_schema(*schema) ? new KeyboardSection(dialog) : nullptr;
         },
     };
 }
