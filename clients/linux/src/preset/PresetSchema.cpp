@@ -169,6 +169,32 @@ std::vector<SchemaFdcOption> PresetSchema::fdc_options() const {
     return out;
 }
 
+std::vector<SchemaSocket> PresetSchema::sockets() const {
+    std::vector<SchemaSocket> out;
+    const ordered_json* s = section("sideways_bank");
+    if (!s) {
+        return out;
+    }
+    for (const auto& socket : s->value("sockets", ordered_json::array())) {
+        SchemaSocket made;
+        made.label = text(socket, "label");
+        for (const auto& slot : socket.value("slots", ordered_json::array())) {
+            if (slot.is_number_integer()) {
+                made.slots.push_back(slot.get<int>());
+            }
+        }
+        made.capabilities = strings(socket, "capabilities");
+        made.runtime_configurable = flag(socket, "runtime_configurable");
+        out.push_back(std::move(made));
+    }
+    return out;
+}
+
+bool PresetSchema::has_aliasing() const {
+    const ordered_json* s = section("sideways_bank");
+    return s && flag(*s, "has_aliasing");
+}
+
 std::optional<SchemaStation> PresetSchema::station() const {
     const ordered_json* s = section("econet");
     if (!s || !s->contains("station") || !(*s)["station"].is_object()) {

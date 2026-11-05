@@ -110,6 +110,31 @@ struct SchemaBundledImage {
     std::string extension;  // the extension it belongs to; empty for any
 };
 
+// A physical sideways socket and the slots that answer to it.
+struct SchemaSocket {
+    std::string label;
+    std::vector<int> slots;
+    std::vector<std::string> capabilities;  // "rom", "ram", "empty", "write_protect"
+    bool runtime_configurable = false;
+
+    bool can(std::string_view capability) const {
+        for (const auto& c : capabilities) {
+            if (c == capability) {
+                return true;
+            }
+        }
+        return false;
+    }
+    // The MOS looks from slot 15 down: a socket ranks by its highest slot.
+    int priority() const {
+        int highest = -1;
+        for (int slot : slots) {
+            highest = slot > highest ? slot : highest;
+        }
+        return highest;
+    }
+};
+
 struct SchemaFdcOption {
     std::string id;
     std::string label;
@@ -137,6 +162,10 @@ public:
     std::string section_label(std::string_view type) const;
 
     std::vector<SchemaFdcOption> fdc_options() const;
+    // The sideways sockets, in the server's order, and whether any answers
+    // at several slots.
+    std::vector<SchemaSocket> sockets() const;
+    bool has_aliasing() const;
     std::optional<SchemaStation> station() const;
     std::vector<SchemaAttachmentPoint> attachment_points() const;
     // Every extension and transport the model can take.
