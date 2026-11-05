@@ -38,7 +38,8 @@ public:
     explicit ProcessorSection(NewMachineDialog& dialog);
 
     SidebarMode mode() const override { return SidebarMode::processor; }
-    std::vector<std::string> pointers() const override { return {"/speed"}; }
+    // The speed, and the Tube's extensions.
+    bool changed() const override;
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
 

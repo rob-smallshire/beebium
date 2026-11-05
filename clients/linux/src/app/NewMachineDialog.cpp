@@ -398,10 +398,7 @@ void NewMachineDialog::update_markers() {
     for (int row = 0; row < sections_list_->count() && row < static_cast<int>(sections_.size());
          ++row) {
         ConfigurationSection* section = sections_[static_cast<std::size_t>(row)];
-        bool changed = false;
-        for (const auto& pointer : section->pointers()) {
-            changed = changed || draft_.changed(pointer);
-        }
+        const bool changed = section->changed();
         const QString label = sidebar_mode_label(section->mode());
         sections_list_->item(row)->setText(changed ? label + QStringLiteral(" •") : label);
     }

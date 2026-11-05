@@ -651,3 +651,17 @@ TEST_CASE("A floppy drive's Clear empties it", "[configuration][storage]") {
     CHECK(f.dialog->draft().json()["storage"]["floppy_drives"][0]["image_uri"].is_null());
     CHECK(storage->drive_field(0)->text().isEmpty());
 }
+
+TEST_CASE("A Tube change marks Processor, not Peripherals; a disc marks Storage",
+          "[configuration][markers]") {
+    ConfigurationFixture f(model_b_with_extensions(R"([{"name": "acorn-65c02-coprocessor"}])"));
+    auto* processor = f.section<ProcessorSection>();
+    f.pick = "acorn-65c102-coprocessor";
+    processor->tube()->change_button("acorn-65c02-coprocessor")->click();
+    REQUIRE(wait_until([&] { return f.section_names().contains(QStringLiteral("Processor \u2022")); }));
+    CHECK(f.section_names().contains(QStringLiteral("Peripherals")));
+    CHECK(f.section_names().contains(QStringLiteral("Storage")));
+    f.section<StorageSection>()->add_disc()->click();
+    REQUIRE(wait_until([&] { return f.section_names().contains(QStringLiteral("Storage \u2022")); }));
+    CHECK(f.section_names().contains(QStringLiteral("Peripherals \u2022")));  // an adapter and disc
+}

@@ -39,7 +39,7 @@ public:
     explicit KeyboardSection(NewMachineDialog& dialog);
 
     SidebarMode mode() const override { return SidebarMode::keyboard; }
-    std::vector<std::string> pointers() const override { return {"/startup"}; }
+    bool changed() const override { return dialog_.draft().changed("/startup"); }
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
 

@@ -13,6 +13,8 @@
 #include "app/configuration/SectionWidgets.hpp"
 
 #include <QPalette>
+
+#include <algorithm>
 #include <QUrl>
 
 namespace beebium::linux_client {
@@ -56,6 +58,23 @@ void DiagnosticLine::show_for(const std::vector<PresetDiagnostic>& diagnostics,
     setPalette(palette);
     setText(lines.join(QLatin1Char('\n')));
     setVisible(!lines.isEmpty());
+}
+
+std::vector<std::string> point_extensions(const std::optional<PresetSchema>& schema,
+                                          const std::string& point) {
+    if (schema) {
+        for (const auto& p : schema->attachment_points()) {
+            if (p.id == point) {
+                return p.extensions;
+            }
+        }
+    }
+    return {};
+}
+
+bool names_one_of(const nlohmann::ordered_json& entry, const std::vector<std::string>& names) {
+    const std::string name = entry.is_object() ? entry.value("name", std::string()) : std::string();
+    return std::find(names.begin(), names.end(), name) != names.end();
 }
 
 QString path_of_uri(const std::string& uri) {

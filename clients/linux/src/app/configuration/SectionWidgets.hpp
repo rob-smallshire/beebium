@@ -14,6 +14,9 @@
 #define BEEBIUM_LINUX_APP_CONFIGURATION_SECTION_WIDGETS_HPP
 
 #include "preset/PresetResolution.hpp"
+#include "preset/PresetSchema.hpp"
+
+#include <optional>
 
 #include <QLabel>
 #include <QString>
@@ -38,6 +41,13 @@ public:
 };
 
 // A file:// URI's path, else the reference as written (a bundled name).
+// The extensions a schema's point takes, for judging a section's part of
+// the draft's extensions.
+std::vector<std::string> point_extensions(const std::optional<PresetSchema>& schema,
+                                          const std::string& point);
+// Whether an extension entry names one of the extensions given.
+bool names_one_of(const nlohmann::ordered_json& entry, const std::vector<std::string>& names);
+
 QString path_of_uri(const std::string& uri);
 std::string uri_of_path(const QString& path);
 

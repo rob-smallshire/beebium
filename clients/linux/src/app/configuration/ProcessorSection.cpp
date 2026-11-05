@@ -126,6 +126,13 @@ void ProcessorSection::show_speed() {
     }
 }
 
+bool ProcessorSection::changed() const {
+    const auto tube = point_extensions(dialog_.schema(), TUBE);
+    return dialog_.draft().changed("/speed") ||
+           dialog_.draft().changed_where("/extensions",
+                                         [&](const ordered_json& entry) { return names_one_of(entry, tube); });
+}
+
 void ProcessorSection::set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) {
     diagnostics_ = diagnostics;
     if (tube_) {

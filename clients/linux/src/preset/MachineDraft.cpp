@@ -66,6 +66,22 @@ bool MachineDraft::changed(const std::string& pointer) const {
     return !equivalent(now ? *now : none, then ? *then : none);
 }
 
+bool MachineDraft::changed_where(const std::string& pointer,
+                                 const std::function<bool(const ordered_json& item)>& keep) const {
+    const auto kept = [&](const ordered_json* array) {
+        ordered_json out = ordered_json::array();
+        if (array && array->is_array()) {
+            for (const auto& item : *array) {
+                if (keep(item)) {
+                    out.push_back(item);
+                }
+            }
+        }
+        return out;
+    };
+    return !equivalent(kept(at(json_, pointer)), kept(at(baseline_, pointer)));
+}
+
 void MachineDraft::revert(const std::string& pointer) {
     if (pointer.empty()) {
         json_ = baseline_;

@@ -41,7 +41,8 @@ public:
     explicit StorageSection(NewMachineDialog& dialog);
 
     SidebarMode mode() const override { return SidebarMode::storage; }
-    std::vector<std::string> pointers() const override { return {"/storage"}; }
+    // The drives, and the hard discs and their adapters.
+    bool changed() const override;
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
 

@@ -15,6 +15,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -44,6 +45,10 @@ public:
     // document, "") differs from the document as resolved, nulls counting
     // as absent.
     bool changed(const std::string& pointer = {}) const;
+    // Whether the items of the array at a pointer that are kept differ,
+    // in order, from those kept as resolved.
+    bool changed_where(const std::string& pointer,
+                       const std::function<bool(const nlohmann::ordered_json& item)>& keep) const;
     // Put the part at a pointer back as it was resolved.
     void revert(const std::string& pointer);
 

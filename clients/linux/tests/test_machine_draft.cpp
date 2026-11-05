@@ -88,3 +88,15 @@ TEST_CASE("Null and absent are the same to a section's change", "[preset][draft]
     CHECK_FALSE(draft.changed());
     CHECK(draft.json() == resolved());
 }
+
+TEST_CASE("Part of an array is judged changed by the items kept", "[preset][draft]") {
+    MachineDraft draft(ordered_json::parse(R"({"model": "model-b", "extensions": [
+        {"name": "acorn-65c02-coprocessor"}, {"name": "acorn-rtc"}]})"));
+    const auto tube = [](const ordered_json& item) {
+        return item.value("name", std::string()).find("coprocessor") != std::string::npos;
+    };
+    const auto others = [&](const ordered_json& item) { return !tube(item); };
+    draft.set("/extensions", ordered_json::parse(R"([{"name": "acorn-rtc"}, {"name": "acorn-65c102-coprocessor"}])"));
+    CHECK(draft.changed_where("/extensions", tube));
+    CHECK_FALSE(draft.changed_where("/extensions", others));
+}

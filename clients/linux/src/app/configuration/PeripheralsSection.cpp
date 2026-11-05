@@ -113,6 +113,12 @@ void PeripheralsSection::set_diagnostics(const std::vector<PresetDiagnostic>& di
     diagnostic_->show_for(unplaced, "/extensions");
 }
 
+bool PeripheralsSection::changed() const {
+    const auto tube = point_extensions(dialog_.schema(), PROCESSOR_POINTS.front());
+    return dialog_.draft().changed_where(
+        "/extensions", [&](const nlohmann::ordered_json& entry) { return !names_one_of(entry, tube); });
+}
+
 AttachmentPointGroup* PeripheralsSection::group(const std::string& point) const {
     for (auto* g : groups_) {
         if (g->point().id == point) {

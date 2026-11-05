@@ -40,7 +40,7 @@ public:
     explicit MemorySection(NewMachineDialog& dialog);
 
     SidebarMode mode() const override { return SidebarMode::memory; }
-    std::vector<std::string> pointers() const override { return {"/sideways_bank"}; }
+    bool changed() const override { return dialog_.draft().changed("/sideways_bank"); }
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
 

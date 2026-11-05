@@ -101,8 +101,9 @@ class ConfigurationSection : public QWidget {
 public:
     using QWidget::QWidget;
     virtual SidebarMode mode() const = 0;
-    // The draft's parts this section edits, for its changed marker.
-    virtual std::vector<std::string> pointers() const = 0;
+    // Whether the part of the draft this section edits differs from the
+    // preset as resolved, for its changed marker.
+    virtual bool changed() const = 0;
     // The draft or the schema is new: show them afresh.
     virtual void reload() = 0;
     virtual void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) {

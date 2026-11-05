@@ -43,7 +43,7 @@ public:
     explicit NetworkSection(NewMachineDialog& dialog);
 
     SidebarMode mode() const override { return SidebarMode::network; }
-    std::vector<std::string> pointers() const override { return {"/econet"}; }
+    bool changed() const override { return dialog_.draft().changed("/econet"); }
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
 

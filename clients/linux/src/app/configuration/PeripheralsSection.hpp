@@ -39,7 +39,8 @@ public:
     static bool applies(const PresetSchema& schema);
 
     SidebarMode mode() const override { return SidebarMode::peripherals; }
-    std::vector<std::string> pointers() const override { return {"/extensions"}; }
+    // Its extensions: all but the Tube's.
+    bool changed() const override;
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
 

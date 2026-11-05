@@ -197,6 +197,19 @@ void StorageSection::set_image(int drive, const QString& path) {
     Q_EMIT edited();
 }
 
+bool StorageSection::changed() const {
+    if (dialog_.draft().changed("/storage")) {
+        return true;
+    }
+    if (!hard_disc_draft_) {
+        return false;
+    }
+    const auto& capability = hard_disc_draft_->capability();
+    const std::vector<std::string> names{capability.disc, capability.adapter};
+    return dialog_.draft().changed_where(
+        "/extensions", [&](const ordered_json& entry) { return names_one_of(entry, names); });
+}
+
 void StorageSection::disc_edited() {
     // Redrawn once the control that asked has finished.
     QTimer::singleShot(0, this, [this] { show_hard_discs(); });
