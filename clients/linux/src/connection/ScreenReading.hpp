@@ -91,6 +91,15 @@ struct ScreenReading {
     std::uint64_t frame_number = 0;
 };
 
+// Why a reading came back empty-handed: the hold it named has gone (expired
+// or released), or the call failed, in the server's words.
+struct ScreenReadFailure {
+    bool hold_lost = false;
+    std::string message;
+};
+
+using ScreenReadResult = std::variant<ScreenReading, ScreenReadFailure>;
+
 // A held screen: the id later reads name, its grid, and the still when it
 // was asked for.
 struct HeldScreen {

@@ -123,7 +123,7 @@ TEST_CASE("A read of a released or expired hold says the hold is gone",
     const auto* failure = std::get_if<ScreenReadFailure>(&after_release);
     REQUIRE(failure != nullptr);
     CHECK(failure->hold_lost);
-    CHECK(failure->message == QStringLiteral("no screen is held under that id"));
+    CHECK(failure->message == "no screen is held under that id");
     {
         std::lock_guard lock(server.video.screen_mutex);
         CHECK(server.video.released == std::vector<std::uint64_t>{42});

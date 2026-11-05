@@ -16,12 +16,10 @@
 #include "connection/ScreenReading.hpp"
 
 #include <QObject>
-#include <QString>
 
 #include <functional>
 #include <memory>
 #include <optional>
-#include <variant>
 
 namespace grpc {
 class Channel;
@@ -34,15 +32,6 @@ class GetScreenTextRequest;
 namespace beebium::linux_client {
 
 class RpcWorker;
-
-// Why a reading came back empty-handed: the hold it named has gone (expired
-// or released), or the call failed, in the server's words.
-struct ScreenReadFailure {
-    bool hold_lost = false;
-    QString message;
-};
-
-using ScreenReadResult = std::variant<ScreenReading, ScreenReadFailure>;
 
 // A machine window's screen text calls (client specification 6.5): holding
 // the screen with its still, reading text from it or from the live screen,

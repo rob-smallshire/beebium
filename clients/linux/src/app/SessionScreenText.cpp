@@ -108,7 +108,7 @@ void SessionScreenText::read(const beebium::GetScreenTextRequest& request, ReadD
             status.ok() ? ScreenReadResult{screen_reading(wire)}
                         : ScreenReadResult{ScreenReadFailure{
                               status.error_code() == grpc::StatusCode::NOT_FOUND,
-                              QString::fromStdString(status.error_message())}};
+                              status.error_message()}};
         answer<ScreenReadResult>(generation, std::move(done), std::move(result));
     });
 }
