@@ -194,6 +194,14 @@ HostModifiers alt_or_meta_of(const QKeyEvent& event) {
     return held;
 }
 
+// A modifier key pressed with Alt held: the host's, never the machine's.
+// Alt is the screen text selection's modifier and every Alt chord is the
+// window's, so a SHIFT or CTRL pressed under it would only be left down on
+// the machine.
+bool modifier_under_alt(HostModifiers modifier, HostModifiers held, const QKeyEvent& event) {
+    return modifier != 0 && ((held | alt_or_meta_of(event)) & MODIFIER_ALT);
+}
+
 }  // namespace
 
 bool KeyboardInput::window_chord(const QKeyEvent& event) const {
@@ -210,7 +218,8 @@ bool KeyboardInput::takes(const QKeyEvent& event) const {
         return false;
     }
     const auto host_key = host_key_from_event(event, held_modifiers());
-    if (!host_key) {
+    if (!host_key ||
+        modifier_under_alt(modifier_for_code(host_key->code), held_modifiers(), event)) {
         return false;
     }
     if (host_key->code == "CapsLock" && caps_lock_sync_enabled()) {
@@ -248,10 +257,11 @@ bool KeyboardInput::key_press(const QKeyEvent& event) {
     }
     // Tracked before resolving anything else, mapped or not: a later key's
     // `with` is decided by it.
-    if (const HostModifiers modifier = modifier_for_code(host_key->code)) {
+    const HostModifiers modifier = modifier_for_code(host_key->code);
+    if (modifier != 0) {
         host_modifiers_down_[key_id(event)] = modifier;
     }
-    if (!send_ || window_chord(event)) {
+    if (!send_ || window_chord(event) || modifier_under_alt(modifier, held_modifiers(), event)) {
         return false;
     }
     // A synchronised Caps Lock is a toggle with its own path, never a held

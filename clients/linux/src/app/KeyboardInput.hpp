@@ -88,7 +88,9 @@ public:
     // for deciding shortcut overrides. Not while detached; never F11 (full
     // screen); and not with Alt or Meta held unless the mapping binds this
     // key with one of them, Alt being the host's menu key here
-    // (frontend-modifier-keys.md R5).
+    // (frontend-modifier-keys.md R5). A modifier key pressed with Alt held
+    // is never the machine's: Alt is the selection modifier, and its chords
+    // are the window's.
     bool takes(const QKeyEvent& event) const;
     // A key other than a modifier, pressed with Alt or Meta, that the mapping
     // does not bind with either: the window's. The BBC Micro has neither

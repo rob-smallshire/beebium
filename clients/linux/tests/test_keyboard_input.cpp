@@ -225,6 +225,37 @@ TEST_CASE("An Alt chord the mapping binds stays the machine's", "[keyboard][qt]"
     CHECK(input.takes(f12));
 }
 
+TEST_CASE("With Alt held, Shift and Ctrl are the host's and never reach the machine",
+          "[keyboard][qt][selection]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    input.key_press(press(Qt::Key_Alt, XKB_LEFT_ALT, {}, Qt::AltModifier));
+    CHECK_FALSE(input.key_press(
+        press(Qt::Key_Shift, XKB_LEFT_SHIFT, {}, Qt::AltModifier | Qt::ShiftModifier)));
+    CHECK_FALSE(input.takes(
+        press(Qt::Key_Shift, XKB_LEFT_SHIFT, {}, Qt::AltModifier | Qt::ShiftModifier)));
+    CHECK_FALSE(input.key_press(
+        press(Qt::Key_Control, XKB_LEFT_CONTROL, {}, Qt::AltModifier | Qt::ControlModifier)));
+    CHECK(input.held_modifiers() == (MODIFIER_ALT | MODIFIER_SHIFT | MODIFIER_CONTROL));
+    CHECK(wire.events.empty());
+    CHECK(input.held_keys().empty());
+    // Their key-ups send nothing either.
+    CHECK_FALSE(input.key_release(release(Qt::Key_Control, XKB_LEFT_CONTROL, {}, Qt::AltModifier)));
+    CHECK_FALSE(input.key_release(release(Qt::Key_Shift, XKB_LEFT_SHIFT, {}, Qt::AltModifier)));
+    CHECK(wire.events.empty());
+    // A key the mapping binds with Alt is still the machine's: Alt+F12 is
+    // Break under Logical.
+    CHECK(input.key_press(press(Qt::Key_F12, XKB_F12, {}, Qt::AltModifier)));
+    CHECK(wire.events == std::vector<WireEvent>{{WireAction::break_down, 0}});
+    input.key_release(release(Qt::Key_F12, XKB_F12, {}, Qt::AltModifier));
+    input.key_release(release(Qt::Key_Alt, XKB_LEFT_ALT));
+    // Alt up, Shift is the machine's again.
+    wire.events.clear();
+    CHECK(input.key_press(press(Qt::Key_Shift, XKB_LEFT_SHIFT, {}, Qt::ShiftModifier)));
+    CHECK_FALSE(wire.events.empty());
+}
+
 TEST_CASE("Ctrl and Shift chords without Alt or Meta are the machine's", "[keyboard][qt]") {
     Wire wire;
     KeyboardInput input;
