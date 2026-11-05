@@ -603,7 +603,7 @@ What it says:
 
 ## 11. As built
 
-The client as it stands, built test-first: about 745 Catch2 test cases, run
+The client as it stands, built test-first: about 757 Catch2 test cases, run
 headless under the offscreen platform. Sections 1 to 9 describe how it is
 built; this section records what it presents, and where it follows the macOS
 client or departs from it.
@@ -635,7 +635,9 @@ mode shows the same unavailable banner and dims its content.
 The rule of section 3 holds: every machine-window shortcut carries Meta or
 Alt, never Ctrl or Shift alone, and each has a Meta form and a Ctrl+Alt
 form, the Meta form shown first on the Raspberry Pi Desktop. The home window
-has no machine, so it keeps the desktop's Ctrl forms.
+has no machine, so it keeps the desktop's Ctrl forms. The three copies of the
+screen's text are the exception: they carry Alt, the selection modifier, with
+the selection's own qualifiers, and have one binding each on every desktop.
 
 | Command | Meta form | Other form |
 |---------|-----------|------------|
@@ -648,9 +650,9 @@ has no machine, so it keeps the desktop's Ctrl forms.
 | Close Window | Meta+W | Ctrl+Alt+W (Ctrl+W at home) |
 | Quit | Meta+Q | Ctrl+Alt+Q (Ctrl+Q at home) |
 | Paste | Meta+V | Ctrl+Alt+V |
-| Copy | Meta+C | Ctrl+Alt+C |
-| Copy as Columns | Meta+Alt+C | none (menu only) |
-| Copy Text from Graphics | Meta+Shift+C | Ctrl+Alt+Shift+C |
+| Copy | Alt+C (one binding) | |
+| Copy as Columns | Alt+Meta+C (one binding) | |
+| Copy Text from Graphics | Alt+Shift+C (one binding) | |
 | Switch to Previous Keyboard Mapping | Meta+K | Ctrl+Alt+K |
 | A sidebar mode | Meta+1 to Meta+8 | Ctrl+Alt+1 to Ctrl+Alt+8 |
 | Show Sidebar | Meta+Alt+S | Ctrl+Alt+0 |
@@ -660,8 +662,13 @@ has no machine, so it keeps the desktop's Ctrl forms.
 | Show Beebium (the home window) | Meta+Shift+H | Ctrl+Alt+H |
 
 F11 is the desktop's full screen. Rename Machine... and Move To... have no
-shortcut. Copy as Columns has no Ctrl+Alt form because Alt, its qualifier,
-cannot be added to a chord that already holds it.
+shortcut. Alt+Meta+C is the macOS client's Option+Command+C.
+
+Alt and the menu bar. Qt Widgets' menu bar arms its keyboard mode on a lone
+Alt press and takes focus when Alt comes up, so the key-up goes to the menu
+bar, not the display. With the display focused, a lone Alt or Meta is
+overridden there, so the menu bar never arms from it; Alt with a menu's
+mnemonic letter (Alt+E for Edit) still opens that menu.
 
 ### Extension views, and the configurator that reuses them
 
@@ -732,17 +739,23 @@ is the server's; the client never reads pixels.
 The gesture. A plain drag stays the machine's. The macOS client selects on a
 Command-drag, but on Linux both reference desktops take a Super-drag to move
 the window (labwc binds it in its default `rc.xml`, mutter by its
-`mouse-button-modifier`), so the gesture follows the shortcut rule: a
-Ctrl+Alt drag everywhere, and a Meta drag where the desktop lets it through.
-Modifiers held beyond the chord choose the reading, Shift for anywhere and
-Alt for columns, Shift winning. After the button comes up the selection stays
-live and any modifier qualifies, except a chord key still held from the drag,
-which counts only once it has been let go and pressed again: otherwise
-letting go of the mouse before Ctrl+Alt would flip the selection to columns.
-While a selection is live its modifiers are tracked but never sent, so Shift
-and Ctrl, which are BBC keys, do not reach the machine; beginning one also
-releases what the chord pressed on the machine on its way down. Escape and a
-plain click end it and reach nothing; other keys still type.
+`mouse-button-modifier`; labwc matches a binding's modifiers exactly, so
+Super with others held is not taken). The selection modifier is Alt, which
+the BBC Micro lacks: an Alt drag selects rows, Alt+Meta columns and Alt+Shift
+anywhere, Shift winning; Alt itself and Ctrl qualify nothing. The qualifiers
+are read from every mouse and key event as it arrives, a modifier key's own
+flag set by its press and cleared by its release, never kept from presses and
+releases, so a release that went elsewhere leaves nothing latched. After the
+button comes up the selection stays live and the same rule previews the
+reading: Meta held for columns, Shift for anywhere, nothing for rows. While a
+selection is live its modifier keys are tracked but never sent, so Shift and
+Ctrl, which are BBC keys, do not reach the machine; beginning one also
+releases what reached the machine before Alt went down. Whether or not a
+selection is live, a modifier key pressed with Alt held is the host's, and
+Alt with any key the mapping does not bind with Alt is the window's; keys a
+mapping binds with Alt (Logical's Alt+F12 for Break) stay the machine's.
+Escape and a plain click end a selection and reach nothing; other keys still
+type.
 
 The hold. A drag freezes the display at once (the stream's frames wait in the
 mailbox, the latest replacing the rest), asks `HoldScreen` for the still and
@@ -787,7 +800,10 @@ with a beep, the display running on.
 The overlay is a transparent child of the display that takes no input,
 painted in the palette's highlight: the range at a quarter, the cells that
 will copy at a half on top, and for anywhere the marquee as a one-pixel
-outline.
+outline. A small label in the same tint names the reading, Rows, Columns or
+Anywhere, and follows the qualifiers as they change. It sits behind the corner
+the drag began from, clear of the selected cells, flipping to the selection's
+other side or beside it where the widget's edge leaves no room.
 
 ### Delivering a build to the Pi 400
 
