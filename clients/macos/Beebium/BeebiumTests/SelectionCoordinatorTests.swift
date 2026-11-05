@@ -355,6 +355,57 @@ final class SelectionCoordinatorTests: XCTestCase {
         ])
     }
 
+    // MARK: - Interpretation label (the overlay badge)
+
+    func testInterpretationLabelTextMatchesTheCommand() {
+        XCTAssertEqual(ScreenSelectionInterpretation.rows.overlayLabel, "Rows")
+        XCTAssertEqual(ScreenSelectionInterpretation.rectangle.overlayLabel, "Columns")
+        XCTAssertEqual(ScreenSelectionInterpretation.anywhere.overlayLabel, "Anywhere")
+    }
+
+    func testLabelSitsAboveASelectionAnchoredAtItsTop() {
+        let view = CGRect(x: 0, y: 0, width: 600, height: 400)
+        let selection = CGRect(x: 100, y: 150, width: 200, height: 120)
+        let labelSize = CGSize(width: 70, height: 16)
+        // The drag started at the top-left corner and grew down, so the label
+        // goes above the selection.
+        let origin = SelectionOverlayView.interpretationLabelOrigin(
+            anchor: CGPoint(x: 100, y: 150), selection: selection,
+            labelSize: labelSize, viewBounds: view)
+        let frame = CGRect(origin: origin, size: labelSize)
+        XCTAssertFalse(frame.intersects(selection), "never covers the selection")
+        XCTAssertLessThanOrEqual(frame.maxY, selection.minY, "placed above it")
+        XCTAssertTrue(view.contains(frame), "stays within the view")
+    }
+
+    func testLabelSitsBelowASelectionAnchoredAtItsBottom() {
+        let view = CGRect(x: 0, y: 0, width: 600, height: 400)
+        let selection = CGRect(x: 100, y: 150, width: 200, height: 120)
+        let labelSize = CGSize(width: 70, height: 16)
+        // The drag started low and grew up, so the label goes below.
+        let origin = SelectionOverlayView.interpretationLabelOrigin(
+            anchor: CGPoint(x: 300, y: 270), selection: selection,
+            labelSize: labelSize, viewBounds: view)
+        let frame = CGRect(origin: origin, size: labelSize)
+        XCTAssertFalse(frame.intersects(selection), "never covers the selection")
+        XCTAssertGreaterThanOrEqual(frame.minY, selection.maxY, "placed below it")
+        XCTAssertTrue(view.contains(frame), "stays within the view")
+    }
+
+    func testLabelIsClampedIntoTheViewWhenThereIsNoRoom() {
+        let view = CGRect(x: 0, y: 0, width: 600, height: 400)
+        // A selection flush to the top edge with its anchor at the top leaves no
+        // room above: the label is clamped into the view rather than drawn off
+        // the top.
+        let selection = CGRect(x: 0, y: 0, width: 200, height: 100)
+        let labelSize = CGSize(width: 70, height: 16)
+        let origin = SelectionOverlayView.interpretationLabelOrigin(
+            anchor: CGPoint(x: 0, y: 0), selection: selection,
+            labelSize: labelSize, viewBounds: view)
+        let frame = CGRect(origin: origin, size: labelSize)
+        XCTAssertTrue(view.contains(frame), "clamped fully into the view")
+    }
+
     // MARK: - Interpretation to search
 
     func testInterpretationChoosesTheSearch() {

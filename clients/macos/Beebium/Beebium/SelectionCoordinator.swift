@@ -174,6 +174,17 @@ enum ScreenSelectionInterpretation: Equatable {
         case .anywhere: return .anywhere
         }
     }
+
+    /// The word the overlay shows while this interpretation is live, so the
+    /// user can see which of the three a drag will copy. "Columns" rather than
+    /// "Rectangle" to match the Copy as Columns command it stands for.
+    var overlayLabel: String {
+        switch self {
+        case .rows: return "Rows"
+        case .rectangle: return "Columns"
+        case .anywhere: return "Anywhere"
+        }
+    }
 }
 
 // MARK: - Seams
@@ -303,6 +314,11 @@ final class SelectionCoordinator: ObservableObject {
     /// read-only so the overlay can map highlight rectangles from frame pixels
     /// to view coordinates.
     private(set) var frozenGeometry: ScreenRenderGeometry?
+
+    /// The drag's anchor (start) corner in frame pixels, exposed so the view
+    /// can map it and the overlay can place its interpretation label by that
+    /// corner. nil when no selection is live.
+    var anchorFramePixel: CGPoint? { anchorFrame }
 
     /// The view's current size, set by the view as it is laid out.
     ///

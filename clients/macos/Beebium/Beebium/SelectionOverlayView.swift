@@ -43,6 +43,25 @@ final class SelectionOverlayView: NSView {
         didSet { needsDisplay = true }
     }
 
+    /// The word for the live interpretation ("Rows" / "Columns" / "Anywhere"),
+    /// or nil to draw none. Shown by the anchor corner so the user can see, and
+    /// watch change as they hold a modifier, which of the three a copy will take.
+    var interpretationLabel: String? {
+        didSet { needsDisplay = true }
+    }
+
+    /// The drag's anchor corner, in this view's coordinates: where the label is
+    /// pinned.
+    var selectionAnchor: CGPoint? {
+        didSet { needsDisplay = true }
+    }
+
+    /// The selection's bounding rectangle, in this view's coordinates, kept
+    /// clear of the label so it never covers the cells a copy will take.
+    var selectionBounds: CGRect? {
+        didSet { needsDisplay = true }
+    }
+
     override var isFlipped: Bool { true }
 
     /// The overlay is a passive decoration; clicks and drags must reach the
@@ -73,5 +92,56 @@ final class SelectionOverlayView: NSView {
             // Inset by half a line so the 1px stroke sits inside the rectangle.
             context.stroke(marquee.insetBy(dx: 0.5, dy: 0.5))
         }
+
+        if let label = interpretationLabel, let anchor = selectionAnchor {
+            drawInterpretationLabel(label, anchor: anchor, tint: tint)
+        }
+    }
+
+    /// Draw the interpretation word as a small pill by the anchor corner. White
+    /// on the selection tint, the system's small-label font, placed clear of the
+    /// selected cells (see `interpretationLabelOrigin`).
+    private func drawInterpretationLabel(_ text: String, anchor: CGPoint,
+                                         tint: NSColor) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            .foregroundColor: NSColor.white,
+        ]
+        let attributed = NSAttributedString(string: text, attributes: attributes)
+        let textSize = attributed.size()
+        let padding = CGSize(width: 7, height: 3)
+        let labelSize = CGSize(width: ceil(textSize.width) + padding.width * 2,
+                               height: ceil(textSize.height) + padding.height * 2)
+
+        let selection = selectionBounds ?? CGRect(origin: anchor, size: .zero)
+        let origin = Self.interpretationLabelOrigin(
+            anchor: anchor, selection: selection, labelSize: labelSize,
+            viewBounds: bounds)
+        let labelRect = CGRect(origin: origin, size: labelSize)
+
+        let pill = NSBezierPath(roundedRect: labelRect, xRadius: 4, yRadius: 4)
+        tint.withAlphaComponent(0.9).setFill()
+        pill.fill()
+        attributed.draw(at: CGPoint(x: labelRect.minX + padding.width,
+                                    y: labelRect.minY + padding.height))
+    }
+
+    /// Where to draw the interpretation label: outside the selection on the
+    /// anchor's side -- above it when the anchor is in its top half, below it
+    /// otherwise -- pinned horizontally to the anchor and clamped so the whole
+    /// label stays within the view. Keeping it beyond the selection's top or
+    /// bottom edge means it never covers a selected cell (except in the corner
+    /// case where the selection leaves no room and the clamp wins). Pure, so the
+    /// placement is unit-tested without a window.
+    static func interpretationLabelOrigin(anchor: CGPoint, selection: CGRect,
+                                          labelSize: CGSize, viewBounds: CGRect,
+                                          margin: CGFloat = 6) -> CGPoint {
+        let aboveAnchor = anchor.y <= selection.midY
+        var y = aboveAnchor ? selection.minY - margin - labelSize.height
+                            : selection.maxY + margin
+        var x = anchor.x
+        x = min(max(x, viewBounds.minX), viewBounds.maxX - labelSize.width)
+        y = min(max(y, viewBounds.minY), viewBounds.maxY - labelSize.height)
+        return CGPoint(x: x, y: y)
     }
 }

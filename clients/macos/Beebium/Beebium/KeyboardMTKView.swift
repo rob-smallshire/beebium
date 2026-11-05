@@ -145,6 +145,9 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
             selectionOverlayView.rangeRects = []
             selectionOverlayView.highlightRects = []
             selectionOverlayView.marqueeRect = nil
+            selectionOverlayView.interpretationLabel = nil
+            selectionOverlayView.selectionAnchor = nil
+            selectionOverlayView.selectionBounds = nil
             return
         }
         selectionOverlayView.isHidden = false
@@ -158,6 +161,23 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
         selectionOverlayView.marqueeRect = coordinator.marqueeRect.map {
             ScreenCoordinateMapper.viewRect(frameRect: $0, geometry: geometry, viewSize: size)
         }
+
+        // The interpretation label, pinned to the anchor corner (mapped through
+        // the same live geometry so it stays registered across a resize) and
+        // kept clear of the selection's bounding box.
+        selectionOverlayView.interpretationLabel = coordinator.interpretation.overlayLabel
+        if let anchorPixel = coordinator.anchorFramePixel {
+            let n = ScreenCoordinateMapper.normalizedPoint(
+                framePixel: anchorPixel, geometry: geometry)
+            selectionOverlayView.selectionAnchor =
+                CGPoint(x: n.x * size.width, y: n.y * size.height)
+        } else {
+            selectionOverlayView.selectionAnchor = nil
+        }
+        let drawn = selectionOverlayView.rangeRects + selectionOverlayView.highlightRects
+            + (selectionOverlayView.marqueeRect.map { [$0] } ?? [])
+        selectionOverlayView.selectionBounds =
+            drawn.isEmpty ? nil : drawn.dropFirst().reduce(drawn[0]) { $0.union($1) }
     }
 
     override func setFrameSize(_ newSize: NSSize) {
