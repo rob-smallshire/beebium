@@ -30,6 +30,7 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
+#include <QProxyStyle>
 #include <QSet>
 #include <QStatusBar>
 #include <qpa/qwindowsysteminterface.h>
@@ -51,6 +52,7 @@ constexpr quint32 XKB_LEFT_META = 125 + 8;
 constexpr quint32 XKB_H = 35 + 8;
 constexpr quint32 XKB_SLASH = 53 + 8;
 constexpr quint32 XKB_K = 37 + 8;
+constexpr quint32 XKB_E = 18 + 8;
 constexpr quint32 XKB_F11 = 87 + 8;
 
 struct LiveWindow {
@@ -304,4 +306,56 @@ TEST_CASE("Meta+K and Ctrl+Alt+K switch mappings back and forth and never type K
     }));
     const auto keys = live.keys_down();
     CHECK(std::count(keys.begin(), keys.end(), 0x46u) == 0);  // never a K
+}
+
+namespace {
+
+// A style that walks the menu bar from a lone Alt, as Windows-like and
+// desktop-themed styles do.
+class AltNavigationStyle : public QProxyStyle {
+public:
+    int styleHint(StyleHint hint, const QStyleOption* option, const QWidget* widget,
+                  QStyleHintReturn* returned) const override {
+        if (hint == QStyle::SH_MenuBar_AltKeyNavigation) {
+            return 1;
+        }
+        return QProxyStyle::styleHint(hint, option, widget, returned);
+    }
+};
+
+}  // namespace
+
+TEST_CASE("A lone Alt tap leaves the keys in the display; Alt with a mnemonic opens its menu",
+          "[shortcuts][window][selection]") {
+    LiveWindow live;
+    AltNavigationStyle style;
+    live.window.menuBar()->setStyle(&style);
+    live.window.activateWindow();
+    live.window.display().setFocus();
+    REQUIRE(wait_until([&] { return live.window.isActiveWindow(); }));
+    REQUIRE(live.window.display().hasFocus());
+    QWindow* handle = live.window.windowHandle();
+    REQUIRE(handle);
+
+    // The window system gives the modifiers held before the key; the
+    // event's modifiers() add Alt for its press.
+    for (int tap = 0; tap < 2; ++tap) {
+        deliver(handle, QEvent::KeyPress, Qt::Key_Alt, XKB_LEFT_ALT, Qt::NoModifier);
+        deliver(handle, QEvent::KeyRelease, Qt::Key_Alt, XKB_LEFT_ALT, Qt::AltModifier);
+        CHECK(live.window.display().hasFocus());
+        CHECK_FALSE(live.window.menuBar()->hasFocus());
+    }
+
+    QMenu* edit = nullptr;
+    for (QAction* action : live.window.menuBar()->actions()) {
+        if (action->text().remove(QLatin1Char('&')) == QStringLiteral("Edit")) {
+            edit = action->menu();
+        }
+    }
+    REQUIRE(edit);
+    deliver(handle, QEvent::KeyPress, Qt::Key_Alt, XKB_LEFT_ALT, Qt::NoModifier);
+    deliver(handle, QEvent::KeyPress, Qt::Key_E, XKB_E, Qt::AltModifier, QStringLiteral("e"));
+    CHECK(wait_until([&] { return edit->isVisible(); }));
+    edit->close();
+    live.window.menuBar()->setStyle(nullptr);
 }

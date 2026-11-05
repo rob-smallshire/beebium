@@ -74,6 +74,14 @@ bool DisplayWidget::event(QEvent* event) {
     // shortcut uses it: on a BBC Micro, CTRL with a letter is typing.
     if (event->type() == QEvent::ShortcutOverride) {
         const auto& key = *static_cast<QKeyEvent*>(event);
+        // Alt is the selection modifier here, not the menu bar's: a lone
+        // Alt or Meta, overridden, never arms the menu bar's keyboard
+        // mode, which would take focus at its release. Alt with a
+        // mnemonic letter still opens that menu.
+        if (key.key() == Qt::Key_Alt || key.key() == Qt::Key_Meta) {
+            event->accept();
+            return true;
+        }
         if (keyboard_.takes(key)) {
             event->accept();
             return true;
