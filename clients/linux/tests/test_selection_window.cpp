@@ -175,11 +175,9 @@ TEST_CASE("The copies sit directly beneath Paste, then the Mode 7 choice",
     REQUIRE(copy);
     REQUIRE(columns);
     REQUIRE(graphics);
-    CHECK(copy->shortcuts().contains(QKeySequence(QStringLiteral("Meta+C"))));
-    CHECK(copy->shortcuts().contains(QKeySequence(QStringLiteral("Ctrl+Alt+C"))));
-    CHECK(columns->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Meta+Alt+C"))});
-    CHECK(graphics->shortcuts().contains(QKeySequence(QStringLiteral("Meta+Shift+C"))));
-    CHECK(graphics->shortcuts().contains(QKeySequence(QStringLiteral("Ctrl+Alt+Shift+C"))));
+    CHECK(copy->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Alt+C"))});
+    CHECK(columns->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Alt+Meta+C"))});
+    CHECK(graphics->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Alt+Shift+C"))});
     // Labels only.
     for (const QAction* action : {copy, columns, graphics}) {
         CHECK(action->statusTip().isEmpty());

@@ -30,7 +30,8 @@ namespace beebium::linux_client {
 // the session: the Meta form first on the Raspberry Pi Desktop, whose
 // keyboards have the key and whose compositor leaves Meta with a letter
 // free, the other first elsewhere. A wrong guess only changes which of two
-// working forms the menu shows.
+// working forms the menu shows. The copies of the screen's text are the
+// exception: they carry Alt, the selection modifier, and have one form each.
 
 // Whether the session is the Raspberry Pi Desktop: DESKTOP_SESSION or
 // XDG_SESSION_DESKTOP starting "rpd-" (rpd-labwc, rpd-x).

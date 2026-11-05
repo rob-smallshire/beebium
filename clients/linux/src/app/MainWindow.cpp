@@ -581,9 +581,10 @@ void MainWindow::build_menus() {
             [paste_action](bool pasting) { paste_action->setEnabled(!pasting); });
     // Directly beneath Paste, the three copies of the screen's text (6.5),
     // as the macOS client's: each copies the selection in its reading, or
-    // with none the whole screen. Ctrl+C is the machine's (VDU 3), so Copy
-    // is Meta+C or Ctrl+Alt+C. Copy as Columns is Meta+Alt+C: Alt cannot be
-    // added to Ctrl+Alt, so it has no other form. They work in immersive
+    // with none the whole screen. Alt is the selection modifier, so the
+    // copies carry it with the selection's own qualifiers: Alt+C, Alt+Meta+C
+    // for columns (Option+Command+C on macOS), Alt+Shift+C for anywhere,
+    // one binding each on every desktop. They work in immersive
     // presentation too, the menu bar hidden.
     const auto add_copy = [this, edit](const QString& text, Interpretation interpretation,
                                        const QString& object_name) {
@@ -606,15 +607,13 @@ void MainWindow::build_menus() {
     };
     QAction* copy_action = add_copy(tr("&Copy"), Interpretation::rows, QStringLiteral("copy"));
     copy_action->setIcon(QIcon::fromTheme(QStringLiteral("edit-copy")));
-    set_session_shortcuts(copy_action, QKeySequence(QStringLiteral("Meta+C")),
-                          QKeySequence(QStringLiteral("Ctrl+Alt+C")));
+    copy_action->setShortcut(QKeySequence(QStringLiteral("Alt+C")));
     QAction* columns_action =
         add_copy(tr("Copy as Co&lumns"), Interpretation::columns, QStringLiteral("copyAsColumns"));
-    columns_action->setShortcut(QKeySequence(QStringLiteral("Meta+Alt+C")));
+    columns_action->setShortcut(QKeySequence(QStringLiteral("Alt+Meta+C")));
     QAction* graphics_action = add_copy(tr("Copy Text from &Graphics"), Interpretation::anywhere,
                                         QStringLiteral("copyTextFromGraphics"));
-    set_session_shortcuts(graphics_action, QKeySequence(QStringLiteral("Meta+Shift+C")),
-                          QKeySequence(QStringLiteral("Ctrl+Alt+Shift+C")));
+    graphics_action->setShortcut(QKeySequence(QStringLiteral("Alt+Shift+C")));
     // How the copies read a Mode 7 byte: a setting they obey, not a fourth
     // copy. Shared by every window, so shown afresh as the menu opens.
     edit->addSeparator();

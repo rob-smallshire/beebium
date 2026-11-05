@@ -53,6 +53,7 @@ constexpr quint32 XKB_H = 35 + 8;
 constexpr quint32 XKB_SLASH = 53 + 8;
 constexpr quint32 XKB_K = 37 + 8;
 constexpr quint32 XKB_E = 18 + 8;
+constexpr quint32 XKB_C = 46 + 8;
 constexpr quint32 XKB_F11 = 87 + 8;
 
 struct LiveWindow {
@@ -358,4 +359,55 @@ TEST_CASE("A lone Alt tap leaves the keys in the display; Alt with a mnemonic op
     CHECK(wait_until([&] { return edit->isVisible(); }));
     edit->close();
     live.window.menuBar()->setStyle(nullptr);
+}
+
+TEST_CASE("Alt+C, Alt+Meta+C and Alt+Shift+C copy from the display and type nothing",
+          "[shortcuts][window][selection]") {
+    LiveWindow live;
+    QAction* copy = live.window.findChild<QAction*>(QStringLiteral("copy"));
+    QAction* columns = live.window.findChild<QAction*>(QStringLiteral("copyAsColumns"));
+    QAction* graphics = live.window.findChild<QAction*>(QStringLiteral("copyTextFromGraphics"));
+    REQUIRE(copy);
+    REQUIRE(columns);
+    REQUIRE(graphics);
+    // One binding each, the same on every desktop.
+    CHECK(copy->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Alt+C"))});
+    CHECK(columns->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Alt+Meta+C"))});
+    CHECK(graphics->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Alt+Shift+C"))});
+
+    live.window.activateWindow();
+    live.window.display().setFocus();
+    REQUIRE(wait_until([&] { return live.window.isActiveWindow(); }));
+    REQUIRE(wait_until([&] { return copy->isEnabled(); }));
+    QWindow* handle = live.window.windowHandle();
+    REQUIRE(handle);
+    int copies = 0;
+    int column_copies = 0;
+    int graphics_copies = 0;
+    QObject::connect(copy, &QAction::triggered, [&] { ++copies; });
+    QObject::connect(columns, &QAction::triggered, [&] { ++column_copies; });
+    QObject::connect(graphics, &QAction::triggered, [&] { ++graphics_copies; });
+
+    const Chord alt{{{Qt::Key_Alt, XKB_LEFT_ALT}}, Qt::AltModifier};
+    const Chord alt_meta{{{Qt::Key_Alt, XKB_LEFT_ALT}, {Qt::Key_Meta, XKB_LEFT_META}},
+                         Qt::AltModifier | Qt::MetaModifier};
+    const Chord alt_shift{{{Qt::Key_Alt, XKB_LEFT_ALT}, {Qt::Key_Shift, XKB_LEFT_SHIFT}},
+                          Qt::AltModifier | Qt::ShiftModifier};
+    press_chord(handle, alt, Qt::Key_C, XKB_C, QStringLiteral("c"));
+    CHECK(copies == 1);
+    live.window.display().setFocus();
+    press_chord(handle, alt_meta, Qt::Key_C, XKB_C, QStringLiteral("c"));
+    CHECK(column_copies == 1);
+    live.window.display().setFocus();
+    press_chord(handle, alt_shift, Qt::Key_C, XKB_C, QStringLiteral("C"));
+    CHECK(graphics_copies == 1);
+    CHECK(copies == 1);
+    CHECK(column_copies == 1);
+
+    // Give any stray key time to arrive: only the H typed after is there,
+    // no C and no SHIFT.
+    live.window.display().setFocus();
+    press_chord(handle, Chord{}, Qt::Key_H, XKB_H, QStringLiteral("h"));
+    REQUIRE(wait_until([&] { return !live.keys_down().empty(); }));
+    CHECK(live.keys_down() == std::vector<std::uint32_t>{0x54});
 }
