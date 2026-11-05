@@ -45,7 +45,9 @@ public:
     void set_configured(double multiplier, bool dimmed);
     double configured() const { return configured_; }
     bool thumb_dimmed() const { return dimmed_; }
-    // The achieved speed the caret is gliding to.
+    // The achieved speed the caret is gliding to. The caret repaints only
+    // when its drawn position moves, and a speed within a pixel of it is
+    // taken without a glide.
     void set_achieved(double multiplier);
     double achieved() const { return achieved_; }
 

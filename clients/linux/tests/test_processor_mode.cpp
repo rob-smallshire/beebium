@@ -30,6 +30,9 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include <array>
+#include <chrono>
+
 using namespace beebium::linux_client;
 using namespace beebium::linux_client::testing;
 using Catch::Approx;
@@ -63,7 +66,61 @@ void mouse(QWidget* widget, QEvent::Type type, QPoint at) {
     QApplication::sendEvent(widget, &event);
 }
 
+// Counts the paint events a widget receives.
+class PaintCounter : public QObject {
+public:
+    explicit PaintCounter(QWidget* widget) { widget->installEventFilter(this); }
+    int paints = 0;
+
+protected:
+    bool eventFilter(QObject*, QEvent* event) override {
+        if (event->type() == QEvent::Paint) {
+            ++paints;
+        }
+        return false;
+    }
+};
+
+// Lets the event loop run, animations among it.
+void settle(std::chrono::milliseconds time) {
+    wait_until([] { return false; }, time);
+}
+
 }  // namespace
+
+TEST_CASE("At a steady speed the scale is still: samples within a pixel repaint nothing",
+          "[processor]") {
+    SpeedScaleWidget scale;
+    scale.resize(256, SpeedScaleWidget::HEIGHT);
+    scale.show();
+    settle(std::chrono::milliseconds(200));
+    PaintCounter counter(&scale);
+    // As at 1x: every sample a little different, none of them a pixel away.
+    const std::array<double, 6> jitter{1.0003, 0.9998, 1.0001, 0.9997, 1.0002, 0.9999};
+    for (const double achieved : jitter) {
+        REQUIRE(scale.x_for(achieved) == scale.x_for(1.0));
+        scale.set_configured(1.0, false);
+        scale.set_achieved(achieved);
+        settle(std::chrono::milliseconds(150));
+    }
+    CHECK(scale.achieved() == 0.9999);
+    CHECK(counter.paints == 0);
+}
+
+TEST_CASE("A change of speed still glides the caret, then the scale is still", "[processor]") {
+    SpeedScaleWidget scale;
+    scale.resize(256, SpeedScaleWidget::HEIGHT);
+    scale.show();
+    settle(std::chrono::milliseconds(200));
+    PaintCounter counter(&scale);
+    scale.set_achieved(2.0);
+    settle(std::chrono::milliseconds(700));
+    CHECK(scale.achieved() == 2.0);
+    CHECK(counter.paints > 2);  // several steps of the glide, not one jump
+    counter.paints = 0;
+    settle(std::chrono::milliseconds(300));
+    CHECK(counter.paints == 0);
+}
 
 TEST_CASE("The Processor mode watches the pacing statistics only while it shows",
           "[processor]") {

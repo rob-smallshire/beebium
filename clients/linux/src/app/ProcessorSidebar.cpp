@@ -52,8 +52,11 @@ SpeedScaleWidget::SpeedScaleWidget(QWidget* parent)
     glide_->setDuration(GLIDE_MS);
     glide_->setEasingCurve(QEasingCurve::Linear);
     connect(glide_, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+        const int drawn_x = x_for(caret_);
         caret_ = value.toDouble();
-        update();
+        if (x_for(caret_) != drawn_x) {
+            update();
+        }
     });
 }
 
@@ -66,6 +69,9 @@ void SpeedScaleWidget::set_axis(const SpeedAxis& axis) {
 }
 
 void SpeedScaleWidget::set_configured(double multiplier, bool dimmed) {
+    if (multiplier == configured_ && dimmed == dimmed_) {
+        return;
+    }
     configured_ = multiplier;
     dimmed_ = dimmed;
     update();
@@ -77,6 +83,13 @@ void SpeedScaleWidget::set_achieved(double multiplier) {
     }
     achieved_ = multiplier;
     glide_->stop();
+    if (x_for(multiplier) == x_for(caret_)) {
+        // Within a pixel of the caret: nothing to glide, nothing to draw.
+        // At a steady speed every sample differs a little, and a glide
+        // restarted for each would repaint the window without end.
+        caret_ = multiplier;
+        return;
+    }
     glide_->setStartValue(caret_);
     glide_->setEndValue(multiplier);
     glide_->start();
