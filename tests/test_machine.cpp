@@ -84,6 +84,94 @@ TEST_CASE("Machine step and run", "[machine][execution]") {
     REQUIRE_FALSE(machine.mid_instruction());
 }
 
+namespace {
+
+// A Model B whose CPU is about to run, from &0400, sixteen NOPs, STA &0500,
+// then NOPs to the end of the page. The MOS is NOPs with the reset vector at
+// &0400.
+void load_nop_slide_with_store(ModelB& machine) {
+    std::array<uint8_t, 16384> mos{};
+    std::fill(mos.begin(), mos.end(), 0xEA);
+    mos[0x3FFC] = 0x00;
+    mos[0x3FFD] = 0x04;
+    machine.memory().load_mos(mos.data(), mos.size());
+    for (uint16_t addr = 0x0400; addr < 0x0500; ++addr) machine.write(addr, 0xEA);
+    machine.write(0x0410, 0x8D);  // STA &0500
+    machine.write(0x0411, 0x00);
+    machine.write(0x0412, 0x05);
+    M6502_Reset(&machine.cpu());
+    machine.step_instruction();  // the reset sequence
+}
+
+}  // namespace
+
+// The sequence number counts every change to the machine, emulated cycles
+// included, wherever a debugger can observe it: after a step, after a run,
+// and inside a breakpoint or watchpoint callback part-way through a run.
+TEST_CASE("Machine sequence counts each single step", "[machine][sequence]") {
+    ModelB machine;
+    load_nop_slide_with_store(machine);
+    const uint64_t before = machine.sequence();
+    machine.step();
+    const uint64_t after_one = machine.sequence();
+    CHECK(after_one > before);
+    machine.step();
+    CHECK(machine.sequence() > after_one);
+}
+
+TEST_CASE("Machine sequence counts the cycles a run executed", "[machine][sequence]") {
+    ModelB machine;
+    load_nop_slide_with_store(machine);
+    const uint64_t sequence_before = machine.sequence();
+    const uint64_t cycles_before = machine.cycle_count();
+    machine.run(40);
+    const uint64_t cycles_run = machine.cycle_count() - cycles_before;
+    REQUIRE(cycles_run >= 40);
+    CHECK(machine.sequence() - sequence_before >= cycles_run);
+}
+
+TEST_CASE("Machine sequence seen by a breakpoint callback counts the cycles before it",
+          "[machine][sequence]") {
+    ModelB machine;
+    load_nop_slide_with_store(machine);
+    const uint64_t sequence_before = machine.sequence();
+    const uint64_t cycles_before = machine.cycle_count();
+    uint64_t sequence_at_hit = 0;
+    uint64_t cycles_at_hit = 0;
+    machine.set_breakpoint_hit_callback([&](const BreakpointEntry&, uint32_t) {
+        sequence_at_hit = machine.sequence();
+        cycles_at_hit = machine.cycle_count();
+    });
+    machine.set_breakpoint_entries({BreakpointEntry{.id = 1, .start = 0x0410, .end = 0x0411}});
+    machine.run(100);
+    REQUIRE(cycles_at_hit > cycles_before);
+    CHECK(sequence_at_hit - sequence_before >= cycles_at_hit - cycles_before);
+}
+
+TEST_CASE("Machine sequence seen by a watchpoint callback counts the cycles before it",
+          "[machine][sequence]") {
+    ModelB machine;
+    load_nop_slide_with_store(machine);
+    const uint64_t sequence_before = machine.sequence();
+    const uint64_t cycles_before = machine.cycle_count();
+    uint64_t sequence_at_hit = 0;
+    uint64_t cycles_at_hit = 0;
+    machine.set_watchpoint_hit_callback([&](const WatchpointEntry&, uint32_t, uint8_t, bool) {
+        sequence_at_hit = machine.sequence();
+        cycles_at_hit = machine.cycle_count();
+    });
+    machine.add_watchpoint_entry({
+        .id = 1,
+        .start = 0x0500,
+        .end = 0x0501,
+        .type = WATCH_WRITE,
+        .condition = std::get<CompiledExpression>(compile("false")),
+    });
+    machine.run(100);
+    REQUIRE(cycles_at_hit > cycles_before);
+    CHECK(sequence_at_hit - sequence_before >= cycles_at_hit - cycles_before);
+}
+
 TEST_CASE("Machine memory access", "[machine][memory]") {
     ModelB machine;
 

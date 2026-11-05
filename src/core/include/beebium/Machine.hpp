@@ -242,8 +242,17 @@ public:
         return in_reset_;
     }
 
-    // Execute one CPU cycle
+    // Execute one CPU cycle, counted in the sequence number at once.
     void step() {
+        step_cycle();
+        publish_steps();
+    }
+
+private:
+    // Execute one CPU cycle. Its count in the sequence number waits in
+    // unpublished_steps_ until publish_steps(): run() publishes before every
+    // point where a debugger can observe the machine, and step() at once.
+    void step_cycle() {
         // Advance host time in the Tube socket, as the first action on every
         // path. cycle_count advances by exactly one per step(). The socket runs
         // the coprocessor in batches of up to MAX_COPROCESSOR_SKEW host cycles
@@ -265,7 +274,7 @@ public:
             tick_stretch_cycle();
             --stretch_cycles_remaining_;
             ++state_.cycle_count;
-            ++sequence_;
+            ++unpublished_steps_;
             return;
         }
 
@@ -404,9 +413,22 @@ public:
         }
 
         ++state_.cycle_count;
-        ++sequence_;
+        ++unpublished_steps_;
     }
 
+    // Add the cycles run since the last publish to the sequence number. Called
+    // only by the thread executing the machine, or with it quiesced, as are
+    // the steps it counts; the relaxed add is ordered for other readers by
+    // the same handover (a quiesce, a pause) that makes the machine state
+    // itself safe to read, and, being a read-modify-write, loses nothing to a
+    // concurrent pause() or resume().
+    void publish_steps() {
+        if (unpublished_steps_ == 0) return;
+        sequence_.fetch_add(unpublished_steps_, std::memory_order_relaxed);
+        unpublished_steps_ = 0;
+    }
+
+public:
     // Execute for the given number of cycles, or until paused (e.g., by a
     // breakpoint, a watchpoint or the debugger's Stop).
     //
@@ -463,6 +485,7 @@ public:
                     for (auto& bp : breakpoint_entries_) {
                         if (stepping_over || bp.start > pc) break;  // sorted by start
                         if (bp.matches(pc)) {
+                            publish_steps();
                             if (on_breakpoint_hit_) on_breakpoint_hit_(bp, pc);
                             if (paused_.load()) { hit_stop = true; break; }
                         }
@@ -484,6 +507,7 @@ public:
                     bool hit_stop = false;
                     for (auto& bp : breakpoint_entries_) {
                         if (bp.start == 0 && bp.end == 0x10000 && bp.condition) {
+                            publish_steps();
                             if (on_breakpoint_hit_)
                                 on_breakpoint_hit_(bp, state_.cpu.opcode_pc.w);
                             if (paused_.load()) { hit_stop = true; break; }
@@ -493,8 +517,9 @@ public:
                 }
             }
 
-            step();
+            step_cycle();
         }
+        publish_steps();
 
         // Paused part-way through an instruction: complete it quietly.
         finish_instruction();
@@ -571,7 +596,10 @@ public:
     // Cycle counter
     uint64_t cycle_count() const { return state_.cycle_count; }
 
-    // Sequence counter (increments on any mutation, for change detection)
+    // Sequence counter (increments on any mutation, for change detection).
+    // Emulated cycles are counted after a step(), after a run(), and before
+    // a breakpoint or watchpoint callback a run makes; a read from another
+    // thread while the machine runs sees a value up to one run behind.
     uint64_t sequence() const { return sequence_.load(); }
 
     // Debug pause/resume for debugger integration.
@@ -820,8 +848,20 @@ public:
         });
     }
 
+    // A watchpoint fires part-way through a cycle of a run, so the callback
+    // first publishes the cycles run so far: what it reads of sequence()
+    // counts them.
     void set_watchpoint_hit_callback(WatchpointHitCallback cb) {
-        on_watchpoint_hit_ = std::move(cb);
+        if (cb) {
+            on_watchpoint_hit_ = [this, cb = std::move(cb)](const WatchpointEntry& wp,
+                                                            uint32_t addr, uint8_t value,
+                                                            bool is_write) {
+                publish_steps();
+                cb(wp, addr, value, is_write);
+            };
+        } else {
+            on_watchpoint_hit_ = nullptr;
+        }
         cpu_binding_.set_watchpoint_hit_callback(&on_watchpoint_hit_);
     }
 
@@ -1009,7 +1049,11 @@ private:
     // True while the emulation thread does per-iteration work outside run()
     // under an EmulationBusyScope; wait_until_idle() waits on it too.
     std::atomic<bool> emulation_busy_{false};
-    std::atomic<uint64_t> sequence_{0};  // Increments on any mutation
+    // Increments on any mutation. Emulated cycles reach it in bulk through
+    // unpublished_steps_ (see publish_steps()), so the hot path pays a plain
+    // increment, not an atomic read-modify-write, per cycle.
+    std::atomic<uint64_t> sequence_{0};
+    uint64_t unpublished_steps_ = 0;  // Cycles run but not yet in sequence_
 
     // Break key state (true when Break is held, CPU halted)
     bool in_reset_ = false;
