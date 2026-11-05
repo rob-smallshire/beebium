@@ -49,6 +49,9 @@ public:
     // What is attached to a point: the model's own, or one a provider's.
     std::vector<ExtensionInstance> attached(const SchemaAttachmentPoint& point,
                                             const ExtensionInstance* provider = nullptr) const;
+    // What no point places: an extension the catalogue lacks, or one whose
+    // provider is missing, so the user can see it and remove it.
+    std::vector<ExtensionInstance> unattached() const;
     // What can be added to a point now, by display name: none when it is full.
     std::vector<SchemaExtension> addable(const SchemaAttachmentPoint& point,
                                          const ExtensionInstance* provider = nullptr) const;

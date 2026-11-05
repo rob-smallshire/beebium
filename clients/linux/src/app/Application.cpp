@@ -382,6 +382,19 @@ NewMachineHost Application::new_machine_host() {
                      done(result.ok() ? parse_rom_description(result.standard_output) : std::nullopt);
                  });
     };
+    host.list_serial_ports = [this, located](NewMachineHost::SerialPorts done) {
+        const auto found = located();
+        if (!found) {
+            done({});
+            return;
+        }
+        cli_.run(found->executable_filepath(QStringLiteral("model-b")),
+                 {QStringLiteral("--format"), QStringLiteral("jsonl"),
+                  QStringLiteral("list-serial-ports")},
+                 [done = std::move(done)](const CliResult& result) {
+                     done(result.ok() ? parse_serial_ports(result.standard_output) : QStringList());
+                 });
+    };
     host.launch = [this, located](const PresetListing& preset, const QString& filepath) {
         const auto found = located();
         if (!found) {

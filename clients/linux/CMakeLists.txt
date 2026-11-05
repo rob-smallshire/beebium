@@ -291,7 +291,10 @@ add_library(beebium_linux_app STATIC
     src/app/NewMachineDialog.cpp
     src/app/configuration/ConfigurationSections.cpp
     src/app/configuration/SectionWidgets.cpp
+    src/app/configuration/AttachmentChooser.cpp
+    src/app/configuration/AttachmentPointGroup.cpp
     src/app/configuration/MemorySection.cpp
+    src/app/configuration/PeripheralsSection.cpp
     src/app/configuration/StorageSection.cpp
     src/app/ParameterForm.cpp
     src/app/PeripheralsSidebar.cpp

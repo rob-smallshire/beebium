@@ -156,3 +156,27 @@ TEST_CASE("An extension the catalogue lacks is named by its identifier", "[prese
     CHECK(extensions.display_name("no-such-extension") == "no-such-extension");
     CHECK(extensions.display_name("acorn-rtc") != "acorn-rtc");
 }
+
+TEST_CASE("A disc naming no adapter is unattached, never given to another", "[preset][extensions]") {
+    MachineDraft draft = with_extensions(R"([
+        {"name": "acorn-scsi", "config": {"id": "first"}},
+        {"name": "scsi-hard-disc", "config": {"scsi-id": 0, "adapter-id": "gone"}},
+        {"name": "scsi-hard-disc", "config": {"scsi-id": 1}},
+        {"name": "no-such-extension"}])");
+    const ExtensionsDraft extensions(draft, model_b_schema());
+    const auto adapter = extensions.attached(point(extensions, "1mhz-bus")).at(0);
+    const auto scsi = extensions.provided_points(adapter).at(0);
+    const auto discs = extensions.attached(scsi, &adapter);
+    REQUIRE(discs.size() == 1);
+    CHECK(discs[0].index == 2);
+    const auto orphans = extensions.unattached();
+    REQUIRE(orphans.size() == 2);
+    CHECK(orphans[0].index == 1);
+    CHECK(orphans[1].name == "no-such-extension");
+}
+
+TEST_CASE("With no adapter at all, a disc is unattached", "[preset][extensions]") {
+    MachineDraft draft = with_extensions(R"([{"name": "scsi-hard-disc", "config": {"scsi-id": 0}}])");
+    const ExtensionsDraft extensions(draft, model_b_schema());
+    REQUIRE(extensions.unattached().size() == 1);
+}

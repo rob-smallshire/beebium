@@ -162,6 +162,35 @@ std::vector<ExtensionInstance> ExtensionsDraft::attached(const SchemaAttachmentP
     return out;
 }
 
+namespace {
+
+void place(const ExtensionsDraft& extensions, const SchemaAttachmentPoint& point,
+           const ExtensionInstance* provider, std::set<std::size_t>& placed) {
+    for (const auto& instance : extensions.attached(point, provider)) {
+        if (placed.insert(instance.index).second) {
+            for (const auto& provided : extensions.provided_points(instance)) {
+                place(extensions, provided, &instance, placed);
+            }
+        }
+    }
+}
+
+}  // namespace
+
+std::vector<ExtensionInstance> ExtensionsDraft::unattached() const {
+    std::set<std::size_t> placed;
+    for (const auto& point : model_points()) {
+        place(*this, point, nullptr, placed);
+    }
+    std::vector<ExtensionInstance> out;
+    for (auto& instance : instances()) {
+        if (!placed.count(instance.index)) {
+            out.push_back(std::move(instance));
+        }
+    }
+    return out;
+}
+
 std::vector<SchemaExtension> ExtensionsDraft::addable(const SchemaAttachmentPoint& point,
                                                       const ExtensionInstance* provider) const {
     std::vector<SchemaExtension> out;

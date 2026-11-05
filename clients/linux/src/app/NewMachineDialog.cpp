@@ -14,6 +14,7 @@
 
 #include "app/ClientSettings.hpp"
 #include "app/SidebarMode.hpp"
+#include "app/configuration/AttachmentChooser.hpp"
 #include "app/configuration/SectionWidgets.hpp"
 
 #include <QCheckBox>
@@ -473,6 +474,31 @@ void NewMachineDialog::launch_draft() {
     QDialog::accept();
     draft_ = MachineDraft();
     reload();
+}
+
+std::optional<std::string> NewMachineDialog::pick(const AttachmentChoice& choice) {
+    if (attachment_picker_) {
+        return attachment_picker_(choice);
+    }
+    AttachmentChooser chooser(choice, this);
+    if (chooser.exec() != QDialog::Accepted) {
+        return std::nullopt;
+    }
+    return chooser.chosen();
+}
+
+const QStringList& NewMachineDialog::serial_ports() {
+    if (!serial_ports_asked_ && host_.list_serial_ports) {
+        serial_ports_asked_ = true;
+        QPointer<NewMachineDialog> guard(this);
+        host_.list_serial_ports([guard](QStringList paths) {
+            if (guard) {
+                guard->serial_ports_ = std::move(paths);
+                Q_EMIT guard->serial_ports_listed();
+            }
+        });
+    }
+    return serial_ports_;
 }
 
 const RomDescription* NewMachineDialog::rom_description(const std::string& image_uri) {

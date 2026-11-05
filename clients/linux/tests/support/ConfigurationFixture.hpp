@@ -56,6 +56,8 @@ struct ConfigurationFixture {
     std::optional<QString> answer;  // the next Browse's path
     std::map<QString, RomDescription> roms;  // describe-rom's answers, by name or path
     QStringList described;                   // what describe-rom was asked
+    std::optional<std::string> pick;         // the attachment chooser's answer
+    std::optional<AttachmentChoice> asked;   // what it was last asked
     std::unique_ptr<NewMachineDialog> dialog;
 
     // Before: the server's answers are set before the dialog first asks,
@@ -92,6 +94,10 @@ struct ConfigurationFixture {
         };
         dialog = std::make_unique<NewMachineDialog>(host, &settings);
         dialog->set_chooser([this](const FormBrowse&) { return answer; });
+        dialog->set_picker([this](const AttachmentChoice& choice) {
+            asked = choice;
+            return pick;
+        });
         REQUIRE(wait_until([&] { return dialog->create_button()->isEnabled(); }));
     }
 

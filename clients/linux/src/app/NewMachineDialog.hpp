@@ -48,6 +48,23 @@ class NewMachineDialog;
 std::vector<std::function<class ConfigurationSection*(NewMachineDialog&)>>
 configuration_section_makers();
 
+// One extension the attachment chooser offers: catalogue text throughout.
+struct ChooserEntry {
+    std::string name;  // the identifier; empty for "None"
+    std::string display_name;
+    std::string description;
+    std::vector<std::string> needs;     // its parameters' labels
+    std::vector<std::string> provides;  // the points it adds, by display name
+};
+
+// The attachment chooser's question: pick one of the entries.
+struct AttachmentChoice {
+    QString title;
+    QString commit;
+    std::vector<ChooserEntry> entries;
+    std::string selected;
+};
+
 // What the New Machine dialog needs of this host's servers, as functions so
 // tests can stand in for them.
 struct NewMachineHost {
@@ -55,6 +72,7 @@ struct NewMachineHost {
     using Schema = std::function<void(std::optional<PresetSchema> schema)>;
     using Imported = std::function<void(bool ok, QString error)>;
     using RomDescribed = std::function<void(std::optional<RomDescription> rom)>;
+    using SerialPorts = std::function<void(QStringList paths)>;
 
     // list-presets: every preset this host can launch.
     std::function<void(Presets done)> list_presets;
@@ -68,6 +86,8 @@ struct NewMachineHost {
     std::function<void(const QString& model, const QString& filepath, Imported done)> import_preset;
     // describe-rom of a ROM library name or image path.
     std::function<void(const QString& model, const QString& rom, RomDescribed done)> describe_rom;
+    // list-serial-ports: the host's, for a parameter that offers them.
+    std::function<void(SerialPorts done)> list_serial_ports;
     // Start a machine from a preset file, as a preset card does: the listing
     // names the preset it was made from, for the machine's name and ordinal.
     std::function<void(const PresetListing& preset, const QString& filepath)> launch;
@@ -142,11 +162,21 @@ public:
     std::optional<QString> choose(const FormBrowse& browse);
     const Chooser& chooser() const { return chooser_; }
 
+    // An extension from the attachment chooser: the platform's dialog by
+    // default; tests answer. Nothing when the user cancels.
+    using Picker = std::function<std::optional<std::string>(const AttachmentChoice& choice)>;
+    void set_picker(Picker picker) { attachment_picker_ = std::move(picker); }
+    std::optional<std::string> pick(const AttachmentChoice& choice);
+
+    // The host's serial ports, asked once; serial_ports_listed() follows.
+    const QStringList& serial_ports();
+
     void accept() override;
     void reject() override;
 
 Q_SIGNALS:
     void rom_described();
+    void serial_ports_listed();
 
 private:
     void choose_preset(int index);
@@ -160,6 +190,9 @@ private:
 
     NewMachineHost host_;
     Chooser chooser_;
+    Picker attachment_picker_;
+    QStringList serial_ports_;
+    bool serial_ports_asked_ = false;
     ClientSettings* settings_;
     std::unique_ptr<PresetResolver> resolver_;
     std::vector<PresetListing> presets_;
