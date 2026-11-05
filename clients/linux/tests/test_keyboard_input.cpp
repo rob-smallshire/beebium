@@ -151,6 +151,24 @@ TEST_CASE("A Ctrl+Alt chord is the window's, and the machine is left holding not
     CHECK(wire.events.empty());
 }
 
+TEST_CASE("A host gesture's modifiers are tracked but never reach the machine",
+          "[keyboard][qt][selection]") {
+    Wire wire;
+    KeyboardInput input;
+    input.attach(sample_key_table(), wire.sender());
+    CHECK(input.track_host_modifier(press(Qt::Key_Shift, XKB_LEFT_SHIFT)));
+    CHECK(input.track_host_modifier(press(Qt::Key_Alt, XKB_LEFT_ALT)));
+    CHECK(input.held_modifiers() == (MODIFIER_SHIFT | MODIFIER_ALT));
+    CHECK(wire.events.empty());
+    CHECK(input.held_keys().empty());
+    CHECK(input.track_host_modifier(release(Qt::Key_Shift, XKB_LEFT_SHIFT)));
+    CHECK(input.held_modifiers() == MODIFIER_ALT);
+    CHECK(wire.events.empty());
+    // Anything but a modifier is not the gesture's.
+    CHECK_FALSE(input.track_host_modifier(press(Qt::Key_A, XKB_A, QStringLiteral("a"))));
+    CHECK(input.held_modifiers() == MODIFIER_ALT);
+}
+
 TEST_CASE("A Meta chord is the window's: the machine has no Meta key", "[keyboard][qt]") {
     Wire wire;
     KeyboardInput input;

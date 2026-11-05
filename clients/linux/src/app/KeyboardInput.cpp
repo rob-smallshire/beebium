@@ -221,6 +221,23 @@ bool KeyboardInput::takes(const QKeyEvent& event) const {
     return resolve_key(mapping_, table_, *host_key, switches_).has_value();
 }
 
+bool KeyboardInput::track_host_modifier(const QKeyEvent& event) {
+    const auto host_key = host_key_from_event(event, held_modifiers());
+    if (!host_key) {
+        return false;
+    }
+    const HostModifiers modifier = modifier_for_code(host_key->code);
+    if (modifier == 0) {
+        return false;
+    }
+    if (event.type() == QEvent::KeyRelease) {
+        host_modifiers_down_.erase(key_id(event));
+    } else {
+        host_modifiers_down_[key_id(event)] = modifier;
+    }
+    return true;
+}
+
 bool KeyboardInput::key_press(const QKeyEvent& event) {
     if (event.isAutoRepeat()) {
         return true;  // the MOS runs its own repeat (R7)

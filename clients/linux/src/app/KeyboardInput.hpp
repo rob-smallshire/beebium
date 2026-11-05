@@ -100,6 +100,12 @@ public:
     // modifiers are physically down is kept: the chord may be pressed again.
     void yield_to_window();
 
+    // A host gesture owns the qualifier modifiers (a screen text
+    // selection): a modifier key's press or release is tracked, so later
+    // keys resolve with what is physically down, but nothing reaches the
+    // machine. False, and nothing tracked, for any other key.
+    bool track_host_modifier(const QKeyEvent& event);
+
     // Return true if the event was the machine's.
     bool key_press(const QKeyEvent& event);
     bool key_release(const QKeyEvent& event);
