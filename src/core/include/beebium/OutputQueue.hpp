@@ -34,7 +34,19 @@ namespace beebium {
 // Fill/consume A first, then B.
 //
 // Thread safety: One producer thread and one consumer thread may operate
-// concurrently without external synchronization.
+// concurrently without external synchronization. The producer role may pass
+// from one thread to another, and so may the consumer role, only with a
+// handover that orders them (a mutex, a join).
+//
+// Memory ordering: each index has exactly one writer, so neither needs a
+// read-modify-write. A side reads its own index relaxed (it wrote it), reads
+// the other side's index with acquire, and publishes its own with a release
+// store. The producer's release of write_pos_ makes the items it wrote
+// visible to the consumer's acquire of write_pos_; the consumer's release of
+// read_pos_ orders its reads of the released slots before the producer's
+// acquire of read_pos_ and the overwrites that follow. On AArch64 these are
+// plain LDAR/STLR, with no atomic read-modify-write (which GCC calls out of
+// line) on a path that runs for every pixel batch.
 template <typename T>
 class OutputQueue {
 public:
@@ -67,8 +79,8 @@ public:
     };
 
     ProducerBuffers get_producer_buffer() {
+        uint64_t write_pos = write_pos_.load(std::memory_order_relaxed);
         uint64_t read_pos = read_pos_.load(std::memory_order_acquire);
-        uint64_t write_pos = write_pos_.load(std::memory_order_acquire);
 
         assert(write_pos >= read_pos);
         size_t used = static_cast<size_t>(write_pos - read_pos);
@@ -98,7 +110,8 @@ public:
 
     // Commit n items to the buffer (makes them available to consumer).
     void produce(size_t n) {
-        write_pos_.fetch_add(n, std::memory_order_acq_rel);
+        const uint64_t write_pos = write_pos_.load(std::memory_order_relaxed);
+        write_pos_.store(write_pos + n, std::memory_order_release);
     }
 
     // Convenience: write a single item (returns false if buffer full)
@@ -125,7 +138,7 @@ public:
     };
 
     ConsumerBuffers get_consumer_buffer() const {
-        uint64_t read_pos = read_pos_.load(std::memory_order_acquire);
+        uint64_t read_pos = read_pos_.load(std::memory_order_relaxed);
         uint64_t write_pos = write_pos_.load(std::memory_order_acquire);
 
         assert(write_pos >= read_pos);
@@ -155,7 +168,8 @@ public:
 
     // Release n items from the buffer (frees space for producer).
     void consume(size_t n) {
-        read_pos_.fetch_add(n, std::memory_order_acq_rel);
+        const uint64_t read_pos = read_pos_.load(std::memory_order_relaxed);
+        read_pos_.store(read_pos + n, std::memory_order_release);
     }
 
     // --- Query interface ---

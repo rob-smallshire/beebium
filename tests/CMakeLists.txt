@@ -2357,6 +2357,11 @@ add_executable(test_pacing_controller test_pacing_controller.cpp)
 target_link_libraries(test_pacing_controller PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_pacing_controller)
 
+# OutputQueue as a single-producer, single-consumer ring under two threads
+add_executable(test_output_queue test_output_queue.cpp)
+target_link_libraries(test_output_queue PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_output_queue)
+
 # Thread names for per-thread profiling (top -H, perf report --sort comm)
 add_executable(test_thread_name test_thread_name.cpp)
 target_link_libraries(test_thread_name PRIVATE beebium_core Catch2::Catch2WithMain)

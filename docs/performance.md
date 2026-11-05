@@ -191,8 +191,10 @@ one writer. The minimum ordering is:
   `read_pos_.store(r + n, release)`.
 
 No read-modify-write is needed: on AArch64 these are plain `LDAR`/`STLR`
-(`LDAPR` with Armv8.3), with no call to an atomic helper. Each side can also
-cache the other's index and reload it only when its cached value says the
-ring is full or empty, which removes most of the cache-line traffic between
-the two cores. Today `produce` and `consume` use `fetch_add(acq_rel)` and both
-`get_*_buffer` calls load both indices with acquire.
+(`LDAPR` with Armv8.3), with no call to an atomic helper. `OutputQueue` is
+built this way. A further step, not taken: each side could cache the other's
+index and reload it only when its cached value says the ring is full or
+empty, which would remove most of the cache-line traffic between the two
+cores. `VideoRenderer::deliver` asks `available()` before every push, which
+reads both indices afresh, so the producer's cache would only pay once that
+check goes through the producer's own view.
