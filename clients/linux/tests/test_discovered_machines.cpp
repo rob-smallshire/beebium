@@ -74,3 +74,13 @@ TEST_CASE("This host's machines come first, then by name", "[discovery]") {
     CHECK(machines[1].instance_name == "Alpha");
     CHECK(machines[2].instance_name == "Zeta");
 }
+
+TEST_CASE("Machines whose names differ by a number list by its value", "[discovery]") {
+    std::vector<DiscoveredMachine> machines{
+        machine_from_service(service("Model B 10", "host-c.local.", "198.51.100.2", 1), HOST),
+        machine_from_service(service("Model B 2", "host-c.local.", "198.51.100.3", 2), HOST),
+    };
+    sort_for_display(machines);
+    CHECK(machines[0].instance_name == "Model B 2");
+    CHECK(machines[1].instance_name == "Model B 10");
+}

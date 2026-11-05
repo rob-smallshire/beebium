@@ -55,7 +55,8 @@ ThisHost this_host();
 DiscoveredMachine machine_from_service(const beebium::discovery::DiscoveredService& service,
                                        const ThisHost& host);
 
-// This host's machines first, then the network's, each by name.
+// This host's machines first, then the network's, each by name as a
+// person reads it, the same in every locale.
 void sort_for_display(std::vector<DiscoveredMachine>& machines);
 
 // The live list of discovered machines, browsed with the shared discovery

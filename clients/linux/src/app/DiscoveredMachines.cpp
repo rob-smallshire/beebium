@@ -12,6 +12,8 @@
 
 #include "app/DiscoveredMachines.hpp"
 
+#include "text/NaturalOrder.hpp"
+
 #include <QHostAddress>
 #include <QMetaObject>
 #include <QNetworkInterface>
@@ -85,7 +87,7 @@ void sort_for_display(std::vector<DiscoveredMachine>& machines) {
                          if (a.on_this_host != b.on_this_host) {
                              return a.on_this_host;
                          }
-                         return a.instance_name.localeAwareCompare(b.instance_name) < 0;
+                         return natural_compare(a.instance_name, b.instance_name) < 0;
                      });
 }
 
