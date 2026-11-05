@@ -222,6 +222,7 @@ target_link_libraries(beebium_linux_connection
 
 add_library(beebium_linux_servers STATIC
     src/servers/CoreCli.cpp
+    src/servers/PresetLibrary.cpp
     src/servers/ServerLauncher.cpp
     src/servers/ServerLocator.cpp
 )
