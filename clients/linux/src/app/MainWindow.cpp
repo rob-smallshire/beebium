@@ -41,6 +41,7 @@
 #include "app/SelectionOverlayWidget.hpp"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QMimeData>
 #include <QGuiApplication>
 #include <QClipboard>
@@ -578,6 +579,65 @@ void MainWindow::build_menus() {
             });
     connect(&session_->typing(), &SessionTyping::pasting_changed, paste_action,
             [paste_action](bool pasting) { paste_action->setEnabled(!pasting); });
+    // Directly beneath Paste, the three copies of the screen's text (6.5),
+    // as the macOS client's: each copies the selection in its reading, or
+    // with none the whole screen. Ctrl+C is the machine's (VDU 3), so Copy
+    // is Meta+C or Ctrl+Alt+C. Copy as Columns is Meta+Alt+C: Alt cannot be
+    // added to Ctrl+Alt, so it has no other form. They work in immersive
+    // presentation too, the menu bar hidden.
+    const auto add_copy = [this, edit](const QString& text, Interpretation interpretation,
+                                       const QString& object_name) {
+        QAction* action = edit->addAction(text);
+        action->setObjectName(object_name);
+        action->setShortcutContext(Qt::WindowShortcut);
+        addAction(action);
+        action->setEnabled(false);
+        connect(action, &QAction::triggered, this,
+                [this, interpretation] { selection_->copy(interpretation); });
+        connect(session_, &MachineSession::connected_to_server, action,
+                [action] { action->setEnabled(true); });
+        connect(recovery_, &ConnectionRecovery::verdict_changed, action,
+                [action](ConnectionVerdict verdict) {
+                    if (!is_live(verdict)) {
+                        action->setEnabled(false);
+                    }
+                });
+        return action;
+    };
+    QAction* copy_action = add_copy(tr("&Copy"), Interpretation::rows, QStringLiteral("copy"));
+    copy_action->setIcon(QIcon::fromTheme(QStringLiteral("edit-copy")));
+    set_session_shortcuts(copy_action, QKeySequence(QStringLiteral("Meta+C")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+C")));
+    QAction* columns_action =
+        add_copy(tr("Copy as Co&lumns"), Interpretation::columns, QStringLiteral("copyAsColumns"));
+    columns_action->setShortcut(QKeySequence(QStringLiteral("Meta+Alt+C")));
+    QAction* graphics_action = add_copy(tr("Copy Text from &Graphics"), Interpretation::anywhere,
+                                        QStringLiteral("copyTextFromGraphics"));
+    set_session_shortcuts(graphics_action, QKeySequence(QStringLiteral("Meta+Shift+C")),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+Shift+C")));
+    // How the copies read a Mode 7 byte: a setting they obey, not a fourth
+    // copy. Shared by every window, so shown afresh as the menu opens.
+    edit->addSeparator();
+    QMenu* mode7 = edit->addMenu(tr("&Mode 7 Copies As"));
+    mode7->setObjectName(QStringLiteral("mode7CopiesAs"));
+    auto* mode7_group = new QActionGroup(mode7);
+    mode7_group->setExclusive(true);
+    mode7_codes_action_ = mode7->addAction(tr("Character &Codes"));
+    mode7_displayed_action_ = mode7->addAction(tr("&Displayed Characters"));
+    for (QAction* action : {mode7_codes_action_, mode7_displayed_action_}) {
+        action->setCheckable(true);
+        mode7_group->addAction(action);
+    }
+    mode7_codes_action_->setChecked(true);
+    connect(mode7_group, &QActionGroup::triggered, this, [this](QAction* chosen) {
+        if (settings_) {
+            settings_->set_mode7_characters(chosen == mode7_displayed_action_
+                                                ? Mode7Characters::displayed
+                                                : Mode7Characters::codes);
+        }
+    });
+    connect(edit, &QMenu::aboutToShow, this, &MainWindow::show_mode7_characters);
+    show_mode7_characters();
     // Last, under a separator, as the macOS client's Command-K: Logical and
     // back (7.4).
     edit->addSeparator();
@@ -881,6 +941,24 @@ void MainWindow::rename() {
     session_->set_name(name);
 }
 
+Mode7Characters MainWindow::mode7_characters() const {
+    if (settings_) {
+        return settings_->mode7_characters();
+    }
+    return mode7_displayed_action_ && mode7_displayed_action_->isChecked()
+               ? Mode7Characters::displayed
+               : Mode7Characters::codes;
+}
+
+void MainWindow::show_mode7_characters() {
+    if (!settings_) {
+        return;  // the menu's own state is the choice
+    }
+    const bool displayed = settings_->mode7_characters() == Mode7Characters::displayed;
+    mode7_displayed_action_->setChecked(displayed);
+    mode7_codes_action_->setChecked(!displayed);
+}
+
 void MainWindow::build_selection() {
     SelectionServices services;
     services.connected = [this] { return session_->screen_text().started(); };
@@ -897,9 +975,7 @@ void MainWindow::build_selection() {
     services.show_still = [this](const DecodedFrame& still) { display_->show_still(still); };
     services.resume = [this] { display_->resume(); };
     services.release_machine_keys = [this] { display_->keyboard().yield_to_window(); };
-    // Character codes, the server's default, until the Edit menu offers the
-    // choice.
-    services.mode7_characters = [] { return Mode7Characters::codes; };
+    services.mode7_characters = [this] { return mode7_characters(); };
     services.write_clipboard = [](const std::string& text) {
         QGuiApplication::clipboard()->setText(QString::fromStdString(text));
     };

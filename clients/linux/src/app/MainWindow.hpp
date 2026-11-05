@@ -15,6 +15,7 @@
 
 #include "app/MappingCatalogue.hpp"
 #include "app/Presentation.hpp"
+#include "connection/ScreenReading.hpp"
 
 #include <QMainWindow>
 #include <QSplitter>
@@ -23,6 +24,7 @@
 #include <functional>
 #include <memory>
 
+class QAction;
 class QLabel;
 class QToolButton;
 
@@ -147,6 +149,12 @@ private:
     // Screen text selection and copy (6.5).
     void build_selection();
     std::unique_ptr<SelectionCoordinator> selection_;
+    // Edit > Mode 7 Copies As: the client setting, or with no settings the
+    // menu's own choice.
+    Mode7Characters mode7_characters() const;
+    void show_mode7_characters();
+    QAction* mode7_codes_action_ = nullptr;
+    QAction* mode7_displayed_action_ = nullptr;
     SelectionOverlayWidget* selection_overlay_ = nullptr;
     QWidget* status_strip_ = nullptr;
     IndicatorStrip* indicator_strip_ = nullptr;
