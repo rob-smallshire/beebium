@@ -328,6 +328,10 @@ beebium_linux_add_test(test_session_speed QT
     SOURCES test_session_speed.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_selection_coordinator
+    SOURCES test_selection_coordinator.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_session_screen_text QT
     SOURCES test_session_screen_text.cpp
     LIBRARIES beebium_linux_app)
