@@ -16,6 +16,7 @@
 #include "app/PresetResolver.hpp"
 #include "app/SidebarMode.hpp"
 #include "preset/MachineDraft.hpp"
+#include "preset/ParameterFormModel.hpp"
 #include "preset/PresetResolution.hpp"
 #include "preset/PresetSchema.hpp"
 #include "servers/CoreCli.hpp"
@@ -40,6 +41,12 @@ class QVBoxLayout;
 namespace beebium::linux_client {
 
 class ClientSettings;
+class NewMachineDialog;
+
+// The configuration editor's own sections (the storage, memory,
+// peripherals, keyboard, processor and network editors).
+std::vector<std::function<class ConfigurationSection*(NewMachineDialog&)>>
+configuration_section_makers();
 
 // What the New Machine dialog needs of this host's servers, as functions so
 // tests can stand in for them.
@@ -116,15 +123,22 @@ public:
     // The draft changed through the dialog: ask the server again.
     void draft_edited();
 
-    // The sections are built for each schema by these makers, in turn.
+    // The sections are built for each schema by these makers, in turn:
+    // the built-in ones (configuration_section_makers) and any added.
     using SectionMaker = std::function<ConfigurationSection*(NewMachineDialog& dialog)>;
     static void add_section_maker(SectionMaker maker);
+
+    // A path for a Browse: the platform's choosers by default; tests answer.
+    using Chooser = std::function<std::optional<QString>(const FormBrowse& browse)>;
+    void set_chooser(Chooser chooser) { chooser_ = std::move(chooser); }
+    std::optional<QString> choose(const FormBrowse& browse);
+    const Chooser& chooser() const { return chooser_; }
 
     void accept() override;
     void reject() override;
 
 private:
-    void choose(int index);
+    void choose_preset(int index);
     void on_resolved(const PresetResolution& resolution);
     void present_diagnostics();
     void rebuild_sections();
@@ -134,6 +148,7 @@ private:
     void show_launch_error(const QString& text);
 
     NewMachineHost host_;
+    Chooser chooser_;
     ClientSettings* settings_;
     std::unique_ptr<PresetResolver> resolver_;
     std::vector<PresetListing> presets_;

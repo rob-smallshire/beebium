@@ -287,6 +287,9 @@ add_library(beebium_linux_app STATIC
     src/app/MainWindow.cpp
     src/app/NetworkSidebar.cpp
     src/app/NewMachineDialog.cpp
+    src/app/configuration/ConfigurationSections.cpp
+    src/app/configuration/SectionWidgets.cpp
+    src/app/configuration/StorageSection.cpp
     src/app/ParameterForm.cpp
     src/app/PeripheralsSidebar.cpp
     src/app/PictureDrop.cpp

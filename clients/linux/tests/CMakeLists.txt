@@ -89,6 +89,10 @@ beebium_linux_add_test(test_new_machine_dialog QT
     SOURCES test_new_machine_dialog.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_configuration_sections QT
+    SOURCES test_configuration_sections.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_compatibility
     SOURCES test_compatibility.cpp
     LIBRARIES beebium_linux_connection)

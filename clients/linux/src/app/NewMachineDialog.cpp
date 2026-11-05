@@ -20,6 +20,7 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -140,7 +141,7 @@ NewMachineDialog::NewMachineDialog(NewMachineHost host, ClientSettings* settings
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-    connect(picker_, &QComboBox::activated, this, &NewMachineDialog::choose);
+    connect(picker_, &QComboBox::activated, this, &NewMachineDialog::choose_preset);
     connect(description_, &QLineEdit::editingFinished, this, [this] {
         const QString text = description_->text().trimmed();
         const auto now = draft_.get("/machine_description");
@@ -168,6 +169,27 @@ NewMachineDialog::NewMachineDialog(NewMachineHost host, ClientSettings* settings
 }
 
 NewMachineDialog::~NewMachineDialog() = default;
+
+std::optional<QString> NewMachineDialog::choose(const FormBrowse& browse) {
+    if (chooser_) {
+        return chooser_(browse);
+    }
+    const QString title = QString::fromStdString(browse.label);
+    const QString current = QString::fromStdString(browse.current);
+    QString chosen;
+    switch (browse.chooser) {
+    case FormBrowse::Chooser::open_file:
+        chosen = QFileDialog::getOpenFileName(this, title, current);
+        break;
+    case FormBrowse::Chooser::save_file:
+        chosen = QFileDialog::getSaveFileName(this, title, current);
+        break;
+    case FormBrowse::Chooser::directory:
+        chosen = QFileDialog::getExistingDirectory(this, title, current);
+        break;
+    }
+    return chosen.isEmpty() ? std::nullopt : std::optional<QString>(chosen);
+}
 
 QString NewMachineDialog::launch_error() const {
     return launch_error_->isHidden() ? QString() : launch_error_->text();
@@ -233,12 +255,12 @@ void NewMachineDialog::reload() {
         }
         if (chosen >= 0) {
             guard->picker_->setCurrentIndex(chosen);
-            guard->choose(chosen);
+            guard->choose_preset(chosen);
         }
     });
 }
 
-void NewMachineDialog::choose(int row) {
+void NewMachineDialog::choose_preset(int row) {
     const QVariant index = picker_->itemData(row, PRESET_INDEX_ROLE);
     if (!index.isValid()) {
         return;
@@ -344,7 +366,9 @@ void NewMachineDialog::rebuild_sections() {
     if (!schema_) {
         return;
     }
-    for (const auto& make : section_makers()) {
+    auto makers = configuration_section_makers();
+    makers.insert(makers.end(), section_makers().begin(), section_makers().end());
+    for (const auto& make : makers) {
         if (ConfigurationSection* section = make(*this)) {
             sections_.push_back(section);
         }
