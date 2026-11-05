@@ -67,6 +67,8 @@ TEST_CASE("A socket's new content is written explicitly at its slot", "[preset][
     REQUIRE(slots.size() == 3);
     CHECK(slots[2] == ordered_json::parse(R"({"slot": 13, "type": "ram", "image_uri": null, "write_protected": true})"));
     CHECK(sideways.changed(2));
+    CHECK(sideways.entry_index(2) == std::optional<std::size_t>(2));
+    CHECK_FALSE(sideways.entry_index(3).has_value());
     // Emptied: still written, so it means empty whatever the defaults.
     sideways.set(0, SocketContent{});
     CHECK((*draft.get("/sideways_bank/slots"))[1] == ordered_json::parse(R"({"slot": 15, "type": "empty"})"));

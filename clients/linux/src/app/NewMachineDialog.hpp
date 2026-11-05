@@ -54,6 +54,7 @@ struct NewMachineHost {
     using Presets = std::function<void(std::vector<PresetListing> presets, QString error)>;
     using Schema = std::function<void(std::optional<PresetSchema> schema)>;
     using Imported = std::function<void(bool ok, QString error)>;
+    using RomDescribed = std::function<void(std::optional<RomDescription> rom)>;
 
     // list-presets: every preset this host can launch.
     std::function<void(Presets done)> list_presets;
@@ -65,6 +66,8 @@ struct NewMachineHost {
     PresetResolver::Runner resolve_runner;
     // import-preset of a preset file, for Save as new preset.
     std::function<void(const QString& model, const QString& filepath, Imported done)> import_preset;
+    // describe-rom of a ROM library name or image path.
+    std::function<void(const QString& model, const QString& rom, RomDescribed done)> describe_rom;
     // Start a machine from a preset file, as a preset card does: the listing
     // names the preset it was made from, for the machine's name and ordinal.
     std::function<void(const PresetListing& preset, const QString& filepath)> launch;
@@ -123,6 +126,11 @@ public:
     // The draft changed through the dialog: ask the server again.
     void draft_edited();
 
+    // A sideways image's description (a ROM library name or file URI),
+    // asked of the server once per image: null until it has answered or
+    // when it could not, and rom_described() follows each answer.
+    const RomDescription* rom_description(const std::string& image_uri);
+
     // The sections are built for each schema by these makers, in turn:
     // the built-in ones (configuration_section_makers) and any added.
     using SectionMaker = std::function<ConfigurationSection*(NewMachineDialog& dialog)>;
@@ -136,6 +144,9 @@ public:
 
     void accept() override;
     void reject() override;
+
+Q_SIGNALS:
+    void rom_described();
 
 private:
     void choose_preset(int index);
@@ -159,6 +170,7 @@ private:
     bool settled_ = false;  // the last resolution is the draft's present one
     std::vector<PresetDiagnostic> diagnostics_;
     std::map<QString, PresetSchema> schemas_;
+    std::map<std::string, std::optional<RomDescription>> roms_;  // present once asked
 
     QLabel* banner_;
     QComboBox* picker_;

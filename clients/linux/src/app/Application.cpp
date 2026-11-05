@@ -366,6 +366,22 @@ NewMachineHost Application::new_machine_host() {
                      done(result.ok(), result.standard_error.trimmed());
                  });
     };
+    host.describe_rom = [this, located](const QString& model, const QString& rom,
+                                        NewMachineHost::RomDescribed done) {
+        const auto found = located();
+        if (!found) {
+            done(std::nullopt);
+            return;
+        }
+        QStringList arguments{QStringLiteral("describe-rom"), rom};
+        if (!settings_.rom_dirpath().isEmpty()) {
+            arguments << QStringLiteral("--rom-dir") << settings_.rom_dirpath();
+        }
+        cli_.run(found->executable_filepath(model), arguments,
+                 [done = std::move(done)](const CliResult& result) {
+                     done(result.ok() ? parse_rom_description(result.standard_output) : std::nullopt);
+                 });
+    };
     host.launch = [this, located](const PresetListing& preset, const QString& filepath) {
         const auto found = located();
         if (!found) {

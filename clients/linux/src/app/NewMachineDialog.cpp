@@ -14,6 +14,7 @@
 
 #include "app/ClientSettings.hpp"
 #include "app/SidebarMode.hpp"
+#include "app/configuration/SectionWidgets.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -472,6 +473,32 @@ void NewMachineDialog::launch_draft() {
     QDialog::accept();
     draft_ = MachineDraft();
     reload();
+}
+
+const RomDescription* NewMachineDialog::rom_description(const std::string& image_uri) {
+    if (image_uri.empty()) {
+        return nullptr;
+    }
+    const auto found = roms_.find(image_uri);
+    if (found != roms_.end()) {
+        return found->second ? &*found->second : nullptr;
+    }
+    roms_.emplace(image_uri, std::nullopt);
+    if (!host_.describe_rom || !preset_) {
+        return nullptr;
+    }
+    QPointer<NewMachineDialog> guard(this);
+    host_.describe_rom(preset_->model, path_of_uri(image_uri),
+                       [guard, image_uri](std::optional<RomDescription> rom) {
+                           if (!guard || !rom) {
+                               return;
+                           }
+                           guard->roms_[image_uri] = std::move(rom);
+                           Q_EMIT guard->rom_described();
+                       });
+    // The answer may already be in.
+    const auto answered = roms_.find(image_uri);
+    return answered != roms_.end() && answered->second ? &*answered->second : nullptr;
 }
 
 void NewMachineDialog::show_launch_error(const QString& text) {

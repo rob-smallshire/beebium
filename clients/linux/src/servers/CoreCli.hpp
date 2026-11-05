@@ -107,6 +107,23 @@ std::vector<DiscFormat> parse_disc_formats(const QByteArray& jsonl);
 // The extensions of every format of a kind, for a file dialog's filter.
 QStringList disc_extensions(const std::vector<DiscFormat>& formats, const QString& kind);
 
+// `describe-rom`: a sideways ROM image's header, for its title in place of
+// its file name.
+struct RomDescription {
+    bool recognised = false;
+    QString title;
+    QString version;
+    QStringList kinds;  // the ROM's roles: "language", "service", "romfs"
+
+    // "<title> <version>", or the title alone; empty when unrecognised.
+    QString display_title() const;
+    // The roles as shown: verbatim, but "romfs" as "ROMFS".
+    QStringList display_kinds() const;
+};
+
+// Nullopt unless the output is a ROM's description.
+std::optional<RomDescription> parse_rom_description(const QByteArray& json);
+
 }  // namespace beebium::linux_client
 
 #endif  // BEEBIUM_LINUX_SERVERS_CORE_CLI_HPP

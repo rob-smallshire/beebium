@@ -27,6 +27,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -52,9 +54,18 @@ struct ConfigurationFixture {
     nlohmann::ordered_json diagnostics = nlohmann::ordered_json::array();
     int resolutions = 0;
     std::optional<QString> answer;  // the next Browse's path
+    std::map<QString, RomDescription> roms;  // describe-rom's answers, by name or path
+    QStringList described;                   // what describe-rom was asked
     std::unique_ptr<NewMachineDialog> dialog;
 
-    explicit ConfigurationFixture(nlohmann::ordered_json document) : resolved(std::move(document)) {
+    // Before: the server's answers are set before the dialog first asks,
+    // since it asks once per model and per image.
+    explicit ConfigurationFixture(nlohmann::ordered_json document,
+                                  const std::function<void(ConfigurationFixture&)>& before = {})
+        : resolved(std::move(document)) {
+        if (before) {
+            before(*this);
+        }
         NewMachineHost host;
         host.list_presets = [](NewMachineHost::Presets done) {
             PresetListing preset;
@@ -67,6 +78,12 @@ struct ConfigurationFixture {
         host.executable = [](const QString&) { return QStringLiteral("beebium-model-b"); };
         host.describe_schema = [this](const QString&, NewMachineHost::Schema done) {
             done(PresetSchema::parse(schema_text));
+        };
+        host.describe_rom = [this](const QString&, const QString& rom,
+                                   NewMachineHost::RomDescribed done) {
+            described << rom;
+            const auto found = roms.find(rom);
+            done(found == roms.end() ? std::nullopt : std::optional<RomDescription>(found->second));
         };
         host.resolve_runner = [this](const QString&, const QStringList&, CoreCli::Done done) {
             ++resolutions;

@@ -276,3 +276,19 @@ TEST_CASE("Recent logs are kept even beyond twenty", "[servers][logs]") {
     }
     CHECK(prune_server_logs(directory.path(), QDateTime::currentDateTime()) == 0);
 }
+
+TEST_CASE("A ROM's description gives its title and roles as shown", "[servers][roms]") {
+    const auto dfs = parse_rom_description(
+        R"({"recognised":true,"title":"DFS","version":"2.26","copyright":"(C)1985 Acorn","kinds":["service"]})");
+    REQUIRE(dfs);
+    CHECK(dfs->display_title() == "DFS 2.26");
+    CHECK(dfs->display_kinds() == QStringList{QStringLiteral("service")});
+    const auto basic = parse_rom_description(R"({"recognised":true,"title":"BASIC","version":"","kinds":["language","romfs"]})");
+    REQUIRE(basic);
+    CHECK(basic->display_title() == "BASIC");
+    CHECK(basic->display_kinds() == QStringList({QStringLiteral("language"), QStringLiteral("ROMFS")}));
+    const auto unknown = parse_rom_description(R"({"recognised":false,"title":"","version":""})");
+    REQUIRE(unknown);
+    CHECK(unknown->display_title().isEmpty());
+    CHECK_FALSE(parse_rom_description("Error: no such ROM").has_value());
+}

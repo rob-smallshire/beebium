@@ -52,6 +52,9 @@ public:
     void swap(std::size_t a, std::size_t b);
     void revert(std::size_t socket) { set(socket, resolved(socket)); }
 
+    // Where the socket's entry is in the draft's slots, if it has one.
+    std::optional<std::size_t> entry_index(std::size_t socket) const;
+
 private:
     SocketContent read(const nlohmann::ordered_json& slots, std::size_t socket) const;
     std::optional<int> entry_slot(std::size_t socket) const;

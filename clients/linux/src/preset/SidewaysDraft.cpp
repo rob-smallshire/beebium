@@ -79,6 +79,18 @@ std::optional<int> SidewaysDraft::entry_slot(std::size_t socket) const {
     return std::nullopt;
 }
 
+std::optional<std::size_t> SidewaysDraft::entry_index(std::size_t socket) const {
+    const auto slots = draft_.get(SLOTS);
+    if (slots && slots->is_array()) {
+        for (std::size_t i = 0; i < slots->size(); ++i) {
+            if (answers(sockets_[socket], (*slots)[i])) {
+                return i;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 void SidewaysDraft::set(std::size_t socket, const SocketContent& content) {
     const int slot = entry_slot(socket).value_or(sockets_[socket].priority());
     ordered_json slots = draft_.get(SLOTS).value_or(ordered_json::array());

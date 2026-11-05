@@ -59,6 +59,38 @@ void CoreCli::run(const QString& executable_filepath, const QStringList& argumen
     process->start(executable_filepath, arguments);
 }
 
+QString RomDescription::display_title() const {
+    if (!recognised || title.isEmpty()) {
+        return {};
+    }
+    return version.isEmpty() ? title : title + QLatin1Char(' ') + version;
+}
+
+QStringList RomDescription::display_kinds() const {
+    QStringList shown;
+    for (const QString& kind : kinds) {
+        shown << (kind == QLatin1String("romfs") ? QStringLiteral("ROMFS") : kind);
+    }
+    return shown;
+}
+
+std::optional<RomDescription> parse_rom_description(const QByteArray& json) {
+    const QJsonObject row = QJsonDocument::fromJson(json).object();
+    if (!row.contains(QStringLiteral("recognised"))) {
+        return std::nullopt;
+    }
+    RomDescription rom;
+    rom.recognised = row.value(QStringLiteral("recognised")).toBool();
+    rom.title = row.value(QStringLiteral("title")).toString();
+    rom.version = row.value(QStringLiteral("version")).toString();
+    for (const QJsonValue kind : row.value(QStringLiteral("kinds")).toArray()) {
+        if (kind.isString()) {
+            rom.kinds << kind.toString();
+        }
+    }
+    return rom;
+}
+
 QStringList parse_serial_ports(const QByteArray& jsonl) {
     QStringList paths;
     for (const QByteArray& line : jsonl.split('\n')) {

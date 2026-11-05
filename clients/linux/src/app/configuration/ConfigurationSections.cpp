@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include "app/NewMachineDialog.hpp"
+#include "app/configuration/MemorySection.hpp"
 #include "app/configuration/StorageSection.hpp"
 
 namespace beebium::linux_client {
@@ -23,6 +24,10 @@ configuration_section_makers() {
         [](NewMachineDialog& dialog) -> ConfigurationSection* {
             const auto& schema = dialog.schema();
             return schema && schema->section("storage") ? new StorageSection(dialog) : nullptr;
+        },
+        [](NewMachineDialog& dialog) -> ConfigurationSection* {
+            const auto& schema = dialog.schema();
+            return schema && schema->section("sideways_bank") ? new MemorySection(dialog) : nullptr;
         },
     };
 }
