@@ -516,9 +516,11 @@ TEST_CASE("Storage a peripheral publishes is listed below the floppy drives",
     CHECK(rows[0]->toolTip() == w.image);
     CHECK(rows[1]->title_text() == QStringLiteral("RAM Disc Drive 0"));
     CHECK(rows[1]->file_text() == QStringLiteral("No image"));
-    // Below the floppies.
-    CHECK(rows[0]->mapTo(w.sidebar.get(), QPoint()).y() >
-          w.sidebar->rows().back()->mapTo(w.sidebar.get(), QPoint()).y());
+    // Below the floppies, once the layout has placed the rows that came
+    // last: until it runs they all sit at the top.
+    const auto top = [&](const QWidget* row) { return row->mapTo(w.sidebar.get(), QPoint()).y(); };
+    wait_until([&] { return top(rows[0]) > top(w.sidebar->rows().back()); });
+    CHECK(top(rows[0]) > top(w.sidebar->rows().back()));
     // Read-only: no Browse or Eject of their own.
     CHECK(rows[0]->findChildren<QToolButton*>().isEmpty());
 }
