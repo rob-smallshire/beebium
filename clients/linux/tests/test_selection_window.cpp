@@ -102,18 +102,18 @@ TEST_CASE("A frozen display shows a still in place of the stream until it resume
     CHECK_FALSE(display.frozen());
 }
 
-TEST_CASE("A chord drag with no picture yet starts no selection", "[selection][window]") {
+TEST_CASE("An Alt drag with no picture yet starts no selection", "[selection][window]") {
     FakeServer server;
     MainWindow window(QRhiWidget::Api::OpenGL);
     connect_window(window, server);
     DisplayWidget& display = window.display();
     const QPointF centre(display.width() / 2.0, display.height() / 2.0);
-    send_mouse(&display, QEvent::MouseButtonPress, centre, Qt::MetaModifier);
+    send_mouse(&display, QEvent::MouseButtonPress, centre, Qt::AltModifier);
     CHECK_FALSE(display.frozen());
     CHECK(server.video.holds == 0);
 }
 
-TEST_CASE("A chord drag holds the screen; Escape releases it and the stream resumes",
+TEST_CASE("An Alt drag holds the screen; Escape releases it and the stream resumes",
           "[selection][window]") {
     FakeServer server;
     MainWindow window(QRhiWidget::Api::OpenGL);
@@ -121,7 +121,7 @@ TEST_CASE("A chord drag holds the screen; Escape releases it and the stream resu
     DisplayWidget& display = window.display();
     display.show_still(picture(640));
     const QPointF centre(display.width() / 2.0, display.height() / 2.0);
-    send_mouse(&display, QEvent::MouseButtonPress, centre, Qt::ControlModifier | Qt::AltModifier);
+    send_mouse(&display, QEvent::MouseButtonPress, centre, Qt::AltModifier);
     CHECK(display.frozen());
     auto* overlay = display.findChild<QWidget*>(QStringLiteral("selectionOverlay"));
     REQUIRE(overlay);
@@ -130,9 +130,9 @@ TEST_CASE("A chord drag holds the screen; Escape releases it and the stream resu
     CHECK(overlay->geometry() == display.rect());
     REQUIRE(wait_until([&] { return server.video.holds == 1; }));
     send_mouse(&display, QEvent::MouseMove, centre + QPointF(40, 20),
-               Qt::ControlModifier | Qt::AltModifier);
+               Qt::AltModifier);
     send_mouse(&display, QEvent::MouseButtonRelease, centre + QPointF(40, 20),
-               Qt::ControlModifier | Qt::AltModifier);
+               Qt::AltModifier);
     // Still frozen once the button is up: the selection stays.
     CHECK(display.frozen());
     QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier, 1 + 8, 0, 0);
@@ -152,7 +152,7 @@ TEST_CASE("Connecting afresh ends a selection", "[selection][window]") {
     DisplayWidget& display = window.display();
     display.show_still(picture(640));
     const QPointF centre(display.width() / 2.0, display.height() / 2.0);
-    send_mouse(&display, QEvent::MouseButtonPress, centre, Qt::MetaModifier);
+    send_mouse(&display, QEvent::MouseButtonPress, centre, Qt::AltModifier);
     REQUIRE(display.frozen());
     window.connect_to(server.endpoint());
     CHECK_FALSE(display.frozen());

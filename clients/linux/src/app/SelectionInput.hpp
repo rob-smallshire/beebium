@@ -19,7 +19,6 @@
 #include <Qt>
 
 #include <functional>
-#include <optional>
 
 class QKeyEvent;
 class QMouseEvent;
@@ -30,20 +29,26 @@ class KeyboardInput;
 
 // The display's mouse and keys as a screen text selection reads them
 // (client specification 6.5). A plain drag is the machine's (a future BBC
-// mouse), so a selection starts on a drag with the window's chord: Meta,
-// or Ctrl+Alt where the desktop takes Meta-drags to move windows. Other
-// modifiers held qualify the interpretation, Shift for anywhere and Alt
-// for columns, Shift winning; the chord's own keys qualify nothing while
-// they stay down from the drag that started the selection. Once the drag
-// has begun the modifiers are the selection's and never reach the
-// machine. Escape or a plain click ends it.
+// mouse), and a Meta drag the desktop's (it moves the window), so a
+// selection starts on a drag with Alt held. The other modifiers held
+// qualify the interpretation, Shift for anywhere and Meta for columns,
+// Shift winning; Alt and Ctrl qualify nothing. They are read afresh from
+// each event, never remembered from presses and releases, so a release
+// that went elsewhere cannot leave a qualifier behind. Once the drag has
+// begun the modifiers are the selection's and never reach the machine.
+// Escape or a plain click ends it.
 
 HostModifiers host_modifiers(Qt::KeyboardModifiers modifiers);
 
-// The chord a drag with these modifiers starts a selection with, or none.
-std::optional<HostModifiers> selection_chord(HostModifiers held);
+// The modifiers held once this key event has happened: a modifier key's
+// own flag set by its press and cleared by its release, whatever the
+// platform put in the event; any other key's as the event carries them.
+Qt::KeyboardModifiers live_modifiers(const QKeyEvent& event);
 
-Interpretation interpretation_for(HostModifiers qualifiers);
+// Whether a drag with these modifiers starts a selection.
+bool starts_selection(HostModifiers held);
+
+Interpretation interpretation_for(HostModifiers held);
 
 class SelectionInput {
 public:
@@ -62,14 +67,12 @@ public:
     bool dragging() const { return dragging_; }
 
 private:
-    void requalify(HostModifiers held);
+    void requalify(Qt::KeyboardModifiers held);
 
     SelectionCoordinator& coordinator_;
     KeyboardInput& keyboard_;
     Presentation presentation_;
     bool dragging_ = false;
-    // The chord's keys still down from the drag that began the selection.
-    HostModifiers chord_ = 0;
 };
 
 }  // namespace beebium::linux_client

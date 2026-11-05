@@ -36,22 +36,40 @@ HostModifiers host_modifiers(Qt::KeyboardModifiers modifiers) {
     return held;
 }
 
-std::optional<HostModifiers> selection_chord(HostModifiers held) {
-    if (held & MODIFIER_META) {
-        return MODIFIER_META;
+Qt::KeyboardModifiers live_modifiers(const QKeyEvent& event) {
+    Qt::KeyboardModifiers held = event.modifiers();
+    Qt::KeyboardModifier own = Qt::NoModifier;
+    switch (event.key()) {
+    case Qt::Key_Shift:
+        own = Qt::ShiftModifier;
+        break;
+    case Qt::Key_Control:
+        own = Qt::ControlModifier;
+        break;
+    case Qt::Key_Alt:
+        own = Qt::AltModifier;
+        break;
+    case Qt::Key_Meta:
+    case Qt::Key_Super_L:
+    case Qt::Key_Super_R:
+        own = Qt::MetaModifier;
+        break;
+    default:
+        return held;
     }
-    constexpr HostModifiers CONTROL_ALT = MODIFIER_CONTROL | MODIFIER_ALT;
-    if ((held & CONTROL_ALT) == CONTROL_ALT) {
-        return CONTROL_ALT;
-    }
-    return std::nullopt;
+    held.setFlag(own, event.type() != QEvent::KeyRelease);
+    return held;
 }
 
-Interpretation interpretation_for(HostModifiers qualifiers) {
-    if (qualifiers & MODIFIER_SHIFT) {
+bool starts_selection(HostModifiers held) {
+    return (held & MODIFIER_ALT) != 0;
+}
+
+Interpretation interpretation_for(HostModifiers held) {
+    if (held & MODIFIER_SHIFT) {
         return Interpretation::anywhere;
     }
-    if (qualifiers & MODIFIER_ALT) {
+    if (held & MODIFIER_META) {
         return Interpretation::columns;
     }
     return Interpretation::rows;
@@ -63,13 +81,10 @@ SelectionInput::SelectionInput(SelectionCoordinator& coordinator, KeyboardInput&
 
 bool SelectionInput::mouse_press(const QMouseEvent& event) {
     const HostModifiers held = host_modifiers(event.modifiers());
-    const auto chord = selection_chord(held);
-    if (event.button() == Qt::LeftButton && chord) {
+    if (event.button() == Qt::LeftButton && starts_selection(held)) {
         const QPointF point = event.position();
-        if (coordinator_.begin({point.x(), point.y()}, interpretation_for(held & ~*chord),
-                               presentation_())) {
+        if (coordinator_.begin({point.x(), point.y()}, interpretation_for(held), presentation_())) {
             dragging_ = true;
-            chord_ = *chord;
             return true;
         }
         return false;
@@ -87,7 +102,7 @@ bool SelectionInput::mouse_move(const QMouseEvent& event) {
     if (!dragging_) {
         return false;
     }
-    requalify(host_modifiers(event.modifiers()));
+    requalify(event.modifiers());
     const QPointF point = event.position();
     coordinator_.update({point.x(), point.y()});
     return true;
@@ -98,6 +113,7 @@ bool SelectionInput::mouse_release(const QMouseEvent& event) {
         return dragging_;
     }
     // The selection stays, to be requalified and copied.
+    requalify(event.modifiers());
     dragging_ = false;
     return true;
 }
@@ -114,25 +130,21 @@ bool SelectionInput::key_press(const QKeyEvent& event) {
         }
         return true;
     }
-    if (!keyboard_.track_host_modifier(event)) {
-        return false;
-    }
-    requalify(keyboard_.held_modifiers());
-    return true;
+    requalify(live_modifiers(event));
+    // A modifier key is the selection's; any other key is typed as before.
+    return keyboard_.track_host_modifier(event);
 }
 
 bool SelectionInput::key_release(const QKeyEvent& event) {
-    if (!coordinator_.selecting() || !keyboard_.track_host_modifier(event)) {
+    if (!coordinator_.selecting()) {
         return false;
     }
-    requalify(keyboard_.held_modifiers());
-    return true;
+    requalify(live_modifiers(event));
+    return keyboard_.track_host_modifier(event);
 }
 
-void SelectionInput::requalify(HostModifiers held) {
-    // A chord key let go is an ordinary qualifier when pressed again.
-    chord_ &= held;
-    coordinator_.set_interpretation(interpretation_for(held & ~chord_));
+void SelectionInput::requalify(Qt::KeyboardModifiers held) {
+    coordinator_.set_interpretation(interpretation_for(host_modifiers(held)));
 }
 
 }  // namespace beebium::linux_client
