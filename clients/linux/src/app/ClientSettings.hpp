@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_APP_CLIENT_SETTINGS_HPP
 
 #include "connection/Endpoint.hpp"
+#include "connection/ScreenReading.hpp"
 #include "display/VideoSettings.hpp"
 
 #include <QSettings>
@@ -72,6 +73,12 @@ public:
     // always starts at its default. Open windows never follow a change.
     VideoSettings video_defaults() const;
     void set_video_defaults(const VideoSettings& defaults);
+
+    // How a copy of Mode 7 text renders a byte (client specification 6.5):
+    // as its character code, the default, or as the glyph displayed. Read
+    // afresh at each copy, so every window follows a change at once.
+    Mode7Characters mode7_characters() const;
+    void set_mode7_characters(Mode7Characters characters);
 
     QSettings& store() { return *settings_; }
 

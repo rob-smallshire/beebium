@@ -22,6 +22,7 @@ namespace {
 const QString RECENT_CONNECTIONS_KEY = QStringLiteral("connections/recent");
 const QString RECENT_MACHINES_KEY = QStringLiteral("machines/recent");
 const QString VIDEO_STYLE_KEY = QStringLiteral("video/defaultStyle");
+const QString MODE7_CHARACTERS_KEY = QStringLiteral("screenText/mode7Characters");
 const QString VIDEO_PIXELS_KEY = QStringLiteral("video/defaultPixels");
 const QString VIDEO_BOXING_KEY = QStringLiteral("video/defaultBoxingColour");
 const QString RECENT_DISCS_KEY = QStringLiteral("discs/recent");
@@ -152,6 +153,20 @@ QString ClientSettings::servers_dirpath() const {
 
 void ClientSettings::set_servers_dirpath(const QString& dirpath) {
     settings_->setValue(QStringLiteral("servers/dirpath"), dirpath);
+    settings_->sync();
+}
+
+Mode7Characters ClientSettings::mode7_characters() const {
+    // Anything but the displayed glyphs, an unknown value included, is codes.
+    return settings_->value(MODE7_CHARACTERS_KEY).toString() == QStringLiteral("displayed")
+               ? Mode7Characters::displayed
+               : Mode7Characters::codes;
+}
+
+void ClientSettings::set_mode7_characters(Mode7Characters characters) {
+    settings_->setValue(MODE7_CHARACTERS_KEY, characters == Mode7Characters::displayed
+                                                  ? QStringLiteral("displayed")
+                                                  : QStringLiteral("codes"));
     settings_->sync();
 }
 

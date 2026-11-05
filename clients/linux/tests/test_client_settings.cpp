@@ -157,3 +157,22 @@ TEST_CASE("Video defaults that no longer read fall back to the built-in ones",
     settings.store().setValue(QStringLiteral("video/defaultBoxingColour"), QStringLiteral("blue-ish"));
     CHECK(settings.video_defaults() == VideoSettings{});
 }
+
+TEST_CASE("Mode 7 copies as character codes until displayed characters are chosen, across runs",
+          "[settings][screen-text]") {
+    QTemporaryDir directory;
+    const QString filepath = directory.filePath(QStringLiteral("Beebium.conf"));
+    {
+        ClientSettings settings(filepath);
+        CHECK(settings.mode7_characters() == Mode7Characters::codes);
+        settings.set_mode7_characters(Mode7Characters::displayed);
+        CHECK(settings.mode7_characters() == Mode7Characters::displayed);
+    }
+    ClientSettings again(filepath);
+    CHECK(again.mode7_characters() == Mode7Characters::displayed);
+    again.set_mode7_characters(Mode7Characters::codes);
+    CHECK(again.mode7_characters() == Mode7Characters::codes);
+    // A value no longer understood is the default.
+    again.store().setValue(QStringLiteral("screenText/mode7Characters"), QStringLiteral("semaphore"));
+    CHECK(again.mode7_characters() == Mode7Characters::codes);
+}
