@@ -13,6 +13,8 @@
 #ifndef BEEBIUM_LINUX_APP_APPLICATION_INFO_HPP
 #define BEEBIUM_LINUX_APP_APPLICATION_INFO_HPP
 
+#include <QIcon>
+
 #include <string>
 #include <string_view>
 
@@ -27,6 +29,10 @@ std::string_view client_protocol_fingerprint();
 
 // One line for --version: the program, its version and its protocol.
 std::string version_text();
+
+// The client's icon: the installed org.beebium.Beebium from the icon theme,
+// or, run without the package installed, the copy built into the program.
+QIcon application_icon();
 
 }  // namespace beebium::linux_client
 

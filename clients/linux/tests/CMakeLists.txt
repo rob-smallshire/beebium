@@ -45,6 +45,10 @@ beebium_linux_add_test(test_application_info
     SOURCES test_application_info.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_application_icon QT
+    SOURCES test_application_icon.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_main_window QT
     SOURCES test_main_window.cpp
     LIBRARIES beebium_linux_app)

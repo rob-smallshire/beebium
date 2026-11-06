@@ -14,6 +14,8 @@
 
 #include "beebium/service/ProtocolFingerprint.hpp"
 
+#include <QString>
+
 namespace beebium::linux_client {
 
 std::string_view client_version() {
@@ -31,6 +33,16 @@ std::string version_text() {
     text.append(client_protocol_fingerprint());
     text.append(")");
     return text;
+}
+
+QIcon application_icon() {
+    // The package's hicolor sizes, built in; the 512 is left to the package.
+    QIcon built_in;
+    for (const int size : {16, 22, 24, 32, 48, 64, 128, 256}) {
+        built_in.addFile(QStringLiteral(":/icons/%1x%1/apps/org.beebium.Beebium.png").arg(size),
+                         QSize(size, size));
+    }
+    return QIcon::fromTheme(QStringLiteral("org.beebium.Beebium"), built_in);
 }
 
 }  // namespace beebium::linux_client

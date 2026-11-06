@@ -403,6 +403,18 @@ qt_add_resources(beebium_linux_app "keyboard_mappings"
         ${BEEBIUM_KEYBOARD_CORPUS_DIRPATH}/Thrust.json
 )
 
+# The application icon built in, for a program run without its package: the
+# hicolor sizes up to 256, the package's own files.
+set(BEEBIUM_ICON_SIZES 16x16 22x22 24x24 32x32 48x48 64x64 128x128 256x256)
+list(TRANSFORM BEEBIUM_ICON_SIZES
+    REPLACE "^(.+)$" "${CMAKE_CURRENT_SOURCE_DIR}/packaging/icons/hicolor/\\1/apps/org.beebium.Beebium.png"
+    OUTPUT_VARIABLE BEEBIUM_ICON_FILEPATHS)
+qt_add_resources(beebium_linux_app "application_icon"
+    PREFIX "/icons"
+    BASE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/icons/hicolor
+    FILES ${BEEBIUM_ICON_FILEPATHS}
+)
+
 qt_add_executable(beebium src/app/main.cpp)
 target_link_libraries(beebium PRIVATE beebium_linux_app)
 

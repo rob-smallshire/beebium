@@ -48,8 +48,9 @@ int main(int argc, char* argv[]) {
     // desktop entry, icons and metainfo under; Wayland compositors match the
     // desktop entry by it.
     QApplication::setDesktopFileName(QStringLiteral("org.beebium.Beebium"));
-    // The installed icon, from the theme (the package puts it in hicolor).
-    QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("org.beebium.Beebium")));
+    // The installed icon from the theme, or the built-in copy when the
+    // program runs without its package.
+    QApplication::setWindowIcon(application_icon());
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Beebium BBC Micro emulator client"));
