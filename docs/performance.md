@@ -178,6 +178,47 @@ The A72 has no LSE atomics, so the atomic add above is a load-exclusive /
 store-exclusive loop. Build and profile on the Pi 5, and use the Pi 400 only
 to confirm a result there.
 
+## After the two atomics (November 2026)
+
+The two read-modify-writes above were replaced: `OutputQueue` publishes each
+index with a release store (c3064268), and `Machine::step` counts cycles in a
+plain integer and folds them into `sequence_` only where the debugger can
+observe the machine (924fc284). Measured the same way as the baseline, same
+host, same build type.
+
+### Pi 5
+
+| Scenario | Emulation thread at 1x: before / after | Ceiling at 10x: before / after |
+|----------|----------------------------------------|--------------------------------|
+| idle | 46.1% / 42.1% | 2.26x / 2.52x |
+| mode2 | 43.5% / 41.3% | 2.39x / 2.52x |
+| disc | 47.6% / 44.7% | 2.18x / 2.34x |
+| tube | 60.3% / 55.1% | 1.78x / 1.89x |
+
+The atomic helper has no samples in any scenario at either speed. The top of
+the idle profile is now `Machine::step_cycle` (the old body of `step`, 15%),
+the render loop's `FrameRenderer::process_unit` (9%), `Saa5050::emit_pixels`
+(8%), `SystemViaPeripheral::update_control_lines` (8%, a symbol the earlier
+inlining had folded into `step`), `Via6522::update_port_pins` (6%),
+`CpuBinding::execute_cycle` (5%) and `VideoRenderer::deliver` (4%).
+
+`VideoRenderer::deliver` costs 11 to 14% in `disc` and `tube` against 4 to 5%
+in `idle` and `mode2`. `perf annotate` puts three quarters of its samples on
+the instruction after the acquire load of `read_pos_` in `available()`: a
+coherence miss on the line the render loop has just written on another core.
+That is what the cached-index refinement below would remove. There is also a
+division per push for `% capacity_`.
+
+### Pi 400
+
+Release build of the same commit, idle MODE 7 prompt, headless: the emulation
+thread fell from 97.5% to 90.9% of a core at 1x, and the ceiling rose from
+1.09x to 1.21x. With the Qt client attached on the same Pi (Model B with
+disc, Processor sidebar showing) the server now holds 1.00x with an estimated
+ceiling of 1.08x, where the previous server wobbled between 0.85x and 0.97x.
+The emulation thread is still at 100% of a core in that session, with the
+frame-stream thread at 20% and the render loop at 16%; the headroom is thin.
+
 ## What an SPSC ring needs
 
 `OutputQueue` is a single-producer, single-consumer ring, so each index has
