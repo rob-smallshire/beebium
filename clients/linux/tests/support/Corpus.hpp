@@ -34,8 +34,9 @@ inline std::string corpus_text(const std::string& filename) {
     return text.str();
 }
 
-inline MappingFile corpus_mapping(const std::string& filename) {
-    auto result = parse_mapping_file(corpus_text(filename));
+inline MappingFile corpus_mapping(const std::string& filename,
+                                  const KeyboardClasses& keyboards = {"standard"}) {
+    auto result = parse_mapping_file(corpus_text(filename), keyboards);
     if (auto* error = std::get_if<MappingFileError>(&result)) {
         FAIL(filename << ": " << error->reason);
     }

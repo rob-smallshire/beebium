@@ -43,6 +43,35 @@ std::string with_keys(const std::string& keys) {
 
 }  // namespace
 
+TEST_CASE("A keyboard condition holds when a named class is attached",
+          "[keyboard][mapping-file]") {
+    const std::string text = with_keys(
+        R"({"code": "F12", "when": {"keyboard": "pi-internal"}, "bbc": {"key": "Break"}},
+           {"code": "F11", "when": {"keyboard": ["standard", "pi-internal"]}, "bbc": {"key": "Copy"}},
+           {"code": "F10", "when": {"keyboard": "laptop"}, "bbc": {"key": "f0"}},
+           {"code": "F9", "when": {"keyboard": {"class": "standard"}}, "bbc": {"key": "f9"}},
+           {"code": "F8", "when": {"platform": "linux", "keyboard": "pi-internal"},
+            "bbc": {"key": "f8"}})");
+    const auto applies = [&](const KeyboardClasses& keyboards) {
+        auto result = parse_mapping_file(text, keyboards);
+        REQUIRE(std::holds_alternative<MappingFile>(result));
+        std::vector<bool> out;
+        for (const auto& entry : std::get<MappingFile>(result).keys) {
+            out.push_back(entry.applies);
+        }
+        return out;
+    };
+    // An unknown class, or a value of another shape, never holds.
+    CHECK(applies({"standard"}) == std::vector<bool>{false, true, false, false, false});
+    CHECK(applies({"pi-internal"}) == std::vector<bool>{true, true, false, false, true});
+    CHECK(applies({"pi-internal", "standard"}) ==
+          std::vector<bool>{true, true, false, false, true});
+    // Without classes given, a standard keyboard.
+    auto result = parse_mapping_file(text);
+    REQUIRE(std::holds_alternative<MappingFile>(result));
+    CHECK_FALSE(std::get<MappingFile>(result).keys[0].applies);
+}
+
 TEST_CASE("A mapping's fields and defaults are read", "[keyboard][mapping-file]") {
     const auto mapping = parse_ok(with_keys(
         R"({"code": "Digit8", "with": ["Shift", "Alt"],

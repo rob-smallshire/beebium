@@ -14,6 +14,7 @@
 // the user's files with the ones that will not load shown as such, and the
 // active mapping's labelled keys (#234).
 
+#include "app/HostKeyboards.hpp"
 #include "app/KeyboardInput.hpp"
 #include "app/KeyboardSidebar.hpp"
 #include "app/MappingCatalogue.hpp"
@@ -104,6 +105,7 @@ TEST_CASE("A host key is named as a person would", "[keyboard][mode]") {
 }
 
 TEST_CASE("Logical labels its five keys with no host namesake, Shift Lock on Alt+F11 on Linux", "[keyboard][mode]") {
+    set_host_keyboard_classes({"standard"});
     const auto mapping = built_in_mapping(QStringLiteral("Logical"));
     REQUIRE(mapping);
     QStringList rows;
@@ -112,6 +114,23 @@ TEST_CASE("Logical labels its five keys with no host namesake, Shift Lock on Alt
     }
     CHECK(rows == QStringList{QStringLiteral("F10 = f0"), QStringLiteral("F11 = Copy"),
                               QStringLiteral("Alt+F12 = Break"), QStringLiteral("Alt+F11 = Shift Lock"),
+                              QStringLiteral("Backspace = Delete")});
+}
+
+TEST_CASE("On the Pi keyboard Logical labels Break on F12 as well", "[keyboard][mode]") {
+    set_host_keyboard_classes({"pi-internal"});
+    const auto mapping = built_in_mapping(QStringLiteral("Logical"));
+    set_host_keyboard_classes({"standard"});
+    REQUIRE(mapping);
+    QStringList rows;
+    for (const auto& row : mapping_reference(*mapping)) {
+        rows << row.host_key + QStringLiteral(" = ") + row.action;
+    }
+    // Alt+F12 stays while every client does not yet know the keyboard
+    // condition (docs/keyboard-mapping-files.md 3.5).
+    CHECK(rows == QStringList{QStringLiteral("F10 = f0"), QStringLiteral("F11 = Copy"),
+                              QStringLiteral("Alt+F12 = Break"), QStringLiteral("F12 = Break"),
+                              QStringLiteral("Alt+F11 = Shift Lock"),
                               QStringLiteral("Backspace = Delete")});
 }
 

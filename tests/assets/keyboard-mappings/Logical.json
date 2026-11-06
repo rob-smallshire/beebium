@@ -116,6 +116,17 @@
       }
     },
     {
+      "code": "F12",
+      "when": {
+        "keyboard": "pi-internal"
+      },
+      "bbc": {
+        "key": "Break",
+        "disabled": false,
+        "action": "Break"
+      }
+    },
+    {
       "code": "F13",
       "when": {
         "platform": "macOS"

@@ -12,6 +12,8 @@
 
 #include "app/MappingCatalogue.hpp"
 
+#include "app/HostKeyboards.hpp"
+
 #include "app/KeyboardInput.hpp"
 
 #include <QDir>
@@ -91,7 +93,8 @@ std::vector<MappingChoice> mapping_choices(const QString& user_dirpath) {
             choices.push_back(choice);
             continue;
         }
-        const auto result = parse_mapping_file(reading.readAll().toStdString());
+        const auto result =
+            parse_mapping_file(reading.readAll().toStdString(), host_keyboard_classes());
         if (const auto* error = std::get_if<MappingFileError>(&result)) {
             choice.problem = QString::fromStdString(error->reason);
         } else {

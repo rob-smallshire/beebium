@@ -13,6 +13,7 @@
 #include "app/Application.hpp"
 #include "app/ApplicationInfo.hpp"
 #include "app/GraphicsApi.hpp"
+#include "app/HostKeyboards.hpp"
 #include "app/MainWindow.hpp"
 #include "app/SingleInstance.hpp"
 #include "app/SpikeMetrics.hpp"
@@ -51,6 +52,9 @@ int main(int argc, char* argv[]) {
     // The installed icon from the theme, or the built-in copy when the
     // program runs without its package.
     QApplication::setWindowIcon(application_icon());
+    // The keyboards attached now, which mapping entries are decided against;
+    // read once, and logged.
+    host_keyboard_classes();
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Beebium BBC Micro emulator client"));

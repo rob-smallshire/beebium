@@ -47,28 +47,51 @@ bool platform_holds(const Json& value) {
     return named;
 }
 
+// Whether a "when.keyboard" value names a class among those attached (3.5):
+// a class, or an array of them; any other shape does not hold.
+bool keyboard_holds(const Json& value, const KeyboardClasses& keyboards) {
+    if (value.is_string()) {
+        return keyboards.count(value.get<std::string>()) > 0;
+    }
+    if (!value.is_array()) {
+        return false;
+    }
+    bool named = false;
+    for (const auto& name : value) {
+        if (!name.is_string()) {
+            return false;
+        }
+        named = named || keyboards.count(name.get<std::string>()) > 0;
+    }
+    return named;
+}
+
 // Whether every predicate of an entry's "when" holds here (3.5). A predicate
 // this client does not know does not hold.
-bool when_holds(const Json& when) {
+bool when_holds(const Json& when, const KeyboardClasses& keyboards) {
     if (!when.is_object()) {
         return false;
     }
     for (const auto& [name, value] : when.items()) {
-        if (name != "platform" || !platform_holds(value)) {
+        const bool holds = name == "platform"   ? platform_holds(value)
+                           : name == "keyboard" ? keyboard_holds(value, keyboards)
+                                                : false;
+        if (!holds) {
             return false;
         }
     }
     return true;
 }
 
-std::optional<MappingEntry> parse_entry(const Json& source, std::string& error) {
+std::optional<MappingEntry> parse_entry(const Json& source, const KeyboardClasses& keyboards,
+                                        std::string& error) {
     if (!source.is_object()) {
         error = "an entry is not an object";
         return std::nullopt;
     }
     MappingEntry entry;
     entry.source = source;
-    if (source.contains("when") && !when_holds(source["when"])) {
+    if (source.contains("when") && !when_holds(source["when"], keyboards)) {
         entry.applies = false;
         return entry;
     }
@@ -207,7 +230,7 @@ HostModifiers modifier_for_code(std::string_view code) {
     return 0;
 }
 
-MappingFileResult parse_mapping_file(std::string_view json_text) {
+MappingFileResult parse_mapping_file(std::string_view json_text, const KeyboardClasses& keyboards) {
     Json source = Json::parse(json_text, nullptr, false);
     if (source.is_discarded() || !source.is_object()) {
         return MappingFileError{"not a JSON object"};
@@ -239,7 +262,7 @@ MappingFileResult parse_mapping_file(std::string_view json_text) {
     file.synchronize_caps_lock = source.value("synchronizeCapsLock", true);
     for (const auto& item : source["keys"]) {
         std::string error;
-        auto entry = parse_entry(item, error);
+        auto entry = parse_entry(item, keyboards, error);
         if (!entry) {
             return MappingFileError{error};
         }

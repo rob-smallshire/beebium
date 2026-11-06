@@ -145,6 +145,7 @@ add_library(beebium_linux_keyboard STATIC
     src/keyboard/EvdevCodes.cpp
     src/keyboard/HeldKeys.cpp
     src/keyboard/KeyResolver.cpp
+    src/keyboard/KeyboardClasses.cpp
     src/keyboard/MappingFile.cpp
 )
 target_include_directories(beebium_linux_keyboard PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -300,6 +301,7 @@ add_library(beebium_linux_app STATIC
     src/app/LedColour.cpp
     src/app/MachineSession.cpp
     src/app/MappingCatalogue.cpp
+    src/app/HostKeyboards.cpp
     src/app/MachinesPage.cpp
     src/app/MainWindow.cpp
     src/app/NetworkSidebar.cpp

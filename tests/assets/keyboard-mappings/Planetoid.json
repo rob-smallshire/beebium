@@ -69,6 +69,16 @@
         "key": "Break",
         "disabled": false
       }
+    },
+    {
+      "code": "F12",
+      "when": {
+        "keyboard": "pi-internal"
+      },
+      "bbc": {
+        "key": "Break",
+        "disabled": false
+      }
     }
   ]
 }

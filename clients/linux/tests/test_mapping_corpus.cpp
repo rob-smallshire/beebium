@@ -21,7 +21,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <map>
 
 using namespace beebium::linux_client;
 using namespace beebium::linux_client::testing;
@@ -55,12 +54,16 @@ TEST_CASE("Every portable and Linux case in the corpus resolves as expected",
     }
     const BbcKeyTable table(entries);
 
-    std::map<std::string, MappingFile> mappings;
-    for (const auto& [key, value] : corpus["mappings"].items()) {
-        auto parsed = parse_mapping_file(value.dump());
-        REQUIRE(std::holds_alternative<MappingFile>(parsed));
-        mappings.emplace(key, std::get<MappingFile>(std::move(parsed)));
-    }
+    // A case's mapping, read with the keyboard classes the case states
+    // attached (3.5), a standard keyboard when it states none.
+    const auto mapping_for = [&](const std::string& name, const KeyboardClasses& keyboards) {
+        if (corpus["mappings"].contains(name)) {
+            auto parsed = parse_mapping_file(corpus["mappings"][name].dump(), keyboards);
+            REQUIRE(std::holds_alternative<MappingFile>(parsed));
+            return std::get<MappingFile>(std::move(parsed));
+        }
+        return corpus_mapping(name, keyboards);
+    };
 
     int run = 0;
     for (const auto& item : corpus["cases"]) {
@@ -73,10 +76,14 @@ TEST_CASE("Every portable and Linux case in the corpus resolves as expected",
         ++run;
         INFO(item["id"].get<std::string>() << " " << name);
 
-        const std::string mapping_name = item["mapping"].get<std::string>();
-        if (!mappings.count(mapping_name)) {
-            mappings.emplace(mapping_name, corpus_mapping(mapping_name));
+        KeyboardClasses keyboards{"standard"};
+        if (event.contains("keyboards")) {
+            keyboards.clear();
+            for (const auto& keyboard : event["keyboards"]) {
+                keyboards.insert(keyboard.get<std::string>());
+            }
         }
+        const MappingFile mapping = mapping_for(item["mapping"].get<std::string>(), keyboards);
 
         HostKey key;
         key.code = event.value("code", "");
@@ -85,7 +92,7 @@ TEST_CASE("Every portable and Linux case in the corpus resolves as expected",
         if (event.contains("native")) {
             key.evdev = event["native"]["scancode"].get<std::uint32_t>();
         }
-        const auto resolved = resolve_key(mappings.at(mapping_name), table, key);
+        const auto resolved = resolve_key(mapping, table, key);
 
         const Json& expect = item["expect"];
         if (expect.value("ignored", false)) {

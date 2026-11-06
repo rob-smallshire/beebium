@@ -12,6 +12,8 @@
 
 #include "app/KeyboardInput.hpp"
 
+#include "app/HostKeyboards.hpp"
+
 #include "keyboard/EvdevCodes.hpp"
 
 #include <QApplication>
@@ -65,8 +67,9 @@ std::optional<MappingFile> built_in_mapping(const QString& name) {
         return std::nullopt;
     }
     const QByteArray bytes = file.readAll();
-    auto result = parse_mapping_file(std::string_view(bytes.constData(),
-                                                      static_cast<std::size_t>(bytes.size())));
+    auto result = parse_mapping_file(
+        std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())),
+        host_keyboard_classes());
     if (auto* mapping = std::get_if<MappingFile>(&result)) {
         return std::move(*mapping);
     }

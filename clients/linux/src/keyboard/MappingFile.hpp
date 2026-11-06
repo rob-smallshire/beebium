@@ -13,6 +13,8 @@
 #ifndef BEEBIUM_LINUX_KEYBOARD_MAPPING_FILE_HPP
 #define BEEBIUM_LINUX_KEYBOARD_MAPPING_FILE_HPP
 
+#include "keyboard/KeyboardClasses.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <cstdint>
@@ -88,8 +90,10 @@ using MappingFileResult = std::variant<MappingFile, MappingFileError>;
 // reported as such, for conversion), a malformed entry, an unknown host
 // modifier, and an entry carrying both a code and a platform, or a "linux"
 // platform entry for a key that has a code (section 3.4). An entry whose
-// "when" does not hold on Linux is not checked: it is not this client's.
-MappingFileResult parse_mapping_file(std::string_view json_text);
+// "when" does not hold on Linux with `keyboards` attached is not checked: it
+// is not this client's.
+MappingFileResult parse_mapping_file(std::string_view json_text,
+                                     const KeyboardClasses& keyboards = {"standard"});
 
 // Write a mapping file as version 2: the known fields from `file`, every
 // other field as it was read.
