@@ -28,6 +28,10 @@ The other threads matter as well, since on a four-core Pi they compete with
 the client: the render loop (pixel batches into the framebuffer) is the next
 largest, and the pacing timer is small.
 
+To judge a change, compare ceilings: on the Pi 5 the 1x share moved by
+several points between runs of the same code, more than most single changes
+move it, while the ceiling repeats to about 2%.
+
 ## The pacing statistics
 
 `SystemService.GetPacingStats` reports the server's own account, sampled over
