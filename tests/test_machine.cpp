@@ -366,9 +366,10 @@ TEST_CASE("Machine keeps the CPU's Econet NMI line at the socket's level",
 }
 
 // The disc NMI input follows the disc socket's level on every 1 MHz edge (even
-// cycles). As for Econet, the machine tells the CPU only when the level
-// differs from the CPU's own record of the line, so a record that disagrees is
-// put right at the next sample.
+// cycles), and the IRQ input follows the IRQ sources every cycle. As for
+// Econet, the machine tells the CPU only when the level differs from the CPU's
+// own record of the line, so a record that disagrees is put right at the next
+// sample.
 TEST_CASE("Machine keeps the CPU's disc NMI line at the disc socket's level",
           "[machine][disc][nmi]") {
     ModelB machine;
@@ -381,4 +382,35 @@ TEST_CASE("Machine keeps the CPU's disc NMI line at the disc socket's level",
     machine.step();
     machine.step();  // at least one even cycle has passed
     CHECK((machine.cpu().device_nmi_flags & kDiscNmiDeviceMask) == 0);
+}
+
+TEST_CASE("Machine keeps the CPU's IRQ line at the IRQ sources' level",
+          "[machine][irq]") {
+    ModelB machine;
+    load_nop_slide_with_store(machine);
+    REQUIRE(machine.memory().poll_irq() == 0);
+    machine.step();
+    CHECK((machine.cpu().device_irq_flags & kIrqDeviceMask) == 0);
+
+    machine.cpu().device_irq_flags |= kIrqDeviceMask;  // a stale record
+    machine.step();
+    CHECK((machine.cpu().device_irq_flags & kIrqDeviceMask) == 0);
+
+    SECTION("the line follows a VIA timer interrupt cycle by cycle") {
+        auto& via = machine.memory().system_via;
+        via.write(0x0E, 0xC0);  // IER: enable T1
+        via.write(0x04, 0x04);  // T1 latch low
+        via.write(0x05, 0x00);  // T1 high: start, one-shot
+        bool saw_irq = false;
+        int mismatches = 0;
+        for (int i = 0; i < 100; ++i) {
+            machine.step();
+            const bool sources = machine.memory().poll_irq() != 0;
+            const bool line = (machine.cpu().device_irq_flags & kIrqDeviceMask) != 0;
+            if (sources != line) ++mismatches;
+            saw_irq = saw_irq || sources;
+        }
+        CHECK(saw_irq);
+        CHECK(mismatches == 0);
+    }
 }

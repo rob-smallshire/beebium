@@ -371,8 +371,7 @@ private:
         }
 
         // IRQ handling - poll aggregator and set CPU IRQ line
-        uint8_t irq_mask = state_.memory.poll_irq();
-        M6502_SetDeviceIRQ(&state_.cpu, kIrqDeviceMask, irq_mask ? 1 : 0);
+        update_irq(state_.memory.poll_irq() != 0);
 
         // NMI handling — disc controller at 1MHz, Econet at 2MHz.
         //
@@ -1047,6 +1046,22 @@ private:
         type_ahead.mark_guest_ready();
         guest_ready_seen_ = true;
         if (on_guest_ready_) on_guest_ready_();
+    }
+
+    // Drive the CPU's IRQ input to the level of the IRQ sources, sampled
+    // every cycle. M6502_SetDeviceIRQ sets or clears the device bits and
+    // copies them to irq_flags; the core only ever sets irq_flags to
+    // device_irq_flags, so when the device bits already hold the level the
+    // call changes nothing. The CPU is therefore told only when the level
+    // differs from its own record of the line -- never a copy of ours -- and
+    // still sees it on the cycle it changes.
+    void update_irq(bool wanted) {
+        const bool asserted =
+            (state_.cpu.device_irq_flags & kIrqDeviceMask) == kIrqDeviceMask;
+        const bool released = (state_.cpu.device_irq_flags & kIrqDeviceMask) == 0;
+        if (wanted ? !asserted : !released) {
+            M6502_SetDeviceIRQ(&state_.cpu, kIrqDeviceMask, wanted ? 1 : 0);
+        }
     }
 
     // Drive the CPU's disc NMI input to the disc socket's level, as sampled
