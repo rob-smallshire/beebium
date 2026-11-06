@@ -209,6 +209,20 @@ coherence miss on the line the render loop has just written on another core.
 That is what the cached-index refinement below would remove. There is also a
 division per push for `% capacity_`.
 
+### Pi 5, after the cached indices (089fb37e)
+
+Each ring side now reloads the other's index only when its own copy says
+full or empty. Ceilings at 10x: idle 2.53x, mode2 2.55x, disc 2.40x, tube
+1.93x; against the baseline that is +12%, +7%, +10% and +8%. `deliver` fell
+from 14% to 3.4% in `disc` and out of the top ten in `tube`, but the
+scenarios gained only 2 to 3%, because part of the stall moved rather than
+vanished: `SystemViaPeripheral::update_port_a` appeared at 8 to 10% in those
+two scenarios, almost all of it on the acquire load of a keyboard matrix
+column (`LDAR`, since the generic Armv8-A build has no `LDAPR`). An `LDAR`
+waits for earlier `STLR`s to drain, and `produce()` issues one release store
+per pixel batch, up to two per emulated cycle. The next step is to publish
+the ring's index once per pacing batch rather than per pixel batch.
+
 ### Pi 400
 
 Release build of the same commit, idle MODE 7 prompt, headless: the emulation
