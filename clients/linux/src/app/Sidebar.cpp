@@ -12,6 +12,8 @@
 
 #include "app/Sidebar.hpp"
 
+#include "app/ElidedLabel.hpp"
+
 #include <QButtonGroup>
 #include <QFont>
 #include <QGraphicsOpacityEffect>
@@ -25,40 +27,6 @@
 #include <QVBoxLayout>
 
 namespace beebium::linux_client {
-
-namespace {
-
-// One line of text that elides with an ellipsis rather than wrapping or
-// widening its parent, the whole of it the tooltip when it does not fit.
-class ElidedLabel : public QLabel {
-public:
-    explicit ElidedLabel(QWidget* parent) : QLabel(parent) {
-        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-        setMinimumWidth(0);
-    }
-
-    void set_whole(const QString& text) {
-        whole_ = text;
-        fit();
-    }
-
-protected:
-    void resizeEvent(QResizeEvent* event) override {
-        QLabel::resizeEvent(event);
-        fit();
-    }
-
-private:
-    void fit() {
-        const QString shown = fontMetrics().elidedText(whole_, Qt::ElideRight, contentsRect().width());
-        setText(shown);
-        setToolTip(shown == whole_ ? QString() : whole_);
-    }
-
-    QString whole_;
-};
-
-}  // namespace
 
 Sidebar::Sidebar(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("sidebar"));
