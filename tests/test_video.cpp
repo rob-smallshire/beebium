@@ -22,6 +22,7 @@
 #include <beebium/ScreenMemory.hpp>
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
 
 using namespace beebium;
 
@@ -193,12 +194,21 @@ TEST_CASE("OutputQueue basic operations", "[video]") {
         queue.produce(32);
         queue.consume(32);
 
-        // Now write more - should wrap around
+        // The producer's view of free space may lag the consume (it reloads
+        // only when it sees the ring full), but never offers more than is free.
         auto producer = queue.get_producer_buffer();
-        CHECK(producer.total() == 64);  // Full space available after consume
+        CHECK(producer.total() >= 32);
+        CHECK(producer.total() <= queue.available());
 
-        // Produce 48 items (wraps around)
-        queue.produce(48);
+        // Produce 48 items (wraps around), taking what each offer gives.
+        size_t produced = 0;
+        while (produced < 48) {
+            auto offer = queue.get_producer_buffer();
+            REQUIRE_FALSE(offer.empty());
+            const size_t n = std::min<size_t>(offer.total(), 48 - produced);
+            queue.produce(n);
+            produced += n;
+        }
         CHECK(queue.size() == 48);
 
         auto consumer = queue.get_consumer_buffer();

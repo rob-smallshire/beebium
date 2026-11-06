@@ -47,6 +47,17 @@ namespace beebium {
 // acquire of read_pos_ and the overwrites that follow. On AArch64 these are
 // plain LDAR/STLR, with no atomic read-modify-write (which GCC calls out of
 // line) on a path that runs for every pixel batch.
+//
+// Cached indices: each side keeps a private copy of the other side's index
+// and reloads it (with acquire) only when the copy says the ring is full
+// (producer) or empty (consumer). Indices only grow, so a stale copy only
+// understates: the producer is offered no more space than is really free,
+// and the consumer no more items than are really written. A reload happens
+// before either side reports full or empty, so neither does so falsely.
+// This keeps each side off the other's cache line until it has to look:
+// with the render thread consuming on another core, reading read_pos_ for
+// every pixel batch was a coherence miss each time. size(), available(),
+// empty() and full() read both indices afresh, for any thread's view.
 template <typename T>
 class OutputQueue {
 public:
@@ -68,9 +79,9 @@ public:
 
     // --- Producer interface ---
 
-    // Get writable buffer space. Returns spans for A and B portions.
-    // If no space available, both spans are empty.
-    // Call produce() to commit written items.
+    // Get writable buffer space. Returns spans for A and B portions, perhaps
+    // less than is free (the producer's cached view; see above), and empty
+    // only when the ring is full. Call produce() to commit written items.
     struct ProducerBuffers {
         std::span<T> a;  // First portion (or only portion)
         std::span<T> b;  // Second portion (wrap-around), may be empty
@@ -80,12 +91,13 @@ public:
 
     ProducerBuffers get_producer_buffer() {
         uint64_t write_pos = write_pos_.load(std::memory_order_relaxed);
-        uint64_t read_pos = read_pos_.load(std::memory_order_acquire);
-
-        assert(write_pos >= read_pos);
-        size_t used = static_cast<size_t>(write_pos - read_pos);
-        size_t free = capacity_ - used;
-
+        // Reload when the cached view shows no free slot (or, after a
+        // produce() of more than this view offered, an impossible one).
+        if (write_pos - cached_read_pos_ >= capacity_) {
+            cached_read_pos_ = read_pos_.load(std::memory_order_acquire);
+            assert(write_pos >= cached_read_pos_);
+        }
+        size_t free = capacity_ - static_cast<size_t>(write_pos - cached_read_pos_);
         if (free == 0) {
             return {{}, {}};
         }
@@ -127,9 +139,9 @@ public:
 
     // --- Consumer interface ---
 
-    // Get readable items. Returns spans for A and B portions.
-    // If no items available, both spans are empty.
-    // Call consume() to release read items.
+    // Get readable items. Returns spans for A and B portions, perhaps fewer
+    // than are written (the consumer's cached view; see above), and empty
+    // only when the ring is empty. Call consume() to release read items.
     struct ConsumerBuffers {
         std::span<const T> a;  // First portion
         std::span<const T> b;  // Second portion (wrap-around), may be empty
@@ -139,11 +151,13 @@ public:
 
     ConsumerBuffers get_consumer_buffer() const {
         uint64_t read_pos = read_pos_.load(std::memory_order_relaxed);
-        uint64_t write_pos = write_pos_.load(std::memory_order_acquire);
-
-        assert(write_pos >= read_pos);
-        size_t used = static_cast<size_t>(write_pos - read_pos);
-
+        // Reload when the cached view shows nothing to read (or, after a
+        // consume() of items this view never offered, less than nothing).
+        if (cached_write_pos_ <= read_pos) {
+            cached_write_pos_ = write_pos_.load(std::memory_order_acquire);
+            assert(cached_write_pos_ >= read_pos);
+        }
+        size_t used = static_cast<size_t>(cached_write_pos_ - read_pos);
         if (used == 0) {
             return {{}, {}};
         }
@@ -193,17 +207,23 @@ public:
     void reset() {
         read_pos_.store(0, std::memory_order_release);
         write_pos_.store(0, std::memory_order_release);
+        cached_read_pos_ = 0;
+        cached_write_pos_ = 0;
     }
 
 private:
     const size_t capacity_;
     std::unique_ptr<T[]> buffer_;
 
-    // Consumer state - cache line aligned to avoid false sharing
+    // Consumer state - cache line aligned to avoid false sharing. The
+    // consumer's cached copy of write_pos_ is mutable because
+    // get_consumer_buffer() is const: reloading it changes no observable state.
     alignas(64) std::atomic<uint64_t> read_pos_{0};
+    mutable uint64_t cached_write_pos_ = 0;
 
-    // Producer state - separate cache line
+    // Producer state - separate cache line, with its cached copy of read_pos_
     alignas(64) std::atomic<uint64_t> write_pos_{0};
+    uint64_t cached_read_pos_ = 0;
 };
 
 } // namespace beebium

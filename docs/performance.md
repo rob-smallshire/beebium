@@ -233,9 +233,15 @@ one writer. The minimum ordering is:
 
 No read-modify-write is needed: on AArch64 these are plain `LDAR`/`STLR`
 (`LDAPR` with Armv8.3), with no call to an atomic helper. `OutputQueue` is
-built this way. A further step, not taken: each side could cache the other's
-index and reload it only when its cached value says the ring is full or
-empty, which would remove most of the cache-line traffic between the two
-cores. `VideoRenderer::deliver` asks `available()` before every push, which
-reads both indices afresh, so the producer's cache would only pay once that
-check goes through the producer's own view.
+built this way.
+
+Each side also keeps a private copy of the other's index and reloads it, with
+acquire, only when its copy says the ring is full (producer) or empty
+(consumer). Indices only grow, so a stale copy only understates: the producer
+is offered no more space than is free and the consumer no more items than are
+written, and neither reports full or empty without reloading first. Each side
+then stays off the other's cache line until it has to look.
+`VideoRenderer::deliver` takes its slot through `get_producer_buffer()`, the
+producer's own view, rather than asking `available()`, which reads both
+indices afresh. `size()`, `available()`, `empty()` and `full()` keep that
+fresh view for any other caller.

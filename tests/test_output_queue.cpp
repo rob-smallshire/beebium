@@ -20,6 +20,7 @@
 #include <atomic>
 #include <cstdint>
 #include <thread>
+#include <vector>
 
 using beebium::OutputQueue;
 
@@ -126,4 +127,109 @@ TEST_CASE("OutputQueue reports full and empty across a wrap", "[output_queue]") 
     CHECK(queue.empty());
     CHECK(queue.get_consumer_buffer().empty());
     CHECK(queue.available() == 3);
+}
+
+// Each side keeps a cached copy of the other side's index and reloads it only
+// when the cache says the ring is full (producer) or empty (consumer). A stale
+// cache must only ever understate: the producer never overwrites a slot the
+// consumer has not released, and the consumer never reads one the producer
+// has not published.
+
+TEST_CASE("OutputQueue producer with a stale cache of a full ring reloads it",
+          "[output_queue]") {
+    OutputQueue<int> queue(4);
+    for (int value = 0; value < 4; ++value) REQUIRE(queue.push(value));
+    REQUIRE_FALSE(queue.push(99));  // The producer's cache now records a full ring.
+
+    // The consumer frees two slots; the producer's cache still says full.
+    auto buffers = queue.get_consumer_buffer();
+    REQUIRE(buffers.total() == 4);
+    queue.consume(2);
+
+    // Exactly the two freed slots can be filled (across the wrap), no more.
+    CHECK(queue.push(4));
+    CHECK(queue.push(5));
+    CHECK_FALSE(queue.push(6));
+    CHECK(queue.get_producer_buffer().empty());
+
+    // Nothing unread was overwritten: the ring holds 2, 3, 4, 5 in order.
+    std::vector<int> seen;
+    while (true) {
+        auto readable = queue.get_consumer_buffer();
+        if (readable.empty()) break;
+        seen.insert(seen.end(), readable.a.begin(), readable.a.end());
+        seen.insert(seen.end(), readable.b.begin(), readable.b.end());
+        queue.consume(readable.total());
+    }
+    CHECK(seen == std::vector<int>{2, 3, 4, 5});
+}
+
+TEST_CASE("OutputQueue producer's stale cache never exceeds the real free space",
+          "[output_queue]") {
+    OutputQueue<int> queue(5);
+    REQUIRE(queue.push(0));
+    REQUIRE(queue.push(1));
+    // Free space as the producer sees it is at most the real free space.
+    CHECK(queue.get_producer_buffer().total() <= queue.available());
+    queue.get_consumer_buffer();
+    queue.consume(2);
+    CHECK(queue.get_producer_buffer().total() <= queue.available());
+    // Filling what the producer offers never overruns the ring.
+    size_t pushed = 0;
+    while (queue.push(static_cast<int>(10 + pushed))) ++pushed;
+    CHECK(queue.size() == queue.capacity());
+    CHECK(pushed == queue.capacity());
+}
+
+TEST_CASE("OutputQueue consumer with a stale cache of an empty ring reloads it",
+          "[output_queue]") {
+    OutputQueue<int> queue(4);
+    CHECK(queue.get_consumer_buffer().empty());  // The cache records an empty ring.
+    REQUIRE(queue.push(7));
+    REQUIRE(queue.push(8));
+    auto buffers = queue.get_consumer_buffer();
+    REQUIRE(buffers.total() == 2);
+    CHECK(buffers.a[0] == 7);
+    CHECK(buffers.a[1] == 8);
+}
+
+TEST_CASE("OutputQueue consumer's stale cache shows only published items, in order",
+          "[output_queue]") {
+    OutputQueue<int> queue(4);
+    REQUIRE(queue.push(0));
+    REQUIRE(queue.push(1));
+    REQUIRE(queue.push(2));
+    REQUIRE(queue.get_consumer_buffer().total() == 3);
+    queue.consume(2);  // One item left; the consumer's cache says so.
+    REQUIRE(queue.push(3));
+    REQUIRE(queue.push(4));  // Wraps.
+
+    // Whatever the consumer is shown is a correct, in-order prefix of the
+    // unread items, and draining what it is shown reaches all of them.
+    std::vector<int> seen;
+    for (int pass = 0; pass < 4; ++pass) {
+        auto readable = queue.get_consumer_buffer();
+        CHECK(readable.total() <= queue.size());
+        seen.insert(seen.end(), readable.a.begin(), readable.a.end());
+        seen.insert(seen.end(), readable.b.begin(), readable.b.end());
+        queue.consume(readable.total());
+    }
+    CHECK(seen == std::vector<int>{2, 3, 4});
+    CHECK(queue.empty());
+}
+
+TEST_CASE("OutputQueue reset clears both sides' caches", "[output_queue]") {
+    OutputQueue<int> queue(2);
+    REQUIRE(queue.push(1));
+    REQUIRE(queue.push(2));
+    REQUIRE_FALSE(queue.push(3));
+    REQUIRE(queue.get_consumer_buffer().total() == 2);
+    queue.reset();
+    CHECK(queue.empty());
+    CHECK(queue.get_consumer_buffer().empty());
+    CHECK(queue.push(4));
+    CHECK(queue.push(5));
+    auto buffers = queue.get_consumer_buffer();
+    REQUIRE(buffers.total() == 2);
+    CHECK(buffers.a[0] == 4);
 }

@@ -212,21 +212,24 @@ private:
     // A vsync rising edge is judged over the DELIVERED batches, exactly as the
     // frame renderer judges it over the batches it receives, so the two agree
     // edge for edge even when batches are dropped. Its stamp is published
-    // before the batch: the queue has a single consumer, so space seen here
-    // cannot vanish before the push, and the renderer never meets an edge
-    // whose stamp is not yet visible. The edge is counted even if the stamp
-    // ring is full (no renderer is collecting stamps), so the numbering the
-    // renderer matches against stays right.
+    // before the batch: the slot is taken first, from the producer's own view
+    // of the queue (which the single consumer can only enlarge), then the
+    // stamp is pushed, then the batch is committed, so the renderer never
+    // meets an edge whose stamp is not yet visible. The edge is counted even
+    // if the stamp ring is full (no renderer is collecting stamps), so the
+    // numbering the renderer matches against stays right.
     void deliver(const PixelBatch& batch) {
         auto& queue = *hardware_.video_output;
-        if (queue.available() == 0) return;
+        auto slots = queue.get_producer_buffer();
+        if (slots.empty()) return;
         const bool vsync = batch.vsync();
         if (vsync && !last_delivered_vsync_) {
             field_cycles_.push(FieldCycle{next_edge_, cycle_source_ ? *cycle_source_ : 0,
                                           field_source_ ? *field_source_ : 0});
             ++next_edge_;
         }
-        queue.push(batch);
+        slots.a[0] = batch;
+        queue.produce(1);
         last_delivered_vsync_ = vsync;
     }
 
