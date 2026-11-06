@@ -159,6 +159,33 @@ The predicates:
 | Predicate | Value | Holds when |
 |-----------|-------|------------|
 | `platform` | a platform name, or an array of them: `"macOS"`, `"linux"`, `"windows"` (the names of 3.4) | the client runs on one of the named platforms |
+| `keyboard` | a keyboard class, or an array of them: `"standard"`, `"pi-internal"` | a keyboard of one of the named classes is attached to the host |
+
+The keyboard classes:
+
+| Class | Which keyboards |
+|-------|-----------------|
+| `"pi-internal"` | The keyboard built into a Raspberry Pi 400 or Pi 500: a USB device, vendor `04d9` product `0007`, named "Raspberry Pi Internal Keyboard". It has no F11 or F12 key: F12 is Fn+F2, so a chord on F12 is a chord on Fn+F2, and Ctrl+Alt+F12 reaches the kernel as a virtual-terminal switch before any application sees it. |
+| `"standard"` | Any keyboard that is not of a class listed above. On macOS and Windows a standard keyboard is always taken to be attached. |
+
+A client decides which classes are attached when it starts, from the host's
+input devices (on Linux, `/proc/bus/input/devices` or `/dev/input/by-id`);
+following keyboards that come and go while it runs is platform latitude. A
+host with a Pi 400 keyboard and an external keyboard has both classes
+attached, so entries for either apply, and the keyboard view shows both.
+
+```json
+{ "code": "F12", "with": ["Alt"], "when": { "keyboard": "standard" },
+                 "bbc": { "key": "Break", "action": "Break" } },
+{ "code": "F12", "when": { "keyboard": "pi-internal" },
+                 "bbc": { "key": "Break", "action": "Break" } }
+```
+
+This is Break in every built-in: guarded by Alt on a standard keyboard, so a
+stray F12 does not reset the machine, and on plain F12 on the Pi keyboard,
+where the Fn chord is already the guard and the Alt would put Ctrl+Break on
+the virtual-terminal switch. The predicates of this table are the ones every
+client implements; the paragraph below is about predicates not yet listed.
 
 A predicate the client does not know (a name this document does not list,
 or a value of a shape it does not describe) does not hold. So an entry with
@@ -238,9 +265,11 @@ The ids are UUIDs of the form `00000000-0000-0000-0000-00000000000N`. The
 game mappings keep the ids they ship with today, converted to version 2. User
 mappings are copies with fresh ids.
 
-Break is on Alt+F12 (Option+F12 on macOS) in every built-in: F11 is the BBC
-Copy key in the Logical mapping and is the desktop full-screen key under the
-KDE conventions the Linux client follows, so it is not Break anywhere.
+Break is on Alt+F12 (Option+F12 on macOS) in every built-in on a standard
+keyboard, and on plain F12 (Fn+F2) on the Raspberry Pi 400 and 500 keyboard,
+by the two `when.keyboard` entries of 3.5. F11 is the BBC Copy key in the
+Logical mapping and is the desktop full-screen key under the KDE conventions
+the Linux client follows, so it is not Break anywhere.
 
 Shift Lock is on F13 on macOS and on Alt+F11 on Linux and Windows (3.5),
 whose keyboards mostly have no F13; Alt+F11 is beside Break and is not a
@@ -263,8 +292,9 @@ labels for built-in mappings as well as user ones (client specification 7.4, #23
   that has a `code` value.
 - A shared corpus under `tests/assets/keyboard-mappings/` (the built-ins and
   a file exercising every rule above, 3.5 included, with the expected
-  resolution for a list of host events) is the conformance test: every client's tests load it
-  and must resolve identically. The Linux client's `KeyboardInput` tests and
+  resolution for a list of host events, each list stating the platform and
+  the attached keyboard classes it is resolved under) is the conformance
+  test: every client's tests load it and must resolve identically. The Linux client's `KeyboardInput` tests and
   the macOS `KeyboardMapping` tests both run it.
 
 ## 7. Version 1 (the macOS client's present format) and conversion
