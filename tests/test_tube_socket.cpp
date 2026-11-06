@@ -653,3 +653,46 @@ TEST_CASE("TubeSocket: MOS 1.20 Tube detection with bus cycle simulation", "[tub
         // above are essential for correct Tube detection.
     }
 }
+
+// ===========================================================================
+// The empty socket on the emulation loop's path
+// ===========================================================================
+//
+// With no coprocessor fitted (they are fitted only when a machine is put
+// together) the socket's per-cycle work is cut to the bone: host_cycle()
+// records host time and returns, and irq_pending() answers false without
+// asking the empty backend. These pin what that must not change.
+
+TEST_CASE("TubeSocket: an installed backend's HIRQ reaches irq_pending",
+          "[tube][socket][irq]") {
+    TubeSocket socket;
+    TubeUla ula;
+    socket.install_backend(&ula);
+    socket.write(0, TubeUla::FLAG_S | TubeUla::FLAG_Q);
+    ula.coprocessor_write(7, 0x42);
+    CHECK(socket.irq_pending());
+
+    socket.install_backend(nullptr);  // detaches, back to the empty socket
+    CHECK_FALSE(socket.irq_pending());
+}
+
+TEST_CASE("TubeSocket: re-enabling after disable reports HIRQ again", "[tube][socket][irq]") {
+    TubeSocket socket;
+    socket.enable();
+    socket.disable();
+    CHECK_FALSE(socket.irq_pending());
+    socket.enable();
+    socket.write(0, TubeUla::FLAG_S | TubeUla::FLAG_Q);
+    socket.tube_ula()->coprocessor_write(7, 0x42);
+    CHECK(socket.irq_pending());
+}
+
+TEST_CASE("TubeSocket: host time is kept with no coprocessor, so one installed later starts there",
+          "[tube][socket]") {
+    TubeSocket socket;
+    for (uint64_t h = 1; h <= 500; ++h) socket.host_cycle(h);
+    RecordingCoprocessor coprocessor;
+    socket.install_coprocessor(&coprocessor);
+    REQUIRE_FALSE(coprocessor.run_until_args.empty());
+    CHECK(coprocessor.run_until_args.back() == 500);
+}

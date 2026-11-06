@@ -89,6 +89,7 @@ public:
     // coprocessor_read are called directly on the TubeUla.
     void enable() {
         backend_ = std::make_unique<TubeUla>();
+        empty_ = false;
     }
 
     // Disable the Tube socket (detach second processor).
@@ -96,6 +97,7 @@ public:
     void disable() {
         installed_backend_ = nullptr;
         backend_ = std::make_unique<EmptyTubeBackend>(&last_bus_value_ptr_);
+        empty_ = true;
     }
 
     // Install an externally-owned backend (used by extensions).
@@ -105,6 +107,8 @@ public:
         installed_backend_ = backend;
         if (!backend) {
             disable();
+        } else {
+            empty_ = false;
         }
     }
 
@@ -159,8 +163,11 @@ public:
     // IrqAggregator. This adapts the Tube-specific HIRQ signal to the
     // machine-level IRQ aggregation framework.
 
+    //
+    // The empty socket's backend never asserts HIRQ, so it is not asked: the
+    // IRQ fold calls this every cycle.
     bool irq_pending() const {
-        return active_backend()->hirq();
+        return !empty_ && active_backend()->hirq();
     }
 
     // --- Reset ---
@@ -228,8 +235,15 @@ public:
     // host stop sync exactly via run_coprocessor_until(). A host time earlier
     // than the last (a hard reset zeroes cycle_count) syncs immediately so the
     // coprocessor's rebased clock re-establishes its origin here.
+    //
+    // With no coprocessor installed there is nothing to run, so only host time
+    // is kept. Coprocessors are installed when a machine is put together, and
+    // install_coprocessor() pins the origin at host_time_, so one installed
+    // after host cycles have run starts with none due, as before. Without a
+    // coprocessor coprocessor_time() does not advance; nothing reads it then.
     void host_cycle(uint64_t host_time) {
         host_time_ = host_time;
+        if (!coprocessor_) return;
         if (host_time < coprocessor_time_
             || host_time - coprocessor_time_ >= MAX_COPROCESSOR_SKEW) {
             run_coprocessor_until(host_time);
@@ -302,6 +316,7 @@ private:
 
     std::unique_ptr<TubeHostBackend> backend_;  // owned backend (empty or legacy)
     TubeHostBackend* installed_backend_ = nullptr;  // non-owning, extension-owned
+    bool empty_ = true;  // the active backend is the owned EmptyTubeBackend
     const uint8_t* last_bus_value_ptr_ = nullptr;
 
     // Installed coprocessor, driven in host time (single-threaded model).
