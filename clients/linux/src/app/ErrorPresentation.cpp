@@ -63,7 +63,7 @@ ServerMessageDialog::ServerMessageDialog(const QString& title, const QString& se
         layout->addWidget(message);
     }
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
+    auto* buttons = buttons_ = new QDialogButtonBox(QDialogButtonBox::Close);
     if (!server_message.isEmpty()) {
         auto* copy = buttons->addButton(tr("Copy Message"), QDialogButtonBox::ActionRole);
         // An action-role button would close the dialog; this one only copies.
@@ -75,6 +75,16 @@ ServerMessageDialog::ServerMessageDialog(const QString& title, const QString& se
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
     resize(520, sizeHint().height());
+}
+
+void ServerMessageDialog::offer_clear(std::function<void()> clear) {
+    auto* button = buttons_->addButton(tr("Clear"), QDialogButtonBox::ActionRole);
+    button->setAutoDefault(false);
+    disconnect(button, nullptr, buttons_, nullptr);
+    connect(button, &QPushButton::clicked, this, [this, clear = std::move(clear)] {
+        clear();
+        accept();
+    });
 }
 
 }  // namespace beebium::linux_client

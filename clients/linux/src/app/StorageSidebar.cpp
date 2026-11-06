@@ -13,6 +13,7 @@
 #include "app/StorageSidebar.hpp"
 
 #include "app/ClientSettings.hpp"
+#include "app/ElidedLabel.hpp"
 #include "app/ErrorPresentation.hpp"
 #include "app/FileReveal.hpp"
 #include "app/SessionIndicators.hpp"
@@ -151,6 +152,12 @@ DriveRow::DriveRow(SessionDiscs& discs, int number, ClientSettings* settings, Sh
     state_->setTextInteractionFlags(Qt::NoTextInteraction);
     detail_line_ = new QLabel(this);
     detail_line_->setEnabled(false);  // the secondary text colour
+    // No line of text widens the row past the sidebar: a long one is cut at
+    // the sidebar's edge rather than pushing the row's buttons out of view.
+    for (QLabel* line : {state_, detail_line_}) {
+        line->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        line->setMinimumWidth(0);
+    }
     layout->addWidget(state_);
     layout->addWidget(detail_line_);
     message_line_ = new QWidget(this);
@@ -158,11 +165,15 @@ DriveRow::DriveRow(SessionDiscs& discs, int number, ClientSettings* settings, Sh
     message_layout->setContentsMargins(0, 0, 0, 0);
     auto* warning = new QLabel(message_line_);
     warning->setPixmap(style()->standardIcon(QStyle::SP_MessageBoxWarning).pixmap(14, 14));
-    message_marker_ = new QLabel(message_line_);
+    // The marker gives way, with an ellipsis, before Details and the cross do.
+    message_marker_ = new ElidedLabel(message_line_);
     details_ = new QPushButton(tr("Details..."), message_line_);
     details_->setFlat(true);
+    // A cross at the end of the line, as the macOS client's, the explicit
+    // way to clear a failure (9.6).
     dismiss_ = new QToolButton(message_line_);
-    dismiss_->setText(QStringLiteral("x"));
+    dismiss_->setIcon(QIcon::fromTheme(QStringLiteral("window-close"),
+                                       style()->standardIcon(QStyle::SP_TitleBarCloseButton)));
     dismiss_->setAutoRaise(true);
     dismiss_->setToolTip(tr("Dismiss this error"));
     for (QWidget* widget : {static_cast<QWidget*>(details_), static_cast<QWidget*>(dismiss_)}) {
@@ -275,8 +286,8 @@ void DriveRow::present() {
 
     const bool messaging = message_.kind != DriveMessage::Kind::none;
     message_line_->setVisible(messaging);
-    message_marker_->setText(message_.marker);
-    message_marker_->setToolTip(message_.detail.isEmpty() ? message_.marker : message_.detail);
+    message_marker_->set_whole(message_.marker);
+    message_marker_->set_note(message_.detail.isEmpty() ? message_.marker : message_.detail);
     details_->setVisible(message_.kind == DriveMessage::Kind::failure && !message_.detail.isEmpty());
     dismiss_->setVisible(message_.kind == DriveMessage::Kind::failure);
     state_->setVisible(!messaging);
@@ -349,6 +360,12 @@ void DriveRow::show_details() {
     auto* dialog = new ServerMessageDialog(tr("Disc Problem"), message_.sentence, message_.detail,
                                            window());
     dialog->setAttribute(Qt::WA_DeleteOnClose);
+    // Clear ends the failure; closing the dialog otherwise keeps it.
+    dialog->offer_clear([row = QPointer<DriveRow>(this)] {
+        if (row) {
+            row->clear_message();
+        }
+    });
     dialog->show();
 }
 

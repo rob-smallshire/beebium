@@ -279,6 +279,65 @@ TEST_CASE("A failed insert stays on its row by its kind, with the server's words
     CHECK(s.row(1)->message().kind == DriveMessage::Kind::none);
 }
 
+TEST_CASE("A failure is dismissed by the cross at the end of its line, in the narrowest sidebar",
+          "[storage][sidebar][errors]") {
+    Shown s;
+    {
+        std::lock_guard lock(s.c.server.disc.calls_mutex);
+        s.c.server.disc.fail_next_insert = std::make_pair(
+            beebium::DISC_ERROR_KIND_UNRECOGNISED, std::string("no handler recognised notes.txt"));
+    }
+    s.c.discs.insert(1, s.touch(QStringLiteral("notes.txt")));
+    REQUIRE(wait_until([&] { return s.row(1)->message().kind == DriveMessage::Kind::failure; }));
+    // The sidebar at its narrowest, a large font as the Raspberry Pi's.
+    QFont large = s.sidebar.font();
+    large.setPointSizeF(large.pointSizeF() * 1.25);
+    s.sidebar.setFont(large);
+    s.sidebar.resize(220, 400);
+    wait_until([] { return false; }, std::chrono::milliseconds(100));
+    QToolButton* dismiss = s.row(1)->dismiss_button();
+    REQUIRE(dismiss->isVisibleTo(s.row(1)));
+    // An icon, not a letter, and inside what the sidebar shows.
+    CHECK_FALSE(dismiss->icon().isNull());
+    CHECK(dismiss->text().isEmpty());
+    CHECK(dismiss->toolTip() == QStringLiteral("Dismiss this error"));
+    const QRect shown = QRect(dismiss->mapTo(&s.sidebar, QPoint(0, 0)), dismiss->size());
+    CHECK(shown.right() < s.sidebar.width());
+    CHECK(s.row(1)->width() <= s.sidebar.width());
+    dismiss->click();
+    CHECK(s.row(1)->message().kind == DriveMessage::Kind::none);
+}
+
+TEST_CASE("A failure's details offer Clear, which ends the failure", "[storage][sidebar][errors]") {
+    Shown s;
+    {
+        std::lock_guard lock(s.c.server.disc.calls_mutex);
+        s.c.server.disc.fail_next_insert = std::make_pair(
+            beebium::DISC_ERROR_KIND_UNRECOGNISED, std::string("no handler recognised notes.txt"));
+    }
+    s.c.discs.insert(1, s.touch(QStringLiteral("notes.txt")));
+    REQUIRE(wait_until([&] { return s.row(1)->message().kind == DriveMessage::Kind::failure; }));
+    s.row(1)->details_button()->click();
+    QPushButton* clear = nullptr;
+    QWidget* dialog = nullptr;
+    REQUIRE(wait_until([&] {
+        for (QWidget* top : QApplication::topLevelWidgets()) {
+            if (top->isVisible() && top->windowTitle() == QStringLiteral("Disc Problem")) {
+                dialog = top;
+                for (QPushButton* button : top->findChildren<QPushButton*>()) {
+                    if (button->text() == QStringLiteral("Clear")) {
+                        clear = button;
+                    }
+                }
+            }
+        }
+        return clear != nullptr;
+    }));
+    clear->click();
+    CHECK(s.row(1)->message().kind == DriveMessage::Kind::none);
+    REQUIRE(wait_until([&] { return !dialog->isVisible(); }));
+}
+
 TEST_CASE("An unknown failure kind reads as an honest generic", "[storage][errors]") {
     CHECK(disc_error_marker(beebium::DISC_ERROR_KIND_UNSPECIFIED).isEmpty());
     CHECK(disc_error_marker(99).isEmpty());

@@ -35,6 +35,7 @@ namespace beebium::linux_client {
 
 class ClientSettings;
 class CoreCli;
+class ElidedLabel;
 class SessionIndicators;
 class SessionPeripherals;
 
@@ -94,6 +95,8 @@ public:
     bool eject_stalled() const { return eject_stalled_; }
     QToolButton* browse_button() const { return browse_; }
     QToolButton* eject_button() const { return eject_; }
+    QPushButton* details_button() const { return details_; }
+    QToolButton* dismiss_button() const { return dismiss_; }
     QPushButton* cancel_button() const { return cancel_; }
     QPushButton* force_button() const { return force_; }
     QMenu* browse_menu() const { return menu_; }
@@ -137,7 +140,7 @@ private:
     QLabel* state_;
     QLabel* detail_line_;
     QWidget* message_line_;
-    QLabel* message_marker_;
+    ElidedLabel* message_marker_;
     QPushButton* details_;
     QToolButton* dismiss_;
     QToolButton* browse_;

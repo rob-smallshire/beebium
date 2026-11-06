@@ -20,7 +20,8 @@
 namespace beebium::linux_client {
 
 // One line of text that elides with an ellipsis rather than wrapping or
-// widening its parent, the whole of it the tooltip when it does not fit.
+// widening its parent, the whole of it the tooltip when it does not fit, or
+// a note of its own as the tooltip throughout.
 class ElidedLabel : public QLabel {
 public:
     explicit ElidedLabel(QWidget* parent = nullptr) : QLabel(parent) {
@@ -30,6 +31,11 @@ public:
 
     void set_whole(const QString& text) {
         whole_ = text;
+        fit();
+    }
+
+    void set_note(const QString& note) {
+        note_ = note;
         fit();
     }
 
@@ -43,10 +49,11 @@ private:
     void fit() {
         const QString shown = fontMetrics().elidedText(whole_, Qt::ElideRight, contentsRect().width());
         setText(shown);
-        setToolTip(shown == whole_ ? QString() : whole_);
+        setToolTip(!note_.isEmpty() ? note_ : shown == whole_ ? QString() : whole_);
     }
 
     QString whole_;
+    QString note_;
 };
 
 }  // namespace beebium::linux_client

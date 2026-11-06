@@ -18,6 +18,9 @@
 #include <QDialog>
 #include <QString>
 
+#include <functional>
+
+class QDialogButtonBox;
 class QWidget;
 
 namespace beebium::linux_client {
@@ -39,8 +42,13 @@ public:
 
     QString server_message() const { return server_message_; }
 
+    // A Clear button beside Close, for a failure that stays until the user
+    // clears it: it runs `clear` and closes the dialog.
+    void offer_clear(std::function<void()> clear);
+
 private:
     QString server_message_;
+    QDialogButtonBox* buttons_ = nullptr;
 };
 
 }  // namespace beebium::linux_client
