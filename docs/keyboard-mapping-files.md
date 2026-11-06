@@ -165,7 +165,7 @@ The keyboard classes:
 
 | Class | Which keyboards |
 |-------|-----------------|
-| `"pi-internal"` | The keyboard built into a Raspberry Pi 400 or Pi 500: a USB device, vendor `04d9` product `0007`, named "Raspberry Pi Internal Keyboard". It has no F11 or F12 key: F12 is Fn+F2, so a chord on F12 is a chord on Fn+F2, and Ctrl+Alt+F12 reaches the kernel as a virtual-terminal switch before any application sees it. |
+| `"pi-internal"` | The keyboard built into a Raspberry Pi 400: a USB device, vendor `04d9` product `0007`, named "Raspberry Pi Internal Keyboard". It has no F11 or F12 key: F12 is Fn+F2, so a chord on F12 is a chord on Fn+F2, and Ctrl+Alt+F12 reaches the kernel as a virtual-terminal switch before any application sees it. The Raspberry Pi 500's keyboard is expected to join this class once its USB identity is confirmed (#280). |
 | `"standard"` | Any keyboard that is not of a class listed above. On macOS and Windows a standard keyboard is always taken to be attached. |
 
 A client decides which classes are attached when it starts, from the host's
@@ -266,7 +266,7 @@ game mappings keep the ids they ship with today, converted to version 2. User
 mappings are copies with fresh ids.
 
 Break is on Alt+F12 (Option+F12 on macOS) in every built-in on a standard
-keyboard, and on plain F12 (Fn+F2) on the Raspberry Pi 400 and 500 keyboard,
+keyboard, and on plain F12 (Fn+F2) on the Raspberry Pi 400 keyboard,
 by the two `when.keyboard` entries of 3.5. F11 is the BBC Copy key in the
 Logical mapping and is the desktop full-screen key under the KDE conventions
 the Linux client follows, so it is not Break anywhere.
