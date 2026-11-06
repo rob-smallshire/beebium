@@ -112,7 +112,9 @@ void Sidebar::add_mode(SidebarMode mode, QWidget* content) {
     button->setToolTip(sidebar_mode_label(mode));
     button->setCheckable(true);
     button->setAutoRaise(true);
-    button->setIconSize(QSize(18, 18));
+    // The mode strip's own grid (#272), large enough to read on a Pi's
+    // desktop.
+    button->setIconSize(QSize(MODE_ICON_SIZE, MODE_ICON_SIZE));
     button->setFocusPolicy(Qt::NoFocus);
     buttons_->addButton(button, id);
     // In the order of 13.1, before the closing stretch.
@@ -166,7 +168,8 @@ void Sidebar::present() {
     if (QAbstractButton* button = buttons_->button(static_cast<int>(mode_))) {
         button->setChecked(true);
     }
-    header_icon_->setPixmap(sidebar_mode_icon(mode_).pixmap(20, 20));
+    header_icon_->setPixmap(
+        sidebar_mode_icon(mode_).pixmap(QSize(MODE_ICON_SIZE, MODE_ICON_SIZE), devicePixelRatioF()));
     header_label_->setText(sidebar_mode_label(mode_));
     const StalePresentation stale = stale_presentation(mode_, verdict_);
     banner_->setVisible(stale.stale);

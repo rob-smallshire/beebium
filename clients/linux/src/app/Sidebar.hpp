@@ -34,6 +34,8 @@ class Sidebar : public QWidget {
 
 public:
     static constexpr int WIDTH = 280;
+    // The mode strip's icons, on the 24 grid of the client's set (#272).
+    static constexpr int MODE_ICON_SIZE = 24;
 
     explicit Sidebar(QWidget* parent = nullptr);
 

@@ -12,9 +12,9 @@
 
 #include "app/SidebarMode.hpp"
 
-#include <QApplication>
+#include "app/ModeIcon.hpp"
+
 #include <QObject>
-#include <QStyle>
 
 namespace beebium::linux_client {
 
@@ -34,34 +34,20 @@ QString sidebar_mode_label(SidebarMode mode) {
 
 QString sidebar_mode_icon_name(SidebarMode mode) {
     switch (mode) {
-    case SidebarMode::storage: return QStringLiteral("drive-harddisk");
-    case SidebarMode::memory: return QStringLiteral("media-flash");
-    case SidebarMode::peripherals: return QStringLiteral("preferences-plugin");
-    case SidebarMode::video: return QStringLiteral("video-display");
-    case SidebarMode::sound: return QStringLiteral("audio-card");
-    case SidebarMode::keyboard: return QStringLiteral("input-keyboard");
-    case SidebarMode::processor: return QStringLiteral("cpu");
-    case SidebarMode::network: return QStringLiteral("network-wired");
+    case SidebarMode::storage: return QStringLiteral("storage");
+    case SidebarMode::memory: return QStringLiteral("memory");
+    case SidebarMode::peripherals: return QStringLiteral("peripherals");
+    case SidebarMode::video: return QStringLiteral("video");
+    case SidebarMode::sound: return QStringLiteral("sound");
+    case SidebarMode::keyboard: return QStringLiteral("keyboard");
+    case SidebarMode::processor: return QStringLiteral("processor");
+    case SidebarMode::network: return QStringLiteral("network");
     }
     return {};
 }
 
 QIcon sidebar_mode_icon(SidebarMode mode) {
-    const auto fallback = [mode] {
-        switch (mode) {
-        case SidebarMode::storage: return QStyle::SP_DriveHDIcon;
-        case SidebarMode::memory: return QStyle::SP_DriveFDIcon;
-        case SidebarMode::peripherals: return QStyle::SP_DirIcon;
-        case SidebarMode::sound: return QStyle::SP_MediaVolume;
-        case SidebarMode::network: return QStyle::SP_DriveNetIcon;
-        case SidebarMode::video:
-        case SidebarMode::keyboard:
-        case SidebarMode::processor: break;
-        }
-        return QStyle::SP_ComputerIcon;
-    };
-    return QIcon::fromTheme(sidebar_mode_icon_name(mode),
-                            QApplication::style()->standardIcon(fallback()));
+    return QIcon(new ModeIconEngine(sidebar_mode_icon_name(mode)));
 }
 
 bool shows_server_state(SidebarMode mode) {

@@ -10,7 +10,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
     ca-certificates git cmake ninja-build g++ pkg-config dpkg-dev file \
-    qt6-base-dev qt6-base-private-dev qt6-shadertools-dev qt6-multimedia-dev \
+    qt6-base-dev qt6-base-private-dev qt6-shadertools-dev qt6-multimedia-dev qt6-svg-plugins \
     libgrpc++-dev libprotobuf-dev protobuf-compiler protobuf-compiler-grpc libssl-dev \
     nlohmann-json3-dev \
     libxcb1-dev libwayland-dev libxkbcommon-dev libavahi-client-dev

@@ -19,6 +19,7 @@
 #include "app/ImmersiveExit.hpp"
 #include "app/MachineSession.hpp"
 #include "app/MainWindow.hpp"
+#include "app/ModeIcon.hpp"
 #include "app/SessionAudio.hpp"
 #include "app/Sidebar.hpp"
 #include "app/SidebarMode.hpp"
@@ -27,8 +28,12 @@
 #include "FakeBeebiumServer.hpp"
 
 #include <QAction>
+#include <QApplication>
+#include <QImage>
 #include <QLabel>
+#include <QPalette>
 #include <QPushButton>
+#include <QSet>
 #include <QSlider>
 #include <QToolButton>
 
@@ -56,16 +61,67 @@ QAction* action_named(QWidget& window, const QString& text) {
 
 // --- the shell ---------------------------------------------------------------------
 
-TEST_CASE("The offered modes' icons are the theme's devices, one set by construction",
-          "[sidebar]") {
-    QStringList names;
+TEST_CASE("Every mode has its own drawing at both sizes, the strip's and a menu's",
+          "[sidebar][icons]") {
     for (SidebarMode mode : offered_sidebar_modes()) {
-        names << sidebar_mode_icon_name(mode);
+        INFO(sidebar_mode_label(mode).toStdString());
+        const QIcon icon = sidebar_mode_icon(mode);
+        REQUIRE_FALSE(icon.isNull());
+        for (const int size : {16, 24}) {
+            const QImage image = icon.pixmap(size, size).toImage();
+            REQUIRE(image.size() == QSize(size, size));
+            // Something drawn, and not the whole square.
+            int inked = 0;
+            for (int y = 0; y < size; ++y) {
+                for (int x = 0; x < size; ++x) {
+                    inked += qAlpha(image.pixel(x, y)) > 128 ? 1 : 0;
+                }
+            }
+            CHECK(inked > size);
+            CHECK(inked < size * size / 2);
+        }
     }
-    CHECK(names == QStringList{QStringLiteral("drive-harddisk"), QStringLiteral("media-flash"),
-                               QStringLiteral("preferences-plugin"), QStringLiteral("video-display"),
-                               QStringLiteral("audio-card"), QStringLiteral("input-keyboard"),
-                               QStringLiteral("cpu"), QStringLiteral("network-wired")});
+    // A menu's size takes the 16 grid, the strip's the 24.
+    CHECK(ModeIconEngine::grid_for(16) == 16);
+    CHECK(ModeIconEngine::grid_for(24) == 24);
+    CHECK(ModeIconEngine::grid_for(Sidebar::MODE_ICON_SIZE) == 24);
+}
+
+TEST_CASE("A mode's icon is painted in the palette's ink, light or dark", "[sidebar][icons]") {
+    const QPalette original = QApplication::palette();
+    for (const QColor ink : {QColor(0x2e, 0x34, 0x36), QColor(0xe8, 0xe8, 0xe8)}) {
+        QPalette palette = original;
+        palette.setColor(QPalette::Active, QPalette::WindowText, ink);
+        palette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(0x80, 0x80, 0x80));
+        QApplication::setPalette(palette);
+        const QIcon icon = sidebar_mode_icon(SidebarMode::processor);
+        const auto opaque_colours = [](const QImage& image) {
+            QSet<QRgb> colours;
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    if (qAlpha(image.pixel(x, y)) == 255) {
+                        colours.insert(image.pixel(x, y) | 0xff000000u);
+                    }
+                }
+            }
+            return colours;
+        };
+        CHECK(opaque_colours(icon.pixmap(24, 24).toImage()) == QSet<QRgb>{ink.rgb()});
+        CHECK(opaque_colours(icon.pixmap(QSize(24, 24), QIcon::Disabled).toImage()) ==
+              QSet<QRgb>{QColor(0x80, 0x80, 0x80).rgb()});
+    }
+    QApplication::setPalette(original);
+}
+
+TEST_CASE("The mode strip shows its icons at the 24 grid's size", "[sidebar][icons]") {
+    Sidebar sidebar;
+    QWidget storage;
+    sidebar.add_mode(SidebarMode::storage, &storage);
+    for (QToolButton* button : sidebar.findChildren<QToolButton*>()) {
+        if (button->toolTip() == QStringLiteral("Storage")) {
+            CHECK(button->iconSize() == QSize(24, 24));
+        }
+    }
 }
 
 TEST_CASE("A mode showing the server's state is marked stale while the server is not live",

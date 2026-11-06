@@ -301,6 +301,7 @@ add_library(beebium_linux_app STATIC
     src/app/LedColour.cpp
     src/app/MachineSession.cpp
     src/app/MappingCatalogue.cpp
+    src/app/ModeIcon.cpp
     src/app/HostKeyboards.cpp
     src/app/MachinesPage.cpp
     src/app/MainWindow.cpp
@@ -417,6 +418,21 @@ qt_add_resources(beebium_linux_app "application_icon"
     FILES ${BEEBIUM_ICON_FILEPATHS}
 )
 
+# The sidebar modes' own icon set (#272), drawn on two grids; read through
+# Qt's SVG image plugin (qt6-svg-plugins) and tinted when painted.
+set(BEEBIUM_MODE_ICON_NAMES storage memory peripherals video sound keyboard processor network)
+set(BEEBIUM_MODE_ICON_FILEPATHS)
+foreach(grid 16 24)
+    foreach(name ${BEEBIUM_MODE_ICON_NAMES})
+        list(APPEND BEEBIUM_MODE_ICON_FILEPATHS ${CMAKE_CURRENT_SOURCE_DIR}/icons/modes/${grid}/${name}.svg)
+    endforeach()
+endforeach()
+qt_add_resources(beebium_linux_app "mode_icons"
+    PREFIX "/mode-icons"
+    BASE ${CMAKE_CURRENT_SOURCE_DIR}/icons/modes
+    FILES ${BEEBIUM_MODE_ICON_FILEPATHS}
+)
+
 qt_add_executable(beebium src/app/main.cpp)
 target_link_libraries(beebium PRIVATE beebium_linux_app)
 
@@ -496,7 +512,9 @@ set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Robert Smallshire <robert@smallshire.org.uk
 set(CPACK_DEBIAN_PACKAGE_SECTION "games")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rob-smallshire/beebium")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "qt6-wayland, libvulkan1")
+# qt6-svg-plugins: the sidebar modes' icons are SVG, read through its image
+# plugin, which the shared-library dependencies do not show.
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "qt6-wayland, libvulkan1, qt6-svg-plugins")
 # The client sets no style, palette or font of its own: it takes them from
 # Qt's platform theme. Where a desktop sets none up for Qt 6 (plain Debian
 # trixie under labwc or another wlroots compositor), the client falls to Qt's
