@@ -364,3 +364,21 @@ TEST_CASE("Machine keeps the CPU's Econet NMI line at the socket's level",
     machine.step();
     CHECK((machine.cpu().device_nmi_flags & kEconetNmiDeviceMask) == 0);
 }
+
+// The disc NMI input follows the disc socket's level on every 1 MHz edge (even
+// cycles). As for Econet, the machine tells the CPU only when the level
+// differs from the CPU's own record of the line, so a record that disagrees is
+// put right at the next sample.
+TEST_CASE("Machine keeps the CPU's disc NMI line at the disc socket's level",
+          "[machine][disc][nmi]") {
+    ModelB machine;
+    load_nop_slide_with_store(machine);
+    machine.step();
+    machine.step();
+    CHECK((machine.cpu().device_nmi_flags & kDiscNmiDeviceMask) == 0);
+
+    machine.cpu().device_nmi_flags |= kDiscNmiDeviceMask;  // a stale record
+    machine.step();
+    machine.step();  // at least one even cycle has passed
+    CHECK((machine.cpu().device_nmi_flags & kDiscNmiDeviceMask) == 0);
+}

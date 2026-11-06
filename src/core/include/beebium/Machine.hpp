@@ -383,8 +383,7 @@ private:
         // the next byte, creating a new falling edge on /NMI before the handler
         // completes RTI. This causes NMIs to stack up infinitely.
         if ((state_.cycle_count & 1) == 0) {
-            uint8_t nmi_mask = state_.memory.poll_nmi();
-            M6502_SetDeviceNMI(&state_.cpu, kDiscNmiDeviceMask, nmi_mask ? 1 : 0);
+            update_disc_nmi(state_.memory.poll_nmi() != 0);
         }
 
         // Econet NMI: update every 2MHz cycle (ADLC is a 2MHz device).
@@ -1050,6 +1049,18 @@ private:
         if (on_guest_ready_) on_guest_ready_();
     }
 
+    // Drive the CPU's disc NMI input to the disc socket's level, as sampled
+    // on a 1 MHz edge (poll_nmi(), which also ticks the disc controller and
+    // the 1 MHz bus, is still called on every such edge). As for Econet
+    // below, the CPU is told only when the level differs from its own record
+    // of the line, where M6502_SetDeviceNMI would change nothing.
+    void update_disc_nmi(bool wanted) {
+        const bool asserted = (state_.cpu.device_nmi_flags & kDiscNmiDeviceMask) != 0;
+        if (wanted != asserted) {
+            M6502_SetDeviceNMI(&state_.cpu, kDiscNmiDeviceMask, wanted ? 1 : 0);
+        }
+    }
+
     // Drive the CPU's Econet NMI input to the socket's level. The level is
     // sampled every cycle, but the CPU is told only when it differs from the
     // CPU's own record of the line (device_nmi_flags), which is exactly what
@@ -1197,8 +1208,7 @@ private:
         // ticks whenever the CPU accesses the I/O region, causing the disc
         // head to stall and byte timing to drift.
         if ((cycle & 1) == 0) {
-            uint8_t nmi_mask = state_.memory.poll_nmi();
-            M6502_SetDeviceNMI(&state_.cpu, kDiscNmiDeviceMask, nmi_mask ? 1 : 0);
+            update_disc_nmi(state_.memory.poll_nmi() != 0);
         }
 
         // Econet NMI during stretch cycles
