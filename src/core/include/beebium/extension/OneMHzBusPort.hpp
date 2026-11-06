@@ -94,8 +94,12 @@ public:
     void claim_jim_pages(uint8_t first_page, uint8_t last_page, OneMHzBusDevice& device);
 
     // Tick all registered devices (called at 1 MHz from poll_nmi).
-    // Invalidates the IRQ cache since device state may have changed.
-    void tick();
+    // Invalidates the IRQ cache since device state may have changed. With no
+    // device on the bus there is nothing to tick and nothing to invalidate,
+    // so the emulation loop pays a test of an empty list, inline.
+    void tick() {
+        if (!tickable_devices_.empty()) tick_devices();
+    }
 
     // Assert the bus's NRST line: reset every registered device. The JIM
     // paging register is not cleared, as on the real bus.
@@ -118,11 +122,17 @@ public:
     // Returns true if any device on the 1 MHz bus is asserting IRQ.
     // Used by the IrqAggregator to include 1 MHz bus IRQs.
     // Caches the result between tick() calls to avoid redundant virtual
-    // dispatch at 2 MHz when tick() only runs at 1 MHz.
-    bool irq_pending() const;
+    // dispatch at 2 MHz when tick() only runs at 1 MHz. The cached level is
+    // read inline; the devices are asked, out of line, only when a tick, a
+    // reset or a new claim has invalidated it.
+    bool irq_pending() const {
+        return irq_dirty_ ? refresh_irq_pending() : cached_irq_;
+    }
 
 private:
     void add_tickable(OneMHzBusDevice& device);
+    void tick_devices();
+    bool refresh_irq_pending() const;
 
     std::array<OneMHzBusDevice*, kJimPagingRegisterOffset> fred_map_;
     std::array<OneMHzBusDevice*, 256> jim_page_map_;

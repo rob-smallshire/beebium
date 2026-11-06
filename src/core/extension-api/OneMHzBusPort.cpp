@@ -78,10 +78,11 @@ void OneMHzBusPort::add_tickable(OneMHzBusDevice& device) {
     if (std::find(tickable_devices_.begin(), tickable_devices_.end(), &device)
             == tickable_devices_.end()) {
         tickable_devices_.push_back(&device);
+        irq_dirty_ = true;
     }
 }
 
-void OneMHzBusPort::tick() {
+void OneMHzBusPort::tick_devices() {
     for (auto* dev : tickable_devices_) {
         dev->tick();
     }
@@ -95,17 +96,15 @@ void OneMHzBusPort::reset(ResetCause cause) {
     irq_dirty_ = true;
 }
 
-bool OneMHzBusPort::irq_pending() const {
-    if (irq_dirty_) {
-        cached_irq_ = false;
-        for (auto* dev : tickable_devices_) {
-            if (dev->irq_pending()) {
-                cached_irq_ = true;
-                break;
-            }
+bool OneMHzBusPort::refresh_irq_pending() const {
+    cached_irq_ = false;
+    for (auto* dev : tickable_devices_) {
+        if (dev->irq_pending()) {
+            cached_irq_ = true;
+            break;
         }
-        irq_dirty_ = false;
     }
+    irq_dirty_ = false;
     return cached_irq_;
 }
 

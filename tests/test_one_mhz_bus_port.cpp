@@ -340,3 +340,71 @@ TEST_CASE("OneMHzBusDevice JIM defaults float and ignore writes", "[extension][1
     base.jim_write(0x30, 0x00, 0x42);
     REQUIRE(device.last_write_value == 0);
 }
+
+namespace {
+
+// A device whose IRQ output follows a level the test sets, counting how
+// often the port asks.
+struct IrqDevice : MockDevice {
+    bool irq = false;
+    mutable int irq_queries = 0;
+    bool irq_pending() const override {
+        ++irq_queries;
+        return irq;
+    }
+};
+
+}  // namespace
+
+TEST_CASE("OneMHzBusPort with no devices never asserts IRQ", "[extension][1mhz-bus][irq]") {
+    OneMHzBusPort port;
+    CHECK_FALSE(port.irq_pending());
+    for (int i = 0; i < 4; ++i) {
+        port.tick();
+        CHECK_FALSE(port.irq_pending());
+    }
+    port.reset(ResetCause::PowerOn);
+    CHECK_FALSE(port.irq_pending());
+}
+
+TEST_CASE("OneMHzBusPort IRQ follows a device's level from the tick it changes",
+          "[extension][1mhz-bus][irq]") {
+    OneMHzBusPort port;
+    IrqDevice device;
+    port.claim_addresses(0x00, 0x0F, device);
+    CHECK_FALSE(port.irq_pending());
+
+    device.irq = true;
+    port.tick();
+    CHECK(port.irq_pending());
+
+    device.irq = false;
+    port.tick();
+    CHECK_FALSE(port.irq_pending());
+}
+
+TEST_CASE("OneMHzBusPort asks its devices for IRQ at most once between ticks",
+          "[extension][1mhz-bus][irq]") {
+    OneMHzBusPort port;
+    IrqDevice device;
+    port.claim_addresses(0x00, 0x0F, device);
+    port.tick();
+    device.irq_queries = 0;
+    CHECK_FALSE(port.irq_pending());
+    CHECK_FALSE(port.irq_pending());
+    CHECK_FALSE(port.irq_pending());
+    CHECK(device.irq_queries == 1);
+}
+
+TEST_CASE("OneMHzBusPort device claimed after ticks is ticked and polled",
+          "[extension][1mhz-bus][irq]") {
+    OneMHzBusPort port;
+    port.tick();
+    CHECK_FALSE(port.irq_pending());
+    IrqDevice device;
+    device.irq = true;
+    port.claim_addresses(0x10, 0x1F, device);
+    port.tick();
+    CHECK(device.tick_count == 1);
+    CHECK(port.irq_pending());
+}
