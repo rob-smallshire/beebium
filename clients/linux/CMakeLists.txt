@@ -509,7 +509,7 @@ set(CPACK_DEBIAN_PACKAGE_DESCRIPTION
     " The servers come in the beebium-server package.")
 set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Robert Smallshire <robert@smallshire.org.uk>")
-set(CPACK_DEBIAN_PACKAGE_SECTION "games")
+set(CPACK_DEBIAN_PACKAGE_SECTION "otherosfs")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rob-smallshire/beebium")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 # qt6-svg-plugins: the sidebar modes' icons are SVG, read through its image
