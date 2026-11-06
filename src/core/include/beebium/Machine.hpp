@@ -157,7 +157,7 @@ public:
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
         step_over_breakpoints_ = false;
-        state_.memory.system_via_peripheral.type_ahead().begin_reset();
+        begin_type_ahead_reset();
         ++sequence_;
         if (on_reset_) on_reset_(/*hard=*/true);
     }
@@ -176,7 +176,7 @@ public:
     void soft_reset() {
         // Break pressed has already begun the type-ahead reset, and anything
         // typed while it was held is for the new session.
-        if (!in_reset_) state_.memory.system_via_peripheral.type_ahead().begin_reset();
+        if (!in_reset_) begin_type_ahead_reset();
         M6502_Reset(&state_.cpu);
         state_.memory.soft_reset();
         video_binding_.reset();
@@ -209,7 +209,7 @@ public:
             // A key down when Break is released is a reset option, not input,
             // and a line typed into the old session must not finish in the
             // new one: type-ahead stops here and discards what is queued.
-            state_.memory.system_via_peripheral.type_ahead().begin_reset();
+            begin_type_ahead_reset();
             ++sequence_;
         });
     }
@@ -1029,16 +1029,36 @@ private:
     // than a fixed address follows a MOS or ROM that moves it (IBOS does).
     // Earlier, during the MOS's reset and its ROMs' reset service calls, a
     // key down is lost or read as a reset option. Costs a check of each
-    // instruction boundary only until set, then one atomic load a cycle.
+    // instruction boundary only until set, then a test of a plain bool a
+    // cycle: guest_ready_seen_ mirrors the type-ahead queue's atomic flag on
+    // this thread, which is the only one that sets or clears it (the queue's
+    // begin_reset() and mark_guest_ready() are called only from here and
+    // begin_type_ahead_reset(), on the thread executing the machine or with
+    // it quiesced).
     void note_guest_ready() {
+        if (guest_ready_seen_) return;
         auto& type_ahead = state_.memory.system_via_peripheral.type_ahead();
-        if (type_ahead.guest_ready() || !M6502_IsAboutToExecute(&state_.cpu)) return;
+        if (type_ahead.guest_ready()) {
+            guest_ready_seen_ = true;
+            return;
+        }
+        if (!M6502_IsAboutToExecute(&state_.cpu)) return;
         const uint16_t remv = static_cast<uint16_t>(
             state_.memory.peek(0x022C) | (state_.memory.peek(0x022D) << 8));
         if (state_.cpu.opcode_pc.w != remv || state_.cpu.x != 0) return;
         type_ahead.mark_guest_ready();
+        guest_ready_seen_ = true;
         if (on_guest_ready_) on_guest_ready_();
     }
+
+    // Begin the type-ahead queue's reset (it discards what is queued, and the
+    // guest is not ready for input until note_guest_ready() sees it ask), and
+    // forget this thread's note that the guest was ready.
+    void begin_type_ahead_reset() {
+        state_.memory.system_via_peripheral.type_ahead().begin_reset();
+        guest_ready_seen_ = false;
+    }
+    bool guest_ready_seen_ = false;
     std::vector<WatchpointEntry> watchpoint_entries_;   // sorted by start, modified only while stopped
     WatchpointHitCallback on_watchpoint_hit_;           // rare-path callback
     ProgramCounterHistogram* pc_histogram_ = nullptr;

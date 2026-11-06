@@ -285,3 +285,65 @@ TEST_CASE("Video renderer publishes on its own after a bounded number of staged 
     renderer.publish();
     CHECK(queue.unpublished() == 0);
 }
+
+// The guest becomes ready for typed input on the cycle the CPU is about to
+// fetch the opcode at the REMV vector (&022C) with X = 0, and a reset makes it
+// not ready again, to be detected afresh on the same terms.
+
+namespace {
+
+// Steps until the guest is ready or `limit` cycles pass; returns the cycle
+// count after the step that made it ready, or 0. Also returns, through
+// `expected`, the cycle count after the first step that left the CPU about to
+// fetch the opcode at `remv` with X = 0.
+uint64_t step_until_guest_ready(ModelB& machine, uint16_t remv, uint64_t limit,
+                                uint64_t& expected) {
+    expected = 0;
+    auto& type_ahead = machine.memory().system_via_peripheral.type_ahead();
+    for (uint64_t i = 0; i < limit; ++i) {
+        machine.step();
+        if (expected == 0 && M6502_IsAboutToExecute(&machine.cpu()) &&
+            machine.cpu().opcode_pc.w == remv && machine.cpu().x == 0) {
+            expected = machine.cycle_count();
+        }
+        if (type_ahead.guest_ready()) return machine.cycle_count();
+    }
+    return 0;
+}
+
+}  // namespace
+
+TEST_CASE("Machine marks the guest ready on the cycle it reaches REMV with X = 0",
+          "[machine][guest_ready]") {
+    ModelB machine;
+    load_nop_slide_with_store(machine);
+    machine.write(0x022C, 0x08);  // REMV -> &0408, in the NOP slide
+    machine.write(0x022D, 0x04);
+    auto& type_ahead = machine.memory().system_via_peripheral.type_ahead();
+    REQUIRE_FALSE(type_ahead.guest_ready());  // the power-on reset cleared it
+
+    uint64_t expected = 0;
+    const uint64_t ready_at = step_until_guest_ready(machine, 0x0408, 200, expected);
+    REQUIRE(expected != 0);
+    CHECK(ready_at == expected);
+
+    SECTION("a reset makes it not ready, and it is detected again the same way") {
+        machine.soft_reset();  // runs from the reset vector, &0400, again
+        REQUIRE_FALSE(type_ahead.guest_ready());
+        machine.step_instruction();  // the reset sequence
+        uint64_t expected_again = 0;
+        const uint64_t ready_again =
+            step_until_guest_ready(machine, 0x0408, 200, expected_again);
+        REQUIRE(expected_again != 0);
+        CHECK(ready_again == expected_again);
+    }
+
+    SECTION("a reset while ready, with X not 0 at REMV, leaves it not ready") {
+        machine.soft_reset();
+        machine.step_instruction();
+        machine.set_x(1);
+        uint64_t expected_never = 0;
+        CHECK(step_until_guest_ready(machine, 0x0408, 200, expected_never) == 0);
+        CHECK_FALSE(type_ahead.guest_ready());
+    }
+}
