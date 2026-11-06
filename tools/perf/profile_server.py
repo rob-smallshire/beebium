@@ -253,27 +253,58 @@ def perf_report(data_filepath: Path, output_dirpath: Path, stem: str,
 def direct_callers(report: str) -> list[tuple[str, float]]:
     """The immediate callers in a caller-graph report, as (function, percent of all samples).
 
-    perf prints each call chain's share at the first branch below the symbol
-    as "|--12.34%--function" or "--12.34%--function". A symbol with a single
-    caller prints no branch, so lists nothing here: read the .txt report.
+    The report has a block per thread that ran the symbol, headed by the
+    symbol's overhead in that thread. perf prints each call chain's share at
+    the first branch below the symbol, as "|--12.34%--function" or
+    "--12.34%--function"; a symbol with a single caller in a thread has no
+    branch, and its caller, on the line after "---symbol", takes the block's
+    whole overhead.
     """
-    branches = []
+    callers = []
+    for overhead, lines in _caller_blocks(report):
+        branches = []
+        for line in lines:
+            column = line.find("--")
+            if column < 0 or "%--" not in line[column + 2:]:
+                continue
+            percent_text, function = line[column + 2:].split("%--", 1)
+            try:
+                branches.append((column, function.strip(), float(percent_text)))
+            except ValueError:
+                continue
+        if branches:
+            # Deeper branches split a caller's share among its own callers;
+            # only the shallowest are the symbol's immediate callers.
+            first_column = min(column for column, _, _ in branches)
+            callers += [(function, percent) for column, function, percent in branches
+                        if column == first_column]
+            continue
+        for index, line in enumerate(lines):
+            if line.strip().startswith("---") and index + 1 < len(lines):
+                caller = lines[index + 1].strip().lstrip("|").strip()
+                if caller:
+                    callers.append((caller, overhead))
+                break
+    return callers
+
+
+def _caller_blocks(report: str) -> list[tuple[float, list[str]]]:
+    """Split a caller-graph report into (overhead, lines) blocks, one per thread."""
+    blocks = []
     for line in report.splitlines():
-        column = line.find("--")
-        if column < 0 or "%--" not in line[column + 2:]:
+        if line.startswith("#"):
             continue
-        percent_text, function = line[column + 2:].split("%--", 1)
-        try:
-            branches.append((column, function.strip(), float(percent_text)))
-        except ValueError:
-            continue
-    if not branches:
-        return []
-    # Deeper branches split a caller's share among its own callers; only the
-    # shallowest are the symbol's immediate callers.
-    first_column = min(column for column, _, _ in branches)
-    return [(function, percent) for column, function, percent in branches
-            if column == first_column]
+        fields = line.split()
+        if fields and fields[0].endswith("%") and line.startswith("    ") and \
+                not line.strip().startswith("|"):
+            try:
+                blocks.append((float(fields[0].rstrip("%")), []))
+                continue
+            except ValueError:
+                pass
+        if blocks:
+            blocks[-1][1].append(line)
+    return blocks
 
 
 def top_rows(report: str, count: int) -> list[str]:
