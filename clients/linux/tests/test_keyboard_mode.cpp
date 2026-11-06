@@ -20,13 +20,18 @@
 
 #include "SampleKeyTable.hpp"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QDir>
 #include <QFile>
 #include <QFrame>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QTemporaryDir>
 #include <QTreeWidget>
 
@@ -190,7 +195,7 @@ TEST_CASE("The mappings list has no frame and is as tall as its rows, like the l
     CHECK(list->frameShape() == QFrame::NoFrame);
     CHECK(list->frameWidth() == 0);
     CHECK_FALSE(list->viewport()->autoFillBackground());
-    CHECK(list->verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff);
+    CHECK_FALSE(list->verticalScrollBar()->isVisible());
     CHECK(list->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff);
     // Every row shows, the divider's included, with no empty space below.
     int rows_height = 0;
@@ -249,6 +254,86 @@ TEST_CASE("The labelled keys are a bare table at the foot of the mode, the free 
     CHECK(divider->y() < table->y());
     // The Caps Lock toggle below the table.
     CHECK(sidebar.caps_lock_sync()->y() > table->y());
+}
+
+TEST_CASE("Nothing scrolls until the mode is full; then the mappings give way before the keys",
+          "[keyboard][mode]") {
+    QTemporaryDir directory;
+    // Enough of the user's mappings that the list is long, each labelling
+    // more keys than any built-in: Thrust's and six more.
+    QJsonObject thrust = QJsonDocument::fromJson(corpus("Thrust.json")).object();
+    QJsonArray entries = thrust.value(QStringLiteral("keys")).toArray();
+    const char* const extra_codes[] = {"KeyA", "KeyS", "KeyD", "KeyF", "KeyG", "KeyH"};
+    for (const char* code : extra_codes) {
+        entries.append(QJsonObject{
+            {QStringLiteral("code"), QString::fromLatin1(code)},
+            {QStringLiteral("bbc"), QJsonObject{{QStringLiteral("key"), QStringLiteral("A")},
+                                                {QStringLiteral("action"),
+                                                 QStringLiteral("Extra %1").arg(code)}}}});
+    }
+    thrust.insert(QStringLiteral("keys"), entries);
+    for (int i = 0; i < 6; ++i) {
+        thrust.insert(QStringLiteral("name"), QStringLiteral("Mine %1").arg(i));
+        thrust.insert(QStringLiteral("id"),
+                      QStringLiteral("00000000-0000-0000-0000-0000000001%1").arg(i, 2, 10, QLatin1Char('0')));
+        write(directory.filePath(QStringLiteral("mine%1.json").arg(i)),
+              QJsonDocument(thrust).toJson());
+    }
+    KeyboardSidebar sidebar(directory.path());
+    // The mapping that labels the most keys: one of the Thrust copies.
+    QString most;
+    std::size_t most_rows = 0;
+    for (const MappingChoice& choice : sidebar.choices()) {
+        if (choice.mapping &&
+            mapping_reference(*choice.mapping).size() > most_rows) {
+            most_rows = mapping_reference(*choice.mapping).size();
+            most = choice.id;
+        }
+    }
+    REQUIRE(most_rows > 9);
+    sidebar.set_active(most);
+    sidebar.resize(300, 1400);
+    sidebar.show();
+    QApplication::processEvents();
+    QListWidget* list = sidebar.chooser();
+    QTreeWidget* keys = sidebar.reference();
+    const auto settle = [&](int height) {
+        sidebar.resize(300, height);
+        QApplication::processEvents();
+        QApplication::processEvents();
+    };
+    const int list_full = list->height();
+    const int keys_full = keys->height();
+    const auto free_space = [&] {
+        auto* divider = sidebar.findChild<QFrame*>(QStringLiteral("referenceDivider"));
+        return divider->y() - (list->y() + list->height());
+    };
+
+    // Room for everything: every row shows, neither scrolls, the free space
+    // between them.
+    CHECK(keys_full >= static_cast<int>(most_rows) * keys->sizeHintForRow(0));
+    CHECK_FALSE(list->verticalScrollBar()->isVisible());
+    CHECK_FALSE(keys->verticalScrollBar()->isVisible());
+    const int spare = free_space();
+    REQUIRE(spare > 60);
+
+    // Just enough: still neither scrolls.
+    settle(sidebar.height() - spare);
+    CHECK(free_space() == 0);
+    CHECK(list->height() == list_full);
+    CHECK(keys->height() == keys_full);
+
+    // Short: the mappings give way, the keys keep every row.
+    settle(sidebar.height() - 40);
+    CHECK(list->height() == list_full - 40);
+    CHECK(keys->height() == keys_full);
+
+    // Shorter than the mappings can give: they keep two rows, and then the
+    // keys give way.
+    settle(sidebar.height() - list_full);
+    CHECK(list->height() < list_full - 40);
+    CHECK(list->height() >= 2 * list->sizeHintForRow(0));
+    CHECK(keys->height() < keys_full);
 }
 
 TEST_CASE("The mode has no buttons: the mappings folder is managed elsewhere", "[keyboard][mode]") {

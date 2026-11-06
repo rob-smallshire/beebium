@@ -13,6 +13,7 @@
 #include "app/KeyboardSidebar.hpp"
 
 #include <QCheckBox>
+#include <QEvent>
 #include <QFrame>
 #include <QHeaderView>
 #include <QPalette>
@@ -21,12 +22,16 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 namespace beebium::linux_client {
 
 namespace {
 
 constexpr int CHOICE_ROLE = Qt::UserRole;
 constexpr int DIVIDER_HEIGHT = 9;
+// The rows of mappings kept when space is short, the keys' list then giving way.
+constexpr int LEAST_MAPPING_ROWS = 2;
 
 }  // namespace
 
@@ -36,15 +41,22 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 4, 12, 8);
 
-    list_ = new QListWidget(this);
+    // The mappings at the top and the labelled keys at the foot share one
+    // area, the free space between them; placed by apportion().
+    views_ = new QWidget(this);
+    views_->setObjectName(QStringLiteral("mappingViews"));
+    views_->installEventFilter(this);
+    layout->addWidget(views_, 1);
+
+    list_ = new QListWidget(views_);
     list_->setObjectName(QStringLiteral("mappings"));
     list_->setFocusPolicy(Qt::NoFocus);  // the keys stay the machine's
     list_->setSelectionMode(QAbstractItemView::SingleSelection);
     // A plain list on the mode's background, as tall as its rows, as the
-    // labelled keys are: no frame, and no scrolling past empty space.
+    // labelled keys are: no frame, and a scroll bar only when space is short.
     list_->setFrameShape(QFrame::NoFrame);
     list_->viewport()->setAutoFillBackground(false);
-    list_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    list_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     // The selected row is the active mapping, so it shows whether or not the
     // window has the focus: some palettes draw an inactive selection in the
@@ -54,19 +66,14 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
         marked.setColor(QPalette::Inactive, role, marked.color(QPalette::Active, role));
     }
     list_->setPalette(marked);
-    layout->addWidget(list_);
-    // The free space sits between the mappings and the labelled keys, which
-    // keep to the foot of the mode, as on macOS.
-    layout->addStretch(1);
 
     // The active mapping's labelled keys: a divider, then bare rows of key
-    // and function, as tall as they are.
-    divider_ = new QFrame(this);
+    // and function, as tall as they are, at the foot of the area as on macOS.
+    divider_ = new QFrame(views_);
     divider_->setObjectName(QStringLiteral("referenceDivider"));
     divider_->setFrameShape(QFrame::HLine);
     divider_->setFrameShadow(QFrame::Sunken);
-    layout->addWidget(divider_);
-    reference_ = new QTreeWidget(this);
+    reference_ = new QTreeWidget(views_);
     reference_->setObjectName(QStringLiteral("mappingReference"));
     reference_->setColumnCount(2);
     reference_->setHeaderHidden(true);
@@ -76,7 +83,7 @@ KeyboardSidebar::KeyboardSidebar(QString user_dirpath, QWidget* parent)
     reference_->setFocusPolicy(Qt::NoFocus);
     reference_->setSelectionMode(QAbstractItemView::NoSelection);
     reference_->header()->setStretchLastSection(true);
-    layout->addWidget(reference_);
+    reference_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     // The keys the mapping lets the user switch off, one box each.
     switches_ = new QWidget(this);
@@ -193,22 +200,55 @@ void KeyboardSidebar::rebuild() {
         }
     }
     show_reference();
-    fit_to_rows(list_);
-    // Every mapping shows: the list is never squeezed into scrolling.
-    list_->setFixedHeight(list_->maximumHeight());
+    apportion();
 }
 
-void KeyboardSidebar::fit_to_rows(QAbstractItemView* view) {
-    // No taller than its rows, so the free space is the mode's, not the view's.
+int KeyboardSidebar::rows_height(const QAbstractItemView* view, int rows) {
+    rows = std::min(rows, view->model()->rowCount());
     int height = 2 * view->frameWidth();
-    const int rows = view->model()->rowCount();
     for (int row = 0; row < rows; ++row) {
         height += view->sizeHintForRow(row);
     }
-    if (auto* list = qobject_cast<QListWidget*>(view)) {
+    if (auto* list = qobject_cast<const QListWidget*>(view)) {
         height += 2 * list->spacing() * rows;
     }
-    view->setMaximumHeight(height);
+    return height;
+}
+
+int KeyboardSidebar::rows_height(const QAbstractItemView* view) {
+    return rows_height(view, view->model()->rowCount());
+}
+
+bool KeyboardSidebar::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == views_ && event->type() == QEvent::Resize) {
+        apportion();
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void KeyboardSidebar::apportion() {
+    // Each list as tall as its rows, the free space between them. When the
+    // area is too short for both, the mappings give way first, down to a
+    // couple of rows, and only then the labelled keys: consulting the keys
+    // is the frequent case, choosing a mapping the rare one.
+    const int area_width = views_->width();
+    const int area_height = views_->height();
+    const bool labelled = reference_->topLevelItemCount() > 0;
+    const int keys_wanted = labelled ? rows_height(reference_) : 0;
+    const int divider_height = labelled ? divider_->sizeHint().height() : 0;
+    const int mappings_wanted = rows_height(list_);
+    const int mappings_least =
+        std::min({mappings_wanted, rows_height(list_, LEAST_MAPPING_ROWS), area_height});
+    const int mappings_height =
+        std::clamp(area_height - divider_height - keys_wanted, mappings_least, mappings_wanted);
+    list_->setGeometry(0, 0, area_width, mappings_height);
+    if (labelled) {
+        const int keys_height =
+            std::clamp(area_height - mappings_height - divider_height, 0, keys_wanted);
+        reference_->setGeometry(0, area_height - keys_height, area_width, keys_height);
+        divider_->setGeometry(0, area_height - keys_height - divider_height, area_width,
+                              divider_height);
+    }
 }
 
 void KeyboardSidebar::show_reference() {
@@ -223,7 +263,6 @@ void KeyboardSidebar::show_reference() {
         new QTreeWidgetItem(reference_, {row.host_key, row.action});
     }
     reference_->resizeColumnToContents(0);
-    fit_to_rows(reference_);
     // Only a mapping that labels its keys has a table to show.
     divider_->setVisible(!rows.empty());
     reference_->setVisible(!rows.empty());

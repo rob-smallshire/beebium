@@ -66,15 +66,21 @@ Q_SIGNALS:
 
 protected:
     void showEvent(QShowEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void rebuild();
     void show_reference();
-    static void fit_to_rows(QAbstractItemView* view);
+    // Place the mappings and the labelled keys in their shared area.
+    void apportion();
+    // The height of a view's first `rows` rows, or of all of them.
+    static int rows_height(const QAbstractItemView* view, int rows);
+    static int rows_height(const QAbstractItemView* view);
 
     QString user_dirpath_;
     std::vector<MappingChoice> choices_;
     QString active_id_;
+    QWidget* views_;
     QListWidget* list_;
     QFrame* divider_;
     QTreeWidget* reference_;
