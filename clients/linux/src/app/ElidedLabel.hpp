@@ -34,6 +34,8 @@ public:
         fit();
     }
 
+    const QString& whole() const { return whole_; }
+
     void set_note(const QString& note) {
         note_ = note;
         fit();

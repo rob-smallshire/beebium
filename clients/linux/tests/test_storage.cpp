@@ -338,6 +338,38 @@ TEST_CASE("A failure's details offer Clear, which ends the failure", "[storage][
     REQUIRE(wait_until([&] { return !dialog->isVisible(); }));
 }
 
+TEST_CASE("An empty drive's hint is set a level down: smaller, not bold, secondary",
+          "[storage][sidebar]") {
+    Shown s;
+    const QLabel* hint = s.row(0)->state_label();
+    REQUIRE(s.row(0)->state_text() == QStringLiteral("Empty - Drop disc image here"));
+    CHECK(hint->font().pointSizeF() < s.row(0)->font().pointSizeF());
+    CHECK(hint->font().weight() <= QFont::Normal);
+    CHECK_FALSE(hint->font().bold());
+    CHECK_FALSE(hint->isEnabled());  // the secondary text colour
+    // A disc's name is the row's main line, at the row's own size.
+    s.c.discs.insert(0, s.touch(QStringLiteral("a.ssd")));
+    REQUIRE(wait_until([&] { return s.row(0)->state_text() == QStringLiteral("a.ssd"); }));
+    CHECK(hint->font().pointSizeF() == s.row(0)->font().pointSizeF());
+    CHECK(hint->isEnabled());
+}
+
+TEST_CASE("A long disc name ends in an ellipsis at the sidebar's edge, the whole in its tooltip",
+          "[storage][sidebar]") {
+    Shown s;
+    const QString name =
+        QStringLiteral("a-disc-image-with-a-very-long-name-longer-than-any-sidebar.ssd");
+    s.c.discs.insert(0, s.touch(name));
+    REQUIRE(wait_until([&] { return s.row(0)->state_text() == name; }));
+    s.sidebar.resize(240, 400);
+    wait_until([] { return false; }, std::chrono::milliseconds(100));
+    const QLabel* line = s.row(0)->state_label();
+    CHECK(line->text().endsWith(QChar(0x2026)));
+    CHECK(line->text().size() < name.size());
+    CHECK(line->toolTip().endsWith(name));
+    CHECK(s.row(0)->width() <= s.sidebar.width());
+}
+
 TEST_CASE("An unknown failure kind reads as an honest generic", "[storage][errors]") {
     CHECK(disc_error_marker(beebium::DISC_ERROR_KIND_UNSPECIFIED).isEmpty());
     CHECK(disc_error_marker(99).isEmpty());

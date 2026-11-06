@@ -69,6 +69,8 @@ class DriveRow : public QWidget {
 
 public:
     static constexpr int NOTICE_MS = 6000;
+    // An empty drive's hint, a level down from the disc name it stands for.
+    static constexpr double HINT_SCALE = 0.9;
     // An ordinary eject waits about half a second for the motor; one still
     // waiting after this is offered Force Eject (9.5).
     static constexpr int EJECT_STALL_MS = 2000;
@@ -90,6 +92,8 @@ public:
 
     // For tests and the window: what the row shows.
     QString state_text() const;
+    // The state line as drawn, for tests.
+    const QLabel* state_label() const;
     // The line under it, when shown: read-only, or the disc being ejected.
     QString detail_text() const;
     bool eject_stalled() const { return eject_stalled_; }
@@ -137,8 +141,8 @@ private:
     Extensions extensions_;
     QLabel* title_;
     QLabel* motor_;
-    QLabel* state_;
-    QLabel* detail_line_;
+    ElidedLabel* state_;
+    ElidedLabel* detail_line_;
     QWidget* message_line_;
     ElidedLabel* message_marker_;
     QPushButton* details_;

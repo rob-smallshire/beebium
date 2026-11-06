@@ -148,16 +148,12 @@ DriveRow::DriveRow(SessionDiscs& discs, int number, ClientSettings* settings, Sh
     // never both, so the sidebar does not jump.
     // Not selectable text: a right-click on the name brings the row's own
     // menu, Copy Path among it.
-    state_ = new QLabel(this);
+    // No line of text widens the row past the sidebar: a long one ends in an
+    // ellipsis at the sidebar's edge, the whole of it in the tooltip.
+    state_ = new ElidedLabel(this);
     state_->setTextInteractionFlags(Qt::NoTextInteraction);
-    detail_line_ = new QLabel(this);
+    detail_line_ = new ElidedLabel(this);
     detail_line_->setEnabled(false);  // the secondary text colour
-    // No line of text widens the row past the sidebar: a long one is cut at
-    // the sidebar's edge rather than pushing the row's buttons out of view.
-    for (QLabel* line : {state_, detail_line_}) {
-        line->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-        line->setMinimumWidth(0);
-    }
     layout->addWidget(state_);
     layout->addWidget(detail_line_);
     message_line_ = new QWidget(this);
@@ -271,11 +267,15 @@ void DriveRow::refresh() {
 }
 
 QString DriveRow::detail_text() const {
-    return detail_line_->isVisibleTo(this) ? detail_line_->text() : QString();
+    return detail_line_->isVisibleTo(this) ? detail_line_->whole() : QString();
 }
 
 QString DriveRow::state_text() const {
-    return state_->text();
+    return state_->whole();
+}
+
+const QLabel* DriveRow::state_label() const {
+    return state_;
 }
 
 void DriveRow::present() {
@@ -292,35 +292,40 @@ void DriveRow::present() {
     dismiss_->setVisible(message_.kind == DriveMessage::Kind::failure);
     state_->setVisible(!messaging);
 
-    QFont font = state_->font();
+    // A disc's name is the row's main line; an empty drive's hint is set a
+    // level down, smaller and in the secondary colour.
+    QFont font = this->font();
+    if (state == DriveInfo::State::empty) {
+        font.setPointSizeF(font.pointSizeF() * HINT_SCALE);
+    }
     font.setWeight(state == DriveInfo::State::loaded ? QFont::Medium : QFont::Normal);
     state_->setFont(font);
     state_->setEnabled(state != DriveInfo::State::empty);
     switch (state) {
     case DriveInfo::State::empty:
-        state_->setText(local ? tr("Empty - Drop disc image here")
-                              : tr("Empty - server is on another host"));
-        state_->setToolTip({});
+        state_->set_whole(local ? tr("Empty - Drop disc image here")
+                                : tr("Empty - server is on another host"));
+        state_->set_note({});
         break;
     case DriveInfo::State::loaded:
     case DriveInfo::State::ejecting: {
-        state_->setText(state == DriveInfo::State::ejecting
-                            ? (eject_stalled_ ? tr("Ejecting - drive busy") : tr("Ejecting..."))
-                            : info->disc_name);
+        state_->set_whole(state == DriveInfo::State::ejecting
+                              ? (eject_stalled_ ? tr("Ejecting - drive busy") : tr("Ejecting..."))
+                              : info->disc_name);
         // The name only; the path is in the tooltip and the context menu.
-        state_->setToolTip(path_for_disc_url(info->disc_url));
+        state_->set_note(path_for_disc_url(info->disc_url));
         // No format or sides: the server knows them, and the row reads
         // better without them.
-        detail_line_->setText(state == DriveInfo::State::ejecting ? info->disc_name
-                              : info->write_protected             ? tr("Read-only")
-                                                                  : QString());
+        detail_line_->set_whole(state == DriveInfo::State::ejecting ? info->disc_name
+                                : info->write_protected             ? tr("Read-only")
+                                                                    : QString());
         break;
     }
     }
 
     // Shown only with something to say, so no blank band.
     detail_line_->setVisible(!messaging && state != DriveInfo::State::empty &&
-                             !detail_line_->text().isEmpty());
+                             !detail_line_->whole().isEmpty());
 
     // Browse hands the server a path: an empty drive, a server sharing this
     // filesystem (3.2).
