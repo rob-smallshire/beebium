@@ -18,6 +18,8 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <chrono>
+#include <optional>
 #include <vector>
 
 class QLabel;
@@ -31,11 +33,29 @@ namespace beebium::linux_client {
 // anything to say (client specification 8.3).
 QString health_text(const AudioHealth& health);
 
+// When the health line shows (client specification 8.3): from a glitch, an
+// underrun or a drop the counts had not seen, until five seconds pass with
+// none newer. The counts themselves are the session's, never reset by
+// hiding; counts that fall, as a new connection's do, are no glitch.
+class GlitchWatch {
+public:
+    using Clock = std::chrono::steady_clock;
+    static constexpr std::chrono::milliseconds QUIET{5000};
+
+    // Note the health read at `now`; whether the line shows.
+    bool observe(const AudioHealth& health, Clock::time_point now);
+
+private:
+    std::uint64_t underruns_ = 0;
+    std::uint64_t dropped_ = 0;
+    std::optional<Clock::time_point> last_glitch_;
+};
+
 // The Sound mode (client specification 8.2, 8.3), after the macOS client's
 // mixer: the master and its mute; then one section per group the server
 // reports, in the format's order and never hidden, each with its sub-master
 // and mute, and for the group owning per-channel sources a slider per
-// channel beneath it; then, only once a glitch has happened, the health
+// channel beneath it; then, for five seconds after each glitch, the health
 // line. Sliders write the window's mixer controls, which the playback
 // thread reads.
 class SoundSidebar : public QWidget {
@@ -61,10 +81,6 @@ public:
     // Read the health now, as the poll does.
     void refresh_health();
 
-protected:
-    void showEvent(QShowEvent* event) override;
-    void hideEvent(QHideEvent* event) override;
-
 private:
     struct GroupSection {
         QWidget* section = nullptr;
@@ -89,6 +105,7 @@ private:
     QLabel* health_label_;
     QTimer poll_;
     AudioHealth shown_health_;
+    GlitchWatch glitches_;
 };
 
 }  // namespace beebium::linux_client

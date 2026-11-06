@@ -146,6 +146,31 @@ TEST_CASE("The Sound mode's controls set the mixer, and mutes grey their sliders
     audio.stop();
 }
 
+TEST_CASE("The health line hides five seconds after the last glitch and returns with the next",
+          "[sidebar][sound]") {
+    using namespace std::chrono_literals;
+    GlitchWatch watch;
+    const auto t0 = GlitchWatch::Clock::time_point{} + 100s;
+    CHECK_FALSE(watch.observe(AudioHealth{}, t0));
+    AudioHealth health;
+    health.underrun_events = 1;
+    CHECK(watch.observe(health, t0));
+    CHECK(watch.observe(health, t0 + 4900ms));
+    CHECK_FALSE(watch.observe(health, t0 + 5s));
+    CHECK_FALSE(watch.observe(health, t0 + 60s));
+    // The next glitch brings it back; the counts are the session's.
+    health.dropped_samples = 512;
+    CHECK(watch.observe(health, t0 + 61s));
+    CHECK(health_text(health) == QStringLiteral("1 underruns, 512 dropped"));
+    // Another while it shows starts the five seconds again.
+    health.underrun_events = 2;
+    CHECK(watch.observe(health, t0 + 64s));
+    CHECK(watch.observe(health, t0 + 68s));
+    CHECK_FALSE(watch.observe(health, t0 + 69s));
+    // Counts that fall, a new connection's, are no glitch.
+    CHECK_FALSE(watch.observe(AudioHealth{}, t0 + 70s));
+}
+
 TEST_CASE("The health line appears only once a glitch has happened", "[sidebar][sound]") {
     FakeServer server;
     SessionAudio audio;

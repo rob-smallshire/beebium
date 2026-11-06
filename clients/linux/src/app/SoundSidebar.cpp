@@ -123,9 +123,12 @@ SoundSidebar::SoundSidebar(SessionAudio& audio, QWidget* parent)
     connect(&audio_, &SessionAudio::loaded_changed, this, &SoundSidebar::rebuild);
     connect(&audio_, &SessionAudio::problem_changed, this, &SoundSidebar::rebuild);
     // The counters accumulate on the playback thread whether this is shown
-    // or not; the poll only publishes them, and only while shown.
+    // or not. The poll runs throughout, so a glitch while the mode is hidden
+    // is timed when it happens: the line it brings hides five seconds later
+    // whether or not anyone looked (8.3).
     poll_.setInterval(HEALTH_POLL_MS);
     connect(&poll_, &QTimer::timeout, this, &SoundSidebar::refresh_health);
+    poll_.start();
     rebuild();
 }
 
@@ -257,23 +260,22 @@ void SoundSidebar::update_greying() {
 
 void SoundSidebar::refresh_health() {
     const AudioHealth health = audio_.health();
-    if (health == shown_health_ && !health_->isHidden() == health.glitched()) {
+    const bool showing = glitches_.observe(health, GlitchWatch::Clock::now());
+    if (health == shown_health_ && !health_->isHidden() == showing) {
         return;  // only a change is redrawn
     }
     shown_health_ = health;
     health_label_->setText(health_text(health));
-    health_->setVisible(health.glitched());
+    health_->setVisible(showing);
 }
 
-void SoundSidebar::showEvent(QShowEvent* event) {
-    QWidget::showEvent(event);
-    refresh_health();
-    poll_.start();
-}
-
-void SoundSidebar::hideEvent(QHideEvent* event) {
-    poll_.stop();
-    QWidget::hideEvent(event);
+bool GlitchWatch::observe(const AudioHealth& health, Clock::time_point now) {
+    if (health.underrun_events > underruns_ || health.dropped_samples > dropped_) {
+        last_glitch_ = now;
+    }
+    underruns_ = health.underrun_events;
+    dropped_ = health.dropped_samples;
+    return last_glitch_ && now - *last_glitch_ < QUIET;
 }
 
 QSlider* SoundSidebar::group_slider(std::size_t group) const {
