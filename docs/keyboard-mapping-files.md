@@ -190,6 +190,13 @@ where the Fn chord is already the guard and the Alt would put Ctrl+Break on
 the virtual-terminal switch. The predicates of this table are the ones every
 client implements; the paragraph below is about predicates not yet listed.
 
+Until the macOS client implements `keyboard` (#281), the built-ins carry the
+Alt+F12 entry without a `when`, and only the plain F12 entry is conditional
+on `pi-internal`. A client that does not know the predicate then keeps
+Alt+F12 Break, and a Pi 400's keyboard view shows Break twice, on F12 and on
+Alt+F12, both true. When every client knows the predicate, the built-ins
+take the two-entry form above and the view shows one Break row.
+
 A predicate the client does not know (a name this document does not list,
 or a value of a shape it does not describe) does not hold. So an entry with
 an unknown predicate does not apply, and the client keeps it untouched when
