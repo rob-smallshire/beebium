@@ -251,6 +251,36 @@ per-cycle work: `Machine::step_cycle` (14%), the SAA5050 (9%), the VIAs
 (about 11% between `update_port_pins` and the phi2 edges), the CPU binding
 (5%), the sound chip (4 to 5%) and the IRQ aggregator (6.5% at 1x).
 
+### Pi 5, after the per-cycle round
+
+Nine commits, 229f3b07 to a0cd4fc2: the type-ahead ready flag is a plain
+bool once the guest is ready; the empty 1 MHz bus, the empty Tube socket and
+the Econet, disc and IRQ lines leave the per-cycle path when nothing changes
+(the CPU is told of a level only when it differs from its own record, which
+is exact across resets); and a one-colour teletext half-character is drawn
+without decoding, checked against the old path for every input. Ceilings at
+10x, against the campaign baseline:
+
+| Scenario | Baseline | After the per-cycle round |
+|----------|----------|---------------------------|
+| idle | 2.26x | 3.22x (+43%) |
+| mode2 | 2.39x | 3.11x (+30%) |
+| disc | 2.18x | 2.99x (+37%) |
+| tube | 1.78x | 2.23x (+26%) |
+
+No single step in this round clears the run-to-run noise on its own; the
+round does. What remains is flat: the render loop's `process_unit` (11%, on
+its own thread), `step_cycle` (11%), `render_teletext` (10%), the VIAs
+(about 16% between `update_port_pins` and the phi2 edges), the CPU binding
+(6%), the IRQ fold (4%) and the sound chip (4%).
+
+Parked, with the reason: moving the debugger's in-handler tracking to the
+instruction boundary changes when the debugger sees the flags, for about 3%
+of the total; the VIAs poll their peripherals unconditionally and skipping
+that needs every input source to signal a change; a silent path in the
+SN76489 must keep the filters, the LFSR and the tone phases running exactly
+as they do now.
+
 ### Pi 400
 
 Release build of the same commit, idle MODE 7 prompt, headless: the emulation
