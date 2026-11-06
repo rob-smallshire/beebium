@@ -69,7 +69,8 @@ void SpeedScaleWidget::set_axis(const SpeedAxis& axis) {
 }
 
 void SpeedScaleWidget::set_configured(double multiplier, bool dimmed) {
-    if (multiplier == configured_ && dimmed == dimmed_) {
+    // While held, the thumb is the pointer's; the drop decides the speed.
+    if (dragging_ || (multiplier == configured_ && dimmed == dimmed_)) {
         return;
     }
     configured_ = multiplier;

@@ -42,6 +42,7 @@ public:
 
     void set_axis(const SpeedAxis& axis);
     const SpeedAxis& axis() const { return axis_; }
+    // Ignored while the thumb is held: until the drop, it follows the pointer.
     void set_configured(double multiplier, bool dimmed);
     double configured() const { return configured_; }
     bool thumb_dimmed() const { return dimmed_; }

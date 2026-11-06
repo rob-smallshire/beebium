@@ -219,6 +219,36 @@ TEST_CASE("Dragging the thumb sends the speed only when let go", "[processor]") 
     CHECK(fixture.requests().back() == Approx(2.0).epsilon(0.05));
 }
 
+TEST_CASE("While the thumb is held it follows the pointer, whatever the server reports",
+          "[processor]") {
+    Speed fixture;
+    ProcessorSidebar processor(fixture.speed);
+    processor.resize(280, 200);
+    processor.show();
+    SpeedScaleWidget* scale = processor.scale();
+    fixture.push(1.0, 1.0, 20.0);
+    REQUIRE(wait_until([&] { return scale->achieved() == 1.0 && scale->configured() == 1.0; }));
+    const int y = scale->axis_y();
+    mouse(scale, QEvent::MouseButtonPress, QPoint(scale->x_for(1.0), y));
+    mouse(scale, QEvent::MouseMove, QPoint(scale->x_for(4.0), y));
+    // Samples during the drag still say 1x.
+    fixture.push(1.0, 1.02, 20.0);
+    REQUIRE(wait_until([&] { return scale->achieved() == 1.02; }));
+    CHECK(scale->configured() == Approx(4.0).epsilon(0.05));
+    mouse(scale, QEvent::MouseMove, QPoint(scale->x_for(2.0), y));
+    fixture.push(1.0, 0.98, 20.0);
+    REQUIRE(wait_until([&] { return scale->achieved() == 0.98; }));
+    CHECK(scale->configured() == Approx(2.0).epsilon(0.05));
+    mouse(scale, QEvent::MouseButtonRelease, QPoint(scale->x_for(2.0), y));
+    REQUIRE(wait_until([&] { return fixture.requests().size() == 1; }));
+    CHECK(fixture.requests().back() == Approx(2.0).epsilon(0.05));
+    // Let go, the window owns the speed: a late sample at the old speed
+    // leaves the thumb where it was dropped.
+    fixture.push(1.0, 1.0, 20.0);
+    REQUIRE(wait_until([&] { return scale->achieved() == 1.0; }));
+    CHECK(scale->configured() == Approx(2.0).epsilon(0.05));
+}
+
 TEST_CASE("Unlimited sends 0.0, dims the thumb, and turning it off restores the speed",
           "[processor]") {
     Speed fixture;
