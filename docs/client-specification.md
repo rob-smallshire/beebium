@@ -1536,7 +1536,11 @@ target rises by a step up to a cap and is held for the session (no decay, so no
 oscillation), and playback re-primes so there is one audible gap then stable
 output; a new connection resets the target to the floor. Wire-level drops are
 detected exactly from a per-chunk sequence number. A small "underruns, dropped"
-line appears only once a glitch has occurred; zero means the host kept up.
+line appears only once a glitch has occurred; zero means the host kept up. The
+line hides again after five seconds with no new underrun or drop, and reappears
+on the next one; the session counts it shows are not reset by hiding. A slow
+host glitches while a machine starts, before the user could reach the sidebar,
+and must not look faulty for the rest of the session.
 
 The server does not pace to playback, so the client must buffer and must drop or
 substitute silence rather than block.
