@@ -165,11 +165,14 @@ The keyboard classes:
 
 | Class | Which keyboards |
 |-------|-----------------|
-| `"pi-internal"` | The keyboard built into a Raspberry Pi 400: a USB device, vendor `04d9` product `0007`, named "Raspberry Pi Internal Keyboard". It has no F11 or F12 key: F12 is Fn+F2, so a chord on F12 is a chord on Fn+F2, and Ctrl+Alt+F12 reaches the kernel as a virtual-terminal switch before any application sees it. The Raspberry Pi 500's keyboard is expected to join this class once its USB identity is confirmed (#280). |
+| `"pi-internal"` | The keyboard built into a Raspberry Pi 400 or 500: a keyboard whose device name contains "Raspberry Pi" and "Internal Keyboard", or has USB vendor `04d9` product `0007` (the Pi 400's, "Raspberry Pi Internal Keyboard", confirmed; the Pi 500's identity is still to be confirmed, #280). It has no F11 or F12 key: F12 is Fn+F2, so a chord on F12 is a chord on Fn+F2, and Ctrl+Alt+F12 reaches the kernel as a virtual-terminal switch before any application sees it. The external "Raspberry Pi Keyboard" sold separately has a real F12 and is a standard keyboard; "Internal" is what tells them apart. |
 | `"standard"` | Any keyboard that is not of a class listed above. On macOS and Windows a standard keyboard is always taken to be attached. |
 
 A client decides which classes are attached when it starts, from the host's
-input devices (on Linux, `/proc/bus/input/devices` or `/dev/input/by-id`);
+input devices (on Linux, `/proc/bus/input/devices` or `/dev/input/by-id`,
+counting only devices with letter keys, so that a keyboard's consumer-control
+interface, a power button or an HDMI CEC device is not a keyboard), and logs
+what it found so that a user's log names the keyboards it classified;
 following keyboards that come and go while it runs is platform latitude. A
 host with a Pi 400 keyboard and an external keyboard has both classes
 attached, so entries for either apply, and the keyboard view shows both.
