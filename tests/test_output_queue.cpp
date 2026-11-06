@@ -233,3 +233,76 @@ TEST_CASE("OutputQueue reset clears both sides' caches", "[output_queue]") {
     REQUIRE(buffers.total() == 2);
     CHECK(buffers.a[0] == 4);
 }
+
+// Staged items: the producer can commit items to its own view with stage()
+// and make them visible to the consumer later, all at once, with publish():
+// one release store for many items.
+
+TEST_CASE("OutputQueue staged items are invisible to the consumer until published",
+          "[output_queue]") {
+    OutputQueue<int> queue(8);
+    for (int value = 0; value < 3; ++value) {
+        auto slots = queue.get_producer_buffer();
+        REQUIRE_FALSE(slots.empty());
+        slots.a[0] = value;
+        queue.stage(1);
+    }
+    CHECK(queue.unpublished() == 3);
+    CHECK(queue.empty());
+    CHECK(queue.get_consumer_buffer().empty());
+
+    queue.publish();
+    CHECK(queue.unpublished() == 0);
+    CHECK(queue.size() == 3);
+    auto buffers = queue.get_consumer_buffer();
+    REQUIRE(buffers.total() == 3);
+    CHECK(buffers.a[0] == 0);
+    CHECK(buffers.a[1] == 1);
+    CHECK(buffers.a[2] == 2);
+}
+
+TEST_CASE("OutputQueue publish with nothing staged changes nothing", "[output_queue]") {
+    OutputQueue<int> queue(4);
+    queue.publish();
+    CHECK(queue.empty());
+    REQUIRE(queue.push(1));  // push publishes at once
+    CHECK(queue.unpublished() == 0);
+    queue.publish();
+    CHECK(queue.size() == 1);
+}
+
+TEST_CASE("OutputQueue producer's view counts staged items as used", "[output_queue]") {
+    OutputQueue<int> queue(2);
+    auto slots = queue.get_producer_buffer();
+    REQUIRE(slots.total() == 2);
+    slots.a[0] = 1;
+    slots.a[1] = 2;
+    queue.stage(2);
+    // Staged but unpublished, the slots are still the producer's: none is free.
+    CHECK(queue.get_producer_buffer().empty());
+    CHECK_FALSE(queue.push(3));
+    queue.publish();
+    CHECK(queue.full());
+}
+
+TEST_CASE("OutputQueue keeps order with a concurrent consumer when items are published in bursts",
+          "[output_queue]") {
+    OutputQueue<uint64_t> queue(kCapacity);
+    std::atomic<uint64_t> violations{0};
+    std::thread consumer([&] { violations = consume_all(queue); });
+    for (uint64_t value = 0; value < kItemCount;) {
+        auto slots = queue.get_producer_buffer();
+        if (slots.empty()) {
+            queue.publish();  // a full ring of staged items: let the consumer have them
+            std::this_thread::yield();
+            continue;
+        }
+        slots.a[0] = value++;
+        queue.stage(1);
+        if (value % 3 == 0) queue.publish();
+    }
+    queue.publish();
+    consumer.join();
+    CHECK(violations == 0);
+    CHECK(queue.empty());
+}

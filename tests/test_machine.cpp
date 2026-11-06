@@ -12,6 +12,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <beebium/Machines.hpp>
+#include <algorithm>
 #include <array>
 
 using namespace beebium;
@@ -202,4 +203,85 @@ TEST_CASE("Machine state access", "[machine][state]") {
         machine.step();
         REQUIRE(machine.state().cycle_count == machine.cycle_count());
     }
+}
+
+// Pixel batches are staged as the machine runs and published, with one
+// release store, at the points where a renderer or debugger can look: after
+// a step, at the end of a run (so a paused machine leaves none unseen), and
+// before a breakpoint or watchpoint callback a run makes.
+
+TEST_CASE("Machine publishes the pixel batches a run produced when it ends",
+          "[machine][video_output]") {
+    ModelB machine;
+    machine.memory().enable_video_output();
+    load_nop_slide_with_store(machine);
+    auto& queue = *machine.memory().video_output;
+    machine.run(200);
+    CHECK(queue.unpublished() == 0);
+    CHECK(queue.size() > 0);
+}
+
+TEST_CASE("Machine publishes the pixel batches of a single step", "[machine][video_output]") {
+    ModelB machine;
+    machine.memory().enable_video_output();
+    load_nop_slide_with_store(machine);
+    auto& queue = *machine.memory().video_output;
+    const size_t before = queue.size();
+    for (int i = 0; i < 4; ++i) machine.step();
+    CHECK(queue.unpublished() == 0);
+    CHECK(queue.size() > before);
+}
+
+TEST_CASE("Machine publishes pixel batches before a breakpoint callback",
+          "[machine][video_output]") {
+    ModelB machine;
+    machine.memory().enable_video_output();
+    load_nop_slide_with_store(machine);
+    auto& queue = *machine.memory().video_output;
+    size_t unpublished_at_hit = ~size_t{0};
+    machine.set_breakpoint_hit_callback([&](const BreakpointEntry&, uint32_t) {
+        unpublished_at_hit = queue.unpublished();
+    });
+    machine.set_breakpoint_entries({BreakpointEntry{.id = 1, .start = 0x0410, .end = 0x0411}});
+    machine.run(100);
+    CHECK(unpublished_at_hit == 0);
+}
+
+TEST_CASE("Machine publishes pixel batches before a watchpoint callback",
+          "[machine][video_output]") {
+    ModelB machine;
+    machine.memory().enable_video_output();
+    load_nop_slide_with_store(machine);
+    auto& queue = *machine.memory().video_output;
+    size_t unpublished_at_hit = ~size_t{0};
+    machine.set_watchpoint_hit_callback([&](const WatchpointEntry&, uint32_t, uint8_t, bool) {
+        unpublished_at_hit = queue.unpublished();
+    });
+    machine.add_watchpoint_entry({
+        .id = 1,
+        .start = 0x0500,
+        .end = 0x0501,
+        .type = WATCH_WRITE,
+        .condition = std::get<CompiledExpression>(compile("false")),
+    });
+    machine.run(100);
+    CHECK(unpublished_at_hit == 0);
+}
+
+TEST_CASE("Video renderer publishes on its own after a bounded number of staged batches",
+          "[machine][video_output]") {
+    ModelBHardware hardware;
+    hardware.enable_video_output();
+    VideoRenderer<ModelBHardware> renderer(hardware);
+    auto& queue = *hardware.video_output;
+    const size_t limit = VideoRenderer<ModelBHardware>::kMaxStagedBatches;
+    size_t most_unpublished = 0;
+    for (size_t i = 0; i < 3 * limit; ++i) {
+        renderer.render(Crtc6845::Output{});
+        most_unpublished = std::max(most_unpublished, queue.unpublished());
+    }
+    CHECK(most_unpublished < limit);
+    CHECK(queue.size() >= 2 * limit);  // published without a publish() call
+    renderer.publish();
+    CHECK(queue.unpublished() == 0);
 }

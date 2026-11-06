@@ -104,6 +104,23 @@ public:
     // with the cycle at which it completed (see FrameRenderer::set_field_cycles).
     OutputQueue<FieldCycle>& field_cycles() { return field_cycles_; }
 
+    // Make the pixel batches delivered since the last publish visible to the
+    // frame renderer. deliver() only stages each batch, so that the emulation
+    // thread issues one release store per run, not one per batch (each one a
+    // store every later acquire load on the thread waits behind). Called by
+    // the machine wherever a consumer may look; see Machine::publish_progress.
+    void publish() {
+        if (hardware_.video_output) hardware_.video_output->publish();
+        staged_ = 0;
+    }
+
+    // deliver() also publishes after this many staged batches, so that a long
+    // run -- a late pacing tick can run 3 x 2 MHz x speed x 50 ms, 300,000
+    // cycles at 1x, and a 2 MHz mode delivers a batch a cycle -- never holds
+    // more than a sliver of the queue's 262,144 slots away from a consumer
+    // that would otherwise drain them as the run goes.
+    static constexpr uint32_t kMaxStagedBatches = 4096;
+
     // Reset renderer state
     void reset() {
         last_hsync_ = false;
@@ -215,9 +232,11 @@ private:
     // before the batch: the slot is taken first, from the producer's own view
     // of the queue (which the single consumer can only enlarge), then the
     // stamp is pushed, then the batch is committed, so the renderer never
-    // meets an edge whose stamp is not yet visible. The edge is counted even
-    // if the stamp ring is full (no renderer is collecting stamps), so the
-    // numbering the renderer matches against stays right.
+    // meets an edge whose stamp is not yet visible: the stamp is published at
+    // once, the batch only staged, so the stamp is visible no later than the
+    // batch (see publish()). The edge is counted even if the stamp ring is
+    // full (no renderer is collecting stamps), so the numbering the renderer
+    // matches against stays right.
     void deliver(const PixelBatch& batch) {
         auto& queue = *hardware_.video_output;
         auto slots = queue.get_producer_buffer();
@@ -229,7 +248,8 @@ private:
             ++next_edge_;
         }
         slots.a[0] = batch;
-        queue.produce(1);
+        queue.stage(1);
+        if (++staged_ == kMaxStagedBatches) publish();
         last_delivered_vsync_ = vsync;
     }
 
@@ -242,6 +262,7 @@ private:
     const uint64_t* cycle_source_ = nullptr;
     const uint64_t* field_source_ = nullptr;
     OutputQueue<FieldCycle> field_cycles_{kFieldCycleCapacity};
+    uint32_t staged_ = 0;  // Batches staged since the last publish
     uint64_t next_edge_ = 0;
     bool last_delivered_vsync_ = false;
 

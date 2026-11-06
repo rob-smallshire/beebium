@@ -78,6 +78,12 @@ struct VideoBinding {
         renderer.reset();
     }
 
+    // Publish the pixel batches rendered since the last publish (see
+    // VideoRenderer::publish).
+    void publish_output() {
+        renderer.publish();
+    }
+
     // The machine's cycle counter, read to note when each field starts.
     void set_cycle_source(const uint64_t* cycle_count) {
         cycle_source_ = cycle_count;

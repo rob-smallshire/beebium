@@ -69,6 +69,7 @@ struct VideoRig {
         output.address = address;
         output.raster = raster;
         renderer.render(output);
+        renderer.publish();
         frame_renderer.process(*hardware.video_output, 1 << 16);
     }
 

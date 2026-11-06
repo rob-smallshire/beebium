@@ -25,7 +25,11 @@ namespace beebium {
 // Lock-free single-producer, single-consumer circular buffer.
 //
 // The producer calls get_producer_buffer() to get a span of writable slots,
-// writes to them, then calls produce(n) to commit n items.
+// writes to them, then calls produce(n) to commit n items. Or it commits
+// them with stage(n), which leaves them in the producer's own view, and
+// makes everything staged visible to the consumer at once with publish():
+// one release store however many items, for a producer that commits items
+// far more often than a consumer looks.
 //
 // The consumer calls get_consumer_buffer() to get a span of readable items,
 // reads them, then calls consume(n) to release n slots.
@@ -90,7 +94,8 @@ public:
     };
 
     ProducerBuffers get_producer_buffer() {
-        uint64_t write_pos = write_pos_.load(std::memory_order_relaxed);
+        // Staged items count as used: the producer's view starts after them.
+        uint64_t write_pos = staged_write_pos_;
         // Reload when the cached view shows no free slot (or, after a
         // produce() of more than this view offered, an impossible one).
         if (write_pos - cached_read_pos_ >= capacity_) {
@@ -122,8 +127,27 @@ public:
 
     // Commit n items to the buffer (makes them available to consumer).
     void produce(size_t n) {
-        const uint64_t write_pos = write_pos_.load(std::memory_order_relaxed);
-        write_pos_.store(write_pos + n, std::memory_order_release);
+        stage(n);
+        publish();
+    }
+
+    // Commit n items to the producer's view without showing them to the
+    // consumer: they hold their slots, and publish() releases them.
+    void stage(size_t n) {
+        staged_write_pos_ += n;
+    }
+
+    // Make every staged item visible to the consumer, with one release
+    // store. Does nothing when nothing is staged.
+    void publish() {
+        if (staged_write_pos_ != write_pos_.load(std::memory_order_relaxed)) {
+            write_pos_.store(staged_write_pos_, std::memory_order_release);
+        }
+    }
+
+    // Items staged but not yet published (producer thread only).
+    size_t unpublished() const {
+        return static_cast<size_t>(staged_write_pos_ - write_pos_.load(std::memory_order_relaxed));
     }
 
     // Convenience: write a single item (returns false if buffer full)
@@ -209,6 +233,7 @@ public:
         write_pos_.store(0, std::memory_order_release);
         cached_read_pos_ = 0;
         cached_write_pos_ = 0;
+        staged_write_pos_ = 0;
     }
 
 private:
@@ -222,8 +247,11 @@ private:
     mutable uint64_t cached_write_pos_ = 0;
 
     // Producer state - separate cache line, with its cached copy of read_pos_
+    // and the position up to which it has staged items (write_pos_ is where
+    // it last published).
     alignas(64) std::atomic<uint64_t> write_pos_{0};
     uint64_t cached_read_pos_ = 0;
+    uint64_t staged_write_pos_ = 0;
 };
 
 } // namespace beebium

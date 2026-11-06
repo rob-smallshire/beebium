@@ -242,16 +242,19 @@ public:
         return in_reset_;
     }
 
-    // Execute one CPU cycle, counted in the sequence number at once.
+    // Execute one CPU cycle, its count in the sequence number and its pixel
+    // batches published at once.
     void step() {
         step_cycle();
-        publish_steps();
+        publish_progress();
     }
 
 private:
     // Execute one CPU cycle. Its count in the sequence number waits in
-    // unpublished_steps_ until publish_steps(): run() publishes before every
-    // point where a debugger can observe the machine, and step() at once.
+    // unpublished_steps_, and its pixel batches are staged in the video
+    // output queue, until publish_progress(): run() publishes before every
+    // point where a debugger or the frame renderer can observe the machine,
+    // and step() at once.
     void step_cycle() {
         // Advance host time in the Tube socket, as the first action on every
         // path. cycle_count advances by exactly one per step(). The socket runs
@@ -416,13 +419,22 @@ private:
         ++unpublished_steps_;
     }
 
-    // Add the cycles run since the last publish to the sequence number. Called
-    // only by the thread executing the machine, or with it quiesced, as are
-    // the steps it counts; the relaxed add is ordered for other readers by
-    // the same handover (a quiesce, a pause) that makes the machine state
-    // itself safe to read, and, being a read-modify-write, loses nothing to a
-    // concurrent pause() or resume().
-    void publish_steps() {
+    // Publish what the machine has done since the last publish: the pixel
+    // batches staged in the video output queue (one release store), and the
+    // cycles run, added to the sequence number. Called only by the thread
+    // executing the machine, or with it quiesced, as are the steps it
+    // publishes. The relaxed add is ordered for other readers by the same
+    // handover (a quiesce, a pause) that makes the machine state itself safe
+    // to read, and, being a read-modify-write, loses nothing to a concurrent
+    // pause() or resume(). The emulation thread only parks, for a pause or a
+    // quiesce, after run() has returned, so a stopped machine has no batch
+    // left unpublished.
+    //
+    // Between publishes the staged batches hold their slots; the renderer also
+    // publishes every VideoRenderer::kMaxStagedBatches, so a long run holds
+    // no more than that of the queue's 262,144.
+    void publish_progress() {
+        video_binding_.publish_output();
         if (unpublished_steps_ == 0) return;
         sequence_.fetch_add(unpublished_steps_, std::memory_order_relaxed);
         unpublished_steps_ = 0;
@@ -485,7 +497,7 @@ public:
                     for (auto& bp : breakpoint_entries_) {
                         if (stepping_over || bp.start > pc) break;  // sorted by start
                         if (bp.matches(pc)) {
-                            publish_steps();
+                            publish_progress();
                             if (on_breakpoint_hit_) on_breakpoint_hit_(bp, pc);
                             if (paused_.load()) { hit_stop = true; break; }
                         }
@@ -507,7 +519,7 @@ public:
                     bool hit_stop = false;
                     for (auto& bp : breakpoint_entries_) {
                         if (bp.start == 0 && bp.end == 0x10000 && bp.condition) {
-                            publish_steps();
+                            publish_progress();
                             if (on_breakpoint_hit_)
                                 on_breakpoint_hit_(bp, state_.cpu.opcode_pc.w);
                             if (paused_.load()) { hit_stop = true; break; }
@@ -519,7 +531,7 @@ public:
 
             step_cycle();
         }
-        publish_steps();
+        publish_progress();
 
         // Paused part-way through an instruction: complete it quietly.
         finish_instruction();
@@ -856,7 +868,7 @@ public:
             on_watchpoint_hit_ = [this, cb = std::move(cb)](const WatchpointEntry& wp,
                                                             uint32_t addr, uint8_t value,
                                                             bool is_write) {
-                publish_steps();
+                publish_progress();
                 cb(wp, addr, value, is_write);
             };
         } else {
@@ -1050,7 +1062,7 @@ private:
     // under an EmulationBusyScope; wait_until_idle() waits on it too.
     std::atomic<bool> emulation_busy_{false};
     // Increments on any mutation. Emulated cycles reach it in bulk through
-    // unpublished_steps_ (see publish_steps()), so the hot path pays a plain
+    // unpublished_steps_ (see publish_progress()), so the hot path pays a plain
     // increment, not an atomic read-modify-write, per cycle.
     std::atomic<uint64_t> sequence_{0};
     uint64_t unpublished_steps_ = 0;  // Cycles run but not yet in sequence_
