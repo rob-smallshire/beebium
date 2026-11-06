@@ -98,6 +98,15 @@ void DisplayRenderer::release() {
     rhi_ = nullptr;
 }
 
+QRhiTextureSubresourceUploadDescription frame_upload(const DecodedFrame& frame) {
+    // Raw data: the bytes stay the frame's, and current_ keeps the frame
+    // until the next set_frame, after the batch's frame has ended.
+    QRhiTextureSubresourceUploadDescription upload(QByteArray::fromRawData(
+        frame.pixels.data(), static_cast<qsizetype>(frame.pixels.size())));
+    upload.setDataStride(frame.width * 4);
+    return upload;
+}
+
 void DisplayRenderer::set_frame(std::unique_ptr<DecodedFrame> frame) {
     if (!frame) {
         return;
@@ -116,10 +125,8 @@ void DisplayRenderer::ensure_texture(QRhiResourceUpdateBatch* updates) {
         bindings_->create();
         texture_size_ = size;
     }
-    QRhiTextureSubresourceUploadDescription upload(current_->pixels.data(),
-                                                   static_cast<quint32>(current_->pixels.size()));
-    upload.setDataStride(current_->width * 4);
-    updates->uploadTexture(texture_.get(), QRhiTextureUploadDescription({0, 0, upload}));
+    updates->uploadTexture(texture_.get(),
+                           QRhiTextureUploadDescription({0, 0, frame_upload(*current_)}));
 }
 
 void DisplayRenderer::render(QRhiCommandBuffer* command_buffer, QRhiRenderTarget* target) {

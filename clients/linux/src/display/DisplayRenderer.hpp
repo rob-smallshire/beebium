@@ -31,6 +31,11 @@ namespace beebium::linux_client {
 //
 // A frame given to it stays current until the next, so a paused machine or
 // a resize redraws the last picture (client specification 6.1).
+// The upload of a frame's pixels, sharing the frame's own bytes rather than
+// copying them: the frame must outlive the resource update batch the
+// description goes into, until that batch's frame has ended.
+QRhiTextureSubresourceUploadDescription frame_upload(const DecodedFrame& frame);
+
 class DisplayRenderer {
 public:
     DisplayRenderer() = default;
@@ -47,6 +52,8 @@ public:
     void release();
 
     // Make `frame` the current picture; it is uploaded by the next render().
+    // The upload shares the frame's bytes, so call this only between frames,
+    // never between render() and the end of its frame.
     void set_frame(std::unique_ptr<DecodedFrame> frame);
 
     bool has_frame() const { return static_cast<bool>(current_); }

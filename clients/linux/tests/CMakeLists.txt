@@ -173,6 +173,10 @@ beebium_linux_add_test(test_display_uniforms
     SOURCES test_display_uniforms.cpp
     LIBRARIES beebium_linux_display)
 
+beebium_linux_add_test(test_frame_upload
+    SOURCES test_frame_upload.cpp
+    LIBRARIES beebium_linux_display)
+
 beebium_linux_add_test(test_picture_mapping
     SOURCES test_picture_mapping.cpp
     LIBRARIES beebium_linux_display)
