@@ -169,6 +169,10 @@ private:
     // Host modifier keys down, by physical identity, whether or not the
     // mapping sends them to the machine.
     std::map<std::string, HostModifiers> host_modifiers_down_;
+    // The machine's SHIFT or CTRL for a modifier key pressed with Alt held,
+    // held back until a key the machine takes comes with it (Shift+Alt+F12
+    // is Shift+Break), and dropped if none does.
+    std::map<std::string, ResolvedKey> withheld_modifiers_;
     HostCapsLock host_caps_lock_;
     std::optional<bool> caps_lock_sync_override_;
     KeySwitches switches_;

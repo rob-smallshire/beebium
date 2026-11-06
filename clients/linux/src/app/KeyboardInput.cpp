@@ -20,6 +20,7 @@
 #include <QFile>
 
 #include <algorithm>
+#include <utility>
 
 namespace beebium::linux_client {
 
@@ -264,7 +265,16 @@ bool KeyboardInput::key_press(const QKeyEvent& event) {
     if (modifier != 0) {
         host_modifiers_down_[key_id(event)] = modifier;
     }
-    if (!send_ || window_chord(event) || modifier_under_alt(modifier, held_modifiers(), event)) {
+    if (!send_ || window_chord(event)) {
+        return false;
+    }
+    if (modifier_under_alt(modifier, held_modifiers(), event)) {
+        // Not the machine's yet: Alt is the selection's modifier. Kept for
+        // a key the machine takes while it is down.
+        if (const auto resolved = resolve_key(mapping_, table_, *host_key, switches_);
+            resolved && resolved->role != KeyRole::switched_off) {
+            withheld_modifiers_[key_id(event)] = *resolved;
+        }
         return false;
     }
     // A synchronised Caps Lock is a toggle with its own path, never a held
@@ -291,6 +301,11 @@ bool KeyboardInput::key_press(const QKeyEvent& event) {
     if (user_pressed_) {
         user_pressed_();
     }
+    // A modifier held back under Alt goes down first: the key it came
+    // with is the machine's, and so is the chord.
+    for (const auto& [id, withheld] : std::exchange(withheld_modifiers_, {})) {
+        send_(held_.press(id, withheld));
+    }
     send_(held_.press(key_id(event), *resolved));
     return true;
 }
@@ -300,6 +315,7 @@ bool KeyboardInput::key_release(const QKeyEvent& event) {
         return true;
     }
     host_modifiers_down_.erase(key_id(event));
+    withheld_modifiers_.erase(key_id(event));
     // By identity alone: what the key resolved to was decided at its press,
     // and a release of a key never pressed sends nothing (R8).
     const auto events = held_.release(key_id(event));
@@ -341,6 +357,7 @@ void KeyboardInput::release_machine_keys() {
 
 void KeyboardInput::release_all() {
     host_modifiers_down_.clear();
+    withheld_modifiers_.clear();
     release_machine_keys();
 }
 

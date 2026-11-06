@@ -20,6 +20,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+
 using namespace beebium::linux_client;
 using beebium::linux_client::testing::sample_key_table;
 
@@ -254,6 +256,56 @@ TEST_CASE("With Alt held, Shift and Ctrl are the host's and never reach the mach
     wire.events.clear();
     CHECK(input.key_press(press(Qt::Key_Shift, XKB_LEFT_SHIFT, {}, Qt::ShiftModifier)));
     CHECK_FALSE(wire.events.empty());
+}
+
+TEST_CASE("Shift+Alt+F12 is Shift+Break, Shift pressed before Alt or after",
+          "[keyboard][qt][break]") {
+    // The machine must have SHIFT down when Break comes, or a disc does not
+    // boot; Alt guards Break and is no reason to lose the Shift.
+    const auto shift_held_at_break = [](const std::vector<WireEvent>& events) {
+        bool shift = false;
+        for (const WireEvent& event : events) {
+            if (event.action == WireAction::key_down && event.ik_number == 0) {
+                shift = true;
+            } else if (event.action == WireAction::key_up && event.ik_number == 0) {
+                shift = false;
+            } else if (event.action == WireAction::break_down) {
+                return shift;
+            }
+        }
+        return false;
+    };
+    SECTION("Shift, then Alt") {
+        Wire wire;
+        KeyboardInput input;
+        input.attach(sample_key_table(), wire.sender());
+        input.key_press(press(Qt::Key_Shift, XKB_LEFT_SHIFT, {}, Qt::NoModifier));
+        input.key_press(press(Qt::Key_Alt, XKB_LEFT_ALT, {}, Qt::ShiftModifier));
+        CHECK(input.key_press(
+            press(Qt::Key_F12, XKB_F12, {}, Qt::ShiftModifier | Qt::AltModifier)));
+        INFO(wire.events.size() << " events");
+        CHECK(shift_held_at_break(wire.events));
+    }
+    SECTION("Alt, then Shift") {
+        Wire wire;
+        KeyboardInput input;
+        input.attach(sample_key_table(), wire.sender());
+        input.key_press(press(Qt::Key_Alt, XKB_LEFT_ALT, {}, Qt::NoModifier));
+        input.key_press(press(Qt::Key_Shift, XKB_LEFT_SHIFT, {}, Qt::AltModifier));
+        // Held back while it might be the selection's.
+        CHECK(wire.events.empty());
+        CHECK(input.key_press(
+            press(Qt::Key_F12, XKB_F12, {}, Qt::ShiftModifier | Qt::AltModifier)));
+        INFO(wire.events.size() << " events");
+        CHECK(shift_held_at_break(wire.events));
+        // And let go on the machine with the key.
+        wire.events.clear();
+        input.key_release(release(Qt::Key_F12, XKB_F12, {}, Qt::ShiftModifier | Qt::AltModifier));
+        input.key_release(release(Qt::Key_Shift, XKB_LEFT_SHIFT, {}, Qt::AltModifier));
+        CHECK(std::count(wire.events.begin(), wire.events.end(),
+                         WireEvent{WireAction::key_up, 0}) == 1);
+        CHECK(input.held_keys().empty());
+    }
 }
 
 TEST_CASE("Ctrl and Shift chords without Alt or Meta are the machine's", "[keyboard][qt]") {
