@@ -223,6 +223,19 @@ waits for earlier `STLR`s to drain, and `produce()` issues one release store
 per pixel batch, up to two per emulated cycle. The next step is to publish
 the ring's index once per pacing batch rather than per pixel batch.
 
+### Pi 5, after publishing once per run (1619dded)
+
+The producer now stages pixel batches and publishes `write_pos_` with one
+release store at the end of each `run()` (and every 4,096 batches, so a long
+late tick cannot fill the ring), at the same points the sequence number is
+published. Ceilings at 10x: idle 2.69x, mode2 2.84x, disc 2.57x, tube 2.05x;
+against the baseline, +19%, +19%, +18% and +15%. The keyboard matrix reads
+fell from 8 to 10% to under 1% in every scenario: with the release stores
+gone, the acquire loads no longer wait. The remaining profile is flat
+per-cycle work: `Machine::step_cycle` (14%), the SAA5050 (9%), the VIAs
+(about 11% between `update_port_pins` and the phi2 edges), the CPU binding
+(5%), the sound chip (4 to 5%) and the IRQ aggregator (6.5% at 1x).
+
 ### Pi 400
 
 Release build of the same commit, idle MODE 7 prompt, headless: the emulation
