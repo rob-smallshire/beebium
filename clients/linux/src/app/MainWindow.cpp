@@ -559,11 +559,11 @@ void MainWindow::build_menus() {
     connect(quit_action, &QAction::triggered, this, &MainWindow::quit_requested);
 
     // Edit > Paste types the clipboard into the machine (7.5). Ctrl+V is the
-    // machine's (VDU 22), so Paste is Meta+V or Ctrl+Alt+V.
+    // machine's (VDU 22), so Paste is Meta+Alt+V or Ctrl+Alt+V.
     QMenu* edit = menuBar()->addMenu(tr("&Edit"));
     QAction* paste_action = edit->addAction(QIcon::fromTheme(QStringLiteral("edit-paste")),
                                             tr("&Paste"));
-    set_session_shortcuts(paste_action, QKeySequence(QStringLiteral("Meta+V")),
+    set_session_shortcuts(paste_action, QKeySequence(QStringLiteral("Meta+Alt+V")),
                           QKeySequence(QStringLiteral("Ctrl+Alt+V")));
     paste_action->setToolTip(tr("Type the clipboard's text into the machine"));
     paste_action->setEnabled(false);
@@ -614,6 +614,8 @@ void MainWindow::build_menus() {
     QAction* graphics_action = add_copy(tr("Copy Text from &Graphics"), Interpretation::anywhere,
                                         QStringLiteral("copyTextFromGraphics"));
     graphics_action->setShortcut(QKeySequence(QStringLiteral("Alt+Shift+C")));
+    // Read as Alt+C with Shift, the copy it varies.
+    show_shortcut_as(graphics_action, QStringLiteral("Shift+Alt+C"));
     // How the copies read a Mode 7 byte: a setting they obey, not a fourth
     // copy. Shared by every window, so shown afresh as the menu opens.
     edit->addSeparator();

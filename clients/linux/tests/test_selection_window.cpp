@@ -69,7 +69,10 @@ QMenu* edit_menu(MainWindow& window) {
 QStringList titles(const QMenu* menu) {
     QStringList out;
     for (const QAction* action : menu->actions()) {
-        out << (action->isSeparator() ? QStringLiteral("-") : action->text().remove(QLatin1Char('&')));
+        // The title alone: a shortcut shown as written follows a tab.
+        out << (action->isSeparator() ? QStringLiteral("-")
+                                      : action->text().section(QLatin1Char('\t'), 0, 0).remove(
+                                            QLatin1Char('&')));
     }
     return out;
 }

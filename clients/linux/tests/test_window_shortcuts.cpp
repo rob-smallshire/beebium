@@ -164,7 +164,7 @@ TEST_CASE("Each machine-window action answers to a Meta form and a Ctrl+Alt form
          {QStringLiteral("Meta+Shift+S"), QStringLiteral("Ctrl+Alt+Shift+S")}},
         {QStringLiteral("Close Window"), {QStringLiteral("Meta+W"), QStringLiteral("Ctrl+Alt+W")}},
         {QStringLiteral("Quit"), {QStringLiteral("Meta+Q"), QStringLiteral("Ctrl+Alt+Q")}},
-        {QStringLiteral("Paste"), {QStringLiteral("Meta+V"), QStringLiteral("Ctrl+Alt+V")}},
+        {QStringLiteral("Paste"), {QStringLiteral("Meta+Alt+V"), QStringLiteral("Ctrl+Alt+V")}},
         {QStringLiteral("Show Status Bar"),
          {QStringLiteral("Meta+/"), QStringLiteral("Ctrl+Alt+/")}},
         {QStringLiteral("Show Sidebar"),
@@ -374,6 +374,9 @@ TEST_CASE("Alt+C, Alt+Meta+C and Alt+Shift+C copy from the display and type noth
     CHECK(copy->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Alt+C"))});
     CHECK(columns->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Alt+Meta+C"))});
     CHECK(graphics->shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Alt+Shift+C"))});
+    // The menu reads the third as Alt+C with Shift.
+    CHECK(graphics->text().endsWith(QStringLiteral("\tShift+Alt+C")));
+    CHECK_FALSE(copy->text().contains(QLatin1Char('\t')));
 
     live.window.activateWindow();
     live.window.display().setFocus();

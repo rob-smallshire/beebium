@@ -33,11 +33,17 @@ namespace beebium::linux_client {
 // working forms the menu shows. The copies of the screen's text are the
 // exception: they carry Alt, the selection modifier, and have one form each.
 
-// Whether the session is the Raspberry Pi Desktop: DESKTOP_SESSION or
-// XDG_SESSION_DESKTOP starting "rpd-" (rpd-labwc, rpd-x).
+// Whether the session is the Raspberry Pi Desktop, or another desktop on
+// labwc or wlroots, which leave Meta with a letter free: DESKTOP_SESSION or
+// XDG_SESSION_DESKTOP starting "rpd-" (rpd-labwc, rpd-x), or
+// XDG_CURRENT_DESKTOP naming labwc or wlroots. A process started outside the
+// session, over ssh say, sees none of these, so the installed Raspberry Pi
+// Desktop session (`rpd_session_installed`) decides then.
 bool raspberry_pi_desktop_session(const QString& desktop_session,
-                                  const QString& xdg_session_desktop);
-// The same, from this process's environment.
+                                  const QString& xdg_session_desktop,
+                                  const QString& xdg_current_desktop,
+                                  bool rpd_session_installed);
+// The same, from this process's environment and the installed sessions.
 bool raspberry_pi_desktop_session();
 
 // An action's forms, the one the menu shows first.
@@ -49,6 +55,11 @@ void set_session_shortcuts(QAction* action, const QKeySequence& meta_form,
 // Ordered for this process's session.
 void set_session_shortcuts(QAction* action, const QKeySequence& meta_form,
                            const QKeySequence& other_form);
+
+// Show `shown` as the action's shortcut in a menu instead of Qt's rendering
+// of its first binding: Qt orders modifiers its own way, and Shift+Alt+C
+// reads as Alt+C with Shift. The bindings are unchanged.
+void show_shortcut_as(QAction* action, const QString& shown);
 
 }  // namespace beebium::linux_client
 

@@ -21,14 +21,44 @@
 using namespace beebium::linux_client;
 
 TEST_CASE("The Raspberry Pi Desktop is known by its session name", "[shortcuts]") {
-    CHECK(raspberry_pi_desktop_session(QStringLiteral("rpd-labwc"), {}));
-    CHECK(raspberry_pi_desktop_session(QStringLiteral("rpd-x"), {}));
-    CHECK(raspberry_pi_desktop_session({}, QStringLiteral("rpd-labwc")));
-    CHECK(raspberry_pi_desktop_session(QStringLiteral("plasma"), QStringLiteral("rpd-x")));
-    CHECK_FALSE(raspberry_pi_desktop_session({}, {}));
-    CHECK_FALSE(raspberry_pi_desktop_session(QStringLiteral("plasma"), QStringLiteral("KDE")));
-    CHECK_FALSE(raspberry_pi_desktop_session(QStringLiteral("gnome"), QStringLiteral("ubuntu")));
-    CHECK_FALSE(raspberry_pi_desktop_session(QStringLiteral("LXDE-pi-rpd"), {}));
+    CHECK(raspberry_pi_desktop_session(QStringLiteral("rpd-labwc"), {}, {}, false));
+    CHECK(raspberry_pi_desktop_session(QStringLiteral("rpd-x"), {}, {}, false));
+    CHECK(raspberry_pi_desktop_session({}, QStringLiteral("rpd-labwc"), {}, false));
+    CHECK(raspberry_pi_desktop_session(QStringLiteral("plasma"), QStringLiteral("rpd-x"), {}, false));
+    CHECK_FALSE(raspberry_pi_desktop_session({}, {}, {}, false));
+    CHECK_FALSE(raspberry_pi_desktop_session(QStringLiteral("plasma"), QStringLiteral("KDE"),
+                                             QStringLiteral("KDE"), false));
+    CHECK_FALSE(raspberry_pi_desktop_session(QStringLiteral("gnome"), QStringLiteral("ubuntu"),
+                                             QStringLiteral("ubuntu:GNOME"), false));
+    CHECK_FALSE(raspberry_pi_desktop_session(QStringLiteral("LXDE-pi-rpd"), {}, {}, false));
+}
+
+TEST_CASE("A labwc or wlroots desktop leaves Meta free as the Raspberry Pi Desktop does",
+          "[shortcuts]") {
+    CHECK(raspberry_pi_desktop_session({}, {}, QStringLiteral("labwc:wlroots"), false));
+    CHECK(raspberry_pi_desktop_session({}, {}, QStringLiteral("wlroots"), false));
+    CHECK(raspberry_pi_desktop_session({}, {}, QStringLiteral("LabWC"), false));
+    CHECK_FALSE(raspberry_pi_desktop_session({}, {}, QStringLiteral("sway"), false));
+}
+
+TEST_CASE("Started outside any session, as over ssh, the installed Raspberry Pi Desktop decides",
+          "[shortcuts]") {
+    CHECK(raspberry_pi_desktop_session({}, {}, {}, true));
+    // Inside another desktop the installed session does not count.
+    CHECK_FALSE(raspberry_pi_desktop_session(QStringLiteral("gnome"), QStringLiteral("ubuntu"),
+                                             QStringLiteral("ubuntu:GNOME"), true));
+}
+
+TEST_CASE("A shortcut shown as written replaces Qt's rendering and keeps the binding",
+          "[shortcuts]") {
+    QAction action(QStringLiteral("Copy Text from &Graphics"));
+    action.setShortcut(QKeySequence(QStringLiteral("Alt+Shift+C")));
+    show_shortcut_as(&action, QStringLiteral("Shift+Alt+C"));
+    CHECK(action.text() == QStringLiteral("Copy Text from &Graphics\tShift+Alt+C"));
+    CHECK(action.shortcut() == QKeySequence(QStringLiteral("Alt+Shift+C")));
+    // Shown again, it replaces rather than adds.
+    show_shortcut_as(&action, QStringLiteral("Shift+Alt+C"));
+    CHECK(action.text() == QStringLiteral("Copy Text from &Graphics\tShift+Alt+C"));
 }
 
 TEST_CASE("An action's Meta form comes first on the Raspberry Pi Desktop, last elsewhere",

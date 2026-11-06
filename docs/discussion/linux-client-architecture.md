@@ -204,8 +204,10 @@ action carries two bindings, a Meta form and a Ctrl+Alt form (Meta+K and
 Ctrl+Alt+K for Switch to Previous Keyboard Mapping, Meta+digit and
 Ctrl+Alt+digit for the sidebar modes); Qt shows only the first in a menu, so
 the client orders them by session: Meta first on the Raspberry Pi Desktop
-(DESKTOP_SESSION or XDG_SESSION_DESKTOP begins "rpd-"), where Meta is free
-apart from labwc's own handful, and Ctrl+Alt first elsewhere, since KDE and
+(DESKTOP_SESSION or XDG_SESSION_DESKTOP begins "rpd-", or XDG_CURRENT_DESKTOP
+names labwc or wlroots, or, started outside any session as over ssh, the
+Raspberry Pi Desktop session is installed), where Meta is free apart from
+labwc's own handful, and Ctrl+Alt first elsewhere, since KDE and
 GNOME take Meta+digit, Meta+V and Meta+W for themselves. Menus never show
 both; the modifier is named as Qt prints it ("Meta"), not "Raspberry" or
 "Win", because a Pi is as likely to have an ordinary keyboard. The display
@@ -649,10 +651,10 @@ the selection's own qualifiers, and have one binding each on every desktop.
 | Save As... | Meta+Shift+S | Ctrl+Alt+Shift+S |
 | Close Window | Meta+W | Ctrl+Alt+W (Ctrl+W at home) |
 | Quit | Meta+Q | Ctrl+Alt+Q (Ctrl+Q at home) |
-| Paste | Meta+V | Ctrl+Alt+V |
+| Paste | Meta+Alt+V | Ctrl+Alt+V |
 | Copy | Alt+C (one binding) | |
 | Copy as Columns | Alt+Meta+C (one binding) | |
-| Copy Text from Graphics | Alt+Shift+C (one binding) | |
+| Copy Text from Graphics | Alt+Shift+C (one binding, shown as Shift+Alt+C) | |
 | Switch to Previous Keyboard Mapping | Meta+K | Ctrl+Alt+K |
 | A sidebar mode | Meta+1 to Meta+8 | Ctrl+Alt+1 to Ctrl+Alt+8 |
 | Show Sidebar | Meta+Alt+S | Ctrl+Alt+0 |
