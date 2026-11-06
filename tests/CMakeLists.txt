@@ -1271,6 +1271,11 @@ target_compile_definitions(test_mode7 PRIVATE
 catch_discover_tests(test_mode7)
 
 # SAA5050 line counter: whole glyphs and row capture whatever the 6845 interlace
+# SAA5050 half-character drawing against its reference (every input)
+add_executable(test_saa5050_half_character test_saa5050_half_character.cpp)
+target_link_libraries(test_saa5050_half_character PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_saa5050_half_character)
+
 add_executable(test_saa5050_line_counter test_saa5050_line_counter.cpp)
 target_link_libraries(test_saa5050_line_counter PRIVATE beebium_core Catch2::Catch2WithMain)
 target_compile_definitions(test_saa5050_line_counter PRIVATE

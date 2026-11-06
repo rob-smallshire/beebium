@@ -340,31 +340,63 @@ public:
         m_write_index = (m_write_index + 1) & 7;
     }
 
-    // Emit pixels for half a character (8 output pixels from 6 font bits)
-    // Uses gamma-corrected blending for the 6→8 pixel expansion
-    // Pattern: pixel 0=p0, 1=blend(p0,p1), 2=blend(p2,p1), 3=p2, 4=p3, 5=blend(p3,p4), 6=blend(p5,p4), 7=p5
-    void emit_pixels(PixelBatch& batch, const VideoDataPixel* palette) {
-        Output* output = &m_output[m_read_index];
+    // What the chip draws for one half-character: colours, six font bits and
+    // whether the cursor is on it.
+    struct Output {
+        uint8_t fg;     // Foreground color index (0-7)
+        uint8_t bg;     // Background color index (0-7)
+        uint8_t data;   // 6 bits of expanded font row
+        bool cursor;    // Cursor active for this half-character
+    };
 
-        VideoDataPixel bg_color = palette[output->bg];
-        VideoDataPixel fg_color = palette[output->fg];
-        uint8_t data = output->data;
+    // Emit pixels for half a character (8 output pixels from 6 font bits)
+    void emit_pixels(PixelBatch& batch, const VideoDataPixel* palette) {
+        draw_half_character(m_output[m_read_index], batch, palette);
+        batch.set_type(PixelBatchType::Teletext);
+        m_read_index = (m_read_index + 1) & 7;
+    }
+
+    // Draw one half-character's 8 pixels, exactly as
+    // draw_half_character_reference() does. Most half-characters are one
+    // colour throughout -- every blank cell, every blanking and border clock
+    // -- and for those all six decoded pixels are the same colour c, so the
+    // expansion below is c and blend(c, c) in its fixed pattern: drawn here
+    // with one blend instead of decoding six bits and blending four times.
+    static void draw_half_character(const Output& output, PixelBatch& batch,
+                                    const VideoDataPixel* palette) {
+        const bool uniform = output.data == 0 || output.fg == output.bg;
+        if (!uniform || output.cursor) {
+            draw_half_character_reference(output, batch, palette);
+            return;
+        }
+        const VideoDataPixel c = palette[output.bg];
+        const VideoDataPixel cc = blend(c, c);
+        auto* pixels = batch.pixels.pixels;
+        pixels[0] = c;
+        pixels[1] = cc;
+        pixels[2] = cc;
+        pixels[3] = c;
+        pixels[4] = c;
+        pixels[5] = cc;
+        pixels[6] = cc;
+        pixels[7] = c;
+    }
+
+    // Draw one half-character's 8 pixels by decoding the six font bits to
+    // colours and expanding them to eight with gamma-corrected blending:
+    // pixel 0=p0, 1=blend(p0,p1), 2=blend(p2,p1), 3=p2, 4=p3, 5=blend(p3,p4),
+    // 6=blend(p5,p4), 7=p5. The reference draw_half_character() must match.
+    static void draw_half_character_reference(const Output& output, PixelBatch& batch,
+                                              const VideoDataPixel* palette) {
+        VideoDataPixel bg_color = palette[output.bg];
+        VideoDataPixel fg_color = palette[output.fg];
+        uint8_t data = output.data;
 
         // Decode 6 font bits to fg/bg colors
         VideoDataPixel p[6];
         for (int i = 0; i < 6; ++i) {
             p[i] = (data >> i) & 1 ? fg_color : bg_color;
         }
-
-        // Helper to blend two pixels using gamma-corrected table
-        auto blend = [](VideoDataPixel a, VideoDataPixel b) -> VideoDataPixel {
-            VideoDataPixel result;
-            result.bits.r = TELETEXT_BLEND_TABLE[a.bits.r][b.bits.r];
-            result.bits.g = TELETEXT_BLEND_TABLE[a.bits.g][b.bits.g];
-            result.bits.b = TELETEXT_BLEND_TABLE[a.bits.b][b.bits.b];
-            result.bits.x = 0;
-            return result;
-        };
 
         // Expand 6 pixels → 8 with weighted averaging
         // Pattern: 000 011 112 222 333 344 445 555
@@ -378,14 +410,21 @@ public:
         batch.pixels.pixels[7] = p[5];           // Pure pixel 5
 
         // Apply cursor XOR if active (inverts RGB, same as VideoUla)
-        if (output->cursor) {
+        if (output.cursor) {
             for (int i = 0; i < 8; ++i) {
                 batch.pixels.pixels[i].value ^= 0x0FFF;  // Invert RGB (12-bit)
             }
         }
+    }
 
-        batch.set_type(PixelBatchType::Teletext);
-        m_read_index = (m_read_index + 1) & 7;
+    // Blend two pixels using the gamma-corrected table: 1/3 a + 2/3 b.
+    static VideoDataPixel blend(VideoDataPixel a, VideoDataPixel b) {
+        VideoDataPixel result;
+        result.bits.r = TELETEXT_BLEND_TABLE[a.bits.r][b.bits.r];
+        result.bits.g = TELETEXT_BLEND_TABLE[a.bits.g][b.bits.g];
+        result.bits.b = TELETEXT_BLEND_TABLE[a.bits.b][b.bits.b];
+        result.bits.x = 0;
+        return result;
     }
 
     // LOSE leading edge: the start of a displayed line.
@@ -498,13 +537,6 @@ private:
 
     // Output entry stores 6 bits of font data plus colors and cursor state
     // Each character produces 2 Output entries (left half and right half)
-    struct Output {
-        uint8_t fg;     // Foreground color index (0-7)
-        uint8_t bg;     // Background color index (0-7)
-        uint8_t data;   // 6 bits of expanded font row
-        bool cursor;    // Cursor active for this half-character
-    };
-
     // Record what this cell displayed, into the attached grid.
     //
     // Called after control-code processing, so the attributes are the ones in
