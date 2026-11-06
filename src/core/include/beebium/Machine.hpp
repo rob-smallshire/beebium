@@ -392,8 +392,7 @@ private:
         // in EconetSocket::nmi_pending(). When all three conditions are met
         // (socket enabled, NMI flip-flop set, ADLC IRQ active), NMI is asserted.
         if constexpr (HasEconetSocket<MemoryPolicy>) {
-            uint8_t econet_nmi = state_.memory.econet_socket.nmi_pending() ? 1 : 0;
-            M6502_SetDeviceNMI(&state_.cpu, kEconetNmiDeviceMask, econet_nmi);
+            update_econet_nmi();
         }
 
         // Interrupt handler tracking: detect entry via M6502ReadType_Interrupt
@@ -1051,6 +1050,22 @@ private:
         if (on_guest_ready_) on_guest_ready_();
     }
 
+    // Drive the CPU's Econet NMI input to the socket's level. The level is
+    // sampled every cycle, but the CPU is told only when it differs from the
+    // CPU's own record of the line (device_nmi_flags), which is exactly what
+    // M6502_SetDeviceNMI would leave unchanged otherwise: so with no Econet
+    // fitted, or nothing pending, a cycle costs the socket's three loads and
+    // a compare rather than a call.
+    void update_econet_nmi() {
+        if constexpr (HasEconetSocket<MemoryPolicy>) {
+            const bool wanted = state_.memory.econet_socket.nmi_pending();
+            const bool asserted = (state_.cpu.device_nmi_flags & kEconetNmiDeviceMask) != 0;
+            if (wanted != asserted) {
+                M6502_SetDeviceNMI(&state_.cpu, kEconetNmiDeviceMask, wanted ? 1 : 0);
+            }
+        }
+    }
+
     // Begin the type-ahead queue's reset (it discards what is queued, and the
     // guest is not ready for input until note_guest_ready() sees it ask), and
     // forget this thread's note that the guest was ready.
@@ -1188,8 +1203,7 @@ private:
 
         // Econet NMI during stretch cycles
         if constexpr (HasEconetSocket<MemoryPolicy>) {
-            uint8_t econet_nmi = state_.memory.econet_socket.nmi_pending() ? 1 : 0;
-            M6502_SetDeviceNMI(&state_.cpu, kEconetNmiDeviceMask, econet_nmi);
+            update_econet_nmi();
         }
     }
 

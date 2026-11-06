@@ -347,3 +347,20 @@ TEST_CASE("Machine marks the guest ready on the cycle it reaches REMV with X = 0
         CHECK_FALSE(type_ahead.guest_ready());
     }
 }
+
+// The Econet NMI input to the CPU follows the socket's level every cycle. The
+// machine compares the level with the CPU's own record of the line and only
+// tells the CPU when they differ, so a record that disagrees -- however it
+// came to -- is put right on the next cycle.
+TEST_CASE("Machine keeps the CPU's Econet NMI line at the socket's level",
+          "[machine][econet][nmi]") {
+    ModelB machine;
+    load_nop_slide_with_store(machine);
+    REQUIRE_FALSE(machine.memory().econet_socket.nmi_pending());
+    machine.step();
+    CHECK((machine.cpu().device_nmi_flags & kEconetNmiDeviceMask) == 0);
+
+    machine.cpu().device_nmi_flags |= kEconetNmiDeviceMask;  // a stale record
+    machine.step();
+    CHECK((machine.cpu().device_nmi_flags & kEconetNmiDeviceMask) == 0);
+}
