@@ -291,6 +291,12 @@ ceiling of 1.08x, where the previous server wobbled between 0.85x and 0.97x.
 The emulation thread is still at 100% of a core in that session, with the
 frame-stream thread at 20% and the render loop at 16%; the headroom is thin.
 
+After the per-cycle round (a0cd4fc2), the same Pi 400 measurements: headless
+idle, the emulation thread takes 67% of a core at 1x (from 97.5% at the
+start) and the ceiling is 1.62x (from 1.09x). With the Qt client attached on
+the same Pi, the server holds 1.00x with an estimated ceiling of 1.49x, and
+its emulation thread takes 76% of a core instead of all of it.
+
 ## What an SPSC ring needs
 
 `OutputQueue` is a single-producer, single-consumer ring, so each index has
