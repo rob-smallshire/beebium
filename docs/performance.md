@@ -120,6 +120,17 @@ screen as the measurements ended (to show the program was still running),
 symbol, and the caller graph of each `--callers-of` symbol. `results.json`
 gathers the per-thread CPU and pacing numbers.
 
+### How much a run varies
+
+Two runs of the same binary on the Pi 5, one after the other, reached
+ceilings within about 2% of each other in three scenarios and 4% apart in
+`disc`, whose file I/O makes it the noisiest. The emulation thread's share at
+1x varies by a few points too. So a change of 2% or less in one run is not a
+result: repeat the run, or measure the same binary twice, before reading it
+as one. A change that matters shows in every scenario it should touch, and
+not in those it should not (a change to the empty Tube socket leaves `tube`,
+which has a coprocessor fitted, where it was).
+
 ## Baseline (November 2026)
 
 ### Pi 5 (Cortex-A76, 2.4 GHz)
