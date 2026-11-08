@@ -63,6 +63,7 @@ SoundSidebar::SoundSidebar(SessionAudio& audio, QWidget* parent)
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setFocusPolicy(Qt::NoFocus);  // a click in it leaves the keys the machine's
     outer->addWidget(scroll);
     auto* content = new QWidget(scroll);
     scroll->setWidget(content);

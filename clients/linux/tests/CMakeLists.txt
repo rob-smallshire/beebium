@@ -264,6 +264,10 @@ beebium_linux_add_test(test_window_shortcuts QT
     SOURCES test_window_shortcuts.cpp
     LIBRARIES beebium_linux_app Qt6::GuiPrivate)
 
+beebium_linux_add_test(test_sidebar_focus QT
+    SOURCES test_sidebar_focus.cpp
+    LIBRARIES beebium_linux_app Qt6::GuiPrivate)
+
 beebium_linux_add_test(test_mapping_switch QT
     SOURCES test_mapping_switch.cpp
     LIBRARIES beebium_linux_app)

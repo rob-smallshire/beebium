@@ -185,6 +185,9 @@ NetworkSidebar::NetworkSidebar(SessionEconet& econet, SessionExtensions& extensi
     auto* save = new QPushButton(tr("Save"), editor_);
     save->setObjectName(QStringLiteral("saveStation"));
     save->setDefault(true);
+    for (QPushButton* button : {cancel, save}) {
+        button->setFocusPolicy(Qt::NoFocus);  // the keys stay the field's, Return saving
+    }
     buttons->addStretch(1);
     buttons->addWidget(cancel);
     buttons->addWidget(save);
