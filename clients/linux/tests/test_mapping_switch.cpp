@@ -156,6 +156,26 @@ TEST_CASE("The switch bounces to Logical and back, naming where it goes",
     CHECK(toggle->text() == QStringLiteral("Switch to Arcadians Keyboard Mapping"));
 }
 
+TEST_CASE("Switching twice from the sidebar and twice with the switch names each mapping (#289)",
+          "[keyboard][switch][window]") {
+    // Each change reads the user's files again, replacing the sidebar's list
+    // of choices while the change is still being made; under a sanitiser a
+    // choice read from the old list is caught.
+    MainWindow window{QRhiWidget::Api::OpenGL};
+    QAction* toggle = switch_action(window);
+    REQUIRE(toggle);
+    for (const char* name : {"Thrust", "Arcadians"}) {
+        choose_in_sidebar(window, QString::fromLatin1(name));
+        CHECK(active_id(window) == id_of(name));
+        CHECK(status_name(window) == QString::fromLatin1(name));
+    }
+    for (const char* name : {"Logical", "Arcadians"}) {
+        toggle->trigger();
+        CHECK(active_id(window) == id_of(name));
+        CHECK(status_name(window) == QString::fromLatin1(name));
+    }
+}
+
 TEST_CASE("A deleted previous mapping leaves the switch disabled, not pointing at it",
           "[keyboard][switch][window]") {
     // The test's own configuration area (QtTestMain), not the user's.

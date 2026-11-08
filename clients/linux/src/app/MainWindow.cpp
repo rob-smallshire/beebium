@@ -445,7 +445,7 @@ void MainWindow::show_title(const QString& name) {
     setWindowTitle(title + QStringLiteral("[*]"));
 }
 
-void MainWindow::activate_mapping(const MappingChoice& choice) {
+void MainWindow::activate_mapping(MappingChoice choice) {
     if (!choice.mapping) {
         return;
     }

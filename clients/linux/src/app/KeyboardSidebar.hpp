@@ -60,7 +60,8 @@ public:
     QCheckBox* caps_lock_sync() const { return caps_; }
 
 Q_SIGNALS:
-    void mapping_chosen(const beebium::linux_client::MappingChoice& choice);
+    // By value: a receiver may rescan, replacing the list it came from.
+    void mapping_chosen(beebium::linux_client::MappingChoice choice);
     void caps_lock_sync_toggled(bool on);
     void key_switch_toggled(const QString& key, bool off);
 

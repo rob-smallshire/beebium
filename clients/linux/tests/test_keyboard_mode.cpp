@@ -413,6 +413,35 @@ TEST_CASE("The mode shows the active mapping's labels and switches on a choice",
     CHECK_FALSE(synced);
 }
 
+TEST_CASE("A chosen mapping is the receiver's own, kept through a rescan (#289)",
+          "[keyboard][mode]") {
+    QTemporaryDir directory;
+    KeyboardSidebar sidebar(directory.path());
+    sidebar.set_active(QString::fromStdString(built_in_mapping(QStringLiteral("Logical"))->id));
+    // A receiver that reads the files again, replacing the sidebar's list,
+    // as the window's does to name the mapping it switches back to.
+    bool from_the_list = true;
+    QString name_after_rescan;
+    QObject::connect(&sidebar, &KeyboardSidebar::mapping_chosen,
+                     [&](const MappingChoice& choice) {
+                         const auto& list = sidebar.choices();
+                         from_the_list = !list.empty() && &choice >= list.data() &&
+                                         &choice < list.data() + list.size();
+                         sidebar.rescan();
+                         name_after_rescan = choice.name;
+                     });
+    QListWidgetItem* thrust = nullptr;
+    for (int i = 0; i < sidebar.chooser()->count(); ++i) {
+        if (sidebar.chooser()->item(i)->text() == QStringLiteral("Thrust")) {
+            thrust = sidebar.chooser()->item(i);
+        }
+    }
+    REQUIRE(thrust);
+    Q_EMIT sidebar.chooser()->itemClicked(thrust);
+    CHECK_FALSE(from_the_list);
+    CHECK(name_after_rescan == QStringLiteral("Thrust"));
+}
+
 TEST_CASE("Turning Caps Lock synchronisation off for the session stops the reads",
           "[keyboard][locks]") {
     std::vector<WireEvent> sent;

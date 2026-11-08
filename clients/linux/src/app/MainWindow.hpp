@@ -166,8 +166,9 @@ private:
     void show_title(const QString& name);
     // Make a mapping the active one, from the sidebar or the Edit menu's
     // switch (7.4): the keys, the sidebar's selection, the status bar and
-    // the stored choice follow, and the one it replaces is recorded.
-    void activate_mapping(const MappingChoice& choice);
+    // the stored choice follow, and the one it replaces is recorded. Taken
+    // by value: the sidebar's list it comes from is read again on the way.
+    void activate_mapping(MappingChoice choice);
     // Edit > Switch to ... Keyboard Mapping: its title names where it goes;
     // with nowhere to go it is disabled. The user's files are read again,
     // so a deleted previous mapping is forgotten.
