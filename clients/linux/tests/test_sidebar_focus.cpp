@@ -31,6 +31,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QTextEdit>
 #include <QTimer>
 #include <QToolButton>
@@ -156,8 +157,14 @@ TEST_CASE("A click on a sidebar's background or its labels leaves the keys in th
         // The sidebar's own background, near its foot, below the controls.
         click(&sidebar, QPoint(sidebar.width() / 2, sidebar.height() - 4));
         CHECK(live.window.display().hasFocus());
+        // Watched, not held: a sidebar rebuilds its rows as the server's
+        // state arrives, deleting labels found here.
+        QList<QPointer<QLabel>> labels;
         for (QLabel* label : sidebar.findChildren<QLabel*>()) {
-            if (!label->isVisible() || label->rect().isEmpty()) {
+            labels.append(label);
+        }
+        for (const QPointer<QLabel>& label : labels) {
+            if (!label || !label->isVisible() || label->rect().isEmpty()) {
                 continue;
             }
             INFO(describe(label).toStdString());
