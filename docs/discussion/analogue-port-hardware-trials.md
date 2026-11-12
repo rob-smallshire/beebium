@@ -2,7 +2,7 @@
 
 Part of the analogue port work (issue #98). These trials settle the points on which the emulators we have studied disagree and the NEC uPD7002 datasheet is silent or unverified. The results feed the specification of Beebium's ADC model; the model is built from the datasheet and these measurements, never from the behaviour of a particular MOS.
 
-Any Model B with MOS 1.20 will do. A pair of Acorn analogue joysticks (or any BBC analogue joystick) is needed for trials 1 (in part), 2 (in part) and 5, and useful nowhere else. Nothing here needs a disc or any wiring.
+Any Model B with MOS 1.20 will do. A pair of Acorn analogue joysticks (or any BBC analogue joystick) is needed for trials 1 (in part), 2 (in part), 5 and 7, and useful nowhere else. Nothing here needs a disc or any wiring.
 
 Type each program in as listed, `RUN` it, and send back the screen output, by photograph or by hand. Where a program asks for a control byte, it means the value written to &FEC0: the low two bits are the channel (0 to 3), bit 3 set means 12-bit mode, bit 2 is a "flag" bit the chip echoes in its status. The useful values are `08` (channel 0, 12-bit), `00` (channel 0, 8-bit), `09` (channel 1, 12-bit) and `0E` (what the operating system writes at reset).
 
@@ -10,11 +10,11 @@ Please note the machine: issue number of the board if known, the start-up banner
 
 Every program begins with `*FX16,0` and `?&24C=0`. Together these stop the operating system from starting any further conversions of its own once the one in flight, if any, has finished, so the programs then have the chip to themselves. `*FX16,4` restores normal joystick operation at the end of a session.
 
-**The machine-code loops in trials 1 and 3 cannot be stopped with Escape.** If one of them hangs, press Break, then type the programs' first two lines again as commands before re-running.
+**The machine-code loops in trials 1, 3 and 7 cannot be stopped with Escape.** If one of them hangs, press Break, then type the programs' first two lines again as commands before re-running.
 
 ## Trial 1. Conversion time against input
 
-Measures the mean time of 100 conversions. The datasheet says the time depends on the input voltage, and Stardot measurements found about 9.1 ms with the stick hard right, 10.1 ms at centre and 11.1 ms hard left in 12-bit mode. Emulators all use exactly 10 ms. Nobody has measured 8-bit mode. We want both modes, with nothing plugged in, and with a stick at centre, hard left and hard right if one is available.
+Measures the mean time of 100 conversions. The datasheet says the time depends on the input voltage, and Stardot measurements found about 9.1 ms with the stick hard right, 10.1 ms at centre and 11.1 ms hard left in 12-bit mode, and trial 7 explains why that is only part of the story. Emulators all use exactly 10 ms. Nobody has measured 8-bit mode. We want both modes, with nothing plugged in, and with a stick at centre, hard left and hard right if one is available.
 
 ```
    10 *FX16,0
@@ -154,6 +154,89 @@ Plug in a stick (or the pair) and type the same two lines with the stick at cent
 
 Measure the voltage on the analogue port between pin 11 or 14 (VREF) and pin 5 or 8 (analogue ground) with the machine on. The User Guide gives two calibration figures that do not agree, and this single reading settles the scale.
 
+## Trial 7. Conversion time across the whole range: the sweep
+
+Hardware measurements by others show that in 12-bit mode the conversion time is a sawtooth against the result: about seven teeth across the range, each rising about 2 µs per step of the 12-bit result and then dropping back by about 1 ms. In 8-bit mode the time is a single straight line. This trial records about two thousand conversions while you move the stick slowly from one side to the other, then plots time against result, so we can see the teeth on another chip, where they fall, and how far one tooth overlaps the next. It needs a joystick.
+
+```
+   10 *FX16,0
+   20 ?&24C=0
+   30 MODE 4
+   40 N%=2000
+   50 DIM D% N%*4,C% 200,Z%(255)
+   60 ?&FE6E=&20:?&FE6B=?&FE6B AND &DF
+   70 FOR I%=0 TO 2 STEP 2
+   80 P%=C%
+   90 [OPT I%
+  100 SEI
+  110 LDA #D% AND &FF:STA &70:LDA #D% DIV 256:STA &71
+  120 LDA #N% AND &FF:STA &72:LDA #N% DIV 256:STA &73
+  130 LDA #0:STA &74:LDA #&58:STA &75
+  140 .conv LDA #&FF:STA &FE68:LDX ctl
+  150 STA &FE69:STX &FEC0
+  160 .rise BIT &FEC0:BPL rise
+  170 .wait BIT &FEC0:BMI wait
+  180 .rd LDA &FE69:STA &76:LDA &FE68:LDX &FE69:CPX &76:BNE rd
+  190 LDY #0:STA (&70),Y:INY:TXA:STA (&70),Y
+  200 INY:LDA &FEC2:STA (&70),Y:INY:LDA &FEC1:STA (&70),Y
+  210 CLC:LDA &70:ADC #4:STA &70:BCC nc:INC &71
+  220 .nc LDA &72:AND #&3F:BNE np
+  230 LDA #&FF:LDY #0:STA (&74),Y
+  240 CLC:LDA &74:ADC #8:STA &74:BCC np:INC &75
+  250 .np LDA &72:BNE dl:DEC &73
+  260 .dl DEC &72:LDA &72:ORA &73:BNE conv
+  270 CLI:RTS
+  280 .ctl EQUB 0
+  290 ]
+  300 NEXT
+  310 REPEAT
+  320 CLS:INPUT "Control byte, 08 or 00 "A$
+  330 ?ctl=EVAL("&"+A$)
+  340 PRINT '"Hold the stick hard right, press SPACE,"'"then move it slowly and steadily to"'"hard left. 08 takes about 20 seconds,"'"00 about 8. The bar at the top grows"'"while it records."
+  350 REPEAT UNTIL GET=32
+  360 CLS:CALL C%
+  370 L%=99999:H%=0:U%=9999:W%=-1
+  380 FOR K%=0 TO 255:Z%(K%)=99999:NEXT
+  390 FOR K%=0 TO N%-1
+  400 A%=D%+4*K%:T%=&FFFF-(?A%+256*A%?1):V%=(A%?2+256*A%?3) DIV 64
+  410 IF T%<L% THEN L%=T%
+  420 IF T%>H% THEN H%=T%
+  430 IF V%<U% THEN U%=V%:TU%=T%
+  440 IF V%>W% THEN W%=V%:TW%=T%
+  450 IF T%<Z%(V% DIV 4) THEN Z%(V% DIV 4)=T%
+  460 NEXT
+  470 CLS:PRINT "time ";L%;" to ";H%;" us"
+  480 PRINT "result ";U%;" (";TU%;" us) to ";W%;" (";TW%;" us)"
+  490 FOR K%=0 TO N%-1
+  500 A%=D%+4*K%:T%=&FFFF-(?A%+256*A%?1):V%=(A%?2+256*A%?3) DIV 64
+  510 PLOT 69,V%*5 DIV 4,96+(T%-L%)*800 DIV (H%-L%+1)
+  520 NEXT
+  530 G%=GET:CLS
+  540 PRINT "Drops of more than 300 us:"
+  550 Q%=0
+  560 FOR K%=0 TO 255
+  570 IF Z%(K%)<99999 AND Q%-Z%(K%)>300 THEN PRINT "at result ";K%*4;": ";Q%;" to ";Z%(K%);" us"
+  580 IF Z%(K%)<99999 THEN Q%=Z%(K%)
+  590 NEXT
+  600 PRINT '"To keep the data: *SAVE SWEEP ";~D%;" +";~N%*4
+  610 PRINT "Any key for another run":G%=GET
+  620 UNTIL FALSE
+```
+
+Run it once with `08` and once with `00`. While it records, the machine does nothing else: the keyboard is not read, so Escape does nothing, and the clock stops. The bar at the top of the screen reaches about three quarters of the way across when it has finished. Move the stick slowly and evenly. It does not matter if you go a little past either end, or move back and forth, because the plot is by result, not by order. If the stick is still moving when the bar stops, the last part of the range is simply missing; run it again more slowly.
+
+Each run ends with three screens. Please photograph each one:
+
+1. **The plot**: result (left to right, 0 to 1023 in the 10-bit units the operating system's ADVAL uses, divided by 64) against time (bottom to top). The two lines of text above it give the shortest and longest times, and the time at the lowest and highest result. Press a key to go on.
+2. **The drops**: the points where the time falls back by more than 300 µs from one result to the next, with the times before and after. We expect about six with `08` and none with `00`.
+3. **The save command**: if a disc or tape is to hand, type it exactly as shown before pressing a key, and send us the file. That gives us every point rather than a photograph.
+
+Stop with Break when you have finished, then type `*FX16,4`.
+
+Times include about 10 µs of loop delay, the same for every point. They are measured with the User VIA's second timer at one count per microsecond, read in a way that avoids the ±256 µs error a straight low-then-high read can give.
+
+Optional, if there is time: a third `08` run moving the stick very slowly across the middle only (about a quarter of the travel either side of centre). The plot then shows how wide the band is where two neighbouring teeth both occur.
+
 ## How we will read the results
 
 | Observation | What it decides |
@@ -168,6 +251,9 @@ Measure the voltage on the analogue port between pin 11 or 14 (VREF) and pin 5 o
 | Trial 3 positive-edge run: which of "after high read" and "after new write" shows 10 | Whether the high-byte read or the next write releases the end-of-conversion line |
 | Trial 4 values | What a bare machine's ADVAL returns, and whether it wanders |
 | Trial 6 voltage | The full-scale reference, so our joystick values map to the right numbers |
+| Trial 7 `08` plot: teeth, each rising about 2 µs per 12-bit step and dropping about 1 ms, with drops near 12-bit results 1020, 1452, 2052, 2628, 3204, 3796 (10-bit 255, 363, 513, 657, 801, 949) | Whether the sawtooth and its spacing are a property of the uPD7002 or of one chip. The positions are expected to move by tens of codes between chips |
+| Trial 7 `08` plot: places where two teeth overlap (points on both lines at the same result) | The width of the band in which a conversion may take either tooth's time |
+| Trial 7 `00` plot: one straight line, about 2.95 ms at the right to 5.0 ms at the left | The 8-bit time model; the start time and slope tell us the 8-bit run-up length |
 
 Footnote: reading &FE40 in trial 4 also clears two VIA flags the operating system uses, so it may miss one end-of-conversion interrupt. Its own 10 ms poll catches up, so this is harmless.
 
