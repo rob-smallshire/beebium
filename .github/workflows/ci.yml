@@ -187,6 +187,9 @@ jobs:
     # hours for this build, or wedged (#223). Steps differ from the hosted
     # arm64 job only where the runner requires it: tools are pre-provisioned
     # (no Homebrew), Xcode is selected on the host, and the workspace persists.
+    # Suspended while the self-hosted Intel runner is out of service; its three
+    # dependents skip through needs. Restoring is deleting this `if`.
+    if: false
     runs-on: [self-hosted, macOS, X64]
     needs: preflight
 

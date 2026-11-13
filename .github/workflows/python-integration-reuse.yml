@@ -21,7 +21,7 @@ on:
         default: macos-arm64
         options:
           - macos-arm64
-          - macos-x86_64
+          # macos-x86_64 suspended while the self-hosted Intel runner is out of service.
           - linux
           - windows
       pytest_args:
