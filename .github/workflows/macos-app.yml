@@ -62,9 +62,8 @@ jobs:
           - arch: arm64
             runner: macos-15
             self_hosted: false
-          - arch: x86_64
-            runner: [self-hosted, macOS, X64]
-            self_hosted: true
+          # x86_64 (runner [self-hosted, macOS, X64], self_hosted true) is
+          # suspended while the self-hosted Intel runner is out of service.
     steps:
       # Check out the ref this workflow runs on -- NOT v<version>. For a
       # workflow_call from release.yml that is the release tag (which carries the
