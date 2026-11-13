@@ -45,9 +45,19 @@ public:
     // derivation; tools/audio-analysis/client_chain.py models it).
     static constexpr float MIX_GAIN = 0.2125f;
     static constexpr float MUSIC_FULL_SCALE = 32768.0f;
-    // Four times MIX_GAIN: a Music 5000's digital full scale meets the
-    // SN76489's four channels at full volume.
-    static constexpr float MUSIC_MIX_GAIN = 0.85f;
+    // Set from what real music does, not from the digital full scale (all
+    // sixteen channels in phase, which music never approaches): over sixteen
+    // AMPLE pieces from the System Disk and Amplinex 001/002, the loudest
+    // (Concert) peaks at 7655 of 32767, so at this gain it reaches 0.47, 6 dB
+    // under the limiter's knee, with the sub-master at unity. A quiet piece is
+    // brought up with the sub-master's boost (the macOS client's derivation).
+    static constexpr float MUSIC_MIX_GAIN = 2.0f;
+    // The volume curve's span below unity, and how far a group's sub-master
+    // carries on above it. A sub-master slider runs from 0 to SUB_MASTER_MAX,
+    // with unity at 1 as everywhere else.
+    static constexpr float CURVE_RANGE_DB = 40.0f;
+    static constexpr float SUB_MASTER_BOOST_DB = 12.0f;
+    static constexpr float SUB_MASTER_MAX = 1.0f + SUB_MASTER_BOOST_DB / CURVE_RANGE_DB;
     static constexpr std::size_t BLOCK_FRAMES = 1024;
     // The latency cap: when the fill has stayed more than the margin over
     // the pre-roll's target for a whole window (a stall in the sink while
@@ -68,6 +78,8 @@ public:
 
     // The slider-to-gain curve: 40 dB from 0 to 1, and 0 at 0.
     static float volume_curve(float linear);
+    // A group sub-master's: the same curve, carried on to SUB_MASTER_MAX.
+    static float sub_master_curve(float linear);
     // Identity below 0.8, an exponential shoulder towards 1 above: C1 at the
     // knee, odd, monotonic, strictly within (-1, 1).
     static float soft_limit(float x);

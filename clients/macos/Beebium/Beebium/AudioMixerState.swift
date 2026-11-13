@@ -44,8 +44,8 @@ final class AudioMixerState: ObservableObject {
 
     // MARK: - Group Volumes
 
-    /// Per-group sub-master volumes (groupId -> 0.0...1.0). A group absent from
-    /// the map is at the 1.0 default. Each is applied to every channel of its
+    /// Per-group sub-master volumes (groupId -> 0.0...AudioRenderer.subMasterMaximum,
+    /// unity at 1.0). A group absent from the map is at the 1.0 default. Each is applied to every channel of its
     /// group before the master (see AudioRenderer).
     @Published var groupVolumes: [UInt32: Float] = [:] {
         didSet { updateGroupVolumes() }
@@ -56,12 +56,27 @@ final class AudioMixerState: ObservableObject {
         didSet { updateGroupMutes() }
     }
 
-    /// Binding to a group's sub-master volume, defaulting to 1.0 when unset.
+    /// Binding to a group's sub-master volume, defaulting to 1.0 when unset and
+    /// snapping to unity near it.
     func groupVolumeBinding(for groupId: UInt32) -> Binding<Float> {
         Binding(
             get: { self.groupVolumes[groupId] ?? 1.0 },
-            set: { self.groupVolumes[groupId] = $0 }
+            set: { self.groupVolumes[groupId] = Self.snappedSubMaster($0) }
         )
+    }
+
+    /// The detent at unity: a sub-master within 0.015 of 1.0 is 1.0.
+    nonisolated static func snappedSubMaster(_ value: Float) -> Float {
+        abs(value - 1.0) <= 0.015 ? 1.0 : value
+    }
+
+    /// A sub-master's setting in whole decibels from unity: "0 dB", "+12 dB",
+    /// "-6 dB", and "Off" at the bottom.
+    nonisolated static func subMasterText(_ value: Float) -> String {
+        if value <= 0 { return "Off" }
+        let decibels = Int(((min(value, AudioRenderer.subMasterMaximum) - 1)
+                            * AudioRenderer.curveRangeDecibels).rounded())
+        return decibels > 0 ? "+\(decibels) dB" : "\(decibels) dB"
     }
 
     /// Whether a group is muted (false when unset).

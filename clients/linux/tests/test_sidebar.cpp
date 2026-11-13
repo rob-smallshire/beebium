@@ -24,6 +24,7 @@
 #include "app/Sidebar.hpp"
 #include "app/SidebarMode.hpp"
 #include "app/SoundSidebar.hpp"
+#include "audio/AudioRenderer.hpp"
 
 #include "FakeBeebiumServer.hpp"
 
@@ -37,6 +38,7 @@
 #include <QSlider>
 #include <QToolButton>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 using namespace beebium::linux_client;
@@ -183,8 +185,17 @@ TEST_CASE("The Sound mode's controls set the mixer, and mutes grey their sliders
 
     sound.channel_slider(3)->setValue(0);  // Noise
     CHECK(audio.controls().channel_volume[3].load() == 0.0f);
+    // A sub-master's travel runs on past unity, which it starts at, to the
+    // 12 dB boost; near unity it snaps there.
+    CHECK(sound.group_slider(0)->maximum() == SoundSidebar::SUB_MASTER_STEPS);
+    CHECK(sound.group_slider(0)->value() == SoundSidebar::SLIDER_STEPS);
     sound.group_slider(0)->setValue(SoundSidebar::SLIDER_STEPS / 2);
     CHECK(audio.controls().group_volume[0].load() == 0.5f);
+    sound.group_slider(0)->setValue(SoundSidebar::SUB_MASTER_STEPS);
+    CHECK(audio.controls().group_volume[0].load() == Catch::Approx(AudioRenderer::SUB_MASTER_MAX));
+    sound.group_slider(0)->setValue(SoundSidebar::SLIDER_STEPS + SoundSidebar::DETENT_STEPS);
+    CHECK(audio.controls().group_volume[0].load() == 1.0f);
+    CHECK(sound.group_slider(0)->value() == SoundSidebar::SLIDER_STEPS);
 
     sound.group_mute(0)->click();
     CHECK(audio.controls().group_muted[0].load());
@@ -200,6 +211,13 @@ TEST_CASE("The Sound mode's controls set the mixer, and mutes grey their sliders
     CHECK_FALSE(sound.master_slider()->isEnabled());
     CHECK_FALSE(sound.channel_slider(0)->isEnabled());
     audio.stop();
+}
+
+TEST_CASE("A sub-master reads in decibels from unity", "[sidebar][sound]") {
+    CHECK(sub_master_text(1.0f) == QStringLiteral("0 dB"));
+    CHECK(sub_master_text(AudioRenderer::SUB_MASTER_MAX) == QStringLiteral("+12 dB"));
+    CHECK(sub_master_text(0.85f) == QStringLiteral("-6 dB"));
+    CHECK(sub_master_text(0.0f) == QStringLiteral("Off"));
 }
 
 TEST_CASE("The health line hides five seconds after the last glitch and returns with the next",

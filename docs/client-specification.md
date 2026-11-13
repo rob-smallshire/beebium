@@ -1501,7 +1501,10 @@ a stereo extension shows the sub-master only. Groups must never be hidden: every
 group the server reports gets a section. Volume and mute are client-side DSP; there
 is no RPC to set volume, because the stream carries raw samples and the client
 mixes. The gains default to unity so the mix is bit-identical until a control
-moves.
+moves. A group's sub-master runs on past unity to a 12 dB boost, so a quiet
+source (a quiet Music 5000 piece above all) can be brought up at the risk of a
+loud one reaching the limiter; its travel marks unity and reads in decibels.
+The master and the per-channel sliders stop at unity.
 
 Rests on: `audio.proto AudioService.GetAudioFormat` (the groups, channel names and
 grouping); mixing is entirely client-side.
@@ -1512,13 +1515,15 @@ Conformance:
   (master, per-group sub-master and mute, per-channel for the channel-owning
   group); groups, channel names and grouping from the format; never hide a group;
   mixing and volume are the client's responsibility (the server sends samples, not
-  a mixed stream).
+  a mixed stream); each sub-master boosts to +12 dB above a marked unity, where it
+  starts.
 - LATITUDE: the volume curve, the mix-gain constants, a soft limiter, panning,
   channel row ordering, whether pan is exposed, the layout.
 - MACOS-ONLY: the SwiftUI view and the atomic bridge to the render thread.
 
 Scenarios: an SN-only server -> one group with a sub-master and four channel rows.
-Mute the group -> it goes silent, the master is unaffected. With a Music 5000 -> a
+Mute the group -> it goes silent, the master is unaffected. Take a sub-master to
+the top -> its group is 12 dB (about 4x) louder than at the unity mark. With a Music 5000 -> a
 second group with a sub-master only. Set the noise channel to zero -> only noise is
 silenced. Master mute -> all silent and the group sliders grey.
 

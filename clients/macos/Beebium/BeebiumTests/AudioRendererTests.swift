@@ -183,8 +183,8 @@ final class AudioRendererTests: XCTestCase {
 
         // SN76489 silent; the Music 5000 field 2 holds a constant L/R. Field 2 is
         // the low 32 bits of the extension frame: low int16 = left, high = right.
-        let left16: Int16 = 16384
-        let right16: Int16 = -16384
+        let left16: Int16 = 4096
+        let right16: Int16 = -4096
         let field2 = UInt32(UInt16(bitPattern: left16)) | (UInt32(UInt16(bitPattern: right16)) << 16)
         let extFrame = UInt64(field2)
 
@@ -345,10 +345,42 @@ final class AudioRendererTests: XCTestCase {
 
     // The Music-group sub-master scales field 2; at 0.5 the output is one tenth.
     func testMusicGroupSubmasterScalesField2() {
-        let unity = renderConstantField2(left16: 16384, right16: -16384, groupVolume: 1.0)
-        let half = renderConstantField2(left16: 16384, right16: -16384, groupVolume: 0.5)
+        let unity = renderConstantField2(left16: 4096, right16: -4096, groupVolume: 1.0)
+        let half = renderConstantField2(left16: 4096, right16: -4096, groupVolume: 0.5)
         XCTAssertEqual(half.left / unity.left, 0.1, accuracy: 0.005)
         XCTAssertEqual(half.right / unity.right, 0.1, accuracy: 0.005)
+    }
+
+    // A group's sub-master runs on past unity to a 12 dB boost (about 3.98x),
+    // and no further.
+    func testGroupSubmasterBoostsUpToTwelveDecibels() {
+        let unity = renderConstantField2(left16: 2048, right16: 2048, groupVolume: 1.0)
+        let top = renderConstantField2(left16: 2048, right16: 2048,
+                                       groupVolume: AudioRenderer.subMasterMaximum)
+        let beyond = renderConstantField2(left16: 2048, right16: 2048, groupVolume: 2.0)
+        XCTAssertEqual(AudioRenderer.subMasterMaximum, 1.3, accuracy: 1e-6)
+        XCTAssertEqual(top.left / unity.left, 3.981, accuracy: 0.004)
+        XCTAssertEqual(beyond.left, top.left, accuracy: 1e-6)
+    }
+
+    // The sub-master curve is the volume curve below unity and carries it on
+    // above, 40 dB per unit of slider.
+    func testSubMasterCurveContinuesTheVolumeCurve() {
+        XCTAssertEqual(AudioRenderer.subMasterGain(0), 0)
+        XCTAssertEqual(AudioRenderer.subMasterGain(0.5), 0.1, accuracy: 1e-6)
+        XCTAssertEqual(AudioRenderer.subMasterGain(1), 1, accuracy: 1e-6)
+        XCTAssertEqual(AudioRenderer.subMasterGain(1.15), 1.995, accuracy: 0.002)
+    }
+
+    // A sub-master reads in whole decibels from unity, and snaps to unity near it.
+    func testSubMasterTextAndDetent() {
+        XCTAssertEqual(AudioMixerState.subMasterText(1.0), "0 dB")
+        XCTAssertEqual(AudioMixerState.subMasterText(AudioRenderer.subMasterMaximum), "+12 dB")
+        XCTAssertEqual(AudioMixerState.subMasterText(0.85), "-6 dB")
+        XCTAssertEqual(AudioMixerState.subMasterText(0), "Off")
+        XCTAssertEqual(AudioMixerState.snappedSubMaster(1.012), 1.0)
+        XCTAssertEqual(AudioMixerState.snappedSubMaster(0.99), 1.0)
+        XCTAssertEqual(AudioMixerState.snappedSubMaster(1.05), 1.05)
     }
 
     // Defaults reproduce the pre-#230 mix: with the group sub-masters untouched
@@ -356,8 +388,8 @@ final class AudioRendererTests: XCTestCase {
     func testGroupDefaultsReproducePreviousMix() {
         let sn = renderSquare(onChannels: [0], frequencyHz: 1000)
         XCTAssertEqual(peak(sn.left), 0.1535, accuracy: 0.0005)   // the pre-#230 constant
-        let music = renderConstantField2(left16: 16384, right16: -16384, groupVolume: 1.0)
-        let expected = Float(16384) / AudioRenderer.musicFullScale * AudioRenderer.musicMixGain
+        let music = renderConstantField2(left16: 4096, right16: -4096, groupVolume: 1.0)
+        let expected = Float(4096) / AudioRenderer.musicFullScale * AudioRenderer.musicMixGain
         XCTAssertEqual(music.left, expected, accuracy: 1e-5)
     }
 

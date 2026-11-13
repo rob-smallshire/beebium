@@ -12,6 +12,8 @@
 
 #include "app/SoundSidebar.hpp"
 
+#include "audio/AudioRenderer.hpp"
+
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -22,7 +24,9 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 namespace beebium::linux_client {
 
@@ -48,6 +52,15 @@ QFrame* divider(QWidget* parent) {
 }
 
 }  // namespace
+
+QString sub_master_text(float value) {
+    if (value <= 0.0f) {
+        return QObject::tr("Off");
+    }
+    const long decibels = std::lround(
+        (std::min(value, AudioRenderer::SUB_MASTER_MAX) - 1.0f) * AudioRenderer::CURVE_RANGE_DB);
+    return decibels > 0 ? QObject::tr("+%1 dB").arg(decibels) : QObject::tr("%1 dB").arg(decibels);
+}
 
 QString health_text(const AudioHealth& health) {
     return QObject::tr("%1 underruns, %2 dropped")
@@ -195,11 +208,39 @@ void SoundSidebar::rebuild() {
                                                                           : tr("Mute group"));
         header->addWidget(section.mute);
         section_layout->addLayout(header);
+        // The sub-master runs on past unity, marked by a tick, to its boost;
+        // its level reads in decibels, in the warning colour when boosted,
+        // where a loud piece can reach the limiter.
+        auto* group_row = new QHBoxLayout;
         section.slider = make_slider(section.section, controls.group_volume[g].load());
-        section_layout->addWidget(section.slider);
-        connect(section.slider, &QSlider::valueChanged, this, [this, g](int position) {
-            audio_.controls().group_volume[g].store(slider_value(position));
-        });
+        section.slider->setRange(0, SUB_MASTER_STEPS);
+        section.slider->setTickPosition(QSlider::TicksBelow);
+        section.slider->setTickInterval(SLIDER_STEPS);
+        section.slider->setToolTip(
+            tr("Above the tick at 0 dB the group is boosted, up to 12 dB: for a quiet "
+               "piece. A loud one may then reach the limiter and distort."));
+        section.level = new QLabel(section.section);
+        section.level->setMinimumWidth(44);
+        section.level->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        section.level->setEnabled(false);
+        const auto show_level = [label = section.level](float value) {
+            label->setText(sub_master_text(value));
+            label->setStyleSheet(value > 1.0f ? QStringLiteral("color: #d9822b;") : QString());
+        };
+        show_level(controls.group_volume[g].load());
+        group_row->addWidget(section.slider, 1);
+        group_row->addWidget(section.level);
+        section_layout->addLayout(group_row);
+        connect(section.slider, &QSlider::valueChanged, this,
+                [this, g, slider = section.slider, show_level](int position) {
+                    if (position != SLIDER_STEPS &&
+                        std::abs(position - SLIDER_STEPS) <= DETENT_STEPS) {
+                        slider->setValue(SLIDER_STEPS);  // the detent at unity
+                        return;
+                    }
+                    audio_.controls().group_volume[g].store(slider_value(position));
+                    show_level(slider_value(position));
+                });
         connect(section.mute, &QToolButton::clicked, this, [this, g] {
             const bool muted = !audio_.controls().group_muted[g].load();
             audio_.controls().group_muted[g].store(muted);

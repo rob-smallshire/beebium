@@ -174,7 +174,7 @@ struct AudioMixerView: View {
 
             // Group sub-master, applied before the master to every channel of the
             // group. Greyed when the group or the master is muted.
-            VolumeSlider(
+            SubMasterSlider(
                 value: mixerState.groupVolumeBinding(for: group.id),
                 isMuted: mixerState.isGroupMuted(group.id) || mixerState.isMuted
             )
@@ -257,6 +257,44 @@ private struct VolumeSlider: View {
             .controlSize(.small)
             .opacity(isMuted ? 0.5 : 1.0)
             .disabled(isMuted)
+    }
+}
+
+/// A group's sub-master: the volume slider carried on past unity, which a tick
+/// marks, to a 12 dB boost for a quiet piece. Its level reads in decibels, in
+/// orange when boosted, where a loud piece can reach the limiter.
+private struct SubMasterSlider: View {
+    @Binding var value: Float
+    let isMuted: Bool
+
+    /// The knob's centre stops this far inside each end of the track.
+    private let knobInset: CGFloat = 7
+
+    var body: some View {
+        HStack(spacing: 6) {
+            VStack(spacing: 1) {
+                Slider(value: $value, in: 0...AudioRenderer.subMasterMaximum)
+                    .controlSize(.small)
+                GeometryReader { geometry in
+                    let travel = geometry.size.width - 2 * knobInset
+                    Rectangle()
+                        .fill(Color.secondary)
+                        .frame(width: 1, height: 4)
+                        .position(x: knobInset + travel * CGFloat(1 / AudioRenderer.subMasterMaximum),
+                                  y: 2)
+                }
+                .frame(height: 4)
+            }
+            Text(AudioMixerState.subMasterText(value))
+                .font(.caption)
+                .foregroundColor(value > 1 ? .orange : .secondary)
+                .frame(width: 44, alignment: .trailing)
+                .monospacedDigit()
+        }
+        .help("Above the tick at 0 dB the group is boosted, up to 12 dB: for a quiet piece. "
+              + "A loud one may then reach the limiter and distort.")
+        .opacity(isMuted ? 0.5 : 1.0)
+        .disabled(isMuted)
     }
 }
 

@@ -90,16 +90,28 @@ final class AudioRenderer: @unchecked Sendable {
     static let musicFullScale: Float = 32768.0
 
     /// Fixed gain for a bipolar stereo (Music 5000 / 3000) field, applied to the
-    /// int16 sample normalised to +/-1.0 at full scale, before master volume.
+    /// int16 sample normalised to +/-1.0 at full scale, before the group's
+    /// sub-master and the master volume.
     ///
-    /// The Music 5000's digital full scale is its sixteen channels in phase --
-    /// the hardware's maximum, which real music rarely approaches. The SN76489's
-    /// four channels at full volume reach 4 x mixGain = 0.85 before panning.
-    /// Matching the Music's full scale to that same ceiling (0.85) puts a typical
-    /// AMPLE piece, which sits well below digital full scale, at a loudness
-    /// comparable to a typical BASIC SOUND on one or two SN76489 channels. The
-    /// master volume stays the only user trim.
-    static let musicMixGain: Float = 0.85
+    /// It is set from what real music does, not from the digital full scale
+    /// (all sixteen channels in phase, which music never approaches). Over
+    /// sixteen AMPLE pieces from the System Disk and Amplinex 001/002, the
+    /// loudest (Concert) peaks at 7655 of 32767, so at this gain it reaches
+    /// 0.47, 6 dB under the limiter's knee, with the sub-master at unity; the
+    /// median piece's RMS is then -28 dBFS. Music peaks 13 to 19 dB above its
+    /// RMS, where an SN76489 square does not, so it stays quieter than a
+    /// full-volume SOUND; a quiet piece is brought up with the sub-master's
+    /// boost, at the risk of limiting a loud one.
+    static let musicMixGain: Float = 2.0
+
+    /// The volume curve's span: a slider's 0 to 1 is -40 dB to unity.
+    static let curveRangeDecibels: Float = 40
+
+    /// How far a group's sub-master carries the curve on above unity, and the
+    /// slider value that reaches it (1 + 12 / 40 = 1.3). Only the sub-masters
+    /// boost; the master and the channels stop at unity.
+    static let subMasterBoostDecibels: Float = 12
+    static let subMasterMaximum: Float = 1 + subMasterBoostDecibels / curveRangeDecibels
 
     /// Sample rate
     let sampleRate: Float
@@ -253,9 +265,10 @@ final class AudioRenderer: @unchecked Sendable {
 
     // MARK: - Group sub-master control (called from main thread)
 
-    /// Set the SN76489 group's sub-master volume (0.0 to 1.0, linear slider).
+    /// Set the SN76489 group's sub-master volume (0.0 to subMasterMaximum,
+    /// linear slider, unity at 1.0).
     func setSnGroupVolume(_ volume: Float) {
-        atomicSnGroupVolume.store(floatToUInt32(volume.clamped(to: 0...1)), ordering: .relaxed)
+        atomicSnGroupVolume.store(floatToUInt32(volume.clamped(to: 0...Self.subMasterMaximum)), ordering: .relaxed)
     }
 
     /// Mute or unmute the SN76489 group.
@@ -267,7 +280,7 @@ final class AudioRenderer: @unchecked Sendable {
     /// 5000), slot 1 = field 3 (Music 3000).
     func setExtGroupVolume(slot: Int, volume: Float) {
         guard slot >= 0 && slot < atomicExtGroupVolumes.count else { return }
-        atomicExtGroupVolumes[slot].store(floatToUInt32(volume.clamped(to: 0...1)), ordering: .relaxed)
+        atomicExtGroupVolumes[slot].store(floatToUInt32(volume.clamped(to: 0...Self.subMasterMaximum)), ordering: .relaxed)
     }
 
     /// Mute or unmute an extension field group (slot 0 = field 2, slot 1 = field 3).
@@ -343,16 +356,16 @@ final class AudioRenderer: @unchecked Sendable {
         }
 
         // Group sub-masters: a muted group contributes nothing, else its volume
-        // scaled like the master. All default to 1.0 (unity) so the mix is
-        // unchanged until a slider moves. The SN group gain multiplies with each
+        // on the master's curve, carried on up to the boost. All default to 1.0
+        // (unity) so the mix is unchanged until a slider moves. The SN group gain multiplies with each
         // SN channel's own volume; each extension field's group gain multiplies
         // with musicMixGain.
         let snGroupGain = atomicSnGroupMuted.load(ordering: .relaxed)
-            ? 0 : linearToExponential(uint32ToFloat(atomicSnGroupVolume.load(ordering: .relaxed)))
+            ? 0 : Self.subMasterGain(uint32ToFloat(atomicSnGroupVolume.load(ordering: .relaxed)))
         let ext0GroupGain = atomicExtGroupMuted[0].load(ordering: .relaxed)
-            ? 0 : linearToExponential(uint32ToFloat(atomicExtGroupVolumes[0].load(ordering: .relaxed)))
+            ? 0 : Self.subMasterGain(uint32ToFloat(atomicExtGroupVolumes[0].load(ordering: .relaxed)))
         let ext1GroupGain = atomicExtGroupMuted[1].load(ordering: .relaxed)
-            ? 0 : linearToExponential(uint32ToFloat(atomicExtGroupVolumes[1].load(ordering: .relaxed)))
+            ? 0 : Self.subMasterGain(uint32ToFloat(atomicExtGroupVolumes[1].load(ordering: .relaxed)))
 
         // Process samples
         for i in 0..<framesToRender {
@@ -539,7 +552,14 @@ final class AudioRenderer: @unchecked Sendable {
         if linear <= 0 { return 0 }
         if linear >= 1 { return 1 }
         // -40dB to 0dB range
-        return pow(10.0, (linear - 1.0) * 2.0)
+        return pow(10.0, (linear - 1.0) * Self.curveRangeDecibels / 20)
+    }
+
+    /// A group sub-master's gain: the volume curve, carried on above unity to
+    /// subMasterMaximum (+12 dB).
+    static func subMasterGain(_ linear: Float) -> Float {
+        if linear <= 0 { return 0 }
+        return pow(10.0, (min(linear, subMasterMaximum) - 1.0) * curveRangeDecibels / 20)
     }
 
     /// Soft clipping to prevent harsh distortion

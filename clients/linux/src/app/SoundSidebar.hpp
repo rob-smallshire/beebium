@@ -32,6 +32,9 @@ namespace beebium::linux_client {
 // "N underruns, M dropped": what the health line says, once there is
 // anything to say (client specification 8.3).
 QString health_text(const AudioHealth& health);
+// A sub-master's setting in whole decibels from unity: "0 dB", "+12 dB",
+// "-6 dB", and "Off" at the bottom.
+QString sub_master_text(float value);
 
 // When the health line shows (client specification 8.3): from a glitch, an
 // underrun or a drop the counts had not seen, until five seconds pass with
@@ -63,6 +66,11 @@ class SoundSidebar : public QWidget {
 
 public:
     static constexpr int SLIDER_STEPS = 1000;
+    // A group sub-master's travel: unity at SLIDER_STEPS, then on to the
+    // 12 dB boost (AudioRenderer::SUB_MASTER_MAX). Within DETENT_STEPS of
+    // unity it snaps there.
+    static constexpr int SUB_MASTER_STEPS = SLIDER_STEPS * 13 / 10;
+    static constexpr int DETENT_STEPS = 15;
     static constexpr int HEALTH_POLL_MS = 250;
 
     explicit SoundSidebar(SessionAudio& audio, QWidget* parent = nullptr);
@@ -85,6 +93,7 @@ private:
     struct GroupSection {
         QWidget* section = nullptr;
         QSlider* slider = nullptr;
+        QLabel* level = nullptr;
         QToolButton* mute = nullptr;
     };
 

@@ -473,12 +473,17 @@ needs nothing Music 5000 specific.
   the two never drift apart and a stall in one is a stall in both. The
   renderer drains both rings every callback. A field the format marks
   bipolar 2 x int16 is summed into the stereo output at a fixed ratio,
-  `musicMixGain` 0.85, with no DC removal; a server with no such field leaves
+  `musicMixGain` 2.0, with no DC removal; a server with no such field leaves
   the path inert and the output bit-identical to a machine without the
-  board. The Sound sidebar shows one section per channel group the format
-  reports, each with its own sub-master and mute under the master: the
-  SN76489's, and a "Music 5000" (and "Music 3000") section when fitted. All
-  sub-masters default to 1.0.
+  board. The ratio is set from real music: over sixteen AMPLE pieces from
+  the System Disk and Amplinex 001/002, the loudest (Concert) peaks at 7655
+  of 32767, which this gain puts at 0.47, 6 dB under the limiter's knee. The
+  Sound sidebar shows one section per channel group the format reports, each
+  with its own sub-master and mute under the master: the SN76489's, and a
+  "Music 5000" (and "Music 3000") section when fitted. All sub-masters
+  default to unity (0 dB), marked by a tick, and run on past it to a 12 dB
+  boost for a quiet piece, where a loud one may reach the limiter. The
+  Linux client does the same (`clients/linux/src/audio/AudioRenderer.hpp`).
 - **Python** (`beebium.client.audio`). `AudioFormat` carries `bipolar` per
   `AudioSource`; each `AudioChunk` unpacks its fields by their encodings, so
   a 2 x int16 field arrives as (left, right) int16 pairs.

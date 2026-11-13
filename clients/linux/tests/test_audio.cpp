@@ -300,11 +300,27 @@ TEST_CASE("The SN76489's DC is removed", "[audio][render]") {
 TEST_CASE("A bipolar stereo field is mixed as it is, left and right apart", "[audio][render]") {
     Rig rig(with_music_5000());
     const auto out = rig.play(9600, [](std::size_t, std::uint32_t* frame) {
-        frame[2] = pack(16384, -8192);
+        frame[2] = pack(4096, -2048);
     });
     // No high-pass: a held level stays.
-    CHECK(out[2 * 9000] == Approx(0.5f * AudioRenderer::MUSIC_MIX_GAIN));
-    CHECK(out[2 * 9000 + 1] == Approx(-0.25f * AudioRenderer::MUSIC_MIX_GAIN));
+    CHECK(out[2 * 9000] == Approx(0.125f * AudioRenderer::MUSIC_MIX_GAIN));
+    CHECK(out[2 * 9000 + 1] == Approx(-0.0625f * AudioRenderer::MUSIC_MIX_GAIN));
+}
+
+TEST_CASE("A group's sub-master boosts up to 12 dB above unity, and no further",
+          "[audio][render][mixer]") {
+    const auto level = [](float group_volume) {
+        Rig rig(with_music_5000());
+        rig.controls.group_volume[1].store(group_volume);  // Music 5000
+        const auto out = rig.play(9600, [](std::size_t, std::uint32_t* frame) {
+            frame[2] = pack(2048, 2048);
+        });
+        return out[2 * 9000];
+    };
+    const float unity = level(1.0f);
+    CHECK(unity == Approx(0.0625f * AudioRenderer::MUSIC_MIX_GAIN));
+    CHECK(level(AudioRenderer::SUB_MASTER_MAX) == Approx(unity * 3.981f).epsilon(0.001));
+    CHECK(level(2.0f) == level(AudioRenderer::SUB_MASTER_MAX));
 }
 
 TEST_CASE("Muting a group silences it and nothing else", "[audio][render][mixer]") {
@@ -341,6 +357,18 @@ TEST_CASE("The volume curve spans 40 dB", "[audio][mixer]") {
     CHECK(AudioRenderer::volume_curve(1.0f) == 1.0f);
     CHECK(AudioRenderer::volume_curve(0.5f) == Approx(0.1f));
     CHECK(AudioRenderer::volume_curve(0.001f) == Approx(0.01f).epsilon(0.01));
+}
+
+TEST_CASE("The sub-master curve continues the volume curve 12 dB past unity", "[audio][mixer]") {
+    CHECK(AudioRenderer::SUB_MASTER_MAX == Approx(1.3f));
+    CHECK(AudioRenderer::sub_master_curve(0.0f) == 0.0f);
+    CHECK(AudioRenderer::sub_master_curve(0.5f) == AudioRenderer::volume_curve(0.5f));
+    CHECK(AudioRenderer::sub_master_curve(1.0f) == 1.0f);
+    CHECK(AudioRenderer::sub_master_curve(1.15f) == Approx(1.995f).epsilon(0.001));
+    CHECK(AudioRenderer::sub_master_curve(AudioRenderer::SUB_MASTER_MAX) ==
+          Approx(3.981f).epsilon(0.001));
+    CHECK(AudioRenderer::sub_master_curve(5.0f) ==
+          AudioRenderer::sub_master_curve(AudioRenderer::SUB_MASTER_MAX));
 }
 
 TEST_CASE("The soft limiter is the identity to 0.8 and never reaches 1", "[audio][mixer]") {

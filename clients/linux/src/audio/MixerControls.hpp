@@ -22,8 +22,9 @@ namespace beebium::linux_client {
 
 // The mixer's settings (client specification 8.2), written by the GUI and
 // read by the playback thread once per callback, through atomics alone: the
-// audio thread never takes a lock. Slider values are linear, 0 to 1; the
-// renderer applies the volume curve. Groups and channels are indexed as in
+// audio thread never takes a lock. Slider values are linear, 0 to 1, a
+// group's sub-master on to AudioRenderer::SUB_MASTER_MAX; the renderer
+// applies the volume curve. Groups and channels are indexed as in
 // the AudioLayout; all start at unity and unmuted, so the mix is
 // bit-identical until a control moves. They belong to the window, so they
 // survive a reconnect; like the macOS client's, they are not persisted.

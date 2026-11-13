@@ -68,7 +68,14 @@ float AudioRenderer::volume_curve(float linear) {
     if (linear >= 1.0f) {
         return 1.0f;
     }
-    return std::pow(10.0f, (linear - 1.0f) * 2.0f);
+    return std::pow(10.0f, (linear - 1.0f) * CURVE_RANGE_DB / 20.0f);
+}
+
+float AudioRenderer::sub_master_curve(float linear) {
+    if (linear <= 0.0f) {
+        return 0.0f;
+    }
+    return std::pow(10.0f, (std::min(linear, SUB_MASTER_MAX) - 1.0f) * CURVE_RANGE_DB / 20.0f);
 }
 
 float AudioRenderer::soft_limit(float x) {
@@ -169,7 +176,7 @@ void AudioRenderer::render_block(float* interleaved, std::size_t frames) {
     for (std::size_t g = 0; g < layout_.groups.size(); ++g) {
         group_gain[g] = controls_.group_muted[g].load(std::memory_order_relaxed)
                             ? 0.0f
-                            : volume_curve(controls_.group_volume[g].load(std::memory_order_relaxed));
+                            : sub_master_curve(controls_.group_volume[g].load(std::memory_order_relaxed));
     }
     const std::size_t channel_count = layout_.channels.size();
     std::array<float, AudioLayout::MAX_CHANNELS> channel_gain{};
