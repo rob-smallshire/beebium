@@ -74,9 +74,10 @@ void check_mirror(Hardware& hardware) {
     hardware.analogue_converter().set_input_level(1, 0x4560);
     // Start a 12-bit conversion on channel 1 through a mirror of offset 0.
     hardware.write(0xFED4, 0x09);
-    REQUIRE((hardware.peek(ADC_BASE) & 0x0F) == 0x09);
+    REQUIRE(hardware.analogue_converter().channel() == 1);
     run_adc_clocks(hardware, 20000);
     REQUIRE((hardware.peek(ADC_BASE) & STATUS_NOT_EOC) == 0);
+    REQUIRE((hardware.peek(ADC_BASE) & 0x0F) == 0x09);
 
     for (uint16_t base = ADC_BASE; base <= ADC_END; base += 4) {
         INFO("mirror at " << std::hex << base);
@@ -182,9 +183,10 @@ TEST_CASE("uPD7002 survives Break but not a power cycle", "[upd7002]") {
     SECTION("Break leaves a conversion in flight to complete") {
         hardware.soft_reset();
         CHECK(hardware.analogue_converter().busy());
-        CHECK((hardware.peek(ADC_BASE) & 0x0F) == 0x0B);
+        CHECK(hardware.analogue_converter().channel() == 3);
         run_adc_clocks(hardware, 20000);
         CHECK(hardware.analogue_converter().eoc_level() == 0);
+        CHECK((hardware.peek(ADC_BASE) & 0x0F) == 0x0B);
         CHECK(hardware.peek(ADC_BASE + 1) == 0x12);
     }
     SECTION("a power cycle returns the chip to its power-on state") {

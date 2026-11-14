@@ -16,6 +16,7 @@ namespace beebium {
 
 void Upd7002::power_on() {
     control_ = 0;
+    shown_control_ = 0;
     result_ = 0;
     pending_result_ = 0;
     clocks_remaining_ = 0;
@@ -23,7 +24,7 @@ void Upd7002::power_on() {
 }
 
 uint8_t Upd7002::status() const {
-    uint8_t value = control_ & CONTROL_MASK;
+    uint8_t value = shown_control_ & CONTROL_MASK;
     value |= static_cast<uint8_t>((result_ >> 14) << 4);
     if (!busy()) {
         value |= 0x40;
@@ -65,17 +66,14 @@ void Upd7002::start_conversion(uint8_t value) {
     control_ = value & CONTROL_MASK;
     const uint16_t level = input_levels_[control_ & 0x03];
     const uint16_t code12 = static_cast<uint16_t>(level >> 4);
-    if (twelve_bit()) {
-        pending_result_ = static_cast<uint16_t>(code12 << 4);
-    } else {
-        pending_result_ = static_cast<uint16_t>(level & 0xFF00);
-    }
+    pending_result_ = static_cast<uint16_t>(code12 << 4);
     clocks_remaining_ = upd7002_timing::conversion_clocks(twelve_bit(), code12);
     eoc_ = false;
 }
 
 void Upd7002::complete_conversion() {
     result_ = pending_result_;
+    shown_control_ = control_;
     eoc_ = true;
 }
 

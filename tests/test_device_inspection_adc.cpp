@@ -78,7 +78,8 @@ TEST_CASE("A conversion in flight is reported with its clocks to go (#98)",
     CHECK(state.clocks_remaining() ==
           upd7002_timing::conversion_clocks(true, 0x123) - 100);
     CHECK(state.input_levels(2) == 0x1230);
-    CHECK(state.status() == 0x8E);
+    // Busy with EOC inactive; bits 5 to 0 still the power-on result's.
+    CHECK(state.status() == 0x80);
 }
 
 TEST_CASE("Reading the ADC leaves EOC and CB1 as they were (#98)", "[inspection][upd7002]") {

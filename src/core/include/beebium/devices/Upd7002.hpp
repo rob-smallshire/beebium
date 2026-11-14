@@ -15,6 +15,7 @@
 #include <beebium/ClockTypes.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace beebium {
@@ -28,25 +29,43 @@ namespace beebium {
 // docs/discussion/analogue-port-hardware-trials.md).
 namespace upd7002_timing {
 
-// 8-bit mode: one straight line, t = 2950 + code / 2. Fitted to the 8-bit
-// plot of conversion time against result posted on Stardot (Beebium thread,
-// p=492873): 2.95 ms at code 0 rising 0.5 us per 12-bit code to 5.0 ms.
-inline constexpr uint32_t EIGHT_BIT_START_CLOCKS = 2950;
-inline constexpr uint32_t EIGHT_BIT_CODES_PER_CLOCK = 2;
-
-// 12-bit (10-bit accurate) mode: a sawtooth of seven teeth. Within a tooth
-// the time rises 2 clocks per code from the tooth's start time; each later
-// tooth starts about 1 ms lower than the previous one ends. Boundary codes
-// and start times from the same Stardot plot, digitised to about +/- 30 us
-// (survey section 2.2), and consistent with the Stardot t=27458 timings on
-// two other Model Bs. Per-chip boundary shifts, the overlap band past each
-// boundary, jitter and noise are not modelled.
-inline constexpr uint32_t TWELVE_BIT_CLOCKS_PER_CODE = 2;
-
 struct Tooth {
     uint16_t first_code;   // the boundary code b_k
     uint32_t start_clocks; // T_k, the time at b_k
 };
+
+// Each mode's time is a sawtooth: within a tooth the time rises a fixed
+// number of clocks per code from the tooth's start time; the next tooth
+// starts lower. Measured boundaries move by tens of codes from chip to chip;
+// the tables below are one chip each. Per-chip boundary shifts, the overlap
+// band past each boundary (where a conversion sometimes takes the earlier
+// tooth's time), jitter and noise are not modelled.
+
+// 8-bit mode: half a clock per code. Fitted to trial 7 sweep B on a Master
+// AIV's chip (tools/hardware-trials/adc/results/2026-11-14-master-aiv/):
+// 2945 clocks at code 0 rising to about 4613 at code 3440, then a drop of
+// about 430. That sweep's top bin (codes 3968 and above, near 4221) is open
+// and not modelled. A Model B's chip (Stardot, Beebium thread p=492873)
+// showed one line to code 4048 with no drop.
+inline constexpr uint32_t EIGHT_BIT_CODES_PER_CLOCK = 2;
+
+inline constexpr std::array<Tooth, 2> EIGHT_BIT_TEETH = {{
+    {0, 2945},
+    {3440, 4190},
+}};
+
+// 12-bit (10-bit accurate) mode: 2 clocks per code, seven teeth, each later
+// tooth starting about 1 ms lower than the previous one ends. Boundary codes
+// and start times from a Model B's chip (Stardot, Beebium thread p=492873),
+// digitised to about +/- 30 us (survey section 2.2), and consistent with the
+// Stardot t=27458 timings on two other Model Bs.
+//
+// A Master AIV's chip (trial 7 sweeps A and C, results directory above) has
+// the same slope and drops of 960 to 984 clocks, but its boundaries at 832,
+// 1520, 1888, 2464 and 3056 (and one more between 3614 and 4095, beyond the
+// sweep), with tooth start times 9091, 9728, 10079, 9792, 9919 and 10079.
+// The default stays the Model B chip's, which is complete.
+inline constexpr uint32_t TWELVE_BIT_CLOCKS_PER_CODE = 2;
 
 inline constexpr std::array<Tooth, 7> TWELVE_BIT_TEETH = {{
     {0, 9100},
@@ -58,20 +77,29 @@ inline constexpr std::array<Tooth, 7> TWELVE_BIT_TEETH = {{
     {3796, 10553},
 }};
 
-// Clocks from the start write to completion for a conversion producing
-// code12 in the given mode.
-constexpr uint32_t conversion_clocks(bool twelve_bit, uint16_t code12) {
-    if (!twelve_bit) {
-        return EIGHT_BIT_START_CLOCKS + code12 / EIGHT_BIT_CODES_PER_CLOCK;
-    }
-    const Tooth* tooth = &TWELVE_BIT_TEETH[0];
-    for (const Tooth& candidate : TWELVE_BIT_TEETH) {
+// The tooth a code falls on: the one with the largest first_code <= code12.
+template <std::size_t N>
+constexpr const Tooth& tooth_for(const std::array<Tooth, N>& teeth, uint16_t code12) {
+    const Tooth* tooth = &teeth[0];
+    for (const Tooth& candidate : teeth) {
         if (candidate.first_code <= code12) {
             tooth = &candidate;
         }
     }
-    return tooth->start_clocks
-         + TWELVE_BIT_CLOCKS_PER_CODE * (code12 - tooth->first_code);
+    return *tooth;
+}
+
+// Clocks from the start write to completion for a conversion producing
+// code12 in the given mode.
+constexpr uint32_t conversion_clocks(bool twelve_bit, uint16_t code12) {
+    if (!twelve_bit) {
+        const Tooth& tooth = tooth_for(EIGHT_BIT_TEETH, code12);
+        return tooth.start_clocks
+             + (code12 - tooth.first_code) / EIGHT_BIT_CODES_PER_CLOCK;
+    }
+    const Tooth& tooth = tooth_for(TWELVE_BIT_TEETH, code12);
+    return tooth.start_clocks
+         + TWELVE_BIT_CLOCKS_PER_CODE * (code12 - tooth.first_code);
 }
 
 }  // namespace upd7002_timing
@@ -86,8 +114,15 @@ constexpr uint32_t conversion_clocks(bool twelve_bit, uint16_t code12) {
 //   3  read: the low byte again; write: test mode, modelled as ignored
 //
 // Status: bit 7 EOC as the pin (1 = not complete), bit 6 not busy, bits 5
-// and 4 the result's two most significant bits (the previous result's while
-// a conversion runs), bit 3 mode, bit 2 flag, bits 1 and 0 channel.
+// and 4 the result's two most significant bits, bit 3 mode, bit 2 flag,
+// bits 1 and 0 channel. Bits 5 to 0 describe the conversion whose result is
+// showing: they keep the previous conversion's values until the new one
+// completes, as hardware and the datasheet ("previous conversion data")
+// show. A start write changes only bits 7 and 6.
+//
+// The result reads the same in both modes: the 12-bit code in the high
+// twelve bits, the low four 0. 8-bit mode is less accurate on a real chip;
+// that is not modelled.
 //
 // The chip has no reset pin: Break does not reach it. It is clocked at
 // 1 MHz and counts its conversion time in those clocks. EOC is a level,
@@ -125,7 +160,9 @@ public:
     // from completion until the high byte is read or a conversion starts.
     uint8_t eoc_level() const { return eoc_ ? 0 : 1; }
 
-    // Inspection.
+    // Inspection. channel(), twelve_bit() and flag() are the control bits
+    // as last written (the conversion in flight, if any); status() shows the
+    // ones latched with the result.
     uint8_t status() const;
     uint16_t result() const { return result_; }
     int channel() const { return control_ & 0x03; }
@@ -145,6 +182,7 @@ private:
     std::array<uint16_t, CHANNEL_COUNT> input_levels_ = {
         UNDRIVEN_LEVEL, UNDRIVEN_LEVEL, UNDRIVEN_LEVEL, UNDRIVEN_LEVEL};
     uint8_t control_ = 0;           // bits 3 to 0 as last written
+    uint8_t shown_control_ = 0;     // bits 3 to 0 of the conversion showing
     uint16_t result_ = 0;           // the result the registers show
     uint16_t pending_result_ = 0;   // what the conversion in flight produces
     uint32_t clocks_remaining_ = 0; // 0 when idle

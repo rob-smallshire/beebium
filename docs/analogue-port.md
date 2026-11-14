@@ -17,10 +17,10 @@ trials on real hardware is built by `tools/hardware-trials/adc/`.
 | Modelled | Not modelled (yet) |
 |---|---|
 | The four registers, their mirror every four bytes across &FEC0-&FEDF, and the low byte repeated at offset 3 | The test mode at offset 3 (writes are ignored) |
-| Status: EOC, busy, the result's two top bits (the previous result's during a conversion), mode, flag and channel | Anything the datasheet leaves unspecified beyond the trial results |
+| Status: EOC and busy, and bits 5 to 0 (the result's two top bits, mode, flag and channel) latched at completion, so the previous conversion's while one runs | Anything the datasheet leaves unspecified beyond the trial results |
 | The high-byte read resetting EOC; reads of the other offsets having no side effects | The read error when a read coincides with the end of a conversion |
 | A write during a conversion restarting it | The integration itself: the input is sampled once, at the start write |
-| Conversion time in 1 MHz clocks, as the measured sawtooth (12-bit) or line (8-bit) | Per-chip boundary shifts, the overlap band past each boundary, jitter and noise |
+| Conversion time in 1 MHz clocks, as the measured sawtooth in both modes | Per-chip boundary shifts, the overlap band past each boundary, jitter and noise; the lower accuracy of 8-bit mode |
 | EOC as a level on System VIA CB1, with the VIA doing the edge detection | The fire buttons on PB4 and PB5, which still read "not pressed" |
 | No reset on Break; power-on state on a power cycle | The light pen strobe on CB2 (#210) |
 | An undriven input reads the centre of the range, &8000 | A wandering, machine-dependent unplugged value |
@@ -57,10 +57,17 @@ result's two most significant bits, 3 mode (1 = 12-bit), 2 flag, 1 and 0
 channel. A write stores bits 3 to 0; bits 7 to 4 are ignored. The flag has no
 effect on the chip but is echoed.
 
-The result is sixteen bits as the guest reads it. In 12-bit mode the top
-twelve bits are the conversion code and the low four read 0. In 8-bit mode
-the high byte is the 8-bit code and the low byte reads 0 (a decision trial 7
-may revise).
+Bits 5 to 0 describe the conversion whose result is showing. A start write
+changes only bits 7 and 6; the mode, flag and channel bits, like the two top
+result bits, keep the previous conversion's values until the new one
+completes. A Master AIV's chip showed this in trial 2 (just after writing &0E
+the status still carried the previous conversion's 8; E appeared at
+completion), and the datasheet marks D5 to D0 "previous conversion data".
+
+The result is sixteen bits as the guest reads it, laid out the same in both
+modes: the 12-bit conversion code in the top twelve bits, the low four 0.
+Real chips return low bytes such as &30, &B0 and &F0 in 8-bit mode, the same
+twelve bits only less accurately; the inaccuracy is not modelled.
 
 At power-on the status reads &C0: idle, EOC inactive, not busy, control bits
 clear, a zero result, CB1 high.
@@ -70,8 +77,9 @@ clear, a zero result, CB1 high.
 A write to offset 0 stores the control bits, samples the selected channel's
 input level, works out the code and the conversion time, and starts counting.
 The chip goes busy with EOC inactive. The result registers and status bits 5
-and 4 keep showing the previous result until the conversion completes. On the
-last clock the new result appears, busy clears and EOC goes active.
+to 0 keep showing the previous conversion until this one completes. On the
+last clock the new result and control bits appear, busy clears and EOC goes
+active.
 
 A write during a conversion abandons it and starts again from the new write
 with a fresh sample.
@@ -89,8 +97,12 @@ All the constants are in `upd7002_timing` in
 come from, so they can be re-fitted from new trial data without touching the
 logic. For a conversion producing the 12-bit code `c`:
 
-- **8-bit mode**: `t = 2950 + c / 2` clocks, one straight line from 2.95 ms to
-  5.0 ms.
+- **8-bit mode**: two teeth, each rising half a clock per code:
+  `t = T + (c - b) / 2` for the tooth with the largest `b <= c`, with
+  `{b, T}` = `{0, 2945}` and `{3440, 4190}`. That is 2.95 ms at code 0
+  rising to about 4.66 ms, then a drop of about 0.43 ms. The table is the
+  Master AIV chip's (trial 7 sweep B), the only measurement with a drop; its
+  top bin, codes 3968 and above near 4221 clocks, is open and not modelled.
 - **12-bit mode**: seven teeth. Each tooth rises 2 clocks per code from its
   start code `b` and start time `T`: `t = T + 2 (c - b)` for the tooth with
   the largest `b <= c`.
@@ -105,12 +117,26 @@ logic. For a conversion producing the 12-bit code `c`:
 | 6 | 3204 | 10387 |
 | 7 | 3796 | 10553 |
 
-The table was digitised from conversion-time plots posted on Stardot (the
-Beebium thread, post 492873) to about plus or minus 30 us. It predicts the
-earlier Stardot measurements (thread 27458) on two other Model Bs to within
-about 30 us. The model is deterministic: real chips move their boundaries by
-tens of codes, and near a boundary a conversion sometimes takes the earlier
-tooth's time. Trial 7 measures both on further machines.
+The 12-bit table was digitised from conversion-time plots posted on Stardot
+(the Beebium thread, post 492873) to about plus or minus 30 us. It predicts
+the earlier Stardot measurements (thread 27458) on two other Model Bs to
+within about 30 us.
+
+A second chip, in a Master AIV (`tools/hardware-trials/adc/results/2026-11-14-master-aiv/`),
+has the same 12-bit shape: every tooth at 1.99 to 2.01 clocks per code, drops
+of 960 to 984 clocks, code 0 at about 9092. Its boundaries are elsewhere: 832,
+1520, 1888, 2464 and 3056 (and one more beyond the sweep, between 3614 and
+4095), with tooth start times 9091, 9728, 10079, 9792, 9919 and 10079. Its
+regular run sits about 160 codes below the Model B chip's. Both tables are in
+the `upd7002_timing` comments. The default 12-bit table stays the Model B
+chip's, which is complete.
+
+The model is deterministic: real chips move their boundaries from chip to
+chip, and near a boundary a conversion sometimes takes the earlier tooth's
+time (0 to 21 of about 400 points per tooth on the Master's chip). A
+per-chip parameter waits for a second Model B sweep. One figure is open: on
+the Master, trial 1 timed codes 0 to 4 at 10.0 ms in 12-bit mode, where its
+sweep gives 9.09 ms.
 
 ## EOC and System VIA CB1
 
@@ -163,7 +189,7 @@ through the memory map, so peeking the high byte does not reset EOC.
 
 | Suite | What it covers |
 |---|---|
-| `tests/test_upd7002.cpp` | The chip alone: power-on state, status echo, busy and EOC, the previous result's top bits, the 12-bit and 8-bit result layouts, the high-byte read, peek, restart, both timing models against the measured times, the undriven value, ignored writes |
+| `tests/test_upd7002.cpp` | The chip alone: power-on state, the control bits latched at completion, busy and EOC, the previous result's top bits, the result layout in both modes, the high-byte read, peek, restart, both timing tables against the measured times, the undriven value, ignored writes |
 | `tests/test_upd7002_model_b.cpp` | The mirror on all seven Model B family policies, peek through the machine, CB1 under both edges, the reset rules. With MOS 1.20 as a test vector: the first conversion (256 ms after power-on, once the MOS has cleared RAM), the AUG's ADC workspace (&2BA-&2BD) filling with each channel's level, and a CB1 edge every 11.3 ms while the MOS cycles the channels |
 | `tests/test_device_inspection_adc.cpp` | The inspection RPC, including that it leaves EOC alone |
 | `clients/beebium-python-client/tests/test_analogue_converter.py` | From BBC BASIC, loaded from a tokenised disc: `ADVAL(1)` to `ADVAL(4)` read &8000 with no fire button pressed, and `?&FEC0` reads the chip cycling all four channels in 12-bit mode, never the old open-bus &20 |

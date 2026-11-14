@@ -85,16 +85,28 @@ TEST_CASE("uPD7002 power-on state reads status C0 with a zero result and CB1 hig
     CHECK(adc.eoc_level() == 1);
 }
 
-TEST_CASE("uPD7002 status echoes the written channel, mode and flag bits",
+TEST_CASE("uPD7002 status bits 3 to 0 keep the previous control until completion",
           "[upd7002]") {
     Upd7002 adc;
-    adc.write(STATUS, 0x0E);
+    adc.write(STATUS, CONTROL_12_BIT | 0x01);
+    // The write changes only bits 7 and 6: the low bits still show the
+    // power-on control, 0, until the conversion completes.
+    CHECK((adc.read(STATUS) & 0x0F) == 0x00);
+    run_clocks(adc, CLOCK_LIMIT);
+    REQUIRE(is_complete(adc));
+    CHECK((adc.read(STATUS) & 0x0F) == 0x09);
+
+    adc.write(STATUS, 0xFE);  // bits 7 to 4 ignored: channel 2, 12-bit, flag
+    CHECK((adc.read(STATUS) & 0x0F) == 0x09);
+    run_clocks(adc, CLOCK_LIMIT);
     CHECK((adc.read(STATUS) & 0x0F) == 0x0E);
-    adc.write(STATUS, 0xF5);
-    CHECK((adc.read(STATUS) & 0x0F) == 0x05);
+
     adc.write(STATUS, 0x03);
+    CHECK((adc.read(STATUS) & 0x0F) == 0x0E);
+    run_clocks(adc, CLOCK_LIMIT);
     CHECK((adc.read(STATUS) & 0x0F) == 0x03);
 }
+
 
 TEST_CASE("uPD7002 is busy with EOC inactive until the last clock of a conversion",
           "[upd7002]") {
@@ -156,14 +168,15 @@ TEST_CASE("uPD7002 12-bit result is the high byte and the top nibble of the low 
     CHECK(adc.read(HIGH) == 0xAB);
 }
 
-TEST_CASE("uPD7002 8-bit result is the high byte with a zero low byte",
+TEST_CASE("uPD7002 8-bit result has the same layout as the 12-bit one",
           "[upd7002]") {
     Upd7002 adc;
     convert(adc, 0x00, 0xABCD);
-    CHECK(adc.read(LOW) == 0x00);
-    CHECK(adc.read(LOW_AGAIN) == 0x00);
+    CHECK(adc.read(LOW) == 0xC0);
+    CHECK(adc.read(LOW_AGAIN) == 0xC0);
     CHECK(adc.read(HIGH) == 0xAB);
 }
+
 
 TEST_CASE("uPD7002 reading the high byte resets EOC and reading the others does not",
           "[upd7002]") {
@@ -214,13 +227,16 @@ TEST_CASE("uPD7002 write during a conversion restarts it from the new write",
     CHECK(adc.read(HIGH) == 0xFF);
 }
 
-TEST_CASE("uPD7002 8-bit conversion time is 2950 plus half the code in clocks",
+TEST_CASE("uPD7002 8-bit conversion time follows the measured two-tooth line",
           "[upd7002]") {
     Upd7002 adc;
-    CHECK(clocks_to_complete(adc, 0x00, level_for_code(0)) == 2950);
-    CHECK(clocks_to_complete(adc, 0x00, level_for_code(2024)) == 3962);
-    CHECK(clocks_to_complete(adc, 0x00, level_for_code(4080)) == 4990);
+    CHECK(clocks_to_complete(adc, 0x00, level_for_code(0)) == 2945);
+    CHECK(clocks_to_complete(adc, 0x00, level_for_code(2024)) == 3957);
+    CHECK(clocks_to_complete(adc, 0x00, level_for_code(3436)) == 4663);
+    CHECK(clocks_to_complete(adc, 0x00, level_for_code(3440)) == 4190);
+    CHECK(clocks_to_complete(adc, 0x00, level_for_code(4080)) == 4510);
 }
+
 
 TEST_CASE("uPD7002 12-bit conversion time follows the measured sawtooth",
           "[upd7002]") {
@@ -287,12 +303,12 @@ TEST_CASE("uPD7002 writes to offsets 1, 2 and 3 change nothing observable",
     CHECK(adc.eoc_level() == 0);
 
     // Nor do they disturb a conversion in progress.
-    adc.write(STATUS, 0x00);  // code 0x567 = 1383, 8-bit: 2950 + 691 = 3641
+    adc.write(STATUS, 0x00);  // code 0x567 = 1383, 8-bit: 2945 + 691 = 3636
     run_clocks(adc, 100);
     for (uint16_t offset = 1; offset <= 3; ++offset) {
         adc.write(offset, 0xFF);
     }
-    run_clocks(adc, 3540);
+    run_clocks(adc, 3535);
     CHECK_FALSE(is_complete(adc));
     run_clocks(adc, 1);
     CHECK(is_complete(adc));
