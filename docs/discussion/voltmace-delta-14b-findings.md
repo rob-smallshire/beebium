@@ -122,8 +122,18 @@ on both sockets, with the Elite-A routine as a second vector if its disassembly 
 
 ## 8. Prior art in emulators
 
-Open. The source material says nothing about MAME or others. To check before the specification:
-MAME's `bbc_analogue` and `bbc_userport` slot devices.
+Settled: there is none to read. MAME's `src/devices/bus/bbc/userport/` holds no Voltmace or keypad
+device, and its `bus/bbc/analogue/joystick.cpp` models only the Voltmace Delta 3B twin joysticks
+(checked against the MAME repository listing). B-Em and BeebEm have nothing either. The round 5
+model is written from [M] and the test vectors alone.
+
+Elite-A's Delta 14B build ([E], and the deep dive at
+`elite.bbcelite.com/deep_dives/elite-a_delta_14b_joystick_support.html`) independently confirms
+question 1: PB4 to PB7 outputs, PB0 to PB3 inputs, a clear bit in PB4 to PB6 selects the column, bit 7
+set is the side socket, a clear row bit is the pressed row, %1111 is no key. Its `b_14` routine scans
+the side socket and then the rear because it does not know which holds the handset, and reads the
+fire buttons through the keypad, not the analogue port. The Elite Compendium's Delta 14B notes tell
+players to use the rear socket and leave the side socket empty.
 
 ## 9. A handset straight into the analogue port
 
@@ -166,5 +176,5 @@ normal case (3), channel assignment and direction (5), the test vector (7), the 
 
 Open, to be written as `Decision`s and confirmed on hardware or from a clearer schematic or board
 photographs: the fire-line routing through the box when the columns are driven low from the user
-port (4), the select with PB7 as an input (3), and CB2 (6). MAME's model (8) may answer some of
-these and should be read first, as a secondary source checked against [M].
+port (4), the select with PB7 as an input (3), and CB2 (6). No emulator models the box (8), so
+these can only be settled by a clearer schematic, board photographs, or a measurement.
