@@ -9,9 +9,9 @@ source. Where a statement is an inference from the sources rather than a reading
 - **[M]** Voltmace, *Delta 14/B Handset System: Instructions for Use*, ten pages. Cited as M p.N.
 - **[S]** The adapter circuit diagram on M p.10. A faint hand-drawn scan; only block-level connections
   are legible, not the net-by-net wiring.
-- **[P]** The handset's DA-15 pinout, written for a separate hardware project that drives real Delta
-  handsets, and **[H]** that project's bench measurements of real Delta 14B and 3B units, which
-  confirm [P].
+- **[P]** The handset's DA-15 pinout as recorded by the SPItFIRE project, a joystick interface for
+  the Master Compact that drives real Delta handsets, and **[H]** SPItFIRE's bench measurements of
+  real Delta 14B and 3B units, which confirm [P].
 - **[A]** Annotated disassemblies of Voltmace's own driver programs at
   `acornaeology.uk/voltmace-delta14b-driver/` (secondary; not yet checked against the box).
 - **[E]** Mark Moxon's Delta 14B build of Elite-A, the matrix-scanning routine at
