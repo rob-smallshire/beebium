@@ -13,8 +13,9 @@
 // The analogue port: the AnaloguePort handle, the AnaloguePortDevice seam,
 // and its wiring into the uPD7002, System VIA PB4/PB5 and CB2, and the
 // CRTC's light pen input, against
-// docs/discussion/analogue-port-seam-specification.md (tests 1 to 7 and 10
-// to 11; 8, 9 and 12 come with the attachment point). Tests 10 and 11 use
+// docs/discussion/analogue-port-seam-specification.md (tests 1 to 7, 10
+// to 11, and 8; 9 is with the inspection tests, 12 with the Python
+// client's). Tests 10 and 11 use
 // MOS 1.20 only as a test vector.
 
 #include <catch2/catch_test_macros.hpp>
@@ -23,12 +24,14 @@
 #include <beebium/VideoBinding.hpp>
 #include <beebium/extension/AnaloguePort.hpp>
 #include <beebium/extension/AnaloguePortDevice.hpp>
+#include <beebium/extension/ExtensionContext.hpp>
 
 #include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 using namespace beebium;
@@ -332,4 +335,22 @@ TEST_CASE("Model B MOS 1.20 reports the device's fire buttons through OSBYTE &80
     CHECK(fire_buttons(0x20) == 1);
     CHECK(fire_buttons(0x10) == 2);
     CHECK(fire_buttons(0x00) == 3);
+}
+
+TEST_CASE("ExtensionContext hands out the analogue port", "[analogue_port][extension-context]") {
+    ModelBHardware hardware;
+    ExtensionContext context(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                             &hardware.analogue_port());
+    CHECK(context.has<AnaloguePort>());
+    CHECK(&context.get<AnaloguePort>() == &hardware.analogue_port());
+
+    ExtensionContext without;
+    CHECK_FALSE(without.has<AnaloguePort>());
+    try {
+        (void)without.get<AnaloguePort>();
+        FAIL("get<AnaloguePort>() should throw without a port");
+    } catch (const std::runtime_error& error) {
+        CHECK(std::string(error.what()) ==
+              "ExtensionContext: analogue-port not available on this machine");
+    }
 }

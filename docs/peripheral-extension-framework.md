@@ -23,7 +23,7 @@ Extension points are named attachment sites where extensions can register. Built
 | `1mhz-bus` | Built-in | Machine hardware (FRED/JIM region, 0xFC00-0xFDFF) |
 | `user-port` | Built-in | User VIA Port B, CB1/CB2 |
 | `printer-port` | Built-in | User VIA Port A, CA1/CA2: the parallel printer port (see `docs/printer-port.md`) |
-| `analogue-port` | Built-in | ADC (future) |
+| `analogue-port` | Built-in | The 15-way analogue port: the uPD7002's four channels, System VIA PB4/PB5 and LPSTB (see `docs/analogue-port.md`) |
 | `scsi` | Dynamic | Created by SCSI Host Adapter extension (future) |
 
 Which built-in extension points are available depends on the machine variant. A Model A has none (no User VIA, no 1 MHz bus). A Model B has `1mhz-bus`, `user-port`, `analogue-port`, etc. The hardware policy class registers the extension points corresponding to its physical ports.
@@ -104,7 +104,7 @@ Unclaimed FRED addresses and unclaimed JIM pages return 0xFF on read (74LS245 tr
 
 `AudioSourcePort` (`src/core/include/beebium/extension/AudioSourcePort.hpp`) follows the same pattern for sound: the hardware policy owns the port, and an extension implements `AudioFieldSource::take_field()` and registers it for one field of the machine's audio frames with `register_source(field_index, source, info)`. Fields 0 and 1 belong to the SN76489; a taken index throws. See `docs/sound-subsystem.md`.
 
-Future port types (UserPort, AnaloguePort) will follow the same pattern: a port handle class and a device callback interface, added without changing existing code.
+`AnaloguePort` (`src/core/include/beebium/extension/AnaloguePort.hpp`) follows it too: the hardware policy owns the port over the System VIA peripheral and the uPD7002, and an extension implements `AnaloguePortDevice` and attaches it with `attach(device)`. Future port types follow the same pattern: a port handle class and a device callback interface, added without changing existing code.
 
 Where one chip serves two connectors, the hardware owns a composite `ViaPeripheral` and the port handles front its halves. The User VIA is the case in point: `UserViaPeripheral` is installed on the VIA once by the hardware policy, `UserPort::attach()` places a `UserPortDevice` on its Port B / CB1 / CB2 half, and Port A / CA1 / CA2 are reserved for the printer port.
 
@@ -461,7 +461,7 @@ beebium-model-b list-extensions --attaches-to serial-port
 
 Because `attaches_to` lives in the manifest, both queries work **before any emulator is launched** -- the graphical clients run these CLI commands (parsing `--format jsonl`) the same way they run `create-preset`, since there is no server to talk to over gRPC at configuration time. (The gRPC `PeripheralExtensionService.ListExtensions` is a different view: the extensions *loaded* in a *running* server.)
 
-The point ids are the same strings used by `attaches_to()` / `provides()` / `register_extension_point()`; their display names live in `AttachmentPointCatalogue.hpp`, which is the single place to add a new point (e.g. a future `analogue-port`).
+The point ids are the same strings used by `attaches_to()` / `provides()` / `register_extension_point()`; their display names live in `AttachmentPointCatalogue.hpp`, which is the single place to add a new point.
 
 ## Developer Guide: Creating a Built-in Extension
 

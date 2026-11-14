@@ -17,6 +17,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "beebium/Machines.hpp"
+#include "beebium/extension/AnaloguePortDevice.hpp"
 #include "beebium/service/DeviceInspectionService.hpp"
 
 #include <memory>
@@ -96,4 +97,25 @@ TEST_CASE("Reading the ADC leaves EOC and CB1 as they were (#98)", "[inspection]
     CHECK_FALSE(state.busy());
     CHECK(state.status() == (0x08 | 0x20 | 0x40));
     CHECK(hardware.analogue_converter().eoc_level() == 0);
+}
+
+namespace {
+struct FixedLevels : AnaloguePortDevice {
+    uint16_t channel_level(int channel) override {
+        return static_cast<uint16_t>(0x1000 * (channel + 1) + 0x234);
+    }
+};
+}  // namespace
+
+TEST_CASE("Inspection reports a device's levels as the inputs (#98)",
+          "[inspection][upd7002][analogue_port]") {
+    auto machine = std::make_unique<ModelB>();
+    FixedLevels device;
+    machine->memory().analogue_port().attach(device);
+    const auto state = converter_state(*machine);
+    REQUIRE(state.input_levels_size() == 4);
+    CHECK(state.input_levels(0) == 0x1234);
+    CHECK(state.input_levels(1) == 0x2234);
+    CHECK(state.input_levels(2) == 0x3234);
+    CHECK(state.input_levels(3) == 0x4234);
 }

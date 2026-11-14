@@ -31,6 +31,12 @@ namespace beebium {
 // grounds a button line when its fire button is pressed; a light pen drives
 // LPSTB and uses a button line as its switch. The connector takes one plug,
 // so the port has one device; a pair of joysticks is one device.
+//
+// All three are called on the emulation thread (and channel_level() also
+// from inspection, with the emulation paused); button_lines() and
+// light_pen_strobe() on every System VIA tick and CRTC character clock. A
+// device answers them from plain members -- an atomic, or a value cached
+// from elsewhere -- and never touches a host API or takes a lock there.
 struct BEEBIUM_EXT_API AnaloguePortDevice {
     virtual ~AnaloguePortDevice() = default;
 

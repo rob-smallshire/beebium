@@ -17,6 +17,7 @@
 #include "Export.hpp"
 #include "OneMHzBusPort.hpp"
 #include "PeripheralExtension.hpp"
+#include "AnaloguePort.hpp"
 #include "PrinterPort.hpp"
 #include "SerialPort.hpp"
 #include "UserPort.hpp"
@@ -49,14 +50,16 @@ public:
                              Indicators* indicators = nullptr,
                              SerialPort* serial_port = nullptr,
                              PrinterPort* printer_port = nullptr,
-                             AudioSourcePort* audio_source_port = nullptr)
+                             AudioSourcePort* audio_source_port = nullptr,
+                             AnaloguePort* analogue_port = nullptr)
         : one_mhz_bus_port_(one_mhz_bus_port)
         , user_port_(user_port)
         , tube_socket_(tube_socket)
         , indicators_(indicators)
         , serial_port_(serial_port)
         , printer_port_(printer_port)
-        , audio_source_port_(audio_source_port) {}
+        , audio_source_port_(audio_source_port)
+        , analogue_port_(analogue_port) {}
 
     // Type-safe port handle access.
     template<typename T>
@@ -97,6 +100,12 @@ public:
                     "ExtensionContext: audio output not available on this machine");
             }
             return *audio_source_port_;
+        } else if constexpr (std::is_same_v<T, AnaloguePort>) {
+            if (!analogue_port_) {
+                throw std::runtime_error(
+                    "ExtensionContext: analogue-port not available on this machine");
+            }
+            return *analogue_port_;
         } else {
             static_assert(!std::is_same_v<T, T>, "Unknown port type");
         }
@@ -117,6 +126,8 @@ public:
             return printer_port_ != nullptr;
         } else if constexpr (std::is_same_v<T, AudioSourcePort>) {
             return audio_source_port_ != nullptr;
+        } else if constexpr (std::is_same_v<T, AnaloguePort>) {
+            return analogue_port_ != nullptr;
         } else {
             return false;
         }
@@ -164,6 +175,7 @@ private:
     SerialPort* serial_port_;
     PrinterPort* printer_port_;
     AudioSourcePort* audio_source_port_;
+    AnaloguePort* analogue_port_;
     std::unordered_map<std::string, PeripheralExtension*> providers_;
 };
 

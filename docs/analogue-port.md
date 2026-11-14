@@ -1,13 +1,14 @@
 # The analogue port and its converter
 
-The BBC Micro's analogue-to-digital converter as Beebium builds it: the NEC
-uPD7002 at &FEC0-&FEDF, its end-of-conversion line into the System VIA, and
-the inspection RPC that reads it. This is round 2 of the analogue port work.
-Round 3 adds the `AnaloguePort` handle, the `AnaloguePortDevice` seam and the
-`analogue-port` attachment point, in the shape of the printer and user ports.
-Round 4 adds the first device, a joystick adapter. The tracking issue is #98.
+The BBC Micro's analogue port and the converter behind it as Beebium builds
+them: the NEC uPD7002 at &FEC0-&FEDF, its end-of-conversion line into the
+System VIA, the inspection RPC that reads it, and the port's handle, device
+seam and `analogue-port` attachment point, in the shape of the printer and
+user ports. The first device, a joystick adapter, comes next. The tracking
+issue is #98.
 
-The specification is `docs/discussion/upd7002-adc-specification.md`. The
+The specifications are `docs/discussion/upd7002-adc-specification.md` (the
+chip) and `docs/discussion/analogue-port-seam-specification.md` (the port). The
 measurements behind the timing model come from the round 1 survey and from
 `docs/discussion/analogue-port-hardware-trials.md`. The disc that runs those
 trials on real hardware is built by `tools/hardware-trials/adc/`.
@@ -21,9 +22,10 @@ trials on real hardware is built by `tools/hardware-trials/adc/`.
 | The high-byte read resetting EOC; reads of the other offsets having no side effects | The read error when a read coincides with the end of a conversion |
 | A write during a conversion restarting it | The integration itself: the input is sampled once, at the start write |
 | Conversion time in 1 MHz clocks, as the measured sawtooth in both modes | Per-chip boundary shifts, the overlap band past each boundary, jitter and noise; the lower accuracy of 8-bit mode |
-| EOC as a level on System VIA CB1, with the VIA doing the edge detection | The fire buttons on PB4 and PB5, which still read "not pressed" |
-| No reset on Break; power-on state on a power cycle | The light pen strobe on CB2 (#210) |
+| EOC as a level on System VIA CB1, with the VIA doing the edge detection | A device driving the button lines as outputs (the Bitstik does) |
+| No reset on Break; power-on state on a power cycle | A light pen device (#210); the strobe is wired, the pen is not |
 | An undriven input reads the centre of the range, &8000 | A wandering, machine-dependent unplugged value |
+| The port: one device's channel levels, button lines (PB4, PB5) and light pen strobe (CB2 and the CRTC) | Any shipped device; the tests use stubs |
 
 Nothing in the model knows what any MOS does with the chip. MOS 1.20 appears
 only in tests, as a test vector.
@@ -163,24 +165,83 @@ whatever drives the inputs and are kept.
 
 ## Inputs and the unplugged port
 
-In this round the chip has a direct input seam,
-`set_input_level(channel, level)`, used by the C++ tests. `level` is a 16-bit
-fraction of VREF: 0 is analogue ground, &FFFF is VREF. The 12-bit code is
-`level >> 4`. Round 3 moves the source of these levels behind the analogue
-port's device seam; the chip's interface does not change.
+The chip samples an input at the start of each conversion. Where the level
+comes from is an `AnalogueInputSource`, declared beside the chip: the
+analogue port gives the chip one that forwards to the attached device, so
+the chip includes nothing from `extension/`. With no source the chip uses
+its own stored levels, set with `set_input_level(channel, level)` (the C++
+unit tests do). `level` is a 16-bit fraction of VREF: 0 is analogue ground,
+&FFFF is VREF. The 12-bit code is `level >> 4`.
 
 With nothing driving a channel its level is &8000. Real machines read a
 wandering, machine-dependent value with nothing plugged in: about &7300 on a
 Master, and about &9500-&99E0 and &C800-&CBA0 on two Model Bs. There is no
 single right value, and the centre upsets the fewest programs.
 
+## The port model
+
+`AnaloguePort` (`src/core/include/beebium/extension/AnaloguePort.hpp`) is the
+handle, owned by every Model B family hardware policy over its
+`SystemViaPeripheral` and its `Upd7002`, and exposed as `analogue_port()`
+(`HasAnaloguePort` detects it). The port is one connector, so it takes one
+device: `attach(device)` a second time throws, and `is_occupied()` reports
+whether one is there. Attaching:
+
+- gives the converter an input source that asks the device's
+  `channel_level(channel)`, once per conversion, at the start write;
+- gives the System VIA peripheral the device for port B: its
+  `button_lines()` in bits 4 and 5 (PB4 and PB5, which the connector calls PB0
+  and PB1), active low, the other port B bits unchanged;
+- drives System VIA CB2 from the device's `light_pen_strobe()` on every VIA
+  tick, and passes the same level to the CRTC's light pen input on every
+  character clock through `VideoBinding`, so the VIA's edge detector and the
+  CRTC's R16/R17 latch both see the strobe's edges.
+
+With no device attached nothing observable changes: PB4 and PB5 read 1 (the
+pull-ups), CB2 is left as the VIA has it, the CRTC sees no strobe, and every
+channel reads the undriven &8000.
+
+The point is `analogue-port` in the attachment point catalogue, "Analogue
+Port", occupancy 0..1. Machines with the port list it among their own
+points, and an extension reaches the handle with
+`ExtensionContext::get<AnaloguePort>()` (and `has<AnaloguePort>()`).
+
+## Writing a device
+
+A device implements `AnaloguePortDevice`
+(`src/core/include/beebium/extension/AnaloguePortDevice.hpp`) and attaches in
+its `init()`:
+
+```cpp
+void init(beebium::ExtensionContext& ctx) override {
+    ctx.get<beebium::AnaloguePort>().attach(device_);
+}
+```
+
+- `channel_level(channel)`: the level on channel 0 to 3 as a fraction of VREF.
+  A joystick puts stick 1 on channels 0 (X) and 1 (Y) and stick 2 on 2 and 3,
+  low for right and down. Return `UNDRIVEN_LEVEL` for a channel the device
+  does not drive.
+- `button_lines()`: bits 4 and 5 as the VIA reads them, 0 while a button is
+  pressed. The default is 0x30, nothing pressed.
+- `light_pen_strobe()`: 1 while the strobe is asserted. The default is 0.
+
+All three run on the emulation thread (`channel_level()` also from
+inspection, with the emulation paused). `button_lines()` and
+`light_pen_strobe()` run on every System VIA tick and CRTC character clock,
+so a device answers them from plain members, an atomic or a value cached
+from elsewhere, and never touches a host API or takes a lock there. A device
+that takes input from a client or a host device updates those members from
+its own thread.
+
 ## Inspection
 
 `DeviceInspection.GetAnalogueConverterState` reads the chip under quiesce
 without side effects. It returns the status byte, the 16-bit result, the
-channel, mode and flag, busy, the EOC level as CB1 sees it, the 1 MHz clocks
-left in a conversion (0 when idle) and the four input levels. A machine
-without a converter reports `present = false`.
+channel, mode and flag as last written, busy, the EOC level as CB1 sees it,
+the 1 MHz clocks left in a conversion (0 when idle) and the four input
+levels, which are what the chip would sample now: the device's levels when
+one is attached. A machine without a converter reports `present = false`.
 
 The debugger's memory reads of &FEC0-&FEDF go to the chip's own `peek()`
 through the memory map, so peeking the high byte does not reset EOC.
@@ -191,8 +252,11 @@ through the memory map, so peeking the high byte does not reset EOC.
 |---|---|
 | `tests/test_upd7002.cpp` | The chip alone: power-on state, the control bits latched at completion, busy and EOC, the previous result's top bits, the result layout in both modes, the high-byte read, peek, restart, both timing tables against the measured times, the undriven value, ignored writes |
 | `tests/test_upd7002_model_b.cpp` | The mirror on all seven Model B family policies, peek through the machine, CB1 under both edges, the reset rules. With MOS 1.20 as a test vector: the first conversion (256 ms after power-on, once the MOS has cleared RAM), the AUG's ADC workspace (&2BA-&2BD) filling with each channel's level, and a CB1 edge every 11.3 ms while the MOS cycles the channels |
-| `tests/test_device_inspection_adc.cpp` | The inspection RPC, including that it leaves EOC alone |
+| `tests/test_analogue_port.cpp` | The port: every policy's handle, attach-once, a conversion sampling the device once per conversion, the no-device level, the button lines on PB4 and PB5, the strobe into CB2 and into the CRTC's R16/R17, `ExtensionContext`. With MOS 1.20 as a test vector: the ADC workspace filling from the device, and OSBYTE &80 reporting its fire buttons |
+| `tests/test_device_inspection_adc.cpp` | The inspection RPC, including that it leaves EOC alone and reports a device's levels |
+| `tests/test_preset_resolution.cpp`, `tests/test_attachment_points.cpp` | Every Model B family machine offers `analogue-port`; the catalogue entry |
 | `clients/beebium-python-client/tests/test_analogue_converter.py` | From BBC BASIC, loaded from a tokenised disc: `ADVAL(1)` to `ADVAL(4)` read &8000 with no fire button pressed, and `?&FEC0` reads the chip cycling all four channels in 12-bit mode, never the old open-bus &20 |
 
-There is no Python-side input hook yet, so the Python tests see only
-undriven inputs.
+`clients/beebium-python-client/tests/test_analogue_port.py` checks the
+point through the client's attachment-point listing. There is no Python-side
+input hook yet, so the Python tests see only undriven inputs.

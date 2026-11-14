@@ -67,8 +67,10 @@ private:
 
 The attachment-point names are the ubiquitous-language strings from
 `docs/sideways-slots.md` / the extension framework: `serial-port`,
-`user-port`, `printer-port`, `1mhz-bus`, `tube`, `scsi`. `ctx.get<T>()` hands you the typed
-handle for a point you declared in `attaches_to()`.
+`user-port`, `printer-port`, `analogue-port`, `1mhz-bus`, `tube`, `scsi`. `ctx.get<T>()` hands
+you the typed handle for a point you declared in `attaches_to()`: for the analogue port,
+`ctx.get<beebium::AnaloguePort>().attach(device)` with an `AnaloguePortDevice` (see
+`docs/analogue-port.md`).
 
 Configuration arrives before `init()`. The framework parses
 `--my-extension key=value:key2=value2` (or the equivalent preset entry) into a

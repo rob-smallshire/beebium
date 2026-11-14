@@ -36,8 +36,8 @@ namespace beebium {
 //
 // The point *ids* are the same strings used by attaches_to() / provides() and
 // register_extension_point(). This is the single source of truth for their
-// display names. It is deliberately open to extension: future points (e.g. an
-// "analogue-port" for joysticks) just gain an entry here.
+// display names. It is deliberately open to extension: future points just
+// gain an entry here.
 struct AttachmentPoint {
     std::string id;            // e.g. "serial-port" (matches attaches_to() ids)
     std::string display_name;  // e.g. "Serial Port"
@@ -55,6 +55,8 @@ inline const std::vector<AttachmentPoint>& attachment_point_catalogue() {
          "The user port, a parallel connector for add-ons such as a real-time clock.", 0, 1},
         {"printer-port", "Printer Port",
          "The parallel printer port, a Centronics connector for a printer.", 0, 1},
+        {"analogue-port", "Analogue Port",
+         "The 15-way analogue port, for joysticks, paddles and a light pen.", 0, 1},
         {"1mhz-bus", "1 MHz Bus",
          "The 1 MHz bus, the expansion connector for add-ons such as a SCSI host adapter.", 0, std::nullopt},
         {"tube", "Coprocessor",

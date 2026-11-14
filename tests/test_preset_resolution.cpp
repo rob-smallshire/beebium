@@ -20,6 +20,7 @@
 
 #include "test_temp_paths.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <set>
 #include <string_view>
@@ -279,4 +280,23 @@ TEST_CASE("the preset key registry names every key the loader accepts, once",
     for (const auto& info : kPresetKeys) {
         CHECK(info.written == (info.key != PresetKey::AutoBoot));
     }
+}
+
+namespace {
+template<typename Memory>
+bool offers_analogue_port() {
+    const auto points = beebium::server::machine_attachment_points<Memory>();
+    return std::find(points.begin(), points.end(), "analogue-port") != points.end();
+}
+}  // namespace
+
+TEST_CASE("every Model B family machine offers the analogue-port attachment point (#98)",
+          "[preset-resolution][analogue_port]") {
+    CHECK(offers_analogue_port<beebium::ModelBHardware>());
+    CHECK(offers_analogue_port<beebium::ModelBPlusHardware>());
+    CHECK(offers_analogue_port<beebium::ModelBPlus128KHardware>());
+    CHECK(offers_analogue_port<beebium::ModelBRomRamBoardHardware>());
+    CHECK(offers_analogue_port<beebium::ModelBAtplSidewiseHardware>());
+    CHECK(offers_analogue_port<beebium::ModelBWatfordRomRamHardware>());
+    CHECK(offers_analogue_port<beebium::ModelBIntegraBHardware>());
 }

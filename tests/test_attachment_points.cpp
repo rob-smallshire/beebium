@@ -29,6 +29,7 @@ TEST_CASE("attachment-point catalogue gives display names and occupancy",
     CHECK(attachment_point_display_name("serial-port") == "Serial Port");
     CHECK(attachment_point_display_name("user-port") == "User Port");
     CHECK(attachment_point_display_name("printer-port") == "Printer Port");
+    CHECK(attachment_point_display_name("analogue-port") == "Analogue Port");
     CHECK(attachment_point_display_name("1mhz-bus") == "1 MHz Bus");
     CHECK(attachment_point_display_name("tube") == "Coprocessor");
     CHECK(attachment_point_display_name("scsi") == "SCSI Bus");
@@ -40,6 +41,8 @@ TEST_CASE("attachment-point catalogue gives display names and occupancy",
     CHECK(find_attachment_point("tube")->max_occupancy == 1);
     CHECK(find_attachment_point("printer-port")->min_occupancy == 0);
     CHECK(find_attachment_point("printer-port")->max_occupancy == 1);
+    CHECK(find_attachment_point("analogue-port")->min_occupancy == 0);
+    CHECK(find_attachment_point("analogue-port")->max_occupancy == 1);
     CHECK(find_attachment_point("1mhz-bus")->max_occupancy == std::nullopt);  // unbounded
     CHECK(find_attachment_point("scsi")->max_occupancy == 7);
 
@@ -51,9 +54,9 @@ TEST_CASE("attachment-point catalogue gives display names and occupancy",
 TEST_CASE("attachment-point display name falls back to the id",
           "[extension][attachment-points]") {
     // An id not (yet) in the catalogue returns itself, so callers always have
-    // something to show (e.g. a future "analogue-port").
-    CHECK(find_attachment_point("analogue-port") == nullptr);
-    CHECK(attachment_point_display_name("analogue-port") == "analogue-port");
+    // something to show (e.g. a future "cartridge-port").
+    CHECK(find_attachment_point("cartridge-port") == nullptr);
+    CHECK(attachment_point_display_name("cartridge-port") == "cartridge-port");
 }
 
 TEST_CASE("manifest parser reads the attaches_to array", "[extension][manifest]") {
