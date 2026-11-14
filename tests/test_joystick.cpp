@@ -125,7 +125,7 @@ TEST_CASE("The joystick is a built-in extension on the analogue port", "[joystic
     CHECK(entry->manifest.parameters.empty());
 }
 
-TEST_CASE("--joystick attaches a joystick to a Model B", "[joystick][cli]") {
+TEST_CASE("A Model B started with --joystick has a joystick attached", "[joystick][cli]") {
     if (!roms_available()) SKIP("ROMs not available");
     server::RomPaths::set_rom_directory(BEEBIUM_ROM_DIR);
     using MachineType = ModelB;
