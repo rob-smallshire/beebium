@@ -96,8 +96,9 @@ public:
 };
 ```
 
-One `ControllerRegistry` per machine, owned where the ports are owned, passed into `ExtensionContext`
-with `get<ControllerRegistry>()` and `has<>()` like the port handles. It exists on every machine, so the
+One `ControllerRegistry` per machine, owned by the assembled machine beside the extension registry
+(not by the hardware policies, since it is per machine and not per variant), passed into
+`ExtensionContext` with `get<ControllerRegistry>()` and `has<>()` like the port handles. It exists on every machine, so the
 service always has something to list, and an empty list is the answer with no controller attached.
 Lookups happen on the gRPC thread only; registration happens at assembly time before the emulation
 thread runs, so the registry needs no lock. If the framework can attach after start, say so in the
