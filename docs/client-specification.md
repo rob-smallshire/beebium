@@ -2298,9 +2298,7 @@ client's, applied before a value is sent. The client never special-cases a
 controller by its id or name; it presents and maps whatever is published, using each
 control's display name and group. Control ids are stable, so a mapping the user
 keeps refers to them. A controller keeps its values across Break and power-on, as
-the device in a person's hand would, so on focus loss the client returns what it
-holds to rest (axes to the centre, buttons released) the way it releases held keys
-(rule R10, 7.6).
+the device in a person's hand would.
 
 Rests on: `controller.proto ControllerService.ListControllers` (the controllers and
 their controls, when the machine connects and when its peripherals change),
@@ -2313,19 +2311,18 @@ Conformance:
   in the device's terms, axes 0 to 65535; dead zone, inversion and calibration are
   applied client-side; a refused `SetControls` (an unknown controller or control, a
   value of the wrong kind, an axis above 65535) is reported with the server's sentence
-  in the registers of 3.4, and the client assumes nothing was applied; held controls
-  return to rest on focus loss.
+  in the registers of 3.4, and the client assumes nothing was applied.
 - LATITUDE: which host devices a client can map; the mapping user interface and
   where mappings are kept; how often values are sent while a stick moves.
 - Deferred to the client rounds: the platform input layer (GameController on macOS,
-  SDL or evdev on Linux) and the mapping file format.
+  SDL or evdev on Linux), the mapping file format, and what a client does with held
+  controls on focus loss.
 
 Scenarios: a Model B with no joystick -> `ListControllers` is empty and the client
 offers no controller mapping. Add the joystick extension -> one controller,
 "Joystick", with six controls in two groups. Push a mapped host stick right and
 press its button -> `SetControls` sends the mapped axis and `fire1`, and `ADVAL(0)
-AND 1` in BBC BASIC reads 1. Leave the window with the button held -> the client
-sends `fire1` released.
+AND 1` in BBC BASIC reads 1.
 
 
 ## Appendix A. Server services used, by capability
