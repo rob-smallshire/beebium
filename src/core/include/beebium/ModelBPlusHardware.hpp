@@ -435,8 +435,8 @@ public:
             make_region<0xFE34, 0xFE37, Mirror<0x03>>(std::declval<AccconRegister&>()),
             make_region<0xFE80, 0xFE83, Mirror<0x03>>(std::declval<DiscControlRegister&>()),
             make_region<0xFE84, 0xFE87, Mirror<0x03>>(std::declval<WD1770&>()),
-            make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(std::declval<EconetAdlcRegion&>()),
-            make_region<0xFEC0, 0xFEDF, Mirror<0x03>>(std::declval<Upd7002&>()),                 // uPD7002 ADC        // Econet ADLC
+            make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(std::declval<EconetAdlcRegion&>()),        // Econet ADLC
+            make_region<0xFEC0, 0xFEDF, Mirror<0x03>>(std::declval<Upd7002&>()),                 // uPD7002 ADC
             make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(std::declval<TubeSocket&>()),              // Tube ULA
             make_region<0x0000, 0x7FFF>(std::declval<Ram<32768>&>()),
             make_region<0x8000, 0xBFFF>(std::declval<SidewaysType&>()),
@@ -1368,8 +1368,8 @@ private:
             make_region<0xFE34, 0xFE37, Mirror<0x03>>(acccon_reg),
             make_region<0xFE80, 0xFE83, Mirror<0x03>>(disc_control_reg),
             make_region<0xFE84, 0xFE87, Mirror<0x03>>(disc_controller),
-            make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(econet_adlc_region_),
-            make_region<0xFEC0, 0xFEDF, Mirror<0x03>>(analogue_converter_),       // uPD7002 ADC       // Econet ADLC
+            make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(econet_adlc_region_),       // Econet ADLC
+            make_region<0xFEC0, 0xFEDF, Mirror<0x03>>(analogue_converter_),       // uPD7002 ADC
             make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(tube_socket),               // Tube ULA
             make_region<0x0000, 0x7FFF>(main_ram),
             make_region<0x8000, 0xBFFF>(sideways),
