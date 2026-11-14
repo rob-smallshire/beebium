@@ -114,6 +114,13 @@ uint64_t boot_to_basic(ModelB& machine, uint64_t max_cycles = 10'000'000) {
                 machine.step();
                 ++cycles;
             }
+            // Finish on an instruction boundary, so a caller can set_pc():
+            // stopping on a fixed cycle count lands wherever the guest's
+            // interrupts (VIA timers, the ADC's end of conversion) put it.
+            while (!M6502_IsAboutToExecute(&machine.cpu())) {
+                machine.step();
+                ++cycles;
+            }
             return cycles;
         }
     }
@@ -132,6 +139,13 @@ uint64_t boot_to_basic_bplus(ModelBPlus& machine, uint64_t max_cycles = 10'000'0
         if ((ier & 0x81) == 0x81) {
             // Give it more time to fully initialize
             for (int i = 0; i < 100000; ++i) {
+                machine.step();
+                ++cycles;
+            }
+            // Finish on an instruction boundary, so a caller can set_pc():
+            // stopping on a fixed cycle count lands wherever the guest's
+            // interrupts (VIA timers, the ADC's end of conversion) put it.
+            while (!M6502_IsAboutToExecute(&machine.cpu())) {
                 machine.step();
                 ++cycles;
             }

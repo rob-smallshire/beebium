@@ -911,6 +911,15 @@ add_executable(test_upd7002 test_upd7002.cpp)
 target_link_libraries(test_upd7002 PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_upd7002)
 
+# The uPD7002 on the Model B family memory map and System VIA, with MOS 1.20
+# as a test vector (#98)
+add_executable(test_upd7002_model_b test_upd7002_model_b.cpp)
+target_link_libraries(test_upd7002_model_b PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_upd7002_model_b PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_upd7002_model_b)
+
 # SN76489 sampled-sound playback regression tests (issue #82)
 add_executable(test_sn76489_sample_playback test_sn76489_sample_playback.cpp)
 target_link_libraries(test_sn76489_sample_playback PRIVATE beebium_core Catch2::Catch2WithMain)

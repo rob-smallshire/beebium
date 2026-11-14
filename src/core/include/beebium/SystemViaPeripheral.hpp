@@ -17,6 +17,7 @@
 #include "TypeAheadQueue.hpp"
 #include "Via6522.hpp"
 #include "devices/Sn76489.hpp"
+#include "devices/Upd7002.hpp"
 #include "indicators/IndicatorFilter.hpp"
 #include "indicators/Indicators.hpp"
 #include <chrono>
@@ -197,8 +198,11 @@ public:
 
     void update_control_lines(uint8_t& ca1, uint8_t& ca2,
                               uint8_t& cb1, uint8_t& cb2) override {
-        (void)cb1;
         (void)cb2;
+
+        // CB1: the uPD7002's EOC pin, a level. The VIA does the edge
+        // detection under its own PCR; nothing here looks for edges.
+        cb1 = analogue_converter_ ? analogue_converter_->eoc_level() : 1;
 
         // CA1: VSYNC from CRTC
         // jsbeeb convention: CA1 high when vsync active, low when inactive.
@@ -241,7 +245,6 @@ public:
             auto_scan_column_ = (auto_scan_column_ + 1) & 0x0F;
         }
 
-        // CB1: ADC end of conversion - not implemented
         // CB2: Light pen strobe - not implemented
     }
 
@@ -305,6 +308,7 @@ public:
 
     // Sound chip integration (optional)
     void set_sound_chip(Sn76489* chip) { sound_chip_ = chip; }
+    void set_analogue_converter(const Upd7002* adc) { analogue_converter_ = adc; }
     Sn76489* sound_chip() const { return sound_chip_; }
 
 private:
@@ -371,6 +375,7 @@ private:
 
     // Sound chip integration (optional)
     Sn76489* sound_chip_ = nullptr;
+    const Upd7002* analogue_converter_ = nullptr;
 };
 
 } // namespace beebium

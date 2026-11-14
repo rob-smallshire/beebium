@@ -561,7 +561,9 @@ TEST_CASE("unmapped_read_value function", "[memory_map][open_bus]") {
         REQUIRE(unmapped_read_value(0xFE60, 0x42, OpenBusMode::Accurate) == 0x00);
         REQUIRE(unmapped_read_value(0xFE7F, 0x42, OpenBusMode::Accurate) == 0x00);
 
-        // ADC region (0xFEC0-0xFEDF is 1MHz)
+        // ADC region (0xFEC0-0xFEDF is 1MHz). Like the VIA regions above it is
+        // mapped (to the uPD7002); this checks only the speed classification.
+        // What the chip reads there is tested in test_upd7002_model_b.cpp.
         REQUIRE(unmapped_read_value(0xFEC0, 0x42, OpenBusMode::Accurate) == 0x00);
         REQUIRE(unmapped_read_value(0xFEDF, 0x42, OpenBusMode::Accurate) == 0x00);
     }

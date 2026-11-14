@@ -43,6 +43,8 @@
 #include "devices/Ram.hpp"
 #include "devices/Rom.hpp"
 #include "devices/Sn76489.hpp"
+#include "devices/Upd7002.hpp"
+#include "ClockBinding.hpp"
 #include "devices/VideoUla.hpp"
 #include "disc/DiscDrive.hpp"
 #include "disc/WD1770.hpp"
@@ -241,6 +243,10 @@ public:
     AddressableLatch addressable_latch;
     SystemViaPeripheral system_via_peripheral{addressable_latch, indicators};
 
+    // NEC uPD7002 analogue-to-digital converter at &FEC0-&FEDF. Its EOC pin
+    // drives System VIA CB1. It has no reset pin, so Break leaves it alone.
+    Upd7002 analogue_converter_;
+
     // User VIA peripheral: the composite installed on user_via, carrying the
     // User Port (Port B, CB1/CB2) and printer port (Port A, CA1/CA2) halves.
     UserViaPeripheral user_via_peripheral;
@@ -429,7 +435,8 @@ public:
             make_region<0xFE34, 0xFE37, Mirror<0x03>>(std::declval<AccconRegister&>()),
             make_region<0xFE80, 0xFE83, Mirror<0x03>>(std::declval<DiscControlRegister&>()),
             make_region<0xFE84, 0xFE87, Mirror<0x03>>(std::declval<WD1770&>()),
-            make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(std::declval<EconetAdlcRegion&>()),        // Econet ADLC
+            make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(std::declval<EconetAdlcRegion&>()),
+            make_region<0xFEC0, 0xFEDF, Mirror<0x03>>(std::declval<Upd7002&>()),                 // uPD7002 ADC        // Econet ADLC
             make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(std::declval<TubeSocket&>()),              // Tube ULA
             make_region<0x0000, 0x7FFF>(std::declval<Ram<32768>&>()),
             make_region<0x8000, 0xBFFF>(std::declval<SidewaysType&>()),
@@ -446,6 +453,7 @@ public:
     {
         // Connect internal peripheral to system VIA
         system_via.set_peripheral(&system_via_peripheral);
+        system_via_peripheral.set_analogue_converter(&analogue_converter_);
         user_via.set_peripheral(&user_via_peripheral);
         // Connect sound chip to system VIA peripheral
         system_via_peripheral.set_sound_chip(&sound_chip);
@@ -592,6 +600,7 @@ public:
     // Power-on reset: clear RAM and reset all devices including System VIA
     // This is the original reset() behavior, equivalent to powering off and on.
     void reset() {
+        analogue_converter_.power_on();
         main_ram.clear();
         shadow_ram.clear();
         andy_ram.clear();
@@ -623,6 +632,7 @@ public:
     // Note: Hardware does NOT distinguish Ctrl-Break from Break - MOS checks
     // the keyboard matrix during reset and clears VIA config if Ctrl is held.
     void soft_reset() {
+        // The uPD7002 has no reset pin: a conversion in flight completes.
         // Do NOT reset system_via - this is how MOS detects soft vs hard reset
         user_via.reset();
         crtc.reset();
@@ -710,6 +720,9 @@ public:
         // Tick 1 MHz bus devices
         one_mhz_bus_.tick();
 
+        // Tick the analogue-to-digital converter (1 MHz)
+        make_clock_binding(analogue_converter_).tick_falling();
+
         return nmi;
     }
 
@@ -719,6 +732,8 @@ public:
 
     UserPort& user_port() { return user_port_; }
     PrinterPort& printer_port() { return printer_port_; }
+    Upd7002& analogue_converter() { return analogue_converter_; }
+    const Upd7002& analogue_converter() const { return analogue_converter_; }
     SerialPort& serial_port() { return serial_port_; }
 
     // Paging register accessors for testing
@@ -1353,7 +1368,8 @@ private:
             make_region<0xFE34, 0xFE37, Mirror<0x03>>(acccon_reg),
             make_region<0xFE80, 0xFE83, Mirror<0x03>>(disc_control_reg),
             make_region<0xFE84, 0xFE87, Mirror<0x03>>(disc_controller),
-            make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(econet_adlc_region_),       // Econet ADLC
+            make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(econet_adlc_region_),
+            make_region<0xFEC0, 0xFEDF, Mirror<0x03>>(analogue_converter_),       // uPD7002 ADC       // Econet ADLC
             make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(tube_socket),               // Tube ULA
             make_region<0x0000, 0x7FFF>(main_ram),
             make_region<0x8000, 0xBFFF>(sideways),
