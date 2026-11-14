@@ -122,8 +122,40 @@ specification unless hardware says otherwise: the device leaves the user port's 
   %1101 → row 2, %1011 → row 1, %0111 → row 0. Pressing key 7 gives %1101 on the &50 strobe. M p.4
   also has a six-strobe scan with `DATA &E0,&D0,&B0,&60,&50,&30`, side then rear.
 
-The specification's MOS-independent test vector is a disc-loaded BASIC program in PROCPB's shape run
-on both sockets, with the Elite-A routine as a second vector if its disassembly is confirmed.
+### Voltmace's own drivers, from the annotated disassembly [A]
+
+Three resident drivers, all relocated to &0A00: KEYPAD (matrix only, polled from the vsync event),
+JOYSTIK driver A (stick only, analogue) and JOYSTIK driver B (stick plus matrix cells). Across all
+three the only VIA registers touched are the user VIA's ORB/IRB (&FE60) and DDRB (&FE62). Nothing
+touches the System VIA directly, nor the user VIA's ACR, PCR, IFR, IER, T1 or T2.
+
+- **KEYPAD's scan** (`scan_matrix`): `DDRB = &F0`; six strobes in the order &60, &50, &30 (PB7 = 0)
+  then &E0, &D0, &B0 (PB7 = 1); after each strobe write to &FE60 it reads &FE60 back **immediately**,
+  with no delay instruction between; row masks &08, &04, &02, &01 for rows 0 to 3; a clear bit is a
+  pressed key. Its own cell index is column × 4 + row, cells 0 to 11 for the PB7 = 0 handset and 12 to
+  23 for the other, which is the same matrix as the manual's key = 3 × row + column numbered the other
+  way (row 0 on PB3 is keys 0, 1, 2 in both). A pre-probe writes &00 (all columns low, PB7 = 0) and
+  reads, then &80 and reads, treating &0F and &8F as idle. It reports one key per frame, the first
+  found, and auto-repeats after 24 frames then every 4.
+- **Driver A** reads the fire buttons through OSBYTE &80 X = 0 (`ADVAL(0)`), masks &1 for fire 0 and
+  &2 for fire 1, channels 1 and 2 for the stick, and never writes the user port. So with the box
+  fitted it relies on the user having driven the columns low first, as M p.1 instructs.
+- **Driver B** reads one mapped cell per `INKEY` call: `DDRB = &F0`, write the cell's strobe, read
+  &FE60 back immediately, test the cell's row bit. It never reads `ADVAL(0)`; fire is just another
+  cell.
+- No driver leaves PB7 as an input while reading, none uses T1's PB7 output mode, none touches CB1
+  or CB2.
+- The matrix has no diodes, so three keys forming an L can ghost a fourth; the drivers do nothing
+  about it. The emulation need not model ghosting for round 5 (`Decision`), but it should not be
+  prevented by the design.
+
+**Consequence for the model.** A strobe written to the user VIA must be visible on the very next read
+of the same register. `UserPortDevice::update_port_b(output, ddr)` is called on the write, so the
+device must compute its row lines from the new column state at that call, with no latency.
+
+The specification's MOS-independent test vectors are a disc-loaded BASIC program in PROCPB's shape run
+on both sockets, and KEYPAD's six-strobe scan with the immediate read-back, which the Catch2 tests
+reproduce in 6502 code loaded from a disc.
 
 ## 8. Prior art in emulators
 
@@ -181,5 +213,7 @@ normal case (3), channel assignment and direction (5), the test vector (7), the 
 
 Open, to be written as `Decision`s and confirmed on hardware or from a clearer schematic or board
 photographs: the fire-line routing through the box when the columns are driven low from the user
-port (4), the select with PB7 as an input (3), and CB2 (6). No emulator models the box (8), so
+port (4), the select with PB7 as an input (3), and CB2 (6). Voltmace's own drivers never depend on
+any of the three: they keep PB7 an output, ignore CB1 and CB2, and driver A's fire reading goes
+through `ADVAL(0)` only after the manual's set-up commands. No emulator models the box (8), so
 these can only be settled by a clearer schematic, board photographs, or a measurement.
