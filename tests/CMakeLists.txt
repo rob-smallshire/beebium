@@ -847,6 +847,14 @@ add_executable(test_printer_port test_printer_port.cpp)
 target_link_libraries(test_printer_port PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_printer_port)
 
+# The analogue port handle, its device seam and their wiring (#98)
+add_executable(test_analogue_port test_analogue_port.cpp)
+target_link_libraries(test_analogue_port PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_analogue_port PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_analogue_port)
+
 add_executable(test_centronics_receiver test_centronics_receiver.cpp)
 target_link_libraries(test_centronics_receiver PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_centronics_receiver)

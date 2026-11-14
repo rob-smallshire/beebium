@@ -44,6 +44,7 @@
 #include "devices/UserRomSocketBank.hpp"
 #include "devices/Sn76489.hpp"
 #include "devices/Upd7002.hpp"
+#include "extension/AnaloguePort.hpp"
 #include "ClockBinding.hpp"
 #include "devices/VideoUla.hpp"
 #include "disc/DiscDrive.hpp"
@@ -287,6 +288,10 @@ public:
     // NEC uPD7002 analogue-to-digital converter at &FEC0-&FEDF. Its EOC pin
     // drives System VIA CB1. It has no reset pin, so Break leaves it alone.
     Upd7002 analogue_converter_;
+
+    // Analogue port handle: attach point for an AnaloguePortDevice (must be
+    // declared after system_via_peripheral and analogue_converter_).
+    AnaloguePort analogue_port_{system_via_peripheral, analogue_converter_};
 
     // User VIA peripheral: the composite installed on user_via, carrying the
     // User Port (Port B, CB1/CB2) and printer port (Port A, CA1/CA2) halves.
@@ -775,6 +780,9 @@ public:
     PrinterPort& printer_port() { return printer_port_; }
     Upd7002& analogue_converter() { return analogue_converter_; }
     const Upd7002& analogue_converter() const { return analogue_converter_; }
+    AnaloguePort& analogue_port() { return analogue_port_; }
+    // The analogue port's light pen strobe, for the CRTC (VideoBinding).
+    uint8_t light_pen_strobe() { return system_via_peripheral.light_pen_strobe(); }
     SerialPort& serial_port() { return serial_port_; }
 
     // Paging register accessors for testing

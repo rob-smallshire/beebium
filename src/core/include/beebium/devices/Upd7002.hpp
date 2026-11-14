@@ -104,6 +104,15 @@ constexpr uint32_t conversion_clocks(bool twelve_bit, uint16_t code12) {
 
 }  // namespace upd7002_timing
 
+// Where the converter's four inputs come from when something drives them:
+// the analogue port gives the chip one of these that forwards to the device
+// attached there, so the chip itself knows nothing of extensions.
+struct AnalogueInputSource {
+    virtual ~AnalogueInputSource() = default;
+    // The level on an input, as a fraction of VREF (0 to &FFFF).
+    virtual uint16_t level(int channel) = 0;
+};
+
 // NEC uPD7002 four-channel analogue-to-digital converter, as fitted to the
 // BBC Micro at &FEC0-&FEDF (docs/discussion/upd7002-adc-specification.md).
 //
@@ -152,9 +161,16 @@ public:
     void tick_falling();
 
     // The level on an input, as a fraction of VREF: 0 is analogue ground,
-    // &FFFF is VREF. The 12-bit code is level >> 4.
+    // &FFFF is VREF. The 12-bit code is level >> 4. With an input source
+    // set, the chip samples the source and the stored levels are not used;
+    // input_level() then reports the source's level, which the chip would
+    // sample now.
     void set_input_level(int channel, uint16_t level);
     uint16_t input_level(int channel) const;
+
+    // Where the inputs come from: a source (the analogue port's device), or
+    // nullptr for the stored levels. Kept across power_on().
+    void set_input_source(AnalogueInputSource* source) { input_source_ = source; }
 
     // The EOC pin as System VIA CB1 sees it: 1 while idle or converting, 0
     // from completion until the high byte is read or a conversion starts.
@@ -179,6 +195,7 @@ private:
     void start_conversion(uint8_t value);
     void complete_conversion();
 
+    AnalogueInputSource* input_source_ = nullptr;
     std::array<uint16_t, CHANNEL_COUNT> input_levels_ = {
         UNDRIVEN_LEVEL, UNDRIVEN_LEVEL, UNDRIVEN_LEVEL, UNDRIVEN_LEVEL};
     uint8_t control_ = 0;           // bits 3 to 0 as last written

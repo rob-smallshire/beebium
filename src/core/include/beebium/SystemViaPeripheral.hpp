@@ -18,10 +18,12 @@
 #include "Via6522.hpp"
 #include "devices/Sn76489.hpp"
 #include "devices/Upd7002.hpp"
+#include "extension/AnaloguePortDevice.hpp"
 #include "indicators/IndicatorFilter.hpp"
 #include "indicators/Indicators.hpp"
 #include <chrono>
 #include <cstdint>
+#include <stdexcept>
 #include <memory>
 
 // Keyboard scan diagnostics are temporary measurement scaffolding, compiled in
@@ -189,16 +191,17 @@ public:
         }
 
         // Port B input bits:
-        // Bit 4: Joystick 0 fire (active low) - return 1 = not pressed
-        // Bit 5: Joystick 1 fire (active low) - return 1 = not pressed
+        // Bits 4, 5: the analogue port's button lines (active low; the
+        //            pull-ups read 1 with nothing pressed or no device)
         // Bit 6: Speech ready (active low) - return 1 = ready
         // Bit 7: Speech interrupt (active low) - return 1 = no interrupt
-        return 0xF0;
+        const uint8_t buttons =
+            analogue_port_device_ ? (analogue_port_device_->button_lines() & 0x30) : 0x30;
+        return 0xC0 | buttons;
     }
 
     void update_control_lines(uint8_t& ca1, uint8_t& ca2,
                               uint8_t& cb1, uint8_t& cb2) override {
-        (void)cb2;
 
         // CB1: the uPD7002's EOC pin, a level. The VIA does the edge
         // detection under its own PCR; nothing here looks for edges.
@@ -245,7 +248,11 @@ public:
             auto_scan_column_ = (auto_scan_column_ + 1) & 0x0F;
         }
 
-        // CB2: Light pen strobe - not implemented
+        // CB2: the analogue port's light pen strobe. With no device the line
+        // is left as the VIA has it.
+        if (analogue_port_device_) {
+            cb2 = analogue_port_device_->light_pen_strobe();
+        }
     }
 
     // Set VSYNC state (called by video hardware)
@@ -309,6 +316,25 @@ public:
     // Sound chip integration (optional)
     void set_sound_chip(Sn76489* chip) { sound_chip_ = chip; }
     void set_analogue_converter(const Upd7002* adc) { analogue_converter_ = adc; }
+
+    // The analogue port's device: its button lines become PB4 and PB5, its
+    // light pen strobe CB2. Throws std::runtime_error if a device is already
+    // attached (the port is one connector).
+    void attach_analogue_port_device(AnaloguePortDevice& device) {
+        if (analogue_port_device_) {
+            throw std::runtime_error(
+                "AnaloguePort: a device is already attached (only one analogue port device is supported)");
+        }
+        analogue_port_device_ = &device;
+    }
+
+    bool has_analogue_port_device() const { return analogue_port_device_ != nullptr; }
+
+    // The light pen strobe level on the analogue port, for the CRTC's light
+    // pen input: 0 with no device.
+    uint8_t light_pen_strobe() {
+        return analogue_port_device_ ? analogue_port_device_->light_pen_strobe() : 0;
+    }
     Sn76489* sound_chip() const { return sound_chip_; }
 
 private:
@@ -376,6 +402,7 @@ private:
     // Sound chip integration (optional)
     Sn76489* sound_chip_ = nullptr;
     const Upd7002* analogue_converter_ = nullptr;
+    AnaloguePortDevice* analogue_port_device_ = nullptr;
 };
 
 } // namespace beebium

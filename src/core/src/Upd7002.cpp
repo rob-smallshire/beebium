@@ -64,7 +64,7 @@ void Upd7002::write(uint16_t offset, uint8_t value) {
 
 void Upd7002::start_conversion(uint8_t value) {
     control_ = value & CONTROL_MASK;
-    const uint16_t level = input_levels_[control_ & 0x03];
+    const uint16_t level = input_level(control_ & 0x03);
     const uint16_t code12 = static_cast<uint16_t>(level >> 4);
     pending_result_ = static_cast<uint16_t>(code12 << 4);
     clocks_remaining_ = upd7002_timing::conversion_clocks(twelve_bit(), code12);
@@ -88,6 +88,9 @@ void Upd7002::set_input_level(int channel, uint16_t level) {
 }
 
 uint16_t Upd7002::input_level(int channel) const {
+    if (input_source_) {
+        return input_source_->level(channel & 0x03);
+    }
     return input_levels_[static_cast<size_t>(channel & 0x03)];
 }
 

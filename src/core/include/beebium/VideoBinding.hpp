@@ -53,7 +53,14 @@ struct VideoBinding {
         hardware.crtc.set_fast_clock(hardware.video_ula.fast_clock());
 
         // Tick CRTC to advance timing state
-        auto output = hardware.crtc.tick();
+        // The light pen strobe from the analogue port, where the machine has one.
+        auto output = [&] {
+            if constexpr (requires { hardware.light_pen_strobe(); }) {
+                return hardware.crtc.tick(hardware.light_pen_strobe() != 0);
+            } else {
+                return hardware.crtc.tick();
+            }
+        }();
 
         // Always update VSYNC for system VIA timing (CA1 line)
         hardware.system_via_peripheral.set_vsync(output.vsync != 0);

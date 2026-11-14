@@ -213,6 +213,7 @@ add_library(beebium_extension_api SHARED
     NamePlaceholderProvider.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/UserPort.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/PrinterPort.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/AnaloguePort.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/PluginLoader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/ExtensionArgParser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/ExtensionResolver.cpp
