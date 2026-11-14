@@ -55,6 +55,11 @@ Settled from [M p.10], confirmed by [H].
   10: "the buttons marked 10 are always common and cannot be separated". M p.8 calls the three
   commoned buttons "the three red buttons". [H] confirms both extras read as key 10 on two boards.
 - The keys carry no printed legend: the handset ships with blank overlays for the user to write on.
+- Voltmace's own JOYSTIK editor labels the three commoned buttons F1, F2 and F3 (F1 against keypad
+  cell 10, F2 and F3 against the two red buttons). They are electrically one key, key 10, so the
+  three labels are a presentation of the same logical key, not three inputs (confirmed by the
+  project owner from the hardware; `acornaeology.uk/voltmace-delta14b-driver/`, joystik-editor
+  analysis).
 
 `Decision` for the specification: control ids `handset1.key0` to `handset1.key11` and the same for
 handset 2, display names "Key 0" to "Key 11", groups "Handset 1" and "Handset 2". The two extra
