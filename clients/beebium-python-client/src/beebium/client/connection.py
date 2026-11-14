@@ -18,6 +18,7 @@ import grpc
 
 from beebium.client._proto import (
     audio_pb2_grpc,
+    controller_pb2_grpc,
     debugger_pb2_grpc,
     disc_pb2_grpc,
     econet_pb2_grpc,
@@ -77,6 +78,7 @@ class Connection:
         self._extension_ui_stub: extension_ui_pb2_grpc.ExtensionUiServiceStub | None = None
         self._indicator_stub: indicator_pb2_grpc.IndicatorServiceStub | None = None
         self._keyboard_stub: keyboard_pb2_grpc.KeyboardServiceStub | None = None
+        self._controller_stub: controller_pb2_grpc.ControllerServiceStub | None = None
         self._sideways_stub: sideways_pb2_grpc.SidewaysServiceStub | None = None
         self._system_stub: system_pb2_grpc.SystemServiceStub | None = None
         self._tube_stub: tube_pb2_grpc.TubeServiceStub | None = None
@@ -112,6 +114,7 @@ class Connection:
         self._extension_ui_stub = extension_ui_pb2_grpc.ExtensionUiServiceStub(self._channel)
         self._indicator_stub = indicator_pb2_grpc.IndicatorServiceStub(self._channel)
         self._keyboard_stub = keyboard_pb2_grpc.KeyboardServiceStub(self._channel)
+        self._controller_stub = controller_pb2_grpc.ControllerServiceStub(self._channel)
         self._sideways_stub = sideways_pb2_grpc.SidewaysServiceStub(self._channel)
         self._system_stub = system_pb2_grpc.SystemServiceStub(self._channel)
         self._tube_stub = tube_pb2_grpc.TubeServiceStub(self._channel)
@@ -149,6 +152,13 @@ class Connection:
         if self._keyboard_stub is None:
             raise ConnectionError("Not connected")
         return self._keyboard_stub
+
+    @property
+    def controller_stub(self) -> controller_pb2_grpc.ControllerServiceStub:
+        """The ControllerService stub."""
+        if self._controller_stub is None:
+            raise ConnectionError("Not connected")
+        return self._controller_stub
 
     @property
     def video_stub(self) -> video_pb2_grpc.VideoServiceStub:
@@ -264,6 +274,7 @@ class Connection:
             self._extension_ui_stub = None
             self._indicator_stub = None
             self._keyboard_stub = None
+            self._controller_stub = None
             self._sideways_stub = None
             self._system_stub = None
             self._tube_stub = None

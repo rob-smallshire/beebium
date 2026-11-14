@@ -47,6 +47,7 @@ from beebium.client.extension_ui import ExtensionUi
 from beebium.client.extensions import Extensions
 from beebium.client.indicators import Indicators
 from beebium.client.installation import ServerInstallation
+from beebium.client.controller import Controllers
 from beebium.client.keyboard import Keyboard
 from beebium.client.latch import AddressableLatch
 from beebium.client.memory import Memory
@@ -108,6 +109,7 @@ class Beebium:
         self._debugger: Debugger | None = None
         self._cpu: CPU | None = None
         self._keyboard: Keyboard | None = None
+        self._controllers: Controllers | None = None
         self._video: Video | None = None
         self._memory: Memory | None = None
         self._basic: Basic | None = None
@@ -343,6 +345,13 @@ class Beebium:
         if self._keyboard is None:
             self._keyboard = Keyboard(self._connection.keyboard_stub, client=self)
         return self._keyboard
+
+    @property
+    def controllers(self) -> Controllers:
+        """Access the controllers attached to the machine (joysticks, ...)."""
+        if self._controllers is None:
+            self._controllers = Controllers(self._connection.controller_stub)
+        return self._controllers
 
     @property
     def video(self) -> Video:

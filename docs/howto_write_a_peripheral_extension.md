@@ -72,6 +72,16 @@ you the typed handle for a point you declared in `attaches_to()`: for the analog
 `ctx.get<beebium::AnaloguePort>().attach(device)` with an `AnaloguePortDevice` (see
 `docs/analogue-port.md`).
 
+A device a person holds or points -- a joystick, a handset, a mouse, a light pen --
+is also a `Controller` (`beebium/extension/Controller.hpp`), so a client can set it
+through `ControllerService`. It publishes its controls in its own vocabulary (ids
+such as `stick1.x` and `fire1`, each an axis 0 to 65535 or a button), keeps their
+values in atomics that its port seam reads with plain loads, and registers itself:
+`ctx.get<beebium::ControllerRegistry>().add(*this)` in `init()`, `remove(*this)` in
+`shutdown()`. The built-in joystick (`src/extensions/joystick/`) is the worked
+example. A device that takes its input from the server host, such as a datalogger,
+implements only its port seam and is not a controller.
+
 Configuration arrives before `init()`. The framework parses
 `--my-extension key=value:key2=value2` (or the equivalent preset entry) into a
 map; read it with `config_value("key")`:

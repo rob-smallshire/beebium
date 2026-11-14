@@ -4,11 +4,13 @@ The BBC Micro's analogue port and the converter behind it as Beebium builds
 them: the NEC uPD7002 at &FEC0-&FEDF, its end-of-conversion line into the
 System VIA, the inspection RPC that reads it, and the port's handle, device
 seam and `analogue-port` attachment point, in the shape of the printer and
-user ports. The first device, a joystick adapter, comes next. The tracking
-issue is #98.
+user ports, the controllers a client sets through `ControllerService`, and
+the first device, the joystick. The tracking issue is #98.
 
 The specifications are `docs/discussion/upd7002-adc-specification.md` (the
-chip) and `docs/discussion/analogue-port-seam-specification.md` (the port). The
+chip) and `docs/discussion/analogue-port-seam-specification.md` (the port) and
+`docs/discussion/controller-service-specification.md` (controllers and the
+joystick). The
 measurements behind the timing model come from the round 1 survey and from
 `docs/discussion/analogue-port-hardware-trials.md`. The disc that runs those
 trials on real hardware is built by `tools/hardware-trials/adc/`.
@@ -25,7 +27,8 @@ trials on real hardware is built by `tools/hardware-trials/adc/`.
 | EOC as a level on System VIA CB1, with the VIA doing the edge detection | A device driving the button lines as outputs (the Bitstik does) |
 | No reset on Break; power-on state on a power cycle | A light pen device (#210); the strobe is wired, the pen is not |
 | An undriven input reads the centre of the range, &8000 | A wandering, machine-dependent unplugged value |
-| The port: one device's channel levels, button lines (PB4, PB5) and light pen strobe (CB2 and the CRTC) | Any shipped device; the tests use stubs |
+| The port: one device's channel levels, button lines (PB4, PB5) and light pen strobe (CB2 and the CRTC) | Devices other than the joystick: the Voltmace Delta 14B/1 adapter (round 5), the light pen (#210), dataloggers |
+| The joystick: two sticks and two fire buttons, set by a client through `ControllerService` | Reading a host gamepad: that is the client's, as the host keyboard is |
 
 Nothing in the model knows what any MOS does with the chip. MOS 1.20 appears
 only in tests, as a test vector.
@@ -234,6 +237,107 @@ from elsewhere, and never touches a host API or takes a lock there. A device
 that takes input from a client or a host device updates those members from
 its own thread.
 
+## Controllers
+
+Beebium divides I/O by who is at the other end of it. What a person touches
+or perceives crosses the gRPC boundary: the keyboard in, video and audio
+out. The client owns the host hardware and the mapping from host terms to
+BBC terms; the server owns the emulated device and speaks only in that
+device's terms. Joysticks, handsets, mice and light pens are in that group.
+They are **controllers**: a controller is a device a person holds or points,
+and it publishes **controls**, each a named axis or button. A client sets
+controls through one core service, `ControllerService` (`controller.proto`),
+the way it presses BBC keys through `KeyboardService`. The server never
+reads a host gamepad.
+
+The vocabulary is the device's, not the port's and not a generic
+gamepad's: the joystick publishes two sticks and two fire buttons; a Voltmace
+Delta handset will publish its keys by their printed labels; a light pen
+`x`, `y` and `switch`. The client maps host controls onto the published ids,
+as it maps host keys onto BBC key names, and never knows what a device is.
+The server does no interpretation: dead zone, inversion, calibration and
+auto-fire are the client's.
+
+The seam is `Controller` (`src/core/include/beebium/extension/Controller.hpp`):
+
+- `controller_id()`, the extension instance id; `display_name()`, such as
+  "Joystick";
+- `controls()`, each a `ControlDescription` with a stable 7-bit ASCII `id`
+  the device fixes ("stick1.x"), a `display_name`, a `group` ("Stick 1") and
+  a `ControlKind`, `Axis` or `Button`;
+- `axis(id)` and `button(id)` to read, `set_axis(id, value)` and
+  `set_button(id, pressed)` to set. An axis is 0 to 65535 with the centre at
+  32768, the scale `AnaloguePortDevice::channel_level` uses, so a stick's
+  axis is its channel level with no conversion. Each throws
+  `std::invalid_argument`, with a sentence naming the id, for an id the
+  device has no control of that kind named.
+
+A controller stores its controls in atomics written from gRPC threads and
+loaded on the emulation thread from its port seam, as `KeyboardMatrix`
+stores its columns: no queue, no pause, no mutex. A control is a physical
+thing someone is holding, so nothing in a controller resets, on Break or at
+power-on.
+
+The port seams and the controller seam are orthogonal. A device that takes
+its stimulus from the server host, a datalogger replaying a file say,
+implements only `AnaloguePortDevice` and never appears in
+`ControllerService`.
+
+Each machine has one `ControllerRegistry`
+(`src/core/include/beebium/extension/ControllerRegistry.hpp`), owned by the
+assembled machine beside its extension registry. An extension reaches it
+with `ExtensionContext::get<ControllerRegistry>()`, adds itself in `init()`
+and removes itself in `shutdown()`. Extensions attach only at assembly,
+before any gRPC thread serves, so the registry takes no lock.
+
+`ControllerService` is served on every machine from that registry:
+
+- `ListControllers` returns each controller's id, display name and
+  controls; an empty list when none is attached.
+- `GetControls(controller_id)` returns every control's value, in `controls()`
+  order.
+- `SetControls(controller_id, values)` applies the values in order. It
+  validates the whole request first (the control exists, the value is of its
+  kind, an axis is at most 65535) and stores nothing if any value fails.
+  NOT_FOUND for an unknown controller ("There is no controller named
+  joystick2."); INVALID_ARGUMENT for the rest ("The controller joystick has
+  no control named stick3.x.").
+
+All three are unary. A client-streaming form can be added when a GUI client
+measures that it needs one. The proto names its types `ControlInfo` and
+`ControlType`, so the generated C++ does not collide with the seam's
+`ControlDescription` and `ControlKind` in the shared `beebium` package.
+
+## The joystick
+
+The built-in extension `joystick` ("Joystick", `--joystick`, no parameters,
+`src/extensions/joystick/`) is two analogue joysticks with a fire button
+each, attached to `analogue-port`. It is both the port's device and a
+controller. No stock preset attaches it: a user adds it in New Machine or
+with `--joystick`, as with a printer.
+
+| Control | Kind | Group | Wiring |
+|---|---|---|---|
+| `stick1.x` | axis | Stick 1 | channel 0, `ADVAL(1)` |
+| `stick1.y` | axis | Stick 1 | channel 1, `ADVAL(2)` |
+| `fire1` | button | Stick 1 | grounds PB4 (connector PB0), `ADVAL(0) AND 1` |
+| `stick2.x` | axis | Stick 2 | channel 2, `ADVAL(3)` |
+| `stick2.y` | axis | Stick 2 | channel 3, `ADVAL(4)` |
+| `fire2` | button | Stick 2 | grounds PB5 (connector PB1), `ADVAL(0) AND 2` |
+
+The light pen strobe stays 0. Axes start at 32768 and buttons released, so
+an untouched stick reads the same &8000 as an empty port, as a centred
+stick reads about &8000 on a real Beeb. An axis is the channel level itself:
+on the BBC's joysticks a low level is right or down, and turning a host
+stick's direction into that is the client's mapping. A Voltmace Delta
+handset plugged straight into the port is electrically this device with two
+logical keys.
+
+A test drives it by `SetControls` and reads it back by `GetControls`, or from
+BBC BASIC: the Python client's `bbc.controllers.set("joystick",
+{"stick1.x": 0xF000, "fire1": True})` makes `ADVAL(1)` read &F0xx and
+`ADVAL(0) AND 1` read 1.
+
 ## Inspection
 
 `DeviceInspection.GetAnalogueConverterState` reads the chip under quiesce
@@ -255,8 +359,10 @@ through the memory map, so peeking the high byte does not reset EOC.
 | `tests/test_analogue_port.cpp` | The port: every policy's handle, attach-once, a conversion sampling the device once per conversion, the no-device level, the button lines on PB4 and PB5, the strobe into CB2 and into the CRTC's R16/R17, `ExtensionContext`. With MOS 1.20 as a test vector: the ADC workspace filling from the device, and OSBYTE &80 reporting its fire buttons |
 | `tests/test_device_inspection_adc.cpp` | The inspection RPC, including that it leaves EOC alone and reports a device's levels |
 | `tests/test_preset_resolution.cpp`, `tests/test_attachment_points.cpp` | Every Model B family machine offers `analogue-port`; the catalogue entry |
+| `tests/test_joystick.cpp` | The joystick: its manifest and `--joystick`, its controls, initial values, each axis reaching its channel, the fire buttons on PB4 and PB5, refusals, values kept across Break and power-on. With MOS 1.20 as a test vector: `&2BA` and OSBYTE &80 |
+| `tests/test_grpc_controller.cpp` | `ControllerService` over a machine assembled from the command line: listing with and without a joystick, set and get, every refusal applying nothing, and the four fingerprint constants agreeing |
+| `clients/beebium-python-client/tests/test_controller.py` | `bbc.controllers` on a `--joystick` Model B: list, set and get, `ADVAL(1)` and `ADVAL(0) AND 1` from a disc-loaded BASIC program, and a refusal carrying the server's sentence |
 | `clients/beebium-python-client/tests/test_analogue_converter.py` | From BBC BASIC, loaded from a tokenised disc: `ADVAL(1)` to `ADVAL(4)` read &8000 with no fire button pressed, and `?&FEC0` reads the chip cycling all four channels in 12-bit mode, never the old open-bus &20 |
 
 `clients/beebium-python-client/tests/test_analogue_port.py` checks the
-point through the client's attachment-point listing. There is no Python-side
-input hook yet, so the Python tests see only undriven inputs.
+point through the client's attachment-point listing.

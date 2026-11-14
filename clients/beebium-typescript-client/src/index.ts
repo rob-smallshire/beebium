@@ -14,6 +14,12 @@ export { CPU, type Registers, carry, zero, interruptDisable, decimal, breakFlag,
 export { Memory, AddressSpace, BusAccessor, PeekAccessor, Region, type MemoryRegionInfo } from "./memory.js";
 export { Keyboard, type KeyboardState, type LockState, type TypingQueueStatus } from "./keyboard.js";
 export {
+    Controllers,
+    type Controller,
+    type ControllerControl,
+    type ControllerControlKind,
+} from "./controller.js";
+export {
     Video,
     type VideoConfig,
     type Frame,

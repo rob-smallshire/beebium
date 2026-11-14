@@ -53,6 +53,7 @@ beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, ...)
 | VideoService | video.proto | Frame streaming, display configuration |
 | AudioService | audio.proto | Audio sample streaming |
 | KeyboardService | keyboard.proto | Key press/release, type-ahead |
+| ControllerService | controller.proto | Controllers a person holds (joystick, ...): list, get and set their named axes and buttons |
 | DiscService | disc.proto | Disc image mounting, drive status |
 | IndicatorService | indicator.proto | LED status (caps lock, disc activity) |
 | SidewaysService | sideways.proto | Sideways ROM/RAM slot management |
@@ -261,7 +262,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 - `performance.md` - Measuring what a headless server costs on a slow host (a Raspberry Pi above all): the three numbers, the pacing statistics, thread names, the profiling build, `tools/perf/profile_server.py`, the Pi baseline and what an SPSC ring needs
 - `indicators.md` - LED status indicators
 - `printer-port.md` - The parallel printer port as built: the hardware and the MOS driver, `PrinterPortDevice` and the `CentronicsReceiver` handshake, busy versus offline, and the four sinks (`file-printer`, `job-file-printer`, `tcp-printer` over raw TCP 9100, `host-parallel-printer` on the host's lp device) with field notes on network printers and USB-to-IEEE 1284 adapters
-- `analogue-port.md` - The uPD7002 analogue-to-digital converter as built: the registers at &FEC0-&FEDF, status semantics, the measured conversion-time model (8-bit line, 12-bit sawtooth) in 1 MHz clocks, EOC into System VIA CB1, the no-reset rule across Break, the unplugged-port decision, inspection and testing; the port and joystick device seams follow in later rounds (#98)
+- `analogue-port.md` - The uPD7002 analogue-to-digital converter as built: the registers at &FEC0-&FEDF, status semantics, the measured conversion-time model (8-bit line, 12-bit sawtooth) in 1 MHz clocks, EOC into System VIA CB1, the no-reset rule across Break, the unplugged-port decision, inspection and testing; the port and its device seam; controllers (devices a person holds, publishing named axes and buttons a client sets through ControllerService) and the built-in joystick (#98)
 - `music-5000.md` - The Hybrid Music 5000 / 3000 synthesiser as built: its architecture as a plugin on the 1 MHz bus and a source of audio frames, the framework it rests on, its lifecycle and configuration, JIM paging, the register map and the sixteen-channel DSP modelled from the original schematic and the AM6070 datasheet, the fourth-order analogue output filter and the 46875 to 48000 Hz resampler, the audio frame field it fills, presets, and the known simplifications; `docs/music5000/` holds the reference material and `hardware-model.md`, the normative register-transfer description
 - `sideways-slots.md` - Sideways ROM/RAM topology, validation rules, motherboard links
 - `deployment.md` - Installed layout and runtime ROM/preset discovery
@@ -326,7 +327,7 @@ Complete transcripts of BBC Micro documentation:
 - Hybrid Music 5000 / 3000 synthesiser on the 1 MHz bus (plugin `hybrid-music-5000`), with the board's analogue output filter; JIM paging is owned by the bus port so several 1 MHz bus devices coexist
 - Keyboard matrix with type-ahead
 - Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger
-- gRPC service layer (17 services)
+- gRPC service layer (18 services)
 - macOS frontend with Metal rendering
 - Linux / Raspberry Pi frontend (Qt 6 Widgets, QRhi on Vulkan) built against `docs/client-specification.md`: all eight sidebar modes, the New Machine configurator, the preset library, screen text selection and Copy As, Meta / Ctrl+Alt application shortcuts; per-distribution `.deb` packages (Debian 13, Ubuntu 26.04)
 - Service advertisement AND browse/discovery over mDNS on all platforms: macOS (Bonjour), Linux (Avahi, dlopen'd), Windows (dual-provider: Apple Bonjour dnssd.dll when installed, else native DnsService*, selected at runtime). Full bidirectional AUN peer discovery everywhere

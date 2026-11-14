@@ -18,6 +18,7 @@ import { TubeServiceClient } from "./generated/tube.js";
 import { EconetTransportServiceClient } from "./generated/econet_transport.js";
 import { ExtensionUiServiceClient } from "./generated/extension_ui.js";
 import { IndicatorServiceClient } from "./generated/indicator.js";
+import { ControllerServiceClient } from "./generated/controller.js";
 
 import type { DebuggerControlClient as DebuggerControlClientType } from "./generated/debugger.js";
 import type { CoprocessorDebuggerControlClient as CoprocessorDebuggerControlClientType } from "./generated/debugger.js";
@@ -33,6 +34,7 @@ import type { TubeServiceClient as TubeServiceClientType } from "./generated/tub
 import type { EconetTransportServiceClient as EconetTransportServiceClientType } from "./generated/econet_transport.js";
 import type { ExtensionUiServiceClient as ExtensionUiServiceClientType } from "./generated/extension_ui.js";
 import type { IndicatorServiceClient as IndicatorServiceClientType } from "./generated/indicator.js";
+import type { ControllerServiceClient as ControllerServiceClientType } from "./generated/controller.js";
 
 /**
  * Manages a gRPC connection to a Beebium emulator server.
@@ -59,6 +61,7 @@ export class Connection {
     private _econetTransportStub: EconetTransportServiceClientType | null = null;
     private _extensionUiStub: ExtensionUiServiceClientType | null = null;
     private _indicatorStub: IndicatorServiceClientType | null = null;
+    private _controllerStub: ControllerServiceClientType | null = null;
 
     constructor(target: string) {
         this._target = target;
@@ -242,6 +245,17 @@ export class Connection {
         return this._indicatorStub;
     }
 
+    get controllerStub(): ControllerServiceClientType {
+        this.ensureOpen();
+        if (!this._controllerStub) {
+            this._controllerStub = new ControllerServiceClient(
+                this._target,
+                this.credentials,
+            );
+        }
+        return this._controllerStub;
+    }
+
     /**
      * Wait until the underlying channel is ready, or until the timeout expires.
      *
@@ -297,6 +311,7 @@ export class Connection {
             this._extensionUiStub,
             this._extensionRpcStub,
             this._indicatorStub,
+            this._controllerStub,
         ];
 
         for (const stub of stubs) {
@@ -318,5 +333,6 @@ export class Connection {
         this._extensionUiStub = null;
         this._extensionRpcStub = null;
         this._indicatorStub = null;
+        this._controllerStub = null;
     }
 }

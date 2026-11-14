@@ -117,6 +117,7 @@ Section 3 states cross-cutting foundations that every later section assumes.
 | 13.2 | Application menus and commands | Core |
 | 13.3 | Settings and preferences | Core |
 | 13.4 | The entry point and the home window | Core |
+| 14 | Controllers (joysticks and other held devices) | Peripheral management |
 
 
 ## 2. The contract model and conformance profiles
@@ -2276,6 +2277,57 @@ that machine's window -> the client quits. Close the last machine window with th
 home window open -> the client stays, showing the home window.
 
 
+## 14. Controllers
+
+Profile: Peripheral management. Binding document: `analogue-port.md` (the
+Controllers and The joystick sections). Service: `controller.proto
+ControllerService`. Chapter 7 is the keyboard alone, so controllers have their
+own chapter.
+
+Behaviour. A controller is a device a person holds or points at the screen: a
+joystick, a handset, a mouse, a light pen. Each attached controller publishes named
+controls in the device's own vocabulary, each an axis (0 to 65535, centre 32768) or
+a button (pressed or not): the joystick's are `stick1.x`, `stick1.y`, `fire1`,
+`stick2.x`, `stick2.y` and `fire2`, grouped "Stick 1" and "Stick 2". The client
+discovers the controllers with `ListControllers`, maps host controls (a gamepad's
+sticks and buttons, keys, the mouse) onto the published control ids, and sends their
+values with `SetControls`, as it maps host keys onto BBC keys and presses them
+through `KeyboardService`. The server never reads a host gamepad and does no
+interpretation: dead zone, inversion, sensitivity, calibration and auto-fire are the
+client's, applied before a value is sent. The client never special-cases a
+controller by its id or name; it presents and maps whatever is published, using each
+control's display name and group. Control ids are stable, so a mapping the user
+keeps refers to them. A controller keeps its values across Break and power-on, as
+the device in a person's hand would, so on focus loss the client returns what it
+holds to rest (axes to the centre, buttons released) the way it releases held keys
+(rule R10, 7.6).
+
+Rests on: `controller.proto ControllerService.ListControllers` (the controllers and
+their controls, when the machine connects and when its peripherals change),
+`SetControls` (a whole set applied together, or none of it when refused) and
+`GetControls` (the current values, for a client that shows them).
+
+Conformance:
+
+- MANDATORY: controllers and controls are discovered, not hard-coded; values are sent
+  in the device's terms, axes 0 to 65535; dead zone, inversion and calibration are
+  applied client-side; a refused `SetControls` (an unknown controller or control, a
+  value of the wrong kind, an axis above 65535) is reported with the server's sentence
+  in the registers of 3.4, and the client assumes nothing was applied; held controls
+  return to rest on focus loss.
+- LATITUDE: which host devices a client can map; the mapping user interface and
+  where mappings are kept; how often values are sent while a stick moves.
+- Deferred to the client rounds: the platform input layer (GameController on macOS,
+  SDL or evdev on Linux) and the mapping file format.
+
+Scenarios: a Model B with no joystick -> `ListControllers` is empty and the client
+offers no controller mapping. Add the joystick extension -> one controller,
+"Joystick", with six controls in two groups. Push a mapped host stick right and
+press its button -> `SetControls` sends the mapped axis and `fire1`, and `ADVAL(0)
+AND 1` in BBC BASIC reads 1. Leave the window with the button held -> the client
+sends `fire1` released.
+
+
 ## Appendix A. Server services used, by capability
 
 | Proto | Service and representative RPCs | Capability sections |
@@ -2283,6 +2335,7 @@ home window open -> the client stays, showing the home window.
 | system.proto | SystemService: GetSystemInfo, WatchServerStatus, RequestShutdown, SaveMachine, MoveMachine, SetMachineName, SetSpeedMultiplier, GetPacingStats, WatchPacingStats, SetMachineDescription, ListDescriptionPlaceholders | 3.2, 4.1-4.5, 5.3-5.7 |
 | video.proto | VideoService: GetConfig, SubscribeFrames, HoldScreen, ReleaseScreen, GetScreenGeometry, GetScreenText | 6.1, 6.2, 6.5 |
 | keyboard.proto | KeyboardService: KeyDown, KeyUp, BreakDown, BreakUp, GetLockState, TypeQuickly, WatchTypingStatus, ClearTyping, GetAllKeyMappings | 5.5, 7.1-7.5 |
+| controller.proto | ControllerService: ListControllers, GetControls, SetControls | 14 |
 | audio.proto | AudioService: GetAudioFormat, SubscribeAudio | 8.1-8.3 |
 | disc.proto | DiscService: InsertDisc, EjectDisc, CancelEject, GetDriveStatus, SubscribeDiscEvents, ListBlankDiscs, CreateDisc | 9.1-9.7 |
 | indicator.proto | IndicatorService: ListIndicators, Subscribe | 10 |
@@ -2301,6 +2354,6 @@ home window open -> the client stays, showing the home window.
 
 - Core: 3.1-3.4, 4.1-4.5, 5.1, 5.3-5.7, 6.1, 6.2, 6.4, 7.*, 8.*, 9.*, 10, 13.1-13.3.
 - Configuration editing: 5.2, 12.2 (and the configuration parts of 11, 12.3, 12.4).
-- Peripheral management: 11, 12.1, 12.3, 12.4.
+- Peripheral management: 11, 12.1, 12.3, 12.4, 14.
 - Advanced display: 6.3, 6.5, 6.6.
 - Debugging: 12.5 (optional in full).

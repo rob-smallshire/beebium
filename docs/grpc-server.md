@@ -343,6 +343,33 @@ Response:
 
 Each element is a bitmask of pressed columns for that row.
 
+### ControllerService
+
+Sets the controls of the controllers a person holds: a joystick today, and
+handsets, mice and light pens as they arrive. A controller publishes named
+controls in its own vocabulary, each an axis (0 to 65535, centre 32768) or a
+button; the client maps host controls onto those ids and applies any dead
+zone or inversion itself. Served on every machine; see
+`docs/analogue-port.md`.
+
+**Proto file:** `src/service/proto/controller.proto`
+
+- `ListControllers`: each attached controller's id (its extension instance
+  id), display name and controls, in order. Empty with none attached.
+- `GetControls(controller_id)`: every control's current value.
+- `SetControls(controller_id, values)`: applies the values in order, or none
+  of them. NOT_FOUND for an unknown controller; INVALID_ARGUMENT for an
+  unknown control, a value of the wrong kind, or an axis above 65535, with a
+  sentence in the status details.
+
+```bash
+# On a server started with --joystick: push stick 1 hard left and press fire 1
+grpcurl -plaintext \
+  -import-path src/service/proto -proto controller.proto \
+  -d '{"controllerId": "joystick", "values": [{"id": "stick1.x", "axis": 65535}, {"id": "fire1", "pressed": true}]}' \
+  localhost:48875 beebium.ControllerService/SetControls
+```
+
 #### Type-ahead and guest readiness
 
 `TypeQuickly` queues text, which the server types by pressing keys in the
@@ -984,6 +1011,7 @@ ctest --test-dir build --output-on-failure                 # C++
 │  ├── Server<MachineType>                        │
 │  │   ├── VideoService (frame streaming)         │
 │  │   ├── KeyboardService (input handling)       │
+│  │   ├── ControllerService (joysticks, ...)     │
 │  │   ├── SystemService (identity, lifecycle)    │
 │  │   ├── DebuggerControl (execution, memory,    │
 │  │   │    breakpoints, watchpoints, CPU state)  │

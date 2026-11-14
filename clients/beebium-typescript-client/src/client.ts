@@ -33,6 +33,7 @@ import { Piconet } from "./piconet.js";
 import { EconetTransport } from "./econet_transport.js";
 import { ExtensionUi } from "./extension_ui.js";
 import { Indicators } from "./indicators.js";
+import { Controllers } from "./controller.js";
 import { Via, ViaId } from "./via.js";
 import { Crtc } from "./crtc.js";
 import { RealTimeClock } from "./real-time-clock.js";
@@ -100,6 +101,7 @@ export class Beebium {
     private _transport?: EconetTransport;
     private _extensionUi?: ExtensionUi;
     private _indicators?: Indicators;
+    private _controllers?: Controllers;
     private _systemVia?: Via;
     private _userVia?: Via;
     private _crtc?: Crtc;
@@ -466,6 +468,14 @@ export class Beebium {
             this._extensionUi = new ExtensionUi(this.connection.extensionUiStub);
         }
         return this._extensionUi;
+    }
+
+    /** Access the controllers attached to the machine (joysticks, ...). */
+    get controllers(): Controllers {
+        if (this._controllers === undefined) {
+            this._controllers = new Controllers(this.connection.controllerStub);
+        }
+        return this._controllers;
     }
 
     /** Access hardware indicators (LEDs, motor activity). */
