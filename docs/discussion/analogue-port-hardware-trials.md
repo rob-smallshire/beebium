@@ -259,4 +259,36 @@ Footnote: reading &FE40 in trial 4 also clears two VIA flags the operating syste
 
 ## Results
 
+### 2026-11-14: Master AIV (coprocessor disabled), joystick fitted
+
+Run from the self-running disc's Master build (`tools/hardware-trials/adc/`, `--machine
+master`); the returned image, the decoded report and the sweep CSVs are under
+`tools/hardware-trials/adc/results/2026-11-14-master-aiv/`. The chip is the same part as a
+Model B's, at the Master's address.
+
+- **Trial 1**: 12-bit 10.6 ms unplugged and centre, 11.2 hard left and up, 10.0 hard right and
+  down; 8-bit 4.2 to 4.3 ms except 3.0 hard right. The 10.0 ms at codes 0 to 4 does not match
+  the sweep's 9.09 at codes 4 to 6 and is open. Low bytes in 8-bit mode were `&30`, `&B0`,
+  `&F0`: **8-bit mode delivers the same twelve bits**, not a zero low byte.
+- **Trial 2**: status bits 3 to 0 are the **previous conversion's until completion** (`&89`
+  just after writing `&08`; `&A8` just after writing `&0E`, `&6E` at completion). Bits 5 and 4
+  carry the previous result's top bits during a conversion (`&B8` after a hard-left run).
+  Offset 3 equals the low byte; the low nibble is always 0; bit 7 clears only on the high-byte
+  read; the Master's mirror at `&FE1C` to `&FE1F` is correct.
+- **Trial 3**: CB1 behaves as the datasheet says. Negative edge: `0, 10, 0, E8, 0, 10`.
+  Positive edge: `10, 0, 10, E8, 0, 0`. The high-byte read releases the end-of-conversion line.
+- **Trial 4**: unplugged channels wander across `&C1F0` to `&CDC0`.
+- **Trial 5**: fire button A grounds PB4 (fire lines `&20`, `ADVAL(0)` low bits 1), B grounds
+  PB5 (`&10`, low bits 2).
+- **Trial 6**: VREF 1.85 V.
+- **Trial 7**: 12-bit teeth at 1.99 to 2.01 us per code, drops 960 to 984 us, code 0 at
+  9091 us; boundaries 832, 1520, 1888, 2464, 3056 and one more above 3614 (sweeps A and C
+  agree exactly); tooth starts 9091, 9728, 10079, 9792, 9919, 10079 us. The overlap band is
+  real but narrow (0 to 21 points off-line per tooth). **8-bit mode has a tooth too**: 0.5 us
+  per code from 2945 us, a drop of about 430 us at code 3440, then 0.5 again; the top bin
+  (codes 3968 and above) sat near 4221 us, which is open.
+
+A Model B run is still wanted, above all to sweep its chip (trial 7) and to recheck trial 1's
+hard-right figure.
+
 To be filled in when the trials have been run.

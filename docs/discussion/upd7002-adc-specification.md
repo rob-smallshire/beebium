@@ -57,14 +57,22 @@ Status (read offset 0), bits:
 | 7 | EOC, as the EOC pin: 1 = conversion not complete (also 1 after the high byte is read) |
 | 6 | 1 = not busy. 0 from the start write until the conversion completes |
 | 5, 4 | The two most significant bits of the result. During a conversion these are the **previous** result's bits |
-| 3 | Mode bit as written |
-| 2 | Flag as written |
-| 1, 0 | Channel as written |
+| 3 | Mode bit of the conversion whose result is showing: the **previous** conversion's until completion |
+| 2 | Flag, likewise the previous conversion's until completion |
+| 1, 0 | Channel, likewise |
 
-The result is sixteen bits wide as the Acorn software sees it (`&0000` to `&FFF0`). In 12-bit
-mode the high twelve bits are the conversion code and the low four read 0. `Decision`: in 8-bit
-mode the high byte is the 8-bit code and the whole low byte reads 0. Trial 7's `00` run
-records the raw low byte and will confirm or revise this.
+Hardware (trial 2, 2026-11-14) showed status bits 3 to 0 do not change at the write: just after
+writing `&0E` the status still carried the previous conversion's `8`, and `E` appeared only at
+completion. The datasheet's bit table marks D3 to D0 "previous conversion data", the same note
+as D5 and D4. So the whole of status bits 5 to 0 is latched at completion; the write changes
+only bits 7 and 6.
+
+The result is sixteen bits wide as the Acorn software sees it (`&0000` to `&FFF0`). In both
+modes the high twelve bits are the conversion code and the low four read 0. Hardware (trial 1,
+2026-11-14) read low bytes of `&30`, `&B0` and `&F0` in 8-bit mode, so the 8-bit mode delivers
+the same twelve bits as the 12-bit mode, only less accurately (the datasheet calls bits 7 to 4
+of the low byte "not to be determined" in 8-bit mode). The earlier decision that the 8-bit low
+byte reads 0 is withdrawn; the model does not add the inaccuracy.
 
 ### Power-on state
 
@@ -124,8 +132,14 @@ Time is counted in 1 MHz clocks from the start write to completion. The datashee
 ranges (2.4 to 5 ms and 8.5 to 15 ms). The measured shape (survey section 2 and the trial
 sheet's trial 7 notes) is reproduced:
 
-- **8-bit mode**: `t = 2950 + c / 2` clocks, where `c` is the 12-bit code (0 to 4095) the
-  conversion will produce. One straight line from about 2.95 ms to 5.0 ms.
+- **8-bit mode**: `t = T_k + (c - b_k) / 2` clocks for the tooth with the largest `b_k <= c`,
+  where `c` is the 12-bit code (0 to 4095) the conversion will produce. Hardware (trial 7 sweep
+  B, 2026-11-14, a Master's chip) shows one tooth boundary: the line rises 0.5 clocks per code
+  from 2945 at code 0 to about 4613 at code 3440, drops about 430, and rises at 0.5 again. The
+  table is `{0, 2945}, {3440, 4190}`. The top bin of that sweep (codes 3968 and above) sat near
+  4221, below the line; it is recorded as open and not modelled. The plot from a Model B's chip
+  (survey section 2.2) showed a single line to code 4048 with no drop, so this boundary too is
+  per-chip.
 - **12-bit mode**: a sawtooth of seven teeth. Each tooth is a line of slope 2 clocks per
   12-bit code starting at a boundary code `b_k` with a start time `T_k`:
   `t = T_k + 2 * (c - b_k)` for the tooth with the largest `b_k <= c`. The table, from one
@@ -147,9 +161,22 @@ sheet's trial 7 notes) is reproduced:
 
 `Decision`: the model is deterministic. The per-chip boundary shifts, the overlap band where a
 conversion just past a boundary still takes the earlier tooth's time, the plus or minus 10 us
-jitter and the plus or minus 4 codes of noise are **not** modelled in this round. Trial 7 on a
-second chip tells us how far the boundaries move and how wide the overlap is; if the answer
-makes a parameter worth having, it becomes one then. The constants are to be in one place,
+jitter and the plus or minus 4 codes of noise are **not** modelled in this round.
+
+A second chip (trial 7, 2026-11-14, in a Master AIV, results under
+`tools/hardware-trials/adc/results/2026-11-14-master-aiv/`) confirmed the shape: every tooth at
+1.99 to 2.01 clocks per code, drops of 960 to 984, code 0 at 9091 to 9093, the overlap band
+real but narrow (0 to 21 points off-line per tooth), and the boundaries at other codes:
+832, 1520, 1888, 2464, 3056 and one more between 3614 and 4095, with tooth start times 9091,
+9728, 10079, 9792, 9919 and 10079. Against the Model B chip's 1020, 1452, 2052, 2628, 3204,
+3796 the regular run sits about 160 codes lower. `Decision`: the default 12-bit table stays
+the Model B chip's (it is complete; the Master's sixth boundary was not reached), the default
+8-bit table is the Master chip's (the only measurement with a drop), both tables are recorded
+here, and a per-chip parameter waits until a second Model B has been swept. One figure is
+open: trial 1 on that machine timed codes 0 to 4 (stick hard right, and hard down on channel
+1) at 10.0 ms in 12-bit mode, where the sweep gives 9.09 at codes 4 to 6, while its other
+trial 1 figures match the sweep within 0.1 ms. A second run should check it before anything is
+read into it. The constants are to be in one place,
 named, with the measurement they come from in a comment, so they can be re-fitted from trial
 7's data without touching logic.
 
@@ -205,19 +232,22 @@ All names 7-bit ASCII. One `TEST_CASE` per line below, tagged `[upd7002]`.
 2. Mirror: offsets 0 to 3 repeat at every 4-byte step from `&FEC0` to `&FEDF` (test through
    the Model B memory map, `[memory_map]` tag as well; this one lands with commit 2, since it
    needs the region).
-3. Status echoes the written channel, mode and flag bits.
+3. Status bits 3 to 0 keep the previous conversion's channel, mode and flag until completion,
+   then show the new conversion's (write `&08` after a completed `&0E` conversion: status reads
+   `xE` until completion, then `x8`).
 4. Busy and EOC during conversion: after a start write, bit 6 = 0 and bit 7 = 1 until the
    last clock; on completion bit 6 = 1 and bit 7 = 0.
 5. Status bits 5 and 4 show the previous result's MSBs during a conversion and the new
    result's on completion (two conversions on inputs `&0000` then `&FFFF`).
 6. 12-bit result layout: input `&ABCD` gives high `&AB`, low `&C0`; offset 3 equals offset 2.
-7. 8-bit result layout: input `&ABCD` gives high `&AB`, low `&00`.
+7. 8-bit result layout is the 12-bit one: input `&ABCD` gives high `&AB`, low `&C0`.
 8. High-byte read resets EOC: bit 7 returns to 1 and CB1 to 1; reading offsets 0, 2 and 3
    does not.
 9. Peek has no side effects: peeking offset 1 after completion leaves bit 7 = 0 and CB1 = 0.
 10. Write during a conversion restarts it: the new channel's level and the new mode are what
     complete, and the completion time is measured from the second write.
-11. 8-bit timing: codes 0, 2024 and 4080 complete at 2950, 3962 and 4990 clocks.
+11. 8-bit timing: codes 0, 2024 and 3436 complete at 2945, 3957 and 4663 clocks; code 3440
+    completes at 4190 and 4080 at 4510.
 12. 12-bit timing: the last code of each tooth (1016, 1448, 2048, 2624, 3192, 3784, 4080)
     completes within 15 clocks of the measured end times (11138, 10975, 11153, 11281, 11386,
     11560, 11120), and the first code of each tooth from the table completes at `T_k`
