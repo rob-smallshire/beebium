@@ -2498,6 +2498,11 @@ class DeviceInspectionStub(object):
                 request_serializer=debugger__pb2.GetRealTimeClockStateRequest.SerializeToString,
                 response_deserializer=debugger__pb2.RealTimeClockState.FromString,
                 _registered_method=True)
+        self.GetAnalogueConverterState = channel.unary_unary(
+                '/beebium.DeviceInspection/GetAnalogueConverterState',
+                request_serializer=debugger__pb2.GetAnalogueConverterStateRequest.SerializeToString,
+                response_deserializer=debugger__pb2.AnalogueConverterState.FromString,
+                _registered_method=True)
 
 
 class DeviceInspectionServicer(object):
@@ -2559,6 +2564,12 @@ class DeviceInspectionServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAnalogueConverterState(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DeviceInspectionServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -2606,6 +2617,11 @@ def add_DeviceInspectionServicer_to_server(servicer, server):
                     servicer.GetRealTimeClockState,
                     request_deserializer=debugger__pb2.GetRealTimeClockStateRequest.FromString,
                     response_serializer=debugger__pb2.RealTimeClockState.SerializeToString,
+            ),
+            'GetAnalogueConverterState': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAnalogueConverterState,
+                    request_deserializer=debugger__pb2.GetAnalogueConverterStateRequest.FromString,
+                    response_serializer=debugger__pb2.AnalogueConverterState.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -2853,6 +2869,33 @@ class DeviceInspection(object):
             '/beebium.DeviceInspection/GetRealTimeClockState',
             debugger__pb2.GetRealTimeClockStateRequest.SerializeToString,
             debugger__pb2.RealTimeClockState.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAnalogueConverterState(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DeviceInspection/GetAnalogueConverterState',
+            debugger__pb2.GetAnalogueConverterStateRequest.SerializeToString,
+            debugger__pb2.AnalogueConverterState.FromString,
             options,
             channel_credentials,
             insecure,

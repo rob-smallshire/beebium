@@ -2448,3 +2448,92 @@ class RealTimeClockState(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___RealTimeClockState: _TypeAlias = RealTimeClockState  # noqa: Y015
+
+@_typing.final
+class GetAnalogueConverterStateRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___GetAnalogueConverterStateRequest: _TypeAlias = GetAnalogueConverterStateRequest  # noqa: Y015
+
+@_typing.final
+class AnalogueConverterState(_message.Message):
+    """The machine's analogue-to-digital converter -- the uPD7002 at &FEC0-&FEDF
+    on the Model B family -- read without side effects: the high byte is not
+    read, so the chip's EOC, and the System VIA CB1 level it drives, stay as
+    they are.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PRESENT_FIELD_NUMBER: _builtins.int
+    CHIP_FIELD_NUMBER: _builtins.int
+    STATUS_FIELD_NUMBER: _builtins.int
+    RESULT_FIELD_NUMBER: _builtins.int
+    CHANNEL_FIELD_NUMBER: _builtins.int
+    TWELVE_BIT_FIELD_NUMBER: _builtins.int
+    FLAG_FIELD_NUMBER: _builtins.int
+    BUSY_FIELD_NUMBER: _builtins.int
+    EOC_LEVEL_FIELD_NUMBER: _builtins.int
+    CLOCKS_REMAINING_FIELD_NUMBER: _builtins.int
+    INPUT_LEVELS_FIELD_NUMBER: _builtins.int
+    present: _builtins.bool
+    """False on a machine with no converter; the rest is then empty."""
+    chip: _builtins.str
+    """The chip, e.g. "uPD7002"."""
+    status: _builtins.int
+    """The status register as a read of offset 0 returns it."""
+    result: _builtins.int
+    """The result the registers show, 16 bits as the guest reads them (&0000
+    to &FFF0): the high byte at offset 1, the low byte at offsets 2 and 3.
+    While a conversion runs this is still the previous result.
+    """
+    channel: _builtins.int
+    """The control bits as last written to offset 0."""
+    twelve_bit: _builtins.bool
+    flag: _builtins.bool
+    busy: _builtins.bool
+    """A conversion is in progress."""
+    eoc_level: _builtins.int
+    """The EOC pin as System VIA CB1 sees it: 1 while idle or converting, 0
+    from the end of a conversion until the high byte is read or another
+    conversion starts.
+    """
+    clocks_remaining: _builtins.int
+    """1 MHz clocks until the conversion in progress completes; 0 when idle."""
+    @_builtins.property
+    def input_levels(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
+        """The level on each of the four inputs, as a fraction of VREF: 0 is
+        analogue ground, 65535 is VREF. An undriven input is 32768.
+        """
+
+    def __init__(
+        self,
+        *,
+        present: _builtins.bool = ...,
+        chip: _builtins.str = ...,
+        status: _builtins.int = ...,
+        result: _builtins.int = ...,
+        channel: _builtins.int = ...,
+        twelve_bit: _builtins.bool = ...,
+        flag: _builtins.bool = ...,
+        busy: _builtins.bool = ...,
+        eoc_level: _builtins.int = ...,
+        clocks_remaining: _builtins.int = ...,
+        input_levels: _abc.Iterable[_builtins.int] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["busy", b"busy", "channel", b"channel", "chip", b"chip", "clocks_remaining", b"clocks_remaining", "eoc_level", b"eoc_level", "flag", b"flag", "input_levels", b"input_levels", "present", b"present", "result", b"result", "status", b"status", "twelve_bit", b"twelve_bit"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AnalogueConverterState: _TypeAlias = AnalogueConverterState  # noqa: Y015

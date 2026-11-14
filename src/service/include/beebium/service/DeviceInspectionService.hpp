@@ -15,6 +15,7 @@
 
 #include "debugger.grpc.pb.h"
 #include <beebium/devices/Mc146818Rtc.hpp>
+#include <beebium/devices/Upd7002.hpp>
 #include <beebium/tube/TubeSocket.hpp>
 #include <beebium/tube/TubeInspection.hpp>
 #include <grpcpp/grpcpp.h>
@@ -23,6 +24,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <utility>
 
 namespace beebium::service {
 
@@ -428,6 +430,36 @@ public:
                 response->set_chip("CDP6818");
                 response->set_registers(std::move(registers));
                 response->set_address_register(rtc.address());
+            });
+        } else {
+            response->set_present(false);
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status GetAnalogueConverterState(
+        grpc::ServerContext* /*context*/,
+        const GetAnalogueConverterStateRequest* /*request*/,
+        AnalogueConverterState* response) override
+    {
+        if constexpr (requires { machine_.memory().analogue_converter(); }) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            // The converter is written on the emulation thread; read it whole.
+            machine_.with_emulation_paused([&] {
+                const Upd7002& adc = std::as_const(machine_.memory()).analogue_converter();
+                response->set_present(true);
+                response->set_chip("uPD7002");
+                response->set_status(adc.status());
+                response->set_result(adc.result());
+                response->set_channel(static_cast<uint32_t>(adc.channel()));
+                response->set_twelve_bit(adc.twelve_bit());
+                response->set_flag(adc.flag());
+                response->set_busy(adc.busy());
+                response->set_eoc_level(adc.eoc_level());
+                response->set_clocks_remaining(adc.clocks_remaining());
+                for (int channel = 0; channel < Upd7002::CHANNEL_COUNT; ++channel) {
+                    response->add_input_levels(adc.input_level(channel));
+                }
             });
         } else {
             response->set_present(false);

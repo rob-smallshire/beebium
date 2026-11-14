@@ -628,6 +628,7 @@ class DeviceInspectionStub:
     GetTubeState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetTubeStateRequest, _debugger_pb2.TubeState]
     SetTubeTraceConfig: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.SetTubeTraceConfigRequest, _debugger_pb2.SetTubeTraceConfigResponse]
     GetRealTimeClockState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetRealTimeClockStateRequest, _debugger_pb2.RealTimeClockState]
+    GetAnalogueConverterState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.GetAnalogueConverterStateRequest, _debugger_pb2.AnalogueConverterState]
 
 @_typing.type_check_only
 class DeviceInspectionAsyncStub(DeviceInspectionStub):
@@ -645,6 +646,7 @@ class DeviceInspectionAsyncStub(DeviceInspectionStub):
     GetTubeState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetTubeStateRequest, _debugger_pb2.TubeState]  # type: ignore[assignment]
     SetTubeTraceConfig: _aio.UnaryUnaryMultiCallable[_debugger_pb2.SetTubeTraceConfigRequest, _debugger_pb2.SetTubeTraceConfigResponse]  # type: ignore[assignment]
     GetRealTimeClockState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetRealTimeClockStateRequest, _debugger_pb2.RealTimeClockState]  # type: ignore[assignment]
+    GetAnalogueConverterState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.GetAnalogueConverterStateRequest, _debugger_pb2.AnalogueConverterState]  # type: ignore[assignment]
 
 class DeviceInspectionServicer(metaclass=_abc_1.ABCMeta):
     """BBC Micro device state inspection.
@@ -713,5 +715,12 @@ class DeviceInspectionServicer(metaclass=_abc_1.ABCMeta):
         request: _debugger_pb2.GetRealTimeClockStateRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_debugger_pb2.RealTimeClockState, _abc.Awaitable[_debugger_pb2.RealTimeClockState]]: ...
+
+    @_abc_1.abstractmethod
+    def GetAnalogueConverterState(
+        self,
+        request: _debugger_pb2.GetAnalogueConverterStateRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_debugger_pb2.AnalogueConverterState, _abc.Awaitable[_debugger_pb2.AnalogueConverterState]]: ...
 
 def add_DeviceInspectionServicer_to_server(servicer: DeviceInspectionServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

@@ -97,6 +97,7 @@ service DeviceInspection {
     rpc GetTubeState(GetTubeStateRequest) returns (TubeState);
     rpc SetTubeTraceConfig(SetTubeTraceConfigRequest) returns (SetTubeTraceConfigResponse);
     rpc GetRealTimeClockState(GetRealTimeClockStateRequest) returns (RealTimeClockState);
+    rpc GetAnalogueConverterState(GetAnalogueConverterStateRequest) returns (AnalogueConverterState);
 }
 
 message Empty {}
@@ -778,4 +779,46 @@ message RealTimeClockState {
 
     // The register the chip's address latch selects.
     uint32 address_register = 4;
+}
+
+message GetAnalogueConverterStateRequest {}
+
+// The machine's analogue-to-digital converter -- the uPD7002 at &FEC0-&FEDF
+// on the Model B family -- read without side effects: the high byte is not
+// read, so the chip's EOC, and the System VIA CB1 level it drives, stay as
+// they are.
+message AnalogueConverterState {
+    // False on a machine with no converter; the rest is then empty.
+    bool present = 1;
+
+    // The chip, e.g. "uPD7002".
+    string chip = 2;
+
+    // The status register as a read of offset 0 returns it.
+    uint32 status = 3;
+
+    // The result the registers show, 16 bits as the guest reads them (&0000
+    // to &FFF0): the high byte at offset 1, the low byte at offsets 2 and 3.
+    // While a conversion runs this is still the previous result.
+    uint32 result = 4;
+
+    // The control bits as last written to offset 0.
+    uint32 channel = 5;
+    bool twelve_bit = 6;
+    bool flag = 7;
+
+    // A conversion is in progress.
+    bool busy = 8;
+
+    // The EOC pin as System VIA CB1 sees it: 1 while idle or converting, 0
+    // from the end of a conversion until the high byte is read or another
+    // conversion starts.
+    uint32 eoc_level = 9;
+
+    // 1 MHz clocks until the conversion in progress completes; 0 when idle.
+    uint32 clocks_remaining = 10;
+
+    // The level on each of the four inputs, as a fraction of VREF: 0 is
+    // analogue ground, 65535 is VREF. An undriven input is 32768.
+    repeated uint32 input_levels = 11;
 }
