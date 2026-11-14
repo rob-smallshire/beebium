@@ -7,6 +7,7 @@ add_subdirectory(extension-api)
 add_library(beebium_core STATIC
     src/Via6522.cpp
     src/Sn76489.cpp
+    src/Upd7002.cpp
     src/KeyboardMapping.cpp
     src/ScreenText.cpp
     src/NameTemplate.cpp
@@ -62,6 +63,7 @@ add_library(beebium_core STATIC
     include/beebium/devices/EmptySlot.hpp
     include/beebium/devices/BankedMemory.hpp
     include/beebium/devices/Sn76489.hpp
+    include/beebium/devices/Upd7002.hpp
     include/beebium/AudioBuffer.hpp
 )
 

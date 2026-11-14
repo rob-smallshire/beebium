@@ -906,6 +906,11 @@ add_executable(test_sn76489 test_sn76489.cpp)
 target_link_libraries(test_sn76489 PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_sn76489)
 
+# NEC uPD7002 analogue-to-digital converter, on its own (#98)
+add_executable(test_upd7002 test_upd7002.cpp)
+target_link_libraries(test_upd7002 PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_upd7002)
+
 # SN76489 sampled-sound playback regression tests (issue #82)
 add_executable(test_sn76489_sample_playback test_sn76489_sample_playback.cpp)
 target_link_libraries(test_sn76489_sample_playback PRIVATE beebium_core Catch2::Catch2WithMain)
