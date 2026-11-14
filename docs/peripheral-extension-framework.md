@@ -611,9 +611,11 @@ target_link_libraries(beebium_ext_my_extension PUBLIC
 
 Most extensions should be plugins (next section). A built-in is for one the
 server must recognise with no plugin directory at all; today those are `aun`,
-`host-serial`, `file-printer`, `job-file-printer` and `joystick` (two
+`host-serial`, `file-printer`, `job-file-printer`, `joystick` (two
 joysticks on the analogue port, a controller a client sets through
-`ControllerService`; see `docs/analogue-port.md`), whose rationale
+`ControllerService`) and `voltmace-delta-14b` (Voltmace's two-handset
+adapter, attached to `analogue-port` and `user-port` together; both in
+`docs/analogue-port.md`), whose rationale
 `BuiltinExtensions.hpp` records. A
 built-in has no `manifest.json`: it is one entry in the table in
 `src/server/include/beebium/server/BuiltinExtensions.hpp`, a manifest built in

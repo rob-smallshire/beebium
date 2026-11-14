@@ -5,12 +5,14 @@ them: the NEC uPD7002 at &FEC0-&FEDF, its end-of-conversion line into the
 System VIA, the inspection RPC that reads it, and the port's handle, device
 seam and `analogue-port` attachment point, in the shape of the printer and
 user ports, the controllers a client sets through `ControllerService`, and
-the first device, the joystick. The tracking issue is #98.
+the devices: the joystick and the Voltmace Delta 14B/1 adapter. The tracking
+issue is #98.
 
 The specifications are `docs/discussion/upd7002-adc-specification.md` (the
 chip) and `docs/discussion/analogue-port-seam-specification.md` (the port) and
 `docs/discussion/controller-service-specification.md` (controllers and the
-joystick). The
+joystick) and `docs/discussion/voltmace-delta-14b-specification.md` (the
+Voltmace adapter, from `voltmace-delta-14b-findings.md`). The
 measurements behind the timing model come from the round 1 survey and from
 `docs/discussion/analogue-port-hardware-trials.md`. The disc that runs those
 trials on real hardware is built by `tools/hardware-trials/adc/`.
@@ -27,8 +29,9 @@ trials on real hardware is built by `tools/hardware-trials/adc/`.
 | EOC as a level on System VIA CB1, with the VIA doing the edge detection | A device driving the button lines as outputs (the Bitstik does) |
 | No reset on Break; power-on state on a power cycle | A light pen device (#210); the strobe is wired, the pen is not |
 | An undriven input reads the centre of the range, &8000 | A wandering, machine-dependent unplugged value |
-| The port: one device's channel levels, button lines (PB4, PB5) and light pen strobe (CB2 and the CRTC) | Devices other than the joystick: the Voltmace Delta 14B/1 adapter (round 5), the light pen (#210), dataloggers |
+| The port: one device's channel levels, button lines (PB4, PB5) and light pen strobe (CB2 and the CRTC) | Other devices: the light pen (#210), dataloggers |
 | The joystick: two sticks and two fire buttons, set by a client through `ControllerService` | Reading a host gamepad: that is the client's, as the host keyboard is |
+| The Voltmace Delta 14B/1 adapter: two handsets' sticks in the analogue port, their 3 by 4 keypads in the user port | Ghosting through the keypad's diode-less matrix; three behaviours are modelled but unverified on a real box (below) |
 
 Nothing in the model knows what any MOS does with the chip. MOS 1.20 appears
 only in tests, as a test vector.
@@ -331,12 +334,75 @@ stick reads about &8000 on a real Beeb. An axis is the channel level itself:
 on the BBC's joysticks a low level is right or down, and turning a host
 stick's direction into that is the client's mapping. A Voltmace Delta
 handset plugged straight into the port is electrically this device with two
-logical keys.
+logical keys: keys 9 to 11 and the red buttons are fire 0 (`fire1`, connector
+PB0) and keys 6 to 8 fire 1 (`fire2`, connector PB1); keys 0 to 5 do nothing,
+their row lines landing on 0 V and CH3.
 
 A test drives it by `SetControls` and reads it back by `GetControls`, or from
 BBC BASIC: the Python client's `bbc.controllers.set("joystick",
 {"stick1.x": 0xF000, "fire1": True})` makes `ADVAL(1)` read &F0xx and
 `ADVAL(0) AND 1` read 1.
+
+## The Voltmace Delta 14B/1 adapter
+
+The built-in extension `voltmace-delta-14b` ("Voltmace Delta 14B/1 adapter",
+`--voltmace-delta-14b`, no parameters, `src/extensions/voltmace-delta-14b/`) is
+Voltmace's adapter box with two Delta 14B handsets. It is one device in two
+ports: it attaches to `analogue-port` and `user-port` together, so both report
+occupied and a second device on either is refused. It is the analogue port's
+device, the user port's device and one controller. No stock preset attaches it.
+
+The **rear** socket is handset 1, on channels 0 (X) and 1 (Y); the **side**
+socket is handset 2, on channels 2 and 3. Single-handset use is on the rear
+socket. Stick direction is Acorn's: X high at hard left, Y high at the top.
+Each handset has a 3 by 4 keypad, keys 0 to 11, key = 3 x row + column, row 0
+the bottom row (keys 0, 1, 2). The two red buttons are wired to key 10 and are
+not separate controls.
+
+| Controls, in order | Group |
+|---|---|
+| `handset1.x`, `handset1.y` ("X", "Y"), `handset1.key0` to `handset1.key11` ("Key 0" to "Key 11") | Handset 1 (rear) |
+| `handset2.x`, `handset2.y`, `handset2.key0` to `handset2.key11` | Handset 2 (side) |
+
+Axes start at 32768 and keys released; nothing resets.
+
+The keypad is read through the user port:
+
+| User port line | Role |
+|---|---|
+| PB4, PB5, PB6 | Column 0, 1, 2 strobes, common to both handsets, active low |
+| PB3, PB2, PB1, PB0 | Row 0, 1, 2, 3 of the selected handset, active low, 1 at rest |
+| PB7 | The 74LS157 select: 0 = rear (handset 1), 1 = side (handset 2) |
+
+A column is **driven low** when its DDRB bit is an output and its ORB bit is
+0; an output at 1, or an input floating into the box's TTL inputs, is not.
+Row r of the selected handset reads 0 when any key at row r is held with its
+column driven low, otherwise 1. The rows are computed on every
+`update_port_b(output, ddr)` from the keys held and the lines the user VIA
+drives at that instant, never stored. The VIA asks its peripheral on every
+read of IRB, so a strobe written to &FE60 reads back on the very next
+instruction, which Voltmace's own drivers rely on (`STA &FE60` then
+`LDA &FE60`). The manual's set-up is `*FX151,98,240` (DDRB = &F0); its strobes
+are &60, &50, &30 for the rear socket and &E0, &D0, &B0 for the side. The
+matrix has no diodes, so three keys in an L can ghost a fourth on a real box;
+the model does not reproduce that.
+
+Three behaviours are modelled as the specification decides but are not yet
+verified on a real box. Each is one function and one test whose name starts
+"Unverified:" in `tests/test_voltmace_delta_14b.cpp`:
+
+1. **The fire lines.** A row 3 key (9, 10, 11 or a red button) on handset 1
+   grounds analogue connector PB0 (System VIA PB4) and one on handset 2
+   connector PB1 (PB5), each only while its column is driven low from the
+   user port. No other row reaches a fire line. So `ADVAL(0)` sees fire only
+   after the manual's `*FX151,98,112` and `*FX151,96,0`, as on the hardware.
+2. **The select as an input.** With PB7 an input the box reads the side
+   handset, a floating 74LS157 select input reading high.
+3. **CB1 and CB2.** The device leaves the user port's CB1 and CB2 alone.
+
+Voltmace's drivers depend on none of the three: they keep PB7 an output,
+never touch CB1 or CB2, and read fire through `ADVAL(0)` only after the
+manual's set-up.
 
 ## Inspection
 
@@ -360,8 +426,10 @@ through the memory map, so peeking the high byte does not reset EOC.
 | `tests/test_device_inspection_adc.cpp` | The inspection RPC, including that it leaves EOC alone and reports a device's levels |
 | `tests/test_preset_resolution.cpp`, `tests/test_attachment_points.cpp` | Every Model B family machine offers `analogue-port`; the catalogue entry |
 | `tests/test_joystick.cpp` | The joystick: its manifest and `--joystick`, its controls, initial values, each axis reaching its channel, the fire buttons on PB4 and PB5, refusals, values kept across Break and power-on. With MOS 1.20 as a test vector: `&2BA` and OSBYTE &80 |
-| `tests/test_grpc_controller.cpp` | `ControllerService` over a machine assembled from the command line: listing with and without a joystick, set and get, every refusal applying nothing, and the four fingerprint constants agreeing |
+| `tests/test_grpc_controller.cpp` | `ControllerService` over a machine assembled from the command line: listing with and without a joystick, the Voltmace adapter's two handsets, set and get, every refusal applying nothing, and the four fingerprint constants agreeing |
+| `tests/test_voltmace_delta_14b.cpp` | The Voltmace adapter: its manifest and `--voltmace-delta-14b`, both ports refusing a second device, its twenty-eight controls, the four axes, every key on both handsets under its strobe, the immediate read-back from a 6502 scan loaded from a disc, KEYPAD's pre-probe, undriven columns, the three unverified behaviours, values kept across Break and power-on. With MOS 1.20 as a test vector, from disc-loaded BASIC: the manual's PROCPB and six-strobe scan, `ADVAL(1)` to `ADVAL(4)`, and `ADVAL(0)` fire after the manual's set-up |
 | `clients/beebium-python-client/tests/test_controller.py` | `bbc.controllers` on a `--joystick` Model B: list, set and get, `ADVAL(1)` and `ADVAL(0) AND 1` from a disc-loaded BASIC program, and a refusal carrying the server's sentence |
+| `clients/beebium-python-client/tests/test_voltmace_delta_14b.py` | `bbc.controllers` on a `--voltmace-delta-14b` Model B: a side key found by the six-strobe scan, and handset 1's X on `ADVAL(1)` |
 | `clients/beebium-python-client/tests/test_analogue_converter.py` | From BBC BASIC, loaded from a tokenised disc: `ADVAL(1)` to `ADVAL(4)` read &8000 with no fire button pressed, and `?&FEC0` reads the chip cycling all four channels in 12-bit mode, never the old open-bus &20 |
 
 `clients/beebium-python-client/tests/test_analogue_port.py` checks the

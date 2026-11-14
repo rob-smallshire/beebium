@@ -213,6 +213,38 @@ TEST_CASE("ListControllers lists the joystick by its extension instance id",
     }
 }
 
+TEST_CASE("ListControllers lists the Voltmace Delta 14B/1 adapter's two handsets",
+          "[grpc][controller][voltmace_delta_14b]") {
+    if (!roms_available()) SKIP("ROMs not available");
+    ServedMachine served({"--voltmace-delta-14b"});
+    const auto response = served.list();
+    REQUIRE(response.controllers_size() == 1);
+    const auto& controller = response.controllers(0);
+    CHECK(controller.controller_id() == "voltmace-delta-14b");
+    CHECK(controller.display_name() == "Voltmace Delta 14B/1 adapter");
+    REQUIRE(controller.controls_size() == 28);
+    int rear = 0;
+    int side = 0;
+    for (int i = 0; i < controller.controls_size(); ++i) {
+        const auto& control = controller.controls(i);
+        INFO("control " << i << " " << control.id());
+        const int handset = i < 14 ? 1 : 2;
+        const int index = i % 14;
+        const std::string prefix = "handset" + std::to_string(handset) + ".";
+        if (index < 2) {
+            CHECK(control.id() == prefix + (index == 0 ? "x" : "y"));
+            CHECK(control.kind() == AXIS);
+        } else {
+            CHECK(control.id() == prefix + "key" + std::to_string(index - 2));
+            CHECK(control.kind() == BUTTON);
+        }
+        if (control.group() == "Handset 1 (rear)") ++rear;
+        if (control.group() == "Handset 2 (side)") ++side;
+    }
+    CHECK(rear == 14);
+    CHECK(side == 14);
+}
+
 TEST_CASE("SetControls then GetControls reads back what was set", "[grpc][controller]") {
     if (!roms_available()) SKIP("ROMs not available");
     ServedMachine served({"--joystick"});

@@ -2322,7 +2322,8 @@ Scenarios: a Model B with no joystick -> `ListControllers` is empty and the clie
 offers no controller mapping. Add the joystick extension -> one controller,
 "Joystick", with six controls in two groups. Push a mapped host stick right and
 press its button -> `SetControls` sends the mapped axis and `fire1`, and `ADVAL(0)
-AND 1` in BBC BASIC reads 1.
+AND 1` in BBC BASIC reads 1. Attach the Delta 14B/1 adapter -> one controller,
+"Voltmace Delta 14B/1 adapter", with two groups of fourteen controls.
 
 
 ## Appendix A. Server services used, by capability

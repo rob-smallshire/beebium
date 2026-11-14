@@ -23,7 +23,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <beebium/FrameAllocator.hpp>
+#include <beebium/FrameBuffer.hpp>
+#include <beebium/FrameRenderer.hpp>
 #include <beebium/Machines.hpp>
+#include <beebium/TeletextGrid.hpp>
+#include <beebium/TeletextText.hpp>
 #include <beebium/disc/DiscLoader.hpp>
 #include <beebium/extension/AnaloguePort.hpp>
 #include <beebium/extension/AttachmentPlan.hpp>
@@ -34,6 +39,8 @@
 #include <beebium/server/ServerMain.hpp>
 
 #include <cstdlib>
+#include <functional>
+#include <sstream>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -130,6 +137,89 @@ std::string find_beebasm() {
         if (std::system(check.c_str()) == 0) return c;
     }
     return "";
+}
+
+bool uvx_available() {
+    return std::system("uvx --version >/dev/null 2>&1") == 0;
+}
+
+// A DFS disc that boots straight into `program`, one of the BASIC sources in
+// tests/assets/voltmace, tokenised with oaknut-basic and CHAINed by an
+// EXEC !BOOT: nothing is typed.
+std::filesystem::path make_basic_disc(const std::string& program) {
+    const std::string disc = "uvx --from 'oaknut-disc>=12.10.0' oaknut-disc";
+    const auto dirpath = beebium::test::unique_temp_path("beebium_voltmace_basic_", "");
+    std::filesystem::create_directories(dirpath);
+    const auto ssd_filepath = dirpath / "basic.ssd";
+    const auto tok_filepath = dirpath / (program + ".tok");
+    const auto boot_filepath = dirpath / "boot.txt";
+    {
+        std::ofstream boot(boot_filepath, std::ios::binary);
+        boot << "CHAIN \"" << program << "\"\r";
+    }
+    const std::vector<std::string> commands = {
+        "uvx oaknut-basic tokenise " + (ASSETS_DIRPATH / "voltmace" / (program + ".bas")).string() +
+            " " + tok_filepath.string(),
+        disc + " create " + ssd_filepath.string() + " --title VOLTMACE",
+        disc + " put --load 0x1900 --exec 0x8023 " + ssd_filepath.string() + ":$." + program +
+            " " + tok_filepath.string(),
+        disc + " put " + ssd_filepath.string() + ":$.!BOOT " + boot_filepath.string(),
+        disc + " opt " + ssd_filepath.string() + " 3",
+    };
+    for (const auto& command : commands) {
+        INFO(command);
+        REQUIRE(std::system((command + " >/dev/null 2>&1").c_str()) == 0);
+    }
+    return ssd_filepath;
+}
+
+// A Model B with DFS 2.26 and a 1770 booting `ssd_filepath`, the adapter
+// plugged in and set by `hold` before power-on; returns the first line of the
+// Mode 7 screen that starts with `tag`, once it shows `end`.
+std::string run_basic(const std::filesystem::path& ssd_filepath,
+                      const std::function<void(VoltmaceDelta14bExtension&)>& hold,
+                      const std::string& tag, const std::string& end) {
+    ModelB machine;
+    auto mos = load_rom(ROM_DIRPATH / "acorn-mos_1_20.rom");
+    auto basic = load_rom(ROM_DIRPATH / "bbc-basic_2.rom");
+    auto dfs = load_rom(ROM_DIRPATH / "acorn-dfs_2_26.rom");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.memory().load_sideways_rom(14, dfs.data(), dfs.size());
+    machine.memory().install_acorn_1770();
+    auto disc = load_disc_from_url_or_filepath(ssd_filepath.string());
+    REQUIRE(disc.success());
+    machine.memory().disc_drive_0.insert(std::move(disc.disc));
+
+    HeapFrameAllocator allocator;
+    FrameBuffer frame_buffer{&allocator, 640, 512};
+    FrameRenderer renderer{&frame_buffer};
+    TeletextGrid grid;
+    machine.memory().saa5050.set_teletext_grid(&grid);
+    machine.memory().enable_video_output();
+
+    Plugged plugged(machine.memory());
+    hold(plugged.adapter);
+
+    machine.memory().set_auto_boot(true);
+    machine.reset();
+    std::string screen;
+    for (uint64_t i = 0; i < 60'000'000; ++i) {
+        machine.step();
+        if (machine.memory().video_output.has_value()) {
+            renderer.process(machine.memory().video_output.value());
+        }
+        if ((i & 0x3FFFF) == 0) {
+            screen = teletext_text(grid);
+            if (screen.find(end) != std::string::npos) break;
+        }
+    }
+    INFO("screen:\n" << screen);
+    REQUIRE(screen.find(end) != std::string::npos);
+    const auto start = screen.find(tag);
+    REQUIRE(start != std::string::npos);
+    const auto stop = screen.find(end, start);
+    return screen.substr(start + tag.size(), stop - start - tag.size());
 }
 
 }  // namespace
@@ -506,4 +596,70 @@ TEST_CASE("The Voltmace Delta 14B/1 adapter refuses a control it does not have",
           "The Voltmace Delta 14B/1 adapter has no button named handset2.x.");
     CHECK(message_of([&] { (void)adapter.button("handset1.key01"); }) ==
           "The Voltmace Delta 14B/1 adapter has no button named handset1.key01.");
+}
+
+TEST_CASE("Model B MOS 1.20 reads the keypads through the manual's routines",
+          "[voltmace_delta_14b][mos]") {
+    if (!roms_available()) SKIP("ROMs not available");
+    if (!uvx_available()) SKIP("uvx (from uv) is needed to build the BASIC disc");
+    const auto pb_filepath = make_basic_disc("PB13");
+    const auto scan_filepath = make_basic_disc("SC13");
+
+    auto hold_both = [](VoltmaceDelta14bExtension& adapter) {
+        adapter.set_button("handset1.key7", true);
+        adapter.set_button("handset2.key4", true);
+    };
+    auto hold_none = [](VoltmaceDelta14bExtension&) {};
+
+    // PROCPB on the rear socket: key 7, and 0 with nothing held.
+    CHECK(run_basic(pb_filepath, hold_both, "PB13 ", " END13") == "7");
+    CHECK(run_basic(pb_filepath, hold_none, "PB13 ", " END13") == "0");
+    // The six-strobe scan reads the side socket first.
+    CHECK(run_basic(scan_filepath, hold_both, "SC13 ", " END13") == "SIDE 4");
+    CHECK(run_basic(scan_filepath, hold_none, "SC13 ", " END13") == "NONE -1");
+}
+
+TEST_CASE("Model B MOS 1.20 reads the pots and the fire lines through ADVAL",
+          "[voltmace_delta_14b][mos]") {
+    if (!roms_available()) SKIP("ROMs not available");
+    if (!uvx_available()) SKIP("uvx (from uv) is needed to build the BASIC disc");
+    const auto filepath = make_basic_disc("AD14");
+
+    auto axes = [](VoltmaceDelta14bExtension& adapter) {
+        adapter.set_axis("handset1.x", 0x1100);
+        adapter.set_axis("handset1.y", 0x5500);
+        adapter.set_axis("handset2.x", 0x9900);
+        adapter.set_axis("handset2.y", 0xDD00);
+    };
+    auto fields = [](const std::string& text) {
+        std::vector<std::string> result;
+        std::istringstream in(text);
+        for (std::string field; in >> field;) result.push_back(field);
+        return result;
+    };
+
+    const auto rear = fields(run_basic(
+        filepath,
+        [&](VoltmaceDelta14bExtension& adapter) {
+            axes(adapter);
+            adapter.set_button("handset1.key10", true);
+        },
+        "AD14 ", " END14"));
+    REQUIRE(rear.size() == 5);
+    // ADVAL(n) is the 16-bit reading; its top byte is the level's.
+    CHECK(std::stoul(rear[0], nullptr, 16) >> 8 == 0x11);
+    CHECK(std::stoul(rear[1], nullptr, 16) >> 8 == 0x55);
+    CHECK(std::stoul(rear[2], nullptr, 16) >> 8 == 0x99);
+    CHECK(std::stoul(rear[3], nullptr, 16) >> 8 == 0xDD);
+    CHECK(rear[4] == "1");
+
+    const auto side = fields(run_basic(
+        filepath,
+        [&](VoltmaceDelta14bExtension& adapter) {
+            axes(adapter);
+            adapter.set_button("handset2.key10", true);
+        },
+        "AD14 ", " END14"));
+    REQUIRE(side.size() == 5);
+    CHECK(side[4] == "2");
 }
