@@ -2202,6 +2202,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_file_printer
         beebium_ext_job_file_printer
         beebium_ext_joystick
+        beebium_ext_voltmace_delta_14b
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain
@@ -2211,6 +2212,28 @@ if(BEEBIUM_BUILD_SERVICE)
         BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
     )
     catch_discover_tests(test_joystick)
+
+    # Voltmace Delta 14B/1 adapter: two handsets in the analogue and user ports (#98).
+    add_executable(test_voltmace_delta_14b test_voltmace_delta_14b.cpp)
+    target_link_libraries(test_voltmace_delta_14b PRIVATE
+        beebium_server_headers
+        beebium_service
+        beebium_ext_aun
+        beebium_ext_host_serial
+        beebium_ext_file_printer
+        beebium_ext_job_file_printer
+        beebium_ext_joystick
+        beebium_ext_voltmace_delta_14b
+        nlohmann_json::nlohmann_json
+        stb_image_write
+        Catch2::Catch2WithMain
+    )
+    target_compile_definitions(test_voltmace_delta_14b PRIVATE
+        BEEBIUM_VERSION="${PROJECT_VERSION}"
+        BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+        BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+    )
+    catch_discover_tests(test_voltmace_delta_14b)
 
     # ControllerService: list, get and set a machine's controllers (#98).
     add_executable(test_grpc_controller test_grpc_controller.cpp)
@@ -2222,6 +2245,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_file_printer
         beebium_ext_job_file_printer
         beebium_ext_joystick
+        beebium_ext_voltmace_delta_14b
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain
@@ -2244,6 +2268,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_file_printer
         beebium_ext_job_file_printer
         beebium_ext_joystick
+        beebium_ext_voltmace_delta_14b
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain
@@ -2267,6 +2292,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_file_printer
         beebium_ext_job_file_printer
         beebium_ext_joystick
+        beebium_ext_voltmace_delta_14b
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain

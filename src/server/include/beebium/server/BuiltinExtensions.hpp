@@ -29,6 +29,7 @@
 #include "FilePrinterExtension.hpp"
 #include "JobFilePrinterExtension.hpp"
 #include "JoystickExtension.hpp"
+#include "VoltmaceDelta14bExtension.hpp"
 #include "HostSerialExtension.hpp"
 #include "beebium/extension/Extension.hpp"
 #include "beebium/extension/ExtensionManifest.hpp"
@@ -294,6 +295,26 @@ inline std::vector<Entry> make_entries() {
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new JoystickExtension()); }});
+    }
+
+    // Voltmace Delta 14B/1 adapter.
+    //
+    // Built-in for the same reason as the joystick. One device in two ports:
+    // the handsets' pots and fire lines in the analogue port, their keypads in
+    // the user port. See docs/analogue-port.md.
+    {
+        ExtensionManifest m;
+        m.name = "voltmace-delta-14b";
+        m.display_name = "Voltmace Delta 14B/1 adapter";
+        m.description =
+            "Voltmace's Delta 14B/1 adapter box with two Delta 14B handsets: a joystick and a "
+            "12-key keypad each, in the analogue port and the user port together.";
+        m.cli_name = "voltmace-delta-14b";
+        m.extension_kind = "peripheral";
+        m.attaches_to = {"analogue-port", "user-port"};
+        result.push_back({std::move(m),
+                          [] { return std::unique_ptr<Extension>(
+                              new VoltmaceDelta14bExtension()); }});
     }
 
     // Every manifest passes the checks a plugin's does when it is read; a
