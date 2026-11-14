@@ -181,8 +181,9 @@ Add `make_region<0xFEC0, 0xFEDF, Mirror<0x03>>` over the chip to `ModelBHardware
 other Model B family hardware policies that list the region in their memory map comments
 (`ModelBPlusHardware`, `ModelBPlus128KHardware` and the ROM/RAM board variants built on the
 Model B map). The region is a 1 MHz access (`kSheilaSlowdownMask` already marks it; the
-test `test_memory_map.cpp` lines 564 to 566 asserting the open-bus value `&00` there must be
-replaced by tests against the chip, because the region is no longer unmapped).
+`unmapped_read_value` checks of `&FEC0` in `test_memory_map.cpp` test only that
+classification, as they do for the VIAs, and stay; what the chip reads there is the mirror
+test's business).
 
 ## Inspection
 
@@ -229,15 +230,17 @@ All names 7-bit ASCII. One `TEST_CASE` per line below, tagged `[upd7002]`.
 These load MOS 1.20 from the test assets as the existing BASIC-driven tests do and assert
 machine behaviour, not MOS behaviour as such.
 
-15. After reset the first conversion starts within 50 ms of emulated time, on channel 2 in
-    12-bit mode with the flag set (the MOS's `&0E`). This is a vector for "the region exists
+15. After power-on the first conversion starts within 300 ms of emulated time, on channel 2
+    in 12-bit mode with the flag set (the MOS's `&0E`; MOS 1.20 clears RAM first and writes
+    it at about 256 ms). This is a vector for "the region exists
     and the write path works", not a statement about what a Beeb must do.
 16. With all four inputs set to distinct levels, and after a second of emulated time, the MOS
     workspace holds each channel's high byte at `&2B0` plus channel offsets as documented in
     the Advanced User Guide, read through the debugger peek path. This proves the CB1
     interrupt, the handler's register reads and the channel cycling all meet.
-17. The System VIA sees a negative edge on CB1 roughly every 9 to 12 ms while the MOS cycles
-    the channels, measured from `ViaState.ifr` bit 4 or a CB1 edge counter, never faster.
+17. Once the boot has settled (from 500 ms), the System VIA sees a negative edge on CB1
+    roughly every 9 to 12 ms while the MOS cycles the channels (about 11.3 ms with all four
+    inputs undriven), measured from `ViaState.ifr` bit 4 or a CB1 edge counter, never faster.
 
 ### Python integration (`clients/beebium-python-client/tests`)
 
