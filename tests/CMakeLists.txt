@@ -2192,6 +2192,26 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_preset_resolution)
 
+    # Joystick: the built-in analogue port device and controller (#98).
+    add_executable(test_joystick test_joystick.cpp)
+    target_link_libraries(test_joystick PRIVATE
+        beebium_server_headers
+        beebium_service
+        beebium_ext_aun
+        beebium_ext_host_serial
+        beebium_ext_file_printer
+        beebium_ext_job_file_printer
+        beebium_ext_joystick
+        nlohmann_json::nlohmann_json
+        stb_image_write
+        Catch2::Catch2WithMain
+    )
+    target_compile_definitions(test_joystick PRIVATE
+        BEEBIUM_VERSION="${PROJECT_VERSION}"
+        BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    )
+    catch_discover_tests(test_joystick)
+
     add_executable(test_server_main test_server_main.cpp)
     target_link_libraries(test_server_main PRIVATE
         beebium_server_headers
@@ -2202,6 +2222,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_host_serial
         beebium_ext_file_printer
         beebium_ext_job_file_printer
+        beebium_ext_joystick
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain
@@ -2224,6 +2245,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_host_serial
         beebium_ext_file_printer
         beebium_ext_job_file_printer
+        beebium_ext_joystick
         nlohmann_json::nlohmann_json
         stb_image_write
         Catch2::Catch2WithMain

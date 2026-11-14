@@ -28,6 +28,7 @@
 #include "AunEconetTransportExtension.hpp"
 #include "FilePrinterExtension.hpp"
 #include "JobFilePrinterExtension.hpp"
+#include "JoystickExtension.hpp"
 #include "HostSerialExtension.hpp"
 #include "beebium/extension/Extension.hpp"
 #include "beebium/extension/ExtensionManifest.hpp"
@@ -273,6 +274,26 @@ inline std::vector<Entry> make_entries() {
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new JobFilePrinterExtension()); }});
+    }
+
+    // Joystick.
+    //
+    // Built-in so that --joystick works without a plugin directory, for the
+    // same reason as file-printer. Two sticks and two fire buttons on the
+    // analogue port, which a client sets through ControllerService. See
+    // docs/analogue-port.md.
+    {
+        ExtensionManifest m;
+        m.name = "joystick";
+        m.display_name = "Joystick";
+        m.description =
+            "Two analogue joysticks with a fire button each, plugged into the analogue port.";
+        m.cli_name = "joystick";
+        m.extension_kind = "peripheral";
+        m.attaches_to = {"analogue-port"};
+        result.push_back({std::move(m),
+                          [] { return std::unique_ptr<Extension>(
+                              new JoystickExtension()); }});
     }
 
     // Every manifest passes the checks a plugin's does when it is read; a

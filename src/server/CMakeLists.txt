@@ -250,7 +250,8 @@ function(add_beebium_server TARGET_NAME SOURCE_FILE)
     # aggregated into beebium-servers (the convenience target below)
     # so a single build invocation produces a complete extension tree.
     #
-    # The built-in exceptions (aun, host-serial, file-printer and job-file-printer)
+    # The built-in exceptions (aun, host-serial, file-printer, job-file-printer
+    # and joystick)
     # are statically linked.
     # See BuiltinExtensions.hpp for their rationale and what would be required
     # to convert each to a plugin. acorn-65c02-coprocessor is now a plugin.
@@ -262,6 +263,7 @@ function(add_beebium_server TARGET_NAME SOURCE_FILE)
             beebium_ext_host_serial
             beebium_ext_file_printer
             beebium_ext_job_file_printer
+            beebium_ext_joystick
             nlohmann_json::nlohmann_json
             stb_image_write
     )

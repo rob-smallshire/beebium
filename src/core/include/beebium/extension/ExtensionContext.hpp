@@ -18,6 +18,7 @@
 #include "OneMHzBusPort.hpp"
 #include "PeripheralExtension.hpp"
 #include "AnaloguePort.hpp"
+#include "ControllerRegistry.hpp"
 #include "PrinterPort.hpp"
 #include "SerialPort.hpp"
 #include "UserPort.hpp"
@@ -51,7 +52,8 @@ public:
                              SerialPort* serial_port = nullptr,
                              PrinterPort* printer_port = nullptr,
                              AudioSourcePort* audio_source_port = nullptr,
-                             AnaloguePort* analogue_port = nullptr)
+                             AnaloguePort* analogue_port = nullptr,
+                             ControllerRegistry* controller_registry = nullptr)
         : one_mhz_bus_port_(one_mhz_bus_port)
         , user_port_(user_port)
         , tube_socket_(tube_socket)
@@ -59,9 +61,11 @@ public:
         , serial_port_(serial_port)
         , printer_port_(printer_port)
         , audio_source_port_(audio_source_port)
-        , analogue_port_(analogue_port) {}
+        , analogue_port_(analogue_port)
+        , controller_registry_(controller_registry) {}
 
-    // Type-safe port handle access.
+    // Type-safe port handle access. get<ControllerRegistry>() is the
+    // machine's registry of controllers, which a Controller adds itself to.
     template<typename T>
     T& get() {
         if constexpr (std::is_same_v<T, OneMHzBusPort>) {
@@ -106,6 +110,12 @@ public:
                     "ExtensionContext: analogue-port not available on this machine");
             }
             return *analogue_port_;
+        } else if constexpr (std::is_same_v<T, ControllerRegistry>) {
+            if (!controller_registry_) {
+                throw std::runtime_error(
+                    "ExtensionContext: controller registry not available on this machine");
+            }
+            return *controller_registry_;
         } else {
             static_assert(!std::is_same_v<T, T>, "Unknown port type");
         }
@@ -128,6 +138,8 @@ public:
             return audio_source_port_ != nullptr;
         } else if constexpr (std::is_same_v<T, AnaloguePort>) {
             return analogue_port_ != nullptr;
+        } else if constexpr (std::is_same_v<T, ControllerRegistry>) {
+            return controller_registry_ != nullptr;
         } else {
             return false;
         }
@@ -176,6 +188,7 @@ private:
     PrinterPort* printer_port_;
     AudioSourcePort* audio_source_port_;
     AnaloguePort* analogue_port_;
+    ControllerRegistry* controller_registry_;
     std::unordered_map<std::string, PeripheralExtension*> providers_;
 };
 

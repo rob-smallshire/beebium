@@ -892,6 +892,9 @@ struct AssembledMachine {
     std::optional<MachineDirectory> machine_directory;
     MachineType machine;
     beebium::EconetTransportRegistry transport_registry;
+    // The controllers the extensions attach, for ControllerService. Declared
+    // before the extension registry so it outlives the controllers it lists.
+    beebium::ControllerRegistry controller_registry;
     beebium::ExtensionRegistry extension_registry;
     // Holds raw pointers into machine memory; only meaningful for the life of
     // the machine, hence declared after it. Emplaced during assembly.
@@ -1251,7 +1254,8 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         beebium::HasSerialPort<Memory> ? &machine.state().memory.serial_port() : nullptr,
         beebium::HasPrinterPort<Memory> ? &machine.state().memory.printer_port() : nullptr,
         beebium::HasAudioSourcePort<Memory> ? &machine.state().memory.audio_source_port() : nullptr,
-        beebium::HasAnaloguePort<Memory> ? &machine.state().memory.analogue_port() : nullptr);
+        beebium::HasAnaloguePort<Memory> ? &machine.state().memory.analogue_port() : nullptr,
+        &am->controller_registry);
     extension_registry.resolve_and_init(*am->extension_context);
 
     // A saved machine's extensions take back what their batteries kept,
