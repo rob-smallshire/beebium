@@ -36,10 +36,29 @@ python3 tools/hardware-trials/adc/build_disc.py OUTPUT_DIRPATH
 ```
 
 This writes `OUTPUT_DIRPATH/adc-trials.ssd` (the current directory if you
-leave the argument out). It prints the size of each tokenised program. Never
+leave the argument out).
+
+For a Master 128, build with `--machine master`:
+
+```
+python3 tools/hardware-trials/adc/build_disc.py --machine master OUTPUT_DIRPATH
+```
+
+This writes `adc-trials-master.ssd`. The Master's uPD7002 is at &FE18-&FE1F
+rather than &FEC0-&FEDF, and its four registers repeat only once, at &FE1C.
+The build rewrites the chip addresses in trials 1, 2, 3 and 7, and points
+trial 2's mirror reads at &FE1C to &FE1F. It refuses to finish if any Model B
+address survives. Nothing else changes: MOS 3.20 keeps the ADC workspace
+where MOS 1.20 does (&24C, &24D), and its `*FX16` behaves the same. The
+Master disc's menu checks the MOS type (OSBYTE 0) and warns if the machine
+isn't a Master. The machine notes record `disc=master`. It prints the size of each tokenised program. Never
 commit the `.ssd`.
 
-## Running it on a Model B
+## Running it on a Model B (or a Master)
+
+Use `adc-trials.ssd` on a Model B and `adc-trials-master.ssd` on a Master 128;
+the instructions are otherwise the same. On the wrong machine the timing loops
+read a register that isn't the ADC and hang.
 
 1. Write the image to a floppy (an 80-track single-sided DFS disc), or load it
    in a Gotek or similar drive emulator. **Leave the disc writable**: the

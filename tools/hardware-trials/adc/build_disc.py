@@ -17,7 +17,15 @@ Each program (MENU.bas, T1.bas ... T7.bas) has COMMON.bas appended, is
 tokenised with oaknut-basic and put on a fresh DFS image with oaknut-disc,
 alongside a !BOOT that chains MENU, with the boot option set to EXEC.
 
-Usage: build_disc.py [OUTPUT_DIRPATH]   (default: the current directory)
+The sources are written for the Model B, whose uPD7002 is at &FEC0-&FEDF.
+With --machine master the build rewrites them for the Master 128, whose
+uPD7002 is at &FE18-&FE1F (its four registers repeat once, at &FE1C), and
+writes adc-trials-master.ssd. Nothing else differs: MOS 3.20 keeps the ADC
+workspace at the same addresses as MOS 1.20 (&24C current channel, &24D
+maximum channel) and its OSBYTE &10 behaves the same.
+
+Usage: build_disc.py [--machine model-b|master] [OUTPUT_DIRPATH]
+       (default: model-b, and the current directory)
 
 Needs only the Python standard library and uvx on the PATH.
 """
@@ -32,7 +40,49 @@ SOURCE_DIRPATH = Path(__file__).resolve().parent
 PROGRAM_NAMES = ["MENU", "T1", "T2", "T3", "T4", "T5", "T6", "T7"]
 COMMON_FILENAME = "COMMON.bas"
 BOOT_FILENAME = "BOOT.txt"
-SSD_FILENAME = "adc-trials.ssd"
+
+# Per machine: the image name, the disc title, and the rewrites applied to
+# each program's source before tokenising, in order. After rewriting, no
+# Model B ADC address may remain.
+MACHINES = {
+    "model-b": {
+        "ssd_filename": "adc-trials.ssd",
+        "title": "ADC TRIALS",
+        "rewrites": {},
+    },
+    "master": {
+        "ssd_filename": "adc-trials-master.ssd",
+        "title": "ADC MASTER",
+        "rewrites": {
+            "MENU": [
+                ('PRINT "uPD7002 analogue port trials"',
+                 'PRINT "uPD7002 analogue port trials: Master"'),
+                # OSBYTE 0 with X=1 returns the MOS version: 3 on a Master 128.
+                ("50 MODE 7\n",
+                 "50 MODE 7\n"
+                 "52 A%=0:X%=1:V%=((USR&FFF4)AND&FF00)DIV256\n"
+                 '54 IF V%<>3 THEN PRINT "This disc is for the Master 128 (MOS 3),"\'"but this machine reports MOS type ";V%;"."\':PROCkey("Press SPACE to carry on anyway.")\n'),
+                ('1710 PROCw("minutes_on",c$):PROCw("joystick",j$)',
+                 '1710 PROCw("minutes_on",c$):PROCw("joystick",j$):PROCw("disc","master")'),
+            ],
+            "T2": [
+                ("M1%=?&FEC4:M2%=?&FEC8:M3%=?&FED0:M4%=?&FEDC:M5%=?&FEC6",
+                 "M1%=?&FE1C:M2%=?&FE1D:M3%=?&FE1E:M4%=?&FE1F:M5%=?&FE1E"),
+                ('"_mirror_FEC4"', '"_mirror_FE1C"'),
+                ('"_mirror_FEC8"', '"_mirror_FE1D"'),
+                ('"_mirror_FED0"', '"_mirror_FE1E"'),
+                ('"_mirror_FEDC"', '"_mirror_FE1F"'),
+                ('"_mirror_FEC6_low"', '"_mirror_FE1E_low"'),
+            ],
+            "*": [
+                ("&FEC0", "&FE18"),
+                ("&FEC1", "&FE19"),
+                ("&FEC2", "&FE1A"),
+                ("&FEC3", "&FE1B"),
+            ],
+        },
+    },
+}
 # 12.10.0 is the first release that writes the DFS catalogue in descending
 # start-sector order; with earlier ones a *SAVE on the BBC overwrites a file.
 OAKNUT_DISC = ["uvx", "--from", "oaknut-disc>=12.10.0", "oaknut-disc"]
@@ -66,8 +116,21 @@ def line_numbers(text):
     return numbers
 
 
-def combined_source(program_name, common_text):
-    text = read_ascii(SOURCE_DIRPATH / f"{program_name}.bas")
+def rewrite(program_name, text, rewrites):
+    for old, new in rewrites.get(program_name, []) + rewrites.get("*", []):
+        if old not in text and program_name in rewrites and (old, new) in rewrites[program_name]:
+            sys.exit(f"{program_name}.bas no longer contains {old!r}; update the rewrites.")
+        text = text.replace(old, new)
+    if rewrites:
+        for line in text.splitlines():
+            code = line.split("REM", 1)[0]
+            if "&FEC" in code or "&FED" in code:
+                sys.exit(f"{program_name}.bas still uses a Model B ADC address: {line}")
+    return text
+
+
+def combined_source(program_name, common_text, rewrites):
+    text = rewrite(program_name, read_ascii(SOURCE_DIRPATH / f"{program_name}.bas"), rewrites)
     program_numbers = line_numbers(text)
     common_numbers = line_numbers(common_text)
     if max(program_numbers) >= min(common_numbers):
@@ -78,21 +141,22 @@ def combined_source(program_name, common_text):
     return text.rstrip("\n") + "\n" + common_text
 
 
-def build(output_dirpath):
+def build(output_dirpath, machine="model-b"):
     if shutil.which("uvx") is None:
         sys.exit("uvx was not found on the PATH; install uv first.")
+    config = MACHINES[machine]
     output_dirpath.mkdir(parents=True, exist_ok=True)
-    ssd_filepath = output_dirpath / SSD_FILENAME
+    ssd_filepath = output_dirpath / config["ssd_filename"]
     if ssd_filepath.exists():
         ssd_filepath.unlink()
     common_text = read_ascii(SOURCE_DIRPATH / COMMON_FILENAME)
 
     with tempfile.TemporaryDirectory() as work_dirname:
         work_dirpath = Path(work_dirname)
-        run([*OAKNUT_DISC, "create", str(ssd_filepath), "--title", "ADC TRIALS"])
+        run([*OAKNUT_DISC, "create", str(ssd_filepath), "--title", config["title"]])
         for name in PROGRAM_NAMES:
             source_filepath = work_dirpath / f"{name}.bas"
-            source_filepath.write_text(combined_source(name, common_text), encoding="ascii")
+            source_filepath.write_text(combined_source(name, common_text, config["rewrites"]), encoding="ascii")
             tokenised_filepath = work_dirpath / f"{name}.tok"
             run([*OAKNUT_BASIC, "tokenise", str(source_filepath), str(tokenised_filepath)])
             size = tokenised_filepath.stat().st_size
@@ -113,8 +177,15 @@ def build(output_dirpath):
 
 
 def main():
-    output_dirpath = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
-    build(output_dirpath)
+    args = sys.argv[1:]
+    machine = "model-b"
+    if args[:1] == ["--machine"]:
+        if len(args) < 2 or args[1] not in MACHINES:
+            sys.exit(f"--machine takes one of: {', '.join(MACHINES)}")
+        machine = args[1]
+        args = args[2:]
+    output_dirpath = Path(args[0]) if args else Path.cwd()
+    build(output_dirpath, machine)
 
 
 if __name__ == "__main__":
