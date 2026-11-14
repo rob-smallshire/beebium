@@ -117,18 +117,20 @@ service ControllerService {
   rpc SetControls(SetControlsRequest) returns (SetControlsResponse);
 }
 
-message ControlDescription {
+// ControlInfo and ControlType, not ControlDescription and ControlKind: every proto is in
+// package beebium, so the C++ seam's names would clash with the generated types.
+message ControlInfo {
   string id = 1;
   string display_name = 2;
   string group = 3;
-  ControlKind kind = 4;
+  ControlType type = 4;
 }
-enum ControlKind { CONTROL_KIND_UNSPECIFIED = 0; AXIS = 1; BUTTON = 2; }
+enum ControlType { CONTROL_TYPE_UNSPECIFIED = 0; AXIS = 1; BUTTON = 2; }
 
 message ControllerDescription {
   string controller_id = 1;   // the extension instance id, as PeripheralExtensionService names it
   string display_name = 2;
-  repeated ControlDescription controls = 3;
+  repeated ControlInfo controls = 3;
 }
 message ListControllersRequest {}
 message ListControllersResponse { repeated ControllerDescription controllers = 1; }
@@ -148,7 +150,9 @@ Semantics:
 - `SetControls` applies every value in the request before returning, in order; a request that names an
   unknown controller returns NotFound, an unknown control id or a value of the wrong kind or an axis
   above 65535 returns InvalidArgument, and in those cases nothing in the request is applied (validate
-  first, then store). Error details are sentences ("The joystick has no control named stick3.x.").
+  first, then store). Error details are sentences that name the controller by the id the client used, never by display
+  name: "The controller joystick has no control named stick3.x.", "There is no controller named
+  joystick2."
 - `GetControls` returns the current value of every control, so a test can read back what it set.
 - `Decision`: unary only in this round. A client-streaming form can be added when a GUI client measures
   that it needs one.
