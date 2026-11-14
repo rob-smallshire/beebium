@@ -73,9 +73,11 @@ The chip has no reset. `Decision`: at machine construction the chip is idle with
 CB1 high. Status therefore reads `&C0`.
 
 **Break does not touch the chip.** The CPU reset line does not reach the uPD7002. A conversion
-in flight across Break completes normally and drives CB1 low; what the freshly reset System VIA
-makes of that edge is the VIA's business. Power-on (constructing a new machine) is the only way
-to a clean chip.
+in flight across Break (`Hardware::soft_reset`) completes normally and drives CB1 low; what the
+freshly reset System VIA makes of that edge is the VIA's business. Power-on is the only way to a
+clean chip: constructing a machine, and `Hardware::reset` (the debugger's Reset RPC), which the
+code defines as a power cycle, both return the chip to the state above with any conversion
+abandoned. Input levels are a property of what is plugged in, so they survive both.
 
 ### Starting a conversion
 
@@ -103,8 +105,8 @@ When the countdown reaches zero, on a 1 MHz clock edge:
 
 Reading offset 1 (the high byte) resets EOC: status bit 7 = 1 and CB1 = 1. Reading offsets 0,
 2 or 3 has no side effect. The debugger peek path must read all four offsets without side
-effects (`MemoryRegion` `HasSideEffects` is set, and `ModelBHardware::peek` routes the region
-to a `peek` method as it does for the VIAs and the Tube).
+effects: the chip provides `peek`, which `MemoryMap`'s region dispatch already prefers for a
+`PeekableDevice`, so `Hardware::peek` reaches it with no special case.
 
 ### End of conversion into the System VIA
 
@@ -200,7 +202,8 @@ All names 7-bit ASCII. One `TEST_CASE` per line below, tagged `[upd7002]`.
 
 1. Power-on state: status `&C0`, high and low bytes 0, CB1 level 1.
 2. Mirror: offsets 0 to 3 repeat at every 4-byte step from `&FEC0` to `&FEDF` (test through
-   the Model B memory map, `[memory_map]` tag as well).
+   the Model B memory map, `[memory_map]` tag as well; this one lands with commit 2, since it
+   needs the region).
 3. Status echoes the written channel, mode and flag bits.
 4. Busy and EOC during conversion: after a start write, bit 6 = 0 and bit 7 = 1 until the
    last clock; on completion bit 6 = 1 and bit 7 = 0.
