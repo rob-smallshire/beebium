@@ -1,0 +1,247 @@
+uPD7002 analogue port trials: results from adc-trials-master-results.ssd
+
+Machine notes
+  board_issue = aiv avc12
+  banner = Acorn MOS
+  minutes_on = 60
+  joystick = 1
+  disc = master
+
+Trial 1. Conversion time against input
+  mean conversion time, ms (control &08 = 12-bit, &00 = 8-bit, &09 = channel 1 12-bit)
+    unplugged  &00: 4.3, &08: 10.6
+    centre     &00: 4.2, &08: 10.6
+    left       &00: 4.3, &08: 11.2
+    right      &00: 3.0, &08: 10.0
+    up         &09: 11.2
+    down       &09: 10.0
+
+Trial 2. What the registers read
+  joystick = 1
+  run1_control = &08
+  run1_status_after_write = &89
+  run1_status_when_complete = &68
+  run1_low = &60
+  run1_status_after_low_read = &68
+  run1_fourth_address = &60
+  run1_high = &8F
+  run1_status_after_high_read = &E8
+  run1_mirror_FE1C = &E8
+  run1_mirror_FE1D = &8F
+  run1_mirror_FE1E = &60
+  run1_mirror_FE1F = &60
+  run1_mirror_FE1E_low = &60
+  run2_control = &0E
+  run2_status_after_write = &A8
+  run2_status_when_complete = &6E
+  run2_low = &30
+  run2_status_after_low_read = &6E
+  run2_fourth_address = &30
+  run2_high = &86
+  run2_status_after_high_read = &EE
+  run2_mirror_FE1C = &EE
+  run2_mirror_FE1D = &86
+  run2_mirror_FE1E = &30
+  run2_mirror_FE1F = &30
+  run2_mirror_FE1E_low = &30
+  run3_left_control = &08
+  run3_left_status_after_write = &AE
+  run3_left_status_when_complete = &78
+  run3_left_low = &50
+  run3_left_status_after_low_read = &78
+  run3_left_fourth_address = &50
+  run3_left_high = &FF
+  run3_left_status_after_high_read = &F8
+  run3_left_mirror_FE1C = &F8
+  run3_left_mirror_FE1D = &FF
+  run3_left_mirror_FE1E = &50
+  run3_left_mirror_FE1F = &50
+  run3_left_mirror_FE1E_low = &50
+  run4_right_control = &08
+  run4_right_status_after_write = &B8
+  run4_right_status_when_complete = &48
+  run4_right_low = &50
+  run4_right_status_after_low_read = &48
+  run4_right_fourth_address = &50
+  run4_right_high = &00
+  run4_right_status_after_high_read = &C8
+  run4_right_mirror_FE1C = &C8
+  run4_right_mirror_FE1D = &00
+  run4_right_mirror_FE1E = &50
+  run4_right_mirror_FE1F = &50
+  run4_right_mirror_FE1E_low = &50
+  run1: low nibble zero: yes; fourth address = low: yes; bit 7 clear after low read: yes; bit 7 set after high read: yes
+  run2: low nibble zero: yes; fourth address = low: yes; bit 7 clear after low read: yes; bit 7 set after high read: yes
+  run3_left: low nibble zero: yes; fourth address = low: yes; bit 7 clear after low read: yes; bit 7 set after high read: yes
+  run4_right: low nibble zero: yes; fourth address = low: yes; bit 7 clear after low read: yes; bit 7 set after high read: yes
+  flag bit 2 echoed with control &0E: no
+  status bits 5-4 just after write, left then right: &30: the chip holds the previous result's top bits
+
+Trial 3. The end-of-conversion line into the System VIA
+  neg_flag_after_write = &00
+  neg_flag_at_completion = &10
+  neg_flag_after_high_read = &00
+  neg_status_after_high_read = &E8
+  neg_flag_after_new_write = &00
+  neg_flag_at_2nd_completion = &10
+  pos_flag_after_write = &10
+  pos_flag_at_completion = &00
+  pos_flag_after_high_read = &10
+  pos_status_after_high_read = &E8
+  pos_flag_after_new_write = &00
+  pos_flag_at_2nd_completion = &00
+  verdict: the high-byte read releases the end-of-conversion line (datasheet)
+
+Trial 4. What an empty port reads through ADVAL
+  read1_adval1 = &CD30
+  read1_adval2 = &CA40
+  read1_adval3 = &C500
+  read1_adval4 = &C1F0
+  read2_adval1 = &CBA0
+  read2_adval2 = &CDC0
+  read2_adval3 = &C6A0
+  read2_adval4 = &C480
+  read3_adval1 = &CBE0
+  read3_adval2 = &CD00
+  read3_adval3 = &C4E0
+  read3_adval4 = &C650
+  read4_adval1 = &CC40
+  read4_adval2 = &CBD0
+  read4_adval3 = &C420
+  read4_adval4 = &C2F0
+  adval0 = &0300
+  fire_lines = &30
+
+Trial 5. With a joystick, through ADVAL
+  joystick = 1
+  centre_adval1 = &9860
+  centre_adval2 = &8150
+  centre_adval3 = &8620
+  centre_adval4 = &84D0
+  centre_adval0 = &0200
+  centre_fire_lines = &30
+  left_adval1 = &FF70
+  left_adval2 = &9110
+  left_adval3 = &8630
+  left_adval4 = &84D0
+  left_adval0 = &0300
+  left_fire_lines = &30
+  right_adval1 = &0070
+  right_adval2 = &8920
+  right_adval3 = &8620
+  right_adval4 = &84C0
+  right_adval0 = &0300
+  right_fire_lines = &30
+  up_adval1 = &9AE0
+  up_adval2 = &FFF0
+  up_adval3 = &8620
+  up_adval4 = &8520
+  up_adval0 = &0200
+  up_fire_lines = &30
+  down_adval1 = &9450
+  down_adval2 = &0010
+  down_adval3 = &85C0
+  down_adval4 = &83F0
+  down_adval0 = &0100
+  down_fire_lines = &30
+  fireA_adval1 = &9520
+  fireA_adval2 = &7FC0
+  fireA_adval3 = &85C0
+  fireA_adval4 = &8420
+  fireA_adval0 = &0101
+  fireA_fire_lines = &20
+  fireB_adval1 = &94A0
+  fireB_adval2 = &7FC0
+  fireB_adval3 = &8590
+  fireB_adval4 = &8420
+  fireB_adval0 = &0402
+  fireB_fire_lines = &10
+
+Trial 6. The reference voltage
+  vref_volts = 1.85
+
+Trial 7. The sweep: conversion time against result
+  joystick = 1
+  runs = ABC
+  records_per_run = 2000
+
+  Run A (control &08, full sweep)
+  run = A
+  control = &08
+  records = 2000
+  time_min_us = 9093
+  time_max_us = 11317
+  result_min = 1
+  time_at_result_min_us = 9133
+  result_max = 903
+  time_at_result_max_us = 11193
+  drop1 = 208,10729,9757
+  drop2 = 380,11069,10105
+  drop3 = 472,10789,9825
+  drop4 = 616,10909,9949
+  drop5 = 764,11073,10089
+  drops = 5
+    2000 records -> ./T7A.csv
+    drops of more than 300 us (12-bit result, before -> after):
+      at  832: 10729 -> 9757 us (drop 972)
+      at 1520: 11069 -> 10105 us (drop 964)
+      at 1888: 10789 -> 9825 us (drop 964)
+      at 2464: 10909 -> 9949 us (drop 960)
+      at 3056: 11073 -> 10089 us (drop 984)
+    straight-line fits between drops (12-bit result):
+         0- 832: 498 points (0 off-line), 1.996 us per code, 9091 us at 0
+       832-1520: 396 points (3 off-line), 2.001 us per code, 9728 us at 832
+      1520-1888: 173 points (2 off-line), 2.003 us per code, 10079 us at 1520
+      1888-2464: 231 points (1 off-line), 1.999 us per code, 9792 us at 1888
+      2464-3056: 434 points (7 off-line), 2.001 us per code, 9919 us at 2464
+      3056-4096: 239 points (16 off-line), 1.998 us per code, 10079 us at 3056
+
+  Run B (control &00, full sweep)
+  run = B
+  control = &00
+  records = 2000
+  time_min_us = 2945
+  time_max_us = 4625
+  result_min = 1
+  time_at_result_min_us = 2953
+  result_max = 1023
+  time_at_result_max_us = 4221
+  drops = 0
+    2000 records -> ./T7B.csv
+    drops of more than 300 us (12-bit result, before -> after):
+      none
+    straight-line fits between drops (12-bit result):
+         0-4096: 1791 points (209 off-line), 0.443 us per code, 2988 us at 0
+
+  Run C (control &08, middle only)
+  run = C
+  control = &08
+  records = 2000
+  time_min_us = 9745
+  time_max_us = 11117
+  result_min = 172
+  time_at_result_min_us = 10481
+  result_max = 828
+  time_at_result_max_us = 10593
+  drop1 = 208,10721,9745
+  drop2 = 380,11073,10093
+  drop3 = 472,10793,9809
+  drop4 = 616,10913,9949
+  drop5 = 764,11069,10101
+  drops = 5
+    2000 records -> ./T7C.csv
+    drops of more than 300 us (12-bit result, before -> after):
+      at  832: 10721 -> 9745 us (drop 976)
+      at 1520: 11073 -> 10093 us (drop 980)
+      at 1888: 10793 -> 9809 us (drop 984)
+      at 2464: 10913 -> 9949 us (drop 964)
+      at 3056: 11069 -> 10101 us (drop 968)
+    straight-line fits between drops (12-bit result):
+         0- 832: 216 points (0 off-line), 1.993 us per code, 9093 us at 0
+       832-1520: 427 points (21 off-line), 2.000 us per code, 9728 us at 832
+      1520-1888: 253 points (1 off-line), 1.995 us per code, 10082 us at 1520
+      1888-2464: 436 points (2 off-line), 2.000 us per code, 9791 us at 1888
+      2464-3056: 482 points (11 off-line), 1.999 us per code, 9920 us at 2464
+      3056-4096: 143 points (8 off-line), 2.011 us per code, 10078 us at 3056
+
+CSV files are in .

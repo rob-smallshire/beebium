@@ -103,6 +103,15 @@ one hangs, press Break, then Shift+Break.
 Trial 7 keeps as many records as fit under the MODE 4 screen, at most 2000. The
 number is written as `records`.
 
+## Returned results (`results/`)
+
+`results/` keeps the discs that come back from real machines, one directory
+per run, named by date and machine (for example `2026-11-14-master-aiv/`).
+Each holds the returned image as it came back, which is the raw record, plus
+the decoder's `report.txt` and the CSV files it writes, so the data can be
+read without the tools. These are measurements, not build output. Never
+rebuild or overwrite them; a new run gets a new directory.
+
 ## Decoding a returned disc
 
 ```
