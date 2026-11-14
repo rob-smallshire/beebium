@@ -166,7 +166,12 @@ public:
             // APIs (AunService, PiconetService, the serial/SCSI/RTC services,
             // ...) are NOT hosted as gRPC services by the extensions; clients
             // reach them through the single extension_rpc_service channel.
+            // ControllerService over the controllers the extensions attached:
+            // on every machine, listing none when no controller is attached.
+            beebium::service::ControllerServiceImpl controller_service(am.controller_registry);
+
             std::vector<grpc::Service*> extension_services;
+            extension_services.push_back(&controller_service);
             extension_services.push_back(&peripheral_extension_service);
             extension_services.push_back(&econet_transport_service);
             extension_services.push_back(&extension_ui_service);

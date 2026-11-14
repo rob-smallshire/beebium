@@ -73,6 +73,7 @@ python -m grpc_tools.protoc \
     --mypy_grpc_out="$CORE_OUT" \
     "$PROTO_DIR/video.proto" \
     "$PROTO_DIR/keyboard.proto" \
+    "$PROTO_DIR/controller.proto" \
     "$PROTO_DIR/debugger.proto" \
     "$PROTO_DIR/audio.proto" \
     "$PROTO_DIR/system.proto" \

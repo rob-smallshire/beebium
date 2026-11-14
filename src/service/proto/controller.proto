@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package beebium;
+
+// A controller is a device a person holds or points at the screen: a
+// joystick, a handset, a mouse, a light pen. It publishes named controls,
+// each an axis or a button, and a client sets them.
+//
+// The vocabulary is the device's own: a joystick publishes stick1.x and
+// fire1, not a generic gamepad's. A client maps host controls onto the
+// published ids, as it maps host keys onto BBC keys, and applies any dead
+// zone, inversion or calibration itself; the server does no interpretation.
+// Controls keep their values across Break and power-on, as the device
+// someone is holding would.
+service ControllerService {
+  // The controllers attached to this machine, with their controls. Empty
+  // when none is attached.
+  rpc ListControllers(ListControllersRequest) returns (ListControllersResponse);
+
+  // The current value of every control of one controller, in the order
+  // ListControllers gives them. NOT_FOUND for an unknown controller.
+  rpc GetControls(GetControlsRequest) returns (GetControlsResponse);
+
+  // Set controls of one controller, in order. NOT_FOUND for an unknown
+  // controller; INVALID_ARGUMENT for an unknown control id, a value of the
+  // wrong kind, or an axis above 65535. On an error nothing in the request
+  // is applied.
+  rpc SetControls(SetControlsRequest) returns (SetControlsResponse);
+}
+
+// Named ControlType and ControlInfo, not ControlKind and
+// ControlDescription, so the generated C++ types do not collide with the
+// extension seam's own (beebium/extension/Controller.hpp).
+enum ControlType {
+  CONTROL_TYPE_UNSPECIFIED = 0;
+  AXIS = 1;    // 0 to 65535, centre 32768
+  BUTTON = 2;  // pressed or not
+}
+
+message ControlInfo {
+  string id = 1;            // stable 7-bit ASCII fixed by the device: "stick1.x", "fire1"
+  string display_name = 2;  // "Stick 1 X", "Fire 1"
+  string group = 3;         // "Stick 1"; empty for a flat device
+  ControlType kind = 4;
+}
+
+message ControllerDescription {
+  string controller_id = 1;  // the extension instance id, as PeripheralExtensionService names it
+  string display_name = 2;   // "Joystick"
+  repeated ControlInfo controls = 3;
+}
+
+message ListControllersRequest {}
+message ListControllersResponse {
+  repeated ControllerDescription controllers = 1;
+}
+
+message ControlValue {
+  string id = 1;
+  oneof value {
+    uint32 axis = 2;  // 0 to 65535
+    bool pressed = 3;
+  }
+}
+
+message GetControlsRequest {
+  string controller_id = 1;
+}
+message GetControlsResponse {
+  repeated ControlValue values = 1;  // every control, in controls() order
+}
+
+message SetControlsRequest {
+  string controller_id = 1;
+  repeated ControlValue values = 2;
+}
+message SetControlsResponse {}

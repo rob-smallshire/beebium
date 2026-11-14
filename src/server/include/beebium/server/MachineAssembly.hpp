@@ -48,6 +48,7 @@
 #include "beebium/service/EconetTransportService.hpp"
 #include "beebium/service/ExtensionRpcService.hpp"
 #include "beebium/service/ExtensionUiService.hpp"
+#include "beebium/service/ControllerService.hpp"
 #include "beebium/service/PeripheralExtensionService.hpp"
 #include "beebium/service/Server.hpp"
 

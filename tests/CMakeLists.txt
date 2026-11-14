@@ -2212,6 +2212,27 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_joystick)
 
+    # ControllerService: list, get and set a machine's controllers (#98).
+    add_executable(test_grpc_controller test_grpc_controller.cpp)
+    target_link_libraries(test_grpc_controller PRIVATE
+        beebium_server_headers
+        beebium_service
+        beebium_ext_aun
+        beebium_ext_host_serial
+        beebium_ext_file_printer
+        beebium_ext_job_file_printer
+        beebium_ext_joystick
+        nlohmann_json::nlohmann_json
+        stb_image_write
+        Catch2::Catch2WithMain
+    )
+    target_compile_definitions(test_grpc_controller PRIVATE
+        BEEBIUM_VERSION="${PROJECT_VERSION}"
+        BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+        BEEBIUM_SOURCE_DIRPATH="${CMAKE_SOURCE_DIR}"
+    )
+    catch_discover_tests(test_grpc_controller)
+
     add_executable(test_server_main test_server_main.cpp)
     target_link_libraries(test_server_main PRIVATE
         beebium_server_headers

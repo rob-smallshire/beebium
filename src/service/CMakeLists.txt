@@ -4,6 +4,7 @@
 set(PROTO_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/proto/video.proto
     ${CMAKE_CURRENT_SOURCE_DIR}/proto/keyboard.proto
+    ${CMAKE_CURRENT_SOURCE_DIR}/proto/controller.proto
     ${CMAKE_CURRENT_SOURCE_DIR}/proto/debugger.proto
     ${CMAKE_CURRENT_SOURCE_DIR}/proto/disc.proto
     ${CMAKE_CURRENT_SOURCE_DIR}/proto/indicator.proto

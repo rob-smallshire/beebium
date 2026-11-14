@@ -47,6 +47,7 @@ PROTOS=(
     "$SERVICE_PROTO_DIR:video.proto"
     "$SERVICE_PROTO_DIR:audio.proto"
     "$SERVICE_PROTO_DIR:keyboard.proto"
+    "$SERVICE_PROTO_DIR:controller.proto"
     "$SERVICE_PROTO_DIR:disc.proto"
     "$SERVICE_PROTO_DIR:econet.proto"
     "$SERVICE_PROTO_DIR:serial.proto"
