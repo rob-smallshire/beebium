@@ -137,7 +137,8 @@ given with `--preset` resolve as if written in the preset.
 2. **A relative path with a directory component** (`discs/game.ssd`,
    `../roms/forth.rom`) is resolved against the container.
 3. **An absolute path** is used as it is; a path beginning `/` counts as
-   absolute on Windows too. So is a URI (`file:///...`).
+   absolute on Windows too. A floppy image may also be a `file:///...` URI;
+   a ROM or RAM image may not, and is a name or a path only.
 4. **A leading `~/`** (or `~\`) is the home directory (`HOME`, else
    `USERPROFILE`), on every platform, before rules 2 and 3.
 
