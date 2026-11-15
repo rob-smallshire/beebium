@@ -255,25 +255,19 @@ with `xcode-select` (the jobs assert its version instead of running
 configure starts from an empty build directory. The build runs at
 `CMAKE_BUILD_PARALLEL_LEVEL=6`, which fits its RAM.
 
-**The Intel lanes are suspended** while the self-hosted Intel runner is out of
-service: `server-macos-x86_64` carries `if: false`, so its three dependents
-skip, and releases build, verify and publish no x86_64 bundle, tarball, wheel or
-DMG. Restoring removes that `if`, puts back the `macos-x86_64` option in
-`python-integration-reuse.yml`, and reverts the release-side commit.
-
 **Server builds:**
 - `server-macos-arm64`: Server for Apple Silicon
-- `server-macos-x86_64`: Server for Intel (suspended)
+- `server-macos-x86_64`: Server for Intel
 - `server-linux`: Server for Linux
 - `server-windows`: Server for Windows
 
 **GUI client builds:**
 - `gui-client-macos-arm64`: Client for Apple Silicon
-- `gui-client-macos-x86_64`: Client for Intel (suspended)
+- `gui-client-macos-x86_64`: Client for Intel
 
 **Client integration tests:**
-- `typescript-client`, `typescript-integration-linux`, `typescript-integration-macos-arm64`, `typescript-integration-macos-x86_64` (suspended)
-- `python-client`, `python-integration-linux`, `python-integration-windows`, `python-integration-macos-arm64`, `python-integration-macos-x86_64` (suspended)
+- `typescript-client`, `typescript-integration-linux`, `typescript-integration-macos-arm64`, `typescript-integration-macos-x86_64`
+- `python-client`, `python-integration-linux`, `python-integration-windows`, `python-integration-macos-arm64`, `python-integration-macos-x86_64`
 
 ### Weekly integration tests
 
