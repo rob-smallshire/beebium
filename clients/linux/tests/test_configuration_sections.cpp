@@ -24,13 +24,17 @@
 
 #include "ConfigurationFixture.hpp"
 
+#include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QComboBox>
+#include <QFile>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QRadioButton>
+#include <QTemporaryDir>
 #include <QToolButton>
 
 using namespace beebium::linux_client;
@@ -176,11 +180,46 @@ TEST_CASE("Memory lists the sockets highest priority first, each image by its ti
 
 TEST_CASE("An unrecognised image shows its file name", "[configuration][memory]") {
     auto document = model_b_with_dfs();
-    document["sideways_bank"]["slots"][0]["image_uri"] = "file:///home/me/roms/Mystery.rom";
+    document["sideways_bank"]["slots"][0]["image_uri"] = "/home/me/roms/Mystery.rom";
     ConfigurationFixture f(document);
     auto* memory = f.section<MemorySection>();
     CHECK(memory->row_title(1)->text() == QStringLiteral("Mystery.rom"));
     CHECK(memory->row_caption(1)->text() == QStringLiteral("Slots 2, 6, 10, 14 \u00b7 priority 14"));
+}
+
+TEST_CASE("A ROM image browsed for is written as a plain path, as the server reads it",
+          "[configuration][memory]") {
+    QTemporaryDir roms_dirpath;
+    REQUIRE(roms_dirpath.isValid());
+    const QString rom_filepath = roms_dirpath.filePath(QStringLiteral("Commstar v1.40.rom"));
+    {
+        QFile rom(rom_filepath);
+        REQUIRE(rom.open(QIODevice::WriteOnly));
+        rom.write(QByteArray(16384, '\xff'));
+    }
+    ConfigurationFixture f(model_b_with_dfs());
+    auto* memory = f.section<MemorySection>();
+    f.answer = rom_filepath;
+    {
+        std::unique_ptr<QMenu> menu(memory->row_menu(1));
+        action(menu.get(), QStringLiteral("Browse for ROM Image..."))->trigger();
+    }
+    const auto slots = *f.dialog->draft().get("/sideways_bank/slots");
+    bool written = false;
+    for (const auto& entry : slots) {
+        if (entry["slot"] == 14) {
+            CHECK(entry["image_uri"] == ordered_json(rom_filepath.toStdString()));
+            written = true;
+        }
+    }
+    CHECK(written);
+    CHECK(memory->row_title(1)->text() == QStringLiteral("Commstar v1.40.rom"));
+    std::unique_ptr<QMenu> menu(memory->row_menu(1));
+    QAction* copy = action(menu.get(), QStringLiteral("Copy Path"));
+    REQUIRE(copy->isEnabled());
+    copy->trigger();
+    CHECK(QApplication::clipboard()->text() == rom_filepath);
+    CHECK(action(menu.get(), QStringLiteral("Open Containing Folder"))->isEnabled());
 }
 
 TEST_CASE("Choosing ROM for an empty socket asks for its image first", "[configuration][memory]") {
@@ -198,7 +237,7 @@ TEST_CASE("Choosing ROM for an empty socket asks for its image first", "[configu
     Q_EMIT kind->activated(rom);
     const auto slots = *f.dialog->draft().get("/sideways_bank/slots");
     REQUIRE(slots.size() == 3);
-    CHECK(slots[2] == ordered_json::parse(R"({"slot": 12, "type": "rom", "image_uri": "file:///home/me/roms/View.rom"})"));
+    CHECK(slots[2] == ordered_json::parse(R"({"slot": 12, "type": "rom", "image_uri": "/home/me/roms/View.rom"})"));
     CHECK(memory->row_title(3)->text() == QStringLiteral("View.rom"));
     CHECK(memory->row_label(3)->text() == QStringLiteral("IC52 \u2022"));
     CHECK(f.section_names().at(1) == QStringLiteral("Memory \u2022"));

@@ -18,6 +18,7 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QComboBox>
+#include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -42,16 +43,19 @@ QString kind_label(const std::string& kind) {
     return QObject::tr("Empty");
 }
 
-QString file_name(const std::string& uri) {
-    return QFileInfo(path_of_uri(uri)).fileName();
+QString file_name(const std::string& reference) {
+    return QFileInfo(path_of_uri(reference)).fileName();
 }
 
-// A local image's path; empty for none or a library name.
+// A local image's path; empty for none or a library name. The server reads
+// a sideways image as a name or a path; a file:// URI, should a draft hold
+// one, is read as its path.
 QString image_filepath(const SocketContent& content) {
-    if (content.image_uri.rfind("file:", 0) != 0) {
-        return {};
+    if (content.image_uri.rfind("file:", 0) == 0) {
+        return path_of_uri(content.image_uri);
     }
-    return path_of_uri(content.image_uri);
+    const QString path = QString::fromStdString(content.image_uri);
+    return QDir::isAbsolutePath(path) ? path : QString();
 }
 
 }  // namespace
@@ -296,7 +300,9 @@ void MemorySection::browse(int number) {
     if (content.type != "ram") {
         content = SocketContent{"rom", {}, false};
     }
-    content.image_uri = uri_of_path(*path);
+    // A path, not a file:// URI as a disc's is: the server reads a ROM image
+    // as a name or a path.
+    content.image_uri = QFileInfo(*path).absoluteFilePath().toStdString();
     set(number, content);
 }
 

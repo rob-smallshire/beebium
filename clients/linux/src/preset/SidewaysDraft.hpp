@@ -26,7 +26,7 @@ namespace beebium::linux_client {
 // ROM/RAM bank): its slots' entry, or empty where the draft names none.
 struct SocketContent {
     std::string type = "empty";  // "rom", "ram" or "empty"
-    std::string image_uri;       // a name or file:// URI; empty for none
+    std::string image_uri;       // a name or path; empty for none
     bool write_protected = false;
 
     friend bool operator==(const SocketContent&, const SocketContent&) = default;

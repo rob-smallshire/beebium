@@ -147,7 +147,7 @@ public:
     // The draft changed through the dialog: ask the server again.
     void draft_edited();
 
-    // A sideways image's description (a ROM library name or file URI),
+    // A sideways image's description (a ROM library name or path),
     // asked of the server once per image: null until it has answered or
     // when it could not, and rom_described() follows each answer.
     const RomDescription* rom_description(const std::string& image_uri);
