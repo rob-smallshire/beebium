@@ -96,9 +96,12 @@ provided the ACIA's sampling points are unchanged.
   and the ACIA's /16 or /64 gives 1200 or 300 baud). RxC comes from the data separator below;
   the receive rate field is ignored (F1.3, BeebWiki).
 - The byte-oriented RS423 seam (`SerialDataSource`/`SerialDataSink`) is unchanged in shape.
-  The ULA frames a received byte into RxD levels and holds each level for 64 RxC clocks when
-  the ACIA is at /64, 16 at /16, 1 at /1, so the ACIA's sampling sees the same bits it sees
-  today. The 175 serial tests are the regression net.
+  The ULA frames a received byte into RxD levels and holds each level for 64 RxC clocks
+  regardless of the ACIA's divider, because the far end runs at the selected baud rate and
+  knows nothing of the ACIA's setting. At /64 the ACIA sees the bits it sees today; at /16 or
+  /1 the guest reads garbage, as on the machine. The 175 serial tests are the regression net,
+  with their set-up constant corrected from &15 (/16, wrongly called "the MOS serial config")
+  to &16 (/64, what MOS 1.20 uses on RS423).
 
 `Mc6850` changes: real division of the receive and transmit clocks, start-bit detection by
 sampling (low for 8 or 32 clocks at /16 and /64, F1.3) and mid-bit sampling thereafter; the
