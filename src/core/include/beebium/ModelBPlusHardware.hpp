@@ -50,6 +50,7 @@
 #include "disc/DiscDrive.hpp"
 #include "disc/WD1770.hpp"
 #include "econet/EconetSocket.hpp"
+#include "cassette/CassetteDeck.hpp"
 #include "serial/SerialSocket.hpp"
 #include "tube/TubeSocket.hpp"
 #include "indicators/IndicatorFilter.hpp"
@@ -274,6 +275,11 @@ public:
     // Always fitted on a real BBC; its IRQ output drives the shared CPU IRQ line.
     SerialSocket serial_socket;
 
+    // The cassette deck behind the Serial ULA's cassette side: the user's
+    // transport, which Break and power cycle leave alone.
+    static constexpr bool has_cassette = true;
+    CassetteDeck cassette_deck;
+
     // BBC serial port handle (RS423): attach point for a SerialPortDevice, the
     // UserPort analogue. Exposed to extensions via ExtensionContext.
     SerialPort serial_port_{serial_socket};
@@ -474,6 +480,7 @@ public:
         // Wire 2MHz open bus regions to memory map's last bus value for open bus emulation
         econet_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
         serial_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
+        serial_socket.ula().set_deck(&cassette_deck);
         tube_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
     }
 
@@ -493,6 +500,7 @@ public:
         // Wire 2MHz open bus regions to memory map's last bus value for open bus emulation
         econet_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
         serial_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
+        serial_socket.ula().set_deck(&cassette_deck);
         tube_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
     }
 

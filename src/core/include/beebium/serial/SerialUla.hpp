@@ -14,6 +14,8 @@
 #pragma once
 
 #include "SerialDevice.hpp"
+#include "../cassette/CassetteDeck.hpp"
+#include "../cassette/TapeSink.hpp"
 #include "../devices/Mc6850.hpp"
 
 #include <cstdint>
@@ -56,12 +58,37 @@ namespace beebium {
 //     bits (LSB first) are assembled into a byte delivered to the sink on the
 //     stop bit. /CTS follows the sink's flow control.
 //
-// Cassette selected. /DCD and /CTS are held low (AUG 20.7.4); the high-tone
-// detector that drives /DCD in cassette mode comes with the tape path. The
-// ACIA gets no receive clock and RxD idles high. The RS423 line still runs at
-// its own rate, so bytes a far end sends meanwhile are framed and lost, as on
-// the machine (and the device's has_data() poll keeps its tick). The transmit clock is the transmit divider output; transmitted
-// bits go nowhere, so the RS423 sink receives nothing.
+// Cassette selected. The receive clock and RxD come from the data separator,
+// /DCD from the high-tone detector, and /CTS is held low (AUG 20.7.4); the
+// receive rate field is ignored. The transmit clock is the transmit divider
+// output, and TxD drives the tone synthesiser; the RS423 sink receives nothing.
+// The RS423 line still runs at its own rate, so bytes a far end sends meanwhile
+// are framed and lost, as on the machine.
+//
+// The cassette side runs on the ULA clock in every mode, from the parameter
+// table of the cassette specification (findings 7.1), all intervals in ULA
+// clocks:
+//
+//   Data separator. Each edge of the squared tape signal starts a burst of 4
+//     receive-clock pulses of 4 clocks each (1.625 us low, 1.625 us high); an
+//     edge during a burst ends it and starts a fresh one. 350 clocks (284 us)
+//     with no edge emit one more burst and mark the gap long. At each edge RxD
+//     is decided from the gap just ended: a long gap gives 0, two consecutive
+//     short gaps give 1, otherwise it holds. So a 1200-baud bit of either tone
+//     is 16 receive clocks and a 300-baud bit 64, and the ACIA's divider alone
+//     sets the rate. The edge-to-burst delay of the real part is not modelled.
+//   High-tone detector. A counter advances once per 256-clock cell while RxD is
+//     1, edges are arriving and the motor bit is set; it clears on RxD 0 or
+//     motor off, and holds through silence with the motor on. At 962 cells
+//     (Ferranti, 200 ms) or 445 (VLSI, 92.7 ms) /DCD is driven high for one
+//     cell and the counter holds until cleared. With RS423 selected /DCD is
+//     forced low but the counter runs; switching to cassette does not clear it.
+//   Tone synthesiser. With cassette selected and RTS low, TxD is sampled at
+//     each 1024-clock cell boundary and the cell is filled with two cycles of
+//     2403.8 Hz (mark) or one of 1201.9 Hz (space), phase-continuous, as edges
+//     to an optional TapeSink. RTS high or RS423 selected gives silence.
+//   VLSI part. With latch bit 3 set the tone sense is inverted on receive and
+//     transmit; the Ferranti ignores bits 3 to 5 in cassette mode.
 //
 // Reading &FE10. The ULA has no read/write line and latches the data bus on
 // any access; on a read the bus holds the address high byte, so a read acts as
@@ -100,6 +127,17 @@ public:
     // RxD levels of an RS423 frame are held for this many receive clocks.
     static constexpr uint32_t RS423_CLOCKS_PER_BIT = 64;
 
+    // The cassette side, in ULA clocks.
+    static constexpr uint32_t SEPARATOR_TIMEOUT_CLOCKS = 350;   // 284 us
+    static constexpr uint32_t BURST_PULSES = 4;
+    static constexpr uint32_t PULSE_CLOCKS = 4;                 // 1.625 us low, 1.625 us high
+    static constexpr uint32_t BURST_CLOCKS = BURST_PULSES * PULSE_CLOCKS;
+    static constexpr uint32_t DETECTOR_CELL_CLOCKS = 256;       // 208 us
+    static constexpr uint32_t FERRANTI_HIGH_TONE_CELLS = 962;   // 200 ms
+    static constexpr uint32_t VLSI_HIGH_TONE_CELLS = 445;       // 92.7 ms
+    static constexpr uint32_t TONE_CELL_CLOCKS = 1024;          // one 1200-baud bit
+    static constexpr uint8_t VLSI_TONE_INVERT = 0x08;           // latch bit 3
+
     explicit SerialUla(Mc6850& acia, Part part = Part::Ferranti)
         : acia_(acia), part_(part) {
         reset();
@@ -115,9 +153,13 @@ public:
         tx_divider_ = DIVIDERS[value & TX_BAUD_MASK];
         rx_divider_ = DIVIDERS[(value & RX_BAUD_MASK) >> RX_BAUD_SHIFT];
 
-        // RS423 forces carrier present; in cassette mode /DCD comes from the
-        // high-tone detector, which is not yet modelled, so it is low too.
-        acia_.set_not_dcd(false);
+        // Motor off re-arms the high-tone detector; a write that keeps the
+        // motor on, whether or not the value changes, does not.
+        if (!motor_on()) {
+            clear_high_tone();
+        }
+        // RS423 forces carrier present; in cassette mode /DCD is the detector's.
+        acia_.set_not_dcd(!rs423_selected() && dcd_output_);
         refresh_cts();
     }
 
@@ -168,7 +210,21 @@ public:
         rx_parity_ = Mc6850::Parity::None;
         rx_has_byte_ = false;
         rx_break_ = false;
-        // The power-on latch selects cassette: /DCD and /CTS low.
+        // The cassette side: silence, RxD high, the detector cleared.
+        clocks_since_edge_ = SEPARATOR_TIMEOUT_CLOCKS;
+        separator_timed_out_ = true;
+        previous_gap_short_ = false;
+        recovered_ = true;
+        burst_clocks_left_ = 0;
+        high_tone_cells_ = 0;
+        dcd_output_ = false;
+        dcd_pulse_clocks_left_ = 0;
+        tx_level_ = true;
+        tone_enabled_ = false;
+        tone_mark_ = true;
+        tone_level_ = false;
+        // The power-on latch selects cassette with the motor off: /DCD and
+        // /CTS low.
         acia_.set_not_dcd(false);
         acia_.set_not_cts(false);
         // Re-baseline RTS and BREAK to the (reset) ACIA level and re-deliver to
@@ -198,8 +254,22 @@ public:
         sink_->set_break(last_break_asserted_);
     }
 
+    // --- The cassette side's attachments (non-owning) ---
+    // The deck whose edges the data separator receives, clocked with the relay.
+    void set_deck(CassetteDeck* deck) { deck_ = deck; }
+    // Where the tone synthesiser's edges go; none drops them.
+    void set_tape_sink(TapeSink* sink) { tape_sink_ = sink; }
+
     // --- Accessors for tests / debugging ---
     uint8_t control() const { return control_; }
+    // The cassette RxD the separator presents to the ACIA (after any VLSI
+    // inversion), the detector's count, and its /DCD output.
+    bool cassette_rxd() const { return rxd(); }
+    uint32_t high_tone_cells() const { return high_tone_cells_; }
+    bool dcd_output() const { return dcd_output_; }
+    uint32_t high_tone_threshold() const {
+        return part_ == Part::VLSI ? VLSI_HIGH_TONE_CELLS : FERRANTI_HIGH_TONE_CELLS;
+    }
     Part part() const { return part_; }
     bool motor_on() const { return (control_ & MOTOR_ENABLE) != 0; }
     bool rs423_selected() const { return (control_ & RS423_SELECT) != 0; }
@@ -230,6 +300,135 @@ private:
         if (++rx_div_count_ >= rx_divider_) {
             rx_div_count_ = 0;
             receive_clock();
+        }
+        cassette_clock();
+    }
+
+    // --- The cassette side, one ULA clock ---
+
+    void cassette_clock() {
+        const bool edge = deck_ != nullptr && deck_->clock(motor_on());
+        // Idle: silence, no burst or pulse in progress, nothing listening to
+        // the tone. Only the detector's cell boundary can matter.
+        if (!edge && separator_timed_out_ && (burst_clocks_left_ | dcd_pulse_clocks_left_) == 0 &&
+            tape_sink_ == nullptr) {
+            if ((ula_clocks_ & (DETECTOR_CELL_CLOCKS - 1)) == 0) {
+                detector_cell();
+            }
+            return;
+        }
+        if (edge) {
+            separator_edge();
+        } else if (!separator_timed_out_ && ++clocks_since_edge_ >= SEPARATOR_TIMEOUT_CLOCKS) {
+            // No edge for 284 us: one more burst, and the gap is long.
+            separator_timed_out_ = true;
+            burst_clocks_left_ = BURST_CLOCKS;
+        }
+        if (burst_clocks_left_ != 0) {
+            burst_clock();
+        }
+        // A /DCD pulse ends one cell after it began.
+        if (dcd_pulse_clocks_left_ != 0 && --dcd_pulse_clocks_left_ == 0) {
+            set_dcd_output(false);
+        }
+        if ((ula_clocks_ & (DETECTOR_CELL_CLOCKS - 1)) == 0) {
+            detector_cell();
+        }
+        if (tape_sink_ != nullptr) {
+            tone_clock();
+        }
+    }
+
+    // An edge of the tape signal: decide RxD from the gap just ended and start
+    // a fresh burst (ending any burst in progress).
+    void separator_edge() {
+        const bool long_gap = separator_timed_out_;
+        if (long_gap) {
+            set_recovered(false);
+        } else if (previous_gap_short_) {
+            set_recovered(true);
+        }
+        previous_gap_short_ = !long_gap;
+        clocks_since_edge_ = 0;
+        separator_timed_out_ = false;
+        burst_clocks_left_ = BURST_CLOCKS;
+    }
+
+    // One clock of a burst: a receive-clock pulse rises every 4 clocks, and in
+    // cassette mode the ACIA takes it with the current RxD.
+    void burst_clock() {
+        const uint32_t offset = BURST_CLOCKS - burst_clocks_left_;
+        if (offset % PULSE_CLOCKS == 0 && !rs423_selected()) {
+            ++rx_clocks_;
+            acia_.receive_clock(rxd());
+        }
+        --burst_clocks_left_;
+    }
+
+    bool tone_inverted() const {
+        return part_ == Part::VLSI && (control_ & VLSI_TONE_INVERT) != 0 && !rs423_selected();
+    }
+
+    bool rxd() const { return recovered_ != tone_inverted(); }
+
+    void set_recovered(bool value) {
+        recovered_ = value;
+        if (!rxd()) {
+            clear_high_tone();
+        }
+    }
+
+    // One 256-clock cell of the high-tone detector.
+    void detector_cell() {
+        if (!motor_on() || !rxd()) {
+            clear_high_tone();
+            return;
+        }
+        if (separator_timed_out_) {
+            return;  // silence with the motor on: hold
+        }
+        const uint32_t threshold = high_tone_threshold();
+        if (high_tone_cells_ < threshold && ++high_tone_cells_ == threshold) {
+            set_dcd_output(true);
+            dcd_pulse_clocks_left_ = DETECTOR_CELL_CLOCKS;
+        }
+    }
+
+    // Re-arm the detector: the count cleared and /DCD low.
+    void clear_high_tone() {
+        high_tone_cells_ = 0;
+        dcd_pulse_clocks_left_ = 0;
+        if (dcd_output_) {
+            set_dcd_output(false);
+        }
+    }
+
+    void set_dcd_output(bool high) {
+        dcd_output_ = high;
+        if (!rs423_selected()) {
+            acia_.set_not_dcd(high);
+        }
+    }
+
+    // One clock of the tone synthesiser: at each 1024-clock cell boundary take
+    // TxD and whether the tone is on; within the cell an edge every half-cycle.
+    void tone_clock() {
+        const uint32_t offset = static_cast<uint32_t>(ula_clocks_ % TONE_CELL_CLOCKS);
+        if (offset == 0) {
+            tone_enabled_ = !rs423_selected() && !acia_.get_not_rts();
+            tone_mark_ = tx_level_ != tone_inverted();
+            if (!tone_enabled_) {
+                tape_sink_->silence_until(ula_clocks_ + TONE_CELL_CLOCKS);
+                return;
+            }
+        }
+        if (!tone_enabled_) {
+            return;
+        }
+        const uint32_t half_cycle = tone_mark_ ? TONE_CELL_CLOCKS / 4 : TONE_CELL_CLOCKS / 2;
+        if (offset % half_cycle == 0) {
+            tone_level_ = !tone_level_;
+            tape_sink_->edge(ula_clocks_, tone_level_);
         }
     }
 
@@ -282,8 +481,12 @@ private:
         }
 
         const std::optional<Mc6850::TransmitResult> result = acia_.transmit_clock();
-        if (!result || !rs423_selected()) {
-            return;  // between bit boundaries, or cassette: the bits go nowhere
+        if (!result) {
+            return;  // between bit boundaries
+        }
+        tx_level_ = result->bit != 0;  // TxD, for the tone synthesiser
+        if (!rs423_selected()) {
+            return;  // cassette: the RS423 sink receives nothing
         }
         switch (result->type) {
             case Mc6850::BitType::Start:
@@ -339,6 +542,10 @@ private:
                     // it as an all-zeros frame with the stop bit forced low, so
                     // the ACIA latches a Framing Error with data 0x00 -- exactly
                     // how the MC6850 represents a received break.
+                    // This poll is also the device's tick: HostSerialEndpoint
+                    // applies a pending re-point inside has_data(), and only this
+                    // framer calls it, which is why the framer runs in cassette
+                    // mode too.
                     if (!rx_has_byte_ && source_->take_break()) {
                         start_rx_frame(0, /*is_break=*/true);
                     } else if (!rx_has_byte_ && source_->has_data()) {
@@ -439,6 +646,22 @@ private:
     Mc6850::Parity rx_parity_ = Mc6850::Parity::None;
     bool rx_has_byte_ = false;
     bool rx_break_ = false;  // current inbound frame is a break (stop bit low)
+
+    // The cassette side.
+    CassetteDeck* deck_ = nullptr;
+    TapeSink* tape_sink_ = nullptr;
+    uint32_t clocks_since_edge_ = SEPARATOR_TIMEOUT_CLOCKS;
+    bool separator_timed_out_ = true;   // no edge for the timeout: the gap is long
+    bool previous_gap_short_ = false;
+    bool recovered_ = true;             // the separator's data, before any VLSI inversion
+    uint32_t burst_clocks_left_ = 0;
+    uint32_t high_tone_cells_ = 0;
+    bool dcd_output_ = false;
+    uint32_t dcd_pulse_clocks_left_ = 0;
+    bool tx_level_ = true;              // TxD as the ACIA last set it
+    bool tone_enabled_ = false;
+    bool tone_mark_ = true;
+    bool tone_level_ = false;
 
     // Last RTS / BREAK levels delivered to the attached device, for edge
     // detection.
