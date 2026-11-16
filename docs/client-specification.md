@@ -100,6 +100,7 @@ Section 3 states cross-cutting foundations that every later section assumes.
 | 8.2 | The group mixer: master, sub-masters, channels | Core |
 | 8.3 | Buffering, latency and buffer health | Core |
 | 9.0 | Cassette: the deck, its keys and the motor relay | Core |
+| 9.0.1 | Creating blank tapes | Core |
 | 9.1 | Mounting disc images | Core |
 | 9.2 | Recent discs | Core |
 | 9.3 | Creating blank discs | Core |
@@ -211,7 +212,8 @@ What gates and what does not (per `frontend-local-server-gating.md`):
 
 - Gated (offered only when the server shares the filesystem): browse-for and
   insert a disc image by picked path; drag-and-drop a disc image; create a
-  blank disc (it picks a host path for the server to write); first Save of a
+  blank disc or a blank tape (each picks a host path for the server to
+  write); first Save of a
   transient machine, Save As and Move To (each sends a client-chosen path as
   the server's destination, and Save As's replace check must be made against
   the server's filesystem, #263); reveal any server-reported path in a file
@@ -1623,17 +1625,30 @@ section sits above the floppy drives, which sit above the hard discs.
   When the server reports a duration of 0 (unknown) the client shows the counter
   without a proportional slider. The counter and the slider are the user's only
   guide to where anything is on the tape, as on a real deck.
+- The Record key. The deck has a red Record key, which sends `Record`.
+  Recording is a transport the user selects, as play is: the tape moves only while
+  the motor relay is closed, and everything that passes under the head is replaced
+  by what the machine sends, silence included, so a recording deck erases while
+  the machine is quiet. The usual sequence is the real one: insert a blank tape
+  (9.0.1) or one to record over, press Record, then type `SAVE "NAME"` and press
+  RETURN at the MOS's prompt. Stop ends a recording, as do Play, a seek, a wind,
+  Eject and the end of the tape. Only a tape whose `TapeMetadata.recordable` is true
+  (a UEF) can be recorded on; for any other (a CSW) the client disables Record with
+  an explanation, or sends it and shows the server's read-only sentence ("The tape
+  <name> is a CSW image, and Beebium records only on UEF tapes."). The server writes
+  a recorded tape back to its file itself, when the recording ends, on eject, on
+  Save and at shutdown; the client has no save step for a tape.
 - Insert and play are separate. After a plain insert the deck is stopped at the
   start, and the user presses Play. A client may also offer an insert-and-play
   gesture (a double-click on a recent tape, a modifier held on drop), which sends
   `InsertTape` and then, on its success, `Play`.
 - Transport and relay. The client shows both the transport (stopped, playing,
-  rewinding or fast-forwarding)
+  recording, rewinding or fast-forwarding)
   and the machine's motor relay (`motor_on`). They are independent: the tape moves
-  only while the deck plays and the relay is closed. "Playing, motor off" is the
+  only while the deck plays or records and the relay is closed. "Playing, motor off" is the
   ordinary state of a tape waiting for the machine to ask for it (before a
   `*LOAD` is typed, or between files), not a fault, and the client shows it as
-  such.
+  such; so is "Recording, motor off", before a `SAVE` is typed.
 - The loaded tape shows its name and format, and the image's own title, origin and
   target machine where the server reports them.
 - What is not shown or heard. The client shows no block catalogue, no waveform and
@@ -1643,7 +1658,7 @@ section sits above the floppy drives, which sit above the hard discs.
   the tape is the machine's business.
 - Errors. Every refused cassette request returns a sentence naming the tape, and a
   `CassetteErrorKind` (no cassette interface, cannot open, unreadable, unsupported
-  format, invalid image, deck occupied, deck empty, invalid position). The client
+  format, invalid image, deck occupied, deck empty, invalid position, read only). The client
   shows the server's sentence verbatim and in full, in the register of 3.4: it is
   already a sentence, so the client puts no frame around it. The kind selects only
   the icon or the recovery control (an Eject offer on deck occupied, say); the
@@ -1674,20 +1689,23 @@ States and transitions:
 |-------|---------|------|
 | empty | InsertTape succeeds | stopped at 0 |
 | stopped, rewinding or fast-forwarding | Play | playing, from where the tape is |
-| stopped or playing | Rewind | rewinding (at the start: stays stopped) |
-| stopped or playing | FastForward | fast-forwarding (at the end: stays stopped) |
-| playing, rewinding or fast-forwarding | Stop | stopped where the tape is |
-| playing or fast-forwarding | end of tape | stopped at the end |
+| stopped, playing, rewinding or fast-forwarding, with a UEF | Record | recording, from where the tape is (at the end: stays stopped) |
+| any with a CSW | Record | refused (`READ_ONLY`), transport unchanged |
+| recording | Play | playing, from where the tape is; the recording is written back |
+| stopped, playing or recording | Rewind | rewinding (at the start: stays stopped) |
+| stopped, playing or recording | FastForward | fast-forwarding (at the end: stays stopped) |
+| playing, recording, rewinding or fast-forwarding | Stop | stopped where the tape is |
+| playing, recording or fast-forwarding | end of tape | stopped at the end |
 | rewinding | start of tape | stopped at 0 |
 | stopped or playing | Seek | the same transport, at the new position (a seek past the end stops) |
-| rewinding or fast-forwarding | Seek | stopped, at the new position |
+| recording, rewinding or fast-forwarding | Seek | stopped, at the new position |
 | any with a tape | EjectTape | empty |
 
 The deck's state is mirrored from `SubscribeDeckStatus`, which sends the current
 status at once and then on every change of presence, transport, relay or tape, and
-the position while the deck plays or winds; it is never polled.
+the position while the deck plays, records or winds; it is never polled.
 
-Rests on: `cassette.proto CassetteService.InsertTape`, `EjectTape`, `Play`, `Stop`,
+Rests on: `cassette.proto CassetteService.InsertTape`, `EjectTape`, `Play`, `Record`, `Stop`,
 `Rewind`, `FastForward`, `Seek`, `GetDeckStatus`, `SubscribeDeckStatus`; CLI `describe-preset-schema` and
 `resolve-preset` for the configurator row.
 
@@ -1702,7 +1720,12 @@ Conformance:
   audio at any time; the server's sentence shown verbatim, the kind selecting only the icon
   or recovery control; deck state driven from the status stream; the recording
   policy of 9.2 for tapes; the motor LED rendered only through chapter 10.
-- LATITUDE: one recents list shared with discs or a separate list for tapes; an
+- MANDATORY: recording is a transport state the user selects with the Record key,
+  and Stop ends it; the transport is shown as Recording while it lasts; Record is
+  disabled with an explanation, or refused with the server's sentence shown, for a
+  tape that is not `recordable`.
+- LATITUDE: whether Record is a toggle or a key beside Play (and so whether
+  pressing it again stops); its red marking's exact form; one recents list shared with discs or a separate list for tapes; an
   insert-and-play gesture; the deck keys' glyphs and layout; the position format;
   the status stream's minimum interval; filtering the file dialogue by extension.
 - MACOS-ONLY: the open panel, the drop delegate, the audio-input entitlement.
@@ -1724,7 +1747,49 @@ renamed `.uef` -> accepted by the dialogue, then refused by the server as an
 unsupported format. A machine whose preset names a tape, played part-way and saved ->
 reopens with that tape at that position, stopped; a machine with a tape inserted at
 run time, saved -> reopens with an empty deck. A model with no cassette interface ->
-no cassette section, and no Cassette row in the configurator.
+no cassette section, and no Cassette row in the configurator. Insert a blank UEF and
+press Record -> the transport reads recording; type `SAVE "PROG"` and press RETURN
+at the prompt -> the relay closes and the position advances; press Stop -> the deck
+reads stopped, and the tape's file on disc has changed; Back to the beginning, Play
+and `LOAD "PROG"` -> the program loads. Insert a CSW -> Record is disabled with an
+explanation, or pressing it shows the server's read-only sentence and the transport
+stays as it was.
+
+#### 9.0.1 Creating blank tapes
+
+Profile: Core.
+
+Behaviour. The client fetches the server's blank-tape templates once on connect; a
+failure is non-fatal and leaves the feature empty. Each template is offered by its
+server-supplied label (`Blank C30 (30 minutes)`, say); its length,
+`duration_seconds`, may be shown beside it. Choosing one asks the user for a
+destination (restricted to the template's extension, `.uef`) and creates it, then
+inserts the created tape, stopped at the start, ready for the user to press Record.
+Create and insert are distinct steps. The server adds `.uef` to a destination
+without an extension and refuses another extension, so the client preserves it.
+
+Rests on: `cassette.proto CassetteService.ListBlankTapes`, `CreateTape`, then
+`InsertTape`. Errors are classified (unknown label, destination exists, write
+failed, wrong extension), as for `CreateDisc`.
+
+Conformance:
+
+- MANDATORY: templates are enumerated by the server, not invented; creation writes
+  to a server-host path; the extension is preserved and the server refuses a wrong
+  one; create and insert are distinct; a created tape is inserted stopped, never
+  recording, so recording stays the user's choice.
+- LATITUDE: the save flow; auto-insert after create; where the templates are
+  offered (the empty deck, a menu, or both); showing each template's length.
+- MACOS-ONLY: the save panel and the menu placement.
+
+Gating: blank-tape creation picks a host path for the server to write, so it is
+gated on the server sharing the filesystem (section 3.2), as blank-disc creation is.
+
+Scenarios: a server with no templates -> the feature is disabled. Create with a
+name lacking the extension -> `.uef` is added and the server accepts. Save over an
+existing file -> the chooser confirms and the create replaces it. Create success ->
+the tape is inserted, stopped at 0, its duration the template's, and appears in
+recents. A server on another host -> the feature is disabled with an explanation.
 
 ### 9.1 Mounting disc images
 
@@ -2491,7 +2556,7 @@ AND 1` in BBC BASIC reads 1. Attach the Delta 14B/1 adapter -> one controller,
 | keyboard.proto | KeyboardService: KeyDown, KeyUp, BreakDown, BreakUp, GetLockState, TypeQuickly, WatchTypingStatus, ClearTyping, GetAllKeyMappings | 5.5, 7.1-7.5 |
 | controller.proto | ControllerService: ListControllers, GetControls, SetControls | 14 |
 | audio.proto | AudioService: GetAudioFormat, SubscribeAudio | 8.1-8.3 |
-| cassette.proto | CassetteService: InsertTape, EjectTape, Play, Stop, Rewind, FastForward, Seek, GetDeckStatus, SubscribeDeckStatus | 5.3, 9.0 |
+| cassette.proto | CassetteService: InsertTape, EjectTape, Play, Record, Stop, Rewind, FastForward, Seek, GetDeckStatus, SubscribeDeckStatus, ListBlankTapes, CreateTape | 5.3, 9.0, 9.0.1 |
 | disc.proto | DiscService: InsertDisc, EjectDisc, CancelEject, GetDriveStatus, SubscribeDiscEvents, ListBlankDiscs, CreateDisc | 9.1-9.7 |
 | indicator.proto | IndicatorService: ListIndicators, Subscribe | 10 |
 | sideways.proto | SidewaysService: GetSlotStatus, SubscribeEvents, SetSlotProtection | 11 |
@@ -2507,7 +2572,7 @@ AND 1` in BBC BASIC reads 1. Attach the Delta 14B/1 adapter -> one controller,
 
 ## Appendix B. Conformance profiles summary
 
-- Core: 3.1-3.4, 4.1-4.5, 5.1, 5.3-5.7, 6.1, 6.2, 6.4, 7.*, 8.*, 9.* (9.0, the cassette deck, included), 10, 13.1-13.3.
+- Core: 3.1-3.4, 4.1-4.5, 5.1, 5.3-5.7, 6.1, 6.2, 6.4, 7.*, 8.*, 9.* (9.0, the cassette deck, and 9.0.1, blank tapes, included), 10, 13.1-13.3.
 - Configuration editing: 5.2, 12.2 (and the configuration parts of 11, 12.3, 12.4).
 - Peripheral management: 11, 12.1, 12.3, 12.4, 14.
 - Advanced display: 6.3, 6.5, 6.6.

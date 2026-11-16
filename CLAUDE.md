@@ -55,7 +55,7 @@ beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, ...)
 | KeyboardService | keyboard.proto | Key press/release, type-ahead |
 | ControllerService | controller.proto | Controllers a person holds (joystick, ...): list, get and set their named axes and buttons |
 | DiscService | disc.proto | Disc image mounting, drive status |
-| CassetteService | cassette.proto | Cassette deck: insert/eject UEF and CSW tapes, play/stop/seek, deck status stream |
+| CassetteService | cassette.proto | Cassette deck: insert/eject UEF and CSW tapes, play/record/stop/seek, deck status stream, blank tape templates (ListBlankTapes/CreateTape) |
 | IndicatorService | indicator.proto | LED status (caps lock, disc activity) |
 | SidewaysService | sideways.proto | Sideways ROM/RAM slot management |
 | SystemService | system.proto | Pause/resume/reset, machine control, SystemInfo/host fingerprint, WatchServerStatus |
@@ -326,7 +326,7 @@ Complete transcripts of BBC Micro documentation:
 - Video ULA with all display modes (0-7)
 - SN76489 sound chip
 - Intel 8271 and WD1770 disc controllers with SSD/DSD/HFE support
-- Cassette interface (UEF and CSW tapes) through the Serial ULA's data separator and high-tone detector, with the deck, CassetteService and the motor LED
+- Cassette interface (UEF and CSW tapes) through the Serial ULA's data separator and high-tone detector, with the deck, CassetteService and the motor LED; recording on UEF tapes through the Serial ULA's tone synthesiser, written back to the tape's file; blank tape templates (C15 to C90) with `list-blank-tapes`/`create-tape`
 - Hybrid Music 5000 / 3000 synthesiser on the 1 MHz bus (plugin `hybrid-music-5000`), with the board's analogue output filter; JIM paging is owned by the bus port so several 1 MHz bus devices coexist
 - Keyboard matrix with type-ahead
 - Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger

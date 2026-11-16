@@ -1,6 +1,6 @@
 # Beebium Deployment and Resource Discovery
 
-This document describes how Beebium server executables are deployed, how they locate ROMs, presets, extensions and bundled discs at runtime, and where they keep per-user state.
+This document describes how Beebium server executables are deployed, how they locate ROMs, presets, extensions, bundled discs and blank disc and tape templates at runtime, and where they keep per-user state.
 
 > For embedding the servers and their native dependencies inside the macOS `.app` bundle (and the path to a distributable, notarized build), see [macOS App Packaging](macos-app-packaging.md).
 
@@ -79,7 +79,8 @@ build/
 │   ├── beebium-model-b, beebium-model-b-plus, ...
 │   ├── extensions/<name>/{<plugin library>, manifest.json}
 │   ├── presets/   (*.beebium-preset)
-│   └── blank-discs/   (copied from discs/blank/)
+│   ├── blank-discs/   (copied from discs/blank/)
+│   └── blank-tapes/   (copied from tapes/blank/)
 ├── roms/
 │   ├── acorn-mos_1_20.rom
 │   ├── acorn-mos_2_0.rom
@@ -104,7 +105,8 @@ When installed via `cmake --install`, the tree is relocatable and self-describin
 └── share/beebium/
     ├── roms/      (acorn-mos_1_20.rom, ...)
     ├── presets/   (*.beebium-preset)
-    └── blank-discs/   (Acorn DFS 80T SS 200K.ssd, ...)
+    ├── blank-discs/   (Acorn DFS 80T SS 200K.ssd, ...)
+    └── blank-tapes/   (Blank C30 (30 minutes).uef, ...)
 ```
 
 The server binaries carry an `$ORIGIN`-relative `RPATH` (`@loader_path` on macOS),
@@ -127,8 +129,9 @@ For the self-contained, statically linked bundles (and how they are built,
 validated, and shipped), see [Packaging and Distribution](packaging.md).
 
 The executable locates ROMs via `../share/beebium/roms/`, presets via
-`../share/beebium/presets/` and blank disc templates via
-`../share/beebium/blank-discs/`, relative to its directory.
+`../share/beebium/presets/`, blank disc templates via
+`../share/beebium/blank-discs/` and blank tape templates via
+`../share/beebium/blank-tapes/`, relative to its directory.
 
 ## ROM Discovery Algorithm
 
@@ -179,6 +182,7 @@ The CMake install rules handle:
 - ROM files (`.rom`) to `share/beebium/roms/`
 - System presets, each an archive holding its thumbnail and any disc it carries, to `share/beebium/presets/`
 - Blank disc templates (`discs/blank/`) to `share/beebium/blank-discs/`
+- Blank tape templates (`tapes/blank/`) to `share/beebium/blank-tapes/`
 
 ## Preset Discovery
 
@@ -215,6 +219,30 @@ in this order, as the system presets are:
 1. `$BEEBIUM_SERVERS_DIRPATH/blank-discs/`
 2. `<executable_dir>/blank-discs/` (build layout)
 3. `<executable_dir>/../share/beebium/blank-discs/` (installed layout)
+
+## Blank Tape Templates
+
+A user who wants a new, empty tape to record on gets a copy of a shipped
+template, as for a floppy: one empty UEF per length, named so that the file
+name without its extension is the label the user chooses it by
+(`Blank C15 (15 minutes).uef`, `Blank C30 (30 minutes).uef`,
+`Blank C60 (60 minutes).uef`, `Blank C90 (90 minutes).uef`). Each is a UEF
+0.10 holding an origin chunk (&0000, `Beebium`) and one gap chunk (&0116) of
+the tape's length: 900, 1800, 3600 or 5400 seconds of silence, which
+recording replaces. Adding a length is adding a file. `list-blank-tapes` lists
+them in file name order and `create-tape` copies one into place
+(CassetteService's `ListBlankTapes` and `CreateTape` for clients); see
+[cli.md](cli.md#list-blank-tapes).
+
+The templates are committed under `tapes/blank/`, made by
+`scripts/make_blank_tapes.py` (plain `python3`, standard library only) so the
+set is byte-reproducible (`make_blank_tapes.py --check` verifies it, and the
+ctest `blank_tapes_match_their_script` runs that check). They are found in
+this order, as the blank discs are:
+
+1. `$BEEBIUM_SERVERS_DIRPATH/blank-tapes/`
+2. `<executable_dir>/blank-tapes/` (build layout)
+3. `<executable_dir>/../share/beebium/blank-tapes/` (installed layout)
 
 ## Bundled Discs and Machine Directories
 
@@ -324,7 +352,7 @@ launcher enables it.
 | Variable | Description |
 |----------|-------------|
 | `BEEBIUM_ROM_DIR` | Path to ROM directory (overrides auto-detection) |
-| `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets and whose `blank-discs/` holds the blank disc templates (overrides auto-detection) |
+| `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets, whose `blank-discs/` holds the blank disc templates and whose `blank-tapes/` holds the blank tape templates (overrides auto-detection) |
 | `BEEBIUM_USER_DIRPATH` | The per-user state directory (overrides the platform default); its `presets/`, `discs/`, `tapes/`, `aun-map.json` and `aun-auto-next` follow it. For tests and CI, to keep a run away from the real user's files |
 | `BEEBIUM_AUN_MAP_FILEPATH` | AUN map file path (overrides the per-user `aun-map.json`; `--aun map-file=` overrides this, and `map-file=none` disables the map file) |
 | `BEEBIUM_AUN_AUTO_STATE_FILEPATH` | AUN automatic-station hint file (overrides the per-user `aun-auto-next`; `none` disables the hint) |

@@ -267,9 +267,9 @@ Loading tape: /Users/me/Tapes/Elite.uef (playing)
 
 or `(stopped)` for a preset's tape, or `(stopped at 12.5 s)` for a saved
 machine's tape put back where its last Save left it. While the machine runs,
-`CassetteService` inserts, ejects, plays, stops and winds tapes (see
-[grpc-server.md](grpc-server.md#cassetteservice) and
-[cassette.md](cassette.md)).
+`CassetteService` inserts, ejects, plays, records on, stops and winds tapes
+(see [grpc-server.md](grpc-server.md#cassetteservice) and
+[cassette.md](cassette.md)); `create-tape` makes a blank tape to record on.
 
 #### gRPC Server
 
@@ -838,6 +838,41 @@ beebium-model-b create-disc "Acorn ADFS M 320K" ~/Discs/Work.adm --overwrite
 
 The new disc always has the template's extension, which is what the server's format detection goes by when the disc is inserted: a destination without an extension gets the template's (`~/Discs/Work` becomes `~/Discs/Work.ssd`, and that is the path printed), and one with another extension is refused (`destination must end in .ssd: <path>`), since that copy would not load. The comparison ignores case. An existing destination is refused unless `--overwrite` is given; a directory is always refused. Exit codes: `EX_NOINPUT` (66) for an unknown label, `EX_CANTCREAT` (73) for an existing destination, `EX_IOERR` (74) when the copy cannot be written, `EX_USAGE` (64) for a wrong extension and for missing or extra arguments. DiscService's `CreateDisc(label, destination_path, overwrite)` does the same, with the same error messages, on the server's host.
 
+### list-blank-tapes
+
+List the blank tape templates the server ships, in file name order: one empty UEF tape per length, which `create-tape` copies into place. Each has a `label` (its file name without the extension, which `create-tape` takes), its `filename`, its `kind` (`tape`), its `size_bytes` and its `duration_seconds`. The templates are found as the blank discs are (see [deployment.md](deployment.md#blank-tape-templates)); adding a length is adding a file there. CassetteService's `ListBlankTapes` gives a client the same list.
+
+```bash
+beebium-model-b list-blank-tapes
+```
+
+**`--format tsv`** (default for non-TTY):
+```
+label	filename	kind	size_bytes	duration_seconds
+Blank C15 (15 minutes)	Blank C15 (15 minutes).uef	tape	36	900
+Blank C30 (30 minutes)	Blank C30 (30 minutes).uef	tape	36	1800
+Blank C60 (60 minutes)	Blank C60 (60 minutes).uef	tape	36	3600
+Blank C90 (90 minutes)	Blank C90 (90 minutes).uef	tape	36	5400
+```
+
+**`--format jsonl`**:
+```
+{"label":"Blank C15 (15 minutes)","filename":"Blank C15 (15 minutes).uef","kind":"tape","size_bytes":36,"duration_seconds":899.9999994375}
+```
+
+The length is the tape's in seconds of the Serial ULA's clock, so the full-precision `jsonl` value can fall a hair short of the whole minutes the label names.
+
+### create-tape
+
+Create a blank tape image: copy the template with the given label to the destination, byte for byte, and print the new tape's absolute path. The copy is an ordinary writable UEF. Insert it as any other tape (`--tape <filepath>`, or CassetteService's `InsertTape`) and record on it (CassetteService's `Record`).
+
+```bash
+beebium-model-b create-tape "Blank C30 (30 minutes)" ~/Tapes/Work.uef
+beebium-model-b create-tape "Blank C90 (90 minutes)" ~/Tapes/Work.uef --overwrite
+```
+
+The new tape always has the template's extension, `.uef`: a destination without an extension gets it (`~/Tapes/Work` becomes `~/Tapes/Work.uef`, and that is the path printed), and one with another extension is refused (`destination must end in .uef: <path>`). The comparison ignores case. An existing destination is refused unless `--overwrite` is given; a directory is always refused. Exit codes are those of `create-disc`: `EX_NOINPUT` (66) for an unknown label, `EX_CANTCREAT` (73) for an existing destination, `EX_IOERR` (74) when the copy cannot be written, `EX_USAGE` (64) for a wrong extension and for missing or extra arguments. CassetteService's `CreateTape(label, destination_path, overwrite)` does the same, with the same error messages, on the server's host.
+
 ### list-extensions
 
 List every peripheral or transport extension that the server can recognise via a `--<cli-name>` flag, in the same priority order that `start` would resolve. See [Extension Search Paths](peripheral-extension-framework.md#extension-search-paths) in the extension framework doc for the full ordering rules.
@@ -1329,6 +1364,9 @@ beebium-model-b start --floppy 0:elite.ssd --auto-boot
 
 # Insert a tape and press play
 beebium-model-b start --tape elite.uef
+
+# Make a blank tape to SAVE to
+beebium-model-b create-tape "Blank C30 (30 minutes)" ~/Tapes/Work.uef
 
 # Replace BASIC with Forth
 beebium-model-b start --sideways slot=15:type=rom:image=forth.rom

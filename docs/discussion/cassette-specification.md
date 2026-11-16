@@ -335,7 +335,7 @@ CSW or WAV tape image." and so on.
 ## Blank tapes and recording
 
 A blank tape is a bundled template, as a blank disc is: `tapes/blank/<label>.uef`, committed,
-byte-reproducible from `scripts/make-blank-tapes.sh` (a UEF whose tape content is one gap of
+byte-reproducible from `scripts/make_blank_tapes.py` (a UEF whose tape content is one gap of
 the tape's length, with an origin chunk naming Beebium and no date), copied into the build
 tree and installed to `share/beebium/blank-tapes` beside `blank-discs`. The label is the file
 name without its extension and is what the user is offered. `Decision`: the lengths are the
@@ -448,8 +448,8 @@ cassette agent, and ends with the full gate from a separate Release worktree.
    client-specification chapter; `docs/cassette.md` and the updates to `serial-acia.md`
    (including its &15 claim, F-Q26), `grpc-server.md`, `preset-schema.md`, `indicators.md`,
    `machine-directory.md`, `client-specification.md`, CLAUDE.md, README.
-4. **Round 6: recording and blank tapes.** The recording transport state, the UEF writer, the
-   templates and `scripts/make-blank-tapes.sh`, `ListBlankTapes`/`CreateTape`, CLI
+4. **Round 6: recording and blank tapes.** *Done.* The recording transport state, the UEF writer, the
+   templates and `scripts/make_blank_tapes.py`, `ListBlankTapes`/`CreateTape`, CLI
    `list-blank-tapes`/`create-tape`, Python and TypeScript mirrors, the client-specification
    section on creating blank tapes (the mirror of 9.3, gated on a shared filesystem). Tests: MOS
    1.20 SAVEs a program to a blank C15 and `CHAIN`s it back after rewind, in Beebium and then

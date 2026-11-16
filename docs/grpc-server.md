@@ -419,7 +419,7 @@ pointing at `KeyDown`/`KeyUp`; no budget waits indefinitely.
 The cassette deck behind the Serial ULA's cassette interface. There is one
 deck, so no drive number anywhere. The deck is the user's transport: inserting
 leaves it stopped at the start, and play is a separate request. The tape moves
-only while the deck plays and the machine's motor relay (Serial ULA latch bit
+only while the deck plays or records and the machine's motor relay (Serial ULA latch bit
 7, at &FE10) is closed. Served on every machine, beside `DiscService`; see
 [cassette.md](cassette.md).
 
@@ -431,29 +431,43 @@ only while the deck plays and the machine's motor relay (Serial ULA latch bit
 | `EjectTape` | Stop and remove the tape. |
 | `Play` | Start the deck. At the end of the tape it succeeds and leaves the deck stopped at the end. |
 | `Stop` | Stop the deck where it is. |
-| `Rewind`, `FastForward` | Wind the tape backwards or forwards at 30 times real speed, whether or not the motor relay is closed; the Serial ULA receives nothing while it winds. The wind ends on `Stop`, `Play`, `Seek` or `EjectTape`, or at an end of the tape, where the deck stops. At the start (or the end) it succeeds and leaves the deck stopped. |
+| `Record` | Start recording. Like `Play`, the tape moves only while the motor relay is closed; every clock under the head replaces what the tape held with what the Serial ULA's tone synthesiser sends, an edge, or silence when RTS is high or RS423 is selected, so a recording deck erases to silence while the machine is quiet. A relay opening only stops the tape. `Stop`, `Play`, `Seek`, `Rewind`, `FastForward`, `EjectTape` and the end of the tape end the recording, each leaving the deck as it would leave a playing one, except that a `Seek` leaves it stopped; at the end of the tape `Record` succeeds and leaves the deck stopped. Only a UEF is recorded on: on a CSW it is refused with `READ_ONLY` ("The tape Elite.csw is a CSW image, and Beebium records only on UEF tapes."). |
+| `Rewind`, `FastForward` | Wind the tape backwards or forwards at 30 times real speed, whether or not the motor relay is closed; the Serial ULA receives nothing while it winds. A wind ends a recording. The wind ends on `Stop`, `Play`, `Record`, `Seek` or `EjectTape`, or at an end of the tape, where the deck stops. At the start (or the end) it succeeds and leaves the deck stopped. |
 | `Seek` | Move the tape to `position_seconds`; a seek ends a wind and leaves a playing deck playing. `Seek` to 0 is the instant return to the start. A position beyond the end lands at the end, and the deck stops; a negative position is refused with `INVALID_POSITION`. |
+| `ListBlankTapes` | The blank tape templates the server ships, in file name order, as `BlankTape`s: `label` (the file name without its extension, which `CreateTape` takes), `filename`, `kind` (`"tape"`), `size_bytes` and `duration_seconds`. The templates are found as the blank discs are (see [deployment.md](deployment.md#blank-tape-templates)). |
+| `CreateTape` | Copy the template with `label` to `destination_path` on the server's host, byte for byte, as `DiscService`'s `CreateDisc` does for a disc, and return the new tape's absolute `path`. A destination without an extension gets `.uef`; one with another extension is refused (`WRONG_EXTENSION`), as is an existing destination unless `overwrite` is set (`DESTINATION_EXISTS`), an unknown label (`UNKNOWN_LABEL`) and a copy that cannot be written (`WRITE_FAILED`), with the same messages as `create-tape` (see [cli.md](cli.md#create-tape)). The copy is not inserted: `InsertTape` does that. |
 | `GetDeckStatus` | One `DeckStatus`. |
-| `SubscribeDeckStatus` | Server stream of `DeckStatus`: the current status at once, then one on every change of presence, transport, relay or tape, and, while the deck plays, the position no more often than `min_interval_ms` (default 100) of emulated time; while it winds, as often as the position moves thirty times that much tape. |
+| `SubscribeDeckStatus` | Server stream of `DeckStatus`: the current status at once, then one on every change of presence, transport, relay or tape, and, while the deck plays or records, the position no more often than `min_interval_ms` (default 100) of emulated time; while it winds, as often as the position moves thirty times that much tape. |
 
 `DeckStatus` gives `has_cassette_interface`, `tape_inserted`, the `tape`
 (`TapeMetadata`: the file's `name`, the `url` as given, `format` `"UEF"` or
 `"CSW"`, the image's own `title`, `origin` and `target_machine` where it
-carries them, and `duration_seconds`, 0 when unknown), the `transport`
-(`TAPE_TRANSPORT_STOPPED`, `_PLAYING`, `_REWINDING` or `_FAST_FORWARDING`; 2 is reserved for recording), `position_seconds` in tape time,
+carries them, `duration_seconds`, 0 when unknown, and `recordable`, whether
+`Record` can record on it: true for a UEF, false for a CSW), the `transport`
+(`TAPE_TRANSPORT_STOPPED`, `_PLAYING`, `_RECORDING`, `_REWINDING` or
+`_FAST_FORWARDING`), `position_seconds` in tape time,
 `motor_on` (the relay, whether or not a tape is in) and `ula_part`
 (`"ferranti"` or `"vlsi"`). The presence field is `tape_inserted` rather than
 `has_tape` because protobuf derives `has_tape()` from the `tape` field. The
 status is read without stopping the machine, from values the deck publishes
 atomically as it runs.
 
+A tape recorded on is written back to its file whole and atomically (written
+beside it and renamed over it, gzipped if it was) when a recording ends, on
+`EjectTape`, on `SaveMachine`, on a move of the machine directory and at
+shutdown, and only if it has been recorded on since it was last written.
+Beebium writes the UEF in its own chunk vocabulary at the nominal 1200 Hz
+base: what the tape holds is preserved cycle for cycle, its chunk layout is
+not.
+
 Errors are reported in the response's `success`, `error` and `kind` fields,
 not as a gRPC status. Every error is a sentence naming the tape by the name the
 client gave, and its `kind` is one of `NO_CASSETTE_INTERFACE`, `CANNOT_OPEN`
 (missing, or no permission), `UNREADABLE`, `UNSUPPORTED_FORMAT` (not a UEF or
 CSW), `INVALID_IMAGE` (recognised but refused: a disc chunk, a version, a
-value out of range), `DECK_OCCUPIED`, `DECK_EMPTY` (eject, play, stop, seek or wind
-with no tape) and `INVALID_POSITION`.
+value out of range), `DECK_OCCUPIED`, `DECK_EMPTY` (eject, play, stop, seek, wind or record
+with no tape), `INVALID_POSITION` and `READ_ONLY` (record on a CSW).
+`CreateTape` reports its own `CreateTapeErrorKind`, as `CreateDisc` does.
 
 ```bash
 grpcurl -plaintext -import-path src/service/proto -proto cassette.proto \
