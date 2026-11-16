@@ -25,13 +25,14 @@ SERPROC      = &FE10    \ Serial ULA latch (SERPROC), write-only
 READY    = &71          \ set once RS423 is selected (carrier up) and we are polling
 SENTINEL = &70          \ set when the program has finished its job
 
-\ 6850 control-register values (8 data bits, no parity, 1 stop, divide-by-16):
-\   bits 0-1 = 01  divide-by-16 clock
+\ 6850 control-register values (8 data bits, no parity, 1 stop, divide-by-64,
+\ which is what MOS 1.20 uses on RS423; the Serial ULA supplies 64 clocks a bit):
+\   bits 0-1 = 10  divide-by-64 clock
 \   bits 2-4 = 101 word select 8N1
 \   bits 5-6 = transmitter control, bit 7 = receive interrupt enable
 CTRL_RESET = &03        \ master reset the ACIA (counter-divide = 11)
-CTRL_8N1   = &15        \ 8N1, /16, RX IRQ off, /RTS low, no break (TX control = 00)
-CTRL_BREAK = &75        \ as CTRL_8N1 but TX control = 11 -> hold TX in BREAK
+CTRL_8N1   = &16        \ 8N1, /64, RX IRQ off, /RTS low, no break (TX control = 00)
+CTRL_BREAK = &76        \ as CTRL_8N1 but TX control = 11 -> hold TX in BREAK
                         \ (the MOS-level equivalent is OSBYTE &9C / *FX156,96,159)
 
 \ Serial ULA latch: bit 6 selects RS423 (which drives the ACIA /DCD low, i.e.

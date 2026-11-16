@@ -25,7 +25,9 @@ using namespace beebium;
 
 namespace {
 
-constexpr uint8_t CONTROL_8N1 = Mc6850::COUNTER_DIVIDE_16
+// 8N1 at the /64 counter divide, which is what MOS 1.20 uses on RS423: the
+// Serial ULA supplies 64 receive and transmit clocks per bit at the selected rate.
+constexpr uint8_t CONTROL_8N1 = Mc6850::COUNTER_DIVIDE_64
     | (0x05 << Mc6850::CR_WORD_SELECT_SHIFT);
 
 // Phase 2 / Correction 1, Axis A: serial-socket presence is gated by detecting

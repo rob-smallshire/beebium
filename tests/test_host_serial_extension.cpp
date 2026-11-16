@@ -72,8 +72,10 @@ RpcStatus call(ExtensionRpcDispatcher& d, std::string_view method,
 #endif
 
 namespace {
+// 8N1 at the /64 counter divide, which is what MOS 1.20 uses on RS423: the
+// Serial ULA supplies 64 receive and transmit clocks per bit at the selected rate.
 constexpr uint8_t CONTROL_8N1 =
-    Mc6850::COUNTER_DIVIDE_16 | (0x05 << Mc6850::CR_WORD_SELECT_SHIFT);
+    Mc6850::COUNTER_DIVIDE_64 | (0x05 << Mc6850::CR_WORD_SELECT_SHIFT);
 }  // namespace
 
 TEST_CASE("HostSerialExtension attaches to the serial port (pty mode)",

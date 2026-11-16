@@ -30,8 +30,10 @@
 using namespace beebium;
 
 namespace {
+// 8N1 at the /64 counter divide, which is what MOS 1.20 uses on RS423: the
+// Serial ULA supplies 64 receive and transmit clocks per bit at the selected rate.
 constexpr uint8_t CONTROL_8N1 =
-    Mc6850::COUNTER_DIVIDE_16 | (0x05 << Mc6850::CR_WORD_SELECT_SHIFT);
+    Mc6850::COUNTER_DIVIDE_64 | (0x05 << Mc6850::CR_WORD_SELECT_SHIFT);
 
 // A minimal RpcContext for driving a dispatcher directly in a unit test (no
 // gRPC). The dispatcher resolves remote calls to serialized bytes, exactly as

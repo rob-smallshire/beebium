@@ -24,13 +24,15 @@ using namespace beebium;
 
 namespace {
 
-constexpr uint8_t CONTROL_8N1 = Mc6850::COUNTER_DIVIDE_16
+// 8N1 at the /64 counter divide, which is what MOS 1.20 uses on RS423: the
+// Serial ULA supplies 64 receive and transmit clocks per bit at the selected rate.
+constexpr uint8_t CONTROL_8N1 = Mc6850::COUNTER_DIVIDE_64
     | (0x05 << Mc6850::CR_WORD_SELECT_SHIFT);
 
 // Control-register value for a given Word Select code (the datasheet order:
 // 0=7E2, 1=7O2, 2=7E1, 3=7O1, 4=8N2, 5=8N1, 6=8E1, 7=8O1).
 constexpr uint8_t control_for_word_select(uint8_t word_select) {
-    return static_cast<uint8_t>(Mc6850::COUNTER_DIVIDE_16
+    return static_cast<uint8_t>(Mc6850::COUNTER_DIVIDE_64
         | (word_select << Mc6850::CR_WORD_SELECT_SHIFT));
 }
 

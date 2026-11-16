@@ -32,8 +32,9 @@ from beebium.ext.peripheral.rpc_serial import RpcSerial
 # host-serial pty/device modes rely on POSIX pseudo-terminals.
 _posix_only = pytest.mark.skipif(sys.platform.startswith("win"), reason="host-serial pty/device is POSIX-only")
 
-# MC6850 control: /16 divide, 8N1, /RTS low, no TX IRQ -- the MOS serial config.
-_ACIA_8N1 = 0x15
+# MC6850 control: /64 divide, 8N1, /RTS low, no TX IRQ. /64 is what MOS 1.20 uses
+# on RS423: the Serial ULA supplies 64 clocks per bit at the selected rate.
+_ACIA_8N1 = 0x16
 # Serial ULA: RS423 select (carrier present), 19200 baud on TX and RX.
 _ULA_RS423_19200 = 0x40
 
