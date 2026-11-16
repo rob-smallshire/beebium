@@ -33,7 +33,7 @@ The serial side of the same chips, RS423, is in [serial-acia.md](serial-acia.md)
 | The ACIA dividing real receive and transmit clocks by 1, 16 or 64, and the /DCD latch | |
 | The Ferranti part (the default) and the VLSI part, including the VLSI's tone inversion on latch bit 3 | Selecting the VLSI part from a preset |
 | UEF (plain or gzipped) and CSW (v1.01 and v2, RLE and Z-RLE) tapes, rendered as edges in ULA clocks | WAV files and live audio (later rounds, below) |
-| One deck per machine: insert, eject, play, stop, seek; the tape moving only while it plays with the relay closed | Motor inertia: the relay starts and stops the tape instantly |
+| One deck per machine: insert, eject, play, stop, rewind, fast forward, seek; the tape moving only while it plays with the relay closed, or while it winds | Motor inertia: the relay starts and stops the tape instantly. Tape audio: the tape reaches only the Serial ULA, and no client plays it |
 | The motor relay as an indicator | Recording, and blank tapes (round 6) |
 
 Nothing in the model knows what any MOS does with the cassette. MOS 1.20 appears only in
@@ -194,7 +194,7 @@ machine with an ACIA but no cassette interface can say no.
 The deck holds:
 
 - the tape: none, or one source with its name, URL, kind (UEF or CSW) and metadata;
-- the transport: stopped or playing;
+- the transport: stopped, playing, rewinding or fast-forwarding;
 - the position, in tape time;
 - the relay, from the ULA.
 
@@ -206,9 +206,14 @@ The deck's rules:
   removing a tape is a deliberate eject.
 - **Play and stop** are the user's. A client may offer insert-and-play as one gesture, made as
   two requests.
-- **Seek** moves to a tape time at once, and rewind is a seek to zero. A seek beyond the end
-  lands at the end and stops the deck. At the end of the tape the transport stops; the tape does
-  not loop.
+- **Rewind and fast forward** wind the tape backwards or forwards at 30 times real speed
+  (`WIND_SPEED` tape clocks per ULA clock), whether or not the relay is closed, and no edge
+  reaches the ULA: a winding tape is off the head. A wind ends on stop, play, seek or eject,
+  or at an end of the tape, where the deck stops. Play during a wind plays from where the
+  tape has reached.
+- **Seek** moves to a tape time at once; a seek to zero is the instant return to the start.
+  A seek ends a wind and leaves a playing deck playing. A seek beyond the end lands at the end
+  and stops the deck. At the end of the tape the transport stops; the tape does not loop.
 - **Eject** stops the deck and removes the tape.
 - **Reset.** Break and power cycle leave the deck alone. The relay opens because the latch
   resets.
@@ -227,9 +232,10 @@ The service reads these without stopping the machine.
 | `InsertTape(url)` | Opens a UEF or CSW image the server can reach, given as a `file://` URI or an absolute path and judged by content, and leaves the deck stopped at the start. Returns the tape's metadata. The file is read off the emulation thread; the insertion is made under pause |
 | `EjectTape()` | Stops the deck and removes the tape |
 | `Play()`, `Stop()` | The deck's keys. Play at the end of the tape succeeds and leaves the deck stopped |
-| `Seek(position_seconds)` | Moves the tape; a negative position is refused, and one beyond the end lands at the end |
+| `Rewind()`, `FastForward()` | Wind at 30 times real speed, ungated by the relay, until stop, play, seek, eject or an end of the tape |
+| `Seek(position_seconds)` | Moves the tape at once and ends a wind; a negative position is refused, and one beyond the end lands at the end |
 | `GetDeckStatus()` | Presence, the tape and its metadata (name, URL, format, title, origin, target machine, duration), transport, position, relay and the ULA part |
-| `SubscribeDeckStatus(min_interval_ms)` | The status at once, then on every change of presence, transport, relay or tape, and while the deck plays the position, at most every `min_interval_ms` of emulated time (default 100) |
+| `SubscribeDeckStatus(min_interval_ms)` | The status at once, then on every change of presence, transport, relay or tape, and while the deck plays the position, at most every `min_interval_ms` of emulated time (default 100); while it winds, every thirty times that much tape |
 
 Every unsuccessful request returns `success = false`, a sentence naming the tape by the name
 the client gave, and a `CassetteErrorKind`:
@@ -242,7 +248,7 @@ the client gave, and a `CassetteErrorKind`:
 | `UNSUPPORTED_FORMAT` | It is not a UEF or CSW tape image |
 | `INVALID_IMAGE` | It is a UEF or CSW whose contents break the format, or holds a disc, ROM or machine state |
 | `DECK_OCCUPIED` | A tape is already in; the sentence names both tapes |
-| `DECK_EMPTY` | Play, stop, seek or eject with no tape in |
+| `DECK_EMPTY` | Play, stop, rewind, fast forward, seek or eject with no tape in |
 | `INVALID_POSITION` | A seek before the start of the tape |
 
 For example: "The deck already holds game.uef; eject it before inserting other.uef."
@@ -328,13 +334,13 @@ The tests build their tapes when they run; no tape image is typed into the Beeb.
 |---|---|
 | `tests/test_mc6850.cpp` | Real division at /1, /16 and /64; start-bit detection and mid-bit sampling; master reset clearing the control register; the /DCD latch and its clearing on a data read; the receiver held idle while /DCD is high |
 | `tests/test_serial_ula.cpp` | The 16/13 MHz clock and its dividers; 64 RS423 clocks a bit at every rate; the read of &FE10; cassette mode's /DCD, /CTS and silence; the part |
-| `tests/test_serial_ula_cassette.cpp` | The separator in ULA clocks: bursts, timeouts and the data rule. A tape byte arriving only at the matching ACIA divider. The detector: threshold for each part, re-arming by a 0, by motor off and by silence, and surviving latch writes. The VLSI inversion. The synthesiser's tones and silence; TDRE with no sink. The deck's movement, its refusal of a second tape, and Break |
+| `tests/test_serial_ula_cassette.cpp` | The separator in ULA clocks: bursts, timeouts and the data rule. A tape byte arriving only at the matching ACIA divider. The detector: threshold for each part, re-arming by a 0, by motor off and by silence, and surviving latch writes. The VLSI inversion. The synthesiser's tones and silence; TDRE with no sink. The deck's movement, its refusal of a second tape, and Break. Winding: rewind from 60 s reaching 0 in 2 s and fast forward of a 90 s tape reaching its end in 3 s, with the relay open and no edges; stop and play mid-wind; a seek ending a wind |
 | `tests/test_tape_signal.cpp` | Every UEF chunk the reader renders, refuses or skips; gzip; metadata; seek and duration; CSW against the same tape's UEF to within one clock, both versions, polarity, long pulses, and the refusals |
 | `tests/test_cassette_mos.cpp` | With MOS 1.20 as a test vector: `*TAPE` and `CHAIN""` loading and running a BASIC program from UEF, at 300 baud after `*TAPE3`, and from CSW. `Data?` and `Rewind tape` for a bad data CRC; `Block?` for a block out of sequence. The Welcome tape's short leaders. `*CAT` with the tape running only while the relay is on; searching until the deck plays |
-| `tests/test_grpc_cassette.cpp` | `CassetteService`: status on a fresh machine; insert, refusal of a second tape, and the error kinds; play gated by the relay; the status stream; a BASIC program loaded through MOS 1.20 |
+| `tests/test_grpc_cassette.cpp` | `CassetteService`: status on a fresh machine; insert, refusal of a second tape, and the error kinds; winding at 30 times real speed with the motor off; play gated by the relay; the status stream; a BASIC program loaded through MOS 1.20 |
 | `tests/test_grpc_indicator.cpp` | The motor LED registered on every model after the lock LEDs, following latch bit 7 |
 | `tests/test_preset_subcommands.cpp` | `resolve-preset` and `describe-preset-schema` for the deck; a preset's tape inserted stopped; `--tape` winning and playing; a bare name found in `tapes/` |
-| `clients/beebium-python-client/tests/test_cassette.py` | `bbc.cassette` round trips, errors with kinds and sentences, the status stream, and `boot_tape` running a tokenised BASIC program |
+| `clients/beebium-python-client/tests/test_cassette.py` | `bbc.cassette` round trips and winding, errors with kinds and sentences, the status stream, and `boot_tape` running a tokenised BASIC program |
 | `clients/beebium-python-client/tests/test_saved_machines.py` | A saved machine resuming its tape where it was saved, and a run-time tape not recorded |
 | `clients/beebium-typescript-client/tests/cassette.test.ts`, `cassette-integration.test.ts` | The TypeScript mirror, with mocked stubs and against a server |
 

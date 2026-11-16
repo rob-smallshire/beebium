@@ -431,15 +431,16 @@ only while the deck plays and the machine's motor relay (Serial ULA latch bit
 | `EjectTape` | Stop and remove the tape. |
 | `Play` | Start the deck. At the end of the tape it succeeds and leaves the deck stopped at the end. |
 | `Stop` | Stop the deck where it is. |
-| `Seek` | Move the tape to `position_seconds`. A position beyond the end lands at the end, and the deck stops; a negative position is refused with `INVALID_POSITION`. |
+| `Rewind`, `FastForward` | Wind the tape backwards or forwards at 30 times real speed, whether or not the motor relay is closed; the Serial ULA receives nothing while it winds. The wind ends on `Stop`, `Play`, `Seek` or `EjectTape`, or at an end of the tape, where the deck stops. At the start (or the end) it succeeds and leaves the deck stopped. |
+| `Seek` | Move the tape to `position_seconds`; a seek ends a wind and leaves a playing deck playing. `Seek` to 0 is the instant return to the start. A position beyond the end lands at the end, and the deck stops; a negative position is refused with `INVALID_POSITION`. |
 | `GetDeckStatus` | One `DeckStatus`. |
-| `SubscribeDeckStatus` | Server stream of `DeckStatus`: the current status at once, then one on every change of presence, transport, relay or tape, and, while the deck plays, the position no more often than `min_interval_ms` (default 100) of emulated time. |
+| `SubscribeDeckStatus` | Server stream of `DeckStatus`: the current status at once, then one on every change of presence, transport, relay or tape, and, while the deck plays, the position no more often than `min_interval_ms` (default 100) of emulated time; while it winds, as often as the position moves thirty times that much tape. |
 
 `DeckStatus` gives `has_cassette_interface`, `tape_inserted`, the `tape`
 (`TapeMetadata`: the file's `name`, the `url` as given, `format` `"UEF"` or
 `"CSW"`, the image's own `title`, `origin` and `target_machine` where it
 carries them, and `duration_seconds`, 0 when unknown), the `transport`
-(`TAPE_TRANSPORT_STOPPED` or `_PLAYING`), `position_seconds` in tape time,
+(`TAPE_TRANSPORT_STOPPED`, `_PLAYING`, `_REWINDING` or `_FAST_FORWARDING`; 2 is reserved for recording), `position_seconds` in tape time,
 `motor_on` (the relay, whether or not a tape is in) and `ula_part`
 (`"ferranti"` or `"vlsi"`). The presence field is `tape_inserted` rather than
 `has_tape` because protobuf derives `has_tape()` from the `tape` field. The
@@ -451,7 +452,7 @@ not as a gRPC status. Every error is a sentence naming the tape by the name the
 client gave, and its `kind` is one of `NO_CASSETTE_INTERFACE`, `CANNOT_OPEN`
 (missing, or no permission), `UNREADABLE`, `UNSUPPORTED_FORMAT` (not a UEF or
 CSW), `INVALID_IMAGE` (recognised but refused: a disc chunk, a version, a
-value out of range), `DECK_OCCUPIED`, `DECK_EMPTY` (eject, play, stop or seek
+value out of range), `DECK_OCCUPIED`, `DECK_EMPTY` (eject, play, stop, seek or wind
 with no tape) and `INVALID_POSITION`.
 
 ```bash

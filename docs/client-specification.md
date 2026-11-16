@@ -1611,17 +1611,24 @@ section sits above the floppy drives, which sit above the hard discs.
   its file dialogue by the `.uef` and `.csw` extensions as a convenience, but never
   refuses a file itself. A tape is removed through Eject, never by inserting over
   an occupied deck (the server refuses that).
-- The deck keys. Play, Stop, Rewind (a seek to 0) and Eject, and a position
-  slider drawn from `position_seconds` and `duration_seconds`. The slider seeks on
-  release, not while it moves; a drag made while the deck plays seeks too, and the
-  deck plays on from the new position. A seek beyond the end lands at the end and
-  stops the deck. When the server reports a duration of 0 (unknown) the client
-  shows the position without a proportional slider.
+- The deck keys. Play, Stop, Rewind and Fast forward (the winding transports,
+  `Rewind` and `FastForward`), Back to the beginning (`Seek` to 0), and Eject; a
+  tape counter showing the position in minutes and seconds; and a position slider
+  drawn from `position_seconds` and `duration_seconds` that the user scrubs with.
+  A wind runs at 30 times real speed whether or not the motor relay is closed, and
+  the counter and slider follow it; it ends on Stop, Play, a seek or Eject, or at
+  an end of the tape, where the deck stops. The slider seeks on release, not while
+  it moves; a drag made while the deck plays seeks too, and the deck plays on from
+  the new position. A seek beyond the end lands at the end and stops the deck.
+  When the server reports a duration of 0 (unknown) the client shows the counter
+  without a proportional slider. The counter and the slider are the user's only
+  guide to where anything is on the tape, as on a real deck.
 - Insert and play are separate. After a plain insert the deck is stopped at the
   start, and the user presses Play. A client may also offer an insert-and-play
   gesture (a double-click on a recent tape, a modifier held on drop), which sends
   `InsertTape` and then, on its success, `Play`.
-- Transport and relay. The client shows both the transport (stopped or playing)
+- Transport and relay. The client shows both the transport (stopped, playing,
+  rewinding or fast-forwarding)
   and the machine's motor relay (`motor_on`). They are independent: the tape moves
   only while the deck plays and the relay is closed. "Playing, motor off" is the
   ordinary state of a tape waiting for the machine to ask for it (before a
@@ -1629,9 +1636,11 @@ section sits above the floppy drives, which sit above the hard discs.
   such.
 - The loaded tape shows its name and format, and the image's own title, origin and
   target machine where the server reports them.
-- What is not shown. The client shows no block catalogue, no waveform and no
-  decoded filenames. The deck is a transport, as a real one is; what is on the tape
-  is the machine's business.
+- What is not shown or heard. The client shows no block catalogue, no waveform and
+  no decoded filenames, and plays no tape audio at any time: not while playing,
+  winding or scrubbing. The tape reaches only the Serial ULA; no client synthesises
+  or plays cassette sound. The deck is a transport, as a real one is; what is on
+  the tape is the machine's business.
 - Errors. Every refused cassette request returns a sentence naming the tape, and a
   `CassetteErrorKind` (no cassette interface, cannot open, unreadable, unsupported
   format, invalid image, deck occupied, deck empty, invalid position). The client
@@ -1664,18 +1673,22 @@ States and transitions:
 | State | Trigger | Next |
 |-------|---------|------|
 | empty | InsertTape succeeds | stopped at 0 |
-| stopped | Play | playing |
-| playing | Stop | stopped |
-| playing | end of tape | stopped at the end |
+| stopped, rewinding or fast-forwarding | Play | playing, from where the tape is |
+| stopped or playing | Rewind | rewinding (at the start: stays stopped) |
+| stopped or playing | FastForward | fast-forwarding (at the end: stays stopped) |
+| playing, rewinding or fast-forwarding | Stop | stopped where the tape is |
+| playing or fast-forwarding | end of tape | stopped at the end |
+| rewinding | start of tape | stopped at 0 |
 | stopped or playing | Seek | the same transport, at the new position (a seek past the end stops) |
-| stopped or playing | EjectTape | empty |
+| rewinding or fast-forwarding | Seek | stopped, at the new position |
+| any with a tape | EjectTape | empty |
 
 The deck's state is mirrored from `SubscribeDeckStatus`, which sends the current
 status at once and then on every change of presence, transport, relay or tape, and
-the position while the deck plays; it is never polled.
+the position while the deck plays or winds; it is never polled.
 
 Rests on: `cassette.proto CassetteService.InsertTape`, `EjectTape`, `Play`, `Stop`,
-`Seek`, `GetDeckStatus`, `SubscribeDeckStatus`; CLI `describe-preset-schema` and
+`Rewind`, `FastForward`, `Seek`, `GetDeckStatus`, `SubscribeDeckStatus`; CLI `describe-preset-schema` and
 `resolve-preset` for the configurator row.
 
 Conformance:
@@ -1684,8 +1697,9 @@ Conformance:
   hard discs; the deck is shown only when the server reports a cassette interface;
   play is separate from insert, and after a plain insert the deck starts stopped;
   the server judges the format and the client never refuses a file itself; the
-  transport and the relay are both shown; no block catalogue, waveform or decoded
-  filenames; the server's sentence shown verbatim, the kind selecting only the icon
+  transport and the relay are both shown; the deck keys, the tape counter and the
+  scrubbing slider; no block catalogue, waveform or decoded filenames, and no tape
+  audio at any time; the server's sentence shown verbatim, the kind selecting only the icon
   or recovery control; deck state driven from the status stream; the recording
   policy of 9.2 for tapes; the motor LED rendered only through chapter 10.
 - LATITUDE: one recents list shared with discs or a separate list for tapes; an
@@ -1702,7 +1716,10 @@ type `*LOAD ""` and the relay closes -> the motor LED lights in the indicator ro
 the position advances. Press Play on an empty deck -> refused with the server's
 deck-empty sentence, shown persistently. Insert onto an occupied deck -> refused with
 a deck-occupied sentence and an Eject offer. While playing, drag the slider to the
-middle and release -> one `Seek`, and the deck plays on from there. Insert a text file
+middle and release -> one `Seek`, and the deck plays on from there, with no sound
+from the client. Press Fast forward with the motor off -> the counter runs at 30
+times real speed and the deck stops at the end; press Play during a rewind -> the
+deck plays from where the tape had reached. Insert a text file
 renamed `.uef` -> accepted by the dialogue, then refused by the server as an
 unsupported format. A machine whose preset names a tape, played part-way and saved ->
 reopens with that tape at that position, stopped; a machine with a tape inserted at
@@ -2474,7 +2491,7 @@ AND 1` in BBC BASIC reads 1. Attach the Delta 14B/1 adapter -> one controller,
 | keyboard.proto | KeyboardService: KeyDown, KeyUp, BreakDown, BreakUp, GetLockState, TypeQuickly, WatchTypingStatus, ClearTyping, GetAllKeyMappings | 5.5, 7.1-7.5 |
 | controller.proto | ControllerService: ListControllers, GetControls, SetControls | 14 |
 | audio.proto | AudioService: GetAudioFormat, SubscribeAudio | 8.1-8.3 |
-| cassette.proto | CassetteService: InsertTape, EjectTape, Play, Stop, Seek, GetDeckStatus, SubscribeDeckStatus | 5.3, 9.0 |
+| cassette.proto | CassetteService: InsertTape, EjectTape, Play, Stop, Rewind, FastForward, Seek, GetDeckStatus, SubscribeDeckStatus | 5.3, 9.0 |
 | disc.proto | DiscService: InsertDisc, EjectDisc, CancelEject, GetDriveStatus, SubscribeDiscEvents, ListBlankDiscs, CreateDisc | 9.1-9.7 |
 | indicator.proto | IndicatorService: ListIndicators, Subscribe | 10 |
 | sideways.proto | SidewaysService: GetSlotStatus, SubscribeEvents, SetSlotProtection | 11 |
