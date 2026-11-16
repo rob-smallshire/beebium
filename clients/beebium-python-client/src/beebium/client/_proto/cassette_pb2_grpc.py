@@ -78,6 +78,16 @@ class CassetteServiceStub(object):
                 request_serializer=cassette__pb2.SeekRequest.SerializeToString,
                 response_deserializer=cassette__pb2.CassetteResponse.FromString,
                 _registered_method=True)
+        self.Rewind = channel.unary_unary(
+                '/beebium.CassetteService/Rewind',
+                request_serializer=cassette__pb2.RewindRequest.SerializeToString,
+                response_deserializer=cassette__pb2.CassetteResponse.FromString,
+                _registered_method=True)
+        self.FastForward = channel.unary_unary(
+                '/beebium.CassetteService/FastForward',
+                request_serializer=cassette__pb2.FastForwardRequest.SerializeToString,
+                response_deserializer=cassette__pb2.CassetteResponse.FromString,
+                _registered_method=True)
         self.GetDeckStatus = channel.unary_unary(
                 '/beebium.CassetteService/GetDeckStatus',
                 request_serializer=cassette__pb2.GetDeckStatusRequest.SerializeToString,
@@ -135,6 +145,22 @@ class CassetteServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Rewind(self, request, context):
+        """Wind the tape backwards or forwards at 30 times real speed, whether or
+        not the relay is closed; nothing reaches the Serial ULA while it winds.
+        The wind ends on Stop, Play, Seek or EjectTape, or at an end of the
+        tape, where the deck stops. Seek to 0 is the instant return to the start.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def FastForward(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetDeckStatus(self, request, context):
         """The deck's state, read without stopping the machine.
         """
@@ -177,6 +203,16 @@ def add_CassetteServiceServicer_to_server(servicer, server):
             'Seek': grpc.unary_unary_rpc_method_handler(
                     servicer.Seek,
                     request_deserializer=cassette__pb2.SeekRequest.FromString,
+                    response_serializer=cassette__pb2.CassetteResponse.SerializeToString,
+            ),
+            'Rewind': grpc.unary_unary_rpc_method_handler(
+                    servicer.Rewind,
+                    request_deserializer=cassette__pb2.RewindRequest.FromString,
+                    response_serializer=cassette__pb2.CassetteResponse.SerializeToString,
+            ),
+            'FastForward': grpc.unary_unary_rpc_method_handler(
+                    servicer.FastForward,
+                    request_deserializer=cassette__pb2.FastForwardRequest.FromString,
                     response_serializer=cassette__pb2.CassetteResponse.SerializeToString,
             ),
             'GetDeckStatus': grpc.unary_unary_rpc_method_handler(
@@ -331,6 +367,60 @@ class CassetteService(object):
             target,
             '/beebium.CassetteService/Seek',
             cassette__pb2.SeekRequest.SerializeToString,
+            cassette__pb2.CassetteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Rewind(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.CassetteService/Rewind',
+            cassette__pb2.RewindRequest.SerializeToString,
+            cassette__pb2.CassetteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FastForward(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.CassetteService/FastForward',
+            cassette__pb2.FastForwardRequest.SerializeToString,
             cassette__pb2.CassetteResponse.FromString,
             options,
             channel_credentials,

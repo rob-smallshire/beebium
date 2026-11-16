@@ -20,7 +20,7 @@ import SwiftProtobuf
 /// naming the tape by the name the client gave, and a kind.
 ///
 /// Usage: instantiate `Beebium_CassetteServiceClient`, then call methods of this protocol to make API calls.
-internal protocol Beebium_CassetteServiceClientProtocol: GRPCClient {
+public protocol Beebium_CassetteServiceClientProtocol: GRPCClient {
   var serviceName: String { get }
   var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol? { get }
 
@@ -49,6 +49,16 @@ internal protocol Beebium_CassetteServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_SeekRequest, Beebium_CassetteResponse>
 
+  func rewind(
+    _ request: Beebium_RewindRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_RewindRequest, Beebium_CassetteResponse>
+
+  func fastForward(
+    _ request: Beebium_FastForwardRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_FastForwardRequest, Beebium_CassetteResponse>
+
   func getDeckStatus(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions?
@@ -62,7 +72,7 @@ internal protocol Beebium_CassetteServiceClientProtocol: GRPCClient {
 }
 
 extension Beebium_CassetteServiceClientProtocol {
-  internal var serviceName: String {
+  public var serviceName: String {
     return "beebium.CassetteService"
   }
 
@@ -73,7 +83,7 @@ extension Beebium_CassetteServiceClientProtocol {
   ///   - request: Request to send to InsertTape.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func insertTape(
+  public func insertTape(
     _ request: Beebium_InsertTapeRequest,
     callOptions: CallOptions? = nil
   ) -> UnaryCall<Beebium_InsertTapeRequest, Beebium_InsertTapeResponse> {
@@ -91,7 +101,7 @@ extension Beebium_CassetteServiceClientProtocol {
   ///   - request: Request to send to EjectTape.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func ejectTape(
+  public func ejectTape(
     _ request: Beebium_EjectTapeRequest,
     callOptions: CallOptions? = nil
   ) -> UnaryCall<Beebium_EjectTapeRequest, Beebium_CassetteResponse> {
@@ -110,7 +120,7 @@ extension Beebium_CassetteServiceClientProtocol {
   ///   - request: Request to send to Play.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func play(
+  public func play(
     _ request: Beebium_PlayRequest,
     callOptions: CallOptions? = nil
   ) -> UnaryCall<Beebium_PlayRequest, Beebium_CassetteResponse> {
@@ -128,7 +138,7 @@ extension Beebium_CassetteServiceClientProtocol {
   ///   - request: Request to send to Stop.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func stop(
+  public func stop(
     _ request: Beebium_StopRequest,
     callOptions: CallOptions? = nil
   ) -> UnaryCall<Beebium_StopRequest, Beebium_CassetteResponse> {
@@ -146,7 +156,7 @@ extension Beebium_CassetteServiceClientProtocol {
   ///   - request: Request to send to Seek.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func seek(
+  public func seek(
     _ request: Beebium_SeekRequest,
     callOptions: CallOptions? = nil
   ) -> UnaryCall<Beebium_SeekRequest, Beebium_CassetteResponse> {
@@ -158,13 +168,52 @@ extension Beebium_CassetteServiceClientProtocol {
     )
   }
 
+  /// Wind the tape backwards or forwards at 30 times real speed, whether or
+  /// not the relay is closed; nothing reaches the Serial ULA while it winds.
+  /// The wind ends on Stop, Play, Seek or EjectTape, or at an end of the
+  /// tape, where the deck stops. Seek to 0 is the instant return to the start.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to Rewind.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  public func rewind(
+    _ request: Beebium_RewindRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_RewindRequest, Beebium_CassetteResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.rewind.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRewindInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to FastForward
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to FastForward.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  public func fastForward(
+    _ request: Beebium_FastForwardRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_FastForwardRequest, Beebium_CassetteResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.fastForward.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeFastForwardInterceptors() ?? []
+    )
+  }
+
   /// The deck's state, read without stopping the machine.
   ///
   /// - Parameters:
   ///   - request: Request to send to GetDeckStatus.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func getDeckStatus(
+  public func getDeckStatus(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions? = nil
   ) -> UnaryCall<Beebium_GetDeckStatusRequest, Beebium_DeckStatus> {
@@ -185,7 +234,7 @@ extension Beebium_CassetteServiceClientProtocol {
   ///   - callOptions: Call options.
   ///   - handler: A closure called when each response is received from the server.
   /// - Returns: A `ServerStreamingCall` with futures for the metadata and status.
-  internal func subscribeDeckStatus(
+  public func subscribeDeckStatus(
     _ request: Beebium_SubscribeDeckStatusRequest,
     callOptions: CallOptions? = nil,
     handler: @escaping (Beebium_DeckStatus) -> Void
@@ -204,16 +253,16 @@ extension Beebium_CassetteServiceClientProtocol {
 extension Beebium_CassetteServiceClient: @unchecked Sendable {}
 
 @available(*, deprecated, renamed: "Beebium_CassetteServiceNIOClient")
-internal final class Beebium_CassetteServiceClient: Beebium_CassetteServiceClientProtocol {
+public final class Beebium_CassetteServiceClient: Beebium_CassetteServiceClientProtocol {
   private let lock = Lock()
   private var _defaultCallOptions: CallOptions
   private var _interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol?
-  internal let channel: GRPCChannel
-  internal var defaultCallOptions: CallOptions {
+  public let channel: GRPCChannel
+  public var defaultCallOptions: CallOptions {
     get { self.lock.withLock { return self._defaultCallOptions } }
     set { self.lock.withLockVoid { self._defaultCallOptions = newValue } }
   }
-  internal var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol? {
+  public var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol? {
     get { self.lock.withLock { return self._interceptors } }
     set { self.lock.withLockVoid { self._interceptors = newValue } }
   }
@@ -224,7 +273,7 @@ internal final class Beebium_CassetteServiceClient: Beebium_CassetteServiceClien
   ///   - channel: `GRPCChannel` to the service host.
   ///   - defaultCallOptions: Options to use for each service call if the user doesn't provide them.
   ///   - interceptors: A factory providing interceptors for each RPC.
-  internal init(
+  public init(
     channel: GRPCChannel,
     defaultCallOptions: CallOptions = CallOptions(),
     interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol? = nil
@@ -235,10 +284,10 @@ internal final class Beebium_CassetteServiceClient: Beebium_CassetteServiceClien
   }
 }
 
-internal struct Beebium_CassetteServiceNIOClient: Beebium_CassetteServiceClientProtocol {
-  internal var channel: GRPCChannel
-  internal var defaultCallOptions: CallOptions
-  internal var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol?
+public struct Beebium_CassetteServiceNIOClient: Beebium_CassetteServiceClientProtocol {
+  public var channel: GRPCChannel
+  public var defaultCallOptions: CallOptions
+  public var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol?
 
   /// Creates a client for the beebium.CassetteService service.
   ///
@@ -246,7 +295,7 @@ internal struct Beebium_CassetteServiceNIOClient: Beebium_CassetteServiceClientP
   ///   - channel: `GRPCChannel` to the service host.
   ///   - defaultCallOptions: Options to use for each service call if the user doesn't provide them.
   ///   - interceptors: A factory providing interceptors for each RPC.
-  internal init(
+  public init(
     channel: GRPCChannel,
     defaultCallOptions: CallOptions = CallOptions(),
     interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol? = nil
@@ -265,7 +314,7 @@ internal struct Beebium_CassetteServiceNIOClient: Beebium_CassetteServiceClientP
 /// ULA latch bit 7) is closed. Every unsuccessful response carries a sentence
 /// naming the tape by the name the client gave, and a kind.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
-internal protocol Beebium_CassetteServiceAsyncClientProtocol: GRPCClient {
+public protocol Beebium_CassetteServiceAsyncClientProtocol: GRPCClient {
   static var serviceDescriptor: GRPCServiceDescriptor { get }
   var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol? { get }
 
@@ -294,6 +343,16 @@ internal protocol Beebium_CassetteServiceAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_SeekRequest, Beebium_CassetteResponse>
 
+  func makeRewindCall(
+    _ request: Beebium_RewindRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_RewindRequest, Beebium_CassetteResponse>
+
+  func makeFastForwardCall(
+    _ request: Beebium_FastForwardRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_FastForwardRequest, Beebium_CassetteResponse>
+
   func makeGetDeckStatusCall(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions?
@@ -307,15 +366,15 @@ internal protocol Beebium_CassetteServiceAsyncClientProtocol: GRPCClient {
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension Beebium_CassetteServiceAsyncClientProtocol {
-  internal static var serviceDescriptor: GRPCServiceDescriptor {
+  public static var serviceDescriptor: GRPCServiceDescriptor {
     return Beebium_CassetteServiceClientMetadata.serviceDescriptor
   }
 
-  internal var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol? {
+  public var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol? {
     return nil
   }
 
-  internal func makeInsertTapeCall(
+  public func makeInsertTapeCall(
     _ request: Beebium_InsertTapeRequest,
     callOptions: CallOptions? = nil
   ) -> GRPCAsyncUnaryCall<Beebium_InsertTapeRequest, Beebium_InsertTapeResponse> {
@@ -327,7 +386,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func makeEjectTapeCall(
+  public func makeEjectTapeCall(
     _ request: Beebium_EjectTapeRequest,
     callOptions: CallOptions? = nil
   ) -> GRPCAsyncUnaryCall<Beebium_EjectTapeRequest, Beebium_CassetteResponse> {
@@ -339,7 +398,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func makePlayCall(
+  public func makePlayCall(
     _ request: Beebium_PlayRequest,
     callOptions: CallOptions? = nil
   ) -> GRPCAsyncUnaryCall<Beebium_PlayRequest, Beebium_CassetteResponse> {
@@ -351,7 +410,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func makeStopCall(
+  public func makeStopCall(
     _ request: Beebium_StopRequest,
     callOptions: CallOptions? = nil
   ) -> GRPCAsyncUnaryCall<Beebium_StopRequest, Beebium_CassetteResponse> {
@@ -363,7 +422,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func makeSeekCall(
+  public func makeSeekCall(
     _ request: Beebium_SeekRequest,
     callOptions: CallOptions? = nil
   ) -> GRPCAsyncUnaryCall<Beebium_SeekRequest, Beebium_CassetteResponse> {
@@ -375,7 +434,31 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func makeGetDeckStatusCall(
+  public func makeRewindCall(
+    _ request: Beebium_RewindRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_RewindRequest, Beebium_CassetteResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.rewind.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRewindInterceptors() ?? []
+    )
+  }
+
+  public func makeFastForwardCall(
+    _ request: Beebium_FastForwardRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_FastForwardRequest, Beebium_CassetteResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.fastForward.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeFastForwardInterceptors() ?? []
+    )
+  }
+
+  public func makeGetDeckStatusCall(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions? = nil
   ) -> GRPCAsyncUnaryCall<Beebium_GetDeckStatusRequest, Beebium_DeckStatus> {
@@ -387,7 +470,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func makeSubscribeDeckStatusCall(
+  public func makeSubscribeDeckStatusCall(
     _ request: Beebium_SubscribeDeckStatusRequest,
     callOptions: CallOptions? = nil
   ) -> GRPCAsyncServerStreamingCall<Beebium_SubscribeDeckStatusRequest, Beebium_DeckStatus> {
@@ -402,7 +485,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension Beebium_CassetteServiceAsyncClientProtocol {
-  internal func insertTape(
+  public func insertTape(
     _ request: Beebium_InsertTapeRequest,
     callOptions: CallOptions? = nil
   ) async throws -> Beebium_InsertTapeResponse {
@@ -414,7 +497,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func ejectTape(
+  public func ejectTape(
     _ request: Beebium_EjectTapeRequest,
     callOptions: CallOptions? = nil
   ) async throws -> Beebium_CassetteResponse {
@@ -426,7 +509,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func play(
+  public func play(
     _ request: Beebium_PlayRequest,
     callOptions: CallOptions? = nil
   ) async throws -> Beebium_CassetteResponse {
@@ -438,7 +521,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func stop(
+  public func stop(
     _ request: Beebium_StopRequest,
     callOptions: CallOptions? = nil
   ) async throws -> Beebium_CassetteResponse {
@@ -450,7 +533,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func seek(
+  public func seek(
     _ request: Beebium_SeekRequest,
     callOptions: CallOptions? = nil
   ) async throws -> Beebium_CassetteResponse {
@@ -462,7 +545,31 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func getDeckStatus(
+  public func rewind(
+    _ request: Beebium_RewindRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CassetteResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.rewind.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRewindInterceptors() ?? []
+    )
+  }
+
+  public func fastForward(
+    _ request: Beebium_FastForwardRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CassetteResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.fastForward.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeFastForwardInterceptors() ?? []
+    )
+  }
+
+  public func getDeckStatus(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions? = nil
   ) async throws -> Beebium_DeckStatus {
@@ -474,7 +581,7 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
-  internal func subscribeDeckStatus(
+  public func subscribeDeckStatus(
     _ request: Beebium_SubscribeDeckStatusRequest,
     callOptions: CallOptions? = nil
   ) -> GRPCAsyncResponseStream<Beebium_DeckStatus> {
@@ -488,12 +595,12 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
-internal struct Beebium_CassetteServiceAsyncClient: Beebium_CassetteServiceAsyncClientProtocol {
-  internal var channel: GRPCChannel
-  internal var defaultCallOptions: CallOptions
-  internal var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol?
+public struct Beebium_CassetteServiceAsyncClient: Beebium_CassetteServiceAsyncClientProtocol {
+  public var channel: GRPCChannel
+  public var defaultCallOptions: CallOptions
+  public var interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol?
 
-  internal init(
+  public init(
     channel: GRPCChannel,
     defaultCallOptions: CallOptions = CallOptions(),
     interceptors: Beebium_CassetteServiceClientInterceptorFactoryProtocol? = nil
@@ -504,7 +611,7 @@ internal struct Beebium_CassetteServiceAsyncClient: Beebium_CassetteServiceAsync
   }
 }
 
-internal protocol Beebium_CassetteServiceClientInterceptorFactoryProtocol: Sendable {
+public protocol Beebium_CassetteServiceClientInterceptorFactoryProtocol: Sendable {
 
   /// - Returns: Interceptors to use when invoking 'insertTape'.
   func makeInsertTapeInterceptors() -> [ClientInterceptor<Beebium_InsertTapeRequest, Beebium_InsertTapeResponse>]
@@ -521,6 +628,12 @@ internal protocol Beebium_CassetteServiceClientInterceptorFactoryProtocol: Senda
   /// - Returns: Interceptors to use when invoking 'seek'.
   func makeSeekInterceptors() -> [ClientInterceptor<Beebium_SeekRequest, Beebium_CassetteResponse>]
 
+  /// - Returns: Interceptors to use when invoking 'rewind'.
+  func makeRewindInterceptors() -> [ClientInterceptor<Beebium_RewindRequest, Beebium_CassetteResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'fastForward'.
+  func makeFastForwardInterceptors() -> [ClientInterceptor<Beebium_FastForwardRequest, Beebium_CassetteResponse>]
+
   /// - Returns: Interceptors to use when invoking 'getDeckStatus'.
   func makeGetDeckStatusInterceptors() -> [ClientInterceptor<Beebium_GetDeckStatusRequest, Beebium_DeckStatus>]
 
@@ -528,8 +641,8 @@ internal protocol Beebium_CassetteServiceClientInterceptorFactoryProtocol: Senda
   func makeSubscribeDeckStatusInterceptors() -> [ClientInterceptor<Beebium_SubscribeDeckStatusRequest, Beebium_DeckStatus>]
 }
 
-internal enum Beebium_CassetteServiceClientMetadata {
-  internal static let serviceDescriptor = GRPCServiceDescriptor(
+public enum Beebium_CassetteServiceClientMetadata {
+  public static let serviceDescriptor = GRPCServiceDescriptor(
     name: "CassetteService",
     fullName: "beebium.CassetteService",
     methods: [
@@ -538,49 +651,63 @@ internal enum Beebium_CassetteServiceClientMetadata {
       Beebium_CassetteServiceClientMetadata.Methods.play,
       Beebium_CassetteServiceClientMetadata.Methods.stop,
       Beebium_CassetteServiceClientMetadata.Methods.seek,
+      Beebium_CassetteServiceClientMetadata.Methods.rewind,
+      Beebium_CassetteServiceClientMetadata.Methods.fastForward,
       Beebium_CassetteServiceClientMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceClientMetadata.Methods.subscribeDeckStatus,
     ]
   )
 
-  internal enum Methods {
-    internal static let insertTape = GRPCMethodDescriptor(
+  public enum Methods {
+    public static let insertTape = GRPCMethodDescriptor(
       name: "InsertTape",
       path: "/beebium.CassetteService/InsertTape",
       type: GRPCCallType.unary
     )
 
-    internal static let ejectTape = GRPCMethodDescriptor(
+    public static let ejectTape = GRPCMethodDescriptor(
       name: "EjectTape",
       path: "/beebium.CassetteService/EjectTape",
       type: GRPCCallType.unary
     )
 
-    internal static let play = GRPCMethodDescriptor(
+    public static let play = GRPCMethodDescriptor(
       name: "Play",
       path: "/beebium.CassetteService/Play",
       type: GRPCCallType.unary
     )
 
-    internal static let stop = GRPCMethodDescriptor(
+    public static let stop = GRPCMethodDescriptor(
       name: "Stop",
       path: "/beebium.CassetteService/Stop",
       type: GRPCCallType.unary
     )
 
-    internal static let seek = GRPCMethodDescriptor(
+    public static let seek = GRPCMethodDescriptor(
       name: "Seek",
       path: "/beebium.CassetteService/Seek",
       type: GRPCCallType.unary
     )
 
-    internal static let getDeckStatus = GRPCMethodDescriptor(
+    public static let rewind = GRPCMethodDescriptor(
+      name: "Rewind",
+      path: "/beebium.CassetteService/Rewind",
+      type: GRPCCallType.unary
+    )
+
+    public static let fastForward = GRPCMethodDescriptor(
+      name: "FastForward",
+      path: "/beebium.CassetteService/FastForward",
+      type: GRPCCallType.unary
+    )
+
+    public static let getDeckStatus = GRPCMethodDescriptor(
       name: "GetDeckStatus",
       path: "/beebium.CassetteService/GetDeckStatus",
       type: GRPCCallType.unary
     )
 
-    internal static let subscribeDeckStatus = GRPCMethodDescriptor(
+    public static let subscribeDeckStatus = GRPCMethodDescriptor(
       name: "SubscribeDeckStatus",
       path: "/beebium.CassetteService/SubscribeDeckStatus",
       type: GRPCCallType.serverStreaming
@@ -597,7 +724,7 @@ internal enum Beebium_CassetteServiceClientMetadata {
 /// naming the tape by the name the client gave, and a kind.
 ///
 /// To build a server, implement a class that conforms to this protocol.
-internal protocol Beebium_CassetteServiceProvider: CallHandlerProvider {
+public protocol Beebium_CassetteServiceProvider: CallHandlerProvider {
   var interceptors: Beebium_CassetteServiceServerInterceptorFactoryProtocol? { get }
 
   /// Insert a UEF or CSW tape image the server can reach. The format is
@@ -615,6 +742,14 @@ internal protocol Beebium_CassetteServiceProvider: CallHandlerProvider {
 
   func seek(request: Beebium_SeekRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CassetteResponse>
 
+  /// Wind the tape backwards or forwards at 30 times real speed, whether or
+  /// not the relay is closed; nothing reaches the Serial ULA while it winds.
+  /// The wind ends on Stop, Play, Seek or EjectTape, or at an end of the
+  /// tape, where the deck stops. Seek to 0 is the instant return to the start.
+  func rewind(request: Beebium_RewindRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CassetteResponse>
+
+  func fastForward(request: Beebium_FastForwardRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CassetteResponse>
+
   /// The deck's state, read without stopping the machine.
   func getDeckStatus(request: Beebium_GetDeckStatusRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_DeckStatus>
 
@@ -625,13 +760,13 @@ internal protocol Beebium_CassetteServiceProvider: CallHandlerProvider {
 }
 
 extension Beebium_CassetteServiceProvider {
-  internal var serviceName: Substring {
+  public var serviceName: Substring {
     return Beebium_CassetteServiceServerMetadata.serviceDescriptor.fullName[...]
   }
 
   /// Determines, calls and returns the appropriate request handler, depending on the request's method.
   /// Returns nil for methods not handled by this service.
-  internal func handle(
+  public func handle(
     method name: Substring,
     context: CallHandlerContext
   ) -> GRPCServerHandlerProtocol? {
@@ -681,6 +816,24 @@ extension Beebium_CassetteServiceProvider {
         userFunction: self.seek(request:context:)
       )
 
+    case "Rewind":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RewindRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CassetteResponse>(),
+        interceptors: self.interceptors?.makeRewindInterceptors() ?? [],
+        userFunction: self.rewind(request:context:)
+      )
+
+    case "FastForward":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_FastForwardRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CassetteResponse>(),
+        interceptors: self.interceptors?.makeFastForwardInterceptors() ?? [],
+        userFunction: self.fastForward(request:context:)
+      )
+
     case "GetDeckStatus":
       return UnaryServerHandler(
         context: context,
@@ -715,7 +868,7 @@ extension Beebium_CassetteServiceProvider {
 ///
 /// To implement a server, implement an object which conforms to this protocol.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
-internal protocol Beebium_CassetteServiceAsyncProvider: CallHandlerProvider, Sendable {
+public protocol Beebium_CassetteServiceAsyncProvider: CallHandlerProvider, Sendable {
   static var serviceDescriptor: GRPCServiceDescriptor { get }
   var interceptors: Beebium_CassetteServiceServerInterceptorFactoryProtocol? { get }
 
@@ -749,6 +902,20 @@ internal protocol Beebium_CassetteServiceAsyncProvider: CallHandlerProvider, Sen
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_CassetteResponse
 
+  /// Wind the tape backwards or forwards at 30 times real speed, whether or
+  /// not the relay is closed; nothing reaches the Serial ULA while it winds.
+  /// The wind ends on Stop, Play, Seek or EjectTape, or at an end of the
+  /// tape, where the deck stops. Seek to 0 is the instant return to the start.
+  func rewind(
+    request: Beebium_RewindRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CassetteResponse
+
+  func fastForward(
+    request: Beebium_FastForwardRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CassetteResponse
+
   /// The deck's state, read without stopping the machine.
   func getDeckStatus(
     request: Beebium_GetDeckStatusRequest,
@@ -767,19 +934,19 @@ internal protocol Beebium_CassetteServiceAsyncProvider: CallHandlerProvider, Sen
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension Beebium_CassetteServiceAsyncProvider {
-  internal static var serviceDescriptor: GRPCServiceDescriptor {
+  public static var serviceDescriptor: GRPCServiceDescriptor {
     return Beebium_CassetteServiceServerMetadata.serviceDescriptor
   }
 
-  internal var serviceName: Substring {
+  public var serviceName: Substring {
     return Beebium_CassetteServiceServerMetadata.serviceDescriptor.fullName[...]
   }
 
-  internal var interceptors: Beebium_CassetteServiceServerInterceptorFactoryProtocol? {
+  public var interceptors: Beebium_CassetteServiceServerInterceptorFactoryProtocol? {
     return nil
   }
 
-  internal func handle(
+  public func handle(
     method name: Substring,
     context: CallHandlerContext
   ) -> GRPCServerHandlerProtocol? {
@@ -829,6 +996,24 @@ extension Beebium_CassetteServiceAsyncProvider {
         wrapping: { try await self.seek(request: $0, context: $1) }
       )
 
+    case "Rewind":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RewindRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CassetteResponse>(),
+        interceptors: self.interceptors?.makeRewindInterceptors() ?? [],
+        wrapping: { try await self.rewind(request: $0, context: $1) }
+      )
+
+    case "FastForward":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_FastForwardRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CassetteResponse>(),
+        interceptors: self.interceptors?.makeFastForwardInterceptors() ?? [],
+        wrapping: { try await self.fastForward(request: $0, context: $1) }
+      )
+
     case "GetDeckStatus":
       return GRPCAsyncServerHandler(
         context: context,
@@ -853,7 +1038,7 @@ extension Beebium_CassetteServiceAsyncProvider {
   }
 }
 
-internal protocol Beebium_CassetteServiceServerInterceptorFactoryProtocol: Sendable {
+public protocol Beebium_CassetteServiceServerInterceptorFactoryProtocol: Sendable {
 
   /// - Returns: Interceptors to use when handling 'insertTape'.
   ///   Defaults to calling `self.makeInterceptors()`.
@@ -875,6 +1060,14 @@ internal protocol Beebium_CassetteServiceServerInterceptorFactoryProtocol: Senda
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeSeekInterceptors() -> [ServerInterceptor<Beebium_SeekRequest, Beebium_CassetteResponse>]
 
+  /// - Returns: Interceptors to use when handling 'rewind'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeRewindInterceptors() -> [ServerInterceptor<Beebium_RewindRequest, Beebium_CassetteResponse>]
+
+  /// - Returns: Interceptors to use when handling 'fastForward'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeFastForwardInterceptors() -> [ServerInterceptor<Beebium_FastForwardRequest, Beebium_CassetteResponse>]
+
   /// - Returns: Interceptors to use when handling 'getDeckStatus'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetDeckStatusInterceptors() -> [ServerInterceptor<Beebium_GetDeckStatusRequest, Beebium_DeckStatus>]
@@ -884,8 +1077,8 @@ internal protocol Beebium_CassetteServiceServerInterceptorFactoryProtocol: Senda
   func makeSubscribeDeckStatusInterceptors() -> [ServerInterceptor<Beebium_SubscribeDeckStatusRequest, Beebium_DeckStatus>]
 }
 
-internal enum Beebium_CassetteServiceServerMetadata {
-  internal static let serviceDescriptor = GRPCServiceDescriptor(
+public enum Beebium_CassetteServiceServerMetadata {
+  public static let serviceDescriptor = GRPCServiceDescriptor(
     name: "CassetteService",
     fullName: "beebium.CassetteService",
     methods: [
@@ -894,49 +1087,63 @@ internal enum Beebium_CassetteServiceServerMetadata {
       Beebium_CassetteServiceServerMetadata.Methods.play,
       Beebium_CassetteServiceServerMetadata.Methods.stop,
       Beebium_CassetteServiceServerMetadata.Methods.seek,
+      Beebium_CassetteServiceServerMetadata.Methods.rewind,
+      Beebium_CassetteServiceServerMetadata.Methods.fastForward,
       Beebium_CassetteServiceServerMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceServerMetadata.Methods.subscribeDeckStatus,
     ]
   )
 
-  internal enum Methods {
-    internal static let insertTape = GRPCMethodDescriptor(
+  public enum Methods {
+    public static let insertTape = GRPCMethodDescriptor(
       name: "InsertTape",
       path: "/beebium.CassetteService/InsertTape",
       type: GRPCCallType.unary
     )
 
-    internal static let ejectTape = GRPCMethodDescriptor(
+    public static let ejectTape = GRPCMethodDescriptor(
       name: "EjectTape",
       path: "/beebium.CassetteService/EjectTape",
       type: GRPCCallType.unary
     )
 
-    internal static let play = GRPCMethodDescriptor(
+    public static let play = GRPCMethodDescriptor(
       name: "Play",
       path: "/beebium.CassetteService/Play",
       type: GRPCCallType.unary
     )
 
-    internal static let stop = GRPCMethodDescriptor(
+    public static let stop = GRPCMethodDescriptor(
       name: "Stop",
       path: "/beebium.CassetteService/Stop",
       type: GRPCCallType.unary
     )
 
-    internal static let seek = GRPCMethodDescriptor(
+    public static let seek = GRPCMethodDescriptor(
       name: "Seek",
       path: "/beebium.CassetteService/Seek",
       type: GRPCCallType.unary
     )
 
-    internal static let getDeckStatus = GRPCMethodDescriptor(
+    public static let rewind = GRPCMethodDescriptor(
+      name: "Rewind",
+      path: "/beebium.CassetteService/Rewind",
+      type: GRPCCallType.unary
+    )
+
+    public static let fastForward = GRPCMethodDescriptor(
+      name: "FastForward",
+      path: "/beebium.CassetteService/FastForward",
+      type: GRPCCallType.unary
+    )
+
+    public static let getDeckStatus = GRPCMethodDescriptor(
       name: "GetDeckStatus",
       path: "/beebium.CassetteService/GetDeckStatus",
       type: GRPCCallType.unary
     )
 
-    internal static let subscribeDeckStatus = GRPCMethodDescriptor(
+    public static let subscribeDeckStatus = GRPCMethodDescriptor(
       name: "SubscribeDeckStatus",
       path: "/beebium.CassetteService/SubscribeDeckStatus",
       type: GRPCCallType.serverStreaming

@@ -22,6 +22,7 @@
 
 #include "cassette.grpc.pb.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <grpcpp/grpcpp.h>
@@ -149,6 +150,12 @@ public:
 
     beebium::CassetteResponse play() { return call<beebium::PlayRequest>(&beebium::CassetteService::Stub::Play); }
     beebium::CassetteResponse stop() { return call<beebium::StopRequest>(&beebium::CassetteService::Stub::Stop); }
+    beebium::CassetteResponse rewind() {
+        return call<beebium::RewindRequest>(&beebium::CassetteService::Stub::Rewind);
+    }
+    beebium::CassetteResponse fast_forward() {
+        return call<beebium::FastForwardRequest>(&beebium::CassetteService::Stub::FastForward);
+    }
     beebium::CassetteResponse eject() {
         return call<beebium::EjectTapeRequest>(&beebium::CassetteService::Stub::EjectTape);
     }
@@ -265,6 +272,42 @@ TEST_CASE("CassetteService refuses a seek before the start", "[grpc][cassette]")
     CHECK_FALSE(seek.success());
     CHECK(seek.kind() == beebium::CASSETTE_ERROR_KIND_INVALID_POSITION);
     CHECK(seek.error() == "A position of -1 seconds is before the start of the tape.");
+}
+
+// =============================================================================
+// 4a. Winding
+// =============================================================================
+
+TEST_CASE("CassetteService winds at 30 times real speed with the motor off", "[grpc][cassette][mos]") {
+    CassetteFixture fixture;
+    if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    CHECK(fixture.rewind().kind() == beebium::CASSETTE_ERROR_KIND_DECK_EMPTY);
+
+    TapeBuilder builder;
+    builder.carrier(2400 * 90);
+    REQUIRE(fixture.insert(fixture.write("long.uef", builder.uef()).string()).success());
+    REQUIRE(fixture.seek(60.0).success());
+    fixture.start_running();
+
+    REQUIRE(fixture.rewind().success());
+    CHECK(fixture.status().transport() == beebium::TAPE_TRANSPORT_REWINDING);
+    fixture.run_emulated(2'000'000);   // one second: thirty seconds of tape
+    auto status = fixture.status();
+    CHECK_FALSE(status.motor_on());
+    CHECK(status.transport() == beebium::TAPE_TRANSPORT_REWINDING);
+    CHECK(status.position_seconds() < 31.0);
+    CHECK(status.position_seconds() > 0.0);
+    fixture.run_emulated(2'000'000);
+    status = fixture.status();
+    CHECK(status.transport() == beebium::TAPE_TRANSPORT_STOPPED);
+    CHECK(status.position_seconds() == 0.0);
+
+    REQUIRE(fixture.fast_forward().success());
+    CHECK(fixture.status().transport() == beebium::TAPE_TRANSPORT_FAST_FORWARDING);
+    fixture.run_emulated(7'000'000);   // three and a half seconds
+    status = fixture.status();
+    CHECK(status.transport() == beebium::TAPE_TRANSPORT_STOPPED);
+    CHECK(status.position_seconds() == Catch::Approx(status.tape().duration_seconds()));
 }
 
 // =============================================================================

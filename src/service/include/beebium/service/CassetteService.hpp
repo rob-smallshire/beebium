@@ -112,6 +112,15 @@ public:
         return with_tape(response, [](CassetteDeck& deck) { deck.stop(); });
     }
 
+    grpc::Status Rewind(grpc::ServerContext*, const RewindRequest*, CassetteResponse* response) override {
+        return with_tape(response, [](CassetteDeck& deck) { deck.rewind(); });
+    }
+
+    grpc::Status FastForward(grpc::ServerContext*, const FastForwardRequest*,
+                             CassetteResponse* response) override {
+        return with_tape(response, [](CassetteDeck& deck) { deck.fast_forward(); });
+    }
+
     grpc::Status Seek(grpc::ServerContext*, const SeekRequest* request, CassetteResponse* response) override {
         const double seconds = request->position_seconds();
         if (!(seconds >= 0.0)) {
@@ -151,8 +160,14 @@ public:
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             const CassetteDeck::Published now = published_now();
             const bool changed = now.sequence != last.sequence || now.tape_generation != last.tape_generation;
-            const bool moved = now.transport == CassetteDeck::Transport::Playing && now.relay_closed &&
-                               now.position >= last.position + interval_clocks;
+            // A wind covers WIND_SPEED times the tape a clock that playing does.
+            const bool playing = now.transport == CassetteDeck::Transport::Playing && now.relay_closed;
+            const bool winding = now.transport == CassetteDeck::Transport::Rewinding ||
+                                 now.transport == CassetteDeck::Transport::FastForwarding;
+            const TapeTime travelled = now.position > last.position ? now.position - last.position
+                                                                    : last.position - now.position;
+            const bool moved = (playing && travelled >= interval_clocks) ||
+                               (winding && travelled >= interval_clocks * CassetteDeck::WIND_SPEED);
             if (!changed && !moved) continue;
 
             DeckStatus status;
@@ -242,15 +257,23 @@ private:
         }
     }
 
+    static beebium::TapeTransport proto_transport(CassetteDeck::Transport transport) {
+        switch (transport) {
+            case CassetteDeck::Transport::Playing: return beebium::TAPE_TRANSPORT_PLAYING;
+            case CassetteDeck::Transport::Rewinding: return beebium::TAPE_TRANSPORT_REWINDING;
+            case CassetteDeck::Transport::FastForwarding: return beebium::TAPE_TRANSPORT_FAST_FORWARDING;
+            case CassetteDeck::Transport::Stopped: break;
+        }
+        return beebium::TAPE_TRANSPORT_STOPPED;
+    }
+
     void fill_status_locked(DeckStatus& status, const CassetteDeck::Published& published) {
         status.set_has_cassette_interface(HasCassette<Memory>);
         if constexpr (HasCassette<Memory>) {
             refresh_tape_locked();
             status.set_tape_inserted(published.has_tape);
             if (published.has_tape) *status.mutable_tape() = tape_metadata_;
-            status.set_transport(published.transport == CassetteDeck::Transport::Playing
-                                     ? beebium::TAPE_TRANSPORT_PLAYING
-                                     : beebium::TAPE_TRANSPORT_STOPPED);
+            status.set_transport(proto_transport(published.transport));
             status.set_position_seconds(static_cast<double>(published.position) / ULA_CLOCK_HZ);
             status.set_motor_on(published.relay_closed);
             status.set_ula_part(machine_.state().memory.serial_socket.ula().part() == SerialUla::Part::VLSI

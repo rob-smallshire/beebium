@@ -49,7 +49,7 @@ class _CassetteErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Cas
     CASSETTE_ERROR_KIND_DECK_OCCUPIED: _CassetteErrorKind.ValueType  # 6
     """insert with a tape in"""
     CASSETTE_ERROR_KIND_DECK_EMPTY: _CassetteErrorKind.ValueType  # 7
-    """eject, play, stop or seek with no tape"""
+    """eject, play, stop, seek or wind with no tape"""
     CASSETTE_ERROR_KIND_INVALID_POSITION: _CassetteErrorKind.ValueType  # 8
     """a seek to a negative position"""
 
@@ -69,7 +69,7 @@ CASSETTE_ERROR_KIND_INVALID_IMAGE: CassetteErrorKind.ValueType  # 5
 CASSETTE_ERROR_KIND_DECK_OCCUPIED: CassetteErrorKind.ValueType  # 6
 """insert with a tape in"""
 CASSETTE_ERROR_KIND_DECK_EMPTY: CassetteErrorKind.ValueType  # 7
-"""eject, play, stop or seek with no tape"""
+"""eject, play, stop, seek or wind with no tape"""
 CASSETTE_ERROR_KIND_INVALID_POSITION: CassetteErrorKind.ValueType  # 8
 """a seek to a negative position"""
 Global___CassetteErrorKind: _TypeAlias = CassetteErrorKind  # noqa: Y015
@@ -82,11 +82,17 @@ class _TapeTransportEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_TapeTra
     DESCRIPTOR: _descriptor.EnumDescriptor
     TAPE_TRANSPORT_STOPPED: _TapeTransport.ValueType  # 0
     TAPE_TRANSPORT_PLAYING: _TapeTransport.ValueType  # 1
+    TAPE_TRANSPORT_REWINDING: _TapeTransport.ValueType  # 3
+    """2 is reserved for recording."""
+    TAPE_TRANSPORT_FAST_FORWARDING: _TapeTransport.ValueType  # 4
 
 class TapeTransport(_TapeTransport, metaclass=_TapeTransportEnumTypeWrapper): ...
 
 TAPE_TRANSPORT_STOPPED: TapeTransport.ValueType  # 0
 TAPE_TRANSPORT_PLAYING: TapeTransport.ValueType  # 1
+TAPE_TRANSPORT_REWINDING: TapeTransport.ValueType  # 3
+"""2 is reserved for recording."""
+TAPE_TRANSPORT_FAST_FORWARDING: TapeTransport.ValueType  # 4
 Global___TapeTransport: _TypeAlias = TapeTransport  # noqa: Y015
 
 @_typing.final
@@ -300,6 +306,36 @@ class StopRequest(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___StopRequest: _TypeAlias = StopRequest  # noqa: Y015
+
+@_typing.final
+class RewindRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___RewindRequest: _TypeAlias = RewindRequest  # noqa: Y015
+
+@_typing.final
+class FastForwardRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___FastForwardRequest: _TypeAlias = FastForwardRequest  # noqa: Y015
 
 @_typing.final
 class SeekRequest(_message.Message):

@@ -22,6 +22,7 @@
 #include <beebium/devices/Mc6850.hpp>
 #include <beebium/serial/SerialUla.hpp>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
@@ -470,7 +471,7 @@ TEST_CASE("Deck moves only when playing with the relay closed", "[cassette]") {
 
     deck.seek(50'000);
     CHECK(deck.position() == 50'000);
-    deck.rewind();
+    deck.seek(0);
     CHECK(deck.position() == 0);
 
     // The end stops the deck.
@@ -479,6 +480,99 @@ TEST_CASE("Deck moves only when playing with the relay closed", "[cassette]") {
     for (TapeTime i = 0; i < length + 10; ++i) deck.clock(true);
     CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
     CHECK(deck.position() == length);
+}
+
+namespace {
+
+// A tape of carrier lasting about `seconds`.
+std::unique_ptr<TapeSignal> carrier_tape(double seconds) {
+    TapeBuilder builder;
+    builder.carrier(static_cast<uint32_t>(seconds * 2400));
+    const auto bytes = builder.uef();
+    return UefTape::open(bytes, "tone.uef");
+}
+
+TapeTime clocks_of(double seconds) { return static_cast<TapeTime>(seconds * ULA_CLOCK_HZ); }
+
+// Clock the deck `clocks` times with the relay as given; returns the edges.
+int run_deck(CassetteDeck& deck, TapeTime clocks, bool relay_closed) {
+    int edges = 0;
+    for (TapeTime i = 0; i < clocks; ++i) edges += deck.clock(relay_closed) ? 1 : 0;
+    return edges;
+}
+
+}  // namespace
+
+TEST_CASE("Deck rewinds from 60 s to the start in 2 s and stops", "[cassette]") {
+    CassetteDeck deck;
+    deck.insert(carrier_tape(90), "tone.uef");
+    const TapeTime from = clocks_of(60);
+    deck.seek(from);
+    deck.rewind();
+    CHECK(deck.transport() == CassetteDeck::Transport::Rewinding);
+
+    const TapeTime needed = (from + CassetteDeck::WIND_SPEED - 1) / CassetteDeck::WIND_SPEED;
+    CHECK(run_deck(deck, needed - 1, true) == 0);
+    CHECK(deck.transport() == CassetteDeck::Transport::Rewinding);
+    CHECK(deck.position() > 0);
+    CHECK(run_deck(deck, 1, true) == 0);
+    CHECK(deck.position() == 0);
+    CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
+    // 2 s of emulated time, to the clock.
+    CHECK(static_cast<double>(needed) / ULA_CLOCK_HZ == Catch::Approx(2.0).epsilon(1e-6));
+}
+
+TEST_CASE("Deck fast-forwards a 90 s tape to its end in 3 s and stops", "[cassette]") {
+    CassetteDeck deck;
+    deck.insert(carrier_tape(90), "tone.uef");
+    const TapeTime end = *deck.duration();
+    CHECK(static_cast<double>(end) / ULA_CLOCK_HZ == Catch::Approx(90.0).epsilon(0.01));
+    deck.fast_forward();
+    CHECK(deck.transport() == CassetteDeck::Transport::FastForwarding);
+
+    const TapeTime needed = (end + CassetteDeck::WIND_SPEED - 1) / CassetteDeck::WIND_SPEED;
+    CHECK(run_deck(deck, needed, false) == 0);   // the relay open does not stop a wind
+    CHECK(deck.position() == end);
+    CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
+    CHECK(static_cast<double>(needed) / ULA_CLOCK_HZ == Catch::Approx(3.0).epsilon(0.01));
+}
+
+TEST_CASE("Deck stop mid-wind holds and play mid-wind plays from there", "[cassette]") {
+    CassetteDeck deck;
+    deck.insert(carrier_tape(90), "tone.uef");
+    deck.fast_forward();
+    CHECK(run_deck(deck, 1000, true) == 0);
+    deck.stop();
+    const TapeTime held = deck.position();
+    CHECK(held == 1000 * CassetteDeck::WIND_SPEED);
+    CHECK(run_deck(deck, 1000, true) == 0);
+    CHECK(deck.position() == held);
+
+    deck.rewind();
+    CHECK(run_deck(deck, 500, true) == 0);
+    deck.play();
+    const TapeTime from = deck.position();
+    CHECK(from == held - 500 * CassetteDeck::WIND_SPEED);
+    CHECK(deck.transport() == CassetteDeck::Transport::Playing);
+    CHECK(run_deck(deck, 1024, true) > 0);   // the tape is on the head again
+    CHECK(deck.position() == from + 1024);
+}
+
+TEST_CASE("Deck seek ends a wind, and a wind at its end stops at once", "[cassette]") {
+    CassetteDeck deck;
+    deck.insert(carrier_tape(10), "tone.uef");
+    deck.rewind();   // already at the start
+    CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
+
+    deck.fast_forward();
+    run_deck(deck, 100, true);
+    deck.seek(clocks_of(1));
+    CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
+    CHECK(deck.position() == clocks_of(1));
+
+    deck.seek(*deck.duration());
+    deck.fast_forward();
+    CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
 }
 
 TEST_CASE("Deck refuses a second tape with a sentence", "[cassette]") {

@@ -31,6 +31,11 @@ namespace beebium {
 // with no inertia. Inserting leaves the deck stopped, seeking is instant, and
 // the end of the tape stops it. Break and power cycle do not touch the deck.
 //
+// Rewinding and fast-forwarding wind the tape at WIND_SPEED times real speed,
+// backwards or forwards, whether or not the relay is closed, and the tape's
+// edges reach nobody: a wound tape is off the head. A wind ends on stop, play,
+// seek, eject, or at either end of the tape, where the deck stops.
+//
 // The Serial ULA clocks the deck on the emulation thread and takes the edges
 // that fall on each clock. CassetteService drives the transport with the
 // emulation paused, and reads the deck's state without pausing it through
@@ -40,7 +45,10 @@ namespace beebium {
 // counter rather than a store a clock.
 class CassetteDeck {
 public:
-    enum class Transport : uint8_t { Stopped, Playing };
+    enum class Transport : uint8_t { Stopped, Playing, Rewinding, FastForwarding };
+
+    // Tape time a wind covers per ULA clock.
+    static constexpr TapeTime WIND_SPEED = 30;
 
     // While playing, the published position is at most this many ULA clocks
     // (3.3 ms) behind the deck's.
@@ -89,18 +97,42 @@ public:
     }
 
     void play() {
+        end_wind();
         if (tape_ && !at_end()) transport_ = Transport::Playing;
         publish();
     }
 
     void stop() {
+        end_wind();
         transport_ = Transport::Stopped;
         publish();
     }
 
+    // Wind backwards to the start, where the deck stops.
+    void rewind() {
+        if (!tape_) return;
+        end_wind();
+        transport_ = position_ > 0 ? Transport::Rewinding : Transport::Stopped;
+        publish();
+    }
+
+    // Wind forwards to the end, where the deck stops.
+    void fast_forward() {
+        if (!tape_) return;
+        end_wind();
+        transport_ = position_ < end_time() ? Transport::FastForwarding : Transport::Stopped;
+        publish();
+    }
+
+    bool winding() const {
+        return transport_ == Transport::Rewinding || transport_ == Transport::FastForwarding;
+    }
+
     // Reposition instantly; a time beyond the end lands at the end and stops.
+    // A seek ends a wind; it leaves a playing deck playing.
     void seek(TapeTime time) {
         if (!tape_) return;
+        if (winding()) transport_ = Transport::Stopped;
         const auto length = tape_->duration();
         if (length && time >= *length) {
             time = *length;
@@ -112,8 +144,6 @@ public:
         publish();
     }
 
-    void rewind() { seek(0); }
-
     // One ULA clock with the relay as the machine has it. Returns true if an
     // edge of the tape falls on this clock.
     bool clock(bool relay_closed) {
@@ -123,10 +153,11 @@ public:
             published_position_.store(position_, std::memory_order_relaxed);
             published_sequence_.fetch_add(1, std::memory_order_release);
         }
-        if (transport_ != Transport::Playing || !relay_closed) {
-            return false;
+        if (transport_ == Transport::Playing) {
+            return relay_closed && advance();
         }
-        return advance();
+        if (winding()) wind();
+        return false;
     }
 
     // The published state, from any thread.
@@ -168,6 +199,42 @@ public:
 private:
     bool at_end() const {
         return pending_.type == TapeItem::Type::End && position_ >= pending_.time;
+    }
+
+    // The tape's length, or where the reader is if the tape does not know it.
+    TapeTime end_time() const {
+        return tape_->duration().value_or(position_);
+    }
+
+    // One ULA clock of winding. The reader is left where it was and caught
+    // up by end_wind().
+    void wind() {
+        if (transport_ == Transport::Rewinding) {
+            position_ = position_ > WIND_SPEED ? position_ - WIND_SPEED : 0;
+            if (position_ == 0) finish_wind();
+        } else {
+            const TapeTime end = end_time();
+            position_ = end - position_ > WIND_SPEED ? position_ + WIND_SPEED : end;
+            if (position_ == end) finish_wind();
+        }
+        if (transport_ != Transport::Stopped && ++clocks_since_publish_ >= POSITION_PUBLISH_CLOCKS) {
+            clocks_since_publish_ = 0;
+            published_position_.store(position_, std::memory_order_relaxed);
+        }
+    }
+
+    // A wind reaching an end of the tape: the deck stops there.
+    void finish_wind() {
+        end_wind();
+        transport_ = Transport::Stopped;
+        publish();
+    }
+
+    // Bring the reader to where winding left the tape.
+    void end_wind() {
+        if (!winding()) return;
+        tape_->seek(position_);
+        pending_ = tape_->next();
     }
 
     bool advance() {

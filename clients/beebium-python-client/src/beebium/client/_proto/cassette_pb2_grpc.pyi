@@ -64,6 +64,13 @@ class CassetteServiceStub:
     """
     Stop: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.StopRequest, _cassette_pb2.CassetteResponse]
     Seek: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.SeekRequest, _cassette_pb2.CassetteResponse]
+    Rewind: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.RewindRequest, _cassette_pb2.CassetteResponse]
+    """Wind the tape backwards or forwards at 30 times real speed, whether or
+    not the relay is closed; nothing reaches the Serial ULA while it winds.
+    The wind ends on Stop, Play, Seek or EjectTape, or at an end of the
+    tape, where the deck stops. Seek to 0 is the instant return to the start.
+    """
+    FastForward: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.FastForwardRequest, _cassette_pb2.CassetteResponse]
     GetDeckStatus: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.GetDeckStatusRequest, _cassette_pb2.DeckStatus]
     """The deck's state, read without stopping the machine."""
     SubscribeDeckStatus: _grpc.UnaryStreamMultiCallable[_cassette_pb2.SubscribeDeckStatusRequest, _cassette_pb2.DeckStatus]
@@ -96,6 +103,13 @@ class CassetteServiceAsyncStub(CassetteServiceStub):
     """
     Stop: _aio.UnaryUnaryMultiCallable[_cassette_pb2.StopRequest, _cassette_pb2.CassetteResponse]  # type: ignore[assignment]
     Seek: _aio.UnaryUnaryMultiCallable[_cassette_pb2.SeekRequest, _cassette_pb2.CassetteResponse]  # type: ignore[assignment]
+    Rewind: _aio.UnaryUnaryMultiCallable[_cassette_pb2.RewindRequest, _cassette_pb2.CassetteResponse]  # type: ignore[assignment]
+    """Wind the tape backwards or forwards at 30 times real speed, whether or
+    not the relay is closed; nothing reaches the Serial ULA while it winds.
+    The wind ends on Stop, Play, Seek or EjectTape, or at an end of the
+    tape, where the deck stops. Seek to 0 is the instant return to the start.
+    """
+    FastForward: _aio.UnaryUnaryMultiCallable[_cassette_pb2.FastForwardRequest, _cassette_pb2.CassetteResponse]  # type: ignore[assignment]
     GetDeckStatus: _aio.UnaryUnaryMultiCallable[_cassette_pb2.GetDeckStatusRequest, _cassette_pb2.DeckStatus]  # type: ignore[assignment]
     """The deck's state, read without stopping the machine."""
     SubscribeDeckStatus: _aio.UnaryStreamMultiCallable[_cassette_pb2.SubscribeDeckStatusRequest, _cassette_pb2.DeckStatus]  # type: ignore[assignment]
@@ -153,6 +167,25 @@ class CassetteServiceServicer(metaclass=_abc_1.ABCMeta):
     def Seek(
         self,
         request: _cassette_pb2.SeekRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_cassette_pb2.CassetteResponse, _abc.Awaitable[_cassette_pb2.CassetteResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def Rewind(
+        self,
+        request: _cassette_pb2.RewindRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_cassette_pb2.CassetteResponse, _abc.Awaitable[_cassette_pb2.CassetteResponse]]:
+        """Wind the tape backwards or forwards at 30 times real speed, whether or
+        not the relay is closed; nothing reaches the Serial ULA while it winds.
+        The wind ends on Stop, Play, Seek or EjectTape, or at an end of the
+        tape, where the deck stops. Seek to 0 is the instant return to the start.
+        """
+
+    @_abc_1.abstractmethod
+    def FastForward(
+        self,
+        request: _cassette_pb2.FastForwardRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_cassette_pb2.CassetteResponse, _abc.Awaitable[_cassette_pb2.CassetteResponse]]: ...
 

@@ -23,6 +23,13 @@ service CassetteService {
     rpc Stop(StopRequest) returns (CassetteResponse);
     rpc Seek(SeekRequest) returns (CassetteResponse);
 
+    // Wind the tape backwards or forwards at 30 times real speed, whether or
+    // not the relay is closed; nothing reaches the Serial ULA while it winds.
+    // The wind ends on Stop, Play, Seek or EjectTape, or at an end of the
+    // tape, where the deck stops. Seek to 0 is the instant return to the start.
+    rpc Rewind(RewindRequest) returns (CassetteResponse);
+    rpc FastForward(FastForwardRequest) returns (CassetteResponse);
+
     // The deck's state, read without stopping the machine.
     rpc GetDeckStatus(GetDeckStatusRequest) returns (DeckStatus);
 
@@ -40,13 +47,16 @@ enum CassetteErrorKind {
     CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT = 4;     // not a UEF or CSW
     CASSETTE_ERROR_KIND_INVALID_IMAGE = 5;          // recognised, but refused (a disc chunk, a version, a value out of range)
     CASSETTE_ERROR_KIND_DECK_OCCUPIED = 6;          // insert with a tape in
-    CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop or seek with no tape
+    CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop, seek or wind with no tape
     CASSETTE_ERROR_KIND_INVALID_POSITION = 8;       // a seek to a negative position
 }
 
 enum TapeTransport {
     TAPE_TRANSPORT_STOPPED = 0;
     TAPE_TRANSPORT_PLAYING = 1;
+    // 2 is reserved for recording.
+    TAPE_TRANSPORT_REWINDING = 3;
+    TAPE_TRANSPORT_FAST_FORWARDING = 4;
 }
 
 message TapeMetadata {
@@ -89,6 +99,8 @@ message CassetteResponse {
 message EjectTapeRequest {}
 message PlayRequest {}
 message StopRequest {}
+message RewindRequest {}
+message FastForwardRequest {}
 
 message SeekRequest {
     double position_seconds = 1;

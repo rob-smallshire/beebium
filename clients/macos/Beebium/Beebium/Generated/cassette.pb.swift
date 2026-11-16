@@ -20,8 +20,8 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
   typealias Version = _2
 }
 
-enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
-  typealias RawValue = Int
+public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
   case unspecified // = 0
 
   /// the model has no cassette interface
@@ -42,18 +42,18 @@ enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// insert with a tape in
   case deckOccupied // = 6
 
-  /// eject, play, stop or seek with no tape
+  /// eject, play, stop, seek or wind with no tape
   case deckEmpty // = 7
 
   /// a seek to a negative position
   case invalidPosition // = 8
   case UNRECOGNIZED(Int)
 
-  init() {
+  public init() {
     self = .unspecified
   }
 
-  init?(rawValue: Int) {
+  public init?(rawValue: Int) {
     switch rawValue {
     case 0: self = .unspecified
     case 1: self = .noCassetteInterface
@@ -68,7 +68,7 @@ enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     }
   }
 
-  var rawValue: Int {
+  public var rawValue: Int {
     switch self {
     case .unspecified: return 0
     case .noCassetteInterface: return 1
@@ -84,7 +84,7 @@ enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   }
 
   // The compiler won't synthesize support with the UNRECOGNIZED case.
-  static let allCases: [Beebium_CassetteErrorKind] = [
+  public static let allCases: [Beebium_CassetteErrorKind] = [
     .unspecified,
     .noCassetteInterface,
     .cannotOpen,
@@ -98,232 +98,262 @@ enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-enum Beebium_TapeTransport: SwiftProtobuf.Enum, Swift.CaseIterable {
-  typealias RawValue = Int
+public enum Beebium_TapeTransport: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
   case stopped // = 0
   case playing // = 1
+
+  /// 2 is reserved for recording.
+  case rewinding // = 3
+  case fastForwarding // = 4
   case UNRECOGNIZED(Int)
 
-  init() {
+  public init() {
     self = .stopped
   }
 
-  init?(rawValue: Int) {
+  public init?(rawValue: Int) {
     switch rawValue {
     case 0: self = .stopped
     case 1: self = .playing
+    case 3: self = .rewinding
+    case 4: self = .fastForwarding
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
 
-  var rawValue: Int {
+  public var rawValue: Int {
     switch self {
     case .stopped: return 0
     case .playing: return 1
+    case .rewinding: return 3
+    case .fastForwarding: return 4
     case .UNRECOGNIZED(let i): return i
     }
   }
 
   // The compiler won't synthesize support with the UNRECOGNIZED case.
-  static let allCases: [Beebium_TapeTransport] = [
+  public static let allCases: [Beebium_TapeTransport] = [
     .stopped,
     .playing,
+    .rewinding,
+    .fastForwarding,
   ]
 
 }
 
-struct Beebium_TapeMetadata: Sendable {
+public struct Beebium_TapeMetadata: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// the file's name
-  var name: String = String()
+  public var name: String = String()
 
   /// the source, as given
-  var url: String = String()
+  public var url: String = String()
 
   /// "UEF" or "CSW"
-  var format: String = String()
+  public var format: String = String()
 
   /// the image's own title (UEF &0009), else empty
-  var title: String = String()
+  public var title: String = String()
 
   /// the tool that made the image (UEF &0000, the CSW's application), else empty
-  var origin: String = String()
+  public var origin: String = String()
 
   /// the machine the image says it is for (UEF &0005), else empty
-  var targetMachine: String = String()
+  public var targetMachine: String = String()
 
   /// the tape's length; 0 when unknown
-  var durationSeconds: Double = 0
+  public var durationSeconds: Double = 0
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 }
 
-struct Beebium_DeckStatus: Sendable {
+public struct Beebium_DeckStatus: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// false on a model without one
-  var hasCassetteInterface_p: Bool = false
+  public var hasCassetteInterface_p: Bool = false
 
   /// (not has_tape: protobuf derives has_tape() from field 3)
-  var tapeInserted: Bool = false
+  public var tapeInserted: Bool = false
 
   /// set when tape_inserted
-  var tape: Beebium_TapeMetadata {
+  public var tape: Beebium_TapeMetadata {
     get {return _tape ?? Beebium_TapeMetadata()}
     set {_tape = newValue}
   }
   /// Returns true if `tape` has been explicitly set.
-  var hasTape: Bool {return self._tape != nil}
+  public var hasTape: Bool {return self._tape != nil}
   /// Clears the value of `tape`. Subsequent reads from it will return its default value.
-  mutating func clearTape() {self._tape = nil}
+  public mutating func clearTape() {self._tape = nil}
 
-  var transport: Beebium_TapeTransport = .stopped
+  public var transport: Beebium_TapeTransport = .stopped
 
   /// tape time, in seconds of the ULA clock
-  var positionSeconds: Double = 0
+  public var positionSeconds: Double = 0
 
   /// the relay, latch bit 7, whether or not a tape is in
-  var motorOn: Bool = false
+  public var motorOn: Bool = false
 
   /// "ferranti" or "vlsi"
-  var ulaPart: String = String()
+  public var ulaPart: String = String()
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 
   fileprivate var _tape: Beebium_TapeMetadata? = nil
 }
 
-struct Beebium_InsertTapeRequest: Sendable {
+public struct Beebium_InsertTapeRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// a file:// URI or an absolute path
-  var url: String = String()
+  public var url: String = String()
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 }
 
-struct Beebium_InsertTapeResponse: Sendable {
+public struct Beebium_InsertTapeResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var success: Bool = false
+  public var success: Bool = false
 
   /// a sentence when !success
-  var error: String = String()
+  public var error: String = String()
 
-  var kind: Beebium_CassetteErrorKind = .unspecified
+  public var kind: Beebium_CassetteErrorKind = .unspecified
 
   /// set on success
-  var tape: Beebium_TapeMetadata {
+  public var tape: Beebium_TapeMetadata {
     get {return _tape ?? Beebium_TapeMetadata()}
     set {_tape = newValue}
   }
   /// Returns true if `tape` has been explicitly set.
-  var hasTape: Bool {return self._tape != nil}
+  public var hasTape: Bool {return self._tape != nil}
   /// Clears the value of `tape`. Subsequent reads from it will return its default value.
-  mutating func clearTape() {self._tape = nil}
+  public mutating func clearTape() {self._tape = nil}
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 
   fileprivate var _tape: Beebium_TapeMetadata? = nil
 }
 
-struct Beebium_CassetteResponse: Sendable {
+public struct Beebium_CassetteResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var success: Bool = false
+  public var success: Bool = false
 
   /// a sentence when !success
-  var error: String = String()
+  public var error: String = String()
 
-  var kind: Beebium_CassetteErrorKind = .unspecified
+  public var kind: Beebium_CassetteErrorKind = .unspecified
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 }
 
-struct Beebium_EjectTapeRequest: Sendable {
+public struct Beebium_EjectTapeRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 }
 
-struct Beebium_PlayRequest: Sendable {
+public struct Beebium_PlayRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 }
 
-struct Beebium_StopRequest: Sendable {
+public struct Beebium_StopRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 }
 
-struct Beebium_SeekRequest: Sendable {
+public struct Beebium_RewindRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var positionSeconds: Double = 0
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  init() {}
+  public init() {}
 }
 
-struct Beebium_GetDeckStatusRequest: Sendable {
+public struct Beebium_FastForwardRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 }
 
-struct Beebium_SubscribeDeckStatusRequest: Sendable {
+public struct Beebium_SeekRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var positionSeconds: Double = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Beebium_GetDeckStatusRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Beebium_SubscribeDeckStatusRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// default 100
-  var minIntervalMs: UInt32 = 0
+  public var minIntervalMs: UInt32 = 0
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  init() {}
+  public init() {}
 }
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
@@ -331,18 +361,18 @@ struct Beebium_SubscribeDeckStatusRequest: Sendable {
 fileprivate let _protobuf_package = "beebium"
 
 extension Beebium_CassetteErrorKind: SwiftProtobuf._ProtoNameProviding {
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CASSETTE_ERROR_KIND_UNSPECIFIED\0\u{1}CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE\0\u{1}CASSETTE_ERROR_KIND_CANNOT_OPEN\0\u{1}CASSETTE_ERROR_KIND_UNREADABLE\0\u{1}CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT\0\u{1}CASSETTE_ERROR_KIND_INVALID_IMAGE\0\u{1}CASSETTE_ERROR_KIND_DECK_OCCUPIED\0\u{1}CASSETTE_ERROR_KIND_DECK_EMPTY\0\u{1}CASSETTE_ERROR_KIND_INVALID_POSITION\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CASSETTE_ERROR_KIND_UNSPECIFIED\0\u{1}CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE\0\u{1}CASSETTE_ERROR_KIND_CANNOT_OPEN\0\u{1}CASSETTE_ERROR_KIND_UNREADABLE\0\u{1}CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT\0\u{1}CASSETTE_ERROR_KIND_INVALID_IMAGE\0\u{1}CASSETTE_ERROR_KIND_DECK_OCCUPIED\0\u{1}CASSETTE_ERROR_KIND_DECK_EMPTY\0\u{1}CASSETTE_ERROR_KIND_INVALID_POSITION\0")
 }
 
 extension Beebium_TapeTransport: SwiftProtobuf._ProtoNameProviding {
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TAPE_TRANSPORT_STOPPED\0\u{1}TAPE_TRANSPORT_PLAYING\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TAPE_TRANSPORT_STOPPED\0\u{1}TAPE_TRANSPORT_PLAYING\0\u{2}\u{2}TAPE_TRANSPORT_REWINDING\0\u{1}TAPE_TRANSPORT_FAST_FORWARDING\0")
 }
 
 extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".TapeMetadata"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}url\0\u{1}format\0\u{1}title\0\u{1}origin\0\u{3}target_machine\0\u{3}duration_seconds\0")
+  public static let protoMessageName: String = _protobuf_package + ".TapeMetadata"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}url\0\u{1}format\0\u{1}title\0\u{1}origin\0\u{3}target_machine\0\u{3}duration_seconds\0")
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       // The use of inline closures is to circumvent an issue where the compiler
       // allocates stack space for every case branch when no optimizations are
@@ -360,7 +390,7 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     }
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
@@ -385,7 +415,7 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_TapeMetadata, rhs: Beebium_TapeMetadata) -> Bool {
+  public static func ==(lhs: Beebium_TapeMetadata, rhs: Beebium_TapeMetadata) -> Bool {
     if lhs.name != rhs.name {return false}
     if lhs.url != rhs.url {return false}
     if lhs.format != rhs.format {return false}
@@ -399,10 +429,10 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 }
 
 extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".DeckStatus"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_cassette_interface\0\u{3}tape_inserted\0\u{1}tape\0\u{1}transport\0\u{3}position_seconds\0\u{3}motor_on\0\u{3}ula_part\0")
+  public static let protoMessageName: String = _protobuf_package + ".DeckStatus"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_cassette_interface\0\u{3}tape_inserted\0\u{1}tape\0\u{1}transport\0\u{3}position_seconds\0\u{3}motor_on\0\u{3}ula_part\0")
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       // The use of inline closures is to circumvent an issue where the compiler
       // allocates stack space for every case branch when no optimizations are
@@ -420,7 +450,7 @@ extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     }
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     // The use of inline closures is to circumvent an issue where the compiler
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
@@ -449,7 +479,7 @@ extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_DeckStatus, rhs: Beebium_DeckStatus) -> Bool {
+  public static func ==(lhs: Beebium_DeckStatus, rhs: Beebium_DeckStatus) -> Bool {
     if lhs.hasCassetteInterface_p != rhs.hasCassetteInterface_p {return false}
     if lhs.tapeInserted != rhs.tapeInserted {return false}
     if lhs._tape != rhs._tape {return false}
@@ -463,10 +493,10 @@ extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 }
 
 extension Beebium_InsertTapeRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".InsertTapeRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}url\0")
+  public static let protoMessageName: String = _protobuf_package + ".InsertTapeRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}url\0")
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       // The use of inline closures is to circumvent an issue where the compiler
       // allocates stack space for every case branch when no optimizations are
@@ -478,14 +508,14 @@ extension Beebium_InsertTapeRequest: SwiftProtobuf.Message, SwiftProtobuf._Messa
     }
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if !self.url.isEmpty {
       try visitor.visitSingularStringField(value: self.url, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_InsertTapeRequest, rhs: Beebium_InsertTapeRequest) -> Bool {
+  public static func ==(lhs: Beebium_InsertTapeRequest, rhs: Beebium_InsertTapeRequest) -> Bool {
     if lhs.url != rhs.url {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -493,10 +523,10 @@ extension Beebium_InsertTapeRequest: SwiftProtobuf.Message, SwiftProtobuf._Messa
 }
 
 extension Beebium_InsertTapeResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".InsertTapeResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}kind\0\u{1}tape\0")
+  public static let protoMessageName: String = _protobuf_package + ".InsertTapeResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}kind\0\u{1}tape\0")
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       // The use of inline closures is to circumvent an issue where the compiler
       // allocates stack space for every case branch when no optimizations are
@@ -511,7 +541,7 @@ extension Beebium_InsertTapeResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
     }
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     // The use of inline closures is to circumvent an issue where the compiler
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
@@ -531,7 +561,7 @@ extension Beebium_InsertTapeResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_InsertTapeResponse, rhs: Beebium_InsertTapeResponse) -> Bool {
+  public static func ==(lhs: Beebium_InsertTapeResponse, rhs: Beebium_InsertTapeResponse) -> Bool {
     if lhs.success != rhs.success {return false}
     if lhs.error != rhs.error {return false}
     if lhs.kind != rhs.kind {return false}
@@ -542,10 +572,10 @@ extension Beebium_InsertTapeResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
 }
 
 extension Beebium_CassetteResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".CassetteResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}kind\0")
+  public static let protoMessageName: String = _protobuf_package + ".CassetteResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}kind\0")
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       // The use of inline closures is to circumvent an issue where the compiler
       // allocates stack space for every case branch when no optimizations are
@@ -559,7 +589,7 @@ extension Beebium_CassetteResponse: SwiftProtobuf.Message, SwiftProtobuf._Messag
     }
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if self.success != false {
       try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
     }
@@ -572,7 +602,7 @@ extension Beebium_CassetteResponse: SwiftProtobuf.Message, SwiftProtobuf._Messag
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_CassetteResponse, rhs: Beebium_CassetteResponse) -> Bool {
+  public static func ==(lhs: Beebium_CassetteResponse, rhs: Beebium_CassetteResponse) -> Bool {
     if lhs.success != rhs.success {return false}
     if lhs.error != rhs.error {return false}
     if lhs.kind != rhs.kind {return false}
@@ -582,67 +612,105 @@ extension Beebium_CassetteResponse: SwiftProtobuf.Message, SwiftProtobuf._Messag
 }
 
 extension Beebium_EjectTapeRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".EjectTapeRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let protoMessageName: String = _protobuf_package + ".EjectTapeRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     // Load everything into unknown fields
     while try decoder.nextFieldNumber() != nil {}
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_EjectTapeRequest, rhs: Beebium_EjectTapeRequest) -> Bool {
+  public static func ==(lhs: Beebium_EjectTapeRequest, rhs: Beebium_EjectTapeRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
 extension Beebium_PlayRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".PlayRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let protoMessageName: String = _protobuf_package + ".PlayRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     // Load everything into unknown fields
     while try decoder.nextFieldNumber() != nil {}
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_PlayRequest, rhs: Beebium_PlayRequest) -> Bool {
+  public static func ==(lhs: Beebium_PlayRequest, rhs: Beebium_PlayRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
 extension Beebium_StopRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".StopRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let protoMessageName: String = _protobuf_package + ".StopRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     // Load everything into unknown fields
     while try decoder.nextFieldNumber() != nil {}
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_StopRequest, rhs: Beebium_StopRequest) -> Bool {
+  public static func ==(lhs: Beebium_StopRequest, rhs: Beebium_StopRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_RewindRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RewindRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_RewindRequest, rhs: Beebium_RewindRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_FastForwardRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FastForwardRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_FastForwardRequest, rhs: Beebium_FastForwardRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
 extension Beebium_SeekRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".SeekRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}position_seconds\0")
+  public static let protoMessageName: String = _protobuf_package + ".SeekRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}position_seconds\0")
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       // The use of inline closures is to circumvent an issue where the compiler
       // allocates stack space for every case branch when no optimizations are
@@ -654,14 +722,14 @@ extension Beebium_SeekRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     }
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if self.positionSeconds.bitPattern != 0 {
       try visitor.visitSingularDoubleField(value: self.positionSeconds, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_SeekRequest, rhs: Beebium_SeekRequest) -> Bool {
+  public static func ==(lhs: Beebium_SeekRequest, rhs: Beebium_SeekRequest) -> Bool {
     if lhs.positionSeconds != rhs.positionSeconds {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -669,29 +737,29 @@ extension Beebium_SeekRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 }
 
 extension Beebium_GetDeckStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".GetDeckStatusRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let protoMessageName: String = _protobuf_package + ".GetDeckStatusRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     // Load everything into unknown fields
     while try decoder.nextFieldNumber() != nil {}
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_GetDeckStatusRequest, rhs: Beebium_GetDeckStatusRequest) -> Bool {
+  public static func ==(lhs: Beebium_GetDeckStatusRequest, rhs: Beebium_GetDeckStatusRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
 extension Beebium_SubscribeDeckStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".SubscribeDeckStatusRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}min_interval_ms\0")
+  public static let protoMessageName: String = _protobuf_package + ".SubscribeDeckStatusRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}min_interval_ms\0")
 
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       // The use of inline closures is to circumvent an issue where the compiler
       // allocates stack space for every case branch when no optimizations are
@@ -703,14 +771,14 @@ extension Beebium_SubscribeDeckStatusRequest: SwiftProtobuf.Message, SwiftProtob
     }
   }
 
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if self.minIntervalMs != 0 {
       try visitor.visitSingularUInt32Field(value: self.minIntervalMs, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_SubscribeDeckStatusRequest, rhs: Beebium_SubscribeDeckStatusRequest) -> Bool {
+  public static func ==(lhs: Beebium_SubscribeDeckStatusRequest, rhs: Beebium_SubscribeDeckStatusRequest) -> Bool {
     if lhs.minIntervalMs != rhs.minIntervalMs {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
