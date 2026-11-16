@@ -123,10 +123,14 @@ inline std::optional<BlankDiscTemplate> find_blank_disc(
 // extension, so the copy always has the template's: a destination without
 // one gets it, and one with another extension is refused, since that copy
 // would not load.
-inline CreateBlankDiscResult create_blank_disc(const std::optional<std::filesystem::path>& dirpath,
-                                          const std::string& label,
-                                          const std::filesystem::path& destination_filepath,
-                                          bool overwrite) {
+// Copy a blank template (a disc or a tape) to `destination_filepath`, byte for
+// byte. The copy has the template's extension: a destination without one gets
+// it, and one with another is refused. An existing destination is refused
+// unless `overwrite`. `noun` names the template in errors ("disc", "tape").
+inline CreateBlankDiscResult copy_blank_template(const std::filesystem::path& template_filepath,
+                                                 std::uintmax_t size_bytes,
+                                                 const std::filesystem::path& destination_filepath,
+                                                 bool overwrite, const std::string& noun) {
     auto failed = [](CreateBlankDiscErrorKind kind, std::string error) {
         CreateBlankDiscResult result;
         result.kind = kind;
@@ -134,10 +138,6 @@ inline CreateBlankDiscResult create_blank_disc(const std::optional<std::filesyst
         return result;
     };
 
-    auto disc = find_blank_disc(dirpath, label);
-    if (!disc) {
-        return failed(CreateBlankDiscErrorKind::UnknownLabel, "no blank disc named '" + label + "'");
-    }
     if (destination_filepath.empty()) {
         return failed(CreateBlankDiscErrorKind::WriteFailed, "no destination given");
     }
@@ -148,11 +148,11 @@ inline CreateBlankDiscResult create_blank_disc(const std::optional<std::filesyst
                       "destination is a directory: " + destination_filepath.string());
     }
 
-    const auto template_extension = disc->filepath.extension().string();
+    const auto template_extension = template_filepath.extension().string();
     auto filepath = destination_filepath;
     if (!filepath.has_extension()) {
         filepath += template_extension;
-    } else if (lower_case_extension(filepath) != lower_case_extension(disc->filepath)) {
+    } else if (lower_case_extension(filepath) != lower_case_extension(template_filepath)) {
         return failed(CreateBlankDiscErrorKind::WrongExtension,
                       "destination must end in " + template_extension + ": " +
                           destination_filepath.string());
@@ -168,11 +168,11 @@ inline CreateBlankDiscResult create_blank_disc(const std::optional<std::filesyst
                       "destination already exists: " + filepath.string());
     }
 
-    std::ifstream in(disc->filepath, std::ios::binary);
+    std::ifstream in(template_filepath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    if (!in.is_open() || bytes.size() != disc->size_bytes) {
+    if (!in.is_open() || bytes.size() != size_bytes) {
         return failed(CreateBlankDiscErrorKind::WriteFailed,
-                      "cannot read blank disc: " + disc->filepath.string());
+                      "cannot read blank " + noun + ": " + template_filepath.string());
     }
 
     std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
@@ -187,6 +187,20 @@ inline CreateBlankDiscResult create_blank_disc(const std::optional<std::filesyst
     result.created_filepath = std::filesystem::absolute(filepath, ec);
     if (ec) result.created_filepath = filepath;
     return result;
+}
+
+inline CreateBlankDiscResult create_blank_disc(const std::optional<std::filesystem::path>& dirpath,
+                                          const std::string& label,
+                                          const std::filesystem::path& destination_filepath,
+                                          bool overwrite) {
+    auto disc = find_blank_disc(dirpath, label);
+    if (!disc) {
+        CreateBlankDiscResult result;
+        result.kind = CreateBlankDiscErrorKind::UnknownLabel;
+        result.error = "no blank disc named '" + label + "'";
+        return result;
+    }
+    return copy_blank_template(disc->filepath, disc->size_bytes, destination_filepath, overwrite, "disc");
 }
 
 }  // namespace beebium
