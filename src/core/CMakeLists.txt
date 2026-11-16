@@ -29,6 +29,7 @@ add_library(beebium_core STATIC
     include/beebium/cassette/TapeImage.hpp
     include/beebium/cassette/TapeSink.hpp
     include/beebium/cassette/CassetteDeck.hpp
+    include/beebium/cassette/CassetteMotorLed.hpp
     src/TubeUla.cpp
     src/CoprocessorCpu.cpp
     src/CoprocessorRunner.cpp

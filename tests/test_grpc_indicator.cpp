@@ -1092,3 +1092,88 @@ TEST_CASE("IndicatorService Model B+ with SCSI signals activity on transaction",
 }
 
 #endif  // BEEBIUM_ROM_DIR && BEEBIUM_TEST_ASSETS_DIR
+
+// =============================================================================
+// The cassette motor LED (#208)
+// =============================================================================
+
+namespace {
+
+template <typename MachineType>
+void check_cassette_motor_led_registered() {
+    MachineType machine;
+    auto& indicators = machine.state().memory.indicators;
+    const auto names = indicators.names();
+    const auto at = [&](const std::string& name) {
+        return std::find(names.begin(), names.end(), name) - names.begin();
+    };
+    const auto motor = at("cassette-motor-led");
+    REQUIRE(motor < static_cast<std::ptrdiff_t>(names.size()));
+    CHECK(motor > at("caps-lock-led"));
+    CHECK(motor > at("shift-lock-led"));
+    const auto metadata = indicators.metadata("cassette-motor-led");
+    CHECK(metadata.at("label") == "Cassette motor");
+    CHECK(metadata.at("color") == "625nm");
+}
+
+}  // namespace
+
+TEST_CASE("Every model registers the cassette motor LED after the lock LEDs", "[indicator][cassette]") {
+    check_cassette_motor_led_registered<beebium::ModelB>();
+    check_cassette_motor_led_registered<beebium::ModelBPlus>();
+    check_cassette_motor_led_registered<beebium::ModelBPlus128K>();
+    check_cassette_motor_led_registered<beebium::ModelBRomRamBoard>();
+    check_cassette_motor_led_registered<beebium::ModelBAtplSidewise>();
+    check_cassette_motor_led_registered<beebium::ModelBWatfordRomRam>();
+    check_cassette_motor_led_registered<beebium::ModelBIntegraB>();
+}
+
+TEST_CASE("The cassette motor LED follows Serial ULA latch bit 7", "[grpc][indicator][cassette]") {
+    IndicatorTestFixtureModelB fixture;
+
+    grpc::ClientContext context;
+    beebium::SubscribeIndicatorsRequest request;
+    request.set_min_interval_ms(10);
+    request.add_names("cassette-motor-led");
+    auto reader = fixture.stub().Subscribe(&context, request);
+
+    std::vector<int> seen;
+    std::mutex seen_mutex;
+    std::thread reader_thread([&]() {
+        beebium::IndicatorUpdate update;
+        while (reader->Read(&update)) {
+            for (const auto& [name, value] : update.values()) {
+                if (name == "cassette-motor-led") {
+                    std::lock_guard<std::mutex> lock(seen_mutex);
+                    seen.push_back(static_cast<int>(value));
+                }
+            }
+        }
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    auto& memory = fixture.machine().state().memory;
+    auto value_now = [&] {
+        for (int i = 0; i < 100; ++i) {
+            const auto values = memory.indicators.values();
+            const auto it = values.find("cassette-motor-led");
+            if (it != values.end()) return static_cast<int>(it->second);
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        return -1;
+    };
+
+    fixture.machine().with_emulation_paused([&] { memory.write(0xFE10, 0xFE); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(80));
+    CHECK(value_now() == 255);
+    fixture.machine().with_emulation_paused([&] { memory.write(0xFE10, 0x7E); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(80));
+    CHECK(value_now() == 0);
+
+    context.TryCancel();
+    reader_thread.join();
+    std::lock_guard<std::mutex> lock(seen_mutex);
+    REQUIRE(seen.size() >= 2);
+    CHECK(std::find(seen.begin(), seen.end(), 255) != seen.end());
+    CHECK(seen.back() == 0);
+}

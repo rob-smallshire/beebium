@@ -19,6 +19,7 @@
 #include "../devices/Mc6850.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 
 namespace beebium {
@@ -149,7 +150,11 @@ public:
 
     // Memory-mapped write (the latch ignores the address within its range).
     void write(uint16_t /*offset*/, uint8_t value) {
+        const bool motor_was_on = motor_on();
         control_ = value;
+        if (motor_on() != motor_was_on) {
+            update_motor_led();
+        }
         tx_divider_ = DIVIDERS[value & TX_BAUD_MASK];
         rx_divider_ = DIVIDERS[(value & RX_BAUD_MASK) >> RX_BAUD_SHIFT];
 
@@ -191,7 +196,11 @@ public:
     }
 
     void reset() {
+        const bool motor_was_on = motor_on();
         control_ = 0;
+        if (motor_was_on) {
+            update_motor_led();
+        }
         tx_divider_ = DIVIDERS[0];
         rx_divider_ = DIVIDERS[0];
         tx_div_count_ = 0;
@@ -254,6 +263,14 @@ public:
         sink_->set_break(last_break_asserted_);
     }
 
+    // Told the relay's state (latch bit 7) now and whenever it changes, on the
+    // thread that writes the latch. The keyboard's cassette motor LED hangs
+    // here (cassette/CassetteMotorLed.hpp).
+    void set_motor_listener(std::function<void(bool)> listener) {
+        motor_listener_ = std::move(listener);
+        update_motor_led();
+    }
+
     // --- The cassette side's attachments (non-owning) ---
     // The deck whose edges the data separator receives, clocked with the relay.
     void set_deck(CassetteDeck* deck) { deck_ = deck; }
@@ -302,6 +319,12 @@ private:
             receive_clock();
         }
         cassette_clock();
+    }
+
+    void update_motor_led() {
+        if (motor_listener_) {
+            motor_listener_(motor_on());
+        }
     }
 
     // --- The cassette side, one ULA clock ---
@@ -646,6 +669,9 @@ private:
     Mc6850::Parity rx_parity_ = Mc6850::Parity::None;
     bool rx_has_byte_ = false;
     bool rx_break_ = false;  // current inbound frame is a break (stop bit low)
+
+    // Told the relay's state as it changes.
+    std::function<void(bool)> motor_listener_;
 
     // The cassette side.
     CassetteDeck* deck_ = nullptr;
