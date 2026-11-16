@@ -334,6 +334,13 @@ the client's indicator rendering applies whatever hold-off it applies to the dri
   machine's directory copies, as a floppy named by search or position is; one named by an
   absolute path is opened in place. A live source is not persisted.
 - `machine.json` records the tape and position on save; `SaveMachine` pauses, records, resumes.
+- **The New Machine configurator** (both GUI clients, and the machine draft behind it) gains a
+  cassette row in its Storage section, above the drives, so a machine or a preset can start with
+  a tape inserted: browse and drag-and-drop for a UEF, CSW or WAV, written as `storage.cassette`
+  and validated through `resolve-preset` like a floppy; `describe-preset-schema` reports whether
+  the model has the interface (`has_cassette`). A bundled preset may carry its tape beside it as
+  it carries a disc. The deck starts stopped: the user presses play, or the client's
+  insert-and-play gesture does.
 - The ULA part, if not the default, is a `hardware` key settled in round 3.
 
 ## Clients
