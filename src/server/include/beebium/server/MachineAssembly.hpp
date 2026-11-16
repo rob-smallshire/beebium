@@ -503,7 +503,7 @@ std::optional<int> load_tape_image(MachineType& machine, const ServerConfig<Mach
             auto tape = open_tape_file(filepath);
             auto& deck = machine.state().memory.cassette_deck;
             deck.insert(std::move(tape), filepath.filename().string(),
-                        beebium::DiscUrl::from_filepath(filepath).url());
+                        beebium::DiscUrl::from_filepath(filepath).url(), filepath);
             deck.set_configured(true);
             if (config.machine.tape_play) {
                 deck.play();
@@ -543,6 +543,16 @@ void flush_disc_drives(MachineType& machine) {
     if constexpr (requires { machine.state().memory.disc_drive_0; }) {
         machine.state().memory.disc_drive_0.flush_if_dirty();
         machine.state().memory.disc_drive_1.flush_if_dirty();
+    }
+}
+
+// Write a tape recorded on back to its file. The deck writes a recording back
+// when it ends; this is for Save, a move and shutdown, when a recording may
+// still be in progress. Called with the emulation stopped or paused.
+template<typename MachineType>
+void flush_cassette_deck(MachineType& machine) {
+    if constexpr (requires { machine.state().memory.cassette_deck; }) {
+        machine.state().memory.cassette_deck.flush();
     }
 }
 

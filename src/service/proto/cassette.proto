@@ -30,6 +30,18 @@ service CassetteService {
     rpc Rewind(RewindRequest) returns (CassetteResponse);
     rpc FastForward(FastForwardRequest) returns (CassetteResponse);
 
+    // Press record. From here, while the relay is closed, the tape moves and
+    // what passes under the head is replaced by what the Serial ULA sends, an
+    // edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
+    // tape end it, and the tape is then written back to its file. Refused with
+    // READ_ONLY for a tape Beebium only reads (a CSW).
+    rpc Record(RecordRequest) returns (CassetteResponse);
+
+    // The blank tape templates the server ships, and a copy of one into place
+    // on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
+    rpc ListBlankTapes(ListBlankTapesRequest) returns (ListBlankTapesResponse);
+    rpc CreateTape(CreateTapeRequest) returns (CreateTapeResponse);
+
     // The deck's state, read without stopping the machine.
     rpc GetDeckStatus(GetDeckStatusRequest) returns (DeckStatus);
 
@@ -47,14 +59,15 @@ enum CassetteErrorKind {
     CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT = 4;     // not a UEF or CSW
     CASSETTE_ERROR_KIND_INVALID_IMAGE = 5;          // recognised, but refused (a disc chunk, a version, a value out of range)
     CASSETTE_ERROR_KIND_DECK_OCCUPIED = 6;          // insert with a tape in
-    CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop, seek or wind with no tape
+    CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop, seek, wind or record with no tape
     CASSETTE_ERROR_KIND_INVALID_POSITION = 8;       // a seek to a negative position
+    CASSETTE_ERROR_KIND_READ_ONLY = 9;              // record on a tape Beebium only reads (a CSW)
 }
 
 enum TapeTransport {
     TAPE_TRANSPORT_STOPPED = 0;
     TAPE_TRANSPORT_PLAYING = 1;
-    // 2 is reserved for recording.
+    TAPE_TRANSPORT_RECORDING = 2;
     TAPE_TRANSPORT_REWINDING = 3;
     TAPE_TRANSPORT_FAST_FORWARDING = 4;
 }
@@ -67,6 +80,7 @@ message TapeMetadata {
     string origin = 5;            // the tool that made the image (UEF &0000, the CSW's application), else empty
     string target_machine = 6;    // the machine the image says it is for (UEF &0005), else empty
     double duration_seconds = 7;  // the tape's length; 0 when unknown
+    bool recordable = 8;          // whether Record can record on it (a UEF can, a CSW cannot)
 }
 
 message DeckStatus {
@@ -101,6 +115,44 @@ message PlayRequest {}
 message StopRequest {}
 message RewindRequest {}
 message FastForwardRequest {}
+message RecordRequest {}
+
+message ListBlankTapesRequest {}
+
+message ListBlankTapesResponse {
+    repeated BlankTape tapes = 1;     // in file name order
+}
+
+// A blank tape template.
+message BlankTape {
+    string label = 1;                 // the file name without its extension, e.g. "Blank C15 (15 minutes)"
+    string filename = 2;              // e.g. "Blank C15 (15 minutes).uef"
+    string kind = 3;                  // "tape"
+    uint64 size_bytes = 4;
+    double duration_seconds = 5;
+}
+
+// Why a CreateTape failed, so a client can react without parsing `error`.
+enum CreateTapeErrorKind {
+    CREATE_TAPE_ERROR_KIND_UNSPECIFIED = 0;
+    CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL = 1;       // no template has that label
+    CREATE_TAPE_ERROR_KIND_DESTINATION_EXISTS = 2;  // the destination exists (or is a directory) and overwrite was not set
+    CREATE_TAPE_ERROR_KIND_WRITE_FAILED = 3;        // the copy could not be written
+    CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION = 4;     // destination_path ends in another extension than .uef
+}
+
+message CreateTapeRequest {
+    string label = 1;                 // a template's label, from ListBlankTapes
+    string destination_path = 2;      // the new tape's path on the server's host; without an extension, .uef is added
+    bool overwrite = 3;               // replace an existing file at destination_path
+}
+
+message CreateTapeResponse {
+    bool success = 1;
+    string error = 2;                 // a lower-case message if !success
+    CreateTapeErrorKind kind = 3;
+    string path = 4;                  // the absolute path of the new tape, if success
+}
 
 message SeekRequest {
     double position_seconds = 1;

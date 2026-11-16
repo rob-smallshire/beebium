@@ -14,6 +14,7 @@
 #define BEEBIUM_SERVICE_CASSETTE_SERVICE_HPP
 
 #include "cassette.grpc.pb.h"
+#include "beebium/cassette/BlankTapes.hpp"
 #include "beebium/cassette/CassetteDeck.hpp"
 #include "beebium/cassette/TapeImage.hpp"
 #include "beebium/disc/DiscUrl.hpp"
@@ -50,12 +51,34 @@ inline beebium::CassetteErrorKind to_wire_error_kind(beebium::TapeImageError::Ki
 // the emulation thread's. Status is read from the atomics the deck publishes,
 // so asking does not stop the machine; the tape's description is read under
 // pause only when the deck's tape generation moves.
+// Map a blank tape copy failure to its wire enum value.
+inline beebium::CreateTapeErrorKind to_wire_create_tape_error_kind(beebium::CreateBlankDiscErrorKind kind) {
+    switch (kind) {
+        case beebium::CreateBlankDiscErrorKind::None:
+            return beebium::CREATE_TAPE_ERROR_KIND_UNSPECIFIED;
+        case beebium::CreateBlankDiscErrorKind::UnknownLabel:
+            return beebium::CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL;
+        case beebium::CreateBlankDiscErrorKind::DestinationExists:
+            return beebium::CREATE_TAPE_ERROR_KIND_DESTINATION_EXISTS;
+        case beebium::CreateBlankDiscErrorKind::WriteFailed:
+            return beebium::CREATE_TAPE_ERROR_KIND_WRITE_FAILED;
+        case beebium::CreateBlankDiscErrorKind::WrongExtension:
+            return beebium::CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION;
+    }
+    return beebium::CREATE_TAPE_ERROR_KIND_UNSPECIFIED;
+}
+
 template <typename MachineType>
 class CassetteServiceImpl final : public CassetteService::Service {
     using Memory = typename MachineType::Memory;
 
 public:
     explicit CassetteServiceImpl(MachineType& machine) : machine_(machine) {}
+
+    // Where the blank tape templates are; none means no templates.
+    void set_blank_tapes_dirpath(std::optional<std::filesystem::path> dirpath) {
+        blank_tapes_dirpath_ = std::move(dirpath);
+    }
 
     CassetteServiceImpl(const CassetteServiceImpl&) = delete;
     CassetteServiceImpl& operator=(const CassetteServiceImpl&) = delete;
@@ -91,7 +114,8 @@ public:
                 return grpc::Status::OK;
             }
 
-            machine_.with_emulation_paused([&] { deck.insert(std::move(tape), name, request->url()); });
+            // A recording is written back to the file the tape came from.
+            machine_.with_emulation_paused([&] { deck.insert(std::move(tape), name, request->url(), filepath); });
             refresh_tape_locked();
             response->set_success(true);
             *response->mutable_tape() = tape_metadata_;
@@ -119,6 +143,50 @@ public:
     grpc::Status FastForward(grpc::ServerContext*, const FastForwardRequest*,
                              CassetteResponse* response) override {
         return with_tape(response, [](CassetteDeck& deck) { deck.fast_forward(); });
+    }
+
+    grpc::Status Record(grpc::ServerContext*, const RecordRequest*, CassetteResponse* response) override {
+        std::optional<std::string> refused;
+        const grpc::Status status = with_tape(response, [&](CassetteDeck& deck) {
+            if (!deck.recordable()) {
+                refused = "The tape " + deck.name() + " is a " +
+                          (deck.kind() == TapeKind::Csw ? std::string("CSW") : std::string("UEF")) +
+                          " image, and Beebium records only on UEF tapes.";
+                return;
+            }
+            deck.record();
+        });
+        if (refused) fail(response, beebium::CASSETTE_ERROR_KIND_READ_ONLY, *refused);
+        return status;
+    }
+
+    grpc::Status ListBlankTapes(grpc::ServerContext*, const ListBlankTapesRequest*,
+                                ListBlankTapesResponse* response) override {
+        for (const auto& tape : beebium::list_blank_tapes(blank_tapes_dirpath_)) {
+            auto* item = response->add_tapes();
+            item->set_label(tape.label);
+            item->set_filename(tape.filename);
+            item->set_kind(tape.kind);
+            item->set_size_bytes(tape.size_bytes);
+            item->set_duration_seconds(tape.duration_seconds);
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status CreateTape(grpc::ServerContext*, const CreateTapeRequest* request,
+                            CreateTapeResponse* response) override {
+        const auto result = beebium::create_blank_tape(blank_tapes_dirpath_, request->label(),
+                                                       std::filesystem::path(request->destination_path()),
+                                                       request->overwrite());
+        if (!result) {
+            response->set_success(false);
+            response->set_error(result.error);
+            response->set_kind(to_wire_create_tape_error_kind(result.kind));
+            return grpc::Status::OK;
+        }
+        response->set_success(true);
+        response->set_path(result.created_filepath.string());
+        return grpc::Status::OK;
     }
 
     grpc::Status Seek(grpc::ServerContext*, const SeekRequest* request, CassetteResponse* response) override {
@@ -161,7 +229,8 @@ public:
             const CassetteDeck::Published now = published_now();
             const bool changed = now.sequence != last.sequence || now.tape_generation != last.tape_generation;
             // A wind covers WIND_SPEED times the tape a clock that playing does.
-            const bool playing = now.transport == CassetteDeck::Transport::Playing && now.relay_closed;
+            const bool playing = (now.transport == CassetteDeck::Transport::Playing ||
+                                  now.transport == CassetteDeck::Transport::Recording) && now.relay_closed;
             const bool winding = now.transport == CassetteDeck::Transport::Rewinding ||
                                  now.transport == CassetteDeck::Transport::FastForwarding;
             const TapeTime travelled = now.position > last.position ? now.position - last.position
@@ -251,6 +320,7 @@ private:
                 if (const auto length = deck.duration()) {
                     metadata.set_duration_seconds(static_cast<double>(*length) / ULA_CLOCK_HZ);
                 }
+                metadata.set_recordable(deck.recordable());
             });
             tape_metadata_ = std::move(metadata);
             tape_generation_ = generation;
@@ -262,7 +332,7 @@ private:
             case CassetteDeck::Transport::Playing: return beebium::TAPE_TRANSPORT_PLAYING;
             case CassetteDeck::Transport::Rewinding: return beebium::TAPE_TRANSPORT_REWINDING;
             case CassetteDeck::Transport::FastForwarding: return beebium::TAPE_TRANSPORT_FAST_FORWARDING;
-            case CassetteDeck::Transport::Recording:
+            case CassetteDeck::Transport::Recording: return beebium::TAPE_TRANSPORT_RECORDING;
             case CassetteDeck::Transport::Stopped: break;
         }
         return beebium::TAPE_TRANSPORT_STOPPED;
@@ -286,6 +356,7 @@ private:
     std::mutex mutex_;
     TapeMetadata tape_metadata_;
     std::optional<uint64_t> tape_generation_;
+    std::optional<std::filesystem::path> blank_tapes_dirpath_;
 };
 
 }  // namespace beebium::service

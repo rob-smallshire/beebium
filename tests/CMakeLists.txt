@@ -528,6 +528,7 @@ target_link_libraries(test_cassette_mos PRIVATE beebium_core Catch2::Catch2WithM
 target_compile_definitions(test_cassette_mos PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
     BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+    BEEBIUM_BLANK_TAPES_DIR="${CMAKE_SOURCE_DIR}/tapes/blank"
 )
 catch_discover_tests(test_cassette_mos PROPERTIES TIMEOUT 600)
 
@@ -1863,6 +1864,7 @@ if(BEEBIUM_BUILD_SERVICE)
     target_compile_definitions(test_grpc_cassette PRIVATE
         BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
         BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+        BEEBIUM_BLANK_TAPES_DIR="${CMAKE_SOURCE_DIR}/tapes/blank"
     )
     catch_discover_tests(test_grpc_cassette PROPERTIES TIMEOUT 600)
 
@@ -2449,6 +2451,7 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     target_compile_definitions(test_blank_discs PRIVATE
         BEEBIUM_BLANK_DISCS_DIR="${CMAKE_SOURCE_DIR}/discs/blank"
+        BEEBIUM_BLANK_TAPES_DIR="${CMAKE_SOURCE_DIR}/tapes/blank"
     )
     catch_discover_tests(test_blank_discs)
 

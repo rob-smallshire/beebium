@@ -285,3 +285,160 @@ TEST_CASE("MOS 1.20 searches with the relay on until the deck plays", "[cassette
     INFO(beeb.screen());
     CHECK(loaded);
 }
+
+// =============================================================================
+// 7 and 8 (round 6). SAVE to a blank tape and CHAIN it back
+// =============================================================================
+
+namespace {
+
+struct SavedChunk {
+    uint16_t id;
+    std::vector<uint8_t> body;
+};
+
+std::vector<SavedChunk> chunks_of(const std::vector<uint8_t>& uef) {
+    std::vector<SavedChunk> chunks;
+    for (size_t pos = 12; pos + 6 <= uef.size();) {
+        const auto id = static_cast<uint16_t>(uef[pos] | (uef[pos + 1] << 8));
+        const uint32_t length = uef[pos + 2] | (uef[pos + 3] << 8) | (uef[pos + 4] << 16) |
+                                (static_cast<uint32_t>(uef[pos + 5]) << 24);
+        pos += 6;
+        chunks.push_back({id, {uef.begin() + static_cast<std::ptrdiff_t>(pos),
+                               uef.begin() + static_cast<std::ptrdiff_t>(pos + length)}});
+        pos += length;
+    }
+    return chunks;
+}
+
+// Run until the motor relay has closed and then stayed open for half a second:
+// the end of a SAVE.
+bool run_until_relay_rests(TapeBeeb& beeb, double seconds) {
+    bool closed = false;
+    double open_for = 0.0;
+    constexpr uint64_t CHUNK = 100'000;  // 50 ms
+    for (double t = 0.0; t < seconds; t += 0.05) {
+        beeb.step(CHUNK);
+        if (beeb.deck().published().relay_closed) {
+            closed = true;
+            open_for = 0.0;
+        } else if (closed && (open_for += 0.05) >= 0.5) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Load tape_ok, SAVE it as "OK" to a copy of the C15 blank with the deck
+// recording, and return the written file's bytes; CHAIN it back as well.
+std::vector<uint8_t> save_and_chain_back(const std::vector<uint8_t>& program_uef, bool baud_300,
+                                         const std::filesystem::path& blank_filepath) {
+    TapeBeeb beeb;
+    beeb.insert(program_uef, "tape_ok.uef");
+    beeb.type(baud_300 ? "*TAPE3\rCHAIN\"\"\r" : "*TAPE\rCHAIN\"\"\r");
+    REQUIRE(beeb.run_until_screen("TAPE OK 42", 40.0));
+    beeb.deck().eject();
+
+    beeb.deck().insert(open_tape_file(blank_filepath), blank_filepath.filename().string(), "", blank_filepath);
+    beeb.type("CLS\rSAVE \"OK\"\r");
+    REQUIRE(beeb.run_until_screen("RECORD then RETURN", 5.0));
+    beeb.deck().record();
+    beeb.type("\r");
+    REQUIRE(run_until_relay_rests(beeb, 60.0));
+    INFO(beeb.screen());
+    beeb.deck().stop();
+    CHECK(beeb.deck().transport() == CassetteDeck::Transport::Stopped);
+
+    // Back to the start, and load it.
+    beeb.deck().seek(0);
+    beeb.deck().play();
+    beeb.type("NEW\r?&70=0\rCLS\rCHAIN \"OK\"\r");
+    const bool loaded = beeb.run_until_screen("TAPE OK 42", 60.0);
+    INFO(beeb.screen());
+    CHECK(loaded);
+    CHECK(beeb.machine.peek(0x70) == 42);
+    return read_file(blank_filepath);
+}
+
+void check_saved_shape(const std::vector<uint8_t>& written, bool baud_300) {
+    const auto chunks = chunks_of(written);
+    REQUIRE_FALSE(chunks.empty());
+    CHECK(chunks[0].id == 0x0000);
+    CHECK(std::string(chunks[0].body.begin(), chunks[0].body.end() - 1) == "Beebium");
+
+    // Every chunk after the origin is silence, carrier, &0117 or bytes: MOS
+    // 1.20's SAVE frames as 8N1 throughout. Its leader carries one dummy &AA
+    // byte, as UEF's &0111 describes.
+    double leader_cycles = 0.0;
+    double tail_cycles = 0.0;
+    std::optional<size_t> data_at;
+    bool baud_300_before_data = false;
+    for (size_t i = 1; i < chunks.size(); ++i) {
+        const auto& c = chunks[i];
+        INFO("chunk " << i << " is &" << std::hex << c.id);
+        CHECK((c.id == 0x0110 || c.id == 0x0100 || c.id == 0x0112 || c.id == 0x0116 || c.id == 0x0117));
+        const double cycles = c.id == 0x0110 ? (c.body[0] | (c.body[1] << 8)) : 0.0;
+        if (c.id == 0x0117 && !data_at) baud_300_before_data = (c.body[0] | (c.body[1] << 8)) == 300;
+        if (c.id == 0x0100 && !data_at && c.body == std::vector<uint8_t>{0xAA}) continue;
+        if (c.id == 0x0100 && !data_at) {
+            data_at = i;
+            REQUIRE(c.body.size() > 4);
+            CHECK(c.body[0] == 0x2A);
+            CHECK(c.body[1] == 'O');
+            CHECK(c.body[2] == 'K');
+            CHECK(c.body[3] == 0x00);
+        }
+        if (!data_at) leader_cycles += cycles;
+        else tail_cycles += cycles;
+    }
+    REQUIRE(data_at);
+    CHECK(baud_300_before_data == baud_300);
+    // About 5.1 s of 2400 Hz carrier before the block and after it.
+    CHECK(leader_cycles / 2400.0 > 4.5);
+    CHECK(leader_cycles / 2400.0 < 5.6);
+    CHECK(tail_cycles / 2400.0 > 4.5);
+    CHECK(tail_cycles / 2400.0 < 5.6);
+}
+
+}  // namespace
+
+TEST_CASE("MOS 1.20 saves to a blank tape and chains it back, here and in a fresh machine",
+          "[cassette][mos][recording]") {
+    const auto tape = program_tape();
+    REQUIRE_ROMS_AND_TOOLS(tape);
+    beebium::test::ScopedTempDir dir("beebium_cassette_save_");
+    const auto blank_filepath = dir.path() / "saved.uef";
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef",
+                               blank_filepath);
+
+    const auto written = save_and_chain_back(tape->uef, false, blank_filepath);
+    check_saved_shape(written, false);
+
+    TapeBeeb fresh;
+    fresh.deck().insert(open_tape_file(blank_filepath), "saved.uef");
+    fresh.deck().play();
+    fresh.type("*TAPE\rCHAIN\"\"\r");
+    const bool loaded = fresh.run_until_screen("TAPE OK 42", 40.0);
+    INFO(fresh.screen());
+    CHECK(loaded);
+}
+
+TEST_CASE("MOS 1.20 saves at 300 baud after *TAPE3 and the file says so", "[cassette][mos][recording]") {
+    const auto tape = program_tape({.baud = 300});
+    REQUIRE_ROMS_AND_TOOLS(tape);
+    beebium::test::ScopedTempDir dir("beebium_cassette_save_");
+    const auto blank_filepath = dir.path() / "saved300.uef";
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef",
+                               blank_filepath);
+
+    const auto written = save_and_chain_back(tape->uef, true, blank_filepath);
+    check_saved_shape(written, true);
+
+    TapeBeeb fresh;
+    fresh.deck().insert(open_tape_file(blank_filepath), "saved300.uef");
+    fresh.deck().play();
+    fresh.type("*TAPE3\rCHAIN\"\"\r");
+    const bool loaded = fresh.run_until_screen("TAPE OK 42", 60.0);
+    INFO(fresh.screen());
+    CHECK(loaded);
+}

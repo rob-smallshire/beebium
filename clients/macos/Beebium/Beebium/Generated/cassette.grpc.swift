@@ -59,6 +59,21 @@ public protocol Beebium_CassetteServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_FastForwardRequest, Beebium_CassetteResponse>
 
+  func record(
+    _ request: Beebium_RecordRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_RecordRequest, Beebium_CassetteResponse>
+
+  func listBlankTapes(
+    _ request: Beebium_ListBlankTapesRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_ListBlankTapesRequest, Beebium_ListBlankTapesResponse>
+
+  func createTape(
+    _ request: Beebium_CreateTapeRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse>
+
   func getDeckStatus(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions?
@@ -204,6 +219,65 @@ extension Beebium_CassetteServiceClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeFastForwardInterceptors() ?? []
+    )
+  }
+
+  /// Press record. From here, while the relay is closed, the tape moves and
+  /// what passes under the head is replaced by what the Serial ULA sends, an
+  /// edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
+  /// tape end it, and the tape is then written back to its file. Refused with
+  /// READ_ONLY for a tape Beebium only reads (a CSW).
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to Record.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  public func record(
+    _ request: Beebium_RecordRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_RecordRequest, Beebium_CassetteResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.record.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRecordInterceptors() ?? []
+    )
+  }
+
+  /// The blank tape templates the server ships, and a copy of one into place
+  /// on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ListBlankTapes.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  public func listBlankTapes(
+    _ request: Beebium_ListBlankTapesRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_ListBlankTapesRequest, Beebium_ListBlankTapesResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.listBlankTapes.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListBlankTapesInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to CreateTape
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to CreateTape.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  public func createTape(
+    _ request: Beebium_CreateTapeRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.createTape.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCreateTapeInterceptors() ?? []
     )
   }
 
@@ -353,6 +427,21 @@ public protocol Beebium_CassetteServiceAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_FastForwardRequest, Beebium_CassetteResponse>
 
+  func makeRecordCall(
+    _ request: Beebium_RecordRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_RecordRequest, Beebium_CassetteResponse>
+
+  func makeListBlankTapesCall(
+    _ request: Beebium_ListBlankTapesRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_ListBlankTapesRequest, Beebium_ListBlankTapesResponse>
+
+  func makeCreateTapeCall(
+    _ request: Beebium_CreateTapeRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse>
+
   func makeGetDeckStatusCall(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions?
@@ -455,6 +544,42 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeFastForwardInterceptors() ?? []
+    )
+  }
+
+  public func makeRecordCall(
+    _ request: Beebium_RecordRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_RecordRequest, Beebium_CassetteResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.record.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRecordInterceptors() ?? []
+    )
+  }
+
+  public func makeListBlankTapesCall(
+    _ request: Beebium_ListBlankTapesRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_ListBlankTapesRequest, Beebium_ListBlankTapesResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.listBlankTapes.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListBlankTapesInterceptors() ?? []
+    )
+  }
+
+  public func makeCreateTapeCall(
+    _ request: Beebium_CreateTapeRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.createTape.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCreateTapeInterceptors() ?? []
     )
   }
 
@@ -569,6 +694,42 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
+  public func record(
+    _ request: Beebium_RecordRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CassetteResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.record.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRecordInterceptors() ?? []
+    )
+  }
+
+  public func listBlankTapes(
+    _ request: Beebium_ListBlankTapesRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ListBlankTapesResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.listBlankTapes.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListBlankTapesInterceptors() ?? []
+    )
+  }
+
+  public func createTape(
+    _ request: Beebium_CreateTapeRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CreateTapeResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.createTape.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCreateTapeInterceptors() ?? []
+    )
+  }
+
   public func getDeckStatus(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions? = nil
@@ -634,6 +795,15 @@ public protocol Beebium_CassetteServiceClientInterceptorFactoryProtocol: Sendabl
   /// - Returns: Interceptors to use when invoking 'fastForward'.
   func makeFastForwardInterceptors() -> [ClientInterceptor<Beebium_FastForwardRequest, Beebium_CassetteResponse>]
 
+  /// - Returns: Interceptors to use when invoking 'record'.
+  func makeRecordInterceptors() -> [ClientInterceptor<Beebium_RecordRequest, Beebium_CassetteResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'listBlankTapes'.
+  func makeListBlankTapesInterceptors() -> [ClientInterceptor<Beebium_ListBlankTapesRequest, Beebium_ListBlankTapesResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'createTape'.
+  func makeCreateTapeInterceptors() -> [ClientInterceptor<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse>]
+
   /// - Returns: Interceptors to use when invoking 'getDeckStatus'.
   func makeGetDeckStatusInterceptors() -> [ClientInterceptor<Beebium_GetDeckStatusRequest, Beebium_DeckStatus>]
 
@@ -653,6 +823,9 @@ public enum Beebium_CassetteServiceClientMetadata {
       Beebium_CassetteServiceClientMetadata.Methods.seek,
       Beebium_CassetteServiceClientMetadata.Methods.rewind,
       Beebium_CassetteServiceClientMetadata.Methods.fastForward,
+      Beebium_CassetteServiceClientMetadata.Methods.record,
+      Beebium_CassetteServiceClientMetadata.Methods.listBlankTapes,
+      Beebium_CassetteServiceClientMetadata.Methods.createTape,
       Beebium_CassetteServiceClientMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceClientMetadata.Methods.subscribeDeckStatus,
     ]
@@ -698,6 +871,24 @@ public enum Beebium_CassetteServiceClientMetadata {
     public static let fastForward = GRPCMethodDescriptor(
       name: "FastForward",
       path: "/beebium.CassetteService/FastForward",
+      type: GRPCCallType.unary
+    )
+
+    public static let record = GRPCMethodDescriptor(
+      name: "Record",
+      path: "/beebium.CassetteService/Record",
+      type: GRPCCallType.unary
+    )
+
+    public static let listBlankTapes = GRPCMethodDescriptor(
+      name: "ListBlankTapes",
+      path: "/beebium.CassetteService/ListBlankTapes",
+      type: GRPCCallType.unary
+    )
+
+    public static let createTape = GRPCMethodDescriptor(
+      name: "CreateTape",
+      path: "/beebium.CassetteService/CreateTape",
       type: GRPCCallType.unary
     )
 
@@ -749,6 +940,19 @@ public protocol Beebium_CassetteServiceProvider: CallHandlerProvider {
   func rewind(request: Beebium_RewindRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CassetteResponse>
 
   func fastForward(request: Beebium_FastForwardRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CassetteResponse>
+
+  /// Press record. From here, while the relay is closed, the tape moves and
+  /// what passes under the head is replaced by what the Serial ULA sends, an
+  /// edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
+  /// tape end it, and the tape is then written back to its file. Refused with
+  /// READ_ONLY for a tape Beebium only reads (a CSW).
+  func record(request: Beebium_RecordRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CassetteResponse>
+
+  /// The blank tape templates the server ships, and a copy of one into place
+  /// on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
+  func listBlankTapes(request: Beebium_ListBlankTapesRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListBlankTapesResponse>
+
+  func createTape(request: Beebium_CreateTapeRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CreateTapeResponse>
 
   /// The deck's state, read without stopping the machine.
   func getDeckStatus(request: Beebium_GetDeckStatusRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_DeckStatus>
@@ -834,6 +1038,33 @@ extension Beebium_CassetteServiceProvider {
         userFunction: self.fastForward(request:context:)
       )
 
+    case "Record":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RecordRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CassetteResponse>(),
+        interceptors: self.interceptors?.makeRecordInterceptors() ?? [],
+        userFunction: self.record(request:context:)
+      )
+
+    case "ListBlankTapes":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ListBlankTapesRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListBlankTapesResponse>(),
+        interceptors: self.interceptors?.makeListBlankTapesInterceptors() ?? [],
+        userFunction: self.listBlankTapes(request:context:)
+      )
+
+    case "CreateTape":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CreateTapeRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CreateTapeResponse>(),
+        interceptors: self.interceptors?.makeCreateTapeInterceptors() ?? [],
+        userFunction: self.createTape(request:context:)
+      )
+
     case "GetDeckStatus":
       return UnaryServerHandler(
         context: context,
@@ -915,6 +1146,28 @@ public protocol Beebium_CassetteServiceAsyncProvider: CallHandlerProvider, Senda
     request: Beebium_FastForwardRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_CassetteResponse
+
+  /// Press record. From here, while the relay is closed, the tape moves and
+  /// what passes under the head is replaced by what the Serial ULA sends, an
+  /// edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
+  /// tape end it, and the tape is then written back to its file. Refused with
+  /// READ_ONLY for a tape Beebium only reads (a CSW).
+  func record(
+    request: Beebium_RecordRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CassetteResponse
+
+  /// The blank tape templates the server ships, and a copy of one into place
+  /// on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
+  func listBlankTapes(
+    request: Beebium_ListBlankTapesRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ListBlankTapesResponse
+
+  func createTape(
+    request: Beebium_CreateTapeRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CreateTapeResponse
 
   /// The deck's state, read without stopping the machine.
   func getDeckStatus(
@@ -1014,6 +1267,33 @@ extension Beebium_CassetteServiceAsyncProvider {
         wrapping: { try await self.fastForward(request: $0, context: $1) }
       )
 
+    case "Record":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RecordRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CassetteResponse>(),
+        interceptors: self.interceptors?.makeRecordInterceptors() ?? [],
+        wrapping: { try await self.record(request: $0, context: $1) }
+      )
+
+    case "ListBlankTapes":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ListBlankTapesRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListBlankTapesResponse>(),
+        interceptors: self.interceptors?.makeListBlankTapesInterceptors() ?? [],
+        wrapping: { try await self.listBlankTapes(request: $0, context: $1) }
+      )
+
+    case "CreateTape":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CreateTapeRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CreateTapeResponse>(),
+        interceptors: self.interceptors?.makeCreateTapeInterceptors() ?? [],
+        wrapping: { try await self.createTape(request: $0, context: $1) }
+      )
+
     case "GetDeckStatus":
       return GRPCAsyncServerHandler(
         context: context,
@@ -1068,6 +1348,18 @@ public protocol Beebium_CassetteServiceServerInterceptorFactoryProtocol: Sendabl
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeFastForwardInterceptors() -> [ServerInterceptor<Beebium_FastForwardRequest, Beebium_CassetteResponse>]
 
+  /// - Returns: Interceptors to use when handling 'record'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeRecordInterceptors() -> [ServerInterceptor<Beebium_RecordRequest, Beebium_CassetteResponse>]
+
+  /// - Returns: Interceptors to use when handling 'listBlankTapes'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeListBlankTapesInterceptors() -> [ServerInterceptor<Beebium_ListBlankTapesRequest, Beebium_ListBlankTapesResponse>]
+
+  /// - Returns: Interceptors to use when handling 'createTape'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeCreateTapeInterceptors() -> [ServerInterceptor<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse>]
+
   /// - Returns: Interceptors to use when handling 'getDeckStatus'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetDeckStatusInterceptors() -> [ServerInterceptor<Beebium_GetDeckStatusRequest, Beebium_DeckStatus>]
@@ -1089,6 +1381,9 @@ public enum Beebium_CassetteServiceServerMetadata {
       Beebium_CassetteServiceServerMetadata.Methods.seek,
       Beebium_CassetteServiceServerMetadata.Methods.rewind,
       Beebium_CassetteServiceServerMetadata.Methods.fastForward,
+      Beebium_CassetteServiceServerMetadata.Methods.record,
+      Beebium_CassetteServiceServerMetadata.Methods.listBlankTapes,
+      Beebium_CassetteServiceServerMetadata.Methods.createTape,
       Beebium_CassetteServiceServerMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceServerMetadata.Methods.subscribeDeckStatus,
     ]
@@ -1134,6 +1429,24 @@ public enum Beebium_CassetteServiceServerMetadata {
     public static let fastForward = GRPCMethodDescriptor(
       name: "FastForward",
       path: "/beebium.CassetteService/FastForward",
+      type: GRPCCallType.unary
+    )
+
+    public static let record = GRPCMethodDescriptor(
+      name: "Record",
+      path: "/beebium.CassetteService/Record",
+      type: GRPCCallType.unary
+    )
+
+    public static let listBlankTapes = GRPCMethodDescriptor(
+      name: "ListBlankTapes",
+      path: "/beebium.CassetteService/ListBlankTapes",
+      type: GRPCCallType.unary
+    )
+
+    public static let createTape = GRPCMethodDescriptor(
+      name: "CreateTape",
+      path: "/beebium.CassetteService/CreateTape",
       type: GRPCCallType.unary
     )
 

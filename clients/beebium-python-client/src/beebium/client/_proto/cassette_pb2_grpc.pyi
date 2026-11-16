@@ -71,6 +71,18 @@ class CassetteServiceStub:
     tape, where the deck stops. Seek to 0 is the instant return to the start.
     """
     FastForward: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.FastForwardRequest, _cassette_pb2.CassetteResponse]
+    Record: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.RecordRequest, _cassette_pb2.CassetteResponse]
+    """Press record. From here, while the relay is closed, the tape moves and
+    what passes under the head is replaced by what the Serial ULA sends, an
+    edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
+    tape end it, and the tape is then written back to its file. Refused with
+    READ_ONLY for a tape Beebium only reads (a CSW).
+    """
+    ListBlankTapes: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.ListBlankTapesRequest, _cassette_pb2.ListBlankTapesResponse]
+    """The blank tape templates the server ships, and a copy of one into place
+    on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
+    """
+    CreateTape: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.CreateTapeRequest, _cassette_pb2.CreateTapeResponse]
     GetDeckStatus: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.GetDeckStatusRequest, _cassette_pb2.DeckStatus]
     """The deck's state, read without stopping the machine."""
     SubscribeDeckStatus: _grpc.UnaryStreamMultiCallable[_cassette_pb2.SubscribeDeckStatusRequest, _cassette_pb2.DeckStatus]
@@ -110,6 +122,18 @@ class CassetteServiceAsyncStub(CassetteServiceStub):
     tape, where the deck stops. Seek to 0 is the instant return to the start.
     """
     FastForward: _aio.UnaryUnaryMultiCallable[_cassette_pb2.FastForwardRequest, _cassette_pb2.CassetteResponse]  # type: ignore[assignment]
+    Record: _aio.UnaryUnaryMultiCallable[_cassette_pb2.RecordRequest, _cassette_pb2.CassetteResponse]  # type: ignore[assignment]
+    """Press record. From here, while the relay is closed, the tape moves and
+    what passes under the head is replaced by what the Serial ULA sends, an
+    edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
+    tape end it, and the tape is then written back to its file. Refused with
+    READ_ONLY for a tape Beebium only reads (a CSW).
+    """
+    ListBlankTapes: _aio.UnaryUnaryMultiCallable[_cassette_pb2.ListBlankTapesRequest, _cassette_pb2.ListBlankTapesResponse]  # type: ignore[assignment]
+    """The blank tape templates the server ships, and a copy of one into place
+    on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
+    """
+    CreateTape: _aio.UnaryUnaryMultiCallable[_cassette_pb2.CreateTapeRequest, _cassette_pb2.CreateTapeResponse]  # type: ignore[assignment]
     GetDeckStatus: _aio.UnaryUnaryMultiCallable[_cassette_pb2.GetDeckStatusRequest, _cassette_pb2.DeckStatus]  # type: ignore[assignment]
     """The deck's state, read without stopping the machine."""
     SubscribeDeckStatus: _aio.UnaryStreamMultiCallable[_cassette_pb2.SubscribeDeckStatusRequest, _cassette_pb2.DeckStatus]  # type: ignore[assignment]
@@ -188,6 +212,36 @@ class CassetteServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _cassette_pb2.FastForwardRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_cassette_pb2.CassetteResponse, _abc.Awaitable[_cassette_pb2.CassetteResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def Record(
+        self,
+        request: _cassette_pb2.RecordRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_cassette_pb2.CassetteResponse, _abc.Awaitable[_cassette_pb2.CassetteResponse]]:
+        """Press record. From here, while the relay is closed, the tape moves and
+        what passes under the head is replaced by what the Serial ULA sends, an
+        edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
+        tape end it, and the tape is then written back to its file. Refused with
+        READ_ONLY for a tape Beebium only reads (a CSW).
+        """
+
+    @_abc_1.abstractmethod
+    def ListBlankTapes(
+        self,
+        request: _cassette_pb2.ListBlankTapesRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_cassette_pb2.ListBlankTapesResponse, _abc.Awaitable[_cassette_pb2.ListBlankTapesResponse]]:
+        """The blank tape templates the server ships, and a copy of one into place
+        on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
+        """
+
+    @_abc_1.abstractmethod
+    def CreateTape(
+        self,
+        request: _cassette_pb2.CreateTapeRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_cassette_pb2.CreateTapeResponse, _abc.Awaitable[_cassette_pb2.CreateTapeResponse]]: ...
 
     @_abc_1.abstractmethod
     def GetDeckStatus(

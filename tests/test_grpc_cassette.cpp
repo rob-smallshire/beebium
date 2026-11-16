@@ -66,6 +66,7 @@ public:
         }
         machine_.reset();
         server_ = std::make_unique<beebium::service::Server<beebium::ModelB>>(machine_, "127.0.0.1", 0);
+        server_->set_blank_tapes_dirpath(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR));
         server_->start({}, {});
         channel_ = grpc::CreateChannel("127.0.0.1:" + std::to_string(server_->port()),
                                        grpc::InsecureChannelCredentials());
@@ -159,6 +160,28 @@ public:
     beebium::CassetteResponse eject() {
         return call<beebium::EjectTapeRequest>(&beebium::CassetteService::Stub::EjectTape);
     }
+    beebium::CassetteResponse record() {
+        return call<beebium::RecordRequest>(&beebium::CassetteService::Stub::Record);
+    }
+    beebium::ListBlankTapesResponse list_blank_tapes() {
+        grpc::ClientContext context;
+        beebium::ListBlankTapesResponse response;
+        REQUIRE(stub_->ListBlankTapes(&context, {}, &response).ok());
+        return response;
+    }
+    beebium::CreateTapeResponse create_tape(const std::string& label, const std::filesystem::path& destination,
+                                            bool overwrite = false) {
+        grpc::ClientContext context;
+        beebium::CreateTapeRequest request;
+        request.set_label(label);
+        request.set_destination_path(destination.string());
+        request.set_overwrite(overwrite);
+        beebium::CreateTapeResponse response;
+        REQUIRE(stub_->CreateTape(&context, request, &response).ok());
+        return response;
+    }
+    const std::filesystem::path& dirpath() const { return dirpath_; }
+
     beebium::CassetteResponse seek(double seconds) {
         beebium::SeekRequest request;
         request.set_position_seconds(seconds);
@@ -429,4 +452,89 @@ TEST_CASE("CassetteService loads a BASIC program through MOS 1.20", "[grpc][cass
         fixture.machine().with_emulation_paused([&] { ran = fixture.machine().peek(0x70) == 42; });
     }
     CHECK(ran);
+}
+
+// =============================================================================
+// 9. Record
+// =============================================================================
+
+TEST_CASE("CassetteService records on a UEF, refuses a CSW and an empty deck", "[grpc][cassette][recording]") {
+    CassetteFixture fixture;
+    if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+
+    auto record = fixture.record();
+    CHECK_FALSE(record.success());
+    CHECK(record.kind() == beebium::CASSETTE_ERROR_KIND_DECK_EMPTY);
+
+    TapeBuilder csw_builder;
+    csw_builder.carrier(2400);
+    REQUIRE(fixture.insert(fixture.write("game.csw", csw_builder.csw()).string()).success());
+    CHECK_FALSE(fixture.status().tape().recordable());
+    record = fixture.record();
+    CHECK_FALSE(record.success());
+    CHECK(record.kind() == beebium::CASSETTE_ERROR_KIND_READ_ONLY);
+    CHECK(record.error() == "The tape game.csw is a CSW image, and Beebium records only on UEF tapes.");
+    REQUIRE(fixture.eject().success());
+
+    const auto filepath = fixture.write("tone.uef", tone_tape());
+    const auto before = read_file(filepath);
+    const auto inserted = fixture.insert(filepath.string());
+    REQUIRE(inserted.success());
+    CHECK(inserted.tape().recordable());
+    fixture.start_running();
+    REQUIRE(fixture.record().success());
+    CHECK(fixture.status().transport() == beebium::TAPE_TRANSPORT_RECORDING);
+    fixture.type("*MOTOR 1\r");
+    fixture.run_emulated(4'000'000);   // two seconds of the relay closed, the Beeb silent
+    CHECK(fixture.status().motor_on());
+    REQUIRE(fixture.stop().success());
+    CHECK(fixture.status().transport() == beebium::TAPE_TRANSPORT_STOPPED);
+    CHECK(read_file(filepath) != before);
+}
+
+// =============================================================================
+// 10. Blank tapes
+// =============================================================================
+
+TEST_CASE("CassetteService lists the blank tapes and creates one that records", "[grpc][cassette][recording]") {
+    CassetteFixture fixture;
+    const auto listed = fixture.list_blank_tapes();
+    REQUIRE(listed.tapes_size() == 4);
+    const char* labels[] = {"Blank C15 (15 minutes)", "Blank C30 (30 minutes)", "Blank C60 (60 minutes)",
+                            "Blank C90 (90 minutes)"};
+    const double seconds[] = {900.0, 1800.0, 3600.0, 5400.0};
+    for (int i = 0; i < 4; ++i) {
+        CHECK(listed.tapes(i).label() == labels[i]);
+        CHECK(listed.tapes(i).filename() == std::string(labels[i]) + ".uef");
+        CHECK(listed.tapes(i).kind() == "tape");
+        CHECK(std::fabs(listed.tapes(i).duration_seconds() - seconds[i]) < 0.001);
+    }
+
+    // The extension is added.
+    auto created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "mine");
+    REQUIRE(created.success());
+    CHECK(created.path() == (fixture.dirpath() / "mine.uef").string());
+    CHECK(std::filesystem::exists(fixture.dirpath() / "mine.uef"));
+
+    // Another extension is refused.
+    created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "mine.csw");
+    CHECK_FALSE(created.success());
+    CHECK(created.kind() == beebium::CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION);
+
+    // An existing destination is refused, and replaced with overwrite.
+    created = fixture.create_tape("Blank C30 (30 minutes)", fixture.dirpath() / "mine.uef");
+    CHECK_FALSE(created.success());
+    CHECK(created.kind() == beebium::CREATE_TAPE_ERROR_KIND_DESTINATION_EXISTS);
+    created = fixture.create_tape("Blank C30 (30 minutes)", fixture.dirpath() / "mine.uef", true);
+    CHECK(created.success());
+
+    created = fixture.create_tape("Blank C120", fixture.dirpath() / "other.uef");
+    CHECK_FALSE(created.success());
+    CHECK(created.kind() == beebium::CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL);
+
+    const auto inserted = fixture.insert((fixture.dirpath() / "mine.uef").string());
+    REQUIRE(inserted.success());
+    CHECK(inserted.tape().recordable());
+    CHECK(std::fabs(inserted.tape().duration_seconds() - 1800.0) < 0.001);
+    CHECK(fixture.record().success());
 }

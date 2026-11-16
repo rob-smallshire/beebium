@@ -15,8 +15,10 @@
 isort:skip_file
 """
 
+from collections import abc as _abc
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
+from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 import builtins as _builtins
 import sys
@@ -49,9 +51,11 @@ class _CassetteErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Cas
     CASSETTE_ERROR_KIND_DECK_OCCUPIED: _CassetteErrorKind.ValueType  # 6
     """insert with a tape in"""
     CASSETTE_ERROR_KIND_DECK_EMPTY: _CassetteErrorKind.ValueType  # 7
-    """eject, play, stop, seek or wind with no tape"""
+    """eject, play, stop, seek, wind or record with no tape"""
     CASSETTE_ERROR_KIND_INVALID_POSITION: _CassetteErrorKind.ValueType  # 8
     """a seek to a negative position"""
+    CASSETTE_ERROR_KIND_READ_ONLY: _CassetteErrorKind.ValueType  # 9
+    """record on a tape Beebium only reads (a CSW)"""
 
 class CassetteErrorKind(_CassetteErrorKind, metaclass=_CassetteErrorKindEnumTypeWrapper): ...
 
@@ -69,9 +73,11 @@ CASSETTE_ERROR_KIND_INVALID_IMAGE: CassetteErrorKind.ValueType  # 5
 CASSETTE_ERROR_KIND_DECK_OCCUPIED: CassetteErrorKind.ValueType  # 6
 """insert with a tape in"""
 CASSETTE_ERROR_KIND_DECK_EMPTY: CassetteErrorKind.ValueType  # 7
-"""eject, play, stop, seek or wind with no tape"""
+"""eject, play, stop, seek, wind or record with no tape"""
 CASSETTE_ERROR_KIND_INVALID_POSITION: CassetteErrorKind.ValueType  # 8
 """a seek to a negative position"""
+CASSETTE_ERROR_KIND_READ_ONLY: CassetteErrorKind.ValueType  # 9
+"""record on a tape Beebium only reads (a CSW)"""
 Global___CassetteErrorKind: _TypeAlias = CassetteErrorKind  # noqa: Y015
 
 class _TapeTransport:
@@ -82,18 +88,48 @@ class _TapeTransportEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_TapeTra
     DESCRIPTOR: _descriptor.EnumDescriptor
     TAPE_TRANSPORT_STOPPED: _TapeTransport.ValueType  # 0
     TAPE_TRANSPORT_PLAYING: _TapeTransport.ValueType  # 1
+    TAPE_TRANSPORT_RECORDING: _TapeTransport.ValueType  # 2
     TAPE_TRANSPORT_REWINDING: _TapeTransport.ValueType  # 3
-    """2 is reserved for recording."""
     TAPE_TRANSPORT_FAST_FORWARDING: _TapeTransport.ValueType  # 4
 
 class TapeTransport(_TapeTransport, metaclass=_TapeTransportEnumTypeWrapper): ...
 
 TAPE_TRANSPORT_STOPPED: TapeTransport.ValueType  # 0
 TAPE_TRANSPORT_PLAYING: TapeTransport.ValueType  # 1
+TAPE_TRANSPORT_RECORDING: TapeTransport.ValueType  # 2
 TAPE_TRANSPORT_REWINDING: TapeTransport.ValueType  # 3
-"""2 is reserved for recording."""
 TAPE_TRANSPORT_FAST_FORWARDING: TapeTransport.ValueType  # 4
 Global___TapeTransport: _TypeAlias = TapeTransport  # noqa: Y015
+
+class _CreateTapeErrorKind:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _CreateTapeErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_CreateTapeErrorKind.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    CREATE_TAPE_ERROR_KIND_UNSPECIFIED: _CreateTapeErrorKind.ValueType  # 0
+    CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL: _CreateTapeErrorKind.ValueType  # 1
+    """no template has that label"""
+    CREATE_TAPE_ERROR_KIND_DESTINATION_EXISTS: _CreateTapeErrorKind.ValueType  # 2
+    """the destination exists (or is a directory) and overwrite was not set"""
+    CREATE_TAPE_ERROR_KIND_WRITE_FAILED: _CreateTapeErrorKind.ValueType  # 3
+    """the copy could not be written"""
+    CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION: _CreateTapeErrorKind.ValueType  # 4
+    """destination_path ends in another extension than .uef"""
+
+class CreateTapeErrorKind(_CreateTapeErrorKind, metaclass=_CreateTapeErrorKindEnumTypeWrapper):
+    """Why a CreateTape failed, so a client can react without parsing `error`."""
+
+CREATE_TAPE_ERROR_KIND_UNSPECIFIED: CreateTapeErrorKind.ValueType  # 0
+CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL: CreateTapeErrorKind.ValueType  # 1
+"""no template has that label"""
+CREATE_TAPE_ERROR_KIND_DESTINATION_EXISTS: CreateTapeErrorKind.ValueType  # 2
+"""the destination exists (or is a directory) and overwrite was not set"""
+CREATE_TAPE_ERROR_KIND_WRITE_FAILED: CreateTapeErrorKind.ValueType  # 3
+"""the copy could not be written"""
+CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION: CreateTapeErrorKind.ValueType  # 4
+"""destination_path ends in another extension than .uef"""
+Global___CreateTapeErrorKind: _TypeAlias = CreateTapeErrorKind  # noqa: Y015
 
 @_typing.final
 class TapeMetadata(_message.Message):
@@ -106,6 +142,7 @@ class TapeMetadata(_message.Message):
     ORIGIN_FIELD_NUMBER: _builtins.int
     TARGET_MACHINE_FIELD_NUMBER: _builtins.int
     DURATION_SECONDS_FIELD_NUMBER: _builtins.int
+    RECORDABLE_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """the file's name"""
     url: _builtins.str
@@ -120,6 +157,8 @@ class TapeMetadata(_message.Message):
     """the machine the image says it is for (UEF &0005), else empty"""
     duration_seconds: _builtins.float
     """the tape's length; 0 when unknown"""
+    recordable: _builtins.bool
+    """whether Record can record on it (a UEF can, a CSW cannot)"""
     def __init__(
         self,
         *,
@@ -130,10 +169,11 @@ class TapeMetadata(_message.Message):
         origin: _builtins.str = ...,
         target_machine: _builtins.str = ...,
         duration_seconds: _builtins.float = ...,
+        recordable: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["duration_seconds", b"duration_seconds", "format", b"format", "name", b"name", "origin", b"origin", "target_machine", b"target_machine", "title", b"title", "url", b"url"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["duration_seconds", b"duration_seconds", "format", b"format", "name", b"name", "origin", b"origin", "recordable", b"recordable", "target_machine", b"target_machine", "title", b"title", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -336,6 +376,152 @@ class FastForwardRequest(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___FastForwardRequest: _TypeAlias = FastForwardRequest  # noqa: Y015
+
+@_typing.final
+class RecordRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___RecordRequest: _TypeAlias = RecordRequest  # noqa: Y015
+
+@_typing.final
+class ListBlankTapesRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ListBlankTapesRequest: _TypeAlias = ListBlankTapesRequest  # noqa: Y015
+
+@_typing.final
+class ListBlankTapesResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TAPES_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def tapes(self) -> _containers.RepeatedCompositeFieldContainer[Global___BlankTape]:
+        """in file name order"""
+
+    def __init__(
+        self,
+        *,
+        tapes: _abc.Iterable[Global___BlankTape] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["tapes", b"tapes"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ListBlankTapesResponse: _TypeAlias = ListBlankTapesResponse  # noqa: Y015
+
+@_typing.final
+class BlankTape(_message.Message):
+    """A blank tape template."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    LABEL_FIELD_NUMBER: _builtins.int
+    FILENAME_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
+    SIZE_BYTES_FIELD_NUMBER: _builtins.int
+    DURATION_SECONDS_FIELD_NUMBER: _builtins.int
+    label: _builtins.str
+    """the file name without its extension, e.g. "Blank C15 (15 minutes)" """
+    filename: _builtins.str
+    """e.g. "Blank C15 (15 minutes).uef" """
+    kind: _builtins.str
+    """"tape" """
+    size_bytes: _builtins.int
+    duration_seconds: _builtins.float
+    def __init__(
+        self,
+        *,
+        label: _builtins.str = ...,
+        filename: _builtins.str = ...,
+        kind: _builtins.str = ...,
+        size_bytes: _builtins.int = ...,
+        duration_seconds: _builtins.float = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["duration_seconds", b"duration_seconds", "filename", b"filename", "kind", b"kind", "label", b"label", "size_bytes", b"size_bytes"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___BlankTape: _TypeAlias = BlankTape  # noqa: Y015
+
+@_typing.final
+class CreateTapeRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    LABEL_FIELD_NUMBER: _builtins.int
+    DESTINATION_PATH_FIELD_NUMBER: _builtins.int
+    OVERWRITE_FIELD_NUMBER: _builtins.int
+    label: _builtins.str
+    """a template's label, from ListBlankTapes"""
+    destination_path: _builtins.str
+    """the new tape's path on the server's host; without an extension, .uef is added"""
+    overwrite: _builtins.bool
+    """replace an existing file at destination_path"""
+    def __init__(
+        self,
+        *,
+        label: _builtins.str = ...,
+        destination_path: _builtins.str = ...,
+        overwrite: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["destination_path", b"destination_path", "label", b"label", "overwrite", b"overwrite"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CreateTapeRequest: _TypeAlias = CreateTapeRequest  # noqa: Y015
+
+@_typing.final
+class CreateTapeResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUCCESS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
+    PATH_FIELD_NUMBER: _builtins.int
+    success: _builtins.bool
+    error: _builtins.str
+    """a lower-case message if !success"""
+    kind: Global___CreateTapeErrorKind.ValueType
+    path: _builtins.str
+    """the absolute path of the new tape, if success"""
+    def __init__(
+        self,
+        *,
+        success: _builtins.bool = ...,
+        error: _builtins.str = ...,
+        kind: Global___CreateTapeErrorKind.ValueType = ...,
+        path: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "kind", b"kind", "path", b"path", "success", b"success"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CreateTapeResponse: _TypeAlias = CreateTapeResponse  # noqa: Y015
 
 @_typing.final
 class SeekRequest(_message.Message):

@@ -19,6 +19,7 @@
 #include "beebium/Machines.hpp"
 #include "beebium/disc/BlankDiscs.hpp"
 #include "beebium/server/BlankDiscSubcommands.hpp"
+#include "beebium/server/BlankTapeSubcommands.hpp"
 #include "beebium/server/SystemDirectories.hpp"
 #include "test_env.hpp"
 #include "test_temp_paths.hpp"
@@ -338,4 +339,46 @@ TEST_CASE("create-disc rejects an unknown label, a wrong extension and missing a
           ExitCode::USAGE);
     CHECK(run<CreateCommand>({"Zed 80T", "a", "--bogus"}, OutputFormat::Tsv, output) ==
           ExitCode::USAGE);
+}
+
+// =============================================================================
+// Blank tapes: list-blank-tapes and create-tape, over the committed templates
+// =============================================================================
+
+TEST_CASE("list-blank-tapes lists the committed tapes as TSV", "[blank-tapes][cli]") {
+    ScopedTempDir servers{"beebium-servers-"};
+    fs::create_directory_symlink(fs::path(BEEBIUM_BLANK_TAPES_DIR), servers / "blank-tapes");
+    ScopedEnv env("BEEBIUM_SERVERS_DIRPATH", servers.path().string());
+
+    std::string output;
+    REQUIRE(run<ListBlankTapesSubcommand<beebium::ModelB>>({}, OutputFormat::Tsv, output) == ExitCode::OK);
+    CHECK(output ==
+          "label\tfilename\tkind\tsize_bytes\tduration_seconds\n"
+          "Blank C15 (15 minutes)\tBlank C15 (15 minutes).uef\ttape\t36\t900\n"
+          "Blank C30 (30 minutes)\tBlank C30 (30 minutes).uef\ttape\t36\t1800\n"
+          "Blank C60 (60 minutes)\tBlank C60 (60 minutes).uef\ttape\t36\t3600\n"
+          "Blank C90 (90 minutes)\tBlank C90 (90 minutes).uef\ttape\t36\t5400\n");
+}
+
+TEST_CASE("create-tape copies a template, adds .uef and refuses what create-disc refuses",
+          "[blank-tapes][cli]") {
+    using CreateTape = CreateTapeSubcommand<beebium::ModelB>;
+    ScopedTempDir servers{"beebium-servers-"};
+    fs::create_directory_symlink(fs::path(BEEBIUM_BLANK_TAPES_DIR), servers / "blank-tapes");
+    ScopedEnv env("BEEBIUM_SERVERS_DIRPATH", servers.path().string());
+    ScopedTempDir out{"beebium-blank-tape-out-"};
+
+    std::string output;
+    REQUIRE(run<CreateTape>({"Blank C15 (15 minutes)", (out / "side-a").string()}, OutputFormat::Tsv, output) ==
+            ExitCode::OK);
+    CHECK(output == fs::absolute(out / "side-a.uef").string() + "\n");
+    CHECK(read_bytes(out / "side-a.uef") == read_bytes(fs::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef"));
+    CHECK(run<CreateTape>({"Blank C15 (15 minutes)", (out / "side-a.uef").string()}, OutputFormat::Tsv, output) ==
+          ExitCode::CANTCREAT);
+    CHECK(run<CreateTape>({"Blank C15 (15 minutes)", (out / "side-a.uef").string(), "--overwrite"},
+                          OutputFormat::Tsv, output) == ExitCode::OK);
+    CHECK(run<CreateTape>({"Blank C15 (15 minutes)", (out / "x.csw").string()}, OutputFormat::Tsv, output) ==
+          ExitCode::USAGE);
+    CHECK(run<CreateTape>({"Blank C120", (out / "y.uef").string()}, OutputFormat::Tsv, output) ==
+          ExitCode::NOINPUT);
 }

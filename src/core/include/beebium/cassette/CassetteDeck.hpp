@@ -197,6 +197,9 @@ public:
 
     bool recording() const { return transport_ == Transport::Recording; }
 
+    // Whether the tape in the deck can be recorded on.
+    bool recordable() const { return tape_ != nullptr && tape_->recorder() != nullptr; }
+
     // One ULA clock with the relay as the machine has it. Returns true if an
     // edge of the tape falls on this clock.
     bool clock(bool relay_closed) {
@@ -262,6 +265,13 @@ public:
     const std::string& name() const { return name_; }
     const std::string& url() const { return url_; }
     const std::filesystem::path& filepath() const { return filepath_; }
+
+    // The tape's file has moved (its machine's directory was renamed): write
+    // back there from now on.
+    void relocate(std::filesystem::path filepath, std::string url) {
+        filepath_ = std::move(filepath);
+        url_ = std::move(url);
+    }
 
     // Whether the tape in the deck is the one the machine's configuration
     // names (inserted at launch), rather than one inserted while it runs. A

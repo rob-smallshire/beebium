@@ -218,6 +218,7 @@ public:
                                                           std::move(recorded_document));
             server.set_machine_store(&machine_store);
             server.set_blank_discs_dirpath(find_blank_discs_dirpath());
+            server.set_blank_tapes_dirpath(find_blank_tapes_dirpath());
 
             beebium::service::Provenance provenance{
                 config.launch.provenance_type,
@@ -377,6 +378,7 @@ public:
             // Emulation has stopped (the loop ran on this thread), so this
             // cannot race the in-emulation flush. Persist any remaining writes.
             flush_disc_drives(machine);
+            flush_cassette_deck(machine);
 
             // A saved machine keeps what its battery-backed units hold, its
             // extensions' as well as its own, and its last screen.

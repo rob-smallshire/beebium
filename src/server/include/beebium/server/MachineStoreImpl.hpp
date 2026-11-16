@@ -246,6 +246,7 @@ private:
     SaveOutcome save_paused(const std::string& destination, bool replace_existing,
                             const std::string& machine_uuid, const std::string& description_template) {
         flush_disc_drives(am_.machine);
+        flush_cassette_deck(am_.machine);
         const bool saved = !am_.machine_directory->transient();
         const auto home = am_.machine_directory->dirpath();
         if (destination.empty()) {
@@ -336,6 +337,7 @@ private:
         }
 
         flush_disc_drives(am_.machine);
+        flush_cassette_deck(am_.machine);
         if (rename_directory(home, target)) {
             moved_in_place(home, target, *record);
         } else if (respelled) {
@@ -608,6 +610,15 @@ private:
                 if (!relative) continue;
                 const auto filepath = target / *relative;
                 drive->reopen_at(filepath, beebium::DiscUrl::from_filepath(filepath).url());
+            }
+        }
+        if constexpr (beebium::HasCassette<Memory>) {
+            auto& deck = am_.machine.state().memory.cassette_deck;
+            if (deck.has_tape() && !deck.filepath().empty()) {
+                if (const auto relative = machine_store_detail::relative_within(deck.filepath(), home)) {
+                    const auto filepath = target / *relative;
+                    deck.relocate(filepath, beebium::DiscUrl::from_filepath(filepath).url());
+                }
             }
         }
         for (auto* ext : am_.extension_registry.extensions()) {

@@ -42,11 +42,14 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// insert with a tape in
   case deckOccupied // = 6
 
-  /// eject, play, stop, seek or wind with no tape
+  /// eject, play, stop, seek, wind or record with no tape
   case deckEmpty // = 7
 
   /// a seek to a negative position
   case invalidPosition // = 8
+
+  /// record on a tape Beebium only reads (a CSW)
+  case readOnly // = 9
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -64,6 +67,7 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 6: self = .deckOccupied
     case 7: self = .deckEmpty
     case 8: self = .invalidPosition
+    case 9: self = .readOnly
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -79,6 +83,7 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .deckOccupied: return 6
     case .deckEmpty: return 7
     case .invalidPosition: return 8
+    case .readOnly: return 9
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -94,6 +99,7 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     .deckOccupied,
     .deckEmpty,
     .invalidPosition,
+    .readOnly,
   ]
 
 }
@@ -102,8 +108,7 @@ public enum Beebium_TapeTransport: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case stopped // = 0
   case playing // = 1
-
-  /// 2 is reserved for recording.
+  case recording // = 2
   case rewinding // = 3
   case fastForwarding // = 4
   case UNRECOGNIZED(Int)
@@ -116,6 +121,7 @@ public enum Beebium_TapeTransport: SwiftProtobuf.Enum, Swift.CaseIterable {
     switch rawValue {
     case 0: self = .stopped
     case 1: self = .playing
+    case 2: self = .recording
     case 3: self = .rewinding
     case 4: self = .fastForwarding
     default: self = .UNRECOGNIZED(rawValue)
@@ -126,6 +132,7 @@ public enum Beebium_TapeTransport: SwiftProtobuf.Enum, Swift.CaseIterable {
     switch self {
     case .stopped: return 0
     case .playing: return 1
+    case .recording: return 2
     case .rewinding: return 3
     case .fastForwarding: return 4
     case .UNRECOGNIZED(let i): return i
@@ -136,8 +143,64 @@ public enum Beebium_TapeTransport: SwiftProtobuf.Enum, Swift.CaseIterable {
   public static let allCases: [Beebium_TapeTransport] = [
     .stopped,
     .playing,
+    .recording,
     .rewinding,
     .fastForwarding,
+  ]
+
+}
+
+/// Why a CreateTape failed, so a client can react without parsing `error`.
+public enum Beebium_CreateTapeErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// no template has that label
+  case unknownLabel // = 1
+
+  /// the destination exists (or is a directory) and overwrite was not set
+  case destinationExists // = 2
+
+  /// the copy could not be written
+  case writeFailed // = 3
+
+  /// destination_path ends in another extension than .uef
+  case wrongExtension // = 4
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .unknownLabel
+    case 2: self = .destinationExists
+    case 3: self = .writeFailed
+    case 4: self = .wrongExtension
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .unknownLabel: return 1
+    case .destinationExists: return 2
+    case .writeFailed: return 3
+    case .wrongExtension: return 4
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Beebium_CreateTapeErrorKind] = [
+    .unspecified,
+    .unknownLabel,
+    .destinationExists,
+    .writeFailed,
+    .wrongExtension,
   ]
 
 }
@@ -167,6 +230,9 @@ public struct Beebium_TapeMetadata: Sendable {
 
   /// the tape's length; 0 when unknown
   public var durationSeconds: Double = 0
+
+  /// whether Record can record on it (a UEF can, a CSW cannot)
+  public var recordable: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -321,6 +387,102 @@ public struct Beebium_FastForwardRequest: Sendable {
   public init() {}
 }
 
+public struct Beebium_RecordRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Beebium_ListBlankTapesRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Beebium_ListBlankTapesResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// in file name order
+  public var tapes: [Beebium_BlankTape] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// A blank tape template.
+public struct Beebium_BlankTape: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// the file name without its extension, e.g. "Blank C15 (15 minutes)"
+  public var label: String = String()
+
+  /// e.g. "Blank C15 (15 minutes).uef"
+  public var filename: String = String()
+
+  /// "tape"
+  public var kind: String = String()
+
+  public var sizeBytes: UInt64 = 0
+
+  public var durationSeconds: Double = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Beebium_CreateTapeRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// a template's label, from ListBlankTapes
+  public var label: String = String()
+
+  /// the new tape's path on the server's host; without an extension, .uef is added
+  public var destinationPath: String = String()
+
+  /// replace an existing file at destination_path
+  public var overwrite: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Beebium_CreateTapeResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var success: Bool = false
+
+  /// a lower-case message if !success
+  public var error: String = String()
+
+  public var kind: Beebium_CreateTapeErrorKind = .unspecified
+
+  /// the absolute path of the new tape, if success
+  public var path: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public struct Beebium_SeekRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -361,16 +523,20 @@ public struct Beebium_SubscribeDeckStatusRequest: Sendable {
 fileprivate let _protobuf_package = "beebium"
 
 extension Beebium_CassetteErrorKind: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CASSETTE_ERROR_KIND_UNSPECIFIED\0\u{1}CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE\0\u{1}CASSETTE_ERROR_KIND_CANNOT_OPEN\0\u{1}CASSETTE_ERROR_KIND_UNREADABLE\0\u{1}CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT\0\u{1}CASSETTE_ERROR_KIND_INVALID_IMAGE\0\u{1}CASSETTE_ERROR_KIND_DECK_OCCUPIED\0\u{1}CASSETTE_ERROR_KIND_DECK_EMPTY\0\u{1}CASSETTE_ERROR_KIND_INVALID_POSITION\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CASSETTE_ERROR_KIND_UNSPECIFIED\0\u{1}CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE\0\u{1}CASSETTE_ERROR_KIND_CANNOT_OPEN\0\u{1}CASSETTE_ERROR_KIND_UNREADABLE\0\u{1}CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT\0\u{1}CASSETTE_ERROR_KIND_INVALID_IMAGE\0\u{1}CASSETTE_ERROR_KIND_DECK_OCCUPIED\0\u{1}CASSETTE_ERROR_KIND_DECK_EMPTY\0\u{1}CASSETTE_ERROR_KIND_INVALID_POSITION\0\u{1}CASSETTE_ERROR_KIND_READ_ONLY\0")
 }
 
 extension Beebium_TapeTransport: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TAPE_TRANSPORT_STOPPED\0\u{1}TAPE_TRANSPORT_PLAYING\0\u{2}\u{2}TAPE_TRANSPORT_REWINDING\0\u{1}TAPE_TRANSPORT_FAST_FORWARDING\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TAPE_TRANSPORT_STOPPED\0\u{1}TAPE_TRANSPORT_PLAYING\0\u{1}TAPE_TRANSPORT_RECORDING\0\u{1}TAPE_TRANSPORT_REWINDING\0\u{1}TAPE_TRANSPORT_FAST_FORWARDING\0")
+}
+
+extension Beebium_CreateTapeErrorKind: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CREATE_TAPE_ERROR_KIND_UNSPECIFIED\0\u{1}CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL\0\u{1}CREATE_TAPE_ERROR_KIND_DESTINATION_EXISTS\0\u{1}CREATE_TAPE_ERROR_KIND_WRITE_FAILED\0\u{1}CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION\0")
 }
 
 extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TapeMetadata"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}url\0\u{1}format\0\u{1}title\0\u{1}origin\0\u{3}target_machine\0\u{3}duration_seconds\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}url\0\u{1}format\0\u{1}title\0\u{1}origin\0\u{3}target_machine\0\u{3}duration_seconds\0\u{1}recordable\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -385,6 +551,7 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 5: try { try decoder.decodeSingularStringField(value: &self.origin) }()
       case 6: try { try decoder.decodeSingularStringField(value: &self.targetMachine) }()
       case 7: try { try decoder.decodeSingularDoubleField(value: &self.durationSeconds) }()
+      case 8: try { try decoder.decodeSingularBoolField(value: &self.recordable) }()
       default: break
       }
     }
@@ -412,6 +579,9 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if self.durationSeconds.bitPattern != 0 {
       try visitor.visitSingularDoubleField(value: self.durationSeconds, fieldNumber: 7)
     }
+    if self.recordable != false {
+      try visitor.visitSingularBoolField(value: self.recordable, fieldNumber: 8)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -423,6 +593,7 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.origin != rhs.origin {return false}
     if lhs.targetMachine != rhs.targetMachine {return false}
     if lhs.durationSeconds != rhs.durationSeconds {return false}
+    if lhs.recordable != rhs.recordable {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -701,6 +872,209 @@ extension Beebium_FastForwardRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 
   public static func ==(lhs: Beebium_FastForwardRequest, rhs: Beebium_FastForwardRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_RecordRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RecordRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_RecordRequest, rhs: Beebium_RecordRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ListBlankTapesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListBlankTapesRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_ListBlankTapesRequest, rhs: Beebium_ListBlankTapesRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ListBlankTapesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListBlankTapesResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}tapes\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.tapes) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.tapes.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.tapes, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_ListBlankTapesResponse, rhs: Beebium_ListBlankTapesResponse) -> Bool {
+    if lhs.tapes != rhs.tapes {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_BlankTape: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".BlankTape"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}label\0\u{1}filename\0\u{1}kind\0\u{3}size_bytes\0\u{3}duration_seconds\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.filename) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.kind) }()
+      case 4: try { try decoder.decodeSingularUInt64Field(value: &self.sizeBytes) }()
+      case 5: try { try decoder.decodeSingularDoubleField(value: &self.durationSeconds) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 1)
+    }
+    if !self.filename.isEmpty {
+      try visitor.visitSingularStringField(value: self.filename, fieldNumber: 2)
+    }
+    if !self.kind.isEmpty {
+      try visitor.visitSingularStringField(value: self.kind, fieldNumber: 3)
+    }
+    if self.sizeBytes != 0 {
+      try visitor.visitSingularUInt64Field(value: self.sizeBytes, fieldNumber: 4)
+    }
+    if self.durationSeconds.bitPattern != 0 {
+      try visitor.visitSingularDoubleField(value: self.durationSeconds, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_BlankTape, rhs: Beebium_BlankTape) -> Bool {
+    if lhs.label != rhs.label {return false}
+    if lhs.filename != rhs.filename {return false}
+    if lhs.kind != rhs.kind {return false}
+    if lhs.sizeBytes != rhs.sizeBytes {return false}
+    if lhs.durationSeconds != rhs.durationSeconds {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_CreateTapeRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CreateTapeRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}label\0\u{3}destination_path\0\u{1}overwrite\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.destinationPath) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.overwrite) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 1)
+    }
+    if !self.destinationPath.isEmpty {
+      try visitor.visitSingularStringField(value: self.destinationPath, fieldNumber: 2)
+    }
+    if self.overwrite != false {
+      try visitor.visitSingularBoolField(value: self.overwrite, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_CreateTapeRequest, rhs: Beebium_CreateTapeRequest) -> Bool {
+    if lhs.label != rhs.label {return false}
+    if lhs.destinationPath != rhs.destinationPath {return false}
+    if lhs.overwrite != rhs.overwrite {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_CreateTapeResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CreateTapeResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}kind\0\u{1}path\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.path) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 3)
+    }
+    if !self.path.isEmpty {
+      try visitor.visitSingularStringField(value: self.path, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_CreateTapeResponse, rhs: Beebium_CreateTapeResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.kind != rhs.kind {return false}
+    if lhs.path != rhs.path {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

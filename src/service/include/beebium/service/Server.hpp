@@ -126,6 +126,12 @@ public:
         impl_->blank_discs_dirpath = std::move(dirpath);
     }
 
+    /// Where the blank tape templates are, for CassetteService's ListBlankTapes
+    /// and CreateTape. Call before start(); none means no templates.
+    void set_blank_tapes_dirpath(std::optional<std::filesystem::path> dirpath) {
+        impl_->blank_tapes_dirpath = std::move(dirpath);
+    }
+
     /// The frame the machine last presented, as clients are sent it.
     const FrameBuffer& frame_buffer() const { return impl_->frame_buffer; }
 
@@ -231,6 +237,7 @@ private:
         std::function<bool()> release_from_launcher;
         std::optional<double> initial_speed_multiplier;
         std::optional<std::filesystem::path> blank_discs_dirpath;
+        std::optional<std::filesystem::path> blank_tapes_dirpath;
         std::unique_ptr<AudioServiceImpl<MachineType>> audio_service;
         std::unique_ptr<SidewaysServiceImpl<MachineType>> sideways_service;
         // Motherboard link state captured before start(), applied to
@@ -384,6 +391,7 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
     impl_->disc_service->set_blank_discs_dirpath(impl_->blank_discs_dirpath);
 
     impl_->cassette_service = std::make_unique<CassetteServiceImpl<MachineType>>(impl_->machine);
+    impl_->cassette_service->set_blank_tapes_dirpath(impl_->blank_tapes_dirpath);
 
     impl_->indicator_service = std::make_unique<IndicatorServiceImpl<MachineType>>(
         impl_->machine);

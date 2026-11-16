@@ -88,6 +88,21 @@ class CassetteServiceStub(object):
                 request_serializer=cassette__pb2.FastForwardRequest.SerializeToString,
                 response_deserializer=cassette__pb2.CassetteResponse.FromString,
                 _registered_method=True)
+        self.Record = channel.unary_unary(
+                '/beebium.CassetteService/Record',
+                request_serializer=cassette__pb2.RecordRequest.SerializeToString,
+                response_deserializer=cassette__pb2.CassetteResponse.FromString,
+                _registered_method=True)
+        self.ListBlankTapes = channel.unary_unary(
+                '/beebium.CassetteService/ListBlankTapes',
+                request_serializer=cassette__pb2.ListBlankTapesRequest.SerializeToString,
+                response_deserializer=cassette__pb2.ListBlankTapesResponse.FromString,
+                _registered_method=True)
+        self.CreateTape = channel.unary_unary(
+                '/beebium.CassetteService/CreateTape',
+                request_serializer=cassette__pb2.CreateTapeRequest.SerializeToString,
+                response_deserializer=cassette__pb2.CreateTapeResponse.FromString,
+                _registered_method=True)
         self.GetDeckStatus = channel.unary_unary(
                 '/beebium.CassetteService/GetDeckStatus',
                 request_serializer=cassette__pb2.GetDeckStatusRequest.SerializeToString,
@@ -161,6 +176,31 @@ class CassetteServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Record(self, request, context):
+        """Press record. From here, while the relay is closed, the tape moves and
+        what passes under the head is replaced by what the Serial ULA sends, an
+        edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
+        tape end it, and the tape is then written back to its file. Refused with
+        READ_ONLY for a tape Beebium only reads (a CSW).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListBlankTapes(self, request, context):
+        """The blank tape templates the server ships, and a copy of one into place
+        on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateTape(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetDeckStatus(self, request, context):
         """The deck's state, read without stopping the machine.
         """
@@ -214,6 +254,21 @@ def add_CassetteServiceServicer_to_server(servicer, server):
                     servicer.FastForward,
                     request_deserializer=cassette__pb2.FastForwardRequest.FromString,
                     response_serializer=cassette__pb2.CassetteResponse.SerializeToString,
+            ),
+            'Record': grpc.unary_unary_rpc_method_handler(
+                    servicer.Record,
+                    request_deserializer=cassette__pb2.RecordRequest.FromString,
+                    response_serializer=cassette__pb2.CassetteResponse.SerializeToString,
+            ),
+            'ListBlankTapes': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListBlankTapes,
+                    request_deserializer=cassette__pb2.ListBlankTapesRequest.FromString,
+                    response_serializer=cassette__pb2.ListBlankTapesResponse.SerializeToString,
+            ),
+            'CreateTape': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateTape,
+                    request_deserializer=cassette__pb2.CreateTapeRequest.FromString,
+                    response_serializer=cassette__pb2.CreateTapeResponse.SerializeToString,
             ),
             'GetDeckStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDeckStatus,
@@ -422,6 +477,87 @@ class CassetteService(object):
             '/beebium.CassetteService/FastForward',
             cassette__pb2.FastForwardRequest.SerializeToString,
             cassette__pb2.CassetteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Record(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.CassetteService/Record',
+            cassette__pb2.RecordRequest.SerializeToString,
+            cassette__pb2.CassetteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListBlankTapes(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.CassetteService/ListBlankTapes',
+            cassette__pb2.ListBlankTapesRequest.SerializeToString,
+            cassette__pb2.ListBlankTapesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateTape(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.CassetteService/CreateTape',
+            cassette__pb2.CreateTapeRequest.SerializeToString,
+            cassette__pb2.CreateTapeResponse.FromString,
             options,
             channel_credentials,
             insecure,
