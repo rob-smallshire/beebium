@@ -33,7 +33,7 @@ uint32_t read_u32(const uint8_t* p) {
 
 std::unique_ptr<CswTape> CswTape::open(std::span<const uint8_t> bytes, const std::string& name) {
     if (bytes.size() < 0x20 || std::memcmp(bytes.data(), MAGIC, MAGIC_LENGTH) != 0) {
-        throw std::runtime_error("The file " + name + " is not a CSW tape image.");
+        throw TapeImageError(TapeImageError::Kind::UnsupportedFormat, "The file " + name + " is not a CSW tape image.");
     }
     const unsigned major = bytes[0x17];
     const unsigned minor = bytes[0x18];
@@ -48,13 +48,13 @@ std::unique_ptr<CswTape> CswTape::open(std::span<const uint8_t> bytes, const std
         flags = bytes[0x1C];
         data_offset = 0x20;
         if (compression != 1) {
-            throw std::runtime_error("The file " + name +
+            throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name +
                                      " is a version 1 CSW with a compression other than RLE, "
                                      "which Beebium does not read.");
         }
     } else if (major == 2) {
         if (bytes.size() < 0x34) {
-            throw std::runtime_error("The file " + name + " ends part way through its CSW header.");
+            throw TapeImageError(TapeImageError::Kind::Unreadable, "The file " + name + " ends part way through its CSW header.");
         }
         tape->sample_rate_ = read_u32(&bytes[0x19]);
         compression = bytes[0x21];
@@ -65,18 +65,18 @@ std::unique_ptr<CswTape> CswTape::open(std::span<const uint8_t> bytes, const std
         tape->metadata_.origin = application;
         data_offset = 0x34 + extension_length;
         if (data_offset > bytes.size()) {
-            throw std::runtime_error("The file " + name + " ends part way through its CSW header.");
+            throw TapeImageError(TapeImageError::Kind::Unreadable, "The file " + name + " ends part way through its CSW header.");
         }
         if (compression != 1 && compression != 2) {
-            throw std::runtime_error("The file " + name + " uses CSW compression " +
+            throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name + " uses CSW compression " +
                                      std::to_string(compression) + ", which Beebium does not read.");
         }
     } else {
-        throw std::runtime_error("The file " + name + " is a CSW of version " + std::to_string(major) +
+        throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name + " is a CSW of version " + std::to_string(major) +
                                  "." + std::to_string(minor) + ", which Beebium does not read.");
     }
     if (tape->sample_rate_ == 0) {
-        throw std::runtime_error("The file " + name + " gives a sample rate of 0, so it cannot be played.");
+        throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name + " gives a sample rate of 0, so it cannot be played.");
     }
     tape->initial_level_ = (flags & 0x01) != 0;
     tape->gap_samples_ = tape->sample_rate_ / 10;  // 100 ms
@@ -86,7 +86,7 @@ std::unique_ptr<CswTape> CswTape::open(std::span<const uint8_t> bytes, const std
     if (compression == 2) {
         auto result = cassette_detail::inflate_all(data, cassette_detail::Container::Zlib);
         if (!result) {
-            throw std::runtime_error("The file " + name + " has damaged compressed data.");
+            throw TapeImageError(TapeImageError::Kind::Unreadable, "The file " + name + " has damaged compressed data.");
         }
         inflated = std::move(*result);
         data = inflated;
@@ -98,7 +98,7 @@ std::unique_ptr<CswTape> CswTape::open(std::span<const uint8_t> bytes, const std
         uint32_t length = data[i++];
         if (length == 0) {
             if (data.size() - i < 4) {
-                throw std::runtime_error("The file " + name + " ends part way through a long pulse.");
+                throw TapeImageError(TapeImageError::Kind::Unreadable, "The file " + name + " ends part way through a long pulse.");
             }
             length = read_u32(&data[i]);
             i += 4;

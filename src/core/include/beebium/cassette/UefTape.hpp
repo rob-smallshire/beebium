@@ -48,7 +48,7 @@ public:
     void seek(TapeTime time) override;
     std::optional<TapeTime> duration() const override;
     TapeKind kind() const override { return TapeKind::Uef; }
-    const TapeMetadata& metadata() const override { return metadata_; }
+    const TapeImageMetadata& metadata() const override { return metadata_; }
 
     // The render state at a chunk boundary. Public for the renderer only.
     struct RenderState {
@@ -71,7 +71,7 @@ private:
     void render(size_t index, RenderState& state, std::vector<TapeItem>* out) const;
 
     std::string name_;
-    TapeMetadata metadata_;
+    TapeImageMetadata metadata_;
     bool makeuef_parity_swap_ = false;
     std::vector<Chunk> chunks_;              // tape chunks, in order
     std::vector<RenderState> chunk_starts_;  // state at the start of each

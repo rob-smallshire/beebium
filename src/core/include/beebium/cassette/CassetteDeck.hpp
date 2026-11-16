@@ -14,6 +14,7 @@
 
 #include "TapeSignal.hpp"
 
+#include <atomic>
 #include <concepts>
 #include <memory>
 #include <optional>
@@ -31,38 +32,69 @@ namespace beebium {
 // the end of the tape stops it. Break and power cycle do not touch the deck.
 //
 // The Serial ULA clocks the deck on the emulation thread and takes the edges
-// that fall on each clock; the service will drive the transport.
+// that fall on each clock. CassetteService drives the transport with the
+// emulation paused, and reads the deck's state without pausing it through
+// the atomics the deck publishes: presence, transport, relay and a tape
+// generation when they change, and the position whenever the transport moves
+// and every POSITION_PUBLISH_CLOCKS while playing, so the clock path pays a
+// counter rather than a store a clock.
 class CassetteDeck {
 public:
     enum class Transport : uint8_t { Stopped, Playing };
 
+    // While playing, the published position is at most this many ULA clocks
+    // (3.3 ms) behind the deck's.
+    static constexpr uint32_t POSITION_PUBLISH_CLOCKS = 4096;
+
+    // What the deck publishes, readable from any thread.
+    struct Published {
+        bool has_tape = false;
+        Transport transport = Transport::Stopped;
+        TapeTime position = 0;
+        bool relay_closed = false;
+        uint64_t tape_generation = 0;  // bumped on every insert and eject
+        uint64_t sequence = 0;         // bumped on every change but the position's
+    };
+
     // Throws std::runtime_error with a sentence if a tape is already in.
-    void insert(std::unique_ptr<TapeSignal> tape, std::string name) {
+    // `name` is what the tape is called in messages; `url` is its source as
+    // given, for reporting.
+    void insert(std::unique_ptr<TapeSignal> tape, std::string name, std::string url = {}) {
         if (tape_) {
             throw std::runtime_error("The deck already holds " + name_ +
                                      "; eject it before inserting another tape.");
         }
         tape_ = std::move(tape);
         name_ = std::move(name);
+        url_ = std::move(url);
         transport_ = Transport::Stopped;
         position_ = 0;
         tape_->rewind();
         pending_ = tape_->next();
+        published_tape_generation_.fetch_add(1, std::memory_order_relaxed);
+        publish();
     }
 
     void eject() {
         tape_.reset();
         name_.clear();
+        url_.clear();
         transport_ = Transport::Stopped;
         position_ = 0;
         pending_ = TapeItem::end(0);
+        published_tape_generation_.fetch_add(1, std::memory_order_relaxed);
+        publish();
     }
 
     void play() {
         if (tape_ && !at_end()) transport_ = Transport::Playing;
+        publish();
     }
 
-    void stop() { transport_ = Transport::Stopped; }
+    void stop() {
+        transport_ = Transport::Stopped;
+        publish();
+    }
 
     // Reposition instantly; a time beyond the end lands at the end and stops.
     void seek(TapeTime time) {
@@ -75,6 +107,7 @@ public:
         tape_->seek(time);
         position_ = time;
         pending_ = tape_->next();
+        publish();
     }
 
     void rewind() { seek(0); }
@@ -82,10 +115,28 @@ public:
     // One ULA clock with the relay as the machine has it. Returns true if an
     // edge of the tape falls on this clock.
     bool clock(bool relay_closed) {
+        if (relay_closed != relay_closed_) {
+            relay_closed_ = relay_closed;
+            published_relay_.store(relay_closed, std::memory_order_relaxed);
+            published_position_.store(position_, std::memory_order_relaxed);
+            published_sequence_.fetch_add(1, std::memory_order_release);
+        }
         if (transport_ != Transport::Playing || !relay_closed) {
             return false;
         }
         return advance();
+    }
+
+    // The published state, from any thread.
+    Published published() const {
+        Published p;
+        p.sequence = published_sequence_.load(std::memory_order_acquire);
+        p.has_tape = published_has_tape_.load(std::memory_order_relaxed);
+        p.transport = published_transport_.load(std::memory_order_relaxed);
+        p.position = published_position_.load(std::memory_order_relaxed);
+        p.relay_closed = published_relay_.load(std::memory_order_relaxed);
+        p.tape_generation = published_tape_generation_.load(std::memory_order_relaxed);
+        return p;
     }
 
     TapeTime position() const { return position_; }
@@ -95,8 +146,12 @@ public:
     Transport transport() const { return transport_; }
     bool has_tape() const { return tape_ != nullptr; }
     const std::string& name() const { return name_; }
-    const TapeMetadata& metadata() const {
-        static const TapeMetadata none;
+    const std::string& url() const { return url_; }
+    std::optional<TapeKind> kind() const {
+        return tape_ ? std::optional<TapeKind>(tape_->kind()) : std::nullopt;
+    }
+    const TapeImageMetadata& metadata() const {
+        static const TapeImageMetadata none;
         return tape_ ? tape_->metadata() : none;
     }
     // Whether the tape is silent at the current position.
@@ -117,17 +172,41 @@ private:
         }
         if (pending_.type == TapeItem::Type::End && position_ >= pending_.time) {
             transport_ = Transport::Stopped;
+            publish();
             return edge;
         }
         ++position_;
+        if (++clocks_since_publish_ >= POSITION_PUBLISH_CLOCKS) {
+            clocks_since_publish_ = 0;
+            published_position_.store(position_, std::memory_order_relaxed);
+        }
         return edge;
+    }
+
+    // Publish everything but the relay (which clock() publishes as it changes).
+    void publish() {
+        clocks_since_publish_ = 0;
+        published_has_tape_.store(tape_ != nullptr, std::memory_order_relaxed);
+        published_transport_.store(transport_, std::memory_order_relaxed);
+        published_position_.store(position_, std::memory_order_relaxed);
+        published_sequence_.fetch_add(1, std::memory_order_release);
     }
 
     std::unique_ptr<TapeSignal> tape_;
     std::string name_;
+    std::string url_;
     Transport transport_ = Transport::Stopped;
     TapeTime position_ = 0;
     TapeItem pending_ = TapeItem::end(0);
+    bool relay_closed_ = false;
+    uint32_t clocks_since_publish_ = 0;
+
+    std::atomic<bool> published_has_tape_{false};
+    std::atomic<Transport> published_transport_{Transport::Stopped};
+    std::atomic<TapeTime> published_position_{0};
+    std::atomic<bool> published_relay_{false};
+    std::atomic<uint64_t> published_tape_generation_{0};
+    std::atomic<uint64_t> published_sequence_{0};
 };
 
 // A hardware policy with a cassette interface declares `has_cassette = true`

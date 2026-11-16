@@ -64,6 +64,7 @@
 		2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */; };
 		22DE4363A66E960D161ECD01 /* disc.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44DA8D133CDD247497229CA /* disc.grpc.swift */; };
 		22ECF44772C0159ABFED1800 /* BuiltInMappingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6B04201EE913A2107FB39B /* BuiltInMappingsTests.swift */; };
+		23BE7B88F62D66E68BB0E520 /* cassette.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98CC380EE84A3739099222DE /* cassette.grpc.swift */; };
 		23DC1F33FE15F8CEABE9FBE2 /* BBCModifierState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 063CC2272D058D46784E181A /* BBCModifierState.swift */; };
 		23F3E03B298F6AB8A9B9924E /* EconetClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA006204A482FCD8B77F7549 /* EconetClient.swift */; };
 		25614C8EFD2EC82348C86EEA /* ExtensionEditorForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 965A81E6609BBCFAA7FA3997 /* ExtensionEditorForm.swift */; };
@@ -228,6 +229,7 @@
 		C7CFB3597A51313102A58455 /* PopoverTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BCB8ED24D409A21A27A8C /* PopoverTextField.swift */; };
 		C8A9065DC655ACA33F00D0F0 /* UTType+BeebiumPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1022577F48C48C283B9D31DB /* UTType+BeebiumPreset.swift */; };
 		C8B9946440A6BD81331A2BF8 /* KeyboardMappingFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D479C8A62437BA18788365E /* KeyboardMappingFile.swift */; };
+		CA20757A0D2041A303FEB240 /* cassette.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD16E6F3EC60EC8EE3C4C2C /* cassette.pb.swift */; };
 		CBC5ABA53015DE535C5F17A4 /* video.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 642BEA30A8664289314B2D9E /* video.pb.swift */; };
 		CC184BBA4B126032E36F04DB /* FocusDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9D42AD7DD904E1B5B80617 /* FocusDiagnostics.swift */; };
 		CC3CDA8C1FB5B978B592EADE /* EconetClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115851A5C42EB33AAB063B35 /* EconetClientTests.swift */; };
@@ -422,6 +424,7 @@
 		69DA862227C857FDE208AF04 /* ScreenSelectionGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenSelectionGeometry.swift; sourceTree = "<group>"; };
 		6A23FCB8A68DBF8835F44F06 /* controller.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = controller.pb.swift; sourceTree = "<group>"; };
 		6AA9C1D32F71A0E3DD2F7D8E /* SpeedControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedControlView.swift; sourceTree = "<group>"; };
+		6BD16E6F3EC60EC8EE3C4C2C /* cassette.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = cassette.pb.swift; sourceTree = "<group>"; };
 		6D736DE1C5A930D6A43C94E0 /* SvgPathParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPathParser.swift; sourceTree = "<group>"; };
 		703CD429AFEBF865A5EE1F07 /* MachinePackage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinePackage.swift; sourceTree = "<group>"; };
 		7319BB6A760A9042161B98EB /* MachineManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineManager.swift; sourceTree = "<group>"; };
@@ -478,6 +481,7 @@
 		965A81E6609BBCFAA7FA3997 /* ExtensionEditorForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionEditorForm.swift; sourceTree = "<group>"; };
 		98013E310ADF8A88A1E47008 /* StructuredListItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredListItem.swift; sourceTree = "<group>"; };
 		98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RomHeaderInfo.swift; sourceTree = "<group>"; };
+		98CC380EE84A3739099222DE /* cassette.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = cassette.grpc.swift; sourceTree = "<group>"; };
 		992C39260909EB85C84D2C20 /* SidebarMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarMode.swift; sourceTree = "<group>"; };
 		9A0C6F5673F086F459EA3FDC /* ScsiDiscEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScsiDiscEditor.swift; sourceTree = "<group>"; };
 		9B12B8134D637D81FD9FD50D /* StructuredListAdapterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredListAdapterTests.swift; sourceTree = "<group>"; };
@@ -686,6 +690,8 @@
 				4E0CD29C9A89B375C692C019 /* audio.pb.swift */,
 				A32A705682AF714B2B54471F /* aun.grpc.swift */,
 				DA0CF5589888F672F43B52FD /* aun.pb.swift */,
+				98CC380EE84A3739099222DE /* cassette.grpc.swift */,
+				6BD16E6F3EC60EC8EE3C4C2C /* cassette.pb.swift */,
 				D9CCCBCF0B283324A8439699 /* controller.grpc.swift */,
 				6A23FCB8A68DBF8835F44F06 /* controller.pb.swift */,
 				4A25B5AEA5BC043A1C1314DA /* debugger.grpc.swift */,
@@ -1411,6 +1417,8 @@
 				A005244A2347799984C194E6 /* audio.pb.swift in Sources */,
 				03B945147D637860AEC9B652 /* aun.grpc.swift in Sources */,
 				E3426D82AD066B2F7FF0830F /* aun.pb.swift in Sources */,
+				23BE7B88F62D66E68BB0E520 /* cassette.grpc.swift in Sources */,
+				CA20757A0D2041A303FEB240 /* cassette.pb.swift in Sources */,
 				D42A44C921CDB9E4BD0E5489 /* controller.grpc.swift in Sources */,
 				A4E5FEE796C62494485C8285 /* controller.pb.swift in Sources */,
 				517A5C299A144DD482FC9AC2 /* debugger.grpc.swift in Sources */,

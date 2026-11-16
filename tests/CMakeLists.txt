@@ -1840,6 +1840,19 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_grpc_disc)
 
+    # CassetteService (#208)
+    add_executable(test_grpc_cassette test_grpc_cassette.cpp)
+    target_link_libraries(test_grpc_cassette PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+        ZLIB::ZLIB
+    )
+    target_compile_definitions(test_grpc_cassette PRIVATE
+        BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+        BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+    )
+    catch_discover_tests(test_grpc_cassette PROPERTIES TIMEOUT 600)
+
     # Indicator service tests
     add_executable(test_grpc_indicator test_grpc_indicator.cpp)
     target_link_libraries(test_grpc_indicator PRIVATE

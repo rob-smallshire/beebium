@@ -42,16 +42,24 @@ std::unique_ptr<TapeSignal> open_tape_image(std::span<const uint8_t> bytes, cons
     if (starts_with(bytes, "Compressed Square Wave\x1A", 23)) {
         return CswTape::open(bytes, name);
     }
-    throw std::runtime_error("The file " + name + " is not a UEF or CSW tape image.");
+    throw TapeImageError(TapeImageError::Kind::UnsupportedFormat, "The file " + name + " is not a UEF or CSW tape image.");
 }
 
 std::unique_ptr<TapeSignal> open_tape_file(const std::filesystem::path& filepath) {
     const std::string name = filepath.filename().string();
+    std::error_code ec;
+    if (!std::filesystem::exists(filepath, ec)) {
+        throw TapeImageError(TapeImageError::Kind::CannotOpen,
+                             "The tape image " + name + " could not be found.");
+    }
     std::ifstream file(filepath, std::ios::binary);
     if (!file) {
-        throw std::runtime_error("The tape image " + filepath.string() + " could not be opened.");
+        throw TapeImageError(TapeImageError::Kind::CannotOpen, "The tape image " + name + " could not be opened.");
     }
     const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    if (bytes.empty()) {
+        throw TapeImageError(TapeImageError::Kind::Unreadable, "The file " + name + " is empty.");
+    }
     return open_tape_image(bytes, name);
 }
 

@@ -41,7 +41,7 @@ public:
     void seek(TapeTime time) override;
     std::optional<TapeTime> duration() const override;
     TapeKind kind() const override { return TapeKind::Csw; }
-    const TapeMetadata& metadata() const override { return metadata_; }
+    const TapeImageMetadata& metadata() const override { return metadata_; }
 
     uint32_t sample_rate() const { return sample_rate_; }
 
@@ -55,7 +55,7 @@ private:
     // Every this many pulses the running sample count is kept, for seeking.
     static constexpr size_t CHECKPOINT_INTERVAL = 4096;
 
-    TapeMetadata metadata_;
+    TapeImageMetadata metadata_;
     uint32_t sample_rate_ = 0;
     bool initial_level_ = false;
     uint32_t gap_samples_ = 0;            // a pulse longer than this is silence

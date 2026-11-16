@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -50,7 +51,7 @@ struct TapeItem {
 };
 
 // What a tape image says about itself, where it says anything.
-struct TapeMetadata {
+struct TapeImageMetadata {
     std::string title;
     std::string origin;
     std::string target_machine;
@@ -59,6 +60,23 @@ struct TapeMetadata {
 };
 
 enum class TapeKind : uint8_t { Uef, Csw };
+
+// Why a tape image could not be opened. The message is a sentence naming the
+// file; the kind lets a service classify it.
+class TapeImageError : public std::runtime_error {
+public:
+    enum class Kind : uint8_t {
+        CannotOpen,         // missing, or no permission
+        Unreadable,         // opened, but could not be read to the end (empty, truncated, damaged)
+        UnsupportedFormat,  // not a tape image Beebium reads
+        InvalidImage,       // recognised, but refused (a disc chunk, a version, a value out of range)
+    };
+    TapeImageError(Kind kind, const std::string& sentence) : std::runtime_error(sentence), kind_(kind) {}
+    Kind kind() const { return kind_; }
+
+private:
+    Kind kind_;
+};
 
 // The seam between a tape and the deck: a source of edges in tape time.
 //
@@ -82,7 +100,7 @@ public:
 
     virtual TapeKind kind() const = 0;
 
-    virtual const TapeMetadata& metadata() const = 0;
+    virtual const TapeImageMetadata& metadata() const = 0;
 };
 
 // Convert seconds to tape time.

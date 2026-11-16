@@ -58,12 +58,12 @@ public:
         return items_.empty() ? 0 : items_.back().time + 1;
     }
     TapeKind kind() const override { return TapeKind::Uef; }
-    const TapeMetadata& metadata() const override { return metadata_; }
+    const TapeImageMetadata& metadata() const override { return metadata_; }
 
 private:
     std::vector<TapeItem> items_;
     size_t pos_ = 0;
-    TapeMetadata metadata_;
+    TapeImageMetadata metadata_;
 };
 
 // Edges at `start`, then every `spacing` clocks, `count` in all.

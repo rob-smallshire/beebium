@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package beebium;
+
+// The cassette deck behind the Serial ULA's cassette interface.
+//
+// One deck, so no drive number anywhere. The deck is the user's transport:
+// inserting leaves it stopped at the start, and play is a separate request. The
+// tape moves only while the deck plays and the machine's motor relay (Serial
+// ULA latch bit 7) is closed. Every unsuccessful response carries a sentence
+// naming the tape by the name the client gave, and a kind.
+service CassetteService {
+    // Insert a UEF or CSW tape image the server can reach. The format is
+    // judged by content. Fails if a tape is already in.
+    rpc InsertTape(InsertTapeRequest) returns (InsertTapeResponse);
+
+    // Stop and remove the tape.
+    rpc EjectTape(EjectTapeRequest) returns (CassetteResponse);
+
+    // The deck's keys. Play at the end of the tape succeeds and leaves the
+    // deck stopped at the end. Seek beyond the end lands at the end.
+    rpc Play(PlayRequest) returns (CassetteResponse);
+    rpc Stop(StopRequest) returns (CassetteResponse);
+    rpc Seek(SeekRequest) returns (CassetteResponse);
+
+    // The deck's state, read without stopping the machine.
+    rpc GetDeckStatus(GetDeckStatusRequest) returns (DeckStatus);
+
+    // The current status at once, then a status on every change of presence,
+    // transport, relay or tape, and while the deck plays the position no more
+    // often than min_interval_ms of emulated time.
+    rpc SubscribeDeckStatus(SubscribeDeckStatusRequest) returns (stream DeckStatus);
+}
+
+enum CassetteErrorKind {
+    CASSETTE_ERROR_KIND_UNSPECIFIED = 0;
+    CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE = 1;  // the model has no cassette interface
+    CASSETTE_ERROR_KIND_CANNOT_OPEN = 2;            // missing, or no permission
+    CASSETTE_ERROR_KIND_UNREADABLE = 3;             // opened, but could not be read to the end
+    CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT = 4;     // not a UEF or CSW
+    CASSETTE_ERROR_KIND_INVALID_IMAGE = 5;          // recognised, but refused (a disc chunk, a version, a value out of range)
+    CASSETTE_ERROR_KIND_DECK_OCCUPIED = 6;          // insert with a tape in
+    CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop or seek with no tape
+    CASSETTE_ERROR_KIND_INVALID_POSITION = 8;       // a seek to a negative position
+}
+
+enum TapeTransport {
+    TAPE_TRANSPORT_STOPPED = 0;
+    TAPE_TRANSPORT_PLAYING = 1;
+}
+
+message TapeMetadata {
+    string name = 1;              // the file's name
+    string url = 2;               // the source, as given
+    string format = 3;            // "UEF" or "CSW"
+    string title = 4;             // the image's own title (UEF &0009), else empty
+    string origin = 5;            // the tool that made the image (UEF &0000, the CSW's application), else empty
+    string target_machine = 6;    // the machine the image says it is for (UEF &0005), else empty
+    double duration_seconds = 7;  // the tape's length; 0 when unknown
+}
+
+message DeckStatus {
+    bool has_cassette_interface = 1;  // false on a model without one
+    bool tape_inserted = 2;           // (not has_tape: protobuf derives has_tape() from field 3)
+    TapeMetadata tape = 3;            // set when tape_inserted
+    TapeTransport transport = 4;
+    double position_seconds = 5;      // tape time, in seconds of the ULA clock
+    bool motor_on = 6;                // the relay, latch bit 7, whether or not a tape is in
+    string ula_part = 7;              // "ferranti" or "vlsi"
+}
+
+message InsertTapeRequest {
+    string url = 1;                   // a file:// URI or an absolute path
+}
+
+message InsertTapeResponse {
+    bool success = 1;
+    string error = 2;                 // a sentence when !success
+    CassetteErrorKind kind = 3;
+    TapeMetadata tape = 4;            // set on success
+}
+
+message CassetteResponse {
+    bool success = 1;
+    string error = 2;                 // a sentence when !success
+    CassetteErrorKind kind = 3;
+}
+
+message EjectTapeRequest {}
+message PlayRequest {}
+message StopRequest {}
+
+message SeekRequest {
+    double position_seconds = 1;
+}
+
+message GetDeckStatusRequest {}
+
+message SubscribeDeckStatusRequest {
+    uint32 min_interval_ms = 1;       // default 100
+}

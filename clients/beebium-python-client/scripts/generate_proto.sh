@@ -78,6 +78,7 @@ python -m grpc_tools.protoc \
     "$PROTO_DIR/audio.proto" \
     "$PROTO_DIR/system.proto" \
     "$PROTO_DIR/disc.proto" \
+    "$PROTO_DIR/cassette.proto" \
     "$PROTO_DIR/econet.proto" \
     "$PROTO_DIR/econet_transport.proto" \
     "$PROTO_DIR/serial.proto" \

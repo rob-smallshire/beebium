@@ -156,7 +156,7 @@ std::unique_ptr<UefTape> UefTape::open(std::span<const uint8_t> bytes, const std
     if (cassette_detail::has_gzip_magic(bytes)) {
         auto result = cassette_detail::inflate_all(bytes, cassette_detail::Container::Gzip);
         if (!result) {
-            throw std::runtime_error("The file " + name + " is a damaged gzip file.");
+            throw TapeImageError(TapeImageError::Kind::Unreadable, "The file " + name + " is a damaged gzip file.");
         }
         inflated = std::move(*result);
         bytes = inflated;
@@ -164,12 +164,12 @@ std::unique_ptr<UefTape> UefTape::open(std::span<const uint8_t> bytes, const std
 
     static constexpr char MAGIC[] = "UEF File!";  // ten bytes with its NUL
     if (bytes.size() < 12 || std::memcmp(bytes.data(), MAGIC, 10) != 0) {
-        throw std::runtime_error("The file " + name + " is not a UEF tape image.");
+        throw TapeImageError(TapeImageError::Kind::UnsupportedFormat, "The file " + name + " is not a UEF tape image.");
     }
     const unsigned minor = bytes[10];
     const unsigned major = bytes[11];
     if (major != 0) {
-        throw std::runtime_error("The file " + name + " is a UEF of version " + std::to_string(major) +
+        throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name + " is a UEF of version " + std::to_string(major) +
                                  "." + std::to_string(minor) + ", which Beebium does not read.");
     }
 
@@ -179,14 +179,14 @@ std::unique_ptr<UefTape> UefTape::open(std::span<const uint8_t> bytes, const std
     size_t pos = 12;
     while (pos < bytes.size()) {
         if (pos + 6 > bytes.size()) {
-            throw std::runtime_error("The file " + name + " ends part way through a chunk header.");
+            throw TapeImageError(TapeImageError::Kind::Unreadable, "The file " + name + " ends part way through a chunk header.");
         }
         Chunk chunk;
         chunk.id = read_u16(&bytes[pos]);
         const uint32_t length = read_u32(&bytes[pos + 2]);
         pos += 6;
         if (length > bytes.size() - pos) {
-            throw std::runtime_error("The file " + name + " ends part way through chunk " +
+            throw TapeImageError(TapeImageError::Kind::Unreadable, "The file " + name + " ends part way through chunk " +
                                      chunk_id_text(chunk.id) + ".");
         }
         chunk.body.assign(bytes.begin() + static_cast<std::ptrdiff_t>(pos),
@@ -194,7 +194,7 @@ std::unique_ptr<UefTape> UefTape::open(std::span<const uint8_t> bytes, const std
         pos += length;
 
         if (chunk.id >= 0x0200) {
-            throw std::runtime_error("The file " + name + " contains chunk " + chunk_id_text(chunk.id) +
+            throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name + " contains chunk " + chunk_id_text(chunk.id) +
                                      ", which holds a disc, a ROM or a machine's state rather than "
                                      "tape, so Beebium does not read it.");
         }
@@ -252,7 +252,7 @@ void UefTape::render(size_t index, RenderState& state, std::vector<TapeItem>* ou
     Renderer r(state, out);
     auto need = [&](size_t n) {
         if (b.size() < n) {
-            throw std::runtime_error("The file " + name_ + " has a chunk " + chunk_id_text(chunk.id) +
+            throw TapeImageError(TapeImageError::Kind::Unreadable, "The file " + name_ + " has a chunk " + chunk_id_text(chunk.id) +
                                      " that is too short.");
         }
     };
@@ -266,13 +266,13 @@ void UefTape::render(size_t index, RenderState& state, std::vector<TapeItem>* ou
             need(3);
             const unsigned data_bits = b[0];
             if (data_bits != 7 && data_bits != 8) {
-                throw std::runtime_error("The file " + name_ + " has a chunk &0104 with " +
+                throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name_ + " has a chunk &0104 with " +
                                          std::to_string(data_bits) +
                                          " data bits a packet, which Beebium does not read.");
             }
             char parity = static_cast<char>(b[1]);
             if (parity != 'N' && parity != 'E' && parity != 'O') {
-                throw std::runtime_error("The file " + name_ + " has a chunk &0104 with an unknown parity.");
+                throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name_ + " has a chunk &0104 with an unknown parity.");
             }
             if (makeuef_parity_swap_) {
                 if (parity == 'E') parity = 'O';
@@ -316,7 +316,7 @@ void UefTape::render(size_t index, RenderState& state, std::vector<TapeItem>* ou
                 std::ostringstream text;
                 text << "The file " << name_ << " changes the base frequency to " << hz
                      << " Hz, which is outside 100 to 10000 Hz.";
-                throw std::runtime_error(text.str());
+                throw TapeImageError(TapeImageError::Kind::InvalidImage, text.str());
             }
             state.base_hz = hz;
             break;
@@ -358,7 +358,7 @@ void UefTape::render(size_t index, RenderState& state, std::vector<TapeItem>* ou
             need(2);
             const unsigned baud = read_u16(b.data());
             if (baud != 300 && baud != 1200) {
-                throw std::runtime_error("The file " + name_ + " selects a data encoding of " +
+                throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name_ + " selects a data encoding of " +
                                          std::to_string(baud) + " baud, which is neither 300 nor 1200.");
             }
             state.encoding_300 = baud == 300;

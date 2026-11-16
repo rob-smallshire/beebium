@@ -19,6 +19,7 @@
 #include "beebium/service/DebuggerService.hpp"
 #include "beebium/service/HostDebugTarget.hpp"
 #include "beebium/service/DeviceInspectionService.hpp"
+#include "beebium/service/CassetteService.hpp"
 #include "beebium/service/DiscService.hpp"
 #include "beebium/service/IndicatorService.hpp"
 #include "beebium/service/SystemService.hpp"
@@ -223,6 +224,7 @@ private:
         std::unique_ptr<DebuggerControlServiceImpl> debugger_control_service;
         std::unique_ptr<DeviceInspectionServiceImpl<MachineType>> device_inspection_service;
         std::unique_ptr<DiscServiceImpl<MachineType>> disc_service;
+        std::unique_ptr<CassetteServiceImpl<MachineType>> cassette_service;
         std::unique_ptr<IndicatorServiceImpl<MachineType>> indicator_service;
         std::unique_ptr<SystemServiceImpl<MachineType>> system_service;
         MachineStore* machine_store = nullptr;
@@ -381,6 +383,8 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         impl_->machine);
     impl_->disc_service->set_blank_discs_dirpath(impl_->blank_discs_dirpath);
 
+    impl_->cassette_service = std::make_unique<CassetteServiceImpl<MachineType>>(impl_->machine);
+
     impl_->indicator_service = std::make_unique<IndicatorServiceImpl<MachineType>>(
         impl_->machine);
 
@@ -448,6 +452,7 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
     builder.RegisterService(impl_->debugger_control_service.get());
     builder.RegisterService(impl_->device_inspection_service.get());
     builder.RegisterService(impl_->disc_service.get());
+    builder.RegisterService(impl_->cassette_service.get());
     builder.RegisterService(impl_->indicator_service.get());
     builder.RegisterService(impl_->system_service.get());
     builder.RegisterService(impl_->audio_service.get());
@@ -530,6 +535,7 @@ void Server<MachineType>::stop() {
     impl_->debugger_control_service.reset();
     impl_->device_inspection_service.reset();
     impl_->disc_service.reset();
+    impl_->cassette_service.reset();
     impl_->indicator_service.reset();
     impl_->system_service.reset();
     impl_->audio_service.reset();
