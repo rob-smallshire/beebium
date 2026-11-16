@@ -344,8 +344,8 @@ the form the preset gave it. A `filepath` or `dirpath` parameter is resolved as 
 ### Attachment
 
 An extension attaches to the points named in its manifest's `attaches_to`: a
-connector of the machine (`1mhz-bus`, `user-port`, `printer-port`, `tube`,
-`serial-port`), or
+connector of the machine (`1mhz-bus`, `user-port`, `printer-port`,
+`analogue-port`, `tube`, `serial-port`), or
 a point another extension provides (a SCSI host adapter provides `scsi`).
 Before anything is loaded, the launch works out where each instance would
 attach (`check_attachments`, the same rules the extension registry applies
@@ -424,7 +424,7 @@ floppy drives. What differs:
 | `storage.fdc_socket` | Yes: socketed controller | Ignored: built-in WD1770 |
 | Default DFS ROM | No | Yes |
 | Sideways slots and types | Per board (see `describe-preset-schema`) | Per model |
-| Attachment points | `1mhz-bus`, `user-port`, `printer-port`, `tube`, `serial-port` | The same |
+| Attachment points | `1mhz-bus`, `user-port`, `printer-port`, `analogue-port`, `tube`, `serial-port` | The same |
 
 `describe-preset-schema` is the authoritative per-model answer, since it is
 generated from the model's own definition.

@@ -598,6 +598,7 @@ Read-only access to BBC Micro peripheral state. Host-only; parasite returns UNIM
 | `GetAddressableLatchState` | `AddressableLatchState` | IC32 latch: screen base, LEDs, sound/speech enables |
 | `GetSoundGeneratorState` | `SoundGeneratorState` | SN76489: 4 channels with frequency, volume, LFSR state |
 | `GetTubeState` | `TubeState` | Tube ULA: control flags, all registers, FIFOs, status, interrupts, transfer counters |
+| `GetAnalogueConverterState` | `AnalogueConverterState` | uPD7002: status and result as the guest reads them, the control bits last written, busy, the EOC level on System VIA CB1, 1 MHz clocks remaining in the conversion in progress, and the four input levels; read under quiesce (see `docs/analogue-port.md`) |
 
 ```bash
 # Inspect System VIA state

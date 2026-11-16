@@ -31,6 +31,7 @@ Moreover, this architecture also facilitates native GUIs with first-class host p
   - *Storage* — Acorn SCSI host adapter and SCSI hard-disc targets
   - *Real-time clock* — Acorn user-port RTC module
   - *Sound* -- Hybrid Music 5000 synthesiser and Music 3000 expander on the 1 MHz bus, with the board's own analogue output filter ([docs/music-5000.md](docs/music-5000.md))
+  - *Analogue port* -- the uPD7002 converter with its measured conversion timing, a joystick, and the Voltmace Delta 14B/1 adapter with two Delta 14B handsets in the analogue and user ports together; a client sets their sticks and buttons through `ControllerService` ([docs/analogue-port.md](docs/analogue-port.md))
 - **Headless core** — deterministic, UI-free emulation server
 - **Process separation** — core and frontends communicate via gRPC
 - **Platform-native frontends** — native UI using Cocoa and Metal on macOS

@@ -2282,7 +2282,8 @@ home window open -> the client stays, showing the home window.
 Profile: Peripheral management. Binding document: `analogue-port.md` (the
 Controllers and The joystick sections). Service: `controller.proto
 ControllerService`. Chapter 7 is the keyboard alone, so controllers have their
-own chapter.
+own chapter. As of 0.19.0 the Python and TypeScript clients implement it and
+neither the macOS nor the Linux app does; those are the client rounds below.
 
 Behaviour. A controller is a device a person holds or points at the screen: a
 joystick, a handset, a mouse, a light pen. Each attached controller publishes named
