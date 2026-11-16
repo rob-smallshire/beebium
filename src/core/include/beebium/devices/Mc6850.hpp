@@ -14,6 +14,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 namespace beebium {
 
@@ -30,18 +31,39 @@ namespace beebium {
 //
 // The ACIA does not generate its own bit-rate clock. On the BBC the transmit
 // and receive clocks are supplied by the Serial ULA (SERPROC, &FE10), which
-// also selects RS423 vs cassette. The ACIA's own counter-divide bits select
-// /1, /16 or /64 (or a master reset); on the BBC the MOS programs /64. Because
-// the SerialUla in this emulator owns all bit-rate timing, this model processes
-// exactly one serial bit per update_transmit()/update_receive() call and treats
-// the counter-divide field as informational (apart from detecting master reset).
-// This mirrors b2's approach ("REMOVED CLOCK DIVISION - SERPROC already handles
-// timing").
+// also selects RS423 or cassette. The ACIA counts those clocks and divides
+// them by 1, 16 or 64 as its counter-divide field says, exactly as the device
+// does: receive_clock() and transmit_clock() are each one external clock
+// pulse. MOS 1.20 runs RS423 at /64; the cassette uses /16 for 1200 baud and
+// /64 for 300 baud from one fixed ULA clock.
 //
-// This is a bit-level model: the transmit and receive paths walk a start /
-// data / (parity) / stop-bit state machine one bit at a time, tracking parity
-// and framing errors and receiver overrun, exactly as the real device does.
-// The SerialUla shifts those bits to and from a byte-oriented host transport.
+// Receiver (datasheet, "Receive"): at /16 and /64 it hunts for RxD low and
+// confirms the start bit once RxD has been low for 8 or 32 clocks, half a bit;
+// a shorter low is ignored. It then samples each following bit 16 or 64
+// clocks later, mid-bit. At /1 it samples RxD on every clock (the caller
+// supplies a synchronised clock). The frame is start, 7 or 8 data bits LSB
+// first, an optional parity bit and 1 or 2 stop bits, as Word Select says,
+// with framing, parity and overrun detection.
+//
+// Transmitter: every 1, 16 or 64 clocks it advances one bit of the frame and
+// reports the new TxD level and the bit's role, so the Serial ULA can
+// assemble bytes for a host transport or drive cassette tones.
+//
+// /DCD: a low-to-high transition sets status bit 2 and raises the receive
+// interrupt when CR7 is set. The bit stays set until the data register is
+// read, however many times the status register is read in between; after
+// that it follows the pin. This follows measurements on real machines
+// (reported by the beebjit and jsbeeb authors) rather than the datasheet's
+// status-then-data sequence; it is an unverified decision of the cassette
+// specification. While /DCD is high the receiver is held in reset and RDRF
+// reads clear.
+//
+// Master reset (counter divide 11) clears the control register, so /RTS is low
+// and both interrupts are disabled until the guest writes it again (an
+// unverified decision of the cassette specification, from beebjit's
+// measurement; the tape loader of Frak depends on it). TDRE and IRQ read low
+// and the receiver and transmitter are held until a control value with a
+// non-reset divide is written.
 //
 // Conventions for the control/handshake pins follow the datasheet's active-low
 // naming (/DCD, /CTS, /RTS): a "not_dcd" value of true means the /DCD pin is
@@ -80,7 +102,7 @@ public:
     // --- Status Register bits (read from offset 0) ---
     static constexpr uint8_t SR_RDRF    = 0x01;  // Receive Data Register Full
     static constexpr uint8_t SR_TDRE    = 0x02;  // Transmit Data Register Empty
-    static constexpr uint8_t SR_NOT_DCD = 0x04;  // /DCD (1 = no carrier)
+    static constexpr uint8_t SR_NOT_DCD = 0x04;  // /DCD (1 = no carrier, or latched edge)
     static constexpr uint8_t SR_NOT_CTS = 0x08;  // /CTS (1 = not clear to send)
     static constexpr uint8_t SR_FE      = 0x10;  // Framing Error
     static constexpr uint8_t SR_OVRN    = 0x20;  // Receiver Overrun
@@ -90,15 +112,14 @@ public:
     // Parity mode derived from the Word Select field.
     enum class Parity : uint8_t { None, Odd, Even };
 
-    // The type of bit produced by update_transmit(). The SerialUla uses this to
-    // frame outgoing bytes (it only needs Start/Data/Stop, but the full set is
-    // reported for completeness and tracing).
-    enum class BitType : uint8_t { None, Start, Data, Parity, Stop, Break };
+    // The role of the bit the transmitter starts at a bit boundary. The Serial
+    // ULA uses this to frame outgoing bytes.
+    enum class BitType : uint8_t { Idle, Start, Data, Parity, Stop, Break };
 
-    // One serialised transmit bit plus its role in the frame.
+    // One transmitted bit: the TxD level from this boundary on, and its role.
     struct TransmitResult {
         uint8_t bit = 1;            // line level (idle = 1)
-        BitType type = BitType::None;
+        BitType type = BitType::Idle;
     };
 
     Mc6850() { reset(); }
@@ -120,20 +141,20 @@ public:
     // --- CPU-facing register operations ---
 
     void write_control(uint8_t value) {
-        control_ = value;
-        switch (value & CR_COUNTER_DIVIDE_MASK) {
-            case COUNTER_DIVIDE_MASTER_RESET:
-                reset();
-                break;
-            default:
-                break;
+        if ((value & CR_COUNTER_DIVIDE_MASK) == COUNTER_DIVIDE_MASTER_RESET) {
+            reset();
+            control_ = 0;
+            in_master_reset_ = true;
+        } else {
+            control_ = value;
+            in_master_reset_ = false;
         }
         update_irqs();
     }
 
     void write_data(uint8_t value) {
-        // Loading TDR clears TDRE; the byte will be serialised by the TX state
-        // machine, which is pumped one bit at a time from update_transmit().
+        // Loading TDR clears TDRE; the byte is serialised from the next bit
+        // boundary of the transmit clock.
         tdr_ = value;
         tx_tdre_ = false;
         irq_tx_ = false;
@@ -145,10 +166,11 @@ public:
     }
 
     uint8_t read_data() {
-        // Reading RDR clears RDRF and the receive IRQ cause, and reveals any
-        // overrun that was latched while RDRF was still set.
+        // Reading RDR clears RDRF, the receive IRQ cause and the /DCD latch,
+        // and reveals any overrun that was latched while RDRF was still set.
         rdrf_ = false;
         irq_rx_ = false;
+        dcd_latched_ = false;
         update_irqs();
 
         if (rx_ovrn_pending_) {
@@ -166,8 +188,18 @@ public:
 
     // --- Handshake input pins (driven by the Serial ULA) ---
 
-    // /DCD: true = pin HIGH = no carrier (receiver held idle).
-    void set_not_dcd(bool not_dcd) { not_dcd_ = not_dcd; }
+    // /DCD: true = pin HIGH = no carrier. A rising edge latches status bit 2
+    // and the receive interrupt; while high the receiver is held in reset.
+    void set_not_dcd(bool not_dcd) {
+        if (not_dcd && !not_dcd_) {
+            dcd_latched_ = true;
+            irq_rx_ = true;
+            rdrf_ = false;
+            rx_state_ = RxState::Hunt;
+            update_irqs();
+        }
+        not_dcd_ = not_dcd;
+    }
 
     // /CTS: true = pin HIGH = not clear to send (TDRE reported as 0).
     void set_not_cts(bool not_cts) { not_cts_ = not_cts; }
@@ -177,40 +209,171 @@ public:
         return tx_control() == TX_CTRL_RTS_HIGH_NO_IRQ;
     }
 
-    // --- Bit-level serial engine (driven by the Serial ULA bit clock) ---
+    // --- Clock inputs (driven by the Serial ULA) ---
 
-    // Advance the receive state machine by one received bit. The line idles
-    // high (bit = 1); a start bit is a 0. Sets RDRF (and FE/PE/OVRN) when a
-    // whole character has been clocked in.
-    void update_receive(uint8_t bit) {
-        // A 0->1 transition on /DCD (carrier lost) latches a receive interrupt
-        // condition, matching the datasheet note that the Rx clock must be
-        // running for /DCD to be processed.
-        if (!old_not_dcd_ && not_dcd_) {
-            irq_rx_ = true;
-            update_irqs();
+    // One receive clock pulse with RxD at the given level (true = mark/high).
+    void receive_clock(bool rxd) { receive_clocks(1, rxd); }
+
+    // n receive clock pulses with RxD held at one level. The sampling points
+    // are identical to n calls of receive_clock().
+    void receive_clocks(uint32_t n, bool rxd) {
+        if (in_master_reset_ || not_dcd_) {
+            return;
         }
-        old_not_dcd_ = not_dcd_;
+        const uint32_t divide = divide_ratio();
+        while (n > 0) {
+            switch (rx_state_) {
+                case RxState::Hunt:
+                    if (rxd) {
+                        return;  // idle line: nothing changes however long it lasts
+                    }
+                    --n;
+                    if (divide == 1) {
+                        begin_frame(1);  // external synchronisation: next clock is bit 0
+                    } else {
+                        rx_low_count_ = 1;
+                        rx_state_ = RxState::Confirm;
+                        if (rx_low_count_ == divide / 2) begin_frame(divide);
+                    }
+                    break;
+                case RxState::Confirm: {
+                    if (rxd) {
+                        // A low shorter than half a bit is not a start bit.
+                        rx_state_ = RxState::Hunt;
+                        rx_low_count_ = 0;
+                        break;
+                    }
+                    const uint32_t needed = divide / 2 - rx_low_count_;
+                    const uint32_t take = n < needed ? n : needed;
+                    rx_low_count_ += take;
+                    n -= take;
+                    if (rx_low_count_ >= divide / 2) {
+                        begin_frame(divide);
+                    }
+                    break;
+                }
+                default: {
+                    const uint32_t take = n < rx_countdown_ ? n : rx_countdown_;
+                    rx_countdown_ -= take;
+                    n -= take;
+                    if (rx_countdown_ == 0) {
+                        rx_countdown_ = divide;
+                        sample_bit(rxd ? 1 : 0);
+                    }
+                    break;
+                }
+            }
+        }
+    }
 
+    // One transmit clock pulse. At a bit boundary (every 1, 16 or 64 clocks)
+    // returns the new TxD level and the bit's role; otherwise nothing.
+    std::optional<TransmitResult> transmit_clock() {
+        if (in_master_reset_) {
+            return std::nullopt;
+        }
+        if (++tx_count_ < divide_ratio()) {
+            return std::nullopt;
+        }
+        tx_count_ = 0;
+        return next_transmit_bit();
+    }
+
+    // --- IRQ output (wired to the shared CPU IRQ line) ---
+
+    // True when an enabled interrupt condition is active. Master reset
+    // suppresses the IRQ output, as on the real device.
+    bool irq_pending() const {
+        if (in_master_reset_) {
+            return false;
+        }
+        return irq_out_rx_ || irq_out_tx_;
+    }
+
+    // Master reset: clears the transmitter and receiver and the status
+    // register, leaving the /DCD and /CTS pin levels intact. The control
+    // register is cleared by a master-reset write (write_control), not here.
+    void reset() {
+        tx_state_ = TxState::Idle;
+        tx_tdre_ = true;
+        tx_count_ = 0;
+        rx_state_ = RxState::Hunt;
+        rx_low_count_ = 0;
+        rx_countdown_ = 0;
+        rdrf_ = false;
+        fe_ = false;
+        pe_ = false;
+        ovrn_ = false;
+        rx_ovrn_pending_ = false;
+        dcd_latched_ = false;
+        irq_rx_ = false;
+        irq_tx_ = false;
+        irq_out_rx_ = false;
+        irq_out_tx_ = false;
+    }
+
+    // --- Accessors for tests / debugging ---
+
+    uint8_t control() const { return control_; }
+    uint8_t status() const { return status_value(); }
+    uint8_t tx_control() const {
+        return (control_ & CR_TX_CONTROL_MASK) >> CR_TX_CONTROL_SHIFT;
+    }
+    uint8_t word_select() const {
+        return (control_ & CR_WORD_SELECT_MASK) >> CR_WORD_SELECT_SHIFT;
+    }
+    bool tdre() const { return tx_tdre_ && !not_cts_; }
+    bool rdrf() const { return rdrf_ && !not_dcd_; }
+    bool not_dcd() const { return not_dcd_; }
+    bool not_cts() const { return not_cts_; }
+    bool in_master_reset() const { return in_master_reset_; }
+
+    // Clocks per bit from the counter-divide field: 1, 16 or 64.
+    uint32_t divide_ratio() const {
+        switch (control_ & CR_COUNTER_DIVIDE_MASK) {
+            case COUNTER_DIVIDE_1: return 1;
+            case COUNTER_DIVIDE_16: return 16;
+            default: return 64;
+        }
+    }
+
+    // Word-format helpers (derived from the Word Select field).
+    Parity parity() const { return PARITY_BY_WORD_SELECT[word_select()]; }
+    bool eight_bit() const { return (word_select() & 0x04) != 0; }
+    bool one_stop_bit() const { return ONE_STOP_BIT_BY_WORD_SELECT[word_select()]; }
+
+private:
+    enum class TxState : uint8_t { Idle, DataBits, ParityBit, StopBits };
+    // Hunt: waiting for RxD low. Confirm: counting the low half of a start bit.
+    // The rest are the frame's bit positions, each sampled mid-bit.
+    enum class RxState : uint8_t { Hunt, Confirm, DataBits, ParityBit, StopBits };
+
+    // Word Select tables (indexed by the 3-bit field). Mirrors the MC6850
+    // datasheet encoding:
+    //   0: 7E2  1: 7O2  2: 7E1  3: 7O1  4: 8N2  5: 8N1  6: 8E1  7: 8O1
+    static constexpr Parity PARITY_BY_WORD_SELECT[8] = {
+        Parity::Even, Parity::Odd, Parity::Even, Parity::Odd,
+        Parity::None, Parity::None, Parity::Even, Parity::Odd,
+    };
+    static constexpr bool ONE_STOP_BIT_BY_WORD_SELECT[8] = {
+        false, false, true, true, false, true, true, true,
+    };
+
+    // The start bit is confirmed: the next sample falls `countdown` clocks on.
+    void begin_frame(uint32_t countdown) {
+        rx_state_ = RxState::DataBits;
+        rx_countdown_ = countdown;
+        rx_low_count_ = 0;
+        rx_mask_ = 1;
+        rx_data_ = 0;
+        rx_parity_ = 0;
+        rx_parity_error_ = false;
+        rx_framing_error_ = false;
+    }
+
+    // Process one sampled bit of the frame in progress.
+    void sample_bit(uint8_t bit) {
         switch (rx_state_) {
-            case RxState::Idle:
-                // The receiver only leaves idle once carrier is present.
-                if (!not_dcd_) {
-                    rx_state_ = RxState::StartBit;
-                }
-                break;
-
-            case RxState::StartBit:
-                if (!bit) {
-                    rx_state_ = RxState::DataBits;
-                    rx_mask_ = 1;
-                    rx_data_ = 0;
-                    rx_parity_ = 0;
-                    rx_parity_error_ = false;
-                    rx_framing_error_ = false;
-                }
-                break;
-
             case RxState::DataBits:
                 if (bit) {
                     rx_data_ |= rx_mask_;
@@ -238,7 +401,7 @@ public:
                 if (!bit) {
                     rx_framing_error_ = true;
                 }
-                if (advance_stop_mask(rx_mask_, rx_state_, RxState::StartBit)) {
+                if (advance_stop_mask(rx_mask_, rx_state_, RxState::Hunt)) {
                     // A newly received character clears a stale overrun.
                     // "Character synchronization is maintained during the
                     // Overrun condition": the receiver keeps delivering, so the
@@ -266,12 +429,15 @@ public:
                 }
                 break;
             }
+
+            default:
+                break;
         }
     }
 
-    // Advance the transmit state machine by one bit time and return the line
-    // level to drive plus its role in the frame.
-    TransmitResult update_transmit() {
+    // Advance the transmit frame by one bit and return the new line level
+    // plus its role.
+    TransmitResult next_transmit_bit() {
         switch (tx_state_) {
             case TxState::Idle:
                 if (tx_control() == TX_CTRL_RTS_LOW_BREAK) {
@@ -279,7 +445,7 @@ public:
                 }
                 if (tx_tdre_) {
                     // Nothing to send; hold the line idle high.
-                    return {1, BitType::None};
+                    return {1, BitType::Idle};
                 }
                 // Begin a new character: latch TDR, mark TDRE, raise TX IRQ.
                 tx_data_ = tdr_;
@@ -301,7 +467,10 @@ public:
             }
 
             case TxState::ParityBit:
-                if (parity() == Parity::Even) {
+                // tx_parity_ is the parity of the data bits sent. Even parity
+                // sends it as is, making the total number of ones even; odd
+                // parity sends its complement.
+                if (parity() == Parity::Odd) {
                     tx_parity_ ^= 1;
                 }
                 tx_mask_ = 1;
@@ -312,84 +481,21 @@ public:
                 advance_stop_mask(tx_mask_, tx_state_, TxState::Idle);
                 return {1, BitType::Stop};
         }
-        return {1, BitType::None};
+        return {1, BitType::Idle};
     }
-
-    // --- IRQ output (wired to the shared CPU IRQ line) ---
-
-    // True when an enabled interrupt condition is active. Master reset
-    // suppresses the IRQ output, as on the real device.
-    bool irq_pending() const {
-        if ((control_ & CR_COUNTER_DIVIDE_MASK) == COUNTER_DIVIDE_MASTER_RESET) {
-            return false;
-        }
-        return irq_out_rx_ || irq_out_tx_;
-    }
-
-    // Master reset: clears the transmitter and receiver state machines and the
-    // status register, leaving the /DCD and /CTS pin levels intact.
-    void reset() {
-        tx_state_ = TxState::Idle;
-        tx_tdre_ = true;
-        rx_state_ = RxState::Idle;
-        rdrf_ = false;
-        fe_ = false;
-        pe_ = false;
-        ovrn_ = false;
-        rx_ovrn_pending_ = false;
-        irq_rx_ = false;
-        irq_tx_ = false;
-        irq_out_rx_ = false;
-        irq_out_tx_ = false;
-    }
-
-    // --- Accessors for tests / debugging ---
-
-    uint8_t control() const { return control_; }
-    uint8_t status() const { return status_value(); }
-    uint8_t tx_control() const {
-        return (control_ & CR_TX_CONTROL_MASK) >> CR_TX_CONTROL_SHIFT;
-    }
-    uint8_t word_select() const {
-        return (control_ & CR_WORD_SELECT_MASK) >> CR_WORD_SELECT_SHIFT;
-    }
-    bool tdre() const { return tx_tdre_ && !not_cts_; }
-    bool rdrf() const { return rdrf_; }
-    bool not_dcd() const { return not_dcd_; }
-    bool not_cts() const { return not_cts_; }
-
-    // Word-format helpers (derived from the Word Select field).
-    Parity parity() const { return PARITY_BY_WORD_SELECT[word_select()]; }
-    bool eight_bit() const { return (word_select() & 0x04) != 0; }
-    bool one_stop_bit() const { return ONE_STOP_BIT_BY_WORD_SELECT[word_select()]; }
-
-private:
-    enum class TxState : uint8_t { Idle, DataBits, ParityBit, StopBits };
-    enum class RxState : uint8_t { Idle, StartBit, DataBits, ParityBit, StopBits };
-
-    // Word Select tables (indexed by the 3-bit field). Mirrors the MC6850
-    // datasheet encoding (and b2's PARITY_BY_WORD_SELECT/ONE_STOP_BIT tables):
-    //   0: 7E2  1: 7O2  2: 7E1  3: 7O1  4: 8N2  5: 8N1  6: 8E1  7: 8O1
-    static constexpr Parity PARITY_BY_WORD_SELECT[8] = {
-        Parity::Even, Parity::Odd, Parity::Even, Parity::Odd,
-        Parity::None, Parity::None, Parity::Even, Parity::Odd,
-    };
-    static constexpr bool ONE_STOP_BIT_BY_WORD_SELECT[8] = {
-        false, false, true, true, false, true, true, true,
-    };
 
     // Compose the status byte from latched flags plus the live pin levels.
     uint8_t status_value() const {
         uint8_t value = 0;
-        if (rdrf_) value |= SR_RDRF;
+        if (rdrf_ && !not_dcd_) value |= SR_RDRF;
         if (fe_)   value |= SR_FE;
         if (ovrn_) value |= SR_OVRN;
         if (pe_)   value |= SR_PE;
-        if (not_dcd_) value |= SR_NOT_DCD;
+        if (not_dcd_ || dcd_latched_) value |= SR_NOT_DCD;
         if (not_cts_) value |= SR_NOT_CTS;
         // Master reset forces TDRE and IRQ low until the divide bits are
         // reprogrammed to a non-reset value.
-        if ((control_ & CR_COUNTER_DIVIDE_MASK) != COUNTER_DIVIDE_MASTER_RESET) {
+        if (!in_master_reset_) {
             // /CTS high masks TDRE (the transmitter cannot signal "empty").
             if (tx_tdre_ && !not_cts_) value |= SR_TDRE;
             if (irq_out_rx_ || irq_out_tx_) value |= SR_IRQ;
@@ -431,9 +537,10 @@ private:
 
     // Control / status state
     uint8_t control_ = 0;
+    bool in_master_reset_ = false;
     bool not_dcd_ = false;
     bool not_cts_ = false;
-    bool old_not_dcd_ = false;
+    bool dcd_latched_ = false;
 
     uint8_t tdr_ = 0;   // transmit data register (CPU -> ACIA)
     uint8_t rdr_ = 0;   // receive data register (ACIA -> CPU)
@@ -444,16 +551,19 @@ private:
     bool ovrn_ = false;
     bool rx_ovrn_pending_ = false;
 
-    // Receive bit-engine
-    RxState rx_state_ = RxState::Idle;
+    // Receiver
+    RxState rx_state_ = RxState::Hunt;
+    uint32_t rx_low_count_ = 0;   // clocks of low seen while confirming a start bit
+    uint32_t rx_countdown_ = 0;   // clocks to the next mid-bit sample
     uint8_t rx_mask_ = 0;
     uint8_t rx_data_ = 0;
     uint8_t rx_parity_ = 0;
     bool rx_parity_error_ = false;
     bool rx_framing_error_ = false;
 
-    // Transmit bit-engine
+    // Transmitter
     TxState tx_state_ = TxState::Idle;
+    uint32_t tx_count_ = 0;       // clocks since the last bit boundary
     uint8_t tx_data_ = 0;
     uint8_t tx_mask_ = 0;
     uint8_t tx_parity_ = 0;

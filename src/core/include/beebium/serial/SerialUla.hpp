@@ -37,11 +37,11 @@ namespace beebium {
 // between the ACIA's bit-level serial engine and the byte-oriented host
 // transport (SerialDataSource / SerialDataSink):
 //
-//   Transmit (Beeb -> device): tick() pumps Mc6850::update_transmit() at the
+//   Transmit (Beeb -> device): tick() clocks Mc6850::transmit_clock() at the
 //     transmit bit rate, assembles the data bits (LSB first) into a byte, and
 //     delivers the byte to the sink on the stop bit.
 //   Receive (device -> Beeb): tick() pulls a byte from the source and clocks it
-//     into Mc6850::update_receive() one bit at a time at the receive bit rate,
+//     into Mc6850::receive_clocks() one bit at a time at the receive bit rate,
 //     framed as the ACIA's Word Select field specifies (start, 7 or 8 data bits
 //     LSB first, an optional parity bit, 1 or 2 stop bits). When idle it drives
 //     the receive line high.
@@ -221,7 +221,14 @@ private:
         // so /CTS releases promptly once the device reports ready again.
         acia_.set_not_cts(sink_ != nullptr && !sink_->accepts_more());
 
-        Mc6850::TransmitResult result = acia_.update_transmit();
+        // One bit time is as many transmit clocks as the ACIA divides by, so
+        // exactly one bit boundary falls within it.
+        Mc6850::TransmitResult result;
+        for (uint32_t i = acia_.divide_ratio(); i > 0; --i) {
+            if (const auto boundary = acia_.transmit_clock()) {
+                result = *boundary;
+            }
+        }
         switch (result.type) {
             case Mc6850::BitType::Start:
                 tx_byte_ = 0;
@@ -300,7 +307,8 @@ private:
                     break;
             }
         }
-        acia_.update_receive(bit);
+        // One bit time is as many receive clocks as the ACIA divides by.
+        acia_.receive_clocks(acia_.divide_ratio(), bit != 0);
     }
 
     // Latch a byte and the ACIA's current frame shape, then start clocking it.

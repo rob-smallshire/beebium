@@ -96,10 +96,11 @@ TEST_CASE("Model B serial ACIA IRQ reaches the IRQ aggregator", "[serial][socket
     Mc6850& acia = hw.serial_socket.acia();
     acia.write_control(CONTROL_8N1 | Mc6850::CR_RX_IRQ_ENABLE);
     acia.set_not_dcd(false);
-    acia.update_receive(1);
-    acia.update_receive(0);
-    for (int i = 0; i < 8; ++i) acia.update_receive((0x5A >> i) & 1);
-    acia.update_receive(1);
+    // 64 receive clocks a bit at the ACIA's /64.
+    acia.receive_clocks(64, true);
+    acia.receive_clocks(64, false);
+    for (int i = 0; i < 8; ++i) acia.receive_clocks(64, ((0x5A >> i) & 1) != 0);
+    acia.receive_clocks(64, true);
 
     REQUIRE(acia.irq_pending());
     CHECK((hw.poll_irq() & 0x10) != 0);
