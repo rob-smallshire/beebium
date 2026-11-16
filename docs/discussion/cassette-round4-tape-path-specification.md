@@ -189,7 +189,8 @@ gives 0.62 s before and 0.25 s between (the Welcome tape's shape).
 
 6. Separator: a 2400 Hz edge train gives 4 RxC pulses per edge, 16 per 1200-baud bit, and RxD 1
    after the third edge; a 1200 Hz train gives a timeout burst after 350 clocks, 16 per bit, and
-   RxD 0; a 90° intermediate gap of 384 clocks is short (no timeout); an edge 6 clocks into a
+   RxD 0; an intermediate gap of 340 clocks is short (no timeout) and one of 384 clocks (312 µs,
+   past the 284 µs timeout, as the findings say such gaps add bursts) is long; an edge 6 clocks into a
    burst truncates it to the two pulses issued so far.
 7. A byte of 8N1 rendered as edges arrives in the ACIA at /16 intact; the same tape at 300
    (&0117) arrives at /64; at the wrong divider it does not.
@@ -241,3 +242,14 @@ from a separate Release worktree before reporting done. The usual rules: `git co
 never amend, never push, no host or people names, no AI or model names in the body, your own
 trailer. Stop and ask if a `Decision` proves wrong in the code, and tell me what MOS 1.20 does
 if test 11 does not load first time: the separator and detector parameters are the suspects.
+
+## As built (round 4 closed)
+
+Delivered in cbbfac8f, 7da579fa and 7e0590f0; gate 4288 C++ cases, 985 Python, 773 TypeScript.
+Deviations accepted on review: test 17 (the commercial-tape corpus) lives in the Python suite as
+`test_cassette_corpus.py`, launched with `--tape` and reading bitmap screens through the server's
+screen text, and identifies each tape by the SHA-256 of the file itself; `UefBuilder`/`CswBuilder`
+are one `TapeBuilder` with `uef()` and `csw()` outputs from the same primitives; `duration()` is
+the end of the last half-cycle; the first edges after a silence recover a 0, so the ACIA frames
+one garbage byte as a leader starts, as on the machine. zlib is a direct dependency of the core
+(static bundles take vcpkg's). Idle cost about +0.8 ns per 2 MHz tick with no tape playing.
