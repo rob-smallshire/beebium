@@ -282,7 +282,7 @@ Beebium builds (F6). Presence is a hardware-policy trait, `has_cassette`, so a f
 Compact can say no while still having the ACIA.
 
 State: the tape (none, or one source with its name and kind: UEF, CSW, WAV, live); transport
-`stopped` or `playing`; position in tape time; total duration if known; the relay (from the
+`stopped`, `playing`, `recording` (round 6), `rewinding` or `fast_forwarding`; position in tape time; total duration if known; the relay (from the
 ULA); and the metadata the source offers.
 
 Rules:
@@ -298,8 +298,14 @@ Rules:
   as it would a dropout. Below real speed the ring runs dry and the guest hears silence. Neither
   is prevented; the status reports the ring's fill so a client can show it.
 - **Play and stop** are the user's. Inserting a tape leaves the deck stopped; a client may
-  offer insert-and-play as one gesture (two calls). **Seek** is instant to a tape time; rewind
-  is seek to zero. End of tape stops the transport (`Decision`: no looping).
+  offer insert-and-play as one gesture (two calls). **Seek** is instant to a tape time. End of
+  tape stops the transport (`Decision`: no looping).
+- **Winding** (Rob, 2026-11-16: "a back to the beginning button as well as rewind"). `Rewind`
+  and `FastForward` are transport states in which tape time runs backwards or forwards at a
+  fixed wind rate (`Decision`: 30 times real speed, a C60 side-to-side in two minutes, as a
+  real deck), not gated by the relay, ended by `Stop`, `Play`, `Seek`, eject or either end of
+  the tape, where the deck stops. The ULA receives no edges while winding. Back-to-beginning is
+  `Seek(0)`, instant.
 - **Eject** stops and removes the tape. A live source is "ejected" when its stream ends.
 - **Position** is reported in seconds (tape time / ULA clock rate) with the duration, so a
   client can draw a slider. No catalogue, no block names, no waveform.
@@ -383,7 +389,10 @@ the client's indicator rendering applies whatever hold-off it applies to the dri
 
 - **Client specification**: a new chapter "Cassette" in the storage profile, written in round 5
   before any GUI client implements it: insert (browse, drag and drop, recent tapes through the
-  recent-discs machinery, all server-judged), the deck keys, a position slider from position
+  recent-discs machinery, all server-judged), the deck keys (Rob's concessions, 2026-11-16: a
+  back-to-the-beginning button beside Rewind and Fast forward, and a position slider the user
+  scrubs with, guided only by a tape counter showing the position, "just like the real
+  thing"), a position slider from position
   and duration, the live input device picker (audio input devices the host lists, with no voice
   processing), and the error sentences. The chapter states that a client shows no catalogue or
   waveform.

@@ -19,6 +19,7 @@ gave, with a kind.
 | `Play` | nothing | `success`, `error`, `kind` |
 | `Stop` | nothing | `success`, `error`, `kind` |
 | `Seek` | `position_seconds` (double) | `success`, `error`, `kind` |
+| `Rewind`, `FastForward` | nothing | `success`, `error`, `kind`; the deck winds backwards or forwards at 30 times real speed, ungated by the relay, until `Stop`, `Play`, `Seek`, eject or an end of the tape |
 | `GetDeckStatus` | nothing | a `DeckStatus` |
 | `SubscribeDeckStatus` | `min_interval_ms` (uint32, default 100) | `stream DeckStatus` |
 
@@ -34,7 +35,8 @@ enum CassetteErrorKind {
     CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop or seek with no tape
 }
 
-enum TapeTransport { TAPE_TRANSPORT_STOPPED = 0; TAPE_TRANSPORT_PLAYING = 1; }
+enum TapeTransport { TAPE_TRANSPORT_STOPPED = 0; TAPE_TRANSPORT_PLAYING = 1;
+                     TAPE_TRANSPORT_REWINDING = 3; TAPE_TRANSPORT_FAST_FORWARDING = 4; }  // 2 is round 6's RECORDING
 
 message TapeMetadata {
     string name = 1;            // the file's name, as the client gave it
@@ -168,9 +170,12 @@ conformance and scenarios in the chapter's house style:
   recents list or a separate one is LATITUDE; the recording policy of 9.2 is MANDATORY). The
   server judges the format; the client filters its file dialogue by extension only as a
   convenience and never refuses a file itself.
-- **The deck keys**: Play, Stop, Rewind (seek 0), Eject, and a position slider from
-  `position_seconds` and `duration_seconds` that seeks on release; dragging while playing
-  seeks. The transport and the relay are shown. An insert-and-play gesture (a double-click, a
+- **The deck keys** (Rob's concessions, 2026-11-16): Play, Stop, Rewind and Fast forward (the
+  winding transports; the counter runs while they do), a Back-to-the-beginning button
+  (`Seek(0)`), Eject, a **tape counter** showing the position as minutes and seconds, and a
+  position slider from `position_seconds` and `duration_seconds` the user scrubs with (seek on
+  release; dragging while playing seeks). The counter and the slider are the only guide to
+  where anything is on the tape, as on a real deck. The transport and the relay are shown. An insert-and-play gesture (a double-click, a
   modifier on drop) is LATITUDE; the deck starts stopped after a plain insert. MANDATORY: play
   is separate from insert.
 - **What is not shown**: no block catalogue, no waveform, no decoded filenames. MANDATORY, from
@@ -226,6 +231,9 @@ position.
 4. `Play` with the motor off advances nothing in a second of emulated time; `*TAPE` then
    `CHAIN""` typed closes the relay and the position advances; `Stop` holds it; `Seek` to the
    duration leaves it stopped at the end; `Play` there stays stopped.
+4a. `Rewind` from 60 s reaches 0 after 2 s of emulated time and stops; `FastForward` from 0 on a
+   90 s tape stops at 90 s after 3 s; `Stop` mid-wind holds the position; `Play` mid-wind plays
+   from there; the relay open does not stop a wind; the ULA receives no edges while winding.
 5. `SubscribeDeckStatus(50)`: the first message is the current status; an insert, a play, a
    relay closure and a stop each produce a message in order; while playing with the relay closed
    two consecutive position messages are at least 50 ms of emulated time apart.
