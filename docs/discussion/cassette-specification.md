@@ -99,8 +99,9 @@ provided the ACIA's sampling points are unchanged.
   The ULA frames a received byte into RxD levels and holds each level for 64 RxC clocks
   regardless of the ACIA's divider, because the far end runs at the selected baud rate and
   knows nothing of the ACIA's setting. At /64 the ACIA sees the bits it sees today; at /16 or
-  /1 the guest reads garbage, as on the machine. The 175 serial tests are the regression net,
-  with their set-up constant corrected from &15 (/16, wrongly called "the MOS serial config")
+  /1 the guest reads garbage, as on the machine. The existing serial suites are the regression
+  net (round 3 left them at 4235 C++ cases overall, with `test_mc6850` at 24 cases and
+  `test_serial_ula` at 22), with their set-up constant corrected from &15 (/16, wrongly called "the MOS serial config")
   to &16 (/64, what MOS 1.20 uses on RS423).
 
 `Mc6850` changes: real division of the receive and transmit clocks, start-bit detection by

@@ -134,7 +134,11 @@ All in ULA clocks, from the programme's tables.
   divider as round 3 built it.
 
 **Mode.** With cassette selected the ULA takes receive clocks only from the separator; the RS423
-byte source's bytes are framed and lost as round 3 has it. /CTS low.
+byte source's bytes are framed and lost as round 3 has it. /CTS low. Keep the RS423 framer
+running in cassette mode: `HostSerialEndpoint` applies a pending re-point inside `has_data()`,
+which only the framer polls, and machines boot with the latch at 0 (cassette), so stopping the
+framer broke the host-serial re-point tests in round 3. That `has_data()`-as-tick contract is
+implicit; add a comment at the poll site naming it, and nothing more this round.
 
 ## Command line and assembly
 
