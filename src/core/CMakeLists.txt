@@ -19,6 +19,14 @@ add_library(beebium_core STATIC
     src/disc/formats/AdfsFormatHandler.cpp
     src/disc/formats/HfeFormatHandler.cpp
     src/econet/AunBackend.cpp
+    src/cassette/Inflate.cpp
+    src/cassette/UefTape.cpp
+    src/cassette/CswTape.cpp
+    src/cassette/TapeImage.cpp
+    include/beebium/cassette/TapeSignal.hpp
+    include/beebium/cassette/UefTape.hpp
+    include/beebium/cassette/CswTape.hpp
+    include/beebium/cassette/TapeImage.hpp
     src/TubeUla.cpp
     src/CoprocessorCpu.cpp
     src/CoprocessorRunner.cpp
@@ -83,6 +91,12 @@ target_link_libraries(beebium_core PUBLIC beebium_extension_api)
 # one way -- the core's bitmap strategy calls into the library; the library
 # knows nothing of the emulator.
 target_link_libraries(beebium_core PUBLIC screentext)
+
+# zlib inflates gzipped UEF tape images and Z-RLE CSW ones. It is already in
+# every build as a dependency of gRPC; it is named here because the core uses
+# it directly.
+find_package(ZLIB REQUIRED)
+target_link_libraries(beebium_core PRIVATE ZLIB::ZLIB)
 
 # USB serial-port identity enumeration needs platform SDKs: IOKit +
 # CoreFoundation on macOS (IOSerialBSDClient registry walk), setupapi on

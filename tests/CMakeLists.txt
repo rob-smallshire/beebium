@@ -498,6 +498,12 @@ add_executable(test_serial_ula test_serial_ula.cpp)
 target_link_libraries(test_serial_ula PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_serial_ula)
 
+# Cassette (#208): the tape signal seam and its UEF and CSW readers, against
+# tapes the tests build with tests/support/tape_builder.hpp.
+add_executable(test_tape_signal test_tape_signal.cpp)
+target_link_libraries(test_tape_signal PRIVATE beebium_core Catch2::Catch2WithMain ZLIB::ZLIB)
+catch_discover_tests(test_tape_signal)
+
 # Serial socket + Model B memory-map integration tests
 add_executable(test_serial_socket test_serial_socket.cpp)
 target_link_libraries(test_serial_socket PRIVATE beebium_core Catch2::Catch2WithMain)
