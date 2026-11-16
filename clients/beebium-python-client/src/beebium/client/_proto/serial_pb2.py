@@ -36,7 +36,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cserial.proto\x12\x07\x62\x65\x65\x62ium\"\x18\n\x16GetSerialStatusRequest\"3\n\x18WatchSerialStatusRequest\x12\x17\n\x0fmin_interval_ms\x18\x01 \x01(\r\"\xc9\x02\n\x0cSerialStatus\x12\x19\n\x11has_serial_socket\x18\x01 \x01(\x08\x12\x11\n\tconnector\x18\x10 \x01(\t\x12\x14\n\x0c\x61\x63ia_control\x18\x02 \x01(\r\x12\x13\n\x0b\x61\x63ia_status\x18\x03 \x01(\r\x12\x0c\n\x04tdre\x18\x04 \x01(\x08\x12\x0c\n\x04rdrf\x18\x05 \x01(\x08\x12\x0f\n\x07not_dcd\x18\x06 \x01(\x08\x12\x0f\n\x07not_cts\x18\x07 \x01(\x08\x12\x13\n\x0birq_pending\x18\x08 \x01(\x08\x12\x13\n\x0bula_control\x18\t \x01(\r\x12\x0f\n\x07tx_baud\x18\n \x01(\r\x12\x0f\n\x07rx_baud\x18\x0b \x01(\r\x12\x16\n\x0ers423_selected\x18\x0c \x01(\x08\x12\x10\n\x08motor_on\x18\r \x01(\x08\x12\x15\n\rtx_bit_period\x18\x0e \x01(\r\x12\x15\n\rrx_bit_period\x18\x0f \x01(\r2\xab\x01\n\rSerialService\x12I\n\x0fGetSerialStatus\x12\x1f.beebium.GetSerialStatusRequest\x1a\x15.beebium.SerialStatus\x12O\n\x11WatchSerialStatus\x12!.beebium.WatchSerialStatusRequest\x1a\x15.beebium.SerialStatus0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cserial.proto\x12\x07\x62\x65\x65\x62ium\"\x18\n\x16GetSerialStatusRequest\"3\n\x18WatchSerialStatusRequest\x12\x17\n\x0fmin_interval_ms\x18\x01 \x01(\r\"\xcb\x02\n\x0cSerialStatus\x12\x19\n\x11has_serial_socket\x18\x01 \x01(\x08\x12\x11\n\tconnector\x18\x10 \x01(\t\x12\x14\n\x0c\x61\x63ia_control\x18\x02 \x01(\r\x12\x13\n\x0b\x61\x63ia_status\x18\x03 \x01(\r\x12\x0c\n\x04tdre\x18\x04 \x01(\x08\x12\x0c\n\x04rdrf\x18\x05 \x01(\x08\x12\x0f\n\x07not_dcd\x18\x06 \x01(\x08\x12\x0f\n\x07not_cts\x18\x07 \x01(\x08\x12\x13\n\x0birq_pending\x18\x08 \x01(\x08\x12\x13\n\x0bula_control\x18\t \x01(\r\x12\x0f\n\x07tx_baud\x18\n \x01(\r\x12\x0f\n\x07rx_baud\x18\x0b \x01(\r\x12\x16\n\x0ers423_selected\x18\x0c \x01(\x08\x12\x10\n\x08motor_on\x18\r \x01(\x08\x12\x16\n\x0etx_ula_divider\x18\x0e \x01(\r\x12\x16\n\x0erx_ula_divider\x18\x0f \x01(\r2\xab\x01\n\rSerialService\x12I\n\x0fGetSerialStatus\x12\x1f.beebium.GetSerialStatusRequest\x1a\x15.beebium.SerialStatus\x12O\n\x11WatchSerialStatus\x12!.beebium.WatchSerialStatusRequest\x1a\x15.beebium.SerialStatus0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -48,7 +48,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_WATCHSERIALSTATUSREQUEST']._serialized_start=51
   _globals['_WATCHSERIALSTATUSREQUEST']._serialized_end=102
   _globals['_SERIALSTATUS']._serialized_start=105
-  _globals['_SERIALSTATUS']._serialized_end=434
-  _globals['_SERIALSERVICE']._serialized_start=437
-  _globals['_SERIALSERVICE']._serialized_end=608
+  _globals['_SERIALSTATUS']._serialized_end=436
+  _globals['_SERIALSERVICE']._serialized_start=439
+  _globals['_SERIALSERVICE']._serialized_end=610
 # @@protoc_insertion_point(module_scope)

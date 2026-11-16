@@ -53,6 +53,9 @@ message SerialStatus {
     uint32 rx_baud = 11;       // decoded receive baud rate
     bool rs423_selected = 12;  // RS423 (true) vs cassette (false)
     bool motor_on = 13;        // cassette motor relay
-    uint32 tx_bit_period = 14; // transmit bit period in 2MHz cycles
-    uint32 rx_bit_period = 15; // receive bit period in 2MHz cycles
+    // The ULA divider for each rate: ULA clocks (16/13 MHz) per transmit or
+    // receive clock delivered to the ACIA, which divides by 1, 16 or 64 itself.
+    // 19200 is 1, 9600 is 2, ... 300 is 64, 75 is 256.
+    uint32 tx_ula_divider = 14;
+    uint32 rx_ula_divider = 15;
 }

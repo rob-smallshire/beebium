@@ -14,46 +14,68 @@
 #pragma once
 
 #include "SerialDevice.hpp"
-#include "../ClockTypes.hpp"
 #include "../devices/Mc6850.hpp"
 
 #include <cstdint>
+#include <optional>
 
 namespace beebium {
 
-// Serial ULA (SERPROC) emulation — the Ferranti serial processor at &FE10.
+// Serial ULA (SERPROC) emulation: the serial processor at &FE10.
 //
-// On the BBC Micro the Serial ULA generates the transmit and receive bit
-// clocks for the MC6850 ACIA, selects between the RS423 connector and the
-// cassette interface, and drives the cassette motor relay. It is a write-only
-// control latch:
+// On the BBC Micro the Serial ULA generates the transmit and receive clocks
+// for the MC6850 ACIA, selects between the RS423 connector and the cassette
+// interface, and drives the cassette motor relay. It is a write-only control
+// latch:
 //
-//   bits 0-2: Transmit baud-rate select
-//   bits 3-5: Receive baud-rate select
-//   bit  6:   RS423 (1) / cassette (0) select  -> drives the ACIA /DCD input
+//   bits 0-2: Transmit rate select
+//   bits 3-5: Receive rate select
+//   bit  6:   RS423 (1) / cassette (0) select
 //   bit  7:   Cassette motor relay
 //
-// In addition to decoding that latch, this class is the byte<->bit shifter
-// between the ACIA's bit-level serial engine and the byte-oriented host
-// transport (SerialDataSource / SerialDataSink):
+// Clock model. The ULA runs from 16 MHz / 13 = 1.2308 MHz. tick() is called
+// once per 2 MHz cycle and a fractional accumulator yields 8 ULA clocks for
+// every 13 ticks, so every interval is a whole number of ULA clocks and every
+// rate comes out 0.16% above nominal, as on the machine. Each rate select is a
+// divider of the ULA clock (DIVIDERS): 19200 is 1 ULA clock per receive or
+// transmit clock, 9600 is 2, ... 75 is 256. The ACIA divides those clocks by 1,
+// 16 or 64 itself; MOS 1.20 runs RS423 at /64.
 //
-//   Transmit (Beeb -> device): tick() clocks Mc6850::transmit_clock() at the
-//     transmit bit rate, assembles the data bits (LSB first) into a byte, and
-//     delivers the byte to the sink on the stop bit.
-//   Receive (device -> Beeb): tick() pulls a byte from the source and clocks it
-//     into Mc6850::receive_clocks() one bit at a time at the receive bit rate,
-//     framed as the ACIA's Word Select field specifies (start, 7 or 8 data bits
-//     LSB first, an optional parity bit, 1 or 2 stop bits). When idle it drives
-//     the receive line high.
+// RS423 selected. The receive and transmit clocks are the two divider outputs.
+// This class is the byte<->bit shifter between the ACIA and the byte-oriented
+// host transport (SerialDataSource / SerialDataSink):
 //
-// Timing model: tick() is called once per 2MHz CPU cycle (see SerialSocket).
-// The number of ticks per serial bit is CPU_HZ / baud, so e.g. 19200 baud is
-// ~104 ticks/bit. This is a faithful bit-level model at an emulator-friendly
-// rate; it is not cycle-accurate to the 16x ACIA sampling clock, but the BBC's
-// software (and fujinet-nio) only care about correct byte framing at the
-// selected rate.
+//   Receive (device -> Beeb): a byte pulled from the source is framed as the
+//     ACIA's Word Select field specifies (start, 7 or 8 data bits LSB first, an
+//     optional parity bit, 1 or 2 stop bits) and each level is held on RxD for
+//     64 receive clocks, whatever the ACIA's divider: the far end runs at the
+//     selected baud rate and knows nothing of it. At /64 the ACIA reads the
+//     byte; at /16 or /1 it reads garbage or framing errors, as on the machine.
+//     When idle RxD is high.
+//   Transmit (Beeb -> device): the ACIA reports each bit it starts; the data
+//     bits (LSB first) are assembled into a byte delivered to the sink on the
+//     stop bit. /CTS follows the sink's flow control.
+//
+// Cassette selected. /DCD and /CTS are held low (AUG 20.7.4); the high-tone
+// detector that drives /DCD in cassette mode comes with the tape path. The
+// ACIA gets no receive clock and RxD idles high. The RS423 line still runs at
+// its own rate, so bytes a far end sends meanwhile are framed and lost, as on
+// the machine (and the device's has_data() poll keeps its tick). The transmit clock is the transmit divider output; transmitted
+// bits go nowhere, so the RS423 sink receives nothing.
+//
+// Reading &FE10. The ULA has no read/write line and latches the data bus on
+// any access; on a read the bus holds the address high byte, so a read acts as
+// a write of &FE (%11111110: motor on, RS423 selected, receive 75, transmit
+// 2400). The read
+// itself returns open bus, supplied by the owning socket. This is an unverified
+// decision of the cassette specification: Acorn does not document it, and the
+// reference emulators and the CPLD replica of the ULA all do it.
 class SerialUla {
 public:
+    // The silicon fitted: the Ferranti part or VLSI's second source. Recorded
+    // for the cassette side, where the two differ.
+    enum class Part : uint8_t { Ferranti, VLSI };
+
     // Control-register field masks.
     static constexpr uint8_t TX_BAUD_MASK   = 0x07;  // bits 0-2
     static constexpr uint8_t RX_BAUD_MASK   = 0x38;  // bits 3-5
@@ -61,13 +83,25 @@ public:
     static constexpr uint8_t RS423_SELECT   = 0x40;  // bit 6
     static constexpr uint8_t MOTOR_ENABLE   = 0x80;  // bit 7
 
-    // Baud rate indexed by the 3-bit select field (matches the BBC SERPROC
-    // encoding used by OSBYTE 7/8 and b2's SERPROC_BAUD_RATES table).
+    // The value a read of &FE10 latches.
+    static constexpr uint8_t READ_LATCH_VALUE = 0xFE;
+
+    // Nominal baud rate indexed by the 3-bit select field (the BBC SERPROC
+    // encoding used by OSBYTE 7/8), assuming the ACIA divides by 64.
     static constexpr unsigned BAUD_RATES[8] = {
         19200, 1200, 4800, 150, 9600, 300, 2400, 75,
     };
 
-    explicit SerialUla(Mc6850& acia) : acia_(acia) {
+    // ULA clocks per receive or transmit clock, indexed by the select field.
+    static constexpr uint32_t DIVIDERS[8] = {
+        1, 16, 4, 128, 2, 64, 8, 256,
+    };
+
+    // RxD levels of an RS423 frame are held for this many receive clocks.
+    static constexpr uint32_t RS423_CLOCKS_PER_BIT = 64;
+
+    explicit SerialUla(Mc6850& acia, Part part = Part::Ferranti)
+        : acia_(acia), part_(part) {
         reset();
     }
 
@@ -78,53 +112,54 @@ public:
     // Memory-mapped write (the latch ignores the address within its range).
     void write(uint16_t /*offset*/, uint8_t value) {
         control_ = value;
-        tx_bit_period_ = bit_period(value & TX_BAUD_MASK);
-        rx_bit_period_ = bit_period((value & RX_BAUD_MASK) >> RX_BAUD_SHIFT);
+        tx_divider_ = DIVIDERS[value & TX_BAUD_MASK];
+        rx_divider_ = DIVIDERS[(value & RX_BAUD_MASK) >> RX_BAUD_SHIFT];
 
-        // RS423 selected => carrier present (/DCD low). Cassette select (or
-        // power-on default 0) holds /DCD high so the receiver stays idle.
-        acia_.set_not_dcd((value & RS423_SELECT) == 0);
+        // RS423 forces carrier present; in cassette mode /DCD comes from the
+        // high-tone detector, which is not yet modelled, so it is low too.
+        acia_.set_not_dcd(false);
+        refresh_cts();
     }
 
-    // The SERPROC has no read strobe; reads of &FE10 are open bus and are
-    // handled by the owning socket. This method exists only so the latch can
-    // satisfy a uniform device interface if needed.
-    uint8_t read(uint16_t /*offset*/) const { return 0xFF; }
+    // A read of the latch's address acts as a write of &FE. Returns the latch's
+    // own contribution to the bus, which is nothing: the socket supplies the
+    // open-bus value.
+    uint8_t read(uint16_t offset) {
+        write(offset, READ_LATCH_VALUE);
+        return 0xFF;
+    }
 
-    // Advance the bit clocks by one 2MHz tick (called from SerialSocket).
+    // Advance by one 2MHz tick (called from SerialSocket).
     void tick() {
-        // Forward RTS transitions to the device. RTS is a connection/handshake
-        // line independent of the transmit baud clock, so it is polled every
-        // tick (a cheap bool compare) and kept decoupled from the /CTS update in
-        // pump_transmit(): a control-register write that changes RTS must reach
-        // the device even while /CTS is holding the guest's transmit loop.
+        // Forward RTS and BREAK transitions to the device. Both are line
+        // conditions rather than data, so they are polled every tick (a cheap
+        // bool compare) and delivered out of band: a control-register write that
+        // changes RTS must reach the device even while /CTS is holding the
+        // guest's transmit loop.
         update_rts();
-        // Forward BREAK transitions to the device. Like RTS this is a line
-        // condition rather than data (the guest sets the 6850 Transmitter-Control
-        // field to hold the TX line in the space state), so it is polled every
-        // tick and delivered out of band rather than through the byte queue.
         update_break();
-        // Transmit bit clock.
-        if (++tx_timer_ >= tx_bit_period_) {
-            tx_timer_ = 0;
-            pump_transmit();
+
+        // 16/13 MHz from 2 MHz: 8 ULA clocks every 13 ticks.
+        ula_phase_ += 8;
+        if (ula_phase_ < 13) {
+            return;
         }
-        // Receive bit clock.
-        if (++rx_timer_ >= rx_bit_period_) {
-            rx_timer_ = 0;
-            pump_receive();
-        }
+        ula_phase_ -= 13;
+        ula_clock();
     }
 
     void reset() {
         control_ = 0;
-        tx_bit_period_ = bit_period(0);
-        rx_bit_period_ = bit_period(0);
-        tx_timer_ = 0;
-        rx_timer_ = 0;
+        tx_divider_ = DIVIDERS[0];
+        rx_divider_ = DIVIDERS[0];
+        tx_div_count_ = 0;
+        rx_div_count_ = 0;
+        cts_refresh_count_ = 0;
         tx_byte_ = 0;
         tx_bit_index_ = 0;
         rx_state_ = RxByteState::Idle;
+        rx_level_ = true;
+        rx_level_clocks_ = RS423_CLOCKS_PER_BIT - 1;
         rx_byte_ = 0;
         rx_bit_index_ = 0;
         rx_data_bits_ = 8;
@@ -133,8 +168,9 @@ public:
         rx_parity_ = Mc6850::Parity::None;
         rx_has_byte_ = false;
         rx_break_ = false;
-        // Match the power-on latch (cassette select => /DCD high).
-        acia_.set_not_dcd(true);
+        // The power-on latch selects cassette: /DCD and /CTS low.
+        acia_.set_not_dcd(false);
+        acia_.set_not_cts(false);
         // Re-baseline RTS and BREAK to the (reset) ACIA level and re-deliver to
         // any attached device so its view tracks the machine reset.
         last_rts_asserted_ = !acia_.get_not_rts();
@@ -149,10 +185,8 @@ public:
     void set_source(SerialDataSource* source) { source_ = source; }
     void set_sink(SerialDataSink* sink) {
         sink_ = sink;
+        refresh_cts();
         if (sink_ == nullptr) {
-            // No device attached: clear to send (transmitted bytes are
-            // discarded), so the guest's TX loop never stalls.
-            acia_.set_not_cts(false);
             return;
         }
         // Deliver the current RTS and BREAK levels to the freshly attached
@@ -166,22 +200,43 @@ public:
 
     // --- Accessors for tests / debugging ---
     uint8_t control() const { return control_; }
+    Part part() const { return part_; }
     bool motor_on() const { return (control_ & MOTOR_ENABLE) != 0; }
     bool rs423_selected() const { return (control_ & RS423_SELECT) != 0; }
     unsigned tx_baud() const { return BAUD_RATES[control_ & TX_BAUD_MASK]; }
     unsigned rx_baud() const { return BAUD_RATES[(control_ & RX_BAUD_MASK) >> RX_BAUD_SHIFT]; }
-    uint32_t tx_bit_period() const { return tx_bit_period_; }
-    uint32_t rx_bit_period() const { return rx_bit_period_; }
+    // ULA clocks per transmit or receive clock for the selected rates.
+    uint32_t tx_divider() const { return tx_divider_; }
+    uint32_t rx_divider() const { return rx_divider_; }
+    // Running counts of ULA clocks and of the clocks delivered to the ACIA.
+    uint64_t ula_clocks() const { return ula_clocks_; }
+    uint64_t tx_clocks() const { return tx_clocks_; }
+    uint64_t rx_clocks() const { return rx_clocks_; }
 
 private:
     // Bytes-to-bits receive framing state.
     enum class RxByteState : uint8_t { Idle, Start, Data, Parity, Stop };
 
-    // Ticks (2MHz cycles) per serial bit at the given baud-select index.
-    static uint32_t bit_period(uint8_t baud_index) {
-        unsigned baud = BAUD_RATES[baud_index & 0x07];
-        uint32_t period = static_cast<uint32_t>(timing::CPU_HZ / baud);
-        return period < 1 ? 1 : period;
+    // One ULA clock: run both dividers.
+    void ula_clock() {
+        ++ula_clocks_;
+        if (++tx_div_count_ >= tx_divider_) {
+            tx_div_count_ = 0;
+            ++tx_clocks_;
+            transmit_clock();
+        }
+        // The RS423 line runs whichever input is selected: a far end sending
+        // while cassette is selected sends to nobody, and its bytes are lost.
+        if (++rx_div_count_ >= rx_divider_) {
+            rx_div_count_ = 0;
+            receive_clock();
+        }
+    }
+
+    // /CTS: in RS423 mode it follows the device's flow control; in cassette
+    // mode it is held low.
+    void refresh_cts() {
+        acia_.set_not_cts(rs423_selected() && sink_ != nullptr && !sink_->accepts_more());
     }
 
     // Forward an RTS transition to the attached device (edge-triggered, so the
@@ -213,30 +268,31 @@ private:
         }
     }
 
-    // One transmit bit time: clock the ACIA and assemble the outgoing byte.
-    void pump_transmit() {
-        // Drive /CTS from the device's flow-control state: when the device
-        // cannot accept more, the ACIA holds TDRE low so the guest's transmit
-        // loop busy-waits until the device drains. Refreshed each TX bit period,
-        // so /CTS releases promptly once the device reports ready again.
-        acia_.set_not_cts(sink_ != nullptr && !sink_->accepts_more());
-
-        // One bit time is as many transmit clocks as the ACIA divides by, so
-        // exactly one bit boundary falls within it.
-        Mc6850::TransmitResult result;
-        for (uint32_t i = acia_.divide_ratio(); i > 0; --i) {
-            if (const auto boundary = acia_.transmit_clock()) {
-                result = *boundary;
-            }
+    // One transmit clock: clock the ACIA and, in RS423 mode, assemble the
+    // outgoing byte from the bits it reports.
+    void transmit_clock() {
+        // Drive /CTS from the device's flow control: when the device cannot
+        // accept more, the ACIA holds TDRE low so the guest's transmit loop
+        // busy-waits until the device drains. Refreshed every 64 transmit
+        // clocks (one bit at /64), so /CTS releases promptly once the device
+        // reports ready again without polling the device on every clock.
+        if (++cts_refresh_count_ >= RS423_CLOCKS_PER_BIT) {
+            cts_refresh_count_ = 0;
+            refresh_cts();
         }
-        switch (result.type) {
+
+        const std::optional<Mc6850::TransmitResult> result = acia_.transmit_clock();
+        if (!result || !rs423_selected()) {
+            return;  // between bit boundaries, or cassette: the bits go nowhere
+        }
+        switch (result->type) {
             case Mc6850::BitType::Start:
                 tx_byte_ = 0;
                 tx_bit_index_ = 0;
                 break;
             case Mc6850::BitType::Data:
                 // LSB first.
-                if (result.bit && tx_bit_index_ < 8) {
+                if (result->bit && tx_bit_index_ < 8) {
                     tx_byte_ |= static_cast<uint8_t>(1u << tx_bit_index_);
                 }
                 ++tx_bit_index_;
@@ -251,14 +307,29 @@ private:
         }
     }
 
-    // One receive bit time: shift the next received byte into the ACIA.
+    // One RS423 receive divider clock: every 64 clocks move the line to the
+    // next level of the frame. With RS423 selected the clock and the level go
+    // to the ACIA; in cassette mode the receive clock will come from the data
+    // separator, and until then the ACIA has none.
+    void receive_clock() {
+        if (++rx_level_clocks_ >= RS423_CLOCKS_PER_BIT) {
+            rx_level_clocks_ = 0;
+            rx_level_ = next_receive_level() != 0;
+        }
+        if (rs423_selected()) {
+            ++rx_clocks_;
+            acia_.receive_clock(rx_level_);
+        }
+    }
+
+    // The next RxD level of the inbound RS423 frame, one per bit time.
     //
     // The frame follows the ACIA's Word Select field (7 or 8 data bits, an
     // optional parity bit, 1 or 2 stop bits), captured when the frame starts so
     // that a mid-character control-register write cannot corrupt it. Clocking a
     // fixed 8N1 frame into a receiver configured for, say, 7E1 (the viewdata
     // format) puts the two out of step and loses nearly every byte.
-    void pump_receive() {
+    uint8_t next_receive_level() {
         uint8_t bit = 1;  // line idles high
         if (source_) {
             switch (rx_state_) {
@@ -307,8 +378,7 @@ private:
                     break;
             }
         }
-        // One bit time is as many receive clocks as the ACIA divides by.
-        acia_.receive_clocks(acia_.divide_ratio(), bit != 0);
+        return bit;
     }
 
     // Latch a byte and the ACIA's current frame shape, then start clocking it.
@@ -337,12 +407,20 @@ private:
     }
 
     Mc6850& acia_;
+    Part part_;
 
     uint8_t control_ = 0;
-    uint32_t tx_bit_period_ = 1;
-    uint32_t rx_bit_period_ = 1;
-    uint32_t tx_timer_ = 0;
-    uint32_t rx_timer_ = 0;
+
+    // The ULA clock and its dividers.
+    uint32_t ula_phase_ = 0;          // eighths of a 2MHz tick, modulo 13
+    uint32_t tx_divider_ = 1;
+    uint32_t rx_divider_ = 1;
+    uint32_t tx_div_count_ = 0;
+    uint32_t rx_div_count_ = 0;
+    uint32_t cts_refresh_count_ = 0;
+    uint64_t ula_clocks_ = 0;
+    uint64_t tx_clocks_ = 0;
+    uint64_t rx_clocks_ = 0;
 
     // Transmit byte assembly
     uint8_t tx_byte_ = 0;
@@ -351,6 +429,8 @@ private:
     // Receive byte framing. The shape fields are captured from the ACIA when a
     // frame starts and hold for its duration.
     RxByteState rx_state_ = RxByteState::Idle;
+    bool rx_level_ = true;                // current RxD level
+    uint32_t rx_level_clocks_ = 0;        // receive clocks the level has been held
     uint8_t rx_byte_ = 0;
     uint8_t rx_bit_index_ = 0;
     uint8_t rx_data_bits_ = 8;

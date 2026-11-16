@@ -83,8 +83,8 @@ class SerialStatus(_message.Message):
     RX_BAUD_FIELD_NUMBER: _builtins.int
     RS423_SELECTED_FIELD_NUMBER: _builtins.int
     MOTOR_ON_FIELD_NUMBER: _builtins.int
-    TX_BIT_PERIOD_FIELD_NUMBER: _builtins.int
-    RX_BIT_PERIOD_FIELD_NUMBER: _builtins.int
+    TX_ULA_DIVIDER_FIELD_NUMBER: _builtins.int
+    RX_ULA_DIVIDER_FIELD_NUMBER: _builtins.int
     has_serial_socket: _builtins.bool
     """True if this machine variant has the on-board serial socket."""
     connector: _builtins.str
@@ -121,10 +121,12 @@ class SerialStatus(_message.Message):
     """RS423 (true) vs cassette (false)"""
     motor_on: _builtins.bool
     """cassette motor relay"""
-    tx_bit_period: _builtins.int
-    """transmit bit period in 2MHz cycles"""
-    rx_bit_period: _builtins.int
-    """receive bit period in 2MHz cycles"""
+    tx_ula_divider: _builtins.int
+    """The ULA divider for each rate: ULA clocks (16/13 MHz) per transmit or
+    receive clock delivered to the ACIA, which divides by 1, 16 or 64 itself.
+    19200 is 1, 9600 is 2, ... 300 is 64, 75 is 256.
+    """
+    rx_ula_divider: _builtins.int
     def __init__(
         self,
         *,
@@ -142,12 +144,12 @@ class SerialStatus(_message.Message):
         rx_baud: _builtins.int = ...,
         rs423_selected: _builtins.bool = ...,
         motor_on: _builtins.bool = ...,
-        tx_bit_period: _builtins.int = ...,
-        rx_bit_period: _builtins.int = ...,
+        tx_ula_divider: _builtins.int = ...,
+        rx_ula_divider: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["acia_control", b"acia_control", "acia_status", b"acia_status", "connector", b"connector", "has_serial_socket", b"has_serial_socket", "irq_pending", b"irq_pending", "motor_on", b"motor_on", "not_cts", b"not_cts", "not_dcd", b"not_dcd", "rdrf", b"rdrf", "rs423_selected", b"rs423_selected", "rx_baud", b"rx_baud", "rx_bit_period", b"rx_bit_period", "tdre", b"tdre", "tx_baud", b"tx_baud", "tx_bit_period", b"tx_bit_period", "ula_control", b"ula_control"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["acia_control", b"acia_control", "acia_status", b"acia_status", "connector", b"connector", "has_serial_socket", b"has_serial_socket", "irq_pending", b"irq_pending", "motor_on", b"motor_on", "not_cts", b"not_cts", "not_dcd", b"not_dcd", "rdrf", b"rdrf", "rs423_selected", b"rs423_selected", "rx_baud", b"rx_baud", "rx_ula_divider", b"rx_ula_divider", "tdre", b"tdre", "tx_baud", b"tx_baud", "tx_ula_divider", b"tx_ula_divider", "ula_control", b"ula_control"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

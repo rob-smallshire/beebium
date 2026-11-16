@@ -52,8 +52,10 @@ class SerialStatus:
     rx_baud: int
     rs423_selected: bool
     motor_on: bool
-    tx_bit_period: int
-    rx_bit_period: int
+    # ULA clocks (16/13 MHz) per transmit or receive clock for the selected
+    # rates: 19200 is 1, 300 is 64, 75 is 256. The ACIA divides further.
+    tx_ula_divider: int
+    rx_ula_divider: int
 
 
 def _response_to_status(response: serial_pb2.SerialStatus) -> SerialStatus:
@@ -73,8 +75,8 @@ def _response_to_status(response: serial_pb2.SerialStatus) -> SerialStatus:
         rx_baud=response.rx_baud,
         rs423_selected=response.rs423_selected,
         motor_on=response.motor_on,
-        tx_bit_period=response.tx_bit_period,
-        rx_bit_period=response.rx_bit_period,
+        tx_ula_divider=response.tx_ula_divider,
+        rx_ula_divider=response.rx_ula_divider,
     )
 
 

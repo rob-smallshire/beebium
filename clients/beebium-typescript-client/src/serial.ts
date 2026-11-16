@@ -33,8 +33,10 @@ export interface SerialStatus {
     rxBaud: number;
     rs423Selected: boolean;
     motorOn: boolean;
-    txBitPeriod: number;
-    rxBitPeriod: number;
+    /** ULA clocks (16/13 MHz) per transmit clock: 19200 is 1, 300 is 64, 75 is 256. */
+    txUlaDivider: number;
+    /** ULA clocks (16/13 MHz) per receive clock: 19200 is 1, 300 is 64, 75 is 256. */
+    rxUlaDivider: number;
 }
 
 function toSerialStatus(proto: ProtoSerialStatus): SerialStatus {
@@ -53,8 +55,8 @@ function toSerialStatus(proto: ProtoSerialStatus): SerialStatus {
         rxBaud: proto.rxBaud,
         rs423Selected: proto.rs423Selected,
         motorOn: proto.motorOn,
-        txBitPeriod: proto.txBitPeriod,
-        rxBitPeriod: proto.rxBitPeriod,
+        txUlaDivider: proto.txUlaDivider,
+        rxUlaDivider: proto.rxUlaDivider,
     };
 }
 

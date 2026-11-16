@@ -185,6 +185,9 @@ public:
     // Side-effect-free read of RDR/status for the debugger.
     uint8_t debug_read_data() const { return rdr_; }
     uint8_t debug_read_status() const { return status_value(); }
+    uint8_t peek(uint16_t offset) const {
+        return (offset & 0x01) ? debug_read_data() : debug_read_status();
+    }
 
     // --- Handshake input pins (driven by the Serial ULA) ---
 

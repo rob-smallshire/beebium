@@ -41,8 +41,8 @@ def _make_status_proto(**overrides):
         rx_baud=19200,
         rs423_selected=True,
         motor_on=False,
-        tx_bit_period=104,
-        rx_bit_period=104,
+        tx_ula_divider=1,
+        rx_ula_divider=1,
     )
     defaults.update(overrides)
     return serial_pb2.SerialStatus(**defaults)

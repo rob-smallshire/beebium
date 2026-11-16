@@ -94,11 +94,12 @@ struct Beebium_SerialStatus: Sendable {
   /// cassette motor relay
   var motorOn: Bool = false
 
-  /// transmit bit period in 2MHz cycles
-  var txBitPeriod: UInt32 = 0
+  /// The ULA divider for each rate: ULA clocks (16/13 MHz) per transmit or
+  /// receive clock delivered to the ACIA, which divides by 1, 16 or 64 itself.
+  /// 19200 is 1, 9600 is 2, ... 300 is 64, 75 is 256.
+  var txUlaDivider: UInt32 = 0
 
-  /// receive bit period in 2MHz cycles
-  var rxBitPeriod: UInt32 = 0
+  var rxUlaDivider: UInt32 = 0
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -160,7 +161,7 @@ extension Beebium_WatchSerialStatusRequest: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Beebium_SerialStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".SerialStatus"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_serial_socket\0\u{3}acia_control\0\u{3}acia_status\0\u{1}tdre\0\u{1}rdrf\0\u{3}not_dcd\0\u{3}not_cts\0\u{3}irq_pending\0\u{3}ula_control\0\u{3}tx_baud\0\u{3}rx_baud\0\u{3}rs423_selected\0\u{3}motor_on\0\u{3}tx_bit_period\0\u{3}rx_bit_period\0\u{1}connector\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_serial_socket\0\u{3}acia_control\0\u{3}acia_status\0\u{1}tdre\0\u{1}rdrf\0\u{3}not_dcd\0\u{3}not_cts\0\u{3}irq_pending\0\u{3}ula_control\0\u{3}tx_baud\0\u{3}rx_baud\0\u{3}rs423_selected\0\u{3}motor_on\0\u{3}tx_ula_divider\0\u{3}rx_ula_divider\0\u{1}connector\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -181,8 +182,8 @@ extension Beebium_SerialStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 11: try { try decoder.decodeSingularUInt32Field(value: &self.rxBaud) }()
       case 12: try { try decoder.decodeSingularBoolField(value: &self.rs423Selected) }()
       case 13: try { try decoder.decodeSingularBoolField(value: &self.motorOn) }()
-      case 14: try { try decoder.decodeSingularUInt32Field(value: &self.txBitPeriod) }()
-      case 15: try { try decoder.decodeSingularUInt32Field(value: &self.rxBitPeriod) }()
+      case 14: try { try decoder.decodeSingularUInt32Field(value: &self.txUlaDivider) }()
+      case 15: try { try decoder.decodeSingularUInt32Field(value: &self.rxUlaDivider) }()
       case 16: try { try decoder.decodeSingularStringField(value: &self.connector) }()
       default: break
       }
@@ -229,11 +230,11 @@ extension Beebium_SerialStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if self.motorOn != false {
       try visitor.visitSingularBoolField(value: self.motorOn, fieldNumber: 13)
     }
-    if self.txBitPeriod != 0 {
-      try visitor.visitSingularUInt32Field(value: self.txBitPeriod, fieldNumber: 14)
+    if self.txUlaDivider != 0 {
+      try visitor.visitSingularUInt32Field(value: self.txUlaDivider, fieldNumber: 14)
     }
-    if self.rxBitPeriod != 0 {
-      try visitor.visitSingularUInt32Field(value: self.rxBitPeriod, fieldNumber: 15)
+    if self.rxUlaDivider != 0 {
+      try visitor.visitSingularUInt32Field(value: self.rxUlaDivider, fieldNumber: 15)
     }
     if !self.connector.isEmpty {
       try visitor.visitSingularStringField(value: self.connector, fieldNumber: 16)
@@ -256,8 +257,8 @@ extension Beebium_SerialStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.rxBaud != rhs.rxBaud {return false}
     if lhs.rs423Selected != rhs.rs423Selected {return false}
     if lhs.motorOn != rhs.motorOn {return false}
-    if lhs.txBitPeriod != rhs.txBitPeriod {return false}
-    if lhs.rxBitPeriod != rhs.rxBitPeriod {return false}
+    if lhs.txUlaDivider != rhs.txUlaDivider {return false}
+    if lhs.rxUlaDivider != rhs.rxUlaDivider {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

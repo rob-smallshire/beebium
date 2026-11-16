@@ -45,8 +45,8 @@ function makeStatus(overrides: Partial<ProtoSerialStatus> = {}): ProtoSerialStat
         rxBaud: 19200,
         rs423Selected: true,
         motorOn: false,
-        txBitPeriod: 104,
-        rxBitPeriod: 104,
+        txUlaDivider: 1,
+        rxUlaDivider: 1,
         ...overrides,
     } as ProtoSerialStatus;
 }

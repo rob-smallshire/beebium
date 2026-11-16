@@ -35,8 +35,8 @@ namespace beebium {
 // in the machine's IRQ aggregator.
 //
 // Clocking: tick_rising() and tick_falling() are each called once per 2MHz
-// cycle by the Machine step loop (exactly one fires per cycle), so the ULA's
-// bit clock advances once per CPU cycle.
+// cycle by the Machine step loop (exactly one fires per cycle), so the ULA
+// sees one tick per CPU cycle and derives its own 16/13 MHz clock from it.
 class SerialSocket {
 public:
     SerialSocket() {
@@ -67,14 +67,21 @@ public:
 
     // --- ACIA region (&FE08-&FE0F, mirror low bit) ---
     uint8_t read_acia(uint16_t offset) { return acia_.read(offset); }
+    // Inspect the ACIA's registers without the read side effects (RDRF, the
+    // /DCD latch and the receive interrupt are left as they are).
+    uint8_t peek_acia(uint16_t offset) const { return acia_.peek(offset); }
     void write_acia(uint16_t offset, uint8_t value) { acia_.write(offset, value); }
 
     // --- Serial ULA region (&FE10-&FE1F) ---
-    // The SERPROC is a write-only latch; reads return fast 2MHz open bus
-    // (last value driven on the data bus).
-    uint8_t read_ula(uint16_t /*offset*/) {
-        return last_bus_value_ptr_ ? *last_bus_value_ptr_ : 0xFF;
+    // The SERPROC is a write-only latch with no read/write line: a read latches
+    // &FE (see SerialUla::read) and returns fast 2MHz open bus (the last value
+    // driven on the data bus).
+    uint8_t read_ula(uint16_t offset) {
+        ula_.read(offset);
+        return open_bus();
     }
+    // Inspect the latch's address without latching anything.
+    uint8_t peek_ula(uint16_t /*offset*/) const { return open_bus(); }
     void write_ula(uint16_t offset, uint8_t value) { ula_.write(offset, value); }
 
     // --- Clock (called from Machine::step on every 2MHz cycle) ---
@@ -97,6 +104,10 @@ public:
     const SerialUla& ula() const { return ula_; }
 
 private:
+    uint8_t open_bus() const {
+        return last_bus_value_ptr_ ? *last_bus_value_ptr_ : 0xFF;
+    }
+
     Mc6850 acia_;
     SerialUla ula_{acia_};
 

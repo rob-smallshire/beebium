@@ -254,12 +254,14 @@ public:
     struct SerialAciaRegion {
         SerialSocket& serial_socket;
         uint8_t read(uint16_t offset) { return serial_socket.read_acia(offset); }
+        uint8_t peek(uint16_t offset) const { return serial_socket.peek_acia(offset); }
         void write(uint16_t offset, uint8_t value) { serial_socket.write_acia(offset, value); }
     };
 
     struct SerialUlaRegion {
         SerialSocket& serial_socket;
         uint8_t read(uint16_t offset) { return serial_socket.read_ula(offset); }
+        uint8_t peek(uint16_t offset) const { return serial_socket.peek_ula(offset); }
         void write(uint16_t offset, uint8_t value) { serial_socket.write_ula(offset, value); }
     };
 

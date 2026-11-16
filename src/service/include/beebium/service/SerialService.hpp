@@ -115,8 +115,8 @@ private:
             status.set_rx_baud(ula.rx_baud());
             status.set_rs423_selected(ula.rs423_selected());
             status.set_motor_on(ula.motor_on());
-            status.set_tx_bit_period(ula.tx_bit_period());
-            status.set_rx_bit_period(ula.rx_bit_period());
+            status.set_tx_ula_divider(ula.tx_divider());
+            status.set_rx_ula_divider(ula.rx_divider());
         }
     }
 
