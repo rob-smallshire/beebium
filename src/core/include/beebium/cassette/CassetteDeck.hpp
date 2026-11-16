@@ -13,9 +13,13 @@
 #pragma once
 
 #include "TapeSignal.hpp"
+#include "TapeSink.hpp"
 
 #include <atomic>
 #include <concepts>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -36,6 +40,16 @@ namespace beebium {
 // edges reach nobody: a wound tape is off the head. A wind ends on stop, play,
 // seek, eject, or at either end of the tape, where the deck stops.
 //
+// Recording is a transport like playing: the tape moves only while the relay
+// is closed, and every clock that passes under the head replaces what the
+// tape held there with what the Serial ULA's tone synthesiser sends, an edge
+// or silence. The deck is the synthesiser's sink while it records. Only a tape
+// with a recorder (a UEF) can be recorded on. Stop, play, seek, a wind, eject
+// and the end of the tape end a recording. A tape recorded on is written back
+// to its file, whole and atomically (written beside it, then renamed over it),
+// when a recording ends, on eject, on flush() and when the deck is destroyed,
+// and only if it has been recorded on since it was last written.
+//
 // The Serial ULA clocks the deck on the emulation thread and takes the edges
 // that fall on each clock. CassetteService drives the transport with the
 // emulation paused, and reads the deck's state without pausing it through
@@ -43,9 +57,9 @@ namespace beebium {
 // generation when they change, and the position whenever the transport moves
 // and every POSITION_PUBLISH_CLOCKS while playing, so the clock path pays a
 // counter rather than a store a clock.
-class CassetteDeck {
+class CassetteDeck final : public TapeSink {
 public:
-    enum class Transport : uint8_t { Stopped, Playing, Rewinding, FastForwarding };
+    enum class Transport : uint8_t { Stopped, Playing, Rewinding, FastForwarding, Recording };
 
     // Tape time a wind covers per ULA clock.
     static constexpr TapeTime WIND_SPEED = 30;
@@ -64,10 +78,17 @@ public:
         uint64_t sequence = 0;         // bumped on every change but the position's
     };
 
+    CassetteDeck() = default;
+    CassetteDeck(const CassetteDeck&) = delete;
+    CassetteDeck& operator=(const CassetteDeck&) = delete;
+    ~CassetteDeck() override { flush(); }
+
     // Throws std::runtime_error with a sentence if a tape is already in.
     // `name` is what the tape is called in messages; `url` is its source as
-    // given, for reporting.
-    void insert(std::unique_ptr<TapeSignal> tape, std::string name, std::string url = {}) {
+    // given, for reporting; `filepath` is the file a recording is written back
+    // to, or empty for none.
+    void insert(std::unique_ptr<TapeSignal> tape, std::string name, std::string url = {},
+                std::filesystem::path filepath = {}) {
         if (tape_) {
             throw std::runtime_error("The deck already holds " + name_ +
                                      "; eject it before inserting another tape.");
@@ -75,6 +96,7 @@ public:
         tape_ = std::move(tape);
         name_ = std::move(name);
         url_ = std::move(url);
+        filepath_ = std::move(filepath);
         configured_ = false;
         transport_ = Transport::Stopped;
         position_ = 0;
@@ -85,9 +107,12 @@ public:
     }
 
     void eject() {
+        end_recording();
+        flush();
         tape_.reset();
         name_.clear();
         url_.clear();
+        filepath_.clear();
         configured_ = false;
         transport_ = Transport::Stopped;
         position_ = 0;
@@ -97,12 +122,14 @@ public:
     }
 
     void play() {
+        end_recording();
         end_wind();
         if (tape_ && !at_end()) transport_ = Transport::Playing;
         publish();
     }
 
     void stop() {
+        end_recording();
         end_wind();
         transport_ = Transport::Stopped;
         publish();
@@ -111,6 +138,7 @@ public:
     // Wind backwards to the start, where the deck stops.
     void rewind() {
         if (!tape_) return;
+        end_recording();
         end_wind();
         transport_ = position_ > 0 ? Transport::Rewinding : Transport::Stopped;
         publish();
@@ -119,6 +147,7 @@ public:
     // Wind forwards to the end, where the deck stops.
     void fast_forward() {
         if (!tape_) return;
+        end_recording();
         end_wind();
         transport_ = position_ < end_time() ? Transport::FastForwarding : Transport::Stopped;
         publish();
@@ -132,6 +161,7 @@ public:
     // A seek ends a wind; it leaves a playing deck playing.
     void seek(TapeTime time) {
         if (!tape_) return;
+        end_recording();
         if (winding()) transport_ = Transport::Stopped;
         const auto length = tape_->duration();
         if (length && time >= *length) {
@@ -143,6 +173,29 @@ public:
         pending_ = tape_->next();
         publish();
     }
+
+    // Press record: from here, while the relay is closed, the tape moves and
+    // what passes under the head is replaced by what the machine sends. At the
+    // end of the tape the deck stays stopped. Throws std::runtime_error with a
+    // sentence if the deck is empty or the tape cannot be recorded on.
+    void record() {
+        if (!tape_) throw std::runtime_error("There is no tape in the deck.");
+        if (!tape_->recordable()) {
+            throw std::runtime_error("The tape " + name_ + " is a " + kind_text() +
+                                     " image, and Beebium records only on UEF tapes.");
+        }
+        if (transport_ == Transport::Recording) return;
+        end_wind();
+        if (position_ >= end_time()) {
+            transport_ = Transport::Stopped;
+        } else {
+            transport_ = Transport::Recording;
+            tape_->recorder()->begin_recording(position_);
+        }
+        publish();
+    }
+
+    bool recording() const { return transport_ == Transport::Recording; }
 
     // One ULA clock with the relay as the machine has it. Returns true if an
     // edge of the tape falls on this clock.
@@ -156,8 +209,36 @@ public:
         if (transport_ == Transport::Playing) {
             return relay_closed && advance();
         }
+        if (transport_ == Transport::Recording) {
+            record_clock(relay_closed);
+            return false;
+        }
         if (winding()) wind();
         return false;
+    }
+
+    // TapeSink: the tone synthesiser's output, on the clock the deck has just
+    // run. Written at the head while recording with the relay closed.
+    void edge(TapeTime, bool level) override {
+        if (head_writing_) tape_->recorder()->record_edge(head_time_, level);
+    }
+    void silence_until(TapeTime) override {}
+
+    // Write a tape recorded on back to its file, if it has been recorded on
+    // since it was last written; a recording in progress carries on. Returns
+    // false, having logged a sentence, if the file could not be written; the
+    // tape then stays unwritten.
+    bool flush() {
+        if (!tape_ || filepath_.empty()) return true;
+        TapeRecorder* recorder = tape_->recorder();
+        if (recorder == nullptr || !recorder->dirty()) return true;
+        const bool was_recording = transport_ == Transport::Recording;
+        if (was_recording) recorder->end_recording();
+        const std::vector<uint8_t> bytes = recorder->encode();
+        if (was_recording) recorder->begin_recording(position_);
+        if (!write_atomically(bytes)) return false;
+        recorder->mark_clean();
+        return true;
     }
 
     // The published state, from any thread.
@@ -180,6 +261,7 @@ public:
     bool has_tape() const { return tape_ != nullptr; }
     const std::string& name() const { return name_; }
     const std::string& url() const { return url_; }
+    const std::filesystem::path& filepath() const { return filepath_; }
 
     // Whether the tape in the deck is the one the machine's configuration
     // names (inserted at launch), rather than one inserted while it runs. A
@@ -197,6 +279,69 @@ public:
     bool in_gap() const { return pending_.type == TapeItem::Type::Gap; }
 
 private:
+    std::string kind_text() const {
+        return tape_->kind() == TapeKind::Csw ? "CSW" : "UEF";
+    }
+
+    // One ULA clock of recording: with the relay closed the head erases what
+    // the tape held at this clock and writes what edge() delivers.
+    void record_clock(bool relay_closed) {
+        head_writing_ = false;
+        if (!relay_closed) return;
+        if (position_ >= end_time()) {
+            end_recording();
+            publish();
+            return;
+        }
+        head_time_ = position_;
+        head_writing_ = true;
+        tape_->recorder()->erase_before(position_ + 1);
+        ++position_;
+        if (++clocks_since_publish_ >= POSITION_PUBLISH_CLOCKS) {
+            clocks_since_publish_ = 0;
+            published_position_.store(position_, std::memory_order_relaxed);
+        }
+    }
+
+    // Leave the Recording transport, stopped, and write the tape back.
+    void end_recording() {
+        if (transport_ != Transport::Recording) return;
+        head_writing_ = false;
+        tape_->recorder()->end_recording();
+        transport_ = Transport::Stopped;
+        tape_->seek(position_);
+        pending_ = tape_->next();
+        flush();
+    }
+
+    bool write_atomically(const std::vector<uint8_t>& bytes) const {
+        std::filesystem::path temporary = filepath_;
+        temporary += ".beebium-writing";
+        std::error_code ec;
+        {
+            std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+            if (out) {
+                out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+                out.close();
+            }
+            if (!out) {
+                std::filesystem::remove(temporary, ec);
+                std::cerr << "The tape " << name_ << " could not be written back to " << filepath_.string()
+                          << ", so its recording is kept only in memory.\n";
+                return false;
+            }
+        }
+        std::filesystem::rename(temporary, filepath_, ec);
+        if (ec) {
+            const std::string reason = ec.message();
+            std::filesystem::remove(temporary, ec);
+            std::cerr << "The tape " << name_ << " could not be written back to " << filepath_.string() << " ("
+                      << reason << "), so its recording is kept only in memory.\n";
+            return false;
+        }
+        return true;
+    }
+
     bool at_end() const {
         return pending_.type == TapeItem::Type::End && position_ >= pending_.time;
     }
@@ -270,7 +415,10 @@ private:
     std::unique_ptr<TapeSignal> tape_;
     std::string name_;
     std::string url_;
+    std::filesystem::path filepath_;
     bool configured_ = false;
+    bool head_writing_ = false;   // the head writes on this clock
+    TapeTime head_time_ = 0;      // the tape time under the head on this clock
     Transport transport_ = Transport::Stopped;
     TapeTime position_ = 0;
     TapeItem pending_ = TapeItem::end(0);

@@ -505,6 +505,10 @@ target_link_libraries(test_tape_signal PRIVATE beebium_core Catch2::Catch2WithMa
 catch_discover_tests(test_tape_signal)
 
 # Cassette (#208): the Serial ULA's cassette side and the deck.
+add_executable(test_tape_recording test_tape_recording.cpp)
+target_link_libraries(test_tape_recording PRIVATE beebium_core Catch2::Catch2WithMain ZLIB::ZLIB)
+catch_discover_tests(test_tape_recording)
+
 add_executable(test_serial_ula_cassette test_serial_ula_cassette.cpp)
 target_link_libraries(test_serial_ula_cassette PRIVATE beebium_core Catch2::Catch2WithMain ZLIB::ZLIB)
 catch_discover_tests(test_serial_ula_cassette)

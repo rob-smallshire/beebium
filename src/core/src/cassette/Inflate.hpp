@@ -26,6 +26,10 @@ enum class Container { Gzip, Zlib };
 // not a valid stream of that kind.
 std::optional<std::vector<uint8_t>> inflate_all(std::span<const uint8_t> input, Container container);
 
+// Deflate a whole buffer as one gzip member, with no name and a zero time, so
+// the same bytes always give the same file.
+std::vector<uint8_t> deflate_gzip(std::span<const uint8_t> input);
+
 inline bool has_gzip_magic(std::span<const uint8_t> bytes) {
     return bytes.size() >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B;
 }

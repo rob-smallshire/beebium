@@ -78,6 +78,33 @@ private:
     Kind kind_;
 };
 
+// What a tape that can be recorded on offers the deck. Recording overwrites
+// forwards from one point: everything that passes under the head is replaced
+// by the edges written, or by silence where none are. While a recording is in
+// progress the tape is not read; end_recording() makes it readable again, from
+// a fresh seek. Every call comes from the emulation thread.
+class TapeRecorder {
+public:
+    virtual ~TapeRecorder() = default;
+
+    // Start overwriting at `time`.
+    virtual void begin_recording(TapeTime time) = 0;
+    // The head has passed every time before `time`: what the tape held there
+    // is gone.
+    virtual void erase_before(TapeTime time) = 0;
+    // An edge written at `time`, after any written before.
+    virtual void record_edge(TapeTime time, bool level) = 0;
+    virtual void end_recording() = 0;
+
+    // Whether the tape has been recorded on since it was opened or last saved.
+    virtual bool dirty() const = 0;
+    // The tape as a whole file, ready to replace the one it came from. Not
+    // during a recording.
+    virtual std::vector<uint8_t> encode() = 0;
+    // The file now holds what encode() gave.
+    virtual void mark_clean() = 0;
+};
+
 // The seam between a tape and the deck: a source of edges in tape time.
 //
 // A source yields items in tape-time order and never yields a time earlier
@@ -101,6 +128,10 @@ public:
     virtual TapeKind kind() const = 0;
 
     virtual const TapeImageMetadata& metadata() const = 0;
+
+    // The tape's recorder, or null for a tape Beebium only reads.
+    virtual TapeRecorder* recorder() { return nullptr; }
+    bool recordable() { return recorder() != nullptr; }
 };
 
 // Convert seconds to tape time.

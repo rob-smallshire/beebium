@@ -161,6 +161,7 @@ std::unique_ptr<UefTape> UefTape::open(std::span<const uint8_t> bytes, const std
         inflated = std::move(*result);
         bytes = inflated;
     }
+    const bool gzipped = !inflated.empty();
 
     static constexpr char MAGIC[] = "UEF File!";  // ten bytes with its NUL
     if (bytes.size() < 12 || std::memcmp(bytes.data(), MAGIC, 10) != 0) {
@@ -175,6 +176,7 @@ std::unique_ptr<UefTape> UefTape::open(std::span<const uint8_t> bytes, const std
 
     std::unique_ptr<UefTape> tape(new UefTape());
     tape->name_ = name;
+    tape->gzipped_ = gzipped;
 
     size_t pos = 12;
     while (pos < bytes.size()) {
@@ -197,6 +199,9 @@ std::unique_ptr<UefTape> UefTape::open(std::span<const uint8_t> bytes, const std
             throw TapeImageError(TapeImageError::Kind::InvalidImage, "The file " + name + " contains chunk " + chunk_id_text(chunk.id) +
                                      ", which holds a disc, a ROM or a machine's state rather than "
                                      "tape, so Beebium does not read it.");
+        }
+        if (chunk.id < 0x0100 || chunk.id == 0x0120 || chunk.id == 0x0130 || chunk.id == 0x0131) {
+            tape->metadata_chunks_.push_back(chunk);
         }
         switch (chunk.id) {
             case 0x0000:
@@ -225,7 +230,7 @@ std::unique_ptr<UefTape> UefTape::open(std::span<const uint8_t> bytes, const std
             case 0x0003: case 0x0006: case 0x0007: case 0x0008: case 0x000A:
             case 0x0101: case 0x0103: case 0x0105:
                 break;
-            case 0x0100: case 0x0104: case 0x0110: case 0x0111: case 0x0112: case 0x0113:
+            case 0x0100: case 0x0102: case 0x0104: case 0x0110: case 0x0111: case 0x0112: case 0x0113:
             case 0x0114: case 0x0115: case 0x0116: case 0x0117:
                 tape->chunks_.push_back(std::move(chunk));
                 break;
@@ -261,6 +266,26 @@ void UefTape::render(size_t index, RenderState& state, std::vector<TapeItem>* ou
         case 0x0100:
             for (uint8_t value : b) r.frame(value, 8, 'N', 1, false);
             break;
+
+        case 0x0102: {
+            // Explicit 1200-baud bits: the first byte is the number of unused
+            // bits at the end of the last; the bits follow least significant
+            // first, a 0 one cycle at the base frequency, a 1 two at twice it.
+            need(1);
+            const size_t unused = b[0];
+            const size_t available = (b.size() - 1) * 8;
+            const size_t count = unused <= available ? available - unused : 0;
+            for (size_t i = 0; i < count; ++i) {
+                const bool one = ((b[1 + i / 8] >> (i % 8)) & 1) != 0;
+                if (one) {
+                    r.cycle(2.0 * state.base_hz);
+                    r.cycle(2.0 * state.base_hz);
+                } else {
+                    r.cycle(state.base_hz);
+                }
+            }
+            break;
+        }
 
         case 0x0104: {
             need(3);
@@ -371,6 +396,12 @@ void UefTape::render(size_t index, RenderState& state, std::vector<TapeItem>* ou
 }
 
 TapeItem UefTape::next() {
+    if (track_) {
+        if (!track_->valid(cursor_)) return TapeItem::end(track_->length());
+        const auto edge = track_->at(cursor_);
+        track_->advance(cursor_);
+        return TapeItem::edge(edge.time, edge.level);
+    }
     while (buffer_pos_ >= buffer_.size()) {
         if (next_chunk_ >= chunks_.size()) {
             return TapeItem::end(static_cast<TapeTime>(end_state_.exact_time));
@@ -385,6 +416,10 @@ TapeItem UefTape::next() {
 }
 
 void UefTape::seek(TapeTime time) {
+    if (track_) {
+        cursor_ = track_->find(time);
+        return;
+    }
     buffer_.clear();
     buffer_pos_ = 0;
     // The last chunk starting at or before `time`.
@@ -409,7 +444,64 @@ void UefTape::seek(TapeTime time) {
 }
 
 std::optional<TapeTime> UefTape::duration() const {
+    if (track_) return track_->length();
     return static_cast<TapeTime>(end_state_.exact_time);
+}
+
+void UefTape::materialise() {
+    if (track_) return;
+    auto track = std::make_unique<EdgeTrack>(static_cast<TapeTime>(end_state_.exact_time));
+    bool any = false;
+    TapeTime last = 0;
+    for (size_t i = 0; i < chunks_.size(); ++i) {
+        std::vector<TapeItem> items;
+        RenderState state = chunk_starts_[i];
+        render(i, state, &items);
+        for (const TapeItem& item : items) {
+            if (item.type != TapeItem::Type::Edge) continue;
+            if (any && item.time <= last) continue;
+            track->append(item.time, item.level);
+            last = item.time;
+            any = true;
+        }
+    }
+    track_ = std::move(track);
+    chunks_.clear();
+    chunk_starts_.clear();
+    buffer_.clear();
+    buffer_pos_ = 0;
+    cursor_ = track_->begin();
+}
+
+void UefTape::begin_recording(TapeTime time) {
+    materialise();
+    track_->begin_overwrite(time);
+    recorded_span_ = recorded_span_ ? std::make_pair(std::min(recorded_span_->first, time),
+                                                     std::max(recorded_span_->second, time))
+                                    : std::make_pair(time, time);
+}
+
+void UefTape::erase_before(TapeTime time) {
+    track_->erase_before(time);
+    if (recorded_span_ && time > recorded_span_->second) {
+        recorded_span_->second = time;
+        dirty_ = true;
+    }
+}
+
+void UefTape::record_edge(TapeTime time, bool level) {
+    track_->write(time, level);
+    dirty_ = true;
+}
+
+void UefTape::end_recording() {
+    track_->end_overwrite();
+    cursor_ = track_->begin();
+}
+
+std::vector<uint8_t> UefTape::encode() {
+    materialise();
+    return encode_uef(metadata_chunks_, classify_tape_edges(*track_), gzipped_);
 }
 
 }  // namespace beebium

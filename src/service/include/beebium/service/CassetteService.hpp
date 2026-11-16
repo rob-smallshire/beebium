@@ -262,6 +262,7 @@ private:
             case CassetteDeck::Transport::Playing: return beebium::TAPE_TRANSPORT_PLAYING;
             case CassetteDeck::Transport::Rewinding: return beebium::TAPE_TRANSPORT_REWINDING;
             case CassetteDeck::Transport::FastForwarding: return beebium::TAPE_TRANSPORT_FAST_FORWARDING;
+            case CassetteDeck::Transport::Recording:
             case CassetteDeck::Transport::Stopped: break;
         }
         return beebium::TAPE_TRANSPORT_STOPPED;

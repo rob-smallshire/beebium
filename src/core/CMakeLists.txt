@@ -21,10 +21,13 @@ add_library(beebium_core STATIC
     src/econet/AunBackend.cpp
     src/cassette/Inflate.cpp
     src/cassette/UefTape.cpp
+    src/cassette/UefWriter.cpp
     src/cassette/CswTape.cpp
     src/cassette/TapeImage.cpp
     include/beebium/cassette/TapeSignal.hpp
     include/beebium/cassette/UefTape.hpp
+    include/beebium/cassette/UefWriter.hpp
+    include/beebium/cassette/EdgeTrack.hpp
     include/beebium/cassette/CswTape.hpp
     include/beebium/cassette/TapeImage.hpp
     include/beebium/cassette/TapeSink.hpp

@@ -48,4 +48,22 @@ std::optional<std::vector<uint8_t>> inflate_all(std::span<const uint8_t> input, 
     return output;
 }
 
+std::vector<uint8_t> deflate_gzip(std::span<const uint8_t> input) {
+    z_stream stream{};
+    // 15 window bits plus 16: a gzip wrapper. zlib writes a zero time and no
+    // name unless asked.
+    if (deflateInit2(&stream, Z_BEST_COMPRESSION, Z_DEFLATED, 15 + 16, 9, Z_DEFAULT_STRATEGY) != Z_OK) {
+        return {};
+    }
+    std::vector<uint8_t> out(deflateBound(&stream, static_cast<uLong>(input.size())));
+    stream.next_in = const_cast<Bytef*>(input.data());
+    stream.avail_in = static_cast<uInt>(input.size());
+    stream.next_out = out.data();
+    stream.avail_out = static_cast<uInt>(out.size());
+    const int result = deflate(&stream, Z_FINISH);
+    out.resize(stream.total_out);
+    deflateEnd(&stream);
+    return result == Z_STREAM_END ? out : std::vector<uint8_t>{};
+}
+
 }  // namespace beebium::cassette_detail

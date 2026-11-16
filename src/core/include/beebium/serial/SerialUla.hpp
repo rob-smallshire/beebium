@@ -88,7 +88,8 @@ namespace beebium {
 //   Tone synthesiser. With cassette selected and RTS low, TxD is sampled at
 //     each 1024-clock cell boundary and the cell is filled with two cycles of
 //     2403.8 Hz (mark) or one of 1201.9 Hz (space), phase-continuous, as edges
-//     to an optional TapeSink. RTS high or RS423 selected gives silence.
+//     to an attached TapeSink, or to the deck while it records. RTS high or
+//     RS423 selected gives silence.
 //   VLSI part. With latch bit 3 set the tone sense is inverted on receive and
 //     transmit; the Ferranti ignores bits 3 to 5 in cassette mode.
 //
@@ -275,7 +276,8 @@ public:
     // --- The cassette side's attachments (non-owning) ---
     // The deck whose edges the data separator receives, clocked with the relay.
     void set_deck(CassetteDeck* deck) { deck_ = deck; }
-    // Where the tone synthesiser's edges go; none drops them.
+    // Where the tone synthesiser's edges go: this sink, or else the deck while
+    // it records; otherwise they are dropped.
     void set_tape_sink(TapeSink* sink) { tape_sink_ = sink; }
 
     // --- Accessors for tests / debugging ---
@@ -332,10 +334,13 @@ private:
 
     void cassette_clock() {
         const bool edge = deck_ != nullptr && deck_->clock(motor_on());
+        // The tone goes to an attached sink, or to the deck while it records.
+        TapeSink* const sink = tape_sink_ != nullptr ? tape_sink_
+                             : (deck_ != nullptr && deck_->recording() ? deck_ : nullptr);
         // Idle: silence, no burst or pulse in progress, nothing listening to
         // the tone. Only the detector's cell boundary can matter.
         if (!edge && separator_timed_out_ && (burst_clocks_left_ | dcd_pulse_clocks_left_) == 0 &&
-            tape_sink_ == nullptr) {
+            sink == nullptr) {
             if ((ula_clocks_ & (DETECTOR_CELL_CLOCKS - 1)) == 0) {
                 detector_cell();
             }
@@ -358,8 +363,8 @@ private:
         if ((ula_clocks_ & (DETECTOR_CELL_CLOCKS - 1)) == 0) {
             detector_cell();
         }
-        if (tape_sink_ != nullptr) {
-            tone_clock();
+        if (sink != nullptr) {
+            tone_clock(*sink);
         }
     }
 
@@ -436,13 +441,13 @@ private:
 
     // One clock of the tone synthesiser: at each 1024-clock cell boundary take
     // TxD and whether the tone is on; within the cell an edge every half-cycle.
-    void tone_clock() {
+    void tone_clock(TapeSink& sink) {
         const uint32_t offset = static_cast<uint32_t>(ula_clocks_ % TONE_CELL_CLOCKS);
         if (offset == 0) {
             tone_enabled_ = !rs423_selected() && !acia_.get_not_rts();
             tone_mark_ = tx_level_ != tone_inverted();
             if (!tone_enabled_) {
-                tape_sink_->silence_until(ula_clocks_ + TONE_CELL_CLOCKS);
+                sink.silence_until(ula_clocks_ + TONE_CELL_CLOCKS);
                 return;
             }
         }
@@ -452,7 +457,7 @@ private:
         const uint32_t half_cycle = tone_mark_ ? TONE_CELL_CLOCKS / 4 : TONE_CELL_CLOCKS / 2;
         if (offset % half_cycle == 0) {
             tone_level_ = !tone_level_;
-            tape_sink_->edge(ula_clocks_, tone_level_);
+            sink.edge(ula_clocks_, tone_level_);
         }
     }
 

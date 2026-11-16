@@ -12,7 +12,9 @@
 
 #pragma once
 
+#include "EdgeTrack.hpp"
 #include "TapeSignal.hpp"
+#include "UefWriter.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -33,12 +35,18 @@ namespace beebium {
 // every half-cycle boundary, and tape time is accumulated exactly at 16/13 MHz,
 // so the same tape as a 48 kHz CSW gives the same edge times within one clock.
 //
-// Chunks rendered: &0100, &0104, &0110, &0111, &0112, &0113, &0114, &0115,
-// &0116, &0117. Kept as metadata: &0000, &0001, &0005, &0009, &0120, &0130,
-// &0131. Ignored: &0003, &0006 to &0008, &000A, &0101, &0103, &0105. Refused:
-// &0200 and above (discs, ROMs, machine state). Any other chunk is skipped
-// with one log line.
-class UefTape final : public TapeSignal {
+// Chunks rendered: &0100, &0102, &0104, &0110, &0111, &0112, &0113, &0114,
+// &0115, &0116, &0117. Kept as metadata: &0000, &0001, &0005, &0009, &0120,
+// &0130, &0131. Ignored: &0003, &0006 to &0008, &000A, &0101, &0103, &0105.
+// Refused: &0200 and above (discs, ROMs, machine state). Any other chunk is
+// skipped with one log line.
+//
+// A UEF can be recorded on. The first recording renders the whole tape into an
+// EdgeTrack, which from then on is the tape; encode() writes it back through
+// classify_tape_edges() after the file's metadata chunks (those below &0100
+// and &0120, &0130, &0131, unchanged and in their order), gzipped if the file
+// was.
+class UefTape final : public TapeSignal, private TapeRecorder {
 public:
     // Parse a UEF, plain or gzipped. Throws std::runtime_error with a sentence
     // naming `name` if the image cannot be read.
@@ -49,6 +57,10 @@ public:
     std::optional<TapeTime> duration() const override;
     TapeKind kind() const override { return TapeKind::Uef; }
     const TapeImageMetadata& metadata() const override { return metadata_; }
+    TapeRecorder* recorder() override { return this; }
+
+    // The span recorded on since the tape was opened, if any.
+    std::optional<std::pair<TapeTime, TapeTime>> recorded_span() const { return recorded_span_; }
 
     // The render state at a chunk boundary. Public for the renderer only.
     struct RenderState {
@@ -60,19 +72,29 @@ public:
         bool level = false;          // the level after the last edge
     };
 
-    struct Chunk {
-        uint16_t id = 0;
-        std::vector<uint8_t> body;
-    };
+    using Chunk = UefChunk;
 
 private:
     UefTape() = default;
 
     void render(size_t index, RenderState& state, std::vector<TapeItem>* out) const;
 
+    // TapeRecorder
+    void begin_recording(TapeTime time) override;
+    void erase_before(TapeTime time) override;
+    void record_edge(TapeTime time, bool level) override;
+    void end_recording() override;
+    bool dirty() const override { return dirty_; }
+    std::vector<uint8_t> encode() override;
+    void mark_clean() override { dirty_ = false; }
+
+    void materialise();
+
     std::string name_;
     TapeImageMetadata metadata_;
     bool makeuef_parity_swap_ = false;
+    bool gzipped_ = false;
+    std::vector<Chunk> metadata_chunks_;     // written back unchanged, in order
     std::vector<Chunk> chunks_;              // tape chunks, in order
     std::vector<RenderState> chunk_starts_;  // state at the start of each
     RenderState end_state_;
@@ -80,6 +102,12 @@ private:
     size_t next_chunk_ = 0;
     std::vector<TapeItem> buffer_;
     size_t buffer_pos_ = 0;
+
+    // Once recorded on, the tape's edges, and the next to yield.
+    std::unique_ptr<EdgeTrack> track_;
+    EdgeTrack::Cursor cursor_;
+    bool dirty_ = false;
+    std::optional<std::pair<TapeTime, TapeTime>> recorded_span_;
 };
 
 }  // namespace beebium
