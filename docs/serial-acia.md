@@ -18,9 +18,10 @@ CPU  <->  MC6850 ACIA (&FE08/&FE09)  <->  Serial ULA (&FE10)  <->  RS423 / casse
 - The **ACIA** holds the transmit/receive shift registers, the control and
   status registers, and generates the serial IRQ. It does **not** generate its
   own bit-rate clock.
-- The **Serial ULA** supplies the transmit and receive bit clocks (selecting the
-  baud rate), chooses between the RS423 connector and the cassette interface
-  (driving the ACIA's `/DCD` input), and drives the cassette motor relay.
+- The **Serial ULA** supplies the transmit and receive clocks (selecting the
+  baud rate), chooses between the RS423 connector and the cassette interface,
+  and drives the cassette motor relay. The ACIA divides its clocks by 1, 16 or
+  64 itself.
 
 ### Register map
 
@@ -35,7 +36,13 @@ CPU  <->  MC6850 ACIA (&FE08/&FE09)  <->  Serial ULA (&FE10)  <->  RS423 / casse
 The ACIA occupies `&FE08-&FE0F` mirrored on the low address bit; the Serial ULA
 occupies `&FE10-&FE1F` (a write-only latch). Reads of the Serial ULA return fast
 2MHz open bus (the last value on the data bus), consistent with the rest of the
-SHEILA I/O region.
+SHEILA I/O region, and **latch `&FE`** as a write would: the ULA has no
+read/write line, and on a read the data bus holds the address high byte.
+`&FE` is `%11111110`: motor on, RS423 selected, receive 75, transmit 2400. This
+is an unverified decision of the cassette specification
+([cassette-specification.md](discussion/cassette-specification.md)): Acorn does
+not document it, and every reference emulator and the CPLD replica of the ULA
+do it. A debugger peek of either region has no side effect.
 
 ### ACIA control register
 
@@ -46,8 +53,11 @@ SHEILA I/O region.
 | 5-6  | Transmitter control | `/RTS` level, TX IRQ enable, transmit break |
 | 7    | Receive interrupt enable | |
 
-The MOS programs `&15` for the standard configuration: /16 divide, 8N1,
-`/RTS` low, RX interrupt enabled.
+MOS 1.20 runs RS423 at **/64**: its idle value is `&56` (/64, 8N1, `/RTS`
+high), and the Serial ULA's rate fields assume the ACIA divides by 64. `&15`
+(/16) appears only while the MOS sets up a cassette SAVE, and the cassette
+reads at `&D5` (/16, 1200 baud) or `&D6` (/64, 300 baud): the cassette's speed
+is chosen by the ACIA's divider alone (cassette research findings, §2.1).
 
 ### ACIA status register
 
@@ -55,7 +65,7 @@ The MOS programs `&15` for the standard configuration: /16 divide, 8N1,
 |-----|------|---------|
 | 0 | RDRF | Receive Data Register Full |
 | 1 | TDRE | Transmit Data Register Empty (masked when `/CTS` high) |
-| 2 | /DCD | Data Carrier Detect (1 = no carrier) |
+| 2 | /DCD | Data Carrier Detect: 1 while the pin is high, and latched by a rising edge until the data register is read |
 | 3 | /CTS | Clear To Send (1 = not clear to send) |
 | 4 | FE   | Framing Error |
 | 5 | OVRN | Receiver Overrun |
@@ -68,49 +78,71 @@ The MOS programs `&15` for the standard configuration: /16 divide, 8N1,
 |------|-------|
 | 0-2  | Transmit baud-rate select |
 | 3-5  | Receive baud-rate select |
-| 6    | RS423 (1) / cassette (0) select — drives the ACIA `/DCD` input |
+| 6    | RS423 (1) / cassette (0) select |
 | 7    | Cassette motor relay |
 
-Baud-rate select values (per the SERPROC encoding, as set via `OSBYTE 7`/`8`):
+Rate select values (per the SERPROC encoding, as set via `OSBYTE 7`/`8`). Each
+is a divider of the ULA's 16/13 MHz clock; the baud rate assumes the ACIA
+divides by 64, and every rate is 0.16% above nominal:
 
-| Value | Baud  |
-|-------|-------|
-| 0     | 19200 |
-| 1     | 1200  |
-| 2     | 4800  |
-| 3     | 150   |
-| 4     | 9600  |
-| 5     | 300   |
-| 6     | 2400  |
-| 7     | 75    |
+| Value | Baud  | ULA clocks per receive/transmit clock |
+|-------|-------|-----|
+| 0     | 19200 | 1   |
+| 1     | 1200  | 16  |
+| 2     | 4800  | 4   |
+| 3     | 150   | 128 |
+| 4     | 9600  | 2   |
+| 5     | 300   | 64  |
+| 6     | 2400  | 8   |
+| 7     | 75    | 256 |
 
 ## Implementation
 
 | Component | File | Role |
 |-----------|------|------|
-| `Mc6850`        | `devices/Mc6850.hpp`       | Bit-level ACIA: control/status registers, TX/RX bit state machines, parity/framing/overrun, IRQ, `/CTS`-gated TDRE. |
-| `SerialUla`     | `serial/SerialUla.hpp`     | SERPROC latch decode + byte↔bit shifter between the ACIA and the attached device; drives `/CTS` from the device's flow-control state. |
+| `Mc6850`        | `devices/Mc6850.hpp`       | Clocked ACIA: control/status registers, /1, /16 and /64 division, start-bit hunting, TX/RX frames, parity/framing/overrun, the `/DCD` latch, IRQ, `/CTS`-gated TDRE. |
+| `SerialUla`     | `serial/SerialUla.hpp`     | SERPROC latch decode, the 16/13 MHz clock and its rate dividers, the RS423 byte↔bit shifter between the ACIA and the attached device; drives `/CTS` from the device's flow-control state. Takes a part, Ferranti (default) or VLSI, for the cassette side. |
 | `SerialSocket`  | `serial/SerialSocket.hpp`  | Owns the ACIA + ULA, exposes the two memory-mapped regions, clocking, IRQ, reset; `set_device()` wires a device in as source + sink. |
 | `SerialPortDevice` (`SerialDataSource`/`SerialDataSink`) | `serial/SerialDevice.hpp` | The byte-oriented device seam the bit engine talks to. The core holds only the seam; concrete devices live in extensions. |
 | `SerialPort` | `extension/SerialPort.hpp` | Non-owning attach/detach handle a PeripheralExtension uses to plug its device into the socket (the single-connector rule). |
 | `HasSerialSocket` | `serial/SerialConcepts.hpp` | Detects hardware variants that carry a `serial_socket`. |
 
-### Bit-level model
+### Clocked model
 
-The ACIA walks a start / data / (parity) / stop-bit state machine one bit at a
-time, exactly as the real device does:
+The ACIA is clocked, as the device is, and the Serial ULA supplies the clocks:
 
-- `Mc6850::update_transmit()` returns the next serial bit and its role
-  (`Start`/`Data`/`Stop`/...). The `SerialUla` assembles the data bits (LSB
-  first) into a byte and hands the byte to the sink on the stop bit.
-- `Mc6850::update_receive(bit)` is fed one bit at a time. The `SerialUla` pulls
-  a byte from the source and shifts it in as start + 7 or 8 data bits (LSB
-  first) + an optional parity bit + 1 or 2 stop bits, following the word format
-  the guest selected (captured when the frame starts, so a mid-character
-  control-register write cannot corrupt it). On the closing stop bit the ACIA
-  latches RDR, sets RDRF, and raises the RX interrupt (subject to the
-  receive-interrupt-enable bit). On a 7-bit format only the low seven bits of
-  the device's byte are carried, as on a real line.
+- `Mc6850::transmit_clock()` is one transmit clock. Every 1, 16 or 64 clocks
+  (the counter divide) the transmitter starts the next bit and reports its
+  level and role (`Idle`/`Start`/`Data`/`Parity`/`Stop`/`Break`). TDRE sets as a
+  character starts. The `SerialUla` assembles the data bits (LSB first) into a
+  byte and hands the byte to the sink on the stop bit.
+- `Mc6850::receive_clock(rxd)` is one receive clock with RxD at a level
+  (`receive_clocks(n, rxd)` is n of them, sampling at the same points). At /16
+  and /64 the receiver hunts for RxD low and confirms a start bit after 8 or 32
+  clocks of low, half a bit; a shorter low is ignored. It then samples each
+  following bit 16 or 64 clocks later, mid-bit. At /1 it samples on every clock.
+  On the closing stop bit the ACIA latches RDR, sets RDRF, and raises the RX
+  interrupt (subject to the receive-interrupt-enable bit).
+- With RS423 selected, the `SerialUla` pulls a byte from the source and frames
+  it as start + 7 or 8 data bits (LSB first) + an optional parity bit + 1 or 2
+  stop bits, following the word format the guest selected (captured when the
+  frame starts, so a mid-character control-register write cannot corrupt it),
+  and holds each level on RxD for **64 receive clocks whatever the ACIA's
+  divider**: the far end runs at the selected baud rate and knows nothing of
+  the ACIA's setting. At /64 the byte arrives; at /16 or /1 the guest reads
+  garbage or framing errors, as on the machine. On a 7-bit format only the low
+  seven bits of the device's byte are carried, as on a real line.
+
+`/DCD`: a low-to-high transition sets status bit 2 and raises the receive
+interrupt when CR7 is set; the bit stays set until the **data register** is
+read, however many times the status register is read in between, and then
+follows the pin. While `/DCD` is high the receiver is held in reset and RDRF
+reads clear. **Master reset** (counter divide `11`) clears the control
+register, so `/RTS` is low and both interrupts stay disabled until the guest
+writes it again; TDRE and IRQ read low until a non-reset divide is written.
+Both rules are unverified decisions of the cassette specification, taken from
+measurements on real machines reported by other emulators (beebjit, jsbeeb)
+rather than from the datasheet, whose `/DCD` sequence is status then data.
 
 Framing errors (bad stop bit), parity errors, and receiver overrun (a new
 character arriving before RDR is read) are all modelled and surface in the
@@ -178,16 +210,24 @@ software over `rpc-serial` and checks what actually reached the screen.
 ### Timing
 
 `SerialUla::tick()` is called once per 2MHz CPU cycle from `Machine::step()`
-(both the normal and bus-stretch paths), guarded by `HasSerialSocket`. The
-number of ticks per serial bit is `CPU_HZ / baud` (e.g. 104 ticks/bit at 19200
-baud). Transmit and receive have independent bit-clock timers derived from the
-two baud-rate fields in the Serial ULA latch.
+(both the normal and bus-stretch paths), guarded by `HasSerialSocket`. The ULA
+runs from 16 MHz / 13 = 1.2308 MHz, as on the machine: a fractional accumulator
+yields 8 ULA clocks for every 13 ticks, so every interval is a whole number of
+ULA clocks (812.5 ns) and every rate is 0.16% above nominal. The transmit and
+receive rate fields each select a divider of the ULA clock (the table above);
+the divider outputs are the transmit and receive clocks the ACIA counts. With
+RS423 selected at 19200 baud and the ACIA at /64, a bit is 64 receive clocks,
+64 ULA clocks, 104 ticks.
 
-This is a faithful **bit-level** model at an emulator-friendly cadence; it is
-not cycle-accurate to the ACIA's 16× sampling clock. The BBC's software (and
-fujinet-nio) only depend on correct byte framing at the selected rate. This
-mirrors the pragmatic timing approach already taken by the MC6854 byte-trickle
-model in the Econet subsystem.
+**Cassette selected**: `/DCD` and `/CTS` are held low (AUG §20.7.4); the
+high-tone detector that drives `/DCD` in cassette mode, and the data separator
+that supplies the cassette receive clock, come with the tape path. Until then
+the ACIA gets no receive clock and RxD idles high, and the receive rate field
+is ignored, as on the machine. The transmit clock is the transmit divider
+output, so TDRE paces as it would; the transmitted bits go nowhere and the
+RS423 sink receives nothing. The RS423 line still runs at its own rate, so a
+far end's bytes sent meanwhile are framed and lost. `SerialStatus` reports each
+divider as `tx_ula_divider` and `rx_ula_divider`.
 
 ### IRQ wiring
 
@@ -411,8 +451,8 @@ ROM and the device agree on the bytes, and beebium transports them.
 
 | Test | Coverage |
 |------|----------|
-| `tests/test_mc6850.cpp`        | ACIA reset/control decode, TX/RX bit framing, framing/parity errors, overrun, IRQ gating, `/CTS` → TDRE. |
-| `tests/test_serial_ula.cpp`    | ULA baud/motor/RS423 decode, bit-period derivation, byte↔bit shifting through the ACIA. |
+| `tests/test_mc6850.cpp`        | ACIA reset/control decode, division at /1, /16 and /64 for every word format, start-bit hunting and glitch rejection, batched clocks, transmit framing and parity, framing/parity errors, overrun, IRQ gating, the `/DCD` latch, master reset clearing the control register, `/CTS` → TDRE. |
+| `tests/test_serial_ula.cpp`    | ULA rate/motor/RS423 decode, the 16/13 MHz clock and its dividers at every rate, 64 clocks per RS423 bit (and garbage at /16), the `&FE10` read rule and side-effect-free peek, cassette mode's `/DCD`, `/CTS` and silence, the part, byte↔bit shifting through the ACIA. |
 | `tests/test_serial_socket.cpp` | `SerialSocket` + Model B memory-map integration (mapping, mirroring, IRQ to the aggregator), device round trips, and the ULA driving `/CTS` from device back-pressure. |
 | `tests/test_serial_pty.cpp`    | POSIX pty transport: `PtyMaster` + `HostSerialEndpoint` bridged through the socket to a `PosixSerialPort` (hardware-parity round trips). |
 | `tests/test_host_serial_endpoint.cpp` | Cross-platform: a stuck peer back-pressures via `/CTS` without blocking the emulation thread. |
@@ -423,7 +463,7 @@ ROM and the device agree on the bytes, and beebium transports them.
 
 ## Status / future work
 
-- **Done**: bit-level ACIA + Serial ULA, `SerialSocket`, wiring into all Model B
+- **Done**: clocked ACIA + Serial ULA, `SerialSocket`, wiring into all Model B
   variants (memory map, IRQ, reset, clocking); the `SerialPortDevice` seam +
   `SerialPort` handle; the host-serial / rpc-serial / loopback-serial
   extensions, each with configuration, `/CTS`-bounded buffers (configurable
@@ -436,7 +476,10 @@ ROM and the device agree on the bytes, and beebium transports them.
 - **host-serial frame coalescing**: some peers need transmitted frames coalesced
   (a short debounce) to avoid packet splitting — b2 carried such a workaround.
   The hook lives in `HostSerialEndpoint`; deferred pending real-device testing.
-- **Cassette** (the ULA's other axis) is a separate future seam, gated by the
-  cassette-presence axis and *not* routed through `SerialPortDevice`.
+- **Cassette** (the ULA's other axis) is a separate seam, gated by the
+  cassette-presence axis and *not* routed through `SerialPortDevice`. The clock
+  model it needs is in place (cassette round 3); the tape path, data separator
+  and high-tone detector follow in
+  [cassette-specification.md](discussion/cassette-specification.md).
 - **Network-serial** peers (IP232, RFC 2217) are candidate future extensions
   attaching to the same seam.
