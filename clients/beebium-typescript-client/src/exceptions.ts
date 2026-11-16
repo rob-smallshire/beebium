@@ -5,7 +5,7 @@
 // Type-only import: erased at compile time, so it introduces no runtime cycle
 // with disc.ts (which imports DiscError from here).
 import type { DiscErrorKind } from "./disc.js";
-import type { CassetteErrorKind } from "./cassette.js";
+import type { CassetteErrorKind, CreateTapeErrorKind } from "./cassette.js";
 
 /** Base error for all Beebium client errors. */
 export class BeebiumError extends Error {
@@ -98,6 +98,17 @@ export class CassetteError extends BeebiumError {
     constructor(message: string, kind?: CassetteErrorKind) {
         super(message);
         this.name = "CassetteError";
+        this.kind = kind;
+    }
+}
+
+/** A blank tape could not be created; its kind says why. */
+export class CreateTapeError extends BeebiumError {
+    readonly kind?: CreateTapeErrorKind;
+
+    constructor(message: string, kind?: CreateTapeErrorKind) {
+        super(message);
+        this.name = "CreateTapeError";
         this.kind = kind;
     }
 }

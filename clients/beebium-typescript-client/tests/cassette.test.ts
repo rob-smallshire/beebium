@@ -13,8 +13,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Cassette, CassetteErrorKind, TapeTransport } from "../src/cassette.js";
-import { CassetteError } from "../src/exceptions.js";
+import { Cassette, CassetteErrorKind, CreateTapeErrorKind, TapeTransport } from "../src/cassette.js";
+import { CassetteError, CreateTapeError } from "../src/exceptions.js";
 
 // Proto enum values matching the generated code
 const KIND_DECK_EMPTY = 7;
@@ -43,6 +43,7 @@ const TAPE = {
     origin: "tests",
     targetMachine: "",
     durationSeconds: 12.5,
+    recordable: true,
 };
 
 describe("Cassette", () => {
@@ -146,5 +147,34 @@ describe("Cassette", () => {
         expect(stub.rewind).toHaveBeenCalledTimes(1);
         expect(stub.fastForward).toHaveBeenCalledTimes(1);
         expect((await cassette.status()).transport).toBe(TapeTransport.FAST_FORWARDING);
+    });
+
+    it("records, and refuses with READ_ONLY", async () => {
+        const stub = createMockStub({
+            record: () => ({ success: false, error: "The tape game.csw is a CSW image, and Beebium records only on UEF tapes.", kind: 9 }),
+        });
+        await expect(new Cassette(stub as any).record()).rejects.toMatchObject({
+            kind: CassetteErrorKind.READ_ONLY,
+        });
+    });
+
+    it("lists blank tapes and creates one, with its error kinds", async () => {
+        const stub = createMockStub({
+            listBlankTapes: () => ({
+                tapes: [{ label: "Blank C15 (15 minutes)", filename: "Blank C15 (15 minutes).uef", kind: "tape",
+                          sizeBytes: 36, durationSeconds: 900 }],
+            }),
+            createTape: (req: any) => req.label === "Blank C15 (15 minutes)"
+                ? { success: true, error: "", kind: 0, path: "/tmp/side-a.uef" }
+                : { success: false, error: "no blank tape named 'x'", kind: 1, path: "" },
+        });
+        const cassette = new Cassette(stub as any);
+        const tapes = await cassette.listBlankTapes();
+        expect(tapes[0].durationSeconds).toBe(900);
+        expect(await cassette.createTape("Blank C15 (15 minutes)", "/tmp/side-a")).toBe("/tmp/side-a.uef");
+        await expect(cassette.createTape("x", "/tmp/y")).rejects.toBeInstanceOf(CreateTapeError);
+        await expect(cassette.createTape("x", "/tmp/y")).rejects.toMatchObject({
+            kind: CreateTapeErrorKind.UNKNOWN_LABEL,
+        });
     });
 });

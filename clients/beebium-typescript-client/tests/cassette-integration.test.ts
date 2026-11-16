@@ -70,4 +70,21 @@ describe("cassette integration", () => {
             expect((await bbc.cassette.status()).tape).toBeUndefined();
         });
     });
+
+    it("creates a blank tape and records on it", async () => {
+        await withServer(async (conn, server) => {
+            const bbc = new Beebium(conn, server, server.provenanceUuid);
+            const dirpath = mkdtempSync(join(tmpdir(), "beebium-cassette-"));
+            const tapes = await bbc.cassette.listBlankTapes();
+            expect(tapes.map((t) => t.label)).toContain("Blank C15 (15 minutes)");
+            const filepath = await bbc.cassette.createTape("Blank C15 (15 minutes)", join(dirpath, "side-a"));
+            expect(filepath.endsWith("side-a.uef")).toBe(true);
+            const tape = await bbc.cassette.insert(filepath);
+            expect(tape.recordable).toBe(true);
+            await bbc.cassette.record();
+            expect((await bbc.cassette.status()).transport).toBe(TapeTransport.RECORDING);
+            await bbc.cassette.stop();
+            await bbc.cassette.eject();
+        });
+    });
 });

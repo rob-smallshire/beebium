@@ -25,22 +25,26 @@ import { pathToFileURL } from "node:url";
 import type {
     CassetteServiceClient,
     CassetteResponse as ProtoCassetteResponse,
+    CreateTapeResponse as ProtoCreateTapeResponse,
+    ListBlankTapesResponse as ProtoListBlankTapesResponse,
     DeckStatus as ProtoDeckStatus,
     InsertTapeResponse as ProtoInsertTapeResponse,
     TapeMetadata as ProtoTapeMetadata,
 } from "./generated/cassette.js";
 import {
     CassetteErrorKind as ProtoCassetteErrorKind,
+    CreateTapeErrorKind as ProtoCreateTapeErrorKind,
     TapeTransport as ProtoTapeTransport,
 } from "./generated/cassette.js";
 import { promisify } from "./call-utils.js";
 import { toAsyncIterable } from "./stream-utils.js";
-import { CassetteError } from "./exceptions.js";
+import { CassetteError, CreateTapeError } from "./exceptions.js";
 
-/** What the deck is doing: stopped, playing, or winding. */
+/** What the deck is doing: stopped, playing, recording, or winding. */
 export enum TapeTransport {
     STOPPED = "stopped",
     PLAYING = "playing",
+    RECORDING = "recording",
     REWINDING = "rewinding",
     FAST_FORWARDING = "fast_forwarding",
 }
@@ -59,6 +63,28 @@ export enum CassetteErrorKind {
     DECK_OCCUPIED = "deck_occupied",
     DECK_EMPTY = "deck_empty",
     INVALID_POSITION = "invalid_position",
+    READ_ONLY = "read_only",
+}
+
+/** Why a blank tape could not be created; on {@link CreateTapeError.kind}. */
+export enum CreateTapeErrorKind {
+    UNSPECIFIED = "unspecified",
+    UNKNOWN_LABEL = "unknown_label",
+    DESTINATION_EXISTS = "destination_exists",
+    WRITE_FAILED = "write_failed",
+    WRONG_EXTENSION = "wrong_extension",
+}
+
+/** A blank tape template the server ships, from which {@link Cassette.createTape} makes a tape. */
+export interface BlankTape {
+    /** The file name without its extension, e.g. "Blank C15 (15 minutes)". */
+    label: string;
+    /** e.g. "Blank C15 (15 minutes).uef". */
+    filename: string;
+    /** "tape". */
+    kind: string;
+    sizeBytes: number;
+    durationSeconds: number;
 }
 
 /** A tape in the deck. */
@@ -71,6 +97,8 @@ export interface TapeMetadata {
     origin: string;
     targetMachine: string;
     durationSeconds: number;
+    /** Whether {@link Cassette.record} can record on it: a UEF can, a CSW cannot. */
+    recordable: boolean;
 }
 
 /** The deck as the server last published it. */
@@ -104,8 +132,25 @@ function toErrorKind(proto: ProtoCassetteErrorKind): CassetteErrorKind {
             return CassetteErrorKind.DECK_EMPTY;
         case ProtoCassetteErrorKind.CASSETTE_ERROR_KIND_INVALID_POSITION:
             return CassetteErrorKind.INVALID_POSITION;
+        case ProtoCassetteErrorKind.CASSETTE_ERROR_KIND_READ_ONLY:
+            return CassetteErrorKind.READ_ONLY;
         default:
             return CassetteErrorKind.UNSPECIFIED;
+    }
+}
+
+function toCreateTapeErrorKind(proto: ProtoCreateTapeErrorKind): CreateTapeErrorKind {
+    switch (proto) {
+        case ProtoCreateTapeErrorKind.CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL:
+            return CreateTapeErrorKind.UNKNOWN_LABEL;
+        case ProtoCreateTapeErrorKind.CREATE_TAPE_ERROR_KIND_DESTINATION_EXISTS:
+            return CreateTapeErrorKind.DESTINATION_EXISTS;
+        case ProtoCreateTapeErrorKind.CREATE_TAPE_ERROR_KIND_WRITE_FAILED:
+            return CreateTapeErrorKind.WRITE_FAILED;
+        case ProtoCreateTapeErrorKind.CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION:
+            return CreateTapeErrorKind.WRONG_EXTENSION;
+        default:
+            return CreateTapeErrorKind.UNSPECIFIED;
     }
 }
 
@@ -113,6 +158,8 @@ function toTransport(proto: ProtoTapeTransport): TapeTransport {
     switch (proto) {
         case ProtoTapeTransport.TAPE_TRANSPORT_PLAYING:
             return TapeTransport.PLAYING;
+        case ProtoTapeTransport.TAPE_TRANSPORT_RECORDING:
+            return TapeTransport.RECORDING;
         case ProtoTapeTransport.TAPE_TRANSPORT_REWINDING:
             return TapeTransport.REWINDING;
         case ProtoTapeTransport.TAPE_TRANSPORT_FAST_FORWARDING:
@@ -131,6 +178,7 @@ function toTapeMetadata(proto: ProtoTapeMetadata): TapeMetadata {
         origin: proto.origin,
         targetMachine: proto.targetMachine,
         durationSeconds: proto.durationSeconds,
+        recordable: proto.recordable,
     };
 }
 
@@ -218,6 +266,47 @@ export class Cassette {
      */
     async fastForward(): Promise<void> {
         check(await this.call<object, ProtoCassetteResponse>("fastForward", {}));
+    }
+
+    /**
+     * Press record. From here, while the motor relay is closed, the tape moves
+     * and what passes under the head is replaced by what the machine sends, or
+     * by silence. Stop, play, a seek, a wind, eject and the end of the tape end
+     * it, and the tape is then written back to its file. Throws CassetteError
+     * with kind READ_ONLY for a tape Beebium only reads (a CSW).
+     */
+    async record(): Promise<void> {
+        check(await this.call<object, ProtoCassetteResponse>("record", {}));
+    }
+
+    /** The blank tape templates the server ships, in file name order. */
+    async listBlankTapes(): Promise<BlankTape[]> {
+        const response = await this.call<object, ProtoListBlankTapesResponse>("listBlankTapes", {});
+        return response.tapes.map((tape) => ({
+            label: tape.label,
+            filename: tape.filename,
+            kind: tape.kind,
+            sizeBytes: tape.sizeBytes,
+            durationSeconds: tape.durationSeconds,
+        }));
+    }
+
+    /**
+     * Create a blank tape: copy the template with this label to a path on the
+     * server's host, and return the new tape's absolute path. A destination
+     * without an extension gets ".uef"; one with another is refused. Throws
+     * CreateTapeError with its kind.
+     */
+    async createTape(label: string, destinationFilepath: string, overwrite = false): Promise<string> {
+        const response = await this.call<
+            { label: string; destinationPath: string; overwrite: boolean },
+            ProtoCreateTapeResponse
+        >("createTape", { label, destinationPath: destinationFilepath, overwrite });
+        if (!response.success) {
+            throw new CreateTapeError(`Creating a blank tape failed: ${response.error}`,
+                toCreateTapeErrorKind(response.kind));
+        }
+        return response.path;
     }
 
     /** The deck's state, read without stopping the machine. */
