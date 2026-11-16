@@ -8,9 +8,9 @@ rewind, and CHAIN it back, in this machine or another. Programme: `cassette-spec
 ## The recordable tape
 
 - `UefTape` becomes editable in memory: a tape of fixed length holding its edges in tape time
-  (ULA clocks), replaceable over any span. Representation is yours, with two constraints: edge
-  times are kept exactly (a recording read back gives the same edges within one clock), and a
-  fully recorded C90 (about 26 million edges) stays under 100 MB. Runs of equal half-cycles,
+  (ULA clocks), replaceable over any span. Representation is yours, with two constraints: in
+  memory, edge times are kept exactly, and a fully recorded C90 (about 26 million edges) stays
+  under 100 MB. Runs of equal half-cycles,
   run-length coded, meet both. `CswTape` stays read-only.
 - Metadata chunks (&0000 origin, &0001, &0003, &0005 and the other non-tape chunks the reader
   keeps) are carried through unchanged and written back first.
@@ -38,10 +38,18 @@ rewind, and CHAIN it back, in this machine or another. Programme: `cassette-spec
 The file is rewritten when the transport leaves `Recording`, on eject, on `SaveMachine`, and
 at shutdown, if the tape is dirty; whole-file, atomically (write beside, rename over), gzipped
 if the original was gzipped. The whole tape is re-emitted through one classifier so that
-untouched and recorded spans are described alike; a tape loads back to the same edges within
-one clock whatever chunk types the classifier chose, and this is the rule the documentation
-states ("Beebium rewrites a recorded-on UEF in its own chunk vocabulary; its content is
-preserved to the clock, its chunk layout is not").
+untouched and recorded spans are described alike. A UEF is a logical record at a nominal
+1200 Hz base, as every UEF is: the machine's own clock makes the tones 0.16% faster than
+nominal on the way out and again on the way back in, exactly as a real Beeb's SAVE described
+by MakeUEF. So the writer does **not** chase absolute clock times with `&0113` chunks; it
+writes at the base in force (no `&0113` unless the original carried one) and the rule is: a
+tape loads back as the same sequence of cycles and gaps, every half-cycle in the same class
+(2400 Hz, 1200 Hz) and every gap within one 1200 Hz half-cycle of its length, whatever chunk
+types the classifier chose. The documentation states it as "Beebium rewrites a recorded-on
+UEF in its own chunk vocabulary; its content is preserved cycle for cycle, its chunk layout and
+its absolute timing (nominal, as in any UEF) are not". `Decision (architect, 2026-11-17)`:
+chosen over a writer that models the reader and interleaves `&0113` corrections, which would
+buy half-clock fidelity nobody needs at the price of a chunk stream other tools do not expect.
 
 The classifier walks the edges and emits, in order:
 
@@ -130,8 +138,10 @@ done.
    gives `&0112` 12; a byte of 8N1 rendered by the builder gives `&0100` of that byte; the same
    at 300 baud gives `&0117` 300 then `&0100`; a 7E1 byte gives `&0104`; an odd bit sequence
    that frames as nothing gives `&0102` with those bits; metadata chunks come first unchanged.
-2. Round trip: a recorded tape written and read back gives the same edge times within one
-   clock, including an `&0102` region, and a tape that was gzipped is written gzipped.
+2. Round trip: a recorded tape written and read back gives the same sequence of half-cycle
+   classes and gaps (each gap within one 1200 Hz half-cycle), including an `&0102` region; the
+   read-back edge times, scaled by 1200/1201.923, match the originals within one clock plus
+   the gaps' tolerance; a tape that was gzipped is written gzipped.
 3. Overwrite: a 60 s tape with carrier throughout, recorded over from 20 s to 30 s with
    silence, reads back as carrier, silence, carrier at those times; recording past the end
    stops at the end with the transport `Stopped`.
