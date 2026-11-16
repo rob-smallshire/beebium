@@ -102,8 +102,9 @@ All in ULA clocks, from the programme's tables.
 
 **Data separator.**
 
-- An edge from the deck starts a burst: 4 RxC pulses, 2 clocks each (`receive_clock(rxd)` to
-  the ACIA on each pulse's rising edge, with the current RxD level). An edge during a burst
+- An edge from the deck starts a burst: 4 RxC pulses of 4 clocks each (2 low, 2 high: 1.625 µs
+  per half; 16 clocks a burst), with `receive_clock(rxd)` to the ACIA on each pulse's rising
+  edge carrying the current RxD level. An edge during a burst
   ends the burst at once and starts a fresh one.
 - A timeout of 350 clocks since the last edge (`Decision (unverified)`, 284 µs) with no new edge
   emits one more burst and marks the gap long. No further bursts until the next edge.
@@ -115,7 +116,10 @@ All in ULA clocks, from the programme's tables.
 
 - A cell counter advances once per 256 clocks while RxD is 1, high-tone edges are arriving (an
   edge within the last 350 clocks), and the motor bit is 1. It clears on RxD becoming 0 or the
-  motor bit becoming 0. It holds (neither advancing nor clearing) in silence with the motor on.
+  motor bit becoming 0. Silence ends in a timed-out gap, so the first edge after any silence
+  recovers a 0 and clears the counter: silence re-arms the detector. (An earlier draft said the
+  count held through silence; that cannot coexist with the separator rule, the replica clears
+  on the recovered 0, and the Ferranti evidence ties the discharge to the timeout burst.)
 - At the threshold (Ferranti 962 cells, VLSI 445) /DCD is driven high for one cell (256 clocks),
   then low, and the counter holds at the threshold until cleared.
 - With RS423 selected /DCD is forced low but the counter runs as above. Switching to cassette
@@ -167,7 +171,8 @@ gives 0.62 s before and 0.25 s between (the Welcome tape's shape).
 1. The CRC check value.
 2. A `UefBuilder` tape round-trips through `UefTape`: the edges of one &0100 byte are at the
    expected clocks for 1200 mode and, after &0117 = 300, for 300 mode; a &0110 of n cycles
-   yields 2n edges 256 clocks apart; &0112 and &0116 yield gaps of the right length; &0113
+   yields 2n edges 256 or 257 clocks apart (tape time accumulates exactly at 16/13 MHz, so a
+   2400 Hz half-cycle is 256.41 clocks); &0112 and &0116 yield gaps of the right length; &0113
    changes the spacing; &0115 changes the first level after a gap; &0111 contains &AA; &0104
    7E1 has a parity edge pattern and the MakeUEF swap applies only for an origin string below
    2.4; &0114 with the specification's worked example &9D &2C yields the cycle pattern
@@ -184,14 +189,15 @@ gives 0.62 s before and 0.25 s between (the Welcome tape's shape).
 
 6. Separator: a 2400 Hz edge train gives 4 RxC pulses per edge, 16 per 1200-baud bit, and RxD 1
    after the third edge; a 1200 Hz train gives a timeout burst after 350 clocks, 16 per bit, and
-   RxD 0; a 90° intermediate gap of 384 clocks is short (no timeout); an edge 100 clocks into a
-   burst truncates it to the pulses issued so far.
+   RxD 0; a 90° intermediate gap of 384 clocks is short (no timeout); an edge 6 clocks into a
+   burst truncates it to the two pulses issued so far.
 7. A byte of 8N1 rendered as edges arrives in the ACIA at /16 intact; the same tape at 300
    (&0117) arrives at /64; at the wrong divider it does not.
 8. Detector, Ferranti: 961 cells of carrier give no /DCD; 962 give a one-cell pulse and the ACIA
    latches status bit 2 and raises the IRQ with CR7 set; carrier continuing gives no second
    pulse; a 0 bit then 962 cells gives a second pulse; motor off then on then 962 cells gives a
-   pulse; silence after 500 cells then carrier for 462 more gives a pulse (the hold rule); a
+   pulse; silence after 500 cells then carrier for 462 more gives no pulse, and 962 more does
+   (silence re-arms); a
    write of the same latch value with the motor on does not clear the count; RS423 then cassette
    with the motor on does not clear it. VLSI: 445 cells.
 9. Tone synthesiser: with cassette selected and RTS low, an idle ACIA produces edges 256 clocks
