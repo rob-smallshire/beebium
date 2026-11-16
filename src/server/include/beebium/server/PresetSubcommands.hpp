@@ -173,6 +173,14 @@ public:
             }
         }
 
+        // The cassette deck, on a model with the interface: the tape image
+        // formats the server reads by content.
+        if constexpr (HasCassette<Memory>) {
+            storage["cassette"] = ojson{{"has_cassette", true},
+                                        {"label", cassette_label()},
+                                        {"image_types", ojson::array({"uef", "csw"})}};
+        }
+
         ServerConfig<MachineType> resolver_cfg;
         if (auto err = populate_extension_resolver(argv[0], {}, resolver_cfg)) {
             return *err;
@@ -1097,6 +1105,9 @@ private:
             if (parts[0] == "storage" && parts.size() > 1 && parts[1] == "floppy_drives") {
                 if (auto drive = index(2)) return floppy_drive_label(*drive);
             }
+            if (parts[0] == "storage" && parts.size() > 1 && parts[1] == "cassette") {
+                return cassette_label();
+            }
             if (parts[0] == "sideways_bank" && parts.size() > 1 && parts[1] == "slots") {
                 if (auto i = index(2); i && *i < sideways_slots.size()) {
                     return sideways_slot_label(sideways_slots[*i]);
@@ -1194,6 +1205,7 @@ private:
         check_roms_exist(config, preset, warning);
         check_dfs_controllers(config, preset, warning);
         check_floppies_exist(config, warning);
+        check_tape_exists(config, warning);
 
         std::string write_error;
         document = preset_document<MachineType>(
@@ -1332,6 +1344,39 @@ private:
             }
             if (!container.has_file(filepath)) {
                 warning(path, "disc image not found: " + filepath.string());
+            }
+        }
+    }
+
+    // The preset's tape, checked as a floppy is: a missing image is a warning.
+    // A tape on a model without a cassette interface is ignored, with a
+    // warning at the key.
+    template<typename Warning>
+    static void check_tape_exists(const ServerConfig<MachineType>& config, Warning warning) {
+        using Memory = typename MachineType::Memory;
+        const auto& uri = config.machine.tape_filepath;
+        if (uri.empty()) return;
+        const std::string path = "/storage/cassette/image_uri";
+        if constexpr (!HasCassette<Memory>) {
+            warning(path, "ignored: this model has no cassette interface");
+            return;
+        } else {
+            const auto container = config.launch.reference_container();
+            std::filesystem::path filepath;
+            if (uri.find("://") != std::string::npos) {
+                auto url = beebium::DiscUrl::parse(uri);
+                if (!url || !url->is_local()) return;
+                filepath = url->to_filepath();
+            } else {
+                try {
+                    filepath = resolve_reference(uri, ResourceKind::Tape, container, {}).path;
+                } catch (const std::exception& e) {
+                    warning(path, e.what());
+                    return;
+                }
+            }
+            if (!container.has_file(filepath)) {
+                warning(path, "tape image not found: " + filepath.string());
             }
         }
     }

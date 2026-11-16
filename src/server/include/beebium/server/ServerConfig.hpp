@@ -83,8 +83,11 @@ struct MachineDescription {
     // Disc configuration
     std::array<std::string, 2> floppy_filepaths;
 
-    // A tape image to insert into the cassette deck and play (--tape).
+    // A tape image to insert into the cassette deck: a preset's
+    // storage.cassette.image_uri, inserted stopped, or --tape, which wins and
+    // presses play (tape_play).
     std::string tape_filepath;
+    bool tape_play = false;
     std::string fdc_type;
 
     // Econet configuration

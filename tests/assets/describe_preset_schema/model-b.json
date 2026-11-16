@@ -165,7 +165,15 @@
             "hfe"
           ]
         }
-      ]
+      ],
+      "cassette": {
+        "has_cassette": true,
+        "label": "Cassette",
+        "image_types": [
+          "uef",
+          "csw"
+        ]
+      }
     },
     {
       "type": "sideways_bank",

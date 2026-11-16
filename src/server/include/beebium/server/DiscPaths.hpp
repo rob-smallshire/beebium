@@ -76,7 +76,22 @@ public:
     static std::filesystem::path resolve_disc_image(
         const std::string& image, const ReferenceContainer& container,
         const CopyDestination& destination) {
-        const auto found = resolve_reference(image, ResourceKind::Disc, container, {});
+        return resolve_media_image(image, ResourceKind::Disc, container, destination);
+    }
+
+    // The same rule for a tape image: a bare name is searched for in the
+    // container and the per-user tapes/, and a tape the template names by
+    // search or within itself is the machine's own copy.
+    static std::filesystem::path resolve_tape_image(
+        const std::string& image, const ReferenceContainer& container,
+        const CopyDestination& destination) {
+        return resolve_media_image(image, ResourceKind::Tape, container, destination);
+    }
+
+    static std::filesystem::path resolve_media_image(
+        const std::string& image, ResourceKind kind, const ReferenceContainer& container,
+        const CopyDestination& destination) {
+        const auto found = resolve_reference(image, kind, container, {});
         std::filesystem::path relative_path;
         if (found.origin != ReferenceOrigin::Path) {
             relative_path = found.path.filename();

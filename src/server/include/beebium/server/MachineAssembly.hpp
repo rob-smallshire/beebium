@@ -465,28 +465,68 @@ inline std::optional<int> load_single_disc(DiscDrive& drive, int drive_num,
     return std::nullopt;
 }
 
-// Insert the --tape image into the cassette deck and press play. The format is
-// judged by content. A file that cannot be opened or is not a tape image is a
-// configuration error, reported with the reader's sentence.
+// Insert the configured tape into the cassette deck: a preset's
+// storage.cassette.image_uri, or --tape. The reference resolves as a floppy's
+// does (DiscPaths::resolve_tape_image: a bare name is searched for in the
+// container and the per-user tapes/, and a tape the template names by search or
+// within itself is the machine's own copy). The format is judged by content.
+// The deck is left stopped at `position_seconds` (a saved machine's), or
+// playing at the start for --tape. A tape that cannot be found is NOINPUT; one
+// that is not a tape image, a CONFIG error with the reader's sentence.
 // Returns an exit code on error, or std::nullopt on success.
 template<typename MachineType>
-std::optional<int> load_tape_image(MachineType& machine, const ServerConfig<MachineType>& config) {
+std::optional<int> load_tape_image(MachineType& machine, const ServerConfig<MachineType>& config,
+                                   const DiscPaths::CopyDestination& destination,
+                                   std::optional<double> position_seconds = std::nullopt) {
     using Memory = std::remove_cvref_t<decltype(machine.state().memory)>;
     if constexpr (HasCassette<Memory>) {
-        if (config.machine.tape_filepath.empty()) {
+        const std::string& reference = config.machine.tape_filepath;
+        if (reference.empty()) {
             return std::nullopt;
         }
-        const std::filesystem::path filepath(config.machine.tape_filepath);
+        const bool is_url = reference.find("://") != std::string::npos;
+        const auto local_url = is_url ? beebium::DiscUrl::parse(reference) : std::nullopt;
+        if (is_url && !(local_url && local_url->is_local())) {
+            std::cerr << "Error: the tape image " << reference << " is not a local file.\n";
+            return ExitCode::CONFIG;
+        }
+        std::filesystem::path filepath;
+        try {
+            filepath = DiscPaths::resolve_tape_image(
+                local_url ? local_url->to_filepath().string() : reference,
+                config.launch.reference_container(), destination);
+        } catch (const std::runtime_error& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return ExitCode::NOINPUT;
+        }
         try {
             auto tape = open_tape_file(filepath);
             auto& deck = machine.state().memory.cassette_deck;
-            deck.insert(std::move(tape), filepath.filename().string());
-            deck.play();
+            deck.insert(std::move(tape), filepath.filename().string(),
+                        beebium::DiscUrl::from_filepath(filepath).url());
+            deck.set_configured(true);
+            if (config.machine.tape_play) {
+                deck.play();
+            } else if (position_seconds && *position_seconds > 0.0) {
+                deck.seek(seconds_to_tape_time(*position_seconds));
+            }
+        } catch (const TapeImageError& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return e.kind() == TapeImageError::Kind::CannotOpen ? ExitCode::NOINPUT : ExitCode::CONFIG;
         } catch (const std::runtime_error& e) {
             std::cerr << "Error: " << e.what() << "\n";
             return ExitCode::CONFIG;
         }
-        std::cout << "Loading tape: " << filepath.string() << "\n";
+        const auto& deck = machine.state().memory.cassette_deck;
+        std::cout << "Loading tape: " << filepath.string();
+        if (deck.transport() == CassetteDeck::Transport::Playing) {
+            std::cout << " (playing)\n";
+        } else if (deck.position() > 0) {
+            std::cout << " (stopped at " << static_cast<double>(deck.position()) / ULA_CLOCK_HZ
+                      << " s)\n";
+        } else {
+            std::cout << " (stopped)\n";
+        }
     }
     return std::nullopt;
 }
@@ -1013,9 +1053,11 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     }
 
     // A saved machine records when it was last opened.
+    std::optional<double> saved_tape_position_seconds;
     if (!am->machine_directory->transient()) {
         std::string error;
         if (auto record = read_machine_record(am->machine_directory->dirpath(), error)) {
+            saved_tape_position_seconds = record->cassette_position_seconds;
             record->last_used = iso8601_utc_now();
             try {
                 write_machine_record(am->machine_directory->dirpath(), *record);
@@ -1132,7 +1174,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     }
 
     // Load a tape
-    if (auto exit_code = load_tape_image(machine, config)) {
+    if (auto exit_code = load_tape_image(machine, config, disc_destination, saved_tape_position_seconds)) {
         return {nullptr, *exit_code};
     }
 

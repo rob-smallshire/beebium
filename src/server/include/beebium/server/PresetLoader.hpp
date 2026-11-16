@@ -36,6 +36,9 @@ namespace beebium::server {
 struct PresetStorageConfig {
     std::optional<std::string> fdc_socket_id;     // e.g., "acorn-1770", "none"
     std::map<uint8_t, std::optional<std::string>> floppy_drives;  // drive -> image_uri (nullopt = empty)
+    // storage.cassette.image_uri: unset when the preset does not say, set to
+    // nullopt for an explicitly empty deck.
+    std::optional<std::optional<std::string>> cassette_image_uri;
 };
 
 // Generic Econet transport sub-configuration: names a transport
@@ -194,8 +197,8 @@ inline constexpr std::array<PresetKeyInfo, 14> kPresetKeys{{
      "machine.screen_mode, auto_boot, raw_links", true, "Keyboard links"},
     {PresetKey::MosImageUri, "mos_image_uri", "string", "--mos", "machine.mos_filepath", true,
      "MOS ROM"},
-    {PresetKey::Storage, "storage", "object", "--fdc, --floppy",
-     "machine.fdc_type, floppy_filepaths", true, "Storage"},
+    {PresetKey::Storage, "storage", "object", "--fdc, --floppy, --tape",
+     "machine.fdc_type, floppy_filepaths, tape_filepath", true, "Storage"},
     {PresetKey::SidewaysBank, "sideways_bank", "object", "--sideways, --language-rom",
      "machine.sideways_configs, rom_slots", true, "Sideways ROM / RAM"},
     {PresetKey::Econet, "econet", "object", "--station, an Econet transport (--aun, ...)",
@@ -220,6 +223,11 @@ inline std::string preset_key_label(std::string_view name) {
 // What a user calls floppy drive `drive`.
 inline std::string floppy_drive_label(std::size_t drive) {
     return "Floppy drive " + std::to_string(drive);
+}
+
+// What a user calls the cassette deck.
+inline std::string cassette_label() {
+    return "Cassette";
 }
 
 // What a user calls sideways slot `slot`.
@@ -329,6 +337,20 @@ inline std::optional<PresetStorageConfig> parse_storage_section(
                     std::string uri = drive_json["image_uri"].get<std::string>();
                     storage.floppy_drives[drive_num] = normalize_image_uri(uri, preset_dirpath);
                 }
+            }
+        }
+    }
+
+    // Parse the cassette deck: storage.cassette.image_uri, a tape image named as
+    // a floppy's is.
+    if (storage_json.contains("cassette") && storage_json["cassette"].is_object()) {
+        const auto& cassette = storage_json["cassette"];
+        if (cassette.contains("image_uri")) {
+            if (cassette["image_uri"].is_null()) {
+                storage.cassette_image_uri = std::optional<std::string>{};  // explicit empty
+            } else if (cassette["image_uri"].is_string()) {
+                storage.cassette_image_uri =
+                    normalize_image_uri(cassette["image_uri"].get<std::string>(), preset_dirpath);
             }
         }
     }

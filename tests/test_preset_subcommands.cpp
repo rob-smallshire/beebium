@@ -1846,6 +1846,75 @@ TEST_CASE("resolve-preset: a directory preset resolves its references in the dir
           beebium::file_url_from_filepath(dirpath / "discs" / "game.ssd"));
 }
 
+TEST_CASE("resolve-preset: a tape beside a directory preset resolves to a file URI",
+          "[integration][preset][resolve-preset][cassette]") {
+    TempDirectory temp_dir;
+    const auto dirpath = temp_dir.path() / "my-tape";
+    std::filesystem::create_directories(dirpath / "tapes");
+    std::ofstream(dirpath / "tapes" / "game.uef") << "UEF File!";
+    std::ofstream(dirpath / "preset.json") << R"({"model": "model-b",
+        "storage": {"cassette": {"image_uri": "tapes/game.uef"}}})";
+
+    auto out = resolve_json(EXECUTABLE, dirpath.string());
+
+    CHECK(out.at("diagnostics").empty());
+    CHECK(out.at("preset").at("storage").at("cassette").at("image_uri") ==
+          beebium::file_url_from_filepath(dirpath / "tapes" / "game.uef"));
+}
+
+TEST_CASE("resolve-preset: a missing tape is a warning at its image_uri",
+          "[integration][preset][resolve-preset][cassette]") {
+    TempDirectory temp_dir;
+    const auto preset_filepath = temp_dir.path() / "missing-tape.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b",
+        "storage": {"cassette": {"image_uri": "file:///nonexistent/beebium.uef"}}})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    bool warned = false;
+    for (const auto& d : out.at("diagnostics")) {
+        if (d.at("path") == "/storage/cassette/image_uri") {
+            warned = true;
+            CHECK(d.at("severity") == "warning");
+            CHECK(d.at("location") == "Cassette");
+            CHECK(d.at("message").get<std::string>().find("beebium.uef") != std::string::npos);
+        }
+    }
+    CHECK(warned);
+}
+
+TEST_CASE("resolve-preset: a preset without a tape resolves the deck to null",
+          "[integration][preset][resolve-preset][cassette]") {
+    TempDirectory temp_dir;
+    const auto preset_filepath = temp_dir.path() / "no-tape.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b"})";
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+    CHECK(out.at("preset").at("storage").at("cassette").at("image_uri").is_null());
+}
+
+TEST_CASE("describe-preset-schema: every model has the cassette deck",
+          "[integration][preset][describe-preset-schema][cassette]") {
+    for (const char* model : {"model-b", "model-b-plus", "model-b-plus-128k", "model-b-romram",
+                              "model-b-atpl-sidewise", "model-b-watford-rom-ram",
+                              "model-b-integra-b"}) {
+        INFO(model);
+        auto result = run_command(find_executable(std::string("beebium-") + model).string() +
+                                  " describe-preset-schema");
+        REQUIRE(result.exit_code == 0);
+        const auto schema = nlohmann::json::parse(result.stdout_output);
+        bool found = false;
+        for (const auto& section : schema.at("sections")) {
+            if (section.value("type", "") != "storage") continue;
+            found = true;
+            const auto& cassette = section.at("cassette");
+            CHECK(cassette.at("has_cassette") == true);
+            CHECK(cassette.at("label") == "Cassette");
+            CHECK(cassette.at("image_types") == nlohmann::json::array({"uef", "csw"}));
+        }
+        CHECK(found);
+    }
+}
+
 TEST_CASE("resolve-preset: a floppy named with a space or a percent sign opens that file",
           "[integration][preset][resolve-preset]") {
     // The image_uri resolve-preset reports is the one `start` opens, through
@@ -2890,6 +2959,62 @@ TEST_CASE("a preset's relative and bare per-user hard-disc images are both found
     CHECK(after.exit_code == 0);
 }
 
+namespace {
+
+// A minimal UEF: its header and one carrier chunk.
+void put_uef(const std::filesystem::path& filepath) {
+    const unsigned char bytes[] = {'U', 'E', 'F', ' ', 'F', 'i', 'l', 'e', '!', 0, 10, 0,
+                                   0x10, 0x01, 2, 0, 0, 0, 100, 0};
+    std::ofstream(filepath, std::ios::binary)
+        .write(reinterpret_cast<const char*>(bytes), sizeof(bytes));
+}
+
+}  // namespace
+
+TEST_CASE("a preset's tape is inserted stopped and --tape wins and plays",
+          "[integration][preset][cassette]") {
+    TempDirectory temp_dir;
+    const auto user_dirpath = temp_dir.path() / "user";
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
+    put_uef(temp_dir.path() / "preset-tape.uef");
+    put_uef(temp_dir.path() / "cli-tape.uef");
+    const auto preset_filepath = temp_dir.path() / "tape.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b",
+        "storage": {"cassette": {"image_uri": "preset-tape.uef"}}})";
+
+    auto stopped = run_command(capture_command(temp_dir.path() / "a.png") + " --preset \"" +
+                               preset_filepath.string() + "\"");
+    INFO(stopped.stdout_output << stopped.stderr_output);
+    CHECK(stopped.exit_code == 0);
+    CHECK(stopped.stdout_output.find("preset-tape.uef (stopped)") != std::string::npos);
+
+    auto playing = run_command(capture_command(temp_dir.path() / "b.png") + " --preset \"" +
+                               preset_filepath.string() + "\" --tape \"" +
+                               (temp_dir.path() / "cli-tape.uef").string() + "\"");
+    INFO(playing.stdout_output << playing.stderr_output);
+    CHECK(playing.exit_code == 0);
+    CHECK(playing.stdout_output.find("cli-tape.uef (playing)") != std::string::npos);
+    CHECK(playing.stdout_output.find("preset-tape.uef") == std::string::npos);
+}
+
+TEST_CASE("a preset's bare tape name is found in the per-user tapes directory",
+          "[integration][preset][cassette][resource_paths]") {
+    TempDirectory temp_dir;
+    const auto user_dirpath = temp_dir.path() / "user";
+    beebium::test::ScopedEnv user_env("BEEBIUM_USER_DIRPATH", user_dirpath.string());
+    std::filesystem::create_directories(user_dirpath / "tapes");
+    put_uef(user_dirpath / "tapes" / "shelf.uef");
+    const auto preset_filepath = temp_dir.path() / "shelf.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b",
+        "storage": {"cassette": {"image_uri": "shelf.uef"}}})";
+
+    auto result = run_command(capture_command(temp_dir.path() / "c.png") + " --preset \"" +
+                              preset_filepath.string() + "\"");
+    INFO(result.stdout_output << result.stderr_output);
+    CHECK(result.exit_code == 0);
+    CHECK(result.stdout_output.find("shelf.uef (stopped)") != std::string::npos);
+}
+
 TEST_CASE("a launch copies a template's disc into its own directory and removes it after",
           "[integration][preset][resource_paths][machine_directory]") {
     // The L3FS disc beside the preset, named by its bare name, is copied into
@@ -3332,7 +3457,10 @@ TEST_CASE("resolve-preset --json output is stable, diagnostics included",
           "drive": 1,
           "image_uri": null
         }
-      ]
+      ],
+      "cassette": {
+        "image_uri": null
+      }
     },
     "sideways_bank": {
       "slots": [

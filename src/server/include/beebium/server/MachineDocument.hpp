@@ -93,6 +93,10 @@ struct MachineRecord {
     std::string created;        // when the machine was made (ISO 8601, UTC)
     std::string last_used;      // when it was last opened (ISO 8601, UTC)
     std::string source_preset;  // the preset it was made from, for information; may be ""
+    // Where the configured tape (preset.json's storage.cassette) was when the
+    // machine was last saved: state, like the battery-backed RAM, not
+    // configuration. Absent means the start of the tape.
+    std::optional<double> cassette_position_seconds;
 };
 
 // The current time as ISO 8601 UTC, to the second ("2026-10-17T14:30:00Z").
@@ -149,9 +153,16 @@ inline std::optional<MachineRecord> read_machine_record(const std::filesystem::p
         error = filepath.string() + " is from a later version of Beebium";
         return std::nullopt;
     }
-    return MachineRecord{json["uuid"].get<std::string>(), json.value("description", ""),
+    MachineRecord record{json["uuid"].get<std::string>(), json.value("description", ""),
                          json.value("model", ""),          json.value("created", ""),
-                         json.value("last_used", ""),      json.value("source_preset", "")};
+                         json.value("last_used", ""),      json.value("source_preset", ""),
+                         std::nullopt};
+    if (json.contains("cassette") && json["cassette"].is_object() &&
+        json["cassette"].contains("position_seconds") &&
+        json["cassette"]["position_seconds"].is_number()) {
+        record.cassette_position_seconds = json["cassette"]["position_seconds"].get<double>();
+    }
+    return record;
 }
 
 namespace machine_document_detail {
@@ -219,6 +230,9 @@ inline std::string machine_record_text(const MachineRecord& record) {
                                 {"created", record.created},
                                 {"last_used", record.last_used}};
     if (!record.source_preset.empty()) json["source_preset"] = record.source_preset;
+    if (record.cassette_position_seconds) {
+        json["cassette"] = {{"position_seconds", *record.cassette_position_seconds}};
+    }
     return json.dump(2) + "\n";
 }
 

@@ -415,8 +415,24 @@ private:
         auto record = read_machine_record(home, error);
         if (!record) throw std::runtime_error(error);
         record->description = description_template;
+        record->cassette_position_seconds = configured_tape_position_seconds();
         write_machine_record(home, *record);
         write_machine_document_files(home, *record, machine_document_name(home));
+    }
+
+    // Where the configured tape is, for machine.json, or nullopt when the deck
+    // holds no tape or one inserted while the machine runs (which Save does not
+    // record, as it does not record a floppy inserted while it runs). Called
+    // with the emulation paused.
+    std::optional<double> configured_tape_position_seconds() const {
+        using Memory = std::remove_cvref_t<decltype(am_.machine.state().memory)>;
+        if constexpr (HasCassette<Memory>) {
+            const auto& deck = am_.machine.state().memory.cassette_deck;
+            if (deck.configured()) {
+                return static_cast<double>(deck.position()) / ULA_CLOCK_HZ;
+            }
+        }
+        return std::nullopt;
     }
 
     // Why the existing `target` cannot be replaced by the machine at `home`,
@@ -477,6 +493,7 @@ private:
             record.uuid = uuid;
             record.description = description_template;
             record.last_used = iso8601_utc_now();
+            record.cassette_position_seconds = configured_tape_position_seconds();
             write_machine_record(partial, record);
             keep_state(partial);
             if (replacing) {

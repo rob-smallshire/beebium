@@ -542,7 +542,9 @@ inline OptionParse parse_machine_option(
             return usage_error(e.what());
         }
     } else if (arg == "--tape" && i + 1 < argc) {
-        machine.tape_filepath = argv[++i];
+        const std::string value = argv[++i];
+        machine.tape_filepath = value.find("://") == std::string::npos ? reference(value) : value;
+        machine.tape_play = true;
     } else if (arg == "--screen-mode" && i + 1 < argc) {
         try {
             machine.screen_mode = parse_int(argv[++i], "--screen-mode");

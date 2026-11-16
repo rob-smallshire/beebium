@@ -243,11 +243,25 @@ inline std::string command_line_reference(const std::string& reference,
 
 // The kinds of resource a bare name is searched for, each with its per-user
 // directory.
-enum class ResourceKind { Disc, Rom };
+enum class ResourceKind { Disc, Rom, Tape };
 
 inline std::filesystem::path user_resource_dirpath(ResourceKind kind) {
-    return beebium::platform::user_state_base_dirpath() /
-           (kind == ResourceKind::Disc ? "discs" : "roms");
+    switch (kind) {
+        case ResourceKind::Disc: return beebium::platform::user_state_base_dirpath() / "discs";
+        case ResourceKind::Tape: return beebium::platform::user_state_base_dirpath() / "tapes";
+        case ResourceKind::Rom: break;
+    }
+    return beebium::platform::user_state_base_dirpath() / "roms";
+}
+
+// What a user calls a resource of `kind` in a message.
+inline const char* resource_kind_label(ResourceKind kind) {
+    switch (kind) {
+        case ResourceKind::Disc: return "Disc image";
+        case ResourceKind::Tape: return "Tape image";
+        case ResourceKind::Rom: break;
+    }
+    return "ROM";
 }
 
 // Where a reference's file was found: named by a path (anchored, not
@@ -278,7 +292,7 @@ inline ResolvedReference resolve_reference(
     search_dirpaths.insert(search_dirpaths.end(), system_dirpaths.begin(),
                            system_dirpaths.end());
     const auto found = find_on_search_path(
-        reference, search_dirpaths, kind == ResourceKind::Disc ? "Disc image" : "ROM",
+        reference, search_dirpaths, resource_kind_label(kind),
         [&](const std::filesystem::path& filepath) { return container.has_file(filepath); });
     const auto origin = found.parent_path() == container.dirpath() ? ReferenceOrigin::Container
                         : found.parent_path() == user_dirpath    ? ReferenceOrigin::User

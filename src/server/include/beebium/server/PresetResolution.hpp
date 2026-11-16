@@ -28,6 +28,7 @@
 #include "beebium/server/ServerConfig.hpp"
 #include "beebium/server/SidewaysValidation.hpp"
 
+#include "beebium/cassette/CassetteDeck.hpp"
 #include "beebium/disc/DiscConcepts.hpp"
 #include "beebium/econet/EconetConcepts.hpp"
 #include "beebium/econet/StationSelection.hpp"
@@ -239,6 +240,11 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
                         config.machine.floppy_filepaths[drive].empty() && uri_opt) {
                         config.machine.floppy_filepaths[drive] = *uri_opt;
                     }
+                }
+                // A preset's tape is inserted stopped; --tape wins.
+                if (preset.storage->cassette_image_uri && *preset.storage->cassette_image_uri &&
+                    config.machine.tape_filepath.empty()) {
+                    config.machine.tape_filepath = **preset.storage->cassette_image_uri;
                 }
                 break;
             case PresetKey::SidewaysBank:
@@ -1057,6 +1063,13 @@ std::optional<nlohmann::ordered_json> preset_document(const MachineDescription& 
                                            : ojson(normalize_image_uri(image, {}))}});
                 }
                 if (!drives.empty()) storage["floppy_drives"] = std::move(drives);
+                if constexpr (HasCassette<Memory>) {
+                    if (!machine.tape_filepath.empty()) {
+                        storage["cassette"] = {{"image_uri", normalize_image_uri(machine.tape_filepath, {})}};
+                    } else if (every) {
+                        storage["cassette"] = {{"image_uri", nullptr}};
+                    }
+                }
                 if (!storage.empty()) doc[key] = std::move(storage);
                 break;
             }

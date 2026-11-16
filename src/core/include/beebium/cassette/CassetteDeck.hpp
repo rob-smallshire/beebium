@@ -67,6 +67,7 @@ public:
         tape_ = std::move(tape);
         name_ = std::move(name);
         url_ = std::move(url);
+        configured_ = false;
         transport_ = Transport::Stopped;
         position_ = 0;
         tape_->rewind();
@@ -79,6 +80,7 @@ public:
         tape_.reset();
         name_.clear();
         url_.clear();
+        configured_ = false;
         transport_ = Transport::Stopped;
         position_ = 0;
         pending_ = TapeItem::end(0);
@@ -147,6 +149,12 @@ public:
     bool has_tape() const { return tape_ != nullptr; }
     const std::string& name() const { return name_; }
     const std::string& url() const { return url_; }
+
+    // Whether the tape in the deck is the one the machine's configuration
+    // names (inserted at launch), rather than one inserted while it runs. A
+    // saved machine records the position of its configured tape only.
+    bool configured() const { return tape_ != nullptr && configured_; }
+    void set_configured(bool configured) { configured_ = configured; }
     std::optional<TapeKind> kind() const {
         return tape_ ? std::optional<TapeKind>(tape_->kind()) : std::nullopt;
     }
@@ -195,6 +203,7 @@ private:
     std::unique_ptr<TapeSignal> tape_;
     std::string name_;
     std::string url_;
+    bool configured_ = false;
     Transport transport_ = Transport::Stopped;
     TapeTime position_ = 0;
     TapeItem pending_ = TapeItem::end(0);
