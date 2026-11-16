@@ -246,6 +246,12 @@ media the user names by location is the user's own file. So:
   command line, or inserted while the machine runs is opened in place,
   read/write.
 
+A tape for the cassette deck is treated as a floppy is
+(`DiscPaths::resolve_tape_image`): a bare tape name is searched for in the
+preset's container and then in the per-user `tapes/`, and a tape found by
+search or named by a path inside the preset is copied into the machine's
+directory; one named by a path elsewhere is opened in place.
+
 A bare name is looked for as any file reference is
 ([preset-schema.md](preset-schema.md#file-references)). To use a downloaded
 image in a preset, drop its `.dat` and `.dsc` into the per-user `discs/` (or
@@ -264,8 +270,8 @@ The server never chooses where one goes. Its layout and file formats are in
 [machine-directory.md](machine-directory.md).
 
 That per-user directory holds all of Beebium's per-user state: the user
-presets in `presets/`, user-supplied disc and ROM images in `discs/` and
-`roms/`, the directories of machines not yet saved in `machines/`, the shared AUN map file
+presets in `presets/`, user-supplied disc, tape and ROM images in `discs/`,
+`tapes/` and `roms/`, the directories of machines not yet saved in `machines/`, the shared AUN map file
 `aun-map.json`, and the AUN automatic-station hint `aun-auto-next` (with its
 lock file `aun-auto-next.lock`):
 
@@ -319,7 +325,7 @@ launcher enables it.
 |----------|-------------|
 | `BEEBIUM_ROM_DIR` | Path to ROM directory (overrides auto-detection) |
 | `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets and whose `blank-discs/` holds the blank disc templates (overrides auto-detection) |
-| `BEEBIUM_USER_DIRPATH` | The per-user state directory (overrides the platform default); its `presets/`, `discs/`, `aun-map.json` and `aun-auto-next` follow it. For tests and CI, to keep a run away from the real user's files |
+| `BEEBIUM_USER_DIRPATH` | The per-user state directory (overrides the platform default); its `presets/`, `discs/`, `tapes/`, `aun-map.json` and `aun-auto-next` follow it. For tests and CI, to keep a run away from the real user's files |
 | `BEEBIUM_AUN_MAP_FILEPATH` | AUN map file path (overrides the per-user `aun-map.json`; `--aun map-file=` overrides this, and `map-file=none` disables the map file) |
 | `BEEBIUM_AUN_AUTO_STATE_FILEPATH` | AUN automatic-station hint file (overrides the per-user `aun-auto-next`; `none` disables the hint) |
 

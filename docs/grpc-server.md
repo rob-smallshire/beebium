@@ -26,6 +26,7 @@ All arguments are optional. By default, the server loads the appropriate MOS ROM
 | `--rom <slot>:<filepath>` | Slot 15: bbc-basic_2.rom | Load ROM into sideways slot (0-15) |
 | `--rom-dir <dirpath>` | Auto-detected | ROM directory path |
 | `--port <port>` | 48875 | gRPC server port (use 0 for dynamic allocation) |
+| `--tape <filepath>` | - | Insert a UEF or CSW tape and play it (see [cli.md](cli.md)) |
 | `--wait[=mode]` | - | Delay emulation start (see [cli.md](cli.md)) |
 | `--info` | - | Print machine info as JSON and exit |
 | `--help` | - | Show usage |
@@ -412,6 +413,55 @@ client budgets its own wait. The clients' waits for typing and for readiness
 take that budget in emulated seconds (`ready_within`, default 5: a normal boot
 takes well under one) and, when it runs out, raise naming the held queue and
 pointing at `KeyDown`/`KeyUp`; no budget waits indefinitely.
+
+### CassetteService
+
+The cassette deck behind the Serial ULA's cassette interface. There is one
+deck, so no drive number anywhere. The deck is the user's transport: inserting
+leaves it stopped at the start, and play is a separate request. The tape moves
+only while the deck plays and the machine's motor relay (Serial ULA latch bit
+7, at &FE10) is closed. Served on every machine, beside `DiscService`; see
+[cassette.md](cassette.md).
+
+**Proto file:** `src/service/proto/cassette.proto`
+
+| RPC | Behaviour |
+|-----|-----------|
+| `InsertTape` | Insert the tape at `url`, a `file://` URI or an absolute path on the server's host. Its format, UEF or CSW, is judged by content, not by its name. The deck is left stopped at 0. Refused with `DECK_OCCUPIED`, naming both tapes, when a tape is already in. The response's `tape` describes the tape inserted. |
+| `EjectTape` | Stop and remove the tape. |
+| `Play` | Start the deck. At the end of the tape it succeeds and leaves the deck stopped at the end. |
+| `Stop` | Stop the deck where it is. |
+| `Seek` | Move the tape to `position_seconds`. A position beyond the end lands at the end, and the deck stops; a negative position is refused with `INVALID_POSITION`. |
+| `GetDeckStatus` | One `DeckStatus`. |
+| `SubscribeDeckStatus` | Server stream of `DeckStatus`: the current status at once, then one on every change of presence, transport, relay or tape, and, while the deck plays, the position no more often than `min_interval_ms` (default 100) of emulated time. |
+
+`DeckStatus` gives `has_cassette_interface`, `tape_inserted`, the `tape`
+(`TapeMetadata`: the file's `name`, the `url` as given, `format` `"UEF"` or
+`"CSW"`, the image's own `title`, `origin` and `target_machine` where it
+carries them, and `duration_seconds`, 0 when unknown), the `transport`
+(`TAPE_TRANSPORT_STOPPED` or `_PLAYING`), `position_seconds` in tape time,
+`motor_on` (the relay, whether or not a tape is in) and `ula_part`
+(`"ferranti"` or `"vlsi"`). The presence field is `tape_inserted` rather than
+`has_tape` because protobuf derives `has_tape()` from the `tape` field. The
+status is read without stopping the machine, from values the deck publishes
+atomically as it runs.
+
+Errors are reported in the response's `success`, `error` and `kind` fields,
+not as a gRPC status. Every error is a sentence naming the tape by the name the
+client gave, and its `kind` is one of `NO_CASSETTE_INTERFACE`, `CANNOT_OPEN`
+(missing, or no permission), `UNREADABLE`, `UNSUPPORTED_FORMAT` (not a UEF or
+CSW), `INVALID_IMAGE` (recognised but refused: a disc chunk, a version, a
+value out of range), `DECK_OCCUPIED`, `DECK_EMPTY` (eject, play, stop or seek
+with no tape) and `INVALID_POSITION`.
+
+```bash
+grpcurl -plaintext -import-path src/service/proto -proto cassette.proto \
+  -d '{"url": "/Users/me/Tapes/Elite.uef"}' \
+  localhost:48875 beebium.CassetteService/InsertTape
+
+grpcurl -plaintext -import-path src/service/proto -proto cassette.proto \
+  localhost:48875 beebium.CassetteService/Play
+```
 
 ### DebuggerControl
 
@@ -1013,6 +1063,7 @@ ctest --test-dir build --output-on-failure                 # C++
 │  │   ├── VideoService (frame streaming)         │
 │  │   ├── KeyboardService (input handling)       │
 │  │   ├── ControllerService (joysticks, ...)     │
+│  │   ├── CassetteService (the tape deck)        │
 │  │   ├── SystemService (identity, lifecycle)    │
 │  │   ├── DebuggerControl (execution, memory,    │
 │  │   │    breakpoints, watchpoints, CPU state)  │

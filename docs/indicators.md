@@ -261,6 +261,26 @@ public:
 };
 ```
 
+### Cassette motor LED
+
+**Header:** `src/core/include/beebium/cassette/CassetteMotorLed.hpp`
+
+The keyboard's cassette motor LED is lit with the motor relay, which the Serial ULA's control latch drives. `attach_cassette_motor_led()` registers `cassette-motor-led` and listens to the ULA's motor line: the value is 255 while latch bit 7 (&FE10) is set and 0 while it is clear, whether or not a tape is in the deck. Every hardware policy calls it after the lock LEDs are registered.
+
+```cpp
+inline void attach_cassette_motor_led(Indicators& indicators, SerialUla& ula) {
+    std::unordered_map<std::string, std::string> metadata;
+    metadata.emplace("label", "Cassette motor");
+    metadata.emplace("color", "625nm");
+    metadata.emplace("shape", "domed");
+    const uint16_t id = indicators.register_indicator(
+        "cassette-motor-led", std::make_unique<PassthroughFilter>(), std::move(metadata));
+    ula.set_motor_listener([&indicators, id](bool on) { indicators.set(id, on ? 255 : 0); });
+}
+```
+
+The filter is a `PassthroughFilter`, so the MOS's 1 ms motor blips pass through unfiltered; a client applies the same hold-off it gives the drive activity LEDs. See [cassette.md](cassette.md).
+
 ### Hardware Struct Integration
 
 **Model B Hardware:**
@@ -387,6 +407,7 @@ message IndicatorUpdate {
 |------|--------|-------|-------|-------|
 | `caps-lock-led` | DutyCycle(10ms) | CAPS LOCK | 470nm (blue) | domed |
 | `shift-lock-led` | DutyCycle(10ms) | SHIFT LOCK | 470nm (blue) | domed |
+| `cassette-motor-led` | Passthrough | Cassette motor | 625nm (red) | domed |
 
 ### Model B+
 
@@ -396,8 +417,11 @@ message IndicatorUpdate {
 | `shift-lock-led` | DutyCycle(10ms) | SHIFT LOCK | 470nm (blue) | domed |
 | `floppy-0-activity-led` | Passthrough | Drive 0 | 590nm (amber) | rectangular |
 | `floppy-1-activity-led` | Passthrough | Drive 1 | 590nm (amber) | rectangular |
+| `cassette-motor-led` | Passthrough | Cassette motor | 625nm (red) | domed |
 
-**Note:** The 470nm and 590nm wavelengths indicate the approximate LED color (blue and amber respectively). Frontends can use this metadata for accurate visual rendering.
+Every model registers `cassette-motor-led`, after the lock LEDs.
+
+**Note:** The 470nm, 590nm and 625nm wavelengths indicate the approximate LED color (blue, amber and red respectively). Frontends can use this metadata for accurate visual rendering.
 
 ## Test Coverage
 

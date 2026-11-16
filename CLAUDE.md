@@ -55,6 +55,7 @@ beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, ...)
 | KeyboardService | keyboard.proto | Key press/release, type-ahead |
 | ControllerService | controller.proto | Controllers a person holds (joystick, ...): list, get and set their named axes and buttons |
 | DiscService | disc.proto | Disc image mounting, drive status |
+| CassetteService | cassette.proto | Cassette deck: insert/eject UEF and CSW tapes, play/stop/seek, deck status stream |
 | IndicatorService | indicator.proto | LED status (caps lock, disc activity) |
 | SidewaysService | sideways.proto | Sideways ROM/RAM slot management |
 | SystemService | system.proto | Pause/resume/reset, machine control, SystemInfo/host fingerprint, WatchServerStatus |
@@ -244,6 +245,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 - `client-specification.md` - The normative client behavioural specification: what any Beebium client lets a user accomplish and how each capability behaves, derived from the macOS client (the first implementation, not the canon), with Core and optional conformance profiles, mandatory versus platform-latitude versus macOS-only marked, testable scenarios, and the proto-to-capability map; Linux and later clients are built against it
 - `clock-architecture.md` - Timing model and synchronisation
 - `disc-subsystem.md` - Disc controller and image formats
+- `cassette.md` - The cassette interface as built: the Serial ULA's cassette side, the UEF and CSW tape sources, the deck, CassetteService, the motor LED, presets and machine directories, `--tape`, and testing
 - `sound-subsystem.md` - SN76489 and audio pipeline
 - `video-subsystem.md` - Display rendering pipeline
 - `grpc-server.md` - Service API documentation
@@ -324,10 +326,11 @@ Complete transcripts of BBC Micro documentation:
 - Video ULA with all display modes (0-7)
 - SN76489 sound chip
 - Intel 8271 and WD1770 disc controllers with SSD/DSD/HFE support
+- Cassette interface (UEF and CSW tapes) through the Serial ULA's data separator and high-tone detector, with the deck, CassetteService and the motor LED
 - Hybrid Music 5000 / 3000 synthesiser on the 1 MHz bus (plugin `hybrid-music-5000`), with the board's analogue output filter; JIM paging is owned by the bus port so several 1 MHz bus devices coexist
 - Keyboard matrix with type-ahead
 - Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger
-- gRPC service layer (18 services)
+- gRPC service layer (19 services)
 - macOS frontend with Metal rendering
 - Linux / Raspberry Pi frontend (Qt 6 Widgets, QRhi on Vulkan) built against `docs/client-specification.md`: all eight sidebar modes, the New Machine configurator, the preset library, screen text selection and Copy As, Meta / Ctrl+Alt application shortcuts; per-distribution `.deb` packages (Debian 13, Ubuntu 26.04)
 - Service advertisement AND browse/discovery over mDNS on all platforms: macOS (Bonjour), Linux (Avahi, dlopen'd), Windows (dual-provider: Apple Bonjour dnssd.dll when installed, else native DnsService*, selected at runtime). Full bidirectional AUN peer discovery everywhere

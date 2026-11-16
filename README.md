@@ -24,6 +24,7 @@ Moreover, this architecture also facilitates native GUIs with first-class host p
 - **Cycle-accurate 6502 emulation** — NMOS and CMOS variants supported
 - **Seven machine variants** — Model B, B+, B+ 128K, and Model B with the notional ROM/RAM, ATPL Sidewise, Watford ROM/RAM and Integra-B boards
 - **Floppy disc support** — SSD and DSD (DFS), ADFS (`.adf`/`.adl`/`.adm`/`.ads`) and HFE flux-level images, all with read/write
+- **Cassette tapes** — UEF and CSW tape images, loaded through the emulated Serial ULA ([docs/cassette.md](docs/cassette.md))
 - **Pluggable peripherals** — each a loadable extension:
   - *Coprocessors* — Acorn 65C02 (3 MHz) and 65C102 (4 MHz) second processors
   - *Serial* — IP232, RFC 2217 (client and server), host serial port, and loopback adapters

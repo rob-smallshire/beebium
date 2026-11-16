@@ -223,11 +223,8 @@ RS423 selected at 19200 baud and the ACIA at /64, a bit is 64 receive clocks,
 ULA's cassette side (its data separator and high-tone detector), `/CTS` is held
 low (AUG §20.7.4), and the receive rate field is ignored, as on the machine. The
 transmit clock is the transmit divider output, and TxD drives the ULA's tone
-synthesiser; the RS423 sink receives nothing. The cassette side is documented
-in `serial/SerialUla.hpp` and specified in
-[cassette-specification.md](discussion/cassette-specification.md); the tape it
-reads comes from the cassette deck (`cassette/CassetteDeck.hpp`), which
-`--tape <filepath>` loads and plays. The RS423 line still runs at its own rate, so a
+synthesiser; the RS423 sink receives nothing. The cassette side, the tapes it
+reads and the deck that plays them are documented in [cassette.md](cassette.md). The RS423 line still runs at its own rate, so a
 far end's bytes sent meanwhile are framed and lost. `SerialStatus` reports each
 divider as `tx_ula_divider` and `rx_ula_divider`.
 
@@ -479,10 +476,7 @@ ROM and the device agree on the bytes, and beebium transports them.
   (a short debounce) to avoid packet splitting — b2 carried such a workaround.
   The hook lives in `HostSerialEndpoint`; deferred pending real-device testing.
 - **Cassette** (the ULA's other axis) is a separate seam, gated by the
-  cassette-presence axis and *not* routed through `SerialPortDevice`. The clock
-  model (cassette round 3) and the tape path (round 4: UEF and CSW tapes, the
-  deck, the data separator, high-tone detector and tone synthesiser, `--tape`)
-  are in place; the service, indicator, persistence and sampled sources follow
-  in [cassette-specification.md](discussion/cassette-specification.md).
+  cassette-presence axis and *not* routed through `SerialPortDevice`; it is
+  documented in [cassette.md](cassette.md).
 - **Network-serial** peers (IP232, RFC 2217) are candidate future extensions
   attaching to the same seam.

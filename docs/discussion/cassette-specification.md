@@ -361,11 +361,15 @@ the client's indicator rendering applies whatever hold-off it applies to the dri
 
 ## Presets and machine directories
 
-- Preset schema: `storage.cassette: { "image_uri": path or URI or null }`, and
-  `storage.cassette.position_seconds` in a saved machine. A tape in a preset is media the
+- Preset schema: `storage.cassette: { "image_uri": path or URI or null }`. A tape in a preset is media the
   machine's directory copies, as a floppy named by search or position is; one named by an
   absolute path is opened in place. A live source is not persisted.
-- `machine.json` records the tape and position on save; `SaveMachine` pauses, records, resumes.
+- As built in round 5: which tape is configuration, in the machine's `preset.json`
+  (`storage.cassette`); its position is state, `"cassette": {"position_seconds": ...}` in
+  `machine.json`, a field of the machine record carried through every rewrite. `SaveMachine`
+  writes it only while the deck holds the configured tape and omits it otherwise; it is never
+  written at shutdown, and `start --machine` puts the tape back there, stopped. A tape inserted at
+  run time is not recorded, as a floppy inserted at run time is not.
 - **The New Machine configurator** (both GUI clients, and the machine draft behind it) gains a
   cassette row in its Storage section, above the drives, so a machine or a preset can start with
   a tape inserted: browse and drag-and-drop for a UEF, CSW or WAV, written as `storage.cassette`
@@ -418,19 +422,19 @@ Catch2 names 7-bit ASCII, never starting with `--`; tags `[cassette]`, `[serial_
 Each round has its own short specification written from this document, is implemented by the
 cassette agent, and ends with the full gate from a separate Release worktree.
 
-1. **Round 3: the clock model.** `Mc6850` divides for real and gains the /DCD latch and the
+1. **Round 3: the clock model.** *Done.* `Mc6850` divides for real and gains the /DCD latch and the
    master-reset rule; `SerialUla` delivers clocks, keeps RS423 byte framing, gains the part
    parameter and the &FE10 read rule. No cassette yet: in cassette mode /DCD is low and RxD
    idle. Gate: every serial test green; new tests for division, the latch, the reset rule, the
    read rule, and RS423 at /16.
-2. **Round 4: the tape path.** `TapeSignal`, `UefTape`, `CswTape`, `CassetteDeck`, the data
+2. **Round 4: the tape path.** *Done.* `TapeSignal`, `UefTape`, `CswTape`, `CassetteDeck`, the data
    separator, the high-tone detector, the transmit synthesiser with a discarding sink. CLI
    `--tape <file>` for tests. Tests: separator and detector in ULA clocks against the table;
    a generated UEF loads and runs through MOS 1.20 (`*TAPE`, `CHAIN""`, screen text), at 1200 and
    300 baud (&0117); the CSW of the same tape gives the same memory; `Data?` on a corrupted CRC;
    the MOS blip re-arms DCD; motor off stops the tape; a tape with a 0.25 s leader (the Welcome
    tape's shape) loads; beebjit's corpus cases where present.
-3. **Round 5: service, indicator, persistence, clients.** `CassetteService` without
+3. **Round 5: service, indicator, persistence, clients.** *Done.* `CassetteService` without
    `StreamAudio`; the motor LED; preset and machine directory; Python and TypeScript; the
    client-specification chapter; `docs/cassette.md` and the updates to `serial-acia.md`
    (including its &15 claim, F-Q26), `grpc-server.md`, `preset-schema.md`, `indicators.md`,

@@ -80,7 +80,8 @@ namespace beebium {
 //     sets the rate. The edge-to-burst delay of the real part is not modelled.
 //   High-tone detector. A counter advances once per 256-clock cell while RxD is
 //     1, edges are arriving and the motor bit is set; it clears on RxD 0 or
-//     motor off, and holds through silence with the motor on. At 962 cells
+//     motor off. Silence re-arms it: the count waits, and the first edge after
+//     the silence ends a long gap, which gives RxD 0 and clears it. At 962 cells
 //     (Ferranti, 200 ms) or 445 (VLSI, 92.7 ms) /DCD is driven high for one
 //     cell and the counter holds until cleared. With RS423 selected /DCD is
 //     forced low but the counter runs; switching to cassette does not clear it.
@@ -408,7 +409,7 @@ private:
             return;
         }
         if (separator_timed_out_) {
-            return;  // silence with the motor on: hold
+            return;  // silence: the next edge ends a long gap, RxD 0 clears the count
         }
         const uint32_t threshold = high_tone_threshold();
         if (high_tone_cells_ < threshold && ++high_tone_cells_ == threshold) {

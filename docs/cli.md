@@ -170,14 +170,15 @@ The same process id is `describe-machine`'s `locked_by_pid`.
 #### File References
 
 Every option that names a file (`--mos`, `--language-rom`, `--sideways ...:image=`,
-`--floppy`, an extension's file parameter such as `--scsi-hdd ...:image=`)
+`--floppy`, `--tape`, an extension's file parameter such as `--scsi-hdd ...:image=`)
 follows the one rule in [preset-schema.md](preset-schema.md#file-references).
 A reference is resolved from where it is written: a preset's directory for a
 preset, the working directory for the command line. Values given with
 `--preset` resolve as if written in the preset. So a bare name (`--mos my.rom`,
 `--floppy 0:elite.ssd`, `--scsi-hdd scsi-id=0:image=mine.dat`) is looked for
-first in the working directory, ahead of the per-user `roms/` or `discs/` (and,
-for a ROM, the system ROM directory), and a hard disc found there is opened in
+first in the working directory, ahead of the per-user `roms/`, `discs/` or
+`tapes/` (and, for a ROM, the system ROM directory), and a hard disc found
+there is opened in
 place, writable; a relative path is resolved against the working directory; a
 leading `~/` is the home directory, even where the shell does not expand it
 (inside `key=value`).
@@ -240,6 +241,35 @@ Disc controller types for `--fdc`:
 - `acorn-1770` - Acorn WD1770 controller (Acorn DFS 2.xx)
 - `acorn-8271` - Acorn Intel 8271 controller, the Model B's original (Acorn DFS 0.90-1.22)
 - `none` - Leave socket empty (no disc)
+
+#### Tape Configuration
+
+| Option | Description |
+|--------|-------------|
+| `--tape <filepath>` | Insert a UEF or CSW tape into the cassette deck and press play |
+
+Every server accepts `--tape`, on `start` and on the subcommands that take
+machine options. The tape is named as a floppy is: a path relative to the
+working directory, a bare name searched for there and then in the per-user
+`tapes/`, or a `file://` URI. Its format is judged by content, not by its
+name. Unlike a preset's tape, which is inserted with the deck stopped, a tape
+given with `--tape` is inserted and played: it moves as soon as the guest
+closes the motor relay. It wins over a preset's
+`storage.cassette` (see [preset-schema.md](preset-schema.md#storage)). A file
+that is not a tape image exits with `CONFIG` (78) and the reader's sentence; a
+tape that cannot be found exits with `NOINPUT` (66).
+
+At startup the server says what it loaded and where the deck stands:
+
+```
+Loading tape: /Users/me/Tapes/Elite.uef (playing)
+```
+
+or `(stopped)` for a preset's tape, or `(stopped at 12.5 s)` for a saved
+machine's tape put back where its last Save left it. While the machine runs,
+`CassetteService` inserts, ejects, plays, stops and winds tapes (see
+[grpc-server.md](grpc-server.md#cassetteservice) and
+[cassette.md](cassette.md)).
 
 #### gRPC Server
 
@@ -1060,7 +1090,7 @@ The preset is written as a `.beebium-preset` zip archive holding `preset.json`
 my-elite-setup
 ```
 
-`create-preset` also accepts every machine option `start` does that a preset can record: `--description`, `--release-date`, `--machine-description` (a description template, recorded as written; see [Machine Name and Description](#machine-name-and-description)), `--speed`, `--screen-mode`, `--auto-boot`, `--links`, `--mos`, `--language-rom` (recorded as the model's language slot), `--fdc`, `--floppy` (a relative path is taken from the working directory, as for `start`, and recorded absolutely), `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. With `--from`, each flag overrides the source preset as it would on a `start` command line: a `--sideways` or `--floppy` replaces only the slot or drive it names. The file format is described in [preset-schema.md](preset-schema.md). The options are parsed exactly as `start` parses them (`--from` playing `--preset`), and only what was given is recorded: a parameter left to its default, or an instance id the server would generate, is left out, so the preset keeps following the defaults. For example `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "port": "0"}`. A relative path with a directory component (a `--floppy`, `--sideways` image, `--mos` or an extension file parameter) is taken from the working directory and recorded absolutely; a bare name (a ROM, a bundled ROM or a hard disc to be searched for) is kept. Options that configure the launch rather than the machine (`--port`, `--wait`, `--advertise`, ...) and those with no preset form (`--write-protect`, `--hide`, `--motherboard-link`, a board RTC) are refused.
+`create-preset` also accepts every machine option `start` does that a preset can record: `--description`, `--release-date`, `--machine-description` (a description template, recorded as written; see [Machine Name and Description](#machine-name-and-description)), `--speed`, `--screen-mode`, `--auto-boot`, `--links`, `--mos`, `--language-rom` (recorded as the model's language slot), `--fdc`, `--floppy` (a relative path is taken from the working directory, as for `start`, and recorded absolutely), `--tape` (recorded as `storage.cassette.image_uri`), `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. With `--from`, each flag overrides the source preset as it would on a `start` command line: a `--sideways` or `--floppy` replaces only the slot or drive it names. The file format is described in [preset-schema.md](preset-schema.md). The options are parsed exactly as `start` parses them (`--from` playing `--preset`), and only what was given is recorded: a parameter left to its default, or an instance id the server would generate, is left out, so the preset keeps following the defaults. For example `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "port": "0"}`. A relative path with a directory component (a `--floppy`, `--sideways` image, `--mos` or an extension file parameter) is taken from the working directory and recorded absolutely; a bare name (a ROM, a bundled ROM or a hard disc to be searched for) is kept. Options that configure the launch rather than the machine (`--port`, `--wait`, `--advertise`, ...) and those with no preset form (`--write-protect`, `--hide`, `--motherboard-link`, a board RTC) are refused.
 
 If `--from` is omitted, creates a minimal "bare" preset for the model containing just the model ID, name, and release date.
 
@@ -1296,6 +1326,9 @@ beebium-model-b start
 
 # Load a game disc and auto-boot
 beebium-model-b start --floppy 0:elite.ssd --auto-boot
+
+# Insert a tape and press play
+beebium-model-b start --tape elite.uef
 
 # Replace BASIC with Forth
 beebium-model-b start --sideways slot=15:type=rom:image=forth.rom

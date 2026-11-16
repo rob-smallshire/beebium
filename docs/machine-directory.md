@@ -15,7 +15,8 @@ and the RPCs in [grpc-server.md](grpc-server.md#savemachine) (`SaveMachine`,
 
 ```
 Elite Server.beebium-machine/
-  machine.json                  identity: uuid, name, model, times, source preset
+  machine.json                  identity: uuid, name, model, times, source preset;
+                                the tape's position
   preset.json                   the machine's configuration
   thumbnail.png                 its last screen
   nvram/<unit>.bin              the machine's battery-backed units
@@ -50,7 +51,8 @@ without it still gets a document file with it.
   "model": "model-b",
   "created": "2026-10-17T15:28:56Z",
   "last_used": "2026-10-18T09:02:11Z",
-  "source_preset": "model-b-l3fs-aun"
+  "source_preset": "model-b-l3fs-aun",
+  "cassette": { "position_seconds": 12.5 }
 }
 ```
 
@@ -75,6 +77,14 @@ beside it (see [Moving a running machine](#moving-a-running-machine)).
   first run, and written at every start.
 - `source_preset` is the id of the preset the machine was made from, for
   information only; absent when it was made without one.
+- `cassette.position_seconds` is how far the configured tape has wound: the
+  tape `preset.json`'s `storage.cassette` names, inserted at launch. Which
+  tape is configuration and lives in `preset.json`; its position is state and
+  lives here. Absent means the start of the tape. See
+  [Saving a running machine](#saving-a-running-machine).
+
+Every rewrite of `machine.json` carries the whole machine record (`MachineRecord`, `MachineDocument.hpp`), the cassette
+position included.
 
 A `version` later than the server knows is refused. Clients never read this
 file: `describe-machine` reports it.
@@ -188,6 +198,15 @@ It renames that into place, re-points every floppy and storage device open in
 the old directory at its copy, moves the lock, and lets the old directory go:
 a transient one is removed, a saved one is left, unlocked. The machine never
 restarts.
+
+A Save records the tape's position in `machine.json` as
+`cassette.position_seconds` only when the deck holds the configured tape, the
+one the preset or command line named and the launch inserted; otherwise it
+omits the field, which clears one an earlier Save wrote. A tape inserted
+through `CassetteService` while the machine runs is not recorded, exactly as a
+floppy inserted while it runs is not. The position is written only by a Save,
+never at shutdown. `start --machine` inserts the preset's tape and puts it back
+at that position, with the deck stopped.
 
 | Machine | Destination | Result |
 |---------|-------------|--------|

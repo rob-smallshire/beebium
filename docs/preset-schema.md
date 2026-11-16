@@ -1,7 +1,7 @@
 # Preset Schema
 
 A **preset** is a JSON document that describes one machine configuration:
-the model, the ROMs, the disc and network hardware, the extensions plugged
+the model, the ROMs, the disc, tape and network hardware, the extensions plugged
 into it, and how it starts. `start --preset <id|path>` launches the machine a
 preset describes. A front-end's New Machine dialog edits a preset as a draft,
 launches it by writing it to a file and passing `--preset`, and saves it with
@@ -94,7 +94,7 @@ model's default, which `resolve-preset` shows.
 | `speed` | number or `"unlimited"` | [Emulation speed](#speed) |
 | `startup` | object | [Startup keyboard links](#startup) |
 | `mos_image_uri` | string | [The MOS ROM](#mos_image_uri) |
-| `storage` | object | [Disc controller and floppy drives](#storage) |
+| `storage` | object | [Disc controller, floppy drives and cassette](#storage) |
 | `sideways_bank` | object | [Sideways ROM and RAM slots](#sideways-romram-bank) |
 | `econet` | object | [Econet station and transport](#econet) |
 | `extensions` | array | [Peripheral and coprocessor extensions](#extensions) |
@@ -110,8 +110,8 @@ same as leaving the key out, so a `resolve-preset` document, which writes
 
 ## File references
 
-A preset refers to files in four places: floppy images, sideways ROM and RAM
-images, the MOS, and extension parameters whose manifest type is `filepath`
+A preset refers to files in five places: floppy images, the cassette's tape
+image, sideways ROM and RAM images, the MOS, and extension parameters whose manifest type is `filepath`
 (a hard-disc image, a coprocessor ROM, AUN's `map-file`) or `dirpath`
 (job-file-printer's `directory`). Every one of them,
 and every file named on the command line, is resolved by one rule. A
@@ -127,17 +127,19 @@ given with `--preset` resolve as if written in the preset.
    `acorn-dfs_2_26.rom`) is looked for on a search path:
    1. the container;
    2. the per-user directory for that kind of resource: `discs/` for floppy
-      and hard-disc images, `roms/` for ROMs, under the per-user Beebium
+      and hard-disc images, `tapes/` for tape images, `roms/` for ROMs, under
+      the per-user Beebium
       directory ([deployment.md](deployment.md#environment-variables));
    3. for a ROM, the system directory for it: the ROM directory
       ([deployment.md](deployment.md#rom-discovery-algorithm)), or, for a
-      coprocessor's ROM, the `roms/` of the plugin that ships it. Discs have
-      none: a preset that needs one carries it
+      coprocessor's ROM, the `roms/` of the plugin that ships it. Discs and
+      tapes have none: a preset that needs one carries it
       ([deployment.md](deployment.md#bundled-discs-and-machine-directories)).
 2. **A relative path with a directory component** (`discs/game.ssd`,
    `../roms/forth.rom`) is resolved against the container.
 3. **An absolute path** is used as it is; a path beginning `/` counts as
-   absolute on Windows too. A floppy image may also be a `file:///...` URI;
+   absolute on Windows too. A floppy or tape image may also be a
+   `file:///...` URI;
    a ROM or RAM image may not, and is a name or a path only.
 4. **A leading `~/`** (or `~\`) is the home directory (`HOME`, else
    `USERPROFILE`), on every platform, before rules 2 and 3.
@@ -154,8 +156,11 @@ inside the preset, is copied into the machine's own directory, so the guest's
 writes change the machine and never the preset or the user's `discs/`. A disc
 named by an absolute or `~/` path outside the preset, or on the command line,
 is opened in place, writable
-([deployment.md](deployment.md#bundled-discs-and-machine-directories)). ROMs
-are only read.
+([deployment.md](deployment.md#bundled-discs-and-machine-directories)). A tape
+is treated as a floppy is: one found by search (in the container or the
+per-user `tapes/`), or named by a path inside the preset, is copied into the
+machine's own directory, and one named by a path elsewhere is opened in place.
+ROMs are only read.
 
 A `filepath` parameter its manifest declares neither `media` nor `bundled`
 names a **location** the extension owns and may create (AUN's `map-file`), not a
@@ -171,7 +176,7 @@ starts, with the parameter named.
 
 The reference is kept as written. A bare name stays bare in `resolve-preset`'s
 output, so a preset and the files beside it can move together; a relative
-path is written absolute; a floppy path is written as a `file://` URI,
+path is written absolute; a floppy or tape path is written as a `file://` URI,
 percent-encoded. `create-preset` records what the command line meant: a bare
 name found in the working directory as that file's path, a bare name found
 per-user or in a system directory bare, since its meaning is the search.
@@ -228,7 +233,8 @@ The MOS ROM, a name or path as for `--mos`. Default: the model's MOS
   "floppy_drives": [
     { "drive": 0, "image_uri": "discs/elite.ssd" },
     { "drive": 1, "image_uri": null }
-  ]
+  ],
+  "cassette": { "image_uri": "tapes/elite.uef" }
 }
 ```
 
@@ -236,8 +242,15 @@ The MOS ROM, a name or path as for `--mos`. Default: the model's MOS
 |-----|------|---------|
 | `fdc_socket.id` | string | The disc controller in the socket: an id from `list-fdcs` (today `acorn-1770` or `acorn-8271`), or `none` for an empty socket. A DFS ROM in the sideways bank that needs the other controller (DFS 0.9x and 1.xx need `acorn-8271`, DFS 2.xx `acorn-1770`) is reported as a warning at that ROM's entry. Only models with a disc controller socket; a model with a built-in controller (the B+ family) ignores it with a warning. Default: empty socket |
 | `floppy_drives[]` | array | `{ "drive": 0 or 1, "image_uri": path, URI or null }`. `null` leaves the drive empty. Default: both empty |
+| `cassette.image_uri` | string or null | The tape in the cassette deck: a path relative to the preset, a `file://` URI, or a bare name, resolved as a floppy image is ([File references](#file-references)). `null` leaves the deck empty. Default: `null` |
 
-Accepted image types are the floppy formats `list-disc-formats` lists.
+Accepted image types are the floppy formats `list-disc-formats` lists, and for
+the cassette UEF and CSW, judged by content. A preset's tape is inserted at
+launch with the deck stopped at its start, unlike a tape given with `--tape`,
+which plays. Which tape is configuration; how far it has wound is state, kept
+in a saved machine's `machine.json`
+([machine-directory.md](machine-directory.md)). The equivalent command-line
+option is `--tape <filepath>`. See [cassette.md](cassette.md).
 
 ## Sideways ROM/RAM bank
 
@@ -416,8 +429,8 @@ the second with `unit` `music-3000`:
 
 ## Which models accept what
 
-All models accept the machine settings, the sideways bank, Econet and the
-floppy drives. What differs:
+All models accept the machine settings, the sideways bank, Econet, the
+floppy drives and the cassette. What differs:
 
 | | Model B and board variants | Model B+ family |
 |-|---------------------------|-----------------|
@@ -439,6 +452,7 @@ keeps the rest:
 |---------|------|
 | `--machine-description`, `--speed`, `--mos`, `--fdc`, `--station` | Replaces the preset's value |
 | `--floppy d:...` | Replaces the preset's image for that drive |
+| `--tape` | Replaces the preset's `storage.cassette` tape |
 | `--sideways slot=N...` | Replaces the preset's entry for that slot |
 | `--screen-mode`, `--auto-boot`, `--links` | Per key within one form; an option of the other form replaces the preset's startup entirely (`--links` drops the preset's `screen_mode` and `auto_boot`, and the reverse) |
 | `--aun`, `--piconet` (a transport) | The machine has one Econet socket, so a command-line transport stands in for the preset's: of the same name it merges over the preset's per typed key, of a different name it replaces it |
@@ -460,7 +474,7 @@ configuration check finds. Problems
 that do not stop a launch are warnings: an unknown top-level key, the older
 top-level `auto_boot`, an extension check's warnings (for what the launch may
 still accept), and (from
-`resolve-preset`) a ROM, floppy or hard-disc image that cannot be found.
+`resolve-preset`) a ROM, floppy, tape or hard-disc image that cannot be found.
 
 An extension's plugin may check its own configuration once the preset's
 instances are normalised and their attachments are sound, for what its
@@ -497,7 +511,7 @@ every key is present:
 - `speed`: the value, `1.0` by default, `"unlimited"` for unlimited
 - `startup`: `{ "links": n }`, or `{ "screen_mode": m, "auto_boot": b }` with the defaults filled in
 - `mos_image_uri`: the model's MOS by default
-- `storage.fdc_socket`: `{ "id": ... }` (`"none"` for an empty socket), or `null` on a model with a built-in controller; `storage.floppy_drives`: both drives, `image_uri` a `file://` URI or `null`
+- `storage.fdc_socket`: `{ "id": ... }` (`"none"` for an empty socket), or `null` on a model with a built-in controller; `storage.floppy_drives`: both drives, `image_uri` a `file://` URI or `null`; `storage.cassette`: `{ "image_uri": ... }`, a `file://` URI or `null`
 - `sideways_bank.slots`: in slot order, including the model's default ROMs as explicit slots; a `ram` slot always has `image_uri` (or `null`) and `write_protected`
 - `econet`: `null`, or `{ "station": ..., "transport": null | {...} }`
 - each extension and the transport: every manifest parameter, typed (integers as numbers, booleans as `true`/`false`, the rest strings, lists as arrays, `""` or `[]` where there is no value), and each extension with its `attaches_to`
@@ -519,13 +533,15 @@ Without `--json` the document goes to stdout and diagnostics to stderr. With
 `/startup/links`, `/speed`, `/sideways_bank/slots/1/slot` (a slot's own
 shape), `/sideways_bank/slots/1` (a slot the model's sockets refuse, or the
 later of two that conflict), `/sideways_bank` (the bank as a whole),
-`/storage/fdc_socket/id`, `/model`, an extension's entry or parameter. It is
+`/storage/fdc_socket/id`, `/storage/cassette/image_uri` (a tape that cannot be
+found, a warning, as a missing floppy is), `/model`, an extension's entry or
+parameter. It is
 `""` only when the file itself cannot be found or read.
 
 `location` says where that is as a user calls it, in the schema's words, so a
 front-end shows it as given: the extension or Econet transport the path is in,
 by its manifest `display_name` (`Host Serial`); a floppy drive by its schema
-`label` (`Floppy drive 1`); a sideways slot by its slot number, not its index
+`label` (`Floppy drive 1`) and the cassette as `Cassette`; a sideways slot by its slot number, not its index
 in the array (`Sideways slot 4`); otherwise the top-level key's section `label`
 (`Econet`, `Keyboard links`), or the key itself when the preset has no such
 key (`colour`). It is `""` when `path` is. The exit status is 0
@@ -566,7 +582,7 @@ There is one section per preset key, its `type` being the key and its `label` wh
 | `speed` | `default`, and the `unlimited` keyword |
 | `startup` | `screen_mode` and `links` with `min`, `max` and `default`, `auto_boot` with `default`, and `links.excludes`. `links` also lays out the byte: `link_made_when` (`clear`), `screen_mode_bits` (least significant first), `auto_boot_bit` with `auto_boot_true_when` (`clear`), and `bits`, one per bit from 7 down, each with `bit`, `link` (`Link 1` to `Link 8`), `label` and a one-sentence `description` |
 | `mos_image_uri` | `default`: the model's MOS |
-| `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives`, each with `drive`, `label` (`Floppy drive 0`), its geometry and image types |
+| `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives`, each with `drive`, `label` (`Floppy drive 0`), its geometry and image types; `cassette`, on every model: `{"has_cassette": true, "label": "Cassette", "image_types": ["uef", "csw"]}`. Every model has the interface; on one without it, a preset's tape would be ignored with the warning "ignored: this model has no cassette interface" at `/storage/cassette/image_uri` |
 | `sideways_bank` | `sockets` (label, `slots`, `capabilities`, `runtime_configurable`), `has_aliasing`, and `default_roms` (`slot`, `image`, `role`: `language`, `filing` or `board`) |
 | `econet` | `station`: `min`, `max`, `auto`, `auto_default_range`; `transports`: the transport extensions' names |
 | `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `description`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `catalogue`: every extension that can attach to one of those points, and on a model with Econet every transport, each exactly as `describe-extension <name> --json` gives it (`name`, `display_name`, `description`, `cli_name`, `kind`, `source`, `attaches_to`, `provides`, `parameters`, `roms`). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, each with `image`, `display_name`, `size_bytes` and `extension` (the extension it belongs to, or `null` for any), e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "display_name": "Acorn Level 3 File Server 1.26", "size_bytes": 10002432, "extension": null}], "rom": [{"image": "acorn-tube-6502_1_10.rom", "display_name": "Acorn 6502 Tube ROM 1.10", "size_bytes": 4096, "extension": "acorn-65c02-coprocessor"}, ...]}`. `bundled_image_kinds`: each kind with its `display_name`, what a user calls one, a noun to fit a sentence or, with an "s", a heading: `[{"kind": "hard-disc", "display_name": "hard disc"}, {"kind": "rom", "display_name": "ROM"}]`; every kind a parameter's `bundled` names is among them |

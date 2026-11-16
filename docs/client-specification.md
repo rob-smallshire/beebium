@@ -23,7 +23,7 @@ Companion documents:
   `frontend-local-server-gating.md`, `frontend-sleep-wake.md`,
   `video-subsystem.md`, `sound-subsystem.md`, `machine-directory.md`,
   `preset-schema.md`, `sideways-slots.md`, `indicators.md`,
-  `disc-subsystem.md`.
+  `disc-subsystem.md`, `cassette.md`.
 
 
 ## How to read this
@@ -99,6 +99,7 @@ Section 3 states cross-cutting foundations that every later section assumes.
 | 8.1 | Format-driven audio fields | Core |
 | 8.2 | The group mixer: master, sub-masters, channels | Core |
 | 8.3 | Buffering, latency and buffer health | Core |
+| 9.0 | Cassette: the deck, its keys and the motor relay | Core |
 | 9.1 | Mounting disc images | Core |
 | 9.2 | Recent discs | Core |
 | 9.3 | Creating blank discs | Core |
@@ -643,6 +644,11 @@ Rests on (CLI): `resolve-preset --json` (oracle and validation),
 `import-preset` (save as a user preset), `start --preset <temp>` (launch).
 `describe-preset-schema` drives the editor's capabilities.
 
+The configurator's Storage section has a Cassette row above the drives, shown only
+when the schema reports a cassette, which writes the chosen tape as
+`storage.cassette` and validates it through `resolve-preset` like a floppy image
+(section 9.0).
+
 Conformance:
 
 - MANDATORY: edit a resolved document; resolve-preset as validation and
@@ -688,6 +694,10 @@ An unsaved-changes signal is `template_media_written` on every status event:
 true only while a transient machine has written to copies of its preset's media.
 It drives the unsaved-changes indicator and the save-on-close prompt. It is
 always false for a saved machine and is cleared by a save.
+
+A saved machine records its configured tape's position on Save
+(`machine.json` `cassette.position_seconds`), so it resumes that tape where it was
+saved, stopped; a tape inserted at run time is not recorded (section 9.0).
 
 States and transitions:
 
@@ -1577,7 +1587,127 @@ sequence jumps and the exact drop count is detected.
 
 ## 9. Storage
 
-Binding document: `disc-subsystem.md`. Service: `disc.proto DiscService`.
+The storage sidebar holds, top to bottom, the cassette deck (9.0), the floppy
+drives and then the hard discs. Section 9.0 has its own binding document and
+service. For sections 9.1 to 9.7: binding document `disc-subsystem.md`, service
+`disc.proto DiscService`.
+
+### 9.0 Cassette
+
+Profile: Core. Binding document: `cassette.md`. Service:
+`cassette.proto CassetteService`.
+
+Behaviour. A machine whose model has a cassette interface has one cassette deck;
+the deck has no number, so no drive number appears anywhere. The client shows the
+deck only when the server reports `has_cassette_interface`; on a model without one
+the cassette section is absent, not disabled. In the storage sidebar the cassette
+section sits above the floppy drives, which sit above the hard discs.
+
+- Insert. An empty deck offers the same three routes into it as a floppy drive:
+  browse for a file, drag and drop (with the hover rules of 9.4: the only hover
+  refusals are a server on another host and an occupied deck), and the
+  recent-images list of 9.2 extended to tapes. The client sends `InsertTape` with
+  the file's URL. The server judges the format by content; the client may filter
+  its file dialogue by the `.uef` and `.csw` extensions as a convenience, but never
+  refuses a file itself. A tape is removed through Eject, never by inserting over
+  an occupied deck (the server refuses that).
+- The deck keys. Play, Stop, Rewind (a seek to 0) and Eject, and a position
+  slider drawn from `position_seconds` and `duration_seconds`. The slider seeks on
+  release, not while it moves; a drag made while the deck plays seeks too, and the
+  deck plays on from the new position. A seek beyond the end lands at the end and
+  stops the deck. When the server reports a duration of 0 (unknown) the client
+  shows the position without a proportional slider.
+- Insert and play are separate. After a plain insert the deck is stopped at the
+  start, and the user presses Play. A client may also offer an insert-and-play
+  gesture (a double-click on a recent tape, a modifier held on drop), which sends
+  `InsertTape` and then, on its success, `Play`.
+- Transport and relay. The client shows both the transport (stopped or playing)
+  and the machine's motor relay (`motor_on`). They are independent: the tape moves
+  only while the deck plays and the relay is closed. "Playing, motor off" is the
+  ordinary state of a tape waiting for the machine to ask for it (before a
+  `*LOAD` is typed, or between files), not a fault, and the client shows it as
+  such.
+- The loaded tape shows its name and format, and the image's own title, origin and
+  target machine where the server reports them.
+- What is not shown. The client shows no block catalogue, no waveform and no
+  decoded filenames. The deck is a transport, as a real one is; what is on the tape
+  is the machine's business.
+- Errors. Every refused cassette request returns a sentence naming the tape, and a
+  `CassetteErrorKind` (no cassette interface, cannot open, unreadable, unsupported
+  format, invalid image, deck occupied, deck empty, invalid position). The client
+  shows the server's sentence verbatim and in full, in the register of 3.4: it is
+  already a sentence, so the client puts no frame around it. The kind selects only
+  the icon or the recovery control (an Eject offer on deck occupied, say); the
+  client never parses the text. An unmapped future kind degrades to a generic
+  marker with the sentence still shown.
+- Indicator. The cassette motor LED (`cassette-motor-led`) is rendered through
+  chapter 10 like every other LED. The deck view does not duplicate it; the relay
+  shown in the deck view is deck state, the LED is an indicator, as motor and
+  activity are distinct for a floppy (9.7).
+- The configurator. The Storage section of the New Machine configurator (5.2)
+  has a Cassette row above the drives, shown only when `describe-preset-schema`
+  reports `storage.cassette.has_cassette`. The user browses for or drops a tape; it
+  is written to the draft as `storage.cassette.image_uri` and validated through
+  `resolve-preset` like a floppy image, so a missing tape is a warning diagnostic
+  at `/storage/cassette/image_uri`. The row's label and accepted image types come
+  from the schema (`label`, `image_types`), not the client.
+- Saved machines. A saved machine records the position of its configured tape on
+  Save, and reopens with that tape at that position, stopped (5.3). A tape inserted
+  at run time is not recorded on Save, as a floppy inserted at run time is not.
+- Live input. A later round adds an input-device picker for recording from a live
+  source: the audio input devices the host lists, with no voice processing
+  applied. The macOS app will need the audio-input entitlement for it. Nothing in
+  this section depends on it.
+
+States and transitions:
+
+| State | Trigger | Next |
+|-------|---------|------|
+| empty | InsertTape succeeds | stopped at 0 |
+| stopped | Play | playing |
+| playing | Stop | stopped |
+| playing | end of tape | stopped at the end |
+| stopped or playing | Seek | the same transport, at the new position (a seek past the end stops) |
+| stopped or playing | EjectTape | empty |
+
+The deck's state is mirrored from `SubscribeDeckStatus`, which sends the current
+status at once and then on every change of presence, transport, relay or tape, and
+the position while the deck plays; it is never polled.
+
+Rests on: `cassette.proto CassetteService.InsertTape`, `EjectTape`, `Play`, `Stop`,
+`Seek`, `GetDeckStatus`, `SubscribeDeckStatus`; CLI `describe-preset-schema` and
+`resolve-preset` for the configurator row.
+
+Conformance:
+
+- MANDATORY: the cassette section sits above the floppy drives, which sit above the
+  hard discs; the deck is shown only when the server reports a cassette interface;
+  play is separate from insert, and after a plain insert the deck starts stopped;
+  the server judges the format and the client never refuses a file itself; the
+  transport and the relay are both shown; no block catalogue, waveform or decoded
+  filenames; the server's sentence shown verbatim, the kind selecting only the icon
+  or recovery control; deck state driven from the status stream; the recording
+  policy of 9.2 for tapes; the motor LED rendered only through chapter 10.
+- LATITUDE: one recents list shared with discs or a separate list for tapes; an
+  insert-and-play gesture; the deck keys' glyphs and layout; the position format;
+  the status stream's minimum interval; filtering the file dialogue by extension.
+- MACOS-ONLY: the open panel, the drop delegate, the audio-input entitlement.
+
+Gating: browse, drag and drop and insert-by-picked-path are gated on the server
+sharing the filesystem (section 3.2), as for a floppy.
+
+Scenarios: insert a UEF -> the deck shows the tape, stopped at 0; press Play -> the
+transport reads playing and, with the motor off, the deck reads "Playing, motor off";
+type `*LOAD ""` and the relay closes -> the motor LED lights in the indicator row and
+the position advances. Press Play on an empty deck -> refused with the server's
+deck-empty sentence, shown persistently. Insert onto an occupied deck -> refused with
+a deck-occupied sentence and an Eject offer. While playing, drag the slider to the
+middle and release -> one `Seek`, and the deck plays on from there. Insert a text file
+renamed `.uef` -> accepted by the dialogue, then refused by the server as an
+unsupported format. A machine whose preset names a tape, played part-way and saved ->
+reopens with that tape at that position, stopped; a machine with a tape inserted at
+run time, saved -> reopens with an empty deck. A model with no cassette interface ->
+no cassette section, and no Cassette row in the configurator.
 
 ### 9.1 Mounting disc images
 
@@ -1808,13 +1938,21 @@ Profile: Core. Binding document: `indicators.md`. Service:
 Behaviour. The client renders every indicator the server reports, in the server's
 registration order, each labelled and coloured from its metadata, each a brightness
 (0 to 255), not a boolean, because real LEDs are duty-cycle driven. Indicators model
-only physically observable hardware LEDs (the Caps and Shift lock LEDs, per-drive
-activity LEDs, and any an extension registers such as a hard-disc activity LED). The
+only physically observable hardware LEDs (the Caps and Shift lock LEDs, the cassette
+motor LED, per-drive activity LEDs, and any an extension registers such as a
+hard-disc activity LED). The
 indicator channel is not a general UI-state channel: there is no "paused",
 "connected" or "error" indicator here; those are UI concerns elsewhere. The client
 hard-codes no indicator identities; it draws whatever is registered. Because the
 lock LEDs track the hardware latch exactly, a change to them doubles as a race-free
 signal for the client to re-read the authoritative lock state (section 7.3).
+
+The keyboard's cassette motor LED (`cassette-motor-led`, label "Cassette motor",
+red) follows the machine's motor relay whether or not a tape is in, and is
+registered after the lock LEDs on any model with a cassette interface. The MOS
+makes 1 ms motor blips; the server passes them through unfiltered, and the client
+applies to this LED the same hold-off it gives the drive activity LEDs. The cassette
+deck view (9.0) does not duplicate this LED.
 
 Rests on: `indicator.proto IndicatorService.ListIndicators` (metadata and order,
 once) and `Subscribe` (a stream of value changes).
@@ -1829,7 +1967,7 @@ Conformance:
   lock-LED-as-change-signal optimisation.
 - MACOS-ONLY: the colour handling and the SwiftUI shapes.
 
-Scenarios: a Model B -> two lock LEDs, no drive LEDs. A Model B+ -> two more drive
+Scenarios: a Model B -> two lock LEDs and the cassette motor LED, no drive LEDs. A Model B+ -> two more drive
 LEDs. A catalogue command -> the floppy activity LED pulses. Attach a SCSI extension
 -> an extra activity LED appears automatically. A client must not invent an LED the
 server did not register.
@@ -2336,6 +2474,7 @@ AND 1` in BBC BASIC reads 1. Attach the Delta 14B/1 adapter -> one controller,
 | keyboard.proto | KeyboardService: KeyDown, KeyUp, BreakDown, BreakUp, GetLockState, TypeQuickly, WatchTypingStatus, ClearTyping, GetAllKeyMappings | 5.5, 7.1-7.5 |
 | controller.proto | ControllerService: ListControllers, GetControls, SetControls | 14 |
 | audio.proto | AudioService: GetAudioFormat, SubscribeAudio | 8.1-8.3 |
+| cassette.proto | CassetteService: InsertTape, EjectTape, Play, Stop, Seek, GetDeckStatus, SubscribeDeckStatus | 5.3, 9.0 |
 | disc.proto | DiscService: InsertDisc, EjectDisc, CancelEject, GetDriveStatus, SubscribeDiscEvents, ListBlankDiscs, CreateDisc | 9.1-9.7 |
 | indicator.proto | IndicatorService: ListIndicators, Subscribe | 10 |
 | sideways.proto | SidewaysService: GetSlotStatus, SubscribeEvents, SetSlotProtection | 11 |
@@ -2346,12 +2485,12 @@ AND 1` in BBC BASIC reads 1. Attach the Delta 14B/1 adapter -> one controller,
 | econet_transport.proto | EconetTransportService: ListTransports, GetActiveTransport | 12.4 |
 | extension_rpc.proto | ExtensionRpc (transport control, routed by instance id) | 12.4 |
 | debugger.proto | DebuggerControl: Run (and the full debugging surface) | 5.5, 12.5 |
-| (CLI) | list-presets, describe-preset-schema, show-preset, resolve-preset, import-preset, describe-machine, start | 5.1-5.4 |
+| (CLI) | list-presets, describe-preset-schema, show-preset, resolve-preset, import-preset, describe-machine, start | 5.1-5.4, 9.0 (the configurator's Cassette row) |
 
 
 ## Appendix B. Conformance profiles summary
 
-- Core: 3.1-3.4, 4.1-4.5, 5.1, 5.3-5.7, 6.1, 6.2, 6.4, 7.*, 8.*, 9.*, 10, 13.1-13.3.
+- Core: 3.1-3.4, 4.1-4.5, 5.1, 5.3-5.7, 6.1, 6.2, 6.4, 7.*, 8.*, 9.* (9.0, the cassette deck, included), 10, 13.1-13.3.
 - Configuration editing: 5.2, 12.2 (and the configuration parts of 11, 12.3, 12.4).
 - Peripheral management: 11, 12.1, 12.3, 12.4, 14.
 - Advanced display: 6.3, 6.5, 6.6.
