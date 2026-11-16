@@ -39,7 +39,7 @@ std::string read_bytes(const fs::path& filepath) {
 
 MachineRecord a_record() {
     return {"12345678-1234-1234-1234-123456789abc", "Elite Server {station}", "model-b",
-            "2026-10-17T14:30:00Z", "2026-10-17T15:00:00Z", "model-b-l3fs-aun"};
+            "2026-10-17T14:30:00Z", "2026-10-17T15:00:00Z", "model-b-l3fs-aun", std::nullopt};
 }
 
 }  // namespace
