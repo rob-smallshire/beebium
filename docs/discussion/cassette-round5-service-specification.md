@@ -3,8 +3,8 @@
 Round 4 left a deck in every machine that only `--tape` can load. This round gives it a
 service, the keyboard's motor LED, a place in presets and machine directories, Python and
 TypeScript clients, the client-specification chapter the GUI rounds build against, and the
-as-built documentation. No tape format is added (WAV is round 6, live audio round 7) and the
-emulation model does not change, except for one stale comment.
+as-built documentation. No tape format is added (WAV is round 7, live audio round 8) and the
+emulation model does not change, except for one stale comment. (Rounds were renumbered after this was written: recording and blank tapes are round 6, WAV round 7, live audio round 8.)
 
 ## `CassetteService`
 
