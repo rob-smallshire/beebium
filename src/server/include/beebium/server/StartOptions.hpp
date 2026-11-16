@@ -97,7 +97,9 @@ void print_usage(const char* program_name) {
               << "  --rom-dir <dirpath>      ROM directory (auto-detected if not specified)\n"
               << "  --port <port>            gRPC port (default: " << DEFAULT_GRPC_PORT << ")\n"
               << "  --floppy <drive>:<filepath|url>\n"
-              << "                           Load disc image into floppy drive (0 or 1)\n";
+              << "                           Load disc image into floppy drive (0 or 1)\n"
+              << "  --tape <filepath>        Insert a UEF or CSW tape image into the cassette\n"
+              << "                           deck and press play\n";
     if constexpr (requires { Memory::BOARD_RTC_OPTION; }) {
         std::cerr << "  --" << Memory::BOARD_RTC_OPTION
                   << " clock=<host|emulated>[:time=<YYYY-MM-DDThh:mm[:ss]>|:offset=<e.g. -10y>]\n"
@@ -539,6 +541,8 @@ inline OptionParse parse_machine_option(
         } catch (const std::runtime_error& e) {
             return usage_error(e.what());
         }
+    } else if (arg == "--tape" && i + 1 < argc) {
+        machine.tape_filepath = argv[++i];
     } else if (arg == "--screen-mode" && i + 1 < argc) {
         try {
             machine.screen_mode = parse_int(argv[++i], "--screen-mode");

@@ -34,6 +34,8 @@
 #include "beebium/extension/ExtensionRegistry.hpp"
 #include "beebium/extension/OneMHzBusPort.hpp"
 #include "beebium/Machines.hpp"
+#include "beebium/cassette/CassetteDeck.hpp"
+#include "beebium/cassette/TapeImage.hpp"
 #include "beebium/PacingClock.hpp"
 #include "beebium/SleepQuantum.hpp"
 #include "beebium/disc/DiscConcepts.hpp"
@@ -460,6 +462,32 @@ inline std::optional<int> load_single_disc(DiscDrive& drive, int drive_num,
     std::cout << "  format: " << result.disc->format_name() << "\n";
 
     drive.insert(std::move(result.disc), source_url);
+    return std::nullopt;
+}
+
+// Insert the --tape image into the cassette deck and press play. The format is
+// judged by content. A file that cannot be opened or is not a tape image is a
+// configuration error, reported with the reader's sentence.
+// Returns an exit code on error, or std::nullopt on success.
+template<typename MachineType>
+std::optional<int> load_tape_image(MachineType& machine, const ServerConfig<MachineType>& config) {
+    using Memory = std::remove_cvref_t<decltype(machine.state().memory)>;
+    if constexpr (HasCassette<Memory>) {
+        if (config.machine.tape_filepath.empty()) {
+            return std::nullopt;
+        }
+        const std::filesystem::path filepath(config.machine.tape_filepath);
+        try {
+            auto tape = open_tape_file(filepath);
+            auto& deck = machine.state().memory.cassette_deck;
+            deck.insert(std::move(tape), filepath.filename().string());
+            deck.play();
+        } catch (const std::runtime_error& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return ExitCode::CONFIG;
+        }
+        std::cout << "Loading tape: " << filepath.string() << "\n";
+    }
     return std::nullopt;
 }
 
@@ -1100,6 +1128,11 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
 
     // Load disc images
     if (auto exit_code = load_disc_images(machine, config, disc_destination)) {
+        return {nullptr, *exit_code};
+    }
+
+    // Load a tape
+    if (auto exit_code = load_tape_image(machine, config)) {
         return {nullptr, *exit_code};
     }
 

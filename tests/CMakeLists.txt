@@ -509,6 +509,15 @@ add_executable(test_serial_ula_cassette test_serial_ula_cassette.cpp)
 target_link_libraries(test_serial_ula_cassette PRIVATE beebium_core Catch2::Catch2WithMain ZLIB::ZLIB)
 catch_discover_tests(test_serial_ula_cassette)
 
+# Cassette (#208): loading from tape through MOS 1.20 (a test vector only).
+add_executable(test_cassette_mos test_cassette_mos.cpp)
+target_link_libraries(test_cassette_mos PRIVATE beebium_core Catch2::Catch2WithMain ZLIB::ZLIB)
+target_compile_definitions(test_cassette_mos PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+)
+catch_discover_tests(test_cassette_mos PROPERTIES TIMEOUT 600)
+
 # Serial socket + Model B memory-map integration tests
 add_executable(test_serial_socket test_serial_socket.cpp)
 target_link_libraries(test_serial_socket PRIVATE beebium_core Catch2::Catch2WithMain)

@@ -219,13 +219,15 @@ the divider outputs are the transmit and receive clocks the ACIA counts. With
 RS423 selected at 19200 baud and the ACIA at /64, a bit is 64 receive clocks,
 64 ULA clocks, 104 ticks.
 
-**Cassette selected**: `/DCD` and `/CTS` are held low (AUG §20.7.4); the
-high-tone detector that drives `/DCD` in cassette mode, and the data separator
-that supplies the cassette receive clock, come with the tape path. Until then
-the ACIA gets no receive clock and RxD idles high, and the receive rate field
-is ignored, as on the machine. The transmit clock is the transmit divider
-output, so TDRE paces as it would; the transmitted bits go nowhere and the
-RS423 sink receives nothing. The RS423 line still runs at its own rate, so a
+**Cassette selected**: the ACIA's receive clock, RxD and `/DCD` come from the
+ULA's cassette side (its data separator and high-tone detector), `/CTS` is held
+low (AUG §20.7.4), and the receive rate field is ignored, as on the machine. The
+transmit clock is the transmit divider output, and TxD drives the ULA's tone
+synthesiser; the RS423 sink receives nothing. The cassette side is documented
+in `serial/SerialUla.hpp` and specified in
+[cassette-specification.md](discussion/cassette-specification.md); the tape it
+reads comes from the cassette deck (`cassette/CassetteDeck.hpp`), which
+`--tape <filepath>` loads and plays. The RS423 line still runs at its own rate, so a
 far end's bytes sent meanwhile are framed and lost. `SerialStatus` reports each
 divider as `tx_ula_divider` and `rx_ula_divider`.
 
@@ -478,8 +480,9 @@ ROM and the device agree on the bytes, and beebium transports them.
   The hook lives in `HostSerialEndpoint`; deferred pending real-device testing.
 - **Cassette** (the ULA's other axis) is a separate seam, gated by the
   cassette-presence axis and *not* routed through `SerialPortDevice`. The clock
-  model it needs is in place (cassette round 3); the tape path, data separator
-  and high-tone detector follow in
-  [cassette-specification.md](discussion/cassette-specification.md).
+  model (cassette round 3) and the tape path (round 4: UEF and CSW tapes, the
+  deck, the data separator, high-tone detector and tone synthesiser, `--tape`)
+  are in place; the service, indicator, persistence and sampled sources follow
+  in [cassette-specification.md](discussion/cassette-specification.md).
 - **Network-serial** peers (IP232, RFC 2217) are candidate future extensions
   attaching to the same seam.

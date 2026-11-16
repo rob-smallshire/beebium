@@ -205,6 +205,16 @@ TEST_CASE("parse_start_arguments: --port accepts hex value", "[cli][parse_start_
     REQUIRE(config.launch.port == 48875);  // 0xBEEB
 }
 
+TEST_CASE("parse_start_arguments: --tape sets config", "[cli][parse_start_arguments]") {
+    ArgvHelper args{"beebium", "start", "--tape", "game.uef"};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(config.machine.tape_filepath == "game.uef");
+}
+
 TEST_CASE("parse_start_arguments: --mos sets config", "[cli][parse_start_arguments]") {
     ArgvHelper args{"beebium", "start", "--mos", "custom.rom"};
     ServerConfig<MachineType> config;
