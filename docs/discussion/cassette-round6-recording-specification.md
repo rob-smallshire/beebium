@@ -14,8 +14,10 @@ rewind, and CHAIN it back, in this machine or another. Programme: `cassette-spec
   run-length coded, meet both. `CswTape` stays read-only.
 - Metadata chunks (&0000 origin, &0001, &0003, &0005 and the other non-tape chunks the reader
   keeps) are carried through unchanged and written back first.
-- `TapeSignal` gains `recordable()`; `CassetteDeck` gains `record()` and a third transport
-  state, `Recording`. `record()` on a read-only tape or an empty deck throws a sentence.
+- `TapeSignal` gains `recordable()`; `CassetteDeck` gains `record()` and a further transport
+  state, `Recording`, beside round 5's `Playing`, `Rewinding` and `FastForwarding`. `record()`
+  on a read-only tape or an empty deck throws a sentence. Winding ends recording as it ends
+  play; the state table in client-specification 9.0 gains the recording rows.
 
 ## Recording
 
@@ -26,8 +28,8 @@ rewind, and CHAIN it back, in this machine or another. Programme: `cassette-spec
   deck erases to silence while the Beeb is quiet, as a real deck does.
 - The synthesiser's `TapeSink` is the deck. With the deck not recording, edges are discarded as
   today.
-- Recording stops at the end of the tape (transport to `Stopped`), and `Stop`, `Seek`, eject
-  and `Play` end it. Nothing is lost at a relay opening: the tape simply stops moving.
+- Recording stops at the end of the tape (transport to `Stopped`), and `Stop`, `Seek`, `Rewind`,
+  `FastForward`, eject and `Play` end it. Nothing is lost at a relay opening: the tape simply stops moving.
 - The span recorded is noted (dirty from, to, union over a session) so that a tape never
   recorded on is never rewritten.
 
@@ -79,7 +81,7 @@ rpc ListBlankTapes(ListBlankTapesRequest) returns (ListBlankTapesResponse);
 rpc CreateTape(CreateTapeRequest) returns (CreateTapeResponse);
 
 enum TapeTransport { ..., TAPE_TRANSPORT_RECORDING = 2; }
-enum CassetteErrorKind { ..., CASSETTE_ERROR_KIND_READ_ONLY = 8; }   // record on a CSW
+enum CassetteErrorKind { ..., CASSETTE_ERROR_KIND_READ_ONLY = 9; }   // record on a CSW (8 is INVALID_POSITION)
 message TapeMetadata { ..., bool recordable = 8; }
 
 message BlankTape { string label = 1; string filename = 2; string kind = 3 /* "tape" */;
