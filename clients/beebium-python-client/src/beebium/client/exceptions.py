@@ -78,6 +78,18 @@ class ScreenExpectTimeout(TimeoutError):
     pass
 
 
+class CassetteError(BeebiumError):
+    """A cassette deck operation failed.
+
+    The message is the server's sentence; ``kind`` classifies the failure (a
+    :class:`~beebium.client.cassette.CassetteErrorKind`).
+    """
+
+    def __init__(self, message: str, *, kind: object | None = None) -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
 class DiscError(BeebiumError):
     """A disc operation failed.
 

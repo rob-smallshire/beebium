@@ -63,6 +63,7 @@ from beebium.client.econet import (
 from beebium.client.econet_transport import TransportInfo
 from beebium.client.exceptions import (
     BeebiumError,
+    CassetteError,
     ConnectionError,
     DebuggerError,
     DiscError,
@@ -162,6 +163,7 @@ __all__ = [
     "ControlKind",
     "DebuggerError",
     "DEFAULT_GRPC_PORT",
+    "CassetteError",
     "DiscError",
     "DispatchResult",
     "EconetError",

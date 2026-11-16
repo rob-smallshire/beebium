@@ -18,6 +18,7 @@ import grpc
 
 from beebium.client._proto import (
     audio_pb2_grpc,
+    cassette_pb2_grpc,
     controller_pb2_grpc,
     debugger_pb2_grpc,
     disc_pb2_grpc,
@@ -71,6 +72,7 @@ class Connection:
         self._coprocessor_debugger_stub: debugger_pb2_grpc.CoprocessorDebuggerControlStub | None = None
         self._device_inspection_stub: debugger_pb2_grpc.DeviceInspectionStub | None = None
         self._disc_stub: disc_pb2_grpc.DiscServiceStub | None = None
+        self._cassette_stub: cassette_pb2_grpc.CassetteServiceStub | None = None
         self._econet_stub: econet_pb2_grpc.EconetServiceStub | None = None
         self._serial_stub: serial_pb2_grpc.SerialServiceStub | None = None
         self._extension_rpc_stub: extension_rpc_pb2_grpc.ExtensionRpcStub | None = None
@@ -107,6 +109,7 @@ class Connection:
         self._coprocessor_debugger_stub = debugger_pb2_grpc.CoprocessorDebuggerControlStub(self._channel)
         self._device_inspection_stub = debugger_pb2_grpc.DeviceInspectionStub(self._channel)
         self._disc_stub = disc_pb2_grpc.DiscServiceStub(self._channel)
+        self._cassette_stub = cassette_pb2_grpc.CassetteServiceStub(self._channel)
         self._econet_stub = econet_pb2_grpc.EconetServiceStub(self._channel)
         self._serial_stub = serial_pb2_grpc.SerialServiceStub(self._channel)
         self._extension_rpc_stub = extension_rpc_pb2_grpc.ExtensionRpcStub(self._channel)
@@ -173,6 +176,13 @@ class Connection:
         if self._system_stub is None:
             raise ConnectionError("Not connected")
         return self._system_stub
+
+    @property
+    def cassette_stub(self) -> cassette_pb2_grpc.CassetteServiceStub:
+        """The CassetteService stub."""
+        if self._cassette_stub is None:
+            raise ConnectionError("Not connected")
+        return self._cassette_stub
 
     @property
     def disc_stub(self) -> disc_pb2_grpc.DiscServiceStub:
@@ -269,6 +279,7 @@ class Connection:
             self._coprocessor_debugger_stub = None
             self._device_inspection_stub = None
             self._disc_stub = None
+            self._cassette_stub = None
             self._econet_stub = None
             self._econet_transport_stub = None
             self._extension_ui_stub = None

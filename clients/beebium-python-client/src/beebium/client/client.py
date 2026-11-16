@@ -26,7 +26,9 @@ import beebium.client as beebium
 from beebium.client._proto.protocol_fingerprint import PROTOCOL_FINGERPRINT
 from beebium.client.audio import Audio
 from beebium.client.basic import Basic
+from beebium.client.cassette import Cassette
 from beebium.client.connection import Connection
+from beebium.client.controller import Controllers
 from beebium.client.cpu import CPU
 from beebium.client.crtc import Crtc
 from beebium.client.debugger import Debugger, ExecutionState, wall_timeout_for
@@ -47,7 +49,6 @@ from beebium.client.extension_ui import ExtensionUi
 from beebium.client.extensions import Extensions
 from beebium.client.indicators import Indicators
 from beebium.client.installation import ServerInstallation
-from beebium.client.controller import Controllers
 from beebium.client.keyboard import Keyboard
 from beebium.client.latch import AddressableLatch
 from beebium.client.memory import Memory
@@ -122,6 +123,7 @@ class Beebium:
         self._sound: Sound | None = None
         self._system: System | None = None
         self._disc: Disc | None = None
+        self._cassette: Cassette | None = None
         self._econet: Econet | None = None
         self._serial: Serial | None = None
         self._econet_transport: EconetTransport | None = None
@@ -465,6 +467,13 @@ class Beebium:
         return self._system
 
     @property
+    def cassette(self) -> Cassette:
+        """Access the cassette deck."""
+        if self._cassette is None:
+            self._cassette = Cassette(self._connection.cassette_stub)
+        return self._cassette
+
+    @property
     def disc(self) -> Disc:
         """Access floppy disc drive management."""
         if self._disc is None:
@@ -603,6 +612,27 @@ class Beebium:
         self.debugger.ensure_running()
         self.keyboard.shift_break(hold_time=hold_time,
                                   shift_hold_after=shift_hold_after)
+
+    def boot_tape(self, tape_filepath, *, command: str = 'CHAIN""') -> None:
+        """Insert a tape and load it, as a user does at the keyboard.
+
+        Inserts ``tape_filepath``, types ``*TAPE`` and ``command`` (``CHAIN""``
+        for a BASIC program, ``*RUN`` for machine code, or ``*TAPE3`` first for
+        a 300 baud tape by passing it in ``command``), then presses play. It
+        returns at once with the machine running; wait for the screen in
+        emulated time to know the load has finished.
+
+        Requires: any run state.
+        Leaves the machine: RUNNING.
+
+        Args:
+            tape_filepath: Path to the UEF or CSW tape image.
+            command: What to type after ``*TAPE`` to load the tape.
+        """
+        self.cassette.insert(tape_filepath)
+        self.debugger.ensure_running()
+        self.keyboard.type("*TAPE\r" + command + "\r")
+        self.cassette.play()
 
     def expect(self, *texts: str, timeout: float = 30.0,
                sample_interval_seconds: float = 1.0) -> str:

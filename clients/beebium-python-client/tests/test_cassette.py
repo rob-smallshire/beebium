@@ -1,0 +1,139 @@
+# Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
+#
+# This file is part of Beebium.
+#
+# Beebium is free software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version. Beebium is distributed in the hope that it will
+# be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+# You should have received a copy of the GNU General Public License along with Beebium.
+# If not, see <https://www.gnu.org/licenses/>.
+
+"""bbc.cassette and Beebium.boot_tape against a server (#208)."""
+
+from __future__ import annotations
+
+import subprocess
+import time
+from pathlib import Path
+
+import pytest
+import tape_builder
+
+from beebium.client import Beebium, CassetteError
+from beebium.client.cassette import CassetteErrorKind, TapeTransport
+from beebium.client.exceptions import ServerNotFoundError
+
+ASSETS_DIRPATH = Path(__file__).resolve().parents[3] / "tests" / "assets"
+
+
+@pytest.fixture
+def bbc(mos_filepath, basic_filepath, beebium_server_filepath):
+    try:
+        with Beebium.launch(mos_filepath=mos_filepath, basic_filepath=basic_filepath,
+                            server=beebium_server_filepath) as instance:
+            yield instance
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+
+
+def test_insert_leaves_the_deck_stopped_at_the_start(bbc, tmp_path: Path):
+    tape = tape_builder.write(tmp_path / "tone.uef", tape_builder.uef_of_carrier(2.0))
+    metadata = bbc.cassette.insert(tape)
+    assert metadata.name == "tone.uef"
+    assert metadata.format == "UEF"
+    assert abs(metadata.duration_seconds - 2.0) < 0.001
+
+    status = bbc.cassette.status()
+    assert status.has_cassette_interface
+    assert status.tape is not None and status.tape.name == "tone.uef"
+    assert status.transport == TapeTransport.STOPPED
+    assert status.position_seconds == 0.0
+    assert status.ula_part == "ferranti"
+
+
+def test_the_deck_keys_round_trip(bbc, tmp_path: Path):
+    tape = tape_builder.write(tmp_path / "tone.uef", tape_builder.uef_of_carrier(10.0))
+    bbc.cassette.insert(tape)
+    bbc.cassette.play()
+    assert bbc.cassette.status().transport == TapeTransport.PLAYING
+    bbc.cassette.stop()
+    assert bbc.cassette.status().transport == TapeTransport.STOPPED
+    bbc.cassette.seek(4.5)
+    assert abs(bbc.cassette.status().position_seconds - 4.5) < 0.001
+    bbc.cassette.rewind()
+    assert bbc.cassette.status().position_seconds == 0.0
+    bbc.cassette.eject()
+    assert bbc.cassette.status().tape is None
+
+
+def test_errors_carry_a_kind_and_the_servers_sentence(bbc, tmp_path: Path):
+    with pytest.raises(CassetteError) as empty:
+        bbc.cassette.play()
+    assert empty.value.kind == CassetteErrorKind.DECK_EMPTY
+    assert str(empty.value) == "There is no tape in the deck."
+
+    with pytest.raises(CassetteError) as missing:
+        bbc.cassette.insert(tmp_path / "absent.uef")
+    assert missing.value.kind == CassetteErrorKind.CANNOT_OPEN
+    assert "absent.uef" in str(missing.value)
+
+    notes = tmp_path / "notes.txt"
+    notes.write_text("hello")
+    with pytest.raises(CassetteError) as unsupported:
+        bbc.cassette.insert(notes)
+    assert unsupported.value.kind == CassetteErrorKind.UNSUPPORTED_FORMAT
+
+    tape = tape_builder.write(tmp_path / "one.uef", tape_builder.uef_of_carrier(1.0))
+    other = tape_builder.write(tmp_path / "two.uef", tape_builder.uef_of_carrier(1.0))
+    bbc.cassette.insert(tape)
+    with pytest.raises(CassetteError) as occupied:
+        bbc.cassette.insert(other)
+    assert occupied.value.kind == CassetteErrorKind.DECK_OCCUPIED
+    assert "one.uef" in str(occupied.value) and "two.uef" in str(occupied.value)
+
+    with pytest.raises(CassetteError) as before_start:
+        bbc.cassette.seek(-1.0)
+    assert before_start.value.kind == CassetteErrorKind.INVALID_POSITION
+
+
+def test_the_status_stream_starts_with_the_current_status_then_changes(bbc, tmp_path: Path):
+    tape = tape_builder.write(tmp_path / "tone.uef", tape_builder.uef_of_carrier(2.0))
+    events = bbc.cassette.events(min_interval_ms=50)
+    try:
+        first = next(events)
+        assert first.tape is None
+        bbc.cassette.insert(tape)
+        for status in events:
+            if status.tape is not None:
+                assert status.tape.name == "tone.uef"
+                break
+    finally:
+        events.close()
+
+
+def _tokenised(tmp_path: Path) -> bytes:
+    tok = tmp_path / "tape_ok.tok"
+    result = subprocess.run(
+        ["uvx", "oaknut-basic", "tokenise", str(ASSETS_DIRPATH / "cassette" / "tape_ok.bas"), str(tok)],
+        capture_output=True, text=True)
+    if result.returncode != 0 or not tok.exists():
+        pytest.skip("oaknut-basic is not available through uvx, so the test program cannot be tokenised.")
+    return tok.read_bytes()
+
+
+def test_boot_tape_loads_and_runs_a_basic_program(bbc, tmp_path: Path):
+    program = _tokenised(tmp_path)
+    tape = tape_builder.write(tmp_path / "tape_ok.uef",
+                              tape_builder.uef_of_file("TAPEOK", 0xFFFF0E00, 0xFFFF8023, program))
+    bbc.boot_tape(tape)
+    # The program writes 42 to &70 when it runs; the tape takes about eight
+    # seconds of emulated time.
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        if bbc.memory.address.peek[0x70] == 42:
+            break
+        time.sleep(0.5)
+    assert bbc.memory.address.peek[0x70] == 42
+    assert "TAPE OK 42" in bbc.video.screen_text().text

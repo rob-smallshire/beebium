@@ -196,6 +196,32 @@ bbc.keyboard.press_return()
 bbc.expect("FIRE 1")
 ```
 
+### Play a tape
+
+The cassette deck takes UEF and CSW tape images. Inserting leaves the deck
+stopped; play is separate, as on a real deck, and the tape moves only while the
+emulated machine's motor relay is closed. `bbc.cassette.events()` streams the
+deck's status, and an unsuccessful request raises `CassetteError` with the
+server's sentence and a `kind`.
+
+```python
+# Insert a tape: the deck is left stopped at the start.
+tape = bbc.cassette.insert(tmp_path / "game.uef")
+print(tape.name, tape.format, tape.duration_seconds)  # -> game.uef UEF 10.0
+
+# Play, and the tape moves whenever the Beeb's motor relay is closed,
+# which the filing system does when it wants the tape.
+bbc.cassette.play()
+status = bbc.cassette.status()
+print(status.transport, status.motor_on, status.position_seconds)
+
+bbc.cassette.seek(5.0)   # or rewind(), stop(), eject()
+bbc.cassette.eject()
+
+# To load a program from tape as a user would -- *TAPE, CHAIN"" and play:
+#   bbc.boot_tape("game.uef")                       # or command="*RUN"
+```
+
 ### Read and write memory
 
 ```python
@@ -245,6 +271,7 @@ sets breakpoints or watchpoints before `bbc.debugger.run()`.
 | `Beebium.connect` | nothing | unchanged |
 | `Beebium.expect` | a running machine, unless the text is already on the screen | unchanged |
 | `Beebium.boot_disc` | any run state | RUNNING |
+| `Beebium.boot_tape` | any run state | RUNNING |
 | `Beebium.wait_until_ready` | a running machine | unchanged |
 | `Beebium.run_for_emulated_seconds` | any run state | STOPPED |
 | `Beebium.run_until_or_timeout` | any run state | STOPPED |

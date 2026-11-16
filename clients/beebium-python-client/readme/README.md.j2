@@ -152,6 +152,18 @@ launch, with `Beebium.launch(extra_args=["--joystick"])`:
 {{ snippet("controllers") }}
 ```
 
+### Play a tape
+
+The cassette deck takes UEF and CSW tape images. Inserting leaves the deck
+stopped; play is separate, as on a real deck, and the tape moves only while the
+emulated machine's motor relay is closed. `bbc.cassette.events()` streams the
+deck's status, and an unsuccessful request raises `CassetteError` with the
+server's sentence and a `kind`.
+
+```python
+{{ snippet("cassette") }}
+```
+
 ### Read and write memory
 
 ```python
@@ -183,6 +195,7 @@ sets breakpoints or watchpoints before `bbc.debugger.run()`.
 | `Beebium.connect` | nothing | unchanged |
 | `Beebium.expect` | a running machine, unless the text is already on the screen | unchanged |
 | `Beebium.boot_disc` | any run state | RUNNING |
+| `Beebium.boot_tape` | any run state | RUNNING |
 | `Beebium.wait_until_ready` | a running machine | unchanged |
 | `Beebium.run_for_emulated_seconds` | any run state | STOPPED |
 | `Beebium.run_until_or_timeout` | any run state | STOPPED |

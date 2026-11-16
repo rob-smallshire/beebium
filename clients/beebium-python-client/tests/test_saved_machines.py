@@ -709,8 +709,7 @@ def _write_tone_uef(filepath: Path, cycles: int) -> None:
 
 
 def test_a_saved_machine_resumes_its_tape_where_it_was_saved(installation, run, tmp_path: Path):
-    from beebium.client._proto import cassette_pb2, cassette_pb2_grpc
-    from beebium.client.connection import open_channel
+    from beebium.client.cassette import TapeTransport
 
     tape = tmp_path / "tone.uef"
     _write_tone_uef(tape, 2400 * 20)  # twenty seconds
@@ -718,32 +717,25 @@ def test_a_saved_machine_resumes_its_tape_where_it_was_saved(installation, run, 
     result = run("create-machine", "--tape", tape, "--output", machine)
     assert result.returncode == 0, result.stderr
 
-    def deck(bbc):
-        return cassette_pb2_grpc.CassetteServiceStub(open_channel(bbc.target))
-
     with _launch(installation, machine) as bbc:
-        stub = deck(bbc)
-        status = stub.GetDeckStatus(cassette_pb2.GetDeckStatusRequest())
-        assert status.tape_inserted
-        assert status.transport == cassette_pb2.TAPE_TRANSPORT_STOPPED
+        status = bbc.cassette.status()
+        assert status.tape is not None
+        assert status.transport == TapeTransport.STOPPED
         assert status.position_seconds == 0.0
-        assert stub.Seek(cassette_pb2.SeekRequest(position_seconds=12.5)).success
+        bbc.cassette.seek(12.5)
         bbc.system.save_machine()
 
     record = json.loads((machine / "machine.json").read_text())
     assert abs(record["cassette"]["position_seconds"] - 12.5) < 0.01
 
     with _launch(installation, machine) as bbc:
-        status = deck(bbc).GetDeckStatus(cassette_pb2.GetDeckStatusRequest())
-        assert status.tape_inserted
-        assert status.transport == cassette_pb2.TAPE_TRANSPORT_STOPPED
+        status = bbc.cassette.status()
+        assert status.tape is not None
+        assert status.transport == TapeTransport.STOPPED
         assert abs(status.position_seconds - 12.5) < 0.01
 
 
 def test_a_tape_inserted_while_running_is_not_recorded_on_save(installation, run, tmp_path: Path):
-    from beebium.client._proto import cassette_pb2, cassette_pb2_grpc
-    from beebium.client.connection import open_channel
-
     tape = tmp_path / "later.uef"
     _write_tone_uef(tape, 2400)
     machine = tmp_path / "NoTape.beebium-machine"
@@ -751,9 +743,8 @@ def test_a_tape_inserted_while_running_is_not_recorded_on_save(installation, run
     assert result.returncode == 0, result.stderr
 
     with _launch(installation, machine) as bbc:
-        stub = cassette_pb2_grpc.CassetteServiceStub(open_channel(bbc.target))
-        assert stub.InsertTape(cassette_pb2.InsertTapeRequest(url=str(tape))).success
-        assert stub.Seek(cassette_pb2.SeekRequest(position_seconds=0.5)).success
+        bbc.cassette.insert(tape)
+        bbc.cassette.seek(0.5)
         bbc.system.save_machine()
 
     record = json.loads((machine / "machine.json").read_text())
