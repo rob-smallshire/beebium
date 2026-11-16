@@ -5,6 +5,7 @@
 // Type-only import: erased at compile time, so it introduces no runtime cycle
 // with disc.ts (which imports DiscError from here).
 import type { DiscErrorKind } from "./disc.js";
+import type { CassetteErrorKind } from "./cassette.js";
 
 /** Base error for all Beebium client errors. */
 export class BeebiumError extends Error {
@@ -90,6 +91,17 @@ export class TimeoutError extends BeebiumError {
  * without parsing the message. It is undefined for disc operations that do not
  * report a classification.
  */
+/** A cassette deck operation failed: the server's sentence, and its kind. */
+export class CassetteError extends BeebiumError {
+    readonly kind?: CassetteErrorKind;
+
+    constructor(message: string, kind?: CassetteErrorKind) {
+        super(message);
+        this.name = "CassetteError";
+        this.kind = kind;
+    }
+}
+
 export class DiscError extends BeebiumError {
     readonly kind?: DiscErrorKind;
 

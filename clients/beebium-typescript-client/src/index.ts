@@ -39,6 +39,7 @@ export {
 } from "./video.js";
 export { System, type Provenance, type MachineIdentity, type DescriptionPlaceholder, type DescriptionTemplateReport, type MachineDescriptionPreview, type SetMachineDescriptionResult, type ServerStatusEvent, type ShutdownResponse, type ShutdownConditionStatus, type AdvertisementState, type PacingStats, ServerStatus, ShutdownMode } from "./system.js";
 export { Disc, Drive, type DiscMetadata, type DriveStatus, type DiscControllerStatus, type DiscEvent, type DiscControllerInfo, type BlankDisc, DriveState, DiscEventType, DiscErrorKind } from "./disc.js";
+export { Cassette, type TapeMetadata, type DeckStatus, TapeTransport, CassetteErrorKind } from "./cassette.js";
 export { Econet, type EconetStatus, type AdlcStatus, type HandshakeStatus } from "./econet.js";
 export { Serial, type SerialStatus } from "./serial.js";
 export {
@@ -109,6 +110,7 @@ export {
     InvalidConditionError,
     MemoryAccessError,
     TimeoutError,
+    CassetteError,
     DiscError,
     EconetError,
     ProtocolMismatchError,

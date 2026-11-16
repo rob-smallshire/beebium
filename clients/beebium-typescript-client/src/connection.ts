@@ -11,6 +11,7 @@ import { SystemServiceClient } from "./generated/system.js";
 import { KeyboardServiceClient } from "./generated/keyboard.js";
 import { VideoServiceClient } from "./generated/video.js";
 import { DiscServiceClient } from "./generated/disc.js";
+import { CassetteServiceClient } from "./generated/cassette.js";
 import { EconetServiceClient } from "./generated/econet.js";
 import { SerialServiceClient } from "./generated/serial.js";
 import { ExtensionRpcClient } from "./generated/extension_rpc.js";
@@ -27,6 +28,7 @@ import type { SystemServiceClient as SystemServiceClientType } from "./generated
 import type { KeyboardServiceClient as KeyboardServiceClientType } from "./generated/keyboard.js";
 import type { VideoServiceClient as VideoServiceClientType } from "./generated/video.js";
 import type { DiscServiceClient as DiscServiceClientType } from "./generated/disc.js";
+import type { CassetteServiceClient as CassetteServiceClientType } from "./generated/cassette.js";
 import type { EconetServiceClient as EconetServiceClientType } from "./generated/econet.js";
 import type { SerialServiceClient as SerialServiceClientType } from "./generated/serial.js";
 import type { ExtensionRpcClient as ExtensionRpcClientType } from "./generated/extension_rpc.js";
@@ -54,6 +56,7 @@ export class Connection {
     private _keyboardStub: KeyboardServiceClientType | null = null;
     private _videoStub: VideoServiceClientType | null = null;
     private _discStub: DiscServiceClientType | null = null;
+    private _cassetteStub: CassetteServiceClientType | null = null;
     private _econetStub: EconetServiceClientType | null = null;
     private _serialStub: SerialServiceClientType | null = null;
     private _extensionRpcStub: ExtensionRpcClientType | null = null;
@@ -150,6 +153,17 @@ export class Connection {
             );
         }
         return this._videoStub;
+    }
+
+    get cassetteStub(): CassetteServiceClientType {
+        this.ensureOpen();
+        if (!this._cassetteStub) {
+            this._cassetteStub = new CassetteServiceClient(
+                this._target,
+                this.credentials,
+            );
+        }
+        return this._cassetteStub;
     }
 
     get discStub(): DiscServiceClientType {
@@ -305,6 +319,7 @@ export class Connection {
             this._keyboardStub,
             this._videoStub,
             this._discStub,
+            this._cassetteStub,
             this._econetStub,
             this._tubeStub,
             this._econetTransportStub,
@@ -327,6 +342,7 @@ export class Connection {
         this._keyboardStub = null;
         this._videoStub = null;
         this._discStub = null;
+        this._cassetteStub = null;
         this._econetStub = null;
         this._tubeStub = null;
         this._econetTransportStub = null;

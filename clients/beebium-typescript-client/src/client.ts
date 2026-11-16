@@ -18,6 +18,7 @@ import { System } from "./system.js";
 import { BeebiumError, ProtocolMismatchError } from "./exceptions.js";
 import { PROTOCOL_FINGERPRINT } from "./protocol_fingerprint.js";
 import { Disc } from "./disc.js";
+import { Cassette } from "./cassette.js";
 import { Econet } from "./econet.js";
 import { Serial } from "./serial.js";
 import { ExtensionChannel } from "./extension_rpc.js";
@@ -87,6 +88,7 @@ export class Beebium {
     private _video?: Video;
     private _system?: System;
     private _disc?: Disc;
+    private _cassette?: Cassette;
     private _econet?: Econet;
     private _serial?: Serial;
     private _rpcSerial?: RpcSerial;
@@ -307,6 +309,26 @@ export class Beebium {
             this._system = new System(this.connection.systemStub, this.instanceUuid);
         }
         return this._system;
+    }
+
+    /** Access the cassette deck. */
+    get cassette(): Cassette {
+        if (this._cassette === undefined) {
+            this._cassette = new Cassette(this.connection.cassetteStub);
+        }
+        return this._cassette;
+    }
+
+    /**
+     * Insert a tape and load it as a user does at the keyboard: insert it,
+     * type `*TAPE` and `command` (`CHAIN""` for a BASIC program, `*RUN` for
+     * machine code), then press play. Resolves at once; wait for the screen in
+     * emulated time to know the load has finished.
+     */
+    async bootTape(tapeFilepath: string, command = 'CHAIN""'): Promise<void> {
+        await this.cassette.insert(tapeFilepath);
+        await this.keyboard.type("*TAPE\r" + command + "\r");
+        await this.cassette.play();
     }
 
     /** Access floppy disc drive management. */
