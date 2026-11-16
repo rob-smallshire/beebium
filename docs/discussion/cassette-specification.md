@@ -18,7 +18,10 @@ marked `Decision (unverified)` and listed at the end.
   shows the relay state whether or not a deck is connected.
 - The tape user interface shows a position, perhaps as a slider. No block catalogue and no
   waveform: those belong to a transcription or analysis tool, not to Beebium.
-- Recording (SAVE to tape) is a later round; nothing in this design may foreclose it.
+- Recording (SAVE to tape) onto a tape with room for it, and a **new blank tape** facility like
+  the blank-disc one (Rob, 2026-11-16): canned blank tapes of several lengths, a C15 at least,
+  bundled as template images that are copied into place when the user asks, their file names
+  being what the user is offered. Nothing before the recording round may foreclose it.
 - As everywhere in Beebium: no dependence on a particular MOS (MOS 1.20 is a test vector
   only), tests built from images the tests generate, the server as the single source of truth,
   nothing on the per-cycle path takes a lock.
@@ -316,11 +319,37 @@ name the tape by the name the client gave.
 | `GetDeckStatus()` | Presence, tape name and kind, transport, position, duration, relay, metadata (title, origin, target machine), live ring fill |
 | `SubscribeDeckStatus(min_interval_ms)` | A stream of the same, on change |
 | `StreamAudio(stream AudioInputChunk)` | Client-streaming: the first message carries the sample rate and format (16-bit or float32 mono PCM); the rest carry samples. The stream is the live tape; it is refused with `DECK_OCCUPIED` if a tape is in. Closing the stream ejects |
+| `ListBlankTapes()`, `CreateTape(label, destination_path, overwrite)` | The mirror of `ListBlankDiscs`/`CreateDisc`: the bundled blank-tape templates by label, and a copy of one into place on the server's host, with the same error kinds (unknown label, destination exists, write failed, wrong extension). Recording round |
 
 The fingerprint changes; the next release after this lands is a minor.
 
 Errors follow `feedback_user_facing_error_text_is_a_sentence`: "The file game.uef is not a UEF,
 CSW or WAV tape image." and so on.
+
+## Blank tapes and recording
+
+A blank tape is a bundled template, as a blank disc is: `tapes/blank/<label>.uef`, committed,
+byte-reproducible from `scripts/make-blank-tapes.sh` (a UEF whose tape content is one gap of
+the tape's length, with an origin chunk naming Beebium and no date), copied into the build
+tree and installed to `share/beebium/blank-tapes` beside `blank-discs`. The label is the file
+name without its extension and is what the user is offered. `Decision`: the lengths are the
+compact cassette's, C15, C30, C60 and C90, labelled "Blank C15 (15 minutes)" and so on, and the
+whole nominal length is one Beebium tape: the deck has no side to turn over, and a side-flip
+gesture would be a GUI addition for no gain. A blank tape named by a preset is copied into the
+machine's directory like any preset media, so what the Beeb records lands in the machine's own
+copy.
+
+Recording is the transmit synthesiser's edges, which the deck already receives as a
+`TapeSignal` of the same kind it plays, written onto the tape in the deck from the current
+position while the deck is **recording** (a third transport state the user selects, like a
+real deck's record key; the relay gates it as it gates play) and the relay is closed. The
+recorded span replaces what the tape held there; the tape's length is fixed, and recording
+stops at the end. The image is rewritten on eject, on `SaveMachine` and at shutdown, as a UEF
+in the chunks that describe what was recorded without decoding it through any MOS's framing:
+carrier as &0110 cycles, silence as &0116, and data as &0114 raw cycles unless clean 8N1 at
+the cell rate is found, when it becomes &0100 so that other tools read it; the recording
+specification settles the detail. A CSW or WAV in the deck is read-only (`READ_ONLY` kind) until
+a later round says otherwise. `GetDeckStatus` reports whether the tape is recordable.
 
 ## The motor LED
 
@@ -406,13 +435,23 @@ cassette agent, and ends with the full gate from a separate Release worktree.
    client-specification chapter; `docs/cassette.md` and the updates to `serial-acia.md`
    (including its &15 claim, F-Q26), `grpc-server.md`, `preset-schema.md`, `indicators.md`,
    `machine-directory.md`, `client-specification.md`, CLAUDE.md, README.
-4. **Round 6: sampled sources.** WAV, the front end, the corpus tests (every take of Plan B2
+4. **Round 6: recording and blank tapes.** The recording transport state, the UEF writer, the
+   templates and `scripts/make-blank-tapes.sh`, `ListBlankTapes`/`CreateTape`, CLI
+   `list-blank-tapes`/`create-tape`, Python and TypeScript mirrors, the client-specification
+   section on creating blank tapes (the mirror of 9.3, gated on a shared filesystem). Tests: MOS
+   1.20 SAVEs a program to a blank C15 and `CHAIN`s it back after rewind, in Beebium and then
+   from the written UEF in a fresh machine; the written UEF's chunks are what the spec says; a
+   recording over the middle of a tape leaves both ends; recording stops at the end; a
+   recording through round 3's /DCD and the 5.1 s leader and 0.9 s gaps MOS writes are present
+   as carrier. Brought forward so the GUI rounds build against the whole deck.
+5. **Round 7: sampled sources.** WAV, the front end, the corpus tests (every take of Plan B2
    at all three levels loads its first file; a Cascade 50 take loads a named program; the
    partial-rewind take loads after a seek), the DCD-test WAVs.
-5. **Round 7: live audio.** `StreamAudio`, the ring, the timing policy, Python
+6. **Round 8: live audio.** `StreamAudio`, the ring, the timing policy, Python
    `stream_audio` fed from a WAV (which makes the WAV corpus the live test vector too).
-6. **Later**: recording to CSW and UEF; GUI client rounds against the chapter; the VLSI part's
-   selection in presets; a Master Compact's `has_cassette = false` when that variant exists.
+7. **Later**: recording to CSW; GUI client rounds against the chapter (they may start after
+   round 6); the VLSI part's selection in presets; a Master Compact's `has_cassette = false`
+   when that variant exists.
 
 ## Decisions to verify on hardware or against the corpus
 
