@@ -37,10 +37,12 @@ import { promisify } from "./call-utils.js";
 import { toAsyncIterable } from "./stream-utils.js";
 import { CassetteError } from "./exceptions.js";
 
-/** Whether the deck is playing. */
+/** What the deck is doing: stopped, playing, or winding. */
 export enum TapeTransport {
     STOPPED = "stopped",
     PLAYING = "playing",
+    REWINDING = "rewinding",
+    FAST_FORWARDING = "fast_forwarding",
 }
 
 /**
@@ -107,6 +109,19 @@ function toErrorKind(proto: ProtoCassetteErrorKind): CassetteErrorKind {
     }
 }
 
+function toTransport(proto: ProtoTapeTransport): TapeTransport {
+    switch (proto) {
+        case ProtoTapeTransport.TAPE_TRANSPORT_PLAYING:
+            return TapeTransport.PLAYING;
+        case ProtoTapeTransport.TAPE_TRANSPORT_REWINDING:
+            return TapeTransport.REWINDING;
+        case ProtoTapeTransport.TAPE_TRANSPORT_FAST_FORWARDING:
+            return TapeTransport.FAST_FORWARDING;
+        default:
+            return TapeTransport.STOPPED;
+    }
+}
+
 function toTapeMetadata(proto: ProtoTapeMetadata): TapeMetadata {
     return {
         name: proto.name,
@@ -123,8 +138,7 @@ function toDeckStatus(proto: ProtoDeckStatus): DeckStatus {
     return {
         hasCassetteInterface: proto.hasCassetteInterface,
         tape: proto.tapeInserted && proto.tape ? toTapeMetadata(proto.tape) : undefined,
-        transport: proto.transport === ProtoTapeTransport.TAPE_TRANSPORT_PLAYING
-            ? TapeTransport.PLAYING : TapeTransport.STOPPED,
+        transport: toTransport(proto.transport),
         positionSeconds: proto.positionSeconds,
         motorOn: proto.motorOn,
         ulaPart: proto.ulaPart,
@@ -188,9 +202,22 @@ export class Cassette {
             "seek", { positionSeconds: seconds }));
     }
 
-    /** Seek to the start. */
+    /**
+     * Wind backwards at 30 times real speed, whether or not the motor relay is
+     * closed, until stop, play, a seek, eject or the start of the tape, where
+     * the deck stops. `seek(0)` returns to the start at once.
+     */
     async rewind(): Promise<void> {
-        await this.seek(0);
+        check(await this.call<object, ProtoCassetteResponse>("rewind", {}));
+    }
+
+    /**
+     * Wind forwards at 30 times real speed, whether or not the motor relay is
+     * closed, until stop, play, a seek, eject or the end of the tape, where the
+     * deck stops.
+     */
+    async fastForward(): Promise<void> {
+        check(await this.call<object, ProtoCassetteResponse>("fastForward", {}));
     }
 
     /** The deck's state, read without stopping the machine. */

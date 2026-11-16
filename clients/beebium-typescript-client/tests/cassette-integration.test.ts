@@ -63,6 +63,9 @@ describe("cassette integration", () => {
             await bbc.cassette.seek(4.5);
             status = await bbc.cassette.status();
             expect(status.positionSeconds).toBeCloseTo(4.5, 3);
+            await bbc.cassette.fastForward();
+            expect((await bbc.cassette.status()).transport).toBe(TapeTransport.FAST_FORWARDING);
+            await bbc.cassette.stop();
             await bbc.cassette.eject();
             expect((await bbc.cassette.status()).tape).toBeUndefined();
         });

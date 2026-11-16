@@ -31,10 +31,20 @@ from beebium.client.exceptions import CassetteError
 
 
 class TapeTransport(Enum):
-    """Whether the deck is playing."""
+    """What the deck is doing: stopped, playing, or winding."""
 
     STOPPED = "stopped"
     PLAYING = "playing"
+    REWINDING = "rewinding"
+    FAST_FORWARDING = "fast_forwarding"
+
+
+_TRANSPORT_FROM_PROTO = {
+    cassette_pb2.TAPE_TRANSPORT_STOPPED: TapeTransport.STOPPED,
+    cassette_pb2.TAPE_TRANSPORT_PLAYING: TapeTransport.PLAYING,
+    cassette_pb2.TAPE_TRANSPORT_REWINDING: TapeTransport.REWINDING,
+    cassette_pb2.TAPE_TRANSPORT_FAST_FORWARDING: TapeTransport.FAST_FORWARDING,
+}
 
 
 class CassetteErrorKind(Enum):
@@ -109,8 +119,7 @@ def _deck_status(proto: cassette_pb2.DeckStatus) -> DeckStatus:
     return DeckStatus(
         has_cassette_interface=proto.has_cassette_interface,
         tape=_tape_metadata(proto.tape) if proto.tape_inserted else None,
-        transport=(TapeTransport.PLAYING if proto.transport == cassette_pb2.TAPE_TRANSPORT_PLAYING
-                   else TapeTransport.STOPPED),
+        transport=_TRANSPORT_FROM_PROTO.get(proto.transport, TapeTransport.STOPPED),
         position_seconds=proto.position_seconds,
         motor_on=proto.motor_on,
         ula_part=proto.ula_part,
@@ -169,8 +178,16 @@ class Cassette:
         _check(self._stub.Seek(cassette_pb2.SeekRequest(position_seconds=seconds)))
 
     def rewind(self) -> None:
-        """Seek to the start."""
-        self.seek(0.0)
+        """Wind backwards at 30 times real speed, whether or not the motor
+        relay is closed, until stop, play, a seek, eject or the start of the
+        tape, where the deck stops. ``seek(0)`` returns to the start at once."""
+        _check(self._stub.Rewind(cassette_pb2.RewindRequest()))
+
+    def fast_forward(self) -> None:
+        """Wind forwards at 30 times real speed, whether or not the motor relay
+        is closed, until stop, play, a seek, eject or the end of the tape,
+        where the deck stops."""
+        _check(self._stub.FastForward(cassette_pb2.FastForwardRequest()))
 
     def status(self) -> DeckStatus:
         """The deck's state, read without stopping the machine."""

@@ -215,7 +215,9 @@ bbc.cassette.play()
 status = bbc.cassette.status()
 print(status.transport, status.motor_on, status.position_seconds)
 
-bbc.cassette.seek(5.0)   # or rewind(), stop(), eject()
+bbc.cassette.seek(5.0)       # seek(0) is back to the beginning
+bbc.cassette.fast_forward()  # rewind() and fast_forward() wind at 30x
+bbc.cassette.stop()
 bbc.cassette.eject()
 
 # To load a program from tape as a user would -- *TAPE, CHAIN"" and play:

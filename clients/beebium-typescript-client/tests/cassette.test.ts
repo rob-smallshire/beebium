@@ -117,11 +117,34 @@ describe("Cassette", () => {
         expect(status.transport).toBe(TapeTransport.STOPPED);
     });
 
-    it("seeks, and rewinds to the start", async () => {
+    it("seeks", async () => {
         const stub = createMockStub({ seek: () => ({ success: true, error: "", kind: 0 }) });
         const cassette = new Cassette(stub as any);
         await cassette.seek(4.5);
-        await cassette.rewind();
+        await cassette.seek(0);
         expect(stub.seek.mock.calls.map((c: any[]) => c[0].positionSeconds)).toEqual([4.5, 0]);
+    });
+
+    it("winds with Rewind and FastForward and maps the winding transports", async () => {
+        const ok = () => ({ success: true, error: "", kind: 0 });
+        const stub = createMockStub({
+            rewind: ok,
+            fastForward: ok,
+            getDeckStatus: () => ({
+                hasCassetteInterface: true,
+                tapeInserted: true,
+                tape: TAPE,
+                transport: 4,
+                positionSeconds: 1,
+                motorOn: false,
+                ulaPart: "ferranti",
+            }),
+        });
+        const cassette = new Cassette(stub as any);
+        await cassette.rewind();
+        await cassette.fastForward();
+        expect(stub.rewind).toHaveBeenCalledTimes(1);
+        expect(stub.fastForward).toHaveBeenCalledTimes(1);
+        expect((await cassette.status()).transport).toBe(TapeTransport.FAST_FORWARDING);
     });
 });

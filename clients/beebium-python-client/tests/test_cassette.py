@@ -62,10 +62,27 @@ def test_the_deck_keys_round_trip(bbc, tmp_path: Path):
     assert bbc.cassette.status().transport == TapeTransport.STOPPED
     bbc.cassette.seek(4.5)
     assert abs(bbc.cassette.status().position_seconds - 4.5) < 0.001
-    bbc.cassette.rewind()
+    bbc.cassette.seek(0)
     assert bbc.cassette.status().position_seconds == 0.0
     bbc.cassette.eject()
     assert bbc.cassette.status().tape is None
+
+
+def test_the_deck_winds_at_thirty_times_real_speed(bbc, tmp_path: Path):
+    tape = tape_builder.write(tmp_path / "long.uef", tape_builder.uef_of_carrier(90.0))
+    bbc.cassette.insert(tape)
+    bbc.cassette.fast_forward()
+    assert bbc.cassette.status().transport == TapeTransport.FAST_FORWARDING
+    bbc.run_for_emulated_seconds(1.0)
+    status = bbc.cassette.status()
+    assert status.transport == TapeTransport.FAST_FORWARDING
+    assert 25.0 < status.position_seconds < 35.0
+    bbc.cassette.rewind()
+    assert bbc.cassette.status().transport == TapeTransport.REWINDING
+    bbc.run_for_emulated_seconds(1.5)
+    status = bbc.cassette.status()
+    assert status.transport == TapeTransport.STOPPED
+    assert status.position_seconds == 0.0
 
 
 def test_errors_carry_a_kind_and_the_servers_sentence(bbc, tmp_path: Path):
