@@ -90,6 +90,18 @@ class CassetteError(BeebiumError):
         self.kind = kind
 
 
+class CreateTapeError(BeebiumError):
+    """A blank tape could not be created.
+
+    ``kind`` classifies the failure (a
+    :class:`~beebium.client.cassette.CreateTapeErrorKind`).
+    """
+
+    def __init__(self, message: str, *, kind: object | None = None) -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
 class DiscError(BeebiumError):
     """A disc operation failed.
 

@@ -75,6 +75,14 @@ def uef_of_carrier(seconds: float) -> bytes:
     return b"UEF File!\x00\x0a\x00" + _carrier(int(seconds * 2400))
 
 
+def csw_of_pulses(pulses: list[int], sample_rate: int = 44100) -> bytes:
+    """A CSW v2, RLE, of these pulse lengths in samples (each under 256)."""
+    header = (b"Compressed Square Wave\x1a" + bytes([2, 0])
+              + struct.pack("<IIBBB", sample_rate, len(pulses), 1, 1, 0)
+              + b"beebium tests".ljust(16, b"\x00"))
+    return header + bytes(pulses)
+
+
 def write(filepath: Path, data: bytes) -> Path:
     filepath.write_bytes(data)
     return filepath

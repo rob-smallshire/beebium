@@ -21,8 +21,8 @@ from pathlib import Path
 import pytest
 import tape_builder
 
-from beebium.client import Beebium, CassetteError
-from beebium.client.cassette import CassetteErrorKind, TapeTransport
+from beebium.client import Beebium, CassetteError, CreateTapeError
+from beebium.client.cassette import CassetteErrorKind, CreateTapeErrorKind, TapeTransport
 from beebium.client.exceptions import ServerNotFoundError
 
 ASSETS_DIRPATH = Path(__file__).resolve().parents[3] / "tests" / "assets"
@@ -154,3 +154,45 @@ def test_boot_tape_loads_and_runs_a_basic_program(bbc, tmp_path: Path):
         time.sleep(0.5)
     assert bbc.memory.address.peek[0x70] == 42
     assert "TAPE OK 42" in bbc.video.screen_text().text
+
+
+def test_blank_tapes_are_listed_and_one_is_created(bbc, tmp_path: Path):
+    tapes = bbc.cassette.list_blank_tapes()
+    assert [t.label for t in tapes] == ["Blank C15 (15 minutes)", "Blank C30 (30 minutes)",
+                                        "Blank C60 (60 minutes)", "Blank C90 (90 minutes)"]
+    assert [t.duration_seconds for t in tapes] == pytest.approx([900.0, 1800.0, 3600.0, 5400.0], abs=0.001)
+    assert all(t.kind == "tape" and t.filename == t.label + ".uef" for t in tapes)
+
+    created = bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "side-a")
+    assert created.resolve() == (tmp_path / "side-a.uef").resolve()
+    with pytest.raises(CreateTapeError) as exists:
+        bbc.cassette.create_tape("Blank C15 (15 minutes)", created)
+    assert exists.value.kind == CreateTapeErrorKind.DESTINATION_EXISTS
+    assert bbc.cassette.create_tape("Blank C30 (30 minutes)", created, overwrite=True) == created
+    with pytest.raises(CreateTapeError) as unknown:
+        bbc.cassette.create_tape("Blank C120", tmp_path / "other.uef")
+    assert unknown.value.kind == CreateTapeErrorKind.UNKNOWN_LABEL
+    with pytest.raises(CreateTapeError) as wrong:
+        bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "other.csw")
+    assert wrong.value.kind == CreateTapeErrorKind.WRONG_EXTENSION
+
+    metadata = bbc.cassette.insert(created)
+    assert metadata.recordable
+    assert abs(metadata.duration_seconds - 1800.0) < 0.001
+
+
+def test_record_is_a_transport_and_a_csw_is_read_only(bbc, tmp_path: Path):
+    csw = tape_builder.write(tmp_path / "game.csw", tape_builder.csw_of_pulses([18] * 2000))
+    metadata = bbc.cassette.insert(csw)
+    assert not metadata.recordable
+    with pytest.raises(CassetteError) as read_only:
+        bbc.cassette.record()
+    assert read_only.value.kind == CassetteErrorKind.READ_ONLY
+    assert "game.csw" in str(read_only.value) and "CSW" in str(read_only.value)
+    bbc.cassette.eject()
+
+    bbc.cassette.insert(bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "blank"))
+    bbc.cassette.record()
+    assert bbc.cassette.status().transport == TapeTransport.RECORDING
+    bbc.cassette.stop()
+    assert bbc.cassette.status().transport == TapeTransport.STOPPED

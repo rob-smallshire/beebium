@@ -164,6 +164,20 @@ server's sentence and a `kind`.
 {{ snippet("cassette") }}
 ```
 
+### Record a tape
+
+The server ships blank tapes (`bbc.cassette.list_blank_tapes()`), and
+`create_tape` copies one into place on the server's host. Recording is a
+transport, as on a real deck: press record before RETURN at the Beeb's
+`RECORD then RETURN`, and the tape records while the motor relay is closed.
+When the recording ends (stop, play, a seek, a wind, eject) the tape is written
+back to its file as a UEF, which loads here or in any emulator. A CSW is only
+read: `record()` on one raises `CassetteError` with kind `READ_ONLY`.
+
+```python
+{{ snippet("cassette_recording") }}
+```
+
 ### Read and write memory
 
 ```python

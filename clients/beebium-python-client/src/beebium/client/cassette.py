@@ -27,14 +27,15 @@ from enum import Enum
 from pathlib import Path
 
 from beebium.client._proto import cassette_pb2, cassette_pb2_grpc
-from beebium.client.exceptions import CassetteError
+from beebium.client.exceptions import CassetteError, CreateTapeError
 
 
 class TapeTransport(Enum):
-    """What the deck is doing: stopped, playing, or winding."""
+    """What the deck is doing: stopped, playing, recording, or winding."""
 
     STOPPED = "stopped"
     PLAYING = "playing"
+    RECORDING = "recording"
     REWINDING = "rewinding"
     FAST_FORWARDING = "fast_forwarding"
 
@@ -42,6 +43,7 @@ class TapeTransport(Enum):
 _TRANSPORT_FROM_PROTO = {
     cassette_pb2.TAPE_TRANSPORT_STOPPED: TapeTransport.STOPPED,
     cassette_pb2.TAPE_TRANSPORT_PLAYING: TapeTransport.PLAYING,
+    cassette_pb2.TAPE_TRANSPORT_RECORDING: TapeTransport.RECORDING,
     cassette_pb2.TAPE_TRANSPORT_REWINDING: TapeTransport.REWINDING,
     cassette_pb2.TAPE_TRANSPORT_FAST_FORWARDING: TapeTransport.FAST_FORWARDING,
 }
@@ -63,6 +65,27 @@ class CassetteErrorKind(Enum):
     DECK_OCCUPIED = "deck_occupied"
     DECK_EMPTY = "deck_empty"
     INVALID_POSITION = "invalid_position"
+    READ_ONLY = "read_only"
+
+
+class CreateTapeErrorKind(Enum):
+    """Why a blank tape could not be created; on
+    :class:`~beebium.client.exceptions.CreateTapeError`."""
+
+    UNSPECIFIED = "unspecified"
+    UNKNOWN_LABEL = "unknown_label"
+    DESTINATION_EXISTS = "destination_exists"
+    WRITE_FAILED = "write_failed"
+    WRONG_EXTENSION = "wrong_extension"
+
+
+_CREATE_TAPE_ERROR_KIND_FROM_PROTO = {
+    cassette_pb2.CREATE_TAPE_ERROR_KIND_UNSPECIFIED: CreateTapeErrorKind.UNSPECIFIED,
+    cassette_pb2.CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL: CreateTapeErrorKind.UNKNOWN_LABEL,
+    cassette_pb2.CREATE_TAPE_ERROR_KIND_DESTINATION_EXISTS: CreateTapeErrorKind.DESTINATION_EXISTS,
+    cassette_pb2.CREATE_TAPE_ERROR_KIND_WRITE_FAILED: CreateTapeErrorKind.WRITE_FAILED,
+    cassette_pb2.CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION: CreateTapeErrorKind.WRONG_EXTENSION,
+}
 
 
 _ERROR_KIND_FROM_PROTO = {
@@ -75,6 +98,7 @@ _ERROR_KIND_FROM_PROTO = {
     cassette_pb2.CASSETTE_ERROR_KIND_DECK_OCCUPIED: CassetteErrorKind.DECK_OCCUPIED,
     cassette_pb2.CASSETTE_ERROR_KIND_DECK_EMPTY: CassetteErrorKind.DECK_EMPTY,
     cassette_pb2.CASSETTE_ERROR_KIND_INVALID_POSITION: CassetteErrorKind.INVALID_POSITION,
+    cassette_pb2.CASSETTE_ERROR_KIND_READ_ONLY: CassetteErrorKind.READ_ONLY,
 }
 
 
@@ -88,6 +112,19 @@ class TapeMetadata:
     title: str
     origin: str
     target_machine: str
+    duration_seconds: float
+    recordable: bool  # whether record() can record on it: a UEF can, a CSW cannot
+
+
+@dataclass(frozen=True)
+class BlankTape:
+    """A blank tape template the server ships, from which
+    :meth:`Cassette.create_tape` makes a tape."""
+
+    label: str  # the file name without its extension, e.g. "Blank C15 (15 minutes)"
+    filename: str  # e.g. "Blank C15 (15 minutes).uef"
+    kind: str  # "tape"
+    size_bytes: int
     duration_seconds: float
 
 
@@ -112,6 +149,7 @@ def _tape_metadata(proto: cassette_pb2.TapeMetadata) -> TapeMetadata:
         origin=proto.origin,
         target_machine=proto.target_machine,
         duration_seconds=proto.duration_seconds,
+        recordable=proto.recordable,
     )
 
 
@@ -188,6 +226,52 @@ class Cassette:
         is closed, until stop, play, a seek, eject or the end of the tape,
         where the deck stops."""
         _check(self._stub.FastForward(cassette_pb2.FastForwardRequest()))
+
+    def record(self) -> None:
+        """Press record. From here, while the motor relay is closed, the tape
+        moves and what passes under the head is replaced by what the machine
+        sends, or by silence. Stop, play, a seek, a wind, eject and the end of
+        the tape end it, and the tape is then written back to its file.
+
+        Raises:
+            CassetteError: With kind READ_ONLY for a tape Beebium only reads
+                (a CSW), or DECK_EMPTY.
+        """
+        _check(self._stub.Record(cassette_pb2.RecordRequest()))
+
+    def list_blank_tapes(self) -> list[BlankTape]:
+        """The blank tape templates the server ships, in file name order."""
+        response = self._stub.ListBlankTapes(cassette_pb2.ListBlankTapesRequest())
+        return [
+            BlankTape(label=tape.label, filename=tape.filename, kind=tape.kind,
+                      size_bytes=tape.size_bytes, duration_seconds=tape.duration_seconds)
+            for tape in response.tapes
+        ]
+
+    def create_tape(self, label: str, destination_filepath: str | Path, *,
+                    overwrite: bool = False) -> Path:
+        """Create a blank tape: copy the template with this label to a path on
+        the server's host. Insert it with :meth:`insert`.
+
+        A `destination_filepath` without an extension gets ".uef"; one with
+        another extension is refused.
+
+        Returns:
+            The absolute path of the new tape.
+
+        Raises:
+            CreateTapeError: If the label is unknown (UNKNOWN_LABEL), the
+                destination exists and `overwrite` is not set
+                (DESTINATION_EXISTS), it ends in another extension
+                (WRONG_EXTENSION), or the copy cannot be written (WRITE_FAILED).
+        """
+        response = self._stub.CreateTape(cassette_pb2.CreateTapeRequest(
+            label=label, destination_path=str(destination_filepath), overwrite=overwrite))
+        if not response.success:
+            raise CreateTapeError(
+                f"Creating a blank tape failed: {response.error}",
+                kind=_CREATE_TAPE_ERROR_KIND_FROM_PROTO.get(response.kind, CreateTapeErrorKind.UNSPECIFIED))
+        return Path(response.path)
 
     def status(self) -> DeckStatus:
         """The deck's state, read without stopping the machine."""

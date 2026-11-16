@@ -224,6 +224,38 @@ bbc.cassette.eject()
 #   bbc.boot_tape("game.uef")                       # or command="*RUN"
 ```
 
+### Record a tape
+
+The server ships blank tapes (`bbc.cassette.list_blank_tapes()`), and
+`create_tape` copies one into place on the server's host. Recording is a
+transport, as on a real deck: press record before RETURN at the Beeb's
+`RECORD then RETURN`, and the tape records while the motor relay is closed.
+When the recording ends (stop, play, a seek, a wind, eject) the tape is written
+back to its file as a UEF, which loads here or in any emulator. A CSW is only
+read: `record()` on one raises `CassetteError` with kind `READ_ONLY`.
+
+```python
+# A blank C15 on the server's host, in the deck.
+tape = bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "hello")
+bbc.cassette.insert(tape)
+
+bbc.keyboard.type('10 PRINT "HELLO FROM TAPE"\r*TAPE\rSAVE "HELLO"\r')
+bbc.expect("RECORD then RETURN")
+bbc.cassette.record()
+bbc.keyboard.press_return()
+
+# The SAVE is over when the motor relay opens again.
+with contextlib.closing(bbc.cassette.events()) as events:
+    for status in events:
+        if not status.motor_on and status.position_seconds > 0:
+            break
+
+bbc.cassette.seek(0)    # back to the beginning; the recording is written to the file
+bbc.cassette.play()
+bbc.keyboard.type('NEW\rCHAIN "HELLO"\r')
+bbc.expect("HELLO FROM TAPE", timeout=60)
+```
+
 ### Read and write memory
 
 ```python
