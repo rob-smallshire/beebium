@@ -349,6 +349,10 @@ the client's indicator rendering applies whatever hold-off it applies to the dri
   in the shape of `boot_disc` (`*TAPE`, `CHAIN""`, play, wait in emulated time). A README
   section with a tested snippet.
 - **TypeScript**: the mirror.
+- **Placement in the storage sidebar**: the cassette section sits **above** the floppy drives,
+  which sit above hard discs: the order of storage sophistication and performance, and the
+  cassette is the one interface every BBC Micro has (the Master Compact apart, which Beebium
+  does not yet build). The client-specification chapter states the order.
 - **macOS and Linux apps**: later rounds against the chapter. Capture uses the audio input
   device the user picks; the macOS app needs the microphone usage string and the audio-input
   entitlement because the operating system gates every input, line-in included, behind that
