@@ -1663,7 +1663,7 @@ section sits above the floppy drives, which sit above the hard discs.
 - Saved machines. A saved machine records the position of its configured tape on
   Save, and reopens with that tape at that position, stopped (5.3). A tape inserted
   at run time is not recorded on Save, as a floppy inserted at run time is not.
-- Live input. A later round adds an input-device picker for recording from a live
+- Live input. A later round adds an input-device picker for loading from a live
   source: the audio input devices the host lists, with no voice processing
   applied. The macOS app will need the audio-input entitlement for it. Nothing in
   this section depends on it.
