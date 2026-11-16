@@ -16,8 +16,8 @@ rather than being wired into the emulation core.
 
 `beebium` is the Python client for that protocol: a typed API over the gRPC
 services for controlling and automating emulator instances from Python -- type
-on the keyboard, read the screen in any display mode, peek and poke memory,
-drive the debugger, mount discs, and more. It is built for pytest-based testing
+on the keyboard, read the screen in any display mode, set a joystick, peek and
+poke memory, drive the debugger, mount discs, and more. It is built for pytest-based testing
 of BBC Micro software: a `bbc` fixture gives each test a fresh machine.
 
 ### Relationship to `beebium-server`
@@ -173,6 +173,28 @@ paging: the region the video reads (`main_ram`; `shadow_ram` on a B+ or B+ 128K
 in a shadow mode; always `main_ram` on an Integra-B, whose shadow RAM is the
 CPU's), and the address ranges in display order, wrapping as the hardware
 does. `bbc.memory.region(r.region).peek[start:end]` then reads each range.
+
+### Set a joystick
+
+Controllers are devices a person holds. The server publishes each one's named
+axes (0 to 65535, centre 32768) and buttons in the device's own vocabulary, and
+the client sets them; the server never reads a host gamepad. Besides the
+joystick, the Voltmace Delta 14B/1 adapter is built in. Attach the joystick at
+launch, with `Beebium.launch(extra_args=["--joystick"])`:
+
+```python
+# The controllers attached, each with its named axes and buttons.
+for controller in bbc.controllers.list():
+    print(controller.controller_id, [c.id for c in controller.controls])
+# -> joystick ['stick1.x', 'stick1.y', 'fire1', 'stick2.x', 'stick2.y', 'fire2']
+
+# Push stick 1 hard over and hold its fire button down.
+bbc.controllers.set("joystick", {"stick1.x": 0, "fire1": True})
+
+bbc.keyboard.type('PRINT "FIRE ";ADVAL(0) AND 1')
+bbc.keyboard.press_return()
+bbc.expect("FIRE 1")
+```
 
 ### Read and write memory
 
