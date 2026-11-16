@@ -108,9 +108,15 @@ drive-LED hold-off. `docs/indicators.md` lists it with the lock and drive LEDs.
 - `machine.json` gains `"cassette": { "position_seconds": 123.4 }`, written on `SaveMachine`
   (the position is state, like the screen and the battery-backed RAM, not configuration) and
   applied at `start --machine` when the preset's tape is inserted; absent means 0. Which tape
-  is configuration and stays in `preset.json`'s `storage.cassette`. Whether a tape inserted at
-  run time through the service is recorded on Save follows what Save does today for a floppy
-  inserted at run time; report what that is.
+  is configuration and stays in `preset.json`'s `storage.cassette`. A tape inserted at run time
+  through the service is not recorded on Save, as a run-time floppy is not; the position is
+  written only when the deck holds the preset's own tape (compared by resolved source) and is
+  otherwise omitted, so a stale position is cleared. The position is a `MachineRecord` field
+  carried through every rewrite of `machine.json`, written by `SaveMachine` only, never at
+  shutdown.
+- A bare tape name is searched for in a per-user `tapes/` directory beside `discs/` and `roms/`
+  (`ResourceKind::Tape`), documented in `docs/deployment.md`; a tape is not a disc. `--tape` is
+  anchored as `--floppy` is, and `create-preset` writes it as `storage.cassette.image_uri`.
 - `docs/preset-schema.md` and `docs/machine-directory.md` describe all of this as built.
 
 ## Python client
@@ -235,7 +241,8 @@ position.
 ### Catch2, presets, `tests/test_preset*.cpp` as the existing floppy cases are laid out
 
 8. `resolve-preset` on a preset with `storage.cassette.image_uri` naming a tape beside it gives a
-   `file://` URI; a missing tape is an error at `/storage/cassette/image_uri` with a sentence; a
+   `file://` URI; a missing tape is a warning at `/storage/cassette/image_uri` with a sentence, as a
+   missing floppy is; a
    preset without the key resolves to `null`; `describe-preset-schema`'s storage section has the
    `cassette` entry on every model.
 9. A machine created from a preset with a tape starts with that tape inserted and stopped; with
