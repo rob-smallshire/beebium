@@ -51,7 +51,8 @@ suite, green, plus the tests below.
    /CTS is low (AUG §20.7.4). RxD idles high with no RxC until round 4. TxC is the transmit
    divider output. Transmitted bits go nowhere: the RS423 sink receives nothing while cassette
    is selected.
-4. **Reading &FE10** acts as a write of &FE (motor on, cassette selected, 19200/75) and still
+4. **Reading &FE10** acts as a write of &FE (%11111110: motor on, **RS423** selected, receive
+   75, transmit 2400; a stray read during a tape load therefore leaves cassette mode) and still
    returns the open-bus value (`Decision (unverified)`, every reference emulator and the
    replica).
 5. **Part.** `SerialUla` takes a `Part { Ferranti, VLSI }` at construction, default Ferranti,
@@ -83,7 +84,7 @@ set-up (findings §2.1, open question 26).
 2. A byte presented at 16 clocks per bit to an ACIA at /64 is not received as that byte.
 3. A low glitch on RxD of 7 clocks at /16, or 31 at /64, does not start a frame.
 4. Transmit at /64: TDRE sets at the start of each character and a 10-bit 8N1 frame occupies
-   640 clocks; 11 bits for 8N2 and 7E1; the reported TxD levels spell the byte LSB first.
+   640 clocks; 11 bits for 8N2 and 10 for 7E1; the reported TxD levels spell the byte LSB first.
 5. /DCD: a rising edge sets status bit 2 and (CR7 set) the IRQ; three status reads later it is
    still set; a data read clears it; a second rising edge after it has fallen sets it again;
    with /DCD held high, RDRF reads clear although a byte arrived.
@@ -97,7 +98,8 @@ set-up (findings §2.1, open question 26).
    byte rate is the table rate times 1.0016, within one part in ten thousand.
 9. A byte from the source at every word format arrives in the ACIA at /64 (the existing
    loopback and format tests, re-expressed in clocks); at /16 the same byte is not received.
-10. Reading &FE10 leaves `control()` at &FE, motor on and cassette selected, and returns the
+10. Reading &FE10 leaves `control()` at &FE, motor on, RS423 selected, receive 75 and transmit
+    2400, and returns the
     open-bus value the socket supplies.
 11. Cassette selected: /DCD and /CTS read low; a byte offered by the source is not received; a
     byte transmitted by the guest does not reach the sink; TDRE returns after 10 bits at the

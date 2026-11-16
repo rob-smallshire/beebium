@@ -65,7 +65,7 @@ Sources: AUG §20.9.1-20.9.4, pp.392-393; NAUG §15.3.12, pp.247-248; SM-B+ §5.
 | 7 | 1 = cassette motor relay **and** the cassette motor LED on (AUG §20.9.4) |
 
 - **Power-on value.** &64: RS423 selected, 9600/9600, motor off (BeebWiki; MAME `device_start`; DIS 9737).
-- **Reading &FE10.** A read acts as a write of &FE, which turns the motor on and selects cassette.
+- **Reading &FE10.** A read acts as a write of &FE (%11111110): motor on, RS423 selected (bit 6 set), receive 75 and transmit 2400 baud. (An earlier draft of this document said "selects cassette"; that was wrong.)
   - The explanation offered is that the ULA has no R/W line, so on a read cycle the data bus still holds the address high byte, &FE.
   - beebjit (`serial_ula.c:154-166`), jsbeeb (`serial.js:27-30`) and MAME (`read()`) all model it.
   - **[undocumented]** in Acorn literature.

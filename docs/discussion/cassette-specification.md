@@ -113,7 +113,9 @@ deleted; current b2 divides (F1.3).
 
 Bits as today (F1.2). Two changes:
 
-- `Decision (unverified)`: a read of &FE10 acts as a write of &FE (the ULA has no R/W pin and
+- `Decision (unverified)`: a read of &FE10 acts as a write of &FE, %11111110: motor on, RS423
+  selected, receive 75, transmit 2400, so a stray read during a tape load leaves cassette mode
+  (the ULA has no R/W pin and
   latches the bus, which on a read holds the address high byte). The read still returns open
   bus. Every reference emulator and the replica do this; Acorn does not document it.
 - Bit 6 no longer drives /DCD directly. In RS423 mode /DCD is forced low (carrier present) as
