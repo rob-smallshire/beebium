@@ -143,6 +143,11 @@ writes it again; TDRE and IRQ read low until a non-reset divide is written.
 Both rules are unverified decisions of the cassette specification, taken from
 measurements on real machines reported by other emulators (beebjit, jsbeeb)
 rather than from the datasheet, whose `/DCD` sequence is status then data.
+A correction to round 3, from the datasheet (page 4-534: master reset
+"initializes both the receiver and transmitter"): a master reset abandons a
+character being sent, sets TDRE, and holds TxD at mark for as long as it
+lasts, so the Serial ULA synthesises carrier through it, as MOS 1.20's SAVE
+tail needs.
 
 Framing errors (bad stop bit), parity errors, and receiver overrun (a new
 character arriving before RDR is read) are all modelled and surface in the
@@ -450,7 +455,7 @@ ROM and the device agree on the bytes, and beebium transports them.
 
 | Test | Coverage |
 |------|----------|
-| `tests/test_mc6850.cpp`        | ACIA reset/control decode, division at /1, /16 and /64 for every word format, start-bit hunting and glitch rejection, batched clocks, transmit framing and parity, framing/parity errors, overrun, IRQ gating, the `/DCD` latch, master reset clearing the control register, `/CTS` → TDRE. |
+| `tests/test_mc6850.cpp`        | ACIA reset/control decode, division at /1, /16 and /64 for every word format, start-bit hunting and glitch rejection, batched clocks, transmit framing and parity, framing/parity errors, overrun, IRQ gating, the `/DCD` latch, master reset clearing the control register and holding TxD at mark mid-character, `/CTS` → TDRE. |
 | `tests/test_serial_ula.cpp`    | ULA rate/motor/RS423 decode, the 16/13 MHz clock and its dividers at every rate, 64 clocks per RS423 bit (and garbage at /16), the `&FE10` read rule and side-effect-free peek, cassette mode's `/DCD`, `/CTS` and silence, the part, byte↔bit shifting through the ACIA. |
 | `tests/test_serial_socket.cpp` | `SerialSocket` + Model B memory-map integration (mapping, mirroring, IRQ to the aggregator), device round trips, and the ULA driving `/CTS` from device back-pressure. |
 | `tests/test_serial_pty.cpp`    | POSIX pty transport: `PtyMaster` + `HostSerialEndpoint` bridged through the socket to a `PosixSerialPort` (hardware-parity round trips). |

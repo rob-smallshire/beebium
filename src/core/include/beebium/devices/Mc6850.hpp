@@ -63,7 +63,12 @@ namespace beebium {
 // unverified decision of the cassette specification, from beebjit's
 // measurement; the tape loader of Frak depends on it). TDRE and IRQ read low
 // and the receiver and transmitter are held until a control value with a
-// non-reset divide is written.
+// non-reset divide is written. Master reset "initializes both the receiver and
+// transmitter" (MC6850 datasheet, page 4-534, Counter Divide Select Bits): a
+// character being sent is abandoned, TDRE is set, and TxD is held at mark for
+// the whole of the reset, so transmit_clock() reports an idle mark bit on every
+// clock until it ends. MOS 1.20 resets the ACIA with a character just begun at
+// the end of a cassette SAVE, and its tail of carrier depends on this.
 //
 // Conventions for the control/handshake pins follow the datasheet's active-low
 // naming (/DCD, /CTS, /RTS): a "not_dcd" value of true means the /DCD pin is
@@ -273,7 +278,7 @@ public:
     // returns the new TxD level and the bit's role; otherwise nothing.
     std::optional<TransmitResult> transmit_clock() {
         if (in_master_reset_) {
-            return std::nullopt;
+            return TransmitResult{1, BitType::Idle};  // the line held at mark
         }
         if (++tx_count_ < divide_ratio()) {
             return std::nullopt;

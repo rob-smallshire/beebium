@@ -138,6 +138,36 @@ TEST_CASE("ACIA master reset clears status and suppresses IRQ/TDRE", "[serial][m
     CHECK_FALSE(acia.irq_pending());
 }
 
+TEST_CASE("ACIA master reset mid-character abandons it and holds TxD at mark", "[serial][mc6850]") {
+    Mc6850 acia;
+    acia.write_control(control_for(Mc6850::COUNTER_DIVIDE_16, 5));  // 8N1
+    acia.write_data(0x00);
+    // Into the character: its start bit and the first data bit, both space.
+    unsigned spaces = 0;
+    for (unsigned clock = 0; clock < 16 * 2; ++clock) {
+        const auto r = acia.transmit_clock();
+        if (r && r->bit == 0) ++spaces;
+    }
+    REQUIRE(spaces == 2);
+
+    acia.write_control(Mc6850::COUNTER_DIVIDE_MASTER_RESET);
+    // Mark on every clock for as long as the reset lasts.
+    for (unsigned clock = 0; clock < 16 * 40; ++clock) {
+        const auto r = acia.transmit_clock();
+        REQUIRE(r);
+        CHECK(r->bit == 1);
+        CHECK(r->type == Mc6850::BitType::Idle);
+    }
+
+    // Out of reset the character is gone: TDRE is set and the line idles.
+    acia.write_control(control_for(Mc6850::COUNTER_DIVIDE_16, 5));
+    CHECK((acia.status() & Mc6850::SR_TDRE) != 0);
+    for (unsigned clock = 0; clock < 16 * 20; ++clock) {
+        const auto r = acia.transmit_clock();
+        if (r) CHECK(r->type == Mc6850::BitType::Idle);
+    }
+}
+
 TEST_CASE("ACIA master reset clears the control register", "[serial][mc6850]") {
     Mc6850 acia;
     // Transmitter control 10 (/RTS high) and the receive interrupt enabled.
