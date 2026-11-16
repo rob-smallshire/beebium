@@ -589,3 +589,26 @@ TEST_CASE("Record on a CSW or an empty deck is refused with a sentence", "[uef][
     CHECK_THROWS_WITH(deck.record(), "The tape game.csw is a CSW image, and Beebium records only on UEF tapes.");
     CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
 }
+
+// =============================================================================
+// 6. Blank tapes
+// =============================================================================
+
+TEST_CASE("Each blank tape loads, lasts its stated length and can be recorded on", "[uef][recording]") {
+    const std::filesystem::path dirpath = BEEBIUM_BLANK_TAPES_DIR;
+    const std::pair<const char*, double> expected[] = {
+        {"Blank C15 (15 minutes).uef", 900.0},
+        {"Blank C30 (30 minutes).uef", 1800.0},
+        {"Blank C60 (60 minutes).uef", 3600.0},
+        {"Blank C90 (90 minutes).uef", 5400.0},
+    };
+    for (const auto& [filename, seconds] : expected) {
+        INFO(filename);
+        auto tape = open_tape_file(dirpath / filename);
+        CHECK(tape->kind() == TapeKind::Uef);
+        CHECK(tape->metadata().origin == "Beebium");
+        CHECK(std::fabs(static_cast<double>(*tape->duration()) - seconds * ULA_CLOCK_HZ) <= 1.0);
+        CHECK(tape->next().type != TapeItem::Type::Edge);
+        CHECK(tape->recordable());
+    }
+}

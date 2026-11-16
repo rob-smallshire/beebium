@@ -370,6 +370,23 @@ foreach(server_target ${BEEBIUM_SERVERS_DEPS})
     endif()
 endforeach()
 
+# Blank tape templates (tapes/blank/, made by scripts/make_blank_tapes.py),
+# copied and installed as the blank discs are, to blank-tapes.
+set(BLANK_TAPES_SRC_DIR "${CMAKE_SOURCE_DIR}/tapes/blank")
+file(GLOB BLANK_TAPE_FILEPATHS CONFIGURE_DEPENDS "${BLANK_TAPES_SRC_DIR}/*.uef")
+foreach(server_target ${BEEBIUM_SERVERS_DEPS})
+    if(server_target MATCHES "^beebium-model-")
+        add_custom_command(TARGET ${server_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:${server_target}>/blank-tapes"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${BLANK_TAPE_FILEPATHS}
+                "$<TARGET_FILE_DIR:${server_target}>/blank-tapes/"
+            VERBATIM
+        )
+    endif()
+endforeach()
+
 # Generate the shipped system presets (and their thumbnails). Model B serves
 # two presets: a bare cassette machine and a disc-equipped variant. A filing
 # system is provisioned explicitly via --sideways; no machine auto-loads DFS
@@ -618,4 +635,8 @@ install(DIRECTORY ${PRESETS_OUTPUT_DIR}/
 )
 install(DIRECTORY ${BLANK_DISCS_SRC_DIR}/
     DESTINATION share/beebium/blank-discs
+)
+install(DIRECTORY ${BLANK_TAPES_SRC_DIR}/
+    DESTINATION share/beebium/blank-tapes
+    FILES_MATCHING PATTERN "*.uef"
 )

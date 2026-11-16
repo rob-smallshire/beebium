@@ -22,7 +22,7 @@
 namespace beebium::server {
 
 // The directory of a kind of resource shipped with the servers, named
-// `dirname` (presets, blank-discs), found in this order:
+// `dirname` (presets, blank-discs, blank-tapes), found in this order:
 //   1. $BEEBIUM_SERVERS_DIRPATH/<dirname>/
 //   2. <dirname>/ beside the executable (build directory layout)
 //   3. ../share/beebium/<dirname>/ relative to the executable (installed layout)
@@ -58,6 +58,11 @@ inline std::optional<std::filesystem::path> find_system_dirpath(std::string_view
 // The blank disc templates shipped with the servers.
 inline std::optional<std::filesystem::path> find_blank_discs_dirpath() {
     return find_system_dirpath("blank-discs");
+}
+
+// The blank tape templates shipped with the servers.
+inline std::optional<std::filesystem::path> find_blank_tapes_dirpath() {
+    return find_system_dirpath("blank-tapes");
 }
 
 } // namespace beebium::server

@@ -507,7 +507,16 @@ catch_discover_tests(test_tape_signal)
 # Cassette (#208): the Serial ULA's cassette side and the deck.
 add_executable(test_tape_recording test_tape_recording.cpp)
 target_link_libraries(test_tape_recording PRIVATE beebium_core Catch2::Catch2WithMain ZLIB::ZLIB)
+target_compile_definitions(test_tape_recording PRIVATE
+    BEEBIUM_BLANK_TAPES_DIR="${CMAKE_SOURCE_DIR}/tapes/blank")
 catch_discover_tests(test_tape_recording)
+
+# The committed blank tapes are what scripts/make_blank_tapes.py makes.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME blank_tapes_match_their_script
+             COMMAND ${Python3_EXECUTABLE} -I "${CMAKE_SOURCE_DIR}/scripts/make_blank_tapes.py" --check)
+endif()
 
 add_executable(test_serial_ula_cassette test_serial_ula_cassette.cpp)
 target_link_libraries(test_serial_ula_cassette PRIVATE beebium_core Catch2::Catch2WithMain ZLIB::ZLIB)
