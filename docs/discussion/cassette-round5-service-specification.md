@@ -178,8 +178,9 @@ conformance and scenarios in the chapter's house style:
   where anything is on the tape, as on a real deck. The transport and the relay are shown. An insert-and-play gesture (a double-click, a
   modifier on drop) is LATITUDE; the deck starts stopped after a plain insert. MANDATORY: play
   is separate from insert.
-- **What is not shown**: no block catalogue, no waveform, no decoded filenames. MANDATORY, from
-  Rob's ruling.
+- **What is not shown or heard**: no block catalogue, no waveform, no decoded filenames, and no
+  tape audio at any time: not while playing, winding or scrubbing (Rob, 2026-11-16: "No need
+  for audio while scrubbing!"). The tape reaches only the Serial ULA. MANDATORY.
 - **Errors**: the server's sentence, in the register of 3.4; the kind selects only the icon or
   the recovery control.
 - **Indicator**: the motor LED is rendered through chapter 10 like every other LED; the deck

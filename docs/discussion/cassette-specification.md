@@ -392,7 +392,7 @@ the client's indicator rendering applies whatever hold-off it applies to the dri
   recent-discs machinery, all server-judged), the deck keys (Rob's concessions, 2026-11-16: a
   back-to-the-beginning button beside Rewind and Fast forward, and a position slider the user
   scrubs with, guided only by a tape counter showing the position, "just like the real
-  thing"), a position slider from position
+  thing"; and no tape audio while playing, winding or scrubbing), a position slider from position
   and duration, the live input device picker (audio input devices the host lists, with no voice
   processing), and the error sentences. The chapter states that a client shows no catalogue or
   waveform.
