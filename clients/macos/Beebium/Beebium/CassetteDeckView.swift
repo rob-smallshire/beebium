@@ -272,6 +272,7 @@ struct CassetteDeckView: View {
         return Menu {
             Button("Browse...") { browseForTape() }
             recentMenu
+            newBlankTapeMenu
         } label: {
             Image(systemName: "folder")
                 .font(.system(size: 16))
@@ -308,6 +309,23 @@ struct CassetteDeckView: View {
             Button("Clear Recent Tapes") { recentTapes.clear() }
         }
         .disabled(tapes.isEmpty)
+    }
+
+    /// The New Blank Tape submenu: one entry per shipped template, labelled by
+    /// the server (the label already carries the length, "Blank C15 (15
+    /// minutes)"). Choosing one saves a copy to a path the user picks and
+    /// inserts it, stopped at the start, ready to Record. The labels come from
+    /// the server (nothing hard-coded), so the submenu is disabled when the
+    /// server offers none.
+    @ViewBuilder
+    private var newBlankTapeMenu: some View {
+        let blanks = cassetteClient.blankTapes
+        Menu("New Blank Tape") {
+            ForEach(blanks, id: \.label) { tape in
+                Button(tape.label) { newBlankTape(tape) }
+            }
+        }
+        .disabled(blanks.isEmpty)
     }
 
     private var rewindButton: some View {
@@ -409,6 +427,57 @@ struct CassetteDeckView: View {
             panel.canChooseDirectories = false
             if panel.runModal() == .OK, let url = panel.url {
                 insertTape(url: url)
+            }
+        }
+    }
+
+    /// Make a blank tape from a shipped template: suggest the template's own
+    /// file name in a save panel (keeping its .uef extension), then copy and
+    /// insert. Picking the path on this host is why the menu is gated on a local
+    /// server. Create and insert are distinct, and the created tape is inserted
+    /// stopped, never recording -- recording stays the user's choice.
+    private func newBlankTape(_ tape: Beebium_BlankTape) {
+        Task { @MainActor in
+            let panel = NSSavePanel()
+            panel.title = "New Blank Tape"
+            panel.nameFieldStringValue = tape.filename
+            let templateExtension = (tape.filename as NSString).pathExtension
+            if let type = UTType(filenameExtension: templateExtension) {
+                panel.allowedContentTypes = [type]
+            }
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            // Belt and braces: if the returned name still does not carry the
+            // template's extension, add it; the server refuses a wrong one.
+            let destination = BlankDiscNaming.url(forChosen: url, templateFilename: tape.filename)
+            createTape(label: tape.label, destination: destination)
+        }
+    }
+
+    /// Copy the template to `destination` and, on success, insert it -- which
+    /// also records it in Recent. The save panel has already confirmed any
+    /// replacement, so overwrite is passed true. A failure takes the deck's
+    /// marker and popover, the server's lower-case fragment completed into a
+    /// sentence as the disc creation does.
+    private func createTape(label: String, destination: URL) {
+        dropRefusal = nil
+        deckError.clear()
+        isProcessing = true
+        Task {
+            let result = await cassetteClient.createTape(
+                label: label, destinationPath: destination.path, overwrite: true)
+            await MainActor.run {
+                switch result {
+                case .success(let createdPath):
+                    isProcessing = false
+                    insertTape(url: URL(fileURLWithPath: createdPath))
+                case .failure(let error):
+                    isProcessing = false
+                    NSLog("[CassetteDeckView] Create tape failed: \(error.localizedDescription)")
+                    deckError.showFailure(
+                        error.kind.markerLabel ?? "Couldn't create tape",
+                        detail: SaveClient.sentence(error.kind.sentenceLead,
+                                                    detail: error.localizedDescription))
+                }
             }
         }
     }

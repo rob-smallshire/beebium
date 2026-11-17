@@ -155,6 +155,7 @@
 		7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */; };
 		7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE550723A13DFA9A20EB302 /* IndicatorView.swift */; };
 		8004640AFE1BB64192794280 /* DiscImageInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */; };
+		81AE0FC8B3F710AE5BB1F78B /* CreateTapeErrorKindLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E562A1BF96C01F4E6323AB8F /* CreateTapeErrorKindLabelTests.swift */; };
 		8240AA12FA9CD9DD64CB6C7E /* SidewaysSocketEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB849680FE132BBA330C1EF3 /* SidewaysSocketEditorTests.swift */; };
 		8248344928EA9782B944178F /* SidebarMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992C39260909EB85C84D2C20 /* SidebarMode.swift */; };
 		82E5C63F1FAF9D28F87F09BA /* MachinePreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28ED949DB593C8353954F7B1 /* MachinePreset.swift */; };
@@ -599,6 +600,7 @@
 		E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSectionView.swift; sourceTree = "<group>"; };
 		E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscFormatListTests.swift; sourceTree = "<group>"; };
 		E2FF930B029ECBBAE243C4D0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E562A1BF96C01F4E6323AB8F /* CreateTapeErrorKindLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateTapeErrorKindLabelTests.swift; sourceTree = "<group>"; };
 		E5FAFDF7474D253DDBE042E3 /* AudioRingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRingBuffer.swift; sourceTree = "<group>"; };
 		E61C3011B028BF1FDAD579A4 /* keyboard.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = keyboard.pb.swift; sourceTree = "<group>"; };
 		E958A3C4EF29717464C19382 /* SavedMachineOpening.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedMachineOpening.swift; sourceTree = "<group>"; };
@@ -982,6 +984,7 @@
 				D0D8B92DB46302357CC513AA /* ConfigurationEditorOrderTests.swift */,
 				B8A265E36533E541F11ECAC5 /* CoreCLITests.swift */,
 				46732E0BDB1827EAD156DED4 /* CreateDiscErrorKindLabelTests.swift */,
+				E562A1BF96C01F4E6323AB8F /* CreateTapeErrorKindLabelTests.swift */,
 				F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */,
 				5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */,
 				D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */,
@@ -1200,6 +1203,7 @@
 				E403C3B64C6DF471BEEDA99A /* ConfigurationEditorOrderTests.swift in Sources */,
 				D924EC224D99F91FA17CAB43 /* CoreCLITests.swift in Sources */,
 				E85AEC8B5CD92B414DA54B01 /* CreateDiscErrorKindLabelTests.swift in Sources */,
+				81AE0FC8B3F710AE5BB1F78B /* CreateTapeErrorKindLabelTests.swift in Sources */,
 				7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */,
 				7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */,
 				7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */,

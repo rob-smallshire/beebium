@@ -41,6 +41,33 @@ enum CassetteError: LocalizedError {
     }
 }
 
+/// Error type for creating a blank tape from a shipped template.
+enum CreateTapeError: LocalizedError {
+    case notConnected
+    case operationFailed(String, kind: Beebium_CreateTapeErrorKind)
+
+    var errorDescription: String? {
+        switch self {
+        case .notConnected:
+            return "Not connected to server"
+        case .operationFailed(let message, _):
+            return message
+        }
+    }
+
+    /// The server's failure classification, used to choose the short inline
+    /// marker and the user-facing sentence. Unclassified (including a
+    /// client-side not-connected) leaves the caller's own generic in place.
+    var kind: Beebium_CreateTapeErrorKind {
+        switch self {
+        case .notConnected:
+            return .unspecified
+        case .operationFailed(_, let kind):
+            return kind
+        }
+    }
+}
+
 /// Client for the one cassette deck, via gRPC.
 ///
 /// Unlike the floppy drives (which stream discrete events applied
@@ -83,6 +110,12 @@ final class CassetteClient: ObservableObject, Disconnectable {
 
     @Published private(set) var errorMessage: String?
 
+    /// The blank tape templates the server ships, in file-name order, behind the
+    /// Browse icon's New Blank Tape submenu. Fetched once on connect; nothing is
+    /// hard-coded, so the submenu is simply empty (and disabled) if the server
+    /// has none or the call fails.
+    @Published private(set) var blankTapes: [Beebium_BlankTape] = []
+
     /// How a status stream ended, reduced to what the client state depends on.
     enum StreamEnd: Equatable {
         /// We cancelled it (disconnect / reconnect), or the server closed it OK.
@@ -107,6 +140,7 @@ final class CassetteClient: ObservableObject, Disconnectable {
     func connect(channel: GRPCChannel) {
         client = Beebium_CassetteServiceNIOClient(channel: channel)
         startStatusStream()
+        fetchBlankTapes()
     }
 
     func disconnect() {
@@ -123,6 +157,7 @@ final class CassetteClient: ObservableObject, Disconnectable {
         positionSeconds = 0
         motorOn = false
         errorMessage = nil
+        blankTapes = []
     }
 
     // MARK: - Deck keys
@@ -177,6 +212,28 @@ final class CassetteClient: ObservableObject, Disconnectable {
         return await call { try await $0.seek(request).response.get() }
     }
 
+    /// Create a blank tape from a shipped template, copying it to a path on the
+    /// server's host. `overwrite` is for when the chosen path already exists;
+    /// the caller passes it true once a save panel has confirmed replacement.
+    /// Returns the absolute path of the created tape, ready for insertTape.
+    func createTape(label: String, destinationPath: String, overwrite: Bool)
+        async -> Result<String, CreateTapeError> {
+        guard let client = client else { return .failure(.notConnected) }
+        var request = Beebium_CreateTapeRequest()
+        request.label = label
+        request.destinationPath = destinationPath
+        request.overwrite = overwrite
+        do {
+            let response = try await client.createTape(request).response.get()
+            if response.success {
+                return .success(response.path)
+            }
+            return .failure(.operationFailed(response.error, kind: response.kind))
+        } catch {
+            return .failure(.operationFailed(error.localizedDescription, kind: .unspecified))
+        }
+    }
+
     /// Run one of the deck keys that returns a plain CassetteResponse, mapping
     /// its success/sentence/kind to a Result. Keeps the nine wrappers uniform.
     private func call(
@@ -191,6 +248,22 @@ final class CassetteClient: ObservableObject, Disconnectable {
             return .failure(.operationFailed(response.error, kind: response.kind))
         } catch {
             return .failure(.operationFailed(error.localizedDescription, kind: .unspecified))
+        }
+    }
+
+    /// Fetch the shipped blank tape templates once. A failure here is not fatal
+    /// to the deck view -- the New Blank Tape submenu is simply left empty.
+    private func fetchBlankTapes() {
+        guard let client = client else { return }
+        Task { [weak self] in
+            do {
+                let response = try await client.listBlankTapes(Beebium_ListBlankTapesRequest())
+                    .response.get()
+                await MainActor.run { self?.blankTapes = response.tapes }
+            } catch {
+                NSLog("[CassetteClient] ListBlankTapes failed: \(error.localizedDescription)")
+                await MainActor.run { self?.blankTapes = [] }
+            }
         }
     }
 

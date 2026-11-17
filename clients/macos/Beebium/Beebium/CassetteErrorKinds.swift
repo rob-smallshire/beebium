@@ -33,3 +33,33 @@ extension Beebium_CassetteErrorKind {
         }
     }
 }
+
+extension Beebium_CreateTapeErrorKind {
+    /// The short, honest inline marker label for a failed tape creation, or nil
+    /// for an unclassified failure -- in which case the caller keeps its own
+    /// generic ("Couldn't create tape"), so a future server kind we don't yet
+    /// map still reads honestly. The popover shows the full sentence regardless.
+    var markerLabel: String? {
+        switch self {
+        case .unknownLabel: return "Unknown template"
+        case .destinationExists: return "File exists"
+        case .writeFailed: return "Couldn't write tape"
+        case .wrongExtension: return "Wrong extension"
+        case .unspecified, .UNRECOGNIZED: return nil
+        }
+    }
+
+    /// The capitalised lead for the user-facing sentence a failed creation
+    /// shows: an alert must be a sentence, while the server's own message is a
+    /// lower-case fragment, so this leads and the fragment completes it (via
+    /// SaveClient.sentence).
+    var sentenceLead: String {
+        switch self {
+        case .unknownLabel: return "That blank tape template is not available."
+        case .destinationExists: return "A file already exists there."
+        case .writeFailed: return "The tape image could not be written."
+        case .wrongExtension: return "That name must end in .uef for a tape."
+        case .unspecified, .UNRECOGNIZED: return "The tape image could not be created."
+        }
+    }
+}
