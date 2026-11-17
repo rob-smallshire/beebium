@@ -77,8 +77,10 @@ Behaviour:
 - Samples are converted to float on the gRPC thread, the chosen channel taken, and pushed to
   the ring. The gRPC thread never touches emulated state; the ring is the only seam
   (`docs/emulation-thread-ownership.md`).
-- Closing the stream (client half-close, cancellation or connection loss) ejects the live tape
-  and returns the summary. `EjectTape` on a live tape ends the stream from the server side.
+- Closing the stream (client half-close, cancellation or connection loss) lets the live tape
+  play out what the ring holds, then ejects it and returns the summary (`Decision`,
+  2026-11-17: a stream that ends is a tape that ran out, not one yanked from the deck; with
+  the deck stopped the ring is discarded and the eject is immediate). `EjectTape` on a live tape ends the stream from the server side.
 - `DeckStatus` gains `live_ring_fill` (0 to 1), `live_overruns` and `live_underruns`
   (counters), present for a live tape; the stream of statuses updates them at
   `min_interval_ms` like the position.
