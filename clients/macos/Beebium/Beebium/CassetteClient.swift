@@ -110,6 +110,21 @@ final class CassetteClient: ObservableObject, Disconnectable {
 
     @Published private(set) var errorMessage: String?
 
+    /// For a live tape (an audio input streamed from this host): how full the
+    /// server's ring is, from 0 to 1, and the samples it has dropped on overrun
+    /// and made up as silence on underrun. Zero and meaningless for a
+    /// file-backed tape; shown as the deck's small live meter (section 9.0).
+    @Published private(set) var liveRingFill: Double = 0
+    @Published private(set) var liveOverruns: UInt64 = 0
+    @Published private(set) var liveUnderruns: UInt64 = 0
+
+    /// Whether the loaded tape is a live audio input (its format reads "LIVE"),
+    /// rather than a file-backed UEF, CSW or WAV. A live tape has no length, so
+    /// its Seek, Rewind, Fast forward and Record keys are disabled (the server
+    /// refuses them with LIVE_SOURCE), and its ring state is shown in place of a
+    /// duration.
+    var isLive: Bool { tapeInserted && tape?.format == "LIVE" }
+
     /// The blank tape templates the server ships, in file-name order, behind the
     /// Browse icon's New Blank Tape submenu. Fetched once on connect; nothing is
     /// hard-coded, so the submenu is simply empty (and disabled) if the server
@@ -156,6 +171,9 @@ final class CassetteClient: ObservableObject, Disconnectable {
         transport = .stopped
         positionSeconds = 0
         motorOn = false
+        liveRingFill = 0
+        liveOverruns = 0
+        liveUnderruns = 0
         errorMessage = nil
         blankTapes = []
     }
@@ -322,6 +340,9 @@ final class CassetteClient: ObservableObject, Disconnectable {
         transport = status.transport
         positionSeconds = status.positionSeconds
         motorOn = status.motorOn
+        liveRingFill = status.liveRingFill
+        liveOverruns = status.liveOverruns
+        liveUnderruns = status.liveUnderruns
         isLoaded = true
         isStale = false
         errorMessage = nil

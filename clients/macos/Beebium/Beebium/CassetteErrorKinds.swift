@@ -29,6 +29,8 @@ extension Beebium_CassetteErrorKind {
         case .deckEmpty: return "Deck empty"
         case .invalidPosition: return "Invalid position"
         case .readOnly: return "Read-only tape"
+        case .liveSource: return "Not on a live tape"
+        case .invalidFormat: return "Invalid audio format"
         case .unspecified, .UNRECOGNIZED: return nil
         }
     }

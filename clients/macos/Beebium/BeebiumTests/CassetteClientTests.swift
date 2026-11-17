@@ -24,14 +24,15 @@ final class CassetteClientTests: XCTestCase {
                         position: Double = 12.5,
                         motorOn: Bool = false,
                         recordable: Bool = true,
-                        inserted: Bool = true) -> Beebium_DeckStatus {
+                        inserted: Bool = true,
+                        format: String = "UEF") -> Beebium_DeckStatus {
         var status = Beebium_DeckStatus()
         status.hasCassetteInterface_p = true
         status.tapeInserted = inserted
         if inserted {
             var tape = Beebium_TapeMetadata()
             tape.name = "Elite.uef"
-            tape.format = "UEF"
+            tape.format = format
             tape.durationSeconds = 300
             tape.recordable = recordable
             status.tape = tape
@@ -40,6 +41,21 @@ final class CassetteClientTests: XCTestCase {
         status.positionSeconds = position
         status.motorOn = motorOn
         status.ulaPart = "ferranti"
+        return status
+    }
+
+    /// A deck-status snapshot for a live audio input: format "LIVE", named
+    /// after the host device, carrying the server's ring fill and the overrun
+    /// and underrun counts.
+    private func liveStatus(ringFill: Double = 0.25,
+                            overruns: UInt64 = 4,
+                            underruns: UInt64 = 7) -> Beebium_DeckStatus {
+        var status = self.status(transport: .playing, position: 3, motorOn: true, format: "LIVE")
+        status.tape.name = "Built-in Microphone"
+        status.tape.durationSeconds = 0
+        status.liveRingFill = ringFill
+        status.liveOverruns = overruns
+        status.liveUnderruns = underruns
         return status
     }
 
@@ -145,6 +161,46 @@ final class CassetteClientTests: XCTestCase {
 
         XCTAssertFalse(client.isLoaded)
         XCTAssertFalse(client.tapeInserted)
+    }
+
+    // MARK: - Live tape
+
+    func testLiveTapeIsRecognisedWithItsRingState() {
+        let client = CassetteClient()
+        client.handleDeckStatus(liveStatus(), generation: client.streamGeneration)
+        XCTAssertTrue(client.isLive, "a tape of format LIVE must read as the live input")
+        XCTAssertEqual(client.tape?.name, "Built-in Microphone")
+        XCTAssertEqual(client.liveRingFill, 0.25)
+        XCTAssertEqual(client.liveOverruns, 4)
+        XCTAssertEqual(client.liveUnderruns, 7)
+    }
+
+    func testFileTapeIsNotLiveAndHasNoRingState() {
+        let client = loadedClient()   // a UEF tape
+        XCTAssertFalse(client.isLive)
+        XCTAssertEqual(client.liveRingFill, 0)
+        XCTAssertEqual(client.liveOverruns, 0)
+        XCTAssertEqual(client.liveUnderruns, 0)
+    }
+
+    func testAFreshFileTapeClearsAPriorLiveRingState() {
+        let client = CassetteClient()
+        client.handleDeckStatus(liveStatus(), generation: client.streamGeneration)
+        client.handleDeckStatus(status(), generation: client.streamGeneration)
+        XCTAssertFalse(client.isLive)
+        XCTAssertEqual(client.liveRingFill, 0, "a file tape must not keep the live tape's ring fill")
+        XCTAssertEqual(client.liveOverruns, 0)
+        XCTAssertEqual(client.liveUnderruns, 0)
+    }
+
+    func testDisconnectClearsLiveRingState() {
+        let client = CassetteClient()
+        client.handleDeckStatus(liveStatus(), generation: client.streamGeneration)
+        client.disconnect()
+        XCTAssertFalse(client.isLive)
+        XCTAssertEqual(client.liveRingFill, 0)
+        XCTAssertEqual(client.liveOverruns, 0)
+        XCTAssertEqual(client.liveUnderruns, 0)
     }
 
     func testDeckKeyIsRefusedWithoutAConnection() async {
