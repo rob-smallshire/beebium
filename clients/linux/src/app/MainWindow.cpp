@@ -136,6 +136,7 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
         session_->discs(), settings_, [this] { return session_->server_shares_filesystem(); },
         sidebar_);
     storage->set_peripheral_storage(session_->peripherals(), session_->indicators());
+    storage->set_cassette(session_->cassette());
     sidebar_->add_mode(SidebarMode::storage, storage);
     sidebar_->add_mode(SidebarMode::memory,
                        new MemorySidebar(

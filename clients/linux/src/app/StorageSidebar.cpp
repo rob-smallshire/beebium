@@ -12,10 +12,12 @@
 
 #include "app/StorageSidebar.hpp"
 
+#include "app/CassetteDeckRow.hpp"
 #include "app/ClientSettings.hpp"
 #include "app/ElidedLabel.hpp"
 #include "app/ErrorPresentation.hpp"
 #include "app/FileReveal.hpp"
+#include "app/SessionCassette.hpp"
 #include "app/SessionIndicators.hpp"
 #include "app/SessionPeripherals.hpp"
 #include "servers/CoreCli.hpp"
@@ -632,6 +634,10 @@ StorageSidebar::StorageSidebar(SessionDiscs& discs, ClientSettings* settings,
     status_detail_->setEnabled(false);
     layout->addWidget(status_);
     layout->addWidget(status_detail_);
+    // The cassette above the floppy drives, which sit above the hard discs.
+    deck_layout_ = new QVBoxLayout;
+    deck_layout_->setSpacing(0);
+    layout->addLayout(deck_layout_);
     rows_layout_ = new QVBoxLayout;
     rows_layout_->setSpacing(0);
     layout->addLayout(rows_layout_);
@@ -743,6 +749,24 @@ void StorageSidebar::set_peripheral_storage(SessionPeripherals& peripherals,
     rebuild();
 }
 
+void StorageSidebar::set_cassette(SessionCassette& cassette) {
+    cassette_ = &cassette;
+    deck_ = new CassetteDeckRow(cassette, settings_, shares_, this);
+    deck_layout_->addWidget(deck_);
+    // Only the deck's presence changes the sidebar; the deck follows the
+    // rest of its state itself.
+    connect(cassette_, &SessionCassette::deck_changed, this, [this] {
+        if (deck_->isVisibleTo(this) != deck_shown()) {
+            rebuild();
+        }
+    });
+    rebuild();
+}
+
+bool StorageSidebar::deck_shown() const {
+    return cassette_ && cassette_->deck().has_interface;
+}
+
 void StorageSidebar::rebuild_peripherals() {
     for (PeripheralStorageRow* row : peripheral_rows_) {
         delete row;
@@ -772,6 +796,11 @@ void StorageSidebar::rebuild() {
     rows_.clear();
     rebuild_peripherals();
     const bool peripheral = !peripheral_rows_.empty();
+    // A model without a cassette interface has no deck: absent, not disabled.
+    const bool deck = deck_shown();
+    if (deck_) {
+        deck_->setVisible(deck);
+    }
     status_->show();
     status_detail_->hide();
     peripheral_divider_->hide();
@@ -780,8 +809,9 @@ void StorageSidebar::rebuild() {
         return;
     }
     if (!discs_.has_controller() || discs_.drives().empty()) {
-        if (peripheral) {
-            status_->hide();  // the peripherals' storage is the machine's
+        if (peripheral || deck) {
+            status_->hide();  // the deck or the peripherals' storage is the machine's
+            peripheral_divider_->setVisible(peripheral && deck);
             return;
         }
         status_->setText(tr("No Storage Devices"));

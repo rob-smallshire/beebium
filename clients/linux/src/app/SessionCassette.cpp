@@ -85,22 +85,21 @@ QString tape_counter_text(double seconds) {
 }
 
 QString deck_state_text(const DeckState& deck) {
-    QString transport;
     switch (deck.transport) {
-    case DeckState::Transport::stopped: transport = QCoreApplication::translate("Cassette", "Stopped"); break;
-    case DeckState::Transport::playing: transport = QCoreApplication::translate("Cassette", "Playing"); break;
+    case DeckState::Transport::playing:
+        return deck.motor_on ? QCoreApplication::translate("Cassette", "Playing")
+                             : QCoreApplication::translate("Cassette", "Playing, motor off");
     case DeckState::Transport::recording:
-        transport = QCoreApplication::translate("Cassette", "Recording");
-        break;
+        return deck.motor_on ? QCoreApplication::translate("Cassette", "Recording")
+                             : QCoreApplication::translate("Cassette", "Recording, motor off");
     case DeckState::Transport::rewinding:
-        transport = QCoreApplication::translate("Cassette", "Rewinding");
-        break;
+        return QCoreApplication::translate("Cassette", "Rewinding");
     case DeckState::Transport::fast_forwarding:
-        transport = QCoreApplication::translate("Cassette", "Fast forwarding");
+        return QCoreApplication::translate("Cassette", "Fast forwarding");
+    case DeckState::Transport::stopped:
         break;
     }
-    return deck.motor_on ? QCoreApplication::translate("Cassette", "%1, motor on").arg(transport)
-                         : QCoreApplication::translate("Cassette", "%1, motor off").arg(transport);
+    return QCoreApplication::translate("Cassette", "Stopped");
 }
 
 QString BlankTapeTemplate::extension() const {

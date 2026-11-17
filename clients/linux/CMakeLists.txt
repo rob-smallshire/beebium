@@ -277,6 +277,7 @@ add_library(beebium_linux_app STATIC
     src/app/ApplicationInfo.cpp
     src/app/AudioOutput.cpp
     src/app/CardGrid.cpp
+    src/app/CassetteDeckRow.cpp
     src/app/ClientSettings.cpp
     src/app/CloseDecision.cpp
     src/app/MachineMove.cpp

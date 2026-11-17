@@ -33,8 +33,10 @@ class QVBoxLayout;
 
 namespace beebium::linux_client {
 
+class CassetteDeckRow;
 class ClientSettings;
 class CoreCli;
+class SessionCassette;
 class ElidedLabel;
 class SessionIndicators;
 class SessionPeripherals;
@@ -191,9 +193,10 @@ private:
     bool active_ = false;
 };
 
-// The Storage mode (client specification 9): the floppy drives, a row each,
-// from the server's disc controller, then the storage the peripherals
-// publish; a machine with neither says so.
+// The Storage mode (client specification 9): the cassette deck, where the
+// model has a cassette interface; the floppy drives, a row each, from the
+// server's disc controller; then the storage the peripherals publish. A
+// machine with none of them says so.
 class StorageSidebar : public QWidget {
     Q_OBJECT
 
@@ -206,6 +209,11 @@ public:
     std::vector<PeripheralStorageRow*> peripheral_rows() const { return peripheral_rows_; }
     // Where the peripherals' storage and its activity come from.
     void set_peripheral_storage(SessionPeripherals& peripherals, SessionIndicators& indicators);
+    // Where the cassette deck comes from: shown above the drives while the
+    // server reports a cassette interface (9.0).
+    void set_cassette(SessionCassette& cassette);
+    CassetteDeckRow* cassette_deck() const { return deck_; }
+    bool deck_shown() const;
     DriveRow* row(int number) const;
     QString status_text() const;
     // The disc formats' extensions, once read from a local server.
@@ -223,6 +231,9 @@ private:
     SessionDiscs& discs_;
     ClientSettings* settings_;
     DriveRow::Shares shares_;
+    SessionCassette* cassette_ = nullptr;
+    QVBoxLayout* deck_layout_;
+    CassetteDeckRow* deck_ = nullptr;
     QLabel* status_;
     QLabel* status_detail_;
     QVBoxLayout* rows_layout_;

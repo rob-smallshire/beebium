@@ -67,9 +67,11 @@ DeckState deck_state_from(const beebium::DeckStatus& status);
 // A position as the tape counter shows it: minutes and seconds, "0:00",
 // "12:05", "75:30", the seconds whole and never rounded up.
 QString tape_counter_text(double seconds);
-// The transport and the relay together, as the deck reads: "Stopped,
-// motor off", "Playing, motor off" (a tape waiting for the machine, not a
-// fault), "Recording, motor on", "Rewinding, motor off".
+// The transport as the deck reads it, as the macOS client's does: "Stopped",
+// "Playing", "Rewinding", "Fast forwarding"; and for play and record, where
+// a closed relay is what moves the tape, "Playing, motor off" and
+// "Recording, motor off" while the machine has not asked for the tape (a
+// tape waiting, not a fault). The relay is also shown on its own, as a dot.
 QString deck_state_text(const DeckState& deck);
 
 // The keys of the deck, and Eject.

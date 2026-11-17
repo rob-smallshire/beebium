@@ -15,6 +15,7 @@
 
 #include "app/RunHold.hpp"
 #include "app/SessionAudio.hpp"
+#include "app/SessionCassette.hpp"
 #include "app/SessionDiscs.hpp"
 #include "app/SessionEconet.hpp"
 #include "app/SessionExtensions.hpp"
@@ -123,6 +124,7 @@ public:
     SessionEconet& econet() { return *econet_; }
     // The floppy drives (9).
     SessionDiscs& discs() { return *discs_; }
+    SessionCassette& cassette() { return *cassette_; }
     // Typing: the guest_ready edge and pasting (7.3, 7.5).
     SessionTyping& typing() { return *typing_; }
 
@@ -227,6 +229,7 @@ private:
     SessionPeripherals* peripherals_;
     SessionEconet* econet_;
     SessionDiscs* discs_;
+    SessionCassette* cassette_;
     SessionTyping* typing_;
     std::unique_ptr<KeySender> keys_;
     std::unique_ptr<RpcWorker> rpc_;

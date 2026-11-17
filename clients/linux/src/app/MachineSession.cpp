@@ -89,6 +89,7 @@ MachineSession::MachineSession(QObject* parent)
       peripherals_(new SessionPeripherals(this)),
       econet_(new SessionEconet(this)),
       discs_(new SessionDiscs(this)),
+      cassette_(new SessionCassette(this)),
       typing_(new SessionTyping(this)) {
     liveness_ticker_.setInterval(LIVENESS_TICK);
     connect(&liveness_ticker_, &QTimer::timeout, this,
@@ -212,6 +213,7 @@ void MachineSession::on_handshake(unsigned generation, const HandshakeResult& re
     peripherals_->start(channel_);
     econet_->start(channel_);
     discs_->start(channel_);
+    cassette_->start(channel_);
     typing_->start(channel_);
 
     Q_EMIT connected_to_server();
@@ -550,6 +552,7 @@ void MachineSession::stop_streams() {
     peripherals_->stop();
     econet_->stop();
     discs_->stop();
+    cassette_->stop();
     typing_->stop();
 }
 
