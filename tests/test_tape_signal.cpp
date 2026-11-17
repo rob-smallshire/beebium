@@ -14,6 +14,7 @@
 // test builds itself (cassette round 4, #208).
 
 #include "support/tape_builder.hpp"
+#include "test_temp_paths.hpp"
 
 #include <beebium/cassette/CswTape.hpp>
 #include <beebium/cassette/SampledSource.hpp>
@@ -585,7 +586,8 @@ TEST_CASE("A stereo WAV plays its louder channel unless one is chosen", "[wav]")
 
 TEST_CASE("A WAV file is read from the file, not loaded", "[wav]") {
     const auto bytes = one_second_of_carrier().wav();
-    const auto filepath = std::filesystem::temp_directory_path() / ("beebium_wav_" + std::to_string(::getpid()) + ".wav");
+    beebium::test::ScopedTempDir dir("beebium_wav_");
+    const auto filepath = dir.path() / "carrier.wav";
     TapeBuilder::write(filepath, bytes);
     {
         auto tape = open_tape_file(filepath);
@@ -599,7 +601,6 @@ TEST_CASE("A WAV file is read from the file, not loaded", "[wav]") {
         CHECK(item.type == TapeItem::Type::Edge);
         CHECK(item.time >= seconds_to_tape_time(0.5));
     }
-    std::filesystem::remove(filepath);
 }
 
 // =============================================================================
