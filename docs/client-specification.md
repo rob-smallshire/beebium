@@ -1655,16 +1655,21 @@ section sits above the floppy drives, which sit above the hard discs.
   LATITUDE, and it shows the tape's `channel` and `sample_rate` where it shows the
   format. A tape is removed through Eject, never by inserting over
   an occupied deck (the server refuses that).
-- The deck keys. Back to the beginning (`Seek` to 0), Rewind, Play, Stop, Fast
-  forward (the winding transports, `Rewind` and `FastForward`), Record and Eject;
+- The deck keys. Back to the beginning (`Seek` to 0), To the end of the recordings
+  (`SeekToAppendPoint`: two seconds past the last second of signal in the tape's
+  signal map, so the next recording appends; momentary, never depressed or coloured,
+  greyed with the server's sentence while the map is not ready and for a live
+  input), Rewind, Play, Stop, Fast forward (the winding transports, `Rewind` and
+  `FastForward`), Record and Eject;
   a tape counter showing the position in minutes and seconds (minutes run past 59,
   so a C90 reads `90:00`, in fixed-width digits so the counter does not jitter);
   and a position indicator drawn from `position_seconds` and `duration_seconds`
   that the user scrubs with. Layout (MANDATORY): Back to the beginning sits at
-  the left edge of the row and Eject at the right edge, each on its own, and the
-  transport keys (Rewind, Play, Stop, Fast forward, Record) are centred as one
-  group between them, so that the two keys that lose the user's place are apart
-  from the ones pressed often. The position indicator is a marker on a plain
+  the left edge of the row with To the end of the recordings beside it (the two
+  jump keys read as a pair), Eject alone at the right edge, and the transport keys
+  (Rewind, Play, Stop, Fast forward, Record) are centred as one group between them,
+  so that the keys that lose the user's place are apart from the ones pressed
+  often. The position indicator is a marker on a plain
   timeline (an arrow or pointer above or below a bar), not a filled slider: it
   shows where the head is and colours neither side of the bar, because a tape has
   no "played" and "unplayed" portion. A wind runs at 30 times real speed whether
