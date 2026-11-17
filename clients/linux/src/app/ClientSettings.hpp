@@ -64,6 +64,8 @@ public:
     // an insert the server accepted, never a tape a preset put in the deck.
     QStringList recent_tapes() const;
     void remember_tape(const QString& filepath);
+    // A tape the server will not take as a tape, out of the list.
+    void forget_tape(const QString& filepath);
     void clear_tapes();
 
     // Where this host's servers are, when the search should not decide;

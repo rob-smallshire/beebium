@@ -143,6 +143,19 @@ TEST_CASE("Recent tapes are kept apart from discs, newest first, one per path, t
     CHECK(reopened.recent_discs().size() == 1);
 }
 
+TEST_CASE("A recent tape is forgotten by any spelling of its path, the rest kept in order",
+          "[settings][tapes]") {
+    QTemporaryDir directory;
+    ClientSettings settings(directory.filePath(QStringLiteral("Beebium.conf")));
+    settings.remember_tape(QStringLiteral("/t/a.uef"));
+    settings.remember_tape(QStringLiteral("/t/b.uef"));
+    settings.remember_tape(QStringLiteral("/t/c.uef"));
+    settings.forget_tape(QStringLiteral("/t/./b.uef"));
+    CHECK(settings.recent_tapes() == QStringList{QStringLiteral("/t/c.uef"), QStringLiteral("/t/a.uef")});
+    settings.forget_tape(QStringLiteral("/t/never.uef"));
+    CHECK(settings.recent_tapes().size() == 2);
+}
+
 TEST_CASE("Video defaults for new windows persist across runs: style, pixels, boxing colour",
           "[settings][video]") {
     QTemporaryDir directory;

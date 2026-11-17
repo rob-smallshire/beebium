@@ -164,6 +164,14 @@ void ClientSettings::remember_tape(const QString& filepath) {
     settings_->sync();
 }
 
+void ClientSettings::forget_tape(const QString& filepath) {
+    QStringList recents = recent_tapes();
+    if (recents.removeAll(cleaned(filepath)) > 0) {
+        settings_->setValue(RECENT_TAPES_KEY, recents);
+        settings_->sync();
+    }
+}
+
 void ClientSettings::clear_tapes() {
     settings_->remove(RECENT_TAPES_KEY);
     settings_->sync();

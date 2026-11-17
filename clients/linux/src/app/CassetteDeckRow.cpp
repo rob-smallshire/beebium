@@ -416,6 +416,13 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
                     failure.text = outcome.message;
                     failure.icon = cassette_error_icon(outcome.kind);
                     failure.offer_eject = outcome.kind == beebium::CASSETTE_ERROR_KIND_DECK_OCCUPIED;
+                    // A file the server will not take as a tape, a blank
+                    // tape template among them (9.0.1), is not offered
+                    // again; a refusal of the moment (an occupied deck)
+                    // leaves it be.
+                    if (outcome.kind == beebium::CASSETTE_ERROR_KIND_INVALID_IMAGE && settings_) {
+                        settings_->forget_tape(path);
+                    }
                 }
                 show_failure(failure);
             });
@@ -592,12 +599,13 @@ void CassetteDeckRow::present() {
     // Disabled with its reason for a tape Beebium only reads.
     QToolButton* record = key(CassetteKey::record);
     record->setEnabled(inserted && !live && deck.tape.recordable);
+    // Why not, in the server's own sentence: the format, or a place a
+    // recording could not be kept (9.0, The Record key).
     record->setToolTip(!inserted ? tr("Insert a tape to record")
-                       : live    ? live_reason
-                       : !deck.tape.recordable
-                           ? tr("This tape is a %1 image, and Beebium records only on UEF tapes")
-                                 .arg(deck.tape.format)
-                           : tr("Record"));
+                       : !deck.tape.record_refusal.isEmpty() ? deck.tape.record_refusal
+                       : live                                ? live_reason
+                       : !deck.tape.recordable ? tr("Beebium cannot record on this tape")
+                                               : tr("Record"));
     live_->setVisible(live);
     latch_keys();
 }

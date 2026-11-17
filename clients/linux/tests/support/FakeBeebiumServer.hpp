@@ -665,6 +665,8 @@ public:
     std::mutex calls_mutex;
     bool has_interface = true;
     double duration_seconds = 600.0;
+    // A UEF goes in where the server cannot write it back.
+    bool uef_read_only = false;
     // The next insert fails with this kind and sentence, when set.
     std::optional<std::pair<beebium::CassetteErrorKind, std::string>> fail_next_insert;
     std::vector<std::string> inserted_urls;
@@ -1091,7 +1093,17 @@ private:
         tape.set_origin(csw ? "CSW tools" : "");
         tape.set_target_machine(uef ? "BBC Model B" : "");
         tape.set_duration_seconds(duration_seconds);
-        tape.set_recordable(uef);
+        // Recordable only where a recording can be kept, and else why.
+        const bool kept = uef && !uef_read_only;
+        tape.set_recordable(kept);
+        if (!uef) {
+            tape.set_record_refusal("The tape " + name + " is a " + tape.format() +
+                                    " image, and Beebium records only on UEF tapes.");
+        } else if (!kept) {
+            tape.set_record_refusal("The tape " + name +
+                                    " is in a folder Beebium cannot write, so a recording "
+                                    "on it could not be kept.");
+        }
         if (wav) {
             // A channel only for a stereo WAV (one with "stereo" in its
             // name here), as the server reports it; none for mono.

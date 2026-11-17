@@ -81,6 +81,7 @@ DeckState deck_state_from(const beebium::DeckStatus& status) {
         deck.tape.recordable = tape.recordable();
         deck.tape.sample_rate = tape.sample_rate();
         deck.tape.channel = QString::fromStdString(tape.channel());
+        deck.tape.record_refusal = QString::fromStdString(tape.record_refusal());
     }
     deck.transport = transport_of(status.transport());
     deck.position_seconds = std::max(0.0, status.position_seconds());

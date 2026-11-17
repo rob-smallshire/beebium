@@ -48,9 +48,10 @@ struct TapeInfo {
     QString origin;  // the tool that made the image, else empty
     QString target_machine;
     double duration_seconds = 0.0;  // 0 when unknown
-    bool recordable = false;        // a UEF can be recorded on, a CSW or WAV cannot
+    bool recordable = false;        // the server can keep a recording on it: a writable UEF
     unsigned sample_rate = 0;       // a WAV's, in Hz; 0 for UEF and CSW
     QString channel;                // the WAV channel played, "left" or "right"
+    QString record_refusal;         // why not, as the server says, when not recordable
 
     friend bool operator==(const TapeInfo&, const TapeInfo&) = default;
 };

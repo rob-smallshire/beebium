@@ -767,9 +767,64 @@ TEST_CASE("Record is red and disabled with its reason for a tape Beebium only re
     d.load("file:///home/me/tapes/Repton.csw");
     QToolButton* record = d.row.key(CassetteKey::record);
     CHECK_FALSE(record->isEnabled());
+    // The server's own sentence for why.
     CHECK(record->toolTip() ==
-          QStringLiteral("This tape is a CSW image, and Beebium records only on UEF tapes"));
+          QStringLiteral("The tape Repton.csw is a CSW image, and Beebium records only on UEF tapes."));
     CHECK(d.row.metadata_text() == QStringLiteral("CSW - CSW tools"));
+}
+
+TEST_CASE("A UEF the server cannot keep a recording of greys Record with the server's reason",
+          "[cassette][deck][record]") {
+    Deck d;
+    d.server.cassette.uef_read_only = true;
+    d.load("file:///usr/share/beebium/blank-tapes/Blank%20C15%20(15%20minutes).uef");
+    QToolButton* record = d.row.key(CassetteKey::record);
+    CHECK_FALSE(record->isEnabled());
+    CHECK(record->toolTip() ==
+          QStringLiteral("The tape Blank C15 (15 minutes).uef is in a folder Beebium cannot "
+                         "write, so a recording on it could not be kept."));
+    // Everything else it can do, it does.
+    CHECK(d.row.key(CassetteKey::play)->isEnabled());
+    CHECK(d.row.key(CassetteKey::rewind)->isEnabled());
+}
+
+TEST_CASE("A tape the server refuses as an image leaves the recent tapes, its sentence shown",
+          "[cassette][deck][recent]") {
+    Deck d;
+    const QString template_path = d.tape_file(QStringLiteral("Blank C15 (15 minutes).uef"));
+    const QString kept_path = d.tape_file(QStringLiteral("Mine.uef"));
+    d.settings.remember_tape(kept_path);
+    d.settings.remember_tape(template_path);
+    const std::string sentence =
+        "Blank C15 (15 minutes).uef is a blank tape template, which is never inserted; make a "
+        "tape from it with create-tape.";
+    d.server.cassette.fail_next_insert = {beebium::CASSETTE_ERROR_KIND_INVALID_IMAGE, sentence};
+    // Chosen from the Recent menu, as Rob did.
+    Q_EMIT d.row.browse_menu()->aboutToShow();
+    QMenu* recent = action_named(d.row.browse_menu(), QStringLiteral("Recent"))->menu();
+    QAction* pick = nullptr;
+    for (QAction* action : recent->actions()) {
+        if (action->toolTip() == template_path) {
+            pick = action;
+        }
+    }
+    REQUIRE(pick);
+    pick->trigger();
+    REQUIRE(wait_until([&] { return !d.row.message_text().isEmpty(); }));
+    CHECK(d.row.message_text() == QString::fromStdString(sentence));
+    CHECK_FALSE(d.cassette.deck().tape_inserted);
+    CHECK(d.settings.recent_tapes() == QStringList{kept_path});
+}
+
+TEST_CASE("A tape refused for another reason stays among the recent tapes", "[cassette][deck][recent]") {
+    Deck d;
+    d.load("file:///home/me/tapes/Elite.uef");
+    const QString path = d.tape_file(QStringLiteral("Repton.uef"));
+    d.settings.remember_tape(path);
+    // The deck is occupied: nothing wrong with the tape.
+    d.cassette.insert(path);
+    REQUIRE(wait_until([&] { return !d.row.message_text().isEmpty(); }));
+    CHECK(d.settings.recent_tapes() == QStringList{path});
 }
 
 TEST_CASE("A WAV tape shows its rate and channel beside its format, and is not recorded on",
@@ -780,7 +835,8 @@ TEST_CASE("A WAV tape shows its rate and channel beside its format, and is not r
     CHECK(d.row.metadata_text() == QStringLiteral("WAV - 44.1 kHz - left channel"));
     CHECK_FALSE(d.row.key(CassetteKey::record)->isEnabled());
     CHECK(d.row.key(CassetteKey::record)->toolTip() ==
-          QStringLiteral("This tape is a WAV image, and Beebium records only on UEF tapes"));
+          QStringLiteral("The tape Recorded side stereo.wav is a WAV image, and Beebium records "
+                         "only on UEF tapes."));
 }
 
 TEST_CASE("A mono source shows no channel: a WAV of one, and a live input of one",
