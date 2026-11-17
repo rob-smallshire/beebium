@@ -1672,7 +1672,8 @@ section sits above the floppy drives, which sit above the hard discs.
   shown in the deck view is deck state, the LED is an indicator, as motor and
   activity are distinct for a floppy (9.7).
 - The configurator. The Storage section of the New Machine configurator (5.2)
-  has a Cassette row above the drives, shown only when `describe-preset-schema`
+  has a Cassette row above the drives (above the disc controller too, or between it and
+  the drives: LATITUDE), shown only when `describe-preset-schema`
   reports `storage.cassette.has_cassette`. The user browses for or drops a tape; it
   is written to the draft as `storage.cassette.image_uri` and validated through
   `resolve-preset` like a floppy image, so a missing tape is a warning diagnostic
@@ -1739,8 +1740,9 @@ sharing the filesystem (section 3.2), as for a floppy.
 Scenarios: insert a UEF -> the deck shows the tape, stopped at 0; press Play -> the
 transport reads playing and, with the motor off, the deck reads "Playing, motor off";
 type `*LOAD ""` and the relay closes -> the motor LED lights in the indicator row and
-the position advances. Press Play on an empty deck -> refused with the server's
-deck-empty sentence, shown persistently. Insert onto an occupied deck -> refused with
+the position advances. Press Play on an empty deck -> a client may disable the keys
+while the deck is empty (both apps do); one that does not shows the server's
+deck-empty sentence persistently. Insert onto an occupied deck -> refused with
 a deck-occupied sentence and an Eject offer. While playing, drag the slider to the
 middle and release -> one `Seek`, and the deck plays on from there, with no sound
 from the client. Press Fast forward with the motor off -> the counter runs at 30
