@@ -36,9 +36,15 @@ function(beebium_linux_add_test name)
         BEEBIUM_PRESET_SCHEMA_FIXTURES_DIRPATH="${BEEBIUM_PRESET_SCHEMA_FIXTURES_DIRPATH}"
         BEEBIUM_LINUX_FIXTURES_DIRPATH="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
-    # A Catch2 SKIP exits 4: scored as skipped, not failed.
+    # A case that SKIPs is scored as skipped, by Catch2's own summary line
+    # for it. Not by exit code: Catch2 exits with the number of failed
+    # assertions, so a SKIP's exit code 4 is also four failures. The line
+    # is matched at the start, after the rule of = that Catch2 draws above
+    # it ('.' is the newline), so a test's own messages, which Catch2
+    # indents, cannot match; and whole, so "1 skipped" is all there is.
     catch_discover_tests(${name}
-        PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" SKIP_RETURN_CODE 4)
+        PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+                   SKIP_REGULAR_EXPRESSION "=.test cases: 1 [|] 1 skipped.")
 endfunction()
 
 beebium_linux_add_test(test_application_info
