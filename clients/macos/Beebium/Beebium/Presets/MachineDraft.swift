@@ -93,13 +93,29 @@ struct MachineDraft: Equatable {
     struct Storage: Equatable {
         var fdcSocket: FdcSocket?
         var floppyDrives: [FloppyDrive]?
+        var cassette: Cassette?
         var extra: [String: JSONValue]
 
         init(fdcSocket: FdcSocket? = nil,
              floppyDrives: [FloppyDrive]? = nil,
+             cassette: Cassette? = nil,
              extra: [String: JSONValue] = [:]) {
             self.fdcSocket = fdcSocket
             self.floppyDrives = floppyDrives
+            self.cassette = cassette
+            self.extra = extra
+        }
+    }
+
+    /// The `cassette` deck and the tape image loaded in it (if any), on a model
+    /// with a cassette interface. Validated through resolve-preset like a floppy
+    /// image, so a missing tape is a warning at `/storage/cassette/image_uri`.
+    struct Cassette: Equatable {
+        var imageUri: String?
+        var extra: [String: JSONValue]
+
+        init(imageUri: String? = nil, extra: [String: JSONValue] = [:]) {
+            self.imageUri = imageUri
             self.extra = extra
         }
     }
@@ -288,12 +304,13 @@ extension MachineDraft.Startup: Codable {
 }
 
 extension MachineDraft.Storage: Codable {
-    private static let knownKeys: Set<String> = ["fdc_socket", "floppy_drives"]
+    private static let knownKeys: Set<String> = ["fdc_socket", "floppy_drives", "cassette"]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: JSONCodingKey.self)
         fdcSocket = try c.decodeIfPresent(MachineDraft.FdcSocket.self, forKey: "fdc_socket")
         floppyDrives = try c.decodeIfPresent([MachineDraft.FloppyDrive].self, forKey: "floppy_drives")
+        cassette = try c.decodeIfPresent(MachineDraft.Cassette.self, forKey: "cassette")
         extra = try c.decodeExtra(excluding: Self.knownKeys)
     }
 
@@ -301,6 +318,23 @@ extension MachineDraft.Storage: Codable {
         var c = encoder.container(keyedBy: JSONCodingKey.self)
         try c.encodeIfPresent(fdcSocket, forKey: "fdc_socket")
         try c.encodeIfPresent(floppyDrives, forKey: "floppy_drives")
+        try c.encodeIfPresent(cassette, forKey: "cassette")
+        try c.encodeExtra(extra)
+    }
+}
+
+extension MachineDraft.Cassette: Codable {
+    private static let knownKeys: Set<String> = ["image_uri"]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: JSONCodingKey.self)
+        imageUri = try c.decodeIfPresent(String.self, forKey: "image_uri")
+        extra = try c.decodeExtra(excluding: Self.knownKeys)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: JSONCodingKey.self)
+        try c.encodeIfPresent(imageUri, forKey: "image_uri")
         try c.encodeExtra(extra)
     }
 }

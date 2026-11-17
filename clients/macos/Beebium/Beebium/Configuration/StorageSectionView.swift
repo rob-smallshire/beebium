@@ -33,6 +33,16 @@ struct StorageSectionView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                // The cassette deck sits above the drives (section 9.0), shown
+                // only when the schema reports a cassette interface.
+                if let cassette = schema?.cassette, cassette.hasCassette == true {
+                    CassetteConfigView(
+                        label: cassette.label ?? "Cassette",
+                        imageTypes: cassette.imageTypes ?? [],
+                        imageFilepath: cassetteImageBinding,
+                        diagnostics: diagnostics.withPrefix("/storage/cassette"))
+                    Divider()
+                }
                 if let fdcSchema = schema?.fdcSocket {
                     fdcSocketSection(schema: fdcSchema)
                 }
@@ -107,6 +117,34 @@ struct StorageSectionView: View {
                 }
             }
         }
+    }
+
+    /// Bind the cassette's tape image as a plain filesystem path, bridging to
+    /// the draft's `file://` URI form under `storage.cassette.image_uri`.
+    /// Clearing it (nil) drops the whole `cassette` block so the resolved
+    /// document reads clean.
+    private var cassetteImageBinding: Binding<String?> {
+        Binding(
+            get: {
+                guard let uri = draft.storage?.cassette?.imageUri else { return nil }
+                return Self.path(fromImageUri: uri)
+            },
+            set: { newPath in
+                var storage = draft.storage ?? MachineDraft.Storage()
+                if let newPath {
+                    var cassette = storage.cassette ?? MachineDraft.Cassette()
+                    cassette.imageUri = Self.imageUri(fromPath: newPath)
+                    storage.cassette = cassette
+                } else if var cassette = storage.cassette {
+                    // Clearing the tape: keep the block only if it still carries
+                    // unknown keys (lossless), else drop it so the resolved
+                    // document has no empty cassette object.
+                    cassette.imageUri = nil
+                    storage.cassette = cassette.extra.isEmpty ? nil : cassette
+                }
+                draft.storage = storage
+            }
+        )
     }
 
     /// Bind a drive's image as a plain filesystem path, bridging to the draft's

@@ -73,6 +73,8 @@
 		281A106F8708C92D91CD9240 /* keyboard.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61C3011B028BF1FDAD579A4 /* keyboard.pb.swift */; };
 		283A136A708296FC4885B039 /* RecentDiscs.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0EF891426E226950452857 /* RecentDiscs.swift */; };
 		2883A894AD63C6DEF4FD0046 /* TransientMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EE051165760A831AA7396F /* TransientMessage.swift */; };
+		2C52669380DF6E7ABE43DC4C /* CassetteConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2903B68B151EC6C50E61B601 /* CassetteConfigView.swift */; };
+		2CFC414B888BBBC6C1A6F438 /* CassetteConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D133AA0458DD643B20FD55AE /* CassetteConfigTests.swift */; };
 		2DFA99C752F8021C8A4C91AE /* BlankDiscNamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C858E5C4019E78FFD1AD693F /* BlankDiscNamingTests.swift */; };
 		2E9C2894C04791EF7CCDE424 /* BeebiumTouchBarLEDs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */; };
 		2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */; };
@@ -367,6 +369,7 @@
 		27962ADD2EBAA059BF9066CB /* MachineSaving.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineSaving.swift; sourceTree = "<group>"; };
 		27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectCoordinatorTests.swift; sourceTree = "<group>"; };
 		28ED949DB593C8353954F7B1 /* MachinePreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinePreset.swift; sourceTree = "<group>"; };
+		2903B68B151EC6C50E61B601 /* CassetteConfigView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CassetteConfigView.swift; sourceTree = "<group>"; };
 		2A4A8D3907E53A1168B8542D /* MachineDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineDraft.swift; sourceTree = "<group>"; };
 		2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageInfoTests.swift; sourceTree = "<group>"; };
 		2BE9E7191CAFDC8E2EAE7ADA /* WelcomeWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeWindow.swift; sourceTree = "<group>"; };
@@ -572,6 +575,7 @@
 		D0D8B92DB46302357CC513AA /* ConfigurationEditorOrderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationEditorOrderTests.swift; sourceTree = "<group>"; };
 		D0E57F03286476B3C039BC2F /* EditableListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableListViewModel.swift; sourceTree = "<group>"; };
 		D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelShape.swift; sourceTree = "<group>"; };
+		D133AA0458DD643B20FD55AE /* CassetteConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CassetteConfigTests.swift; sourceTree = "<group>"; };
 		D1667C72B283ACDA76849586 /* KeyboardSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSectionView.swift; sourceTree = "<group>"; };
 		D18E087E9A077C20C35016CA /* StructuredListParameterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredListParameterView.swift; sourceTree = "<group>"; };
 		D1D07C4A60DC07CF2E59160C /* ProcessorSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessorSectionView.swift; sourceTree = "<group>"; };
@@ -791,6 +795,7 @@
 			children = (
 				5485C89172467F6E009C0EA5 /* AttachmentChooser.swift */,
 				3B2CFD235F740189691B8B05 /* AttachmentPointGroup.swift */,
+				2903B68B151EC6C50E61B601 /* CassetteConfigView.swift */,
 				7D999E37E519ADA25BD948D0 /* CommittingField.swift */,
 				FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */,
 				DF361B039A144431294C9141 /* ExtensionInstanceModel.swift */,
@@ -976,6 +981,7 @@
 				C858E5C4019E78FFD1AD693F /* BlankDiscNamingTests.swift */,
 				CC6B04201EE913A2107FB39B /* BuiltInMappingsTests.swift */,
 				824454E653FC6B753B26BD00 /* CassetteClientTests.swift */,
+				D133AA0458DD643B20FD55AE /* CassetteConfigTests.swift */,
 				02EB1C9F5D4468D155F3F524 /* CassetteDeckFormattingTests.swift */,
 				C3FB4124AE2BBA7A48727315 /* CassetteErrorKindLabelTests.swift */,
 				31CA435023B19D31740E399C /* ColorExtensionsTests.swift */,
@@ -1195,6 +1201,7 @@
 				2DFA99C752F8021C8A4C91AE /* BlankDiscNamingTests.swift in Sources */,
 				22ECF44772C0159ABFED1800 /* BuiltInMappingsTests.swift in Sources */,
 				B6C17F5C841FADB054186D30 /* CassetteClientTests.swift in Sources */,
+				2CFC414B888BBBC6C1A6F438 /* CassetteConfigTests.swift in Sources */,
 				3597065A66A9B7456ED48EE9 /* CassetteDeckFormattingTests.swift in Sources */,
 				6BE3713A8F08D964A4DD51A4 /* CassetteErrorKindLabelTests.swift in Sources */,
 				BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */,
@@ -1302,6 +1309,7 @@
 				5A4F6F3B51DDC576BBD3D142 /* BeebiumTouchBarManager.swift in Sources */,
 				4CF04CE9A5BFD96B5E1E4590 /* BiquadFilter.swift in Sources */,
 				FE945FEF930F268687B1BAA7 /* CassetteClient.swift in Sources */,
+				2C52669380DF6E7ABE43DC4C /* CassetteConfigView.swift in Sources */,
 				FB305C72570B38629349DD7B /* CassetteDeckView.swift in Sources */,
 				C839B9E69E0D6553AB97CAAC /* CassetteErrorKinds.swift in Sources */,
 				DE83DD7DC63111D2D1AC48CF /* ColorExtensions.swift in Sources */,

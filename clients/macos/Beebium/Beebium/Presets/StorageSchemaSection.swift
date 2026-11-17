@@ -25,12 +25,16 @@ struct StorageSchemaSection: Codable {
     let builtin: StorageBuiltin?
     let fdcSocket: FDCSocketSchema?
     let floppyDrives: [FloppyDriveSchema]?
+    /// The cassette deck, on a model with the interface: whether it is fitted,
+    /// its row label, and the tape image types the configurator's picker offers.
+    let cassette: CassetteSchema?
 
     enum CodingKeys: String, CodingKey {
         case type
         case builtin
         case fdcSocket = "fdc_socket"
         case floppyDrives = "floppy_drives"
+        case cassette
     }
 
     /// Whether this model has an active floppy disc controller given `draft`:
@@ -58,6 +62,23 @@ struct StorageBuiltin: Codable {
 struct BuiltinFdc: Codable {
     let device: String?
     let label: String?
+}
+
+/// Schema for the cassette deck, from the storage section's `cassette` block.
+/// Present only on a model with a cassette interface; the configurator shows
+/// its row only when `hasCassette` is true, labelling it and filtering its
+/// picker from the schema, never the client.
+struct CassetteSchema: Codable {
+    let hasCassette: Bool?
+    let label: String?
+    /// Supported tape image file types (e.g. ["uef", "csw", "wav"]).
+    let imageTypes: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case hasCassette = "has_cassette"
+        case label
+        case imageTypes = "image_types"
+    }
 }
 
 /// Schema for the FDC socket (Model B only).
