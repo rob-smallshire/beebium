@@ -119,14 +119,30 @@ if(BEEBIUM_BUILD_TESTS)
     include(Catch)
 
     # Every Catch2 test treats a legitimate skip -- a fixture or external tool
-    # the runner cannot provide -- as skipped, not failed. Catch2 exits 4 for a
-    # skip-only run, and CTest's SKIP_RETURN_CODE property maps that to
-    # "Skipped". Rather than repeat it at ~200 call sites (and forget it at most
-    # of them), the stock catch_discover_tests is wrapped once, here at the root
-    # so every test-registering subdirectory inherits it -- tests/, and the
-    # catch_discover_tests calls under src/ too.
+    # the runner cannot provide -- as skipped, not failed. The exit code cannot
+    # say so: Catch2 exits 4 for a skip-only run, but it also exits with the
+    # number of failed assertions, so a case with exactly four failures would be
+    # scored Skipped. Instead CTest's SKIP_REGULAR_EXPRESSION matches Catch2's
+    # own summary for a skipped case, the totals block the console reporter
+    # prints after its line of '=':
     #
-    # SKIP_RETURN_CODE is merged into any PROPERTIES a call site already passes:
+    #   ===...===
+    #   test cases: 1 | 1 skipped
+    #   assertions: ...
+    #
+    # Anchored on the rule of '=' directly above it (INFO text is indented, so
+    # cannot start a line with the summary); '.?.' crosses the line break
+    # whether it is \n or \r\n (Windows), '.' matching a newline in a CMake
+    # regular expression, and '[|]' needs no escape to survive Catch's generated
+    # test files. The Linux client's suite uses the same line.
+    # A case that skips one section and fails another is summarised as failed,
+    # so it fails. Rather than repeat this at ~200 call sites (and forget it at
+    # most of them), the stock catch_discover_tests is wrapped once, here at the
+    # root so every test-registering subdirectory inherits it -- tests/, and the
+    # catch_discover_tests calls under src/ too. The properties are recorded with
+    # the call, so the Windows PRE_TEST discovery below applies them as well.
+    #
+    # The skip expression is merged into any PROPERTIES a call site already passes:
     # a second PROPERTIES keyword would let cmake_parse_arguments keep only the
     # last, silently dropping e.g. a RESOURCE_LOCK. The original command remains
     # callable as _catch_discover_tests (CMake's command-override convention).
@@ -137,7 +153,8 @@ if(BEEBIUM_BUILD_TESTS)
     function(catch_discover_tests TARGET)
         cmake_parse_arguments(_cdt "" "" "PROPERTIES" ${ARGN})
         _catch_discover_tests(${TARGET} ${_cdt_UNPARSED_ARGUMENTS}
-            PROPERTIES ${_cdt_PROPERTIES} SKIP_RETURN_CODE 4
+            PROPERTIES ${_cdt_PROPERTIES}
+                SKIP_REGULAR_EXPRESSION "=.?.test cases: 1 [|] 1 skipped."
                 ENVIRONMENT "BEEBIUM_USER_DIRPATH=${CMAKE_BINARY_DIR}/test-user-state")
     endfunction()
 
