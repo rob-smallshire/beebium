@@ -1677,40 +1677,33 @@ section sits above the floppy drives, which sit above the hard discs.
   indicator. The counter and the indicator are the user's only guide to where
   anything is on the tape, as on a real deck.
 - The keys latch (MANDATORY). The deck's keys are drawn as a mechanical deck's
-  are: the key for the current transport is shown depressed (the toolkit's
-  selected style) and that is the status display; Play is down while playing,
-  Rewind or Fast forward while winding, and Record and Play together while
-  recording, since Record implies Play. Stop is momentary and nothing is down
-  while the deck is stopped. Every key stays enabled while a tape is in, and
-  pressing a key that is already down does nothing (the server's `Play`, `Stop`
-  and `Record` are idempotent). A key is greyed only for what the deck cannot do:
-  Record on a tape that is not recordable or on a live input, and the winds and a
-  seek on a live input; each greyed key keeps its explanatory help text. While
-  the deck is empty the key row, the counter and the position indicator are
-  absent, not greyed (MANDATORY): an empty deck shows only the ways to fill it
-  (browse, drop, recent tapes, a new blank tape, a live input), and the keys
-  appear with the tape, so nothing shifts when the insert controls give way to
-  the deck. A key never changes its enabled state to show
-  the transport, so a lit key never reads as the opposite of the truth.
+  are, and they say two things: which transport is selected, by the key being
+  depressed, and whether tape is actually moving, by colour.
+  - Depressed (the toolkit's selected style) is the status display for the
+    transport: Play is down while playing, Rewind or Fast forward while winding,
+    and Record and Play together while recording, since Record implies Play. Stop
+    is momentary and nothing is down while the deck is stopped.
+  - Colour means motion. A depressed key is grey while the tape is still (playing
+    or recording with the motor relay open: the ordinary "Playing, motor off"
+    wait) and coloured while tape moves: Play green while playing with the relay
+    closed; Play and Record both red while recording with the relay closed; Rewind
+    or Fast forward green while winding, since a wind moves the tape regardless of
+    the relay. A key that is not depressed is never coloured.
+  - Every key stays enabled while a tape is in, and pressing a key that is already
+    down does nothing (the server's `Play`, `Stop` and `Record` are idempotent). A
+    key is greyed only for what the deck cannot do: Record on a tape that is not
+    recordable or on a live input, and the winds and a seek on a live input; each
+    greyed key keeps its explanatory help text. While the deck is empty the key
+    row, the counter and the position indicator are absent, not greyed
+    (MANDATORY): an empty deck shows only the ways to fill it (browse, drop, recent
+    tapes, a new blank tape, a live input), and the keys appear with the tape, so
+    nothing shifts when the insert controls give way to the deck. A key never
+    changes its enabled state to show the transport, so a lit key never reads as
+    the opposite of the truth.
 - The Record key. The deck has a Record key, which sends `Record`. It is drawn in
-  the ordinary key colour and turns red only while the deck is recording, so red
-  means recording and nothing else.
-  Recording is a transport the user selects, as play is: the tape moves only while
-  the motor relay is closed, and everything that passes under the head is replaced
-  by what the machine sends, silence included, so a recording deck erases while
-  the machine is quiet. The usual sequence is the real one: insert a blank tape
-  (9.0.1) or one to record over, press Record, then type `SAVE "NAME"` and press
-  RETURN at the MOS's prompt. Stop ends a recording, as do Play, a seek, a wind,
-  Eject and the end of the tape. Only a tape whose `TapeMetadata.recordable` is true
-  can be recorded on: a UEF whose file the server can write. For any other (a CSW, a
-  WAV, a live input, or a UEF in a place the server cannot write, such as an
-  installed template directory) the server sets `recordable` false and
-  `TapeMetadata.record_refusal` to the sentence that says why; the client greys
-  Record and shows that sentence as its explanation, or sends `Record` and shows the
-  server's read-only sentence ("The tape
-  <name> is a CSW image, and Beebium records only on UEF tapes."). The server writes
-  a recorded tape back to its file itself, when the recording ends, on eject, on
-  Save and at shutdown; the client has no save step for a tape.
+  the ordinary key colour, depressed grey while recording with the motor off, and
+  red only while tape is being recorded (Record down and the relay closed), so red
+  means recording is happening and nothing else.
 - Insert and play are separate. After a plain insert the deck is stopped at the
   start, and the user presses Play. A client may also offer an insert-and-play
   gesture (a double-click on a recent tape, a modifier held on drop), which sends
