@@ -10,6 +10,7 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
+import AVFoundation
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -75,6 +76,17 @@ struct CassetteDeckView: View {
     private var transport: Beebium_TapeTransport { cassetteClient.transport }
     private var duration: Double { cassetteClient.tape?.durationSeconds ?? 0 }
 
+    /// A live audio input: no length, limited keys, a ring meter in place of a
+    /// duration. See CassetteClient.isLive.
+    private var isLive: Bool { cassetteClient.isLive }
+
+    /// Whether the running bundle carries the microphone usage string, so the
+    /// input-device picker may be offered at all (the string is Rob's to
+    /// supply; without it the app must never ask the system for the microphone).
+    private var liveInputAvailable: Bool {
+        LiveAudioInput.usageStringPresent(in: Bundle.main.infoDictionary)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
@@ -95,6 +107,14 @@ struct CassetteDeckView: View {
         // A fresh, acceptable drag makes any lingering error beside the point.
         .onChange(of: isDropTargeted) { targeted in
             if targeted { deckError.clear() }
+        }
+        // A live stream that was refused or failed shows its sentence here, the
+        // way an insert failure does; the client reports it once.
+        .onChange(of: cassetteClient.liveError) { message in
+            if let message {
+                deckError.showFailure("Live input ended", detail: message)
+                cassetteClient.clearLiveError()
+            }
         }
         .onDrop(of: [.fileURL], delegate: DiscImageDropDelegate(
             isSlotEmpty: !tapeInserted,
@@ -157,6 +177,29 @@ struct CassetteDeckView: View {
                 .foregroundColor(.secondary)
 
             counterAndSlider
+            liveMeter
+        }
+    }
+
+    /// For a live tape: the server's ring fill as a thin bar, and the overrun
+    /// and underrun counts beside it (section 9.0's LATITUDE: a small meter and
+    /// two numbers). An empty ring is the ordinary priming state, not a fault;
+    /// overruns and underruns grow only when the host and emulated clocks drift
+    /// apart faster than the ring absorbs.
+    @ViewBuilder
+    private var liveMeter: some View {
+        if isLive {
+            VStack(alignment: .leading, spacing: 2) {
+                ProgressView(value: min(max(cassetteClient.liveRingFill, 0), 1))
+                    .progressViewStyle(.linear)
+                    .controlSize(.small)
+                Text("Buffer \(Int((min(max(cassetteClient.liveRingFill, 0), 1) * 100).rounded()))%"
+                     + "  -  over \(cassetteClient.liveOverruns), under \(cassetteClient.liveUnderruns)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .help("The live input buffer's fill, and the samples dropped (overrun) "
+                          + "and made up as silence (underrun)")
+            }
         }
     }
 
@@ -268,17 +311,27 @@ struct CassetteDeckView: View {
     }
 
     private var browseButton: some View {
-        let isEnabled = !tapeInserted && !isProcessing && isServerLocal
+        // Browsing, Recent and New Blank Tape need a shared filesystem; a live
+        // input device is captured on this host and streamed, so it is offered
+        // even when the server is on another host. The control is enabled when
+        // either source is possible.
+        let canBrowse = isServerLocal
+        let isEnabled = !tapeInserted && !isProcessing && (canBrowse || liveInputAvailable)
         return Menu {
-            Button("Browse...") { browseForTape() }
-            recentMenu
-            newBlankTapeMenu
+            if canBrowse {
+                Button("Browse...") { browseForTape() }
+                recentMenu
+                newBlankTapeMenu
+            }
+            inputDeviceMenu
         } label: {
             Image(systemName: "folder")
                 .font(.system(size: 16))
                 .foregroundColor(isEnabled ? .primary.opacity(0.6) : .secondary.opacity(0.3))
         } primaryAction: {
-            browseForTape()
+            // The one-click action is Browse where it is possible; otherwise the
+            // user opens the menu for the Input Device submenu.
+            if canBrowse { browseForTape() }
         }
         .menuStyle(.button)
         .buttonStyle(.borderless)
@@ -288,10 +341,33 @@ struct CassetteDeckView: View {
     }
 
     private var browseHelp: String {
-        if !isServerLocal {
-            return "The server is on another host, so it cannot open a tape image from this one"
+        if isServerLocal {
+            return liveInputAvailable
+                ? "Browse for a tape image, or choose a live input device"
+                : "Browse for a tape image"
         }
-        return "Browse for a tape image"
+        return liveInputAvailable
+            ? "Choose a live input device (the server is on another host, so it cannot open a tape image from this one)"
+            : "The server is on another host, so it cannot open a tape image from this one"
+    }
+
+    /// The Input Device submenu: one entry per host audio input device, named as
+    /// the system names it, with no filtering by kind. Shown only when the
+    /// microphone usage string is present (so the app never asks for the
+    /// microphone without it). Choosing one asks for authorisation, then opens
+    /// the live stream; the deck then shows the live tape, stopped, and the user
+    /// presses Play.
+    @ViewBuilder
+    private var inputDeviceMenu: some View {
+        if liveInputAvailable {
+            let devices = LiveAudioDevices.inputs()
+            Menu("Input Device") {
+                ForEach(devices) { device in
+                    Button(device.name) { startLiveInput(device) }
+                }
+            }
+            .disabled(devices.isEmpty)
+        }
     }
 
     @ViewBuilder
@@ -329,21 +405,23 @@ struct CassetteDeckView: View {
     }
 
     private var rewindButton: some View {
-        transportKey("backward.fill", help: "Rewind", enabled: tapeInserted && transport != .rewinding) {
+        transportKey("backward.fill", help: isLive ? "A live input cannot be wound" : "Rewind",
+                     enabled: tapeInserted && !isLive && transport != .rewinding) {
             run { await cassetteClient.rewind() }
         }
     }
 
     private var fastForwardButton: some View {
-        transportKey("forward.fill", help: "Fast forward",
-                     enabled: tapeInserted && transport != .fastForwarding) {
+        transportKey("forward.fill", help: isLive ? "A live input cannot be wound" : "Fast forward",
+                     enabled: tapeInserted && !isLive && transport != .fastForwarding) {
             run { await cassetteClient.fastForward() }
         }
     }
 
     private var backToStartButton: some View {
-        transportKey("backward.end.fill", help: "Back to the beginning",
-                     enabled: tapeInserted && cassetteClient.positionSeconds > 0) {
+        transportKey("backward.end.fill",
+                     help: isLive ? "A live input cannot be sought" : "Back to the beginning",
+                     enabled: tapeInserted && !isLive && cassetteClient.positionSeconds > 0) {
             seek(to: 0)
         }
     }
@@ -365,7 +443,7 @@ struct CassetteDeckView: View {
     /// disabled key says why rather than letting the server refuse after a press.
     private var recordButton: some View {
         let recordable = cassetteClient.tape?.recordable ?? false
-        let enabled = tapeInserted && recordable && transport != .recording && !isProcessing
+        let enabled = tapeInserted && !isLive && recordable && transport != .recording && !isProcessing
         return Button {
             run { await cassetteClient.record() }
         } label: {
@@ -380,6 +458,7 @@ struct CassetteDeckView: View {
 
     private func recordHelp(recordable: Bool) -> String {
         if !tapeInserted { return "Insert a tape to record" }
+        if isLive { return "A live input cannot be recorded onto" }
         if !recordable {
             return "This tape is a CSW image, and Beebium records only on UEF tapes"
         }
@@ -388,7 +467,14 @@ struct CassetteDeckView: View {
 
     private var ejectButton: some View {
         Button {
-            run { await cassetteClient.ejectTape() }
+            // Ejecting a live tape stops the stream: the server plays out what
+            // its ring holds and then ejects (section 9.0), rather than cutting
+            // it off at once. A file tape ejects straight away.
+            if isLive {
+                cassetteClient.stopLiveInput()
+            } else {
+                run { await cassetteClient.ejectTape() }
+            }
         } label: {
             Image(systemName: "eject.fill")
                 .font(.system(size: 14))
@@ -396,7 +482,7 @@ struct CassetteDeckView: View {
         .buttonStyle(.bordered)
         .controlSize(.regular)
         .disabled(!tapeInserted || isProcessing)
-        .help("Eject tape")
+        .help(isLive ? "Stop the live input" : "Eject tape")
     }
 
     /// One transport key: a borderless glyph button, dimmed when disabled.
@@ -508,6 +594,34 @@ struct CassetteDeckView: View {
 
     private func seek(to seconds: Double) {
         run { await cassetteClient.seek(positionSeconds: seconds) }
+    }
+
+    /// Ask for microphone authorisation, then open the live stream for `device`.
+    /// The menu is shown only when the usage string is present, so asking here
+    /// is safe. A denied request or a start failure takes the deck's popover,
+    /// the way an insert failure does.
+    private func startLiveInput(_ device: LiveAudioDevice) {
+        dropRefusal = nil
+        deckError.clear()
+        isProcessing = true
+        Task {
+            let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            await MainActor.run {
+                isProcessing = false
+                guard granted else {
+                    deckError.showFailure(
+                        "Microphone access denied",
+                        detail: "Beebium needs permission to use the microphone to stream a live "
+                            + "tape. Grant it in System Settings, under Privacy & Security, Microphone.")
+                    return
+                }
+                if case .failure(let error) = cassetteClient.startLiveInput(device: device) {
+                    NSLog("[CassetteDeckView] Live input failed: \(error.localizedDescription)")
+                    deckError.showFailure(error.kind.markerLabel ?? "Live input failed",
+                                          detail: error.localizedDescription)
+                }
+            }
+        }
     }
 
     /// Run a deck key and surface the server's sentence on refusal. The server's
