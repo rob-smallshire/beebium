@@ -210,7 +210,7 @@ through `FrontEnd` (`cassette/FrontEnd.hpp`) until the model flips, and reports 
 edge. A sample's tape time is its index × (16 MHz / 13) / rate, and an edge falls between the two
 samples that straddle the threshold, by linear interpolation, so edge times are not quantised to
 the sample period. A seek starts the model afresh, at rest. A WAV cannot be recorded on.
-`TapeMetadata` reports its `sample_rate` and the `channel` played.
+`TapeMetadata` reports its `sample_rate` and, for a stereo file, the `channel` played; a mono file reports none.
 
 `FrontEnd` models the machine's LM324 input stages (findings 1.5 and 7.1), at the source's rate:
 

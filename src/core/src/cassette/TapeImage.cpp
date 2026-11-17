@@ -43,7 +43,7 @@ std::unique_ptr<TapeSignal> open_wav(std::unique_ptr<ByteReader> reader, const s
     const bool stereo = source->channels() == 2;
     const WavChannel played = source->channel();
     auto tape = std::make_unique<SampledTape>(std::move(source), TapeKind::Wav);
-    tape->mutable_metadata().channel = !stereo || played == WavChannel::Left ? "left" : "right";
+    tape->mutable_metadata().channel = !stereo ? "" : (played == WavChannel::Left ? "left" : "right");
     return tape;
 }
 

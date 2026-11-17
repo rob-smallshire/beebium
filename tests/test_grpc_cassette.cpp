@@ -699,7 +699,7 @@ TEST_CASE("StreamAudio inserts a live tape the deck plays, and closing the strea
     CHECK(status.tape().format() == "LIVE");
     CHECK(status.tape().name() == "Test line in");
     CHECK(status.tape().sample_rate() == 48000);
-    CHECK(status.tape().channel() == "left");
+    CHECK(status.tape().channel().empty());   // a mono stream has no channel to report
     CHECK(status.tape().duration_seconds() == 0.0);
     CHECK_FALSE(status.tape().recordable());
     CHECK(status.transport() == beebium::TAPE_TRANSPORT_STOPPED);
@@ -763,6 +763,27 @@ TEST_CASE("A live stream that ends plays out its ring before the tape goes", "[g
             CHECK(took < 0.1);   // a stopped deck plays nothing: the tape goes at once
         }
         CHECK(wait_for_status(fixture, [](const auto& s) { return !s.tape_inserted(); }));
+    }
+}
+
+TEST_CASE("A live tape reports a channel only for a stereo stream", "[grpc][cassette][live]") {
+    CassetteFixture fixture;
+    for (const auto& [channels, channel, reported] : {std::tuple{1u, std::string(), std::string()},
+                                                      std::tuple{2u, std::string(), std::string("left")},
+                                                      std::tuple{2u, std::string("right"), std::string("right")}}) {
+        CAPTURE(channels, channel);
+        AudioStream stream(fixture.stub());
+        beebium::AudioInputChunk chunk;
+        auto* f = chunk.mutable_format();
+        f->set_sample_rate(48000);
+        f->set_sample_format(beebium::AUDIO_SAMPLE_FORMAT_S16);
+        f->set_channels(channels);
+        f->set_channel(channel);
+        REQUIRE(stream.writer->Write(chunk));
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.tape_inserted(); }));
+        CHECK(fixture.status().tape().channel() == reported);
+        REQUIRE(stream.finish().ok());
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return !s.tape_inserted(); }));
     }
 }
 

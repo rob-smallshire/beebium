@@ -516,7 +516,8 @@ TEST_CASE("WAV of every supported format plays as the same carrier", "[wav]") {
         auto tape = open_tape_image(builder.wav(o), "carrier.wav");
         CHECK(tape->kind() == TapeKind::Wav);
         CHECK(tape->metadata().sample_rate == 48000);
-        CHECK(tape->metadata().channel == "left");
+        // A channel only for stereo: a mono WAV has none to report.
+        CHECK(tape->metadata().channel == (f.channels == 2 ? "left" : ""));
         CHECK_FALSE(tape->recordable());
         const auto times = wav_edge_times(*tape);
         CHECK(times.size() > 4700);

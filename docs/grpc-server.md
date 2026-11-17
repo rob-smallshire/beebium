@@ -445,7 +445,7 @@ only while the deck plays or records and the machine's motor relay (Serial ULA l
 `"CSW"` or `"WAV"`, the image's own `title`, `origin` and `target_machine` where
 it carries them, `duration_seconds`, 0 when unknown, `recordable`, whether
 `Record` can record on it: true for a UEF without &0113, false for a CSW or WAV,
-and for a WAV its `sample_rate` and the `channel` played), the `transport`
+and for a WAV or a live tape its `sample_rate` and, from a stereo source, the `channel` played, empty for mono), the `transport`
 (`TAPE_TRANSPORT_STOPPED`, `_PLAYING`, `_RECORDING`, `_REWINDING` or
 `_FAST_FORWARDING`), `position_seconds` in tape time,
 `motor_on` (the relay, whether or not a tape is in), for a live tape `live_ring_fill` (0 to 1), `live_overruns` and `live_underruns`, and `ula_part`

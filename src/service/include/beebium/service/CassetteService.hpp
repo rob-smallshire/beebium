@@ -225,7 +225,9 @@ public:
                                   "The deck already holds " + current + "; eject it before streaming " + name + ".");
                 }
                 machine_.with_emulation_paused([&] {
-                    deck.insert(std::make_unique<LiveTape>(source, right ? "right" : "left"), name);
+                    // A channel only for a stereo stream; a mono one has none to report.
+                    const std::string channel = format.channels() == 2 ? (right ? "right" : "left") : "";
+                    deck.insert(std::make_unique<LiveTape>(source, channel), name);
                 });
                 live_source_ = source;
                 live_active_ = true;

@@ -57,8 +57,9 @@ struct TapeImageMetadata {
     std::string target_machine;
     std::string instructions;
     std::vector<std::string> position_markers;
-    // A sampled tape's: its rate, and the channel played ("left" or "right";
-    // "left" for mono). Zero and empty otherwise.
+    // A sampled tape's: its rate, and for a stereo source the channel played
+    // ("left" or "right"). Zero and empty otherwise: a mono source has no
+    // channel to report, as a UEF or CSW has none.
     uint32_t sample_rate = 0;
     std::string channel;
 };
