@@ -34,6 +34,8 @@ namespace beebium::linux_client {
 namespace {
 
 constexpr auto CALL_DEADLINE = std::chrono::seconds(10);
+// A second at least half signal lights its column.
+constexpr unsigned SIGNAL_LEVEL = 128;
 
 DeckState::Transport transport_of(beebium::TapeTransport transport) {
     switch (transport) {
@@ -86,7 +88,31 @@ DeckState deck_state_from(const beebium::DeckStatus& status) {
     deck.live_ring_fill = std::clamp(status.live_ring_fill(), 0.0, 1.0);
     deck.live_overruns = status.live_overruns();
     deck.live_underruns = status.live_underruns();
+    deck.signal_map_ready = status.signal_map_ready();
+    deck.signal_map_generation = status.signal_map_generation();
     return deck;
+}
+
+std::vector<bool> signal_columns(unsigned seconds, const QByteArray& levels, int width) {
+    std::vector<bool> columns(static_cast<std::size_t>(std::max(width, 0)), false);
+    const qsizetype known = std::min<qsizetype>(seconds, levels.size());
+    if (known <= 0 || width <= 0) {
+        return columns;
+    }
+    for (int column = 0; column < width; ++column) {
+        const double from = static_cast<double>(column) * seconds / width;
+        const double to = static_cast<double>(column + 1) * seconds / width;
+        const auto first = static_cast<qsizetype>(std::floor(from));
+        const qsizetype last =
+            std::min(known, std::max(first + 1, static_cast<qsizetype>(std::ceil(to))));
+        for (qsizetype second = first; second < last; ++second) {
+            if (static_cast<unsigned char>(levels[second]) >= SIGNAL_LEVEL) {
+                columns[static_cast<std::size_t>(column)] = true;
+                break;
+            }
+        }
+    }
+    return columns;
 }
 
 QStringList tape_description(const TapeInfo& tape) {
@@ -319,6 +345,7 @@ void SessionCassette::stop() {
         rpc_.reset();
     }
     stub_.reset();
+    drop_signal_map();
     if (deck_.known) {
         deck_ = {};
         Q_EMIT deck_changed();
@@ -361,6 +388,45 @@ void SessionCassette::on_status(unsigned generation, const beebium::DeckStatus& 
     }
     deck_ = deck;
     Q_EMIT deck_changed();
+    follow_signal_map();
+}
+
+void SessionCassette::follow_signal_map() {
+    // Fetched once the server has it ready, again for each generation it
+    // publishes, never polled; gone with the tape, and none for a live one.
+    if (!deck_.tape_inserted || deck_.live() || !deck_.signal_map_ready) {
+        drop_signal_map();
+        return;
+    }
+    const std::pair<QString, std::uint32_t> asked{deck_.tape.url, deck_.signal_map_generation};
+    if (signal_map_asked_ == asked) {
+        return;
+    }
+    signal_map_asked_ = asked;
+    post<std::optional<SignalMap>>(
+        [stub = stub_](grpc::ClientContext& context) -> std::optional<SignalMap> {
+            beebium::TapeSignalMap response;
+            if (!stub->GetTapeSignalMap(&context, {}, &response).ok() || !response.success() ||
+                !response.ready()) {
+                return std::nullopt;
+            }
+            return SignalMap{response.seconds(), QByteArray::fromStdString(response.levels())};
+        },
+        [this, asked](const std::optional<SignalMap>& map) {
+            if (!map || signal_map_asked_ != asked || *map == signal_map_) {
+                return;
+            }
+            signal_map_ = *map;
+            Q_EMIT signal_map_changed();
+        });
+}
+
+void SessionCassette::drop_signal_map() {
+    signal_map_asked_.reset();
+    if (!signal_map_.levels.isEmpty() || signal_map_.seconds != 0) {
+        signal_map_ = {};
+        Q_EMIT signal_map_changed();
+    }
 }
 
 void SessionCassette::on_unavailable(unsigned generation) {
@@ -370,6 +436,7 @@ void SessionCassette::on_unavailable(unsigned generation) {
     deck_ = {};
     deck_.known = true;
     Q_EMIT deck_changed();
+    drop_signal_map();
 }
 
 void SessionCassette::insert(const QString& path) {

@@ -17,6 +17,7 @@
 
 #include "cassette.grpc.pb.h"
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -24,6 +25,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace grpc {
@@ -70,6 +72,10 @@ struct DeckState {
     double live_ring_fill = 0.0;
     std::uint64_t live_overruns = 0;
     std::uint64_t live_underruns = 0;
+    // Whether the tape's signal map is ready, and how many the server has
+    // published: a new one after a recording.
+    bool signal_map_ready = false;
+    std::uint32_t signal_map_generation = 0;
 
     // A live input is the tape: it cannot be wound, sought or recorded on.
     bool live() const { return tape_inserted && tape.format == QStringLiteral("LIVE"); }
@@ -93,6 +99,19 @@ QString tape_counter_text(double seconds);
 // "Recording, motor off" while the machine has not asked for the tape (a
 // tape waiting, not a fault). The relay is also shown on its own, as a dot.
 QString deck_state_text(const DeckState& deck);
+
+// Where the tape carries signal, as the server maps it: one level a second,
+// 0 silent to 255 signal throughout. Empty until the map is ready, and for
+// a live tape.
+struct SignalMap {
+    unsigned seconds = 0;
+    QByteArray levels;
+    friend bool operator==(const SignalMap&, const SignalMap&) = default;
+};
+// The map at `width` columns (client specification 9.0, The signal map):
+// a column is lit where the loudest of the seconds it spans is at least
+// half signal (128). Nothing is lit without levels.
+std::vector<bool> signal_columns(unsigned seconds, const QByteArray& levels, int width);
 
 // The keys of the deck, and Eject.
 enum class CassetteKey { play, stop, rewind, fast_forward, record, seek, eject };
@@ -141,6 +160,9 @@ public:
     void stop();
 
     const DeckState& deck() const { return deck_; }
+    // The tape's signal map once the server has it ready, fetched once for
+    // each generation it publishes; empty otherwise.
+    const SignalMap& signal_map() const { return signal_map_; }
     const std::vector<BlankTapeTemplate>& blank_tapes() const { return blank_tapes_; }
 
     void insert(const QString& path);
@@ -168,11 +190,14 @@ Q_SIGNALS:
                       const beebium::linux_client::CassetteOutcome& outcome);
     void create_finished(const QString& label, const beebium::linux_client::CassetteOutcome& outcome);
     void blank_tapes_changed();
+    void signal_map_changed();
     void live_ended(const beebium::linux_client::LiveSummary& summary);
 
 private:
     void on_status(unsigned generation, const beebium::DeckStatus& status);
     void on_unavailable(unsigned generation);
+    void follow_signal_map();
+    void drop_signal_map();
     void call_key(CassetteKey key, double position_seconds);
     template <typename Result>
     void post(std::function<Result(grpc::ClientContext&)> call,
@@ -185,6 +210,9 @@ private:
     std::unique_ptr<RpcWorker> rpc_;
     DeckState deck_;
     std::vector<BlankTapeTemplate> blank_tapes_;
+    SignalMap signal_map_;
+    // The tape and generation of the map last asked for.
+    std::optional<std::pair<QString, std::uint32_t>> signal_map_asked_;
     unsigned generation_ = 0;
 };
 

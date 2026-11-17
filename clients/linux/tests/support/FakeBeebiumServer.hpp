@@ -755,6 +755,39 @@ public:
         }
         publish();
     }
+    // The tape's signal map, published as the server does once it is made
+    // (or made again after a recording): ready, and one more generation.
+    void publish_signal_map(const std::string& levels) {
+        {
+            std::lock_guard lock(calls_mutex);
+            signal_levels_ = levels;
+            status_.set_signal_map_ready(true);
+            status_.set_signal_map_generation(status_.signal_map_generation() + 1);
+        }
+        publish();
+    }
+    int signal_map_fetches() {
+        std::lock_guard lock(calls_mutex);
+        return signal_map_fetches_;
+    }
+    grpc::Status GetTapeSignalMap(grpc::ServerContext*, const beebium::GetTapeSignalMapRequest*,
+                                  beebium::TapeSignalMap* response) override {
+        std::lock_guard lock(calls_mutex);
+        ++signal_map_fetches_;
+        if (!status_.tape_inserted()) {
+            response->set_kind(beebium::CASSETTE_ERROR_KIND_DECK_EMPTY);
+            response->set_error("The cassette deck is empty.");
+            return grpc::Status::OK;
+        }
+        response->set_success(true);
+        response->set_ready(status_.signal_map_ready());
+        if (status_.signal_map_ready()) {
+            response->set_seconds(static_cast<std::uint32_t>(signal_levels_.size()));
+            response->set_levels(signal_levels_);
+        }
+        return grpc::Status::OK;
+    }
+
     // The transport as the server reports it, however it got there.
     void set_transport(beebium::TapeTransport transport) {
         {
@@ -1004,6 +1037,8 @@ private:
     }
     void eject_locked() {
         status_.set_tape_inserted(false);
+        status_.set_signal_map_ready(false);
+        signal_levels_.clear();
         status_.clear_tape();
         status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
         status_.set_position_seconds(0.0);
@@ -1098,6 +1133,8 @@ private:
     }
 
     beebium::DeckStatus status_;
+    std::string signal_levels_;
+    int signal_map_fetches_ = 0;
     grpc::ServerContext* live_context_ = nullptr;
     std::mutex mutex_;
     std::condition_variable changed_;

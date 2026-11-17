@@ -34,6 +34,7 @@
 #include <QMenu>
 #include <QMimeData>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QSlider>
 #include <QStyleOptionSlider>
@@ -123,13 +124,23 @@ QIcon themed(const char* name, QStyle::StandardPixmap fallback, const QWidget* w
     return QIcon::fromTheme(QString::fromLatin1(name), widget->style()->standardIcon(fallback));
 }
 
-// Where the head is on the tape: a marker above a plain bar (client
+// Where the head is on the tape: a marker above a bar (client
 // specification 9.0). A slider in all but its look, so it drags, steps on
 // a click and seeks on release as one does; but it colours neither side of
-// the bar, since a tape has no played and unplayed portion.
+// the bar, since a tape has no played and unplayed portion. The bar is in
+// the accent colour where the signal map says the tape carries signal, and
+// plain grey elsewhere and until there is a map.
 class TapeTimeline : public QSlider {
 public:
     explicit TapeTimeline(QWidget* parent) : QSlider(Qt::Horizontal, parent) {}
+
+    void set_signal_map(const SignalMap& map) {
+        if (map == map_) {
+            return;
+        }
+        map_ = map;
+        update();
+    }
 
 protected:
     void paintEvent(QPaintEvent*) override {
@@ -145,9 +156,32 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(Qt::NoPen);
         const QPalette::ColorGroup group = isEnabled() ? QPalette::Active : QPalette::Disabled;
+        const QRectF bar(half, bar_y, width() - 2.0 * half, BAR_THICKNESS);
+        QPainterPath bar_path;
+        bar_path.addRoundedRect(bar, BAR_THICKNESS / 2.0, BAR_THICKNESS / 2.0);
         painter.setBrush(palette().color(group, QPalette::Mid));
-        painter.drawRoundedRect(QRectF(half, bar_y, width() - 2.0 * half, BAR_THICKNESS),
-                                BAR_THICKNESS / 2.0, BAR_THICKNESS / 2.0);
+        painter.drawPath(bar_path);
+        // The signal, a run of lit columns at a time, within the bar's ends.
+        const std::vector<bool> lit =
+            signal_columns(map_.seconds, map_.levels, static_cast<int>(bar.width()));
+        painter.save();
+        painter.setClipPath(bar_path);
+        const QColor accent = palette().color(group, QPalette::Highlight);
+        for (std::size_t from = 0; from < lit.size();) {
+            if (!lit[from]) {
+                ++from;
+                continue;
+            }
+            std::size_t to = from;
+            while (to < lit.size() && lit[to]) {
+                ++to;
+            }
+            painter.fillRect(QRectF(bar.left() + static_cast<qreal>(from), bar.top(),
+                                    static_cast<qreal>(to - from), bar.height()),
+                             accent);
+            from = to;
+        }
+        painter.restore();
         // A pointer down onto the bar, its tip at the head.
         const qreal tip = bar_y - 1.0;
         const qreal top = std::max(1.0, tip - MARKER_HEIGHT);
@@ -160,6 +194,7 @@ protected:
 private:
     static constexpr qreal BAR_THICKNESS = 3.0;
     static constexpr qreal MARKER_HEIGHT = 9.0;
+    SignalMap map_;
 };
 
 }  // namespace
@@ -358,6 +393,10 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     });
 
     connect(&cassette_, &SessionCassette::deck_changed, this, &CassetteDeckRow::refresh);
+    // The map comes ready, or after a recording anew, or goes with the tape.
+    connect(&cassette_, &SessionCassette::signal_map_changed, this, [this] {
+        static_cast<TapeTimeline*>(slider_)->set_signal_map(cassette_.signal_map());
+    });
     connect(&cassette_, &SessionCassette::insert_finished, this,
             [this](const QString& path, const CassetteOutcome& outcome) {
                 if (outcome.ok) {

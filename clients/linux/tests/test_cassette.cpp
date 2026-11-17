@@ -40,7 +40,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdlib>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 
@@ -146,6 +148,76 @@ TEST_CASE("A tape is described by its format, a WAV's rate and channel, then its
                                                QStringLiteral("right channel")});
     wav.sample_rate = 48000;
     CHECK(tape_description(wav).at(1) == QStringLiteral("48 kHz"));
+}
+
+namespace {
+
+QByteArray levels_of(std::initializer_list<int> levels) {
+    QByteArray bytes;
+    for (int level : levels) {
+        bytes.append(static_cast<char>(level));
+    }
+    return bytes;
+}
+
+std::vector<int> lit(const std::vector<bool>& columns) {
+    std::vector<int> indices;
+    for (std::size_t i = 0; i < columns.size(); ++i) {
+        if (columns[i]) {
+            indices.push_back(static_cast<int>(i));
+        }
+    }
+    return indices;
+}
+
+}  // namespace
+
+TEST_CASE("A signal map lights the columns whose seconds carry signal", "[cassette][signal]") {
+    const std::vector<bool> columns = signal_columns(5, levels_of({0, 0, 255, 255, 0}), 10);
+    REQUIRE(columns.size() == 10);
+    CHECK(lit(columns) == std::vector<int>{4, 5, 6, 7});
+    // Below half a second's worth of signal is quiet.
+    CHECK(lit(signal_columns(5, levels_of({0, 127, 127, 0, 0}), 10)).empty());
+    CHECK(lit(signal_columns(5, levels_of({0, 128, 0, 0, 0}), 10)) == std::vector<int>{2, 3});
+}
+
+TEST_CASE("A column spanning many seconds takes the loudest of them", "[cassette][signal]") {
+    QByteArray levels(5400, '\0');
+    levels[2700] = static_cast<char>(255);
+    const std::vector<bool> columns = signal_columns(5400, levels, 200);
+    REQUIRE(columns.size() == 200);
+    CHECK(lit(columns) == std::vector<int>{100});
+}
+
+TEST_CASE("No map, or one not ready, lights nothing", "[cassette][signal]") {
+    CHECK(signal_columns(0, QByteArray(), 10) == std::vector<bool>(10, false));
+    CHECK(signal_columns(600, QByteArray(), 10) == std::vector<bool>(10, false));
+    CHECK(signal_columns(5, levels_of({255, 255, 255, 255, 255}), 0).empty());
+}
+
+TEST_CASE("The signal map is fetched once when ready, again for a new generation, and dropped on eject",
+          "[cassette][signal]") {
+    Connected c;
+    c.server.cassette.load("file:///home/me/tapes/Elite.uef");
+    REQUIRE(wait_until([&] { return c.deck().tape_inserted; }));
+    CHECK(c.cassette.signal_map().levels.isEmpty());
+    CHECK(c.server.cassette.signal_map_fetches() == 0);
+    c.server.cassette.publish_signal_map(std::string("\x00\xff\xff", 3));
+    REQUIRE(wait_until([&] { return c.cassette.signal_map().levels.size() == 3; }));
+    CHECK(c.cassette.signal_map().seconds == 3);
+    // The position moving is no reason to fetch it again.
+    for (double position : {1.0, 2.0, 3.0}) {
+        c.server.cassette.set_position(position);
+        REQUIRE(wait_until([&] { return c.deck().position_seconds == position; }));
+    }
+    CHECK(c.server.cassette.signal_map_fetches() == 1);
+    // A recording publishes it again.
+    c.server.cassette.publish_signal_map(std::string("\xff\xff\xff\xff", 4));
+    REQUIRE(wait_until([&] { return c.cassette.signal_map().levels.size() == 4; }));
+    CHECK(c.server.cassette.signal_map_fetches() == 2);
+    CHECK(c.press(CassetteKey::eject).ok);
+    REQUIRE(wait_until([&] { return c.cassette.signal_map().levels.isEmpty(); }));
+    CHECK(c.server.cassette.signal_map_fetches() == 2);
 }
 
 TEST_CASE("The tape counter reads minutes and whole seconds", "[cassette]") {
@@ -601,6 +673,35 @@ TEST_CASE("A key follows the deck, not the click, and a key already down sends n
     d.row.key(CassetteKey::stop)->click();
     REQUIRE(wait_until([&] { return !play->isChecked(); }));
     CHECK(d.pressed() == std::vector<std::string>{"play", "stop"});
+}
+
+TEST_CASE("The timeline is coloured where the signal map says the tape carries signal",
+          "[cassette][deck][signal]") {
+    Deck d;
+    d.load();  // ten minutes
+    d.row.resize(360, 320);
+    d.row.show();
+    d.row.layout()->activate();
+    // Quiet for the first half, signal for the second.
+    std::string levels(600, '\0');
+    std::fill(levels.begin() + 300, levels.end(), '\xff');
+    d.server.cassette.publish_signal_map(levels);
+    REQUIRE(wait_until([&] { return d.cassette.signal_map().levels.size() == 600; }));
+    QCoreApplication::processEvents();
+    const QImage image = d.row.slider()->grab().toImage();
+    const auto column = [&](double fraction) {
+        const int x = static_cast<int>(image.width() * fraction);
+        std::vector<QRgb> pixels;
+        for (int y = 0; y < image.height(); ++y) {
+            pixels.push_back(image.pixel(x, y));
+        }
+        return pixels;
+    };
+    // The plain grey where it is quiet, the accent where there is signal,
+    // the same along each.
+    CHECK(column(0.2) == column(0.35));
+    CHECK(column(0.7) == column(0.9));
+    CHECK(column(0.7) != column(0.35));
 }
 
 TEST_CASE("A tape of unknown length has the counter alone, with no slider", "[cassette][deck]") {
