@@ -174,4 +174,42 @@ final class CassetteDeckFormattingTests: XCTestCase {
         XCTAssertTrue(appearance(.backToStart, transport: .stopped).enabled)
         XCTAssertFalse(appearance(.backToStart, transport: .stopped).depressed)
     }
+
+    // MARK: - Signal map reduction
+
+    func testSignalMapLightsTheLoudSecondsColumns() {
+        // Five seconds, two of them full signal, stretched across ten columns:
+        // the two loud seconds light the middle four columns.
+        let columns = CassetteSignalMap.litColumns(
+            seconds: 5, levels: [0, 0, 255, 255, 0], width: 10)
+        XCTAssertEqual(columns, [false, false, false, false, true,
+                                 true, true, true, false, false])
+    }
+
+    func testSignalMapDownsamplesByTheMaximum() {
+        // A C90's worth of seconds into 200 columns: a single loud second lights
+        // exactly its own column, by the maximum-over-the-span rule.
+        var levels = [UInt8](repeating: 0, count: 5400)
+        levels[2700] = 255
+        let columns = CassetteSignalMap.litColumns(seconds: 5400, levels: levels, width: 200)
+        XCTAssertEqual(columns.count, 200)
+        XCTAssertTrue(columns[100], "the column spanning the one loud second must light")
+        XCTAssertEqual(columns.filter { $0 }.count, 1, "and no other column")
+    }
+
+    func testSignalMapThresholdIsTheAccentAt128() {
+        XCTAssertEqual(CassetteSignalMap.litColumns(seconds: 1, levels: [127], width: 1), [false])
+        XCTAssertEqual(CassetteSignalMap.litColumns(seconds: 1, levels: [128], width: 1), [true])
+        XCTAssertEqual(CassetteSignalMap.litColumns(seconds: 1, levels: [255], width: 1), [true])
+    }
+
+    func testSignalMapEmptyOrUnsizedYieldsNoColumns() {
+        XCTAssertTrue(CassetteSignalMap.litColumns(seconds: 0, levels: [], width: 10).isEmpty,
+                      "a not-ready map (no seconds) yields no coloured columns")
+        XCTAssertTrue(CassetteSignalMap.litColumns(seconds: 300, levels: [], width: 10).isEmpty,
+                      "an empty level array yields no coloured columns")
+        XCTAssertTrue(CassetteSignalMap.litColumns(seconds: 5, levels: [0, 0, 255, 255, 0],
+                                                   width: 0).isEmpty,
+                      "a zero-width bar yields no columns")
+    }
 }

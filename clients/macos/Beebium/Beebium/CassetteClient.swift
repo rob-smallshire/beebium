@@ -92,7 +92,7 @@ final class CassetteClient: ObservableObject, Disconnectable {
     @Published private(set) var transport: Beebium_TapeTransport = .stopped
 
     /// The tape position in seconds of the ULA clock; drives the counter and
-    /// the scrubbing slider.
+    /// the scrubbing timeline.
     @Published private(set) var positionSeconds: Double = 0
 
     /// The machine's motor relay (Serial ULA latch bit 7), independent of the
@@ -136,6 +136,18 @@ final class CassetteClient: ObservableObject, Disconnectable {
     /// hard-coded, so the submenu is simply empty (and disabled) if the server
     /// has none or the call fails.
     @Published private(set) var blankTapes: [Beebium_BlankTape] = []
+
+    /// The loaded tape's signal map: its total length in seconds and one level
+    /// byte per second (0 silent .. 255 signal throughout), for colouring the
+    /// position timeline. Empty until the server reports the map ready and it has
+    /// been fetched; dropped on eject and disconnect. A live tape has none.
+    @Published private(set) var signalMapSeconds: Int = 0
+    @Published private(set) var signalMapLevels: [UInt8] = []
+
+    /// The signal-map generation last fetched (or begun fetching), so the map is
+    /// fetched once when ready and again only when the generation changes (after
+    /// a recording) -- never polled. Nil when there is no current map.
+    private var signalMapGeneration: UInt32?
 
     /// How a status stream ended, reduced to what the client state depends on.
     enum StreamEnd: Equatable {
@@ -191,6 +203,9 @@ final class CassetteClient: ObservableObject, Disconnectable {
         errorMessage = nil
         liveError = nil
         blankTapes = []
+        signalMapGeneration = nil
+        signalMapSeconds = 0
+        signalMapLevels = []
     }
 
     // MARK: - Live input
@@ -411,6 +426,63 @@ final class CassetteClient: ObservableObject, Disconnectable {
         isLoaded = true
         isStale = false
         errorMessage = nil
+        reconcileSignalMap(status, streamGeneration: generation)
+    }
+
+    // MARK: - Signal map
+
+    /// Keep the tape's signal map in step with the deck status: fetch it once the
+    /// server reports it ready, fetch it again when the generation changes (after
+    /// a recording), and drop it when the deck empties or the map is not ready.
+    /// Never polls -- a fetch is launched only on a change of ready generation.
+    private func reconcileSignalMap(_ status: Beebium_DeckStatus, streamGeneration: UInt64) {
+        guard status.tapeInserted, status.signalMapReady else {
+            dropSignalMap()
+            return
+        }
+        guard signalMapGeneration != status.signalMapGeneration else { return }
+        // A new (or first) ready generation: drop any stale map, then fetch the
+        // new one. The timeline shows the plain bar until the fetch returns.
+        signalMapGeneration = status.signalMapGeneration
+        signalMapSeconds = 0
+        signalMapLevels = []
+        fetchSignalMap(streamGeneration: streamGeneration)
+    }
+
+    private func dropSignalMap() {
+        signalMapGeneration = nil
+        if signalMapSeconds != 0 || !signalMapLevels.isEmpty {
+            signalMapSeconds = 0
+            signalMapLevels = []
+        }
+    }
+
+    /// Fetch the whole signal map once for the current ready generation. A
+    /// failure leaves the plain bar and is not retried (never poll); a reply that
+    /// a reconnect or a newer generation has overtaken is discarded.
+    private func fetchSignalMap(streamGeneration: UInt64) {
+        guard let client = client else { return }
+        let wantedGeneration = signalMapGeneration
+        Task { [weak self] in
+            do {
+                let map = try await client.getTapeSignalMap(Beebium_GetTapeSignalMapRequest())
+                    .response.get()
+                await MainActor.run {
+                    guard let self = self,
+                          streamGeneration == self.streamGeneration,
+                          wantedGeneration == self.signalMapGeneration else { return }
+                    if map.success && map.ready {
+                        self.signalMapSeconds = Int(map.seconds)
+                        self.signalMapLevels = [UInt8](map.levels)
+                    } else {
+                        self.signalMapSeconds = 0
+                        self.signalMapLevels = []
+                    }
+                }
+            } catch {
+                NSLog("[CassetteClient] GetTapeSignalMap failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// Apply the end of the status stream identified by `generation`. A lost

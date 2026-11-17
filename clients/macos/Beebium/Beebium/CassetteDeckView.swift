@@ -49,6 +49,36 @@ enum TapeTimelineGeometry {
     }
 }
 
+/// Reduces the server's per-second signal map to the timeline's pixel columns.
+/// The map is one level byte per second of tape (0 silent .. 255 signal
+/// throughout); each pixel column spans the seconds that fall under it and is
+/// lit -- drawn in the accent colour -- when the loudest of them reaches the
+/// threshold, so a single loud second still lights its column. Pure, so the
+/// reduction is tested without a view.
+enum CassetteSignalMap {
+    /// A second at or above this 0..255 level is drawn in the accent colour;
+    /// below it, the bar's plain grey.
+    static let accentThreshold: UInt8 = 128
+
+    /// One Bool per pixel column across `width`: true where the tape's signal
+    /// reaches the threshold somewhere in the seconds that column spans. An
+    /// absent or empty map, no seconds, or a non-positive width yields no columns
+    /// -- the caller then draws the plain bar.
+    static func litColumns(seconds: Int, levels: [UInt8], width: Int) -> [Bool] {
+        let count = min(seconds, levels.count)
+        guard width > 0, count > 0 else { return [] }
+        return (0..<width).map { column in
+            let start = column * count / width
+            let end = max(start + 1, (column + 1) * count / width)
+            var peak: UInt8 = 0
+            for second in start..<min(end, count) {
+                peak = max(peak, levels[second])
+            }
+            return peak >= accentThreshold
+        }
+    }
+}
+
 /// The deck's status line: the transport in words, carrying the motor relay
 /// where its being open is the ordinary waiting state rather than motion.
 /// Pure, so the phrasing is tested without a view.
@@ -340,6 +370,8 @@ struct CassetteDeckView: View {
                 position: min(scrubSeconds ?? cassetteClient.positionSeconds, duration),
                 duration: duration,
                 isEnabled: !isProcessing,
+                signalSeconds: cassetteClient.signalMapSeconds,
+                signalLevels: cassetteClient.signalMapLevels,
                 onScrub: { scrubSeconds = $0 },
                 onCommit: { target in
                     scrubSeconds = nil
@@ -764,17 +796,26 @@ struct CassetteDeckView: View {
     }
 }
 
-/// The position timeline: a pointer on a plain bar, no fill either side, since a
+/// The position timeline: a pointer on a bar with no fill either side, since a
 /// tape has no played and unplayed portion (section 9.0). Dragging anywhere
 /// along the bar scrubs the pointer; the seek happens on release, as the slider
-/// it replaces did. The pointer follows the deck -- including winds -- while the
+/// it replaced did. The pointer follows the deck -- including winds -- while the
 /// bar is not being touched. Shown only when the server reports a duration.
+///
+/// When the server's signal map is ready, the bar is coloured from it: the
+/// seconds that carry signal (at or above the accent threshold) are drawn in the
+/// accent colour, the rest in the bar's plain grey. Until the map is ready, and
+/// for a live tape (which has none), the plain grey bar.
 private struct TapeTimeline: View {
     /// The position the pointer shows, in seconds (the scrub position while
     /// dragging, the deck position otherwise), already clamped to the tape.
     let position: Double
     let duration: Double
     let isEnabled: Bool
+    /// The signal map's total seconds and one level byte per second, or empty
+    /// for a plain bar (no map yet, or a live tape).
+    let signalSeconds: Int
+    let signalLevels: [UInt8]
     /// Called continuously while dragging, with the scrubbed-to position.
     let onScrub: (Double) -> Void
     /// Called once on release, with the position to seek to.
@@ -788,16 +829,13 @@ private struct TapeTimeline: View {
             let width = geometry.size.width
             let fraction = TapeTimelineGeometry.fraction(position: position, duration: duration)
             ZStack(alignment: .topLeading) {
-                // The plain bar, centred in the row, with no colouring of either
-                // side of the pointer.
-                Capsule()
-                    .fill(Color.secondary.opacity(0.3))
-                    .frame(height: barHeight)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                // The pointer, its tip on the bar at the position.
+                bar
+                // The pointer, its tip on the bar at the position. It is drawn in
+                // the primary colour so it stays legible over both the plain grey
+                // and the accent-coloured stretches of the bar.
                 Image(systemName: "arrowtriangle.down.fill")
                     .font(.system(size: pointerSize))
-                    .foregroundColor(isEnabled ? .secondary : Color.secondary.opacity(0.4))
+                    .foregroundColor(isEnabled ? .primary : Color.primary.opacity(0.4))
                     .offset(x: CGFloat(fraction) * width - pointerSize / 2, y: 0)
             }
             .contentShape(Rectangle())
@@ -816,5 +854,36 @@ private struct TapeTimeline: View {
             )
         }
         .frame(height: 16)
+    }
+
+    /// The bar itself: a plain grey capsule with no map, or, when the map is
+    /// ready, a grey capsule whose signal-carrying columns are drawn in the
+    /// accent colour. Both keep the rounded ends and carry no fill of a played
+    /// or unplayed side.
+    @ViewBuilder
+    private var bar: some View {
+        if signalLevels.isEmpty {
+            Capsule()
+                .fill(Color.secondary.opacity(0.3))
+                .frame(height: barHeight)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        } else {
+            Canvas { context, size in
+                let barY = (size.height - barHeight) / 2
+                let barRect = CGRect(x: 0, y: barY, width: size.width, height: barHeight)
+                context.clip(to: Capsule().path(in: barRect))
+                context.fill(Path(barRect), with: .color(Color.secondary.opacity(0.3)))
+                let columns = CassetteSignalMap.litColumns(
+                    seconds: signalSeconds, levels: signalLevels,
+                    width: Int(size.width.rounded()))
+                guard !columns.isEmpty else { return }
+                let columnWidth = size.width / CGFloat(columns.count)
+                for (index, lit) in columns.enumerated() where lit {
+                    let rect = CGRect(x: CGFloat(index) * columnWidth, y: barY,
+                                      width: columnWidth + 1, height: barHeight)
+                    context.fill(Path(rect), with: .color(Color.accentColor))
+                }
+            }
+        }
     }
 }
