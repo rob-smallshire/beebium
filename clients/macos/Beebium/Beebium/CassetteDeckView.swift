@@ -536,11 +536,10 @@ struct CassetteDeckView: View {
     }
 
     /// The New Blank Tape submenu: one entry per shipped template, labelled by
-    /// the server (the label already carries the length, "Blank C15 (15
-    /// minutes)"). Choosing one saves a copy to a path the user picks and
-    /// inserts it, stopped at the start, ready to Record. The labels come from
-    /// the server (nothing hard-coded), so the submenu is disabled when the
-    /// server offers none.
+    /// the server by its tape length ("C15", "C30", "C60", "C90"). Choosing one
+    /// saves a copy to a path the user picks and inserts it, stopped at the
+    /// start, ready to Record. The labels come from the server (nothing
+    /// hard-coded), so the submenu is disabled when the server offers none.
     @ViewBuilder
     private var newBlankTapeMenu: some View {
         let blanks = cassetteClient.blankTapes

@@ -58,14 +58,14 @@ final class BlankTapeNamingTests: XCTestCase {
     func testAppendsUefWhenMissing() {
         let chosen = URL(fileURLWithPath: "/tapes/PROG")
         let url = BlankDiscNaming.url(forChosen: chosen,
-                                      templateFilename: "Blank C15 (15 minutes).uef")
+                                      templateFilename: "C15.uef")
         XCTAssertEqual(url.pathExtension, "uef")
     }
 
     func testKeepsUefWhenAlreadyPresent() {
         let chosen = URL(fileURLWithPath: "/tapes/PROG.uef")
         let url = BlankDiscNaming.url(forChosen: chosen,
-                                      templateFilename: "Blank C15 (15 minutes).uef")
+                                      templateFilename: "C15.uef")
         XCTAssertEqual(url.lastPathComponent, "PROG.uef")
     }
 }
@@ -75,7 +75,7 @@ final class CassetteCreateTapeDispatchTests: XCTestCase {
     func testCreateTapeIsRefusedWithoutAConnection() async {
         let client = CassetteClient()
         guard case .failure(.notConnected) = await client.createTape(
-            label: "Blank C15 (15 minutes)", destinationPath: "/tapes/x.uef", overwrite: true) else {
+            label: "C15", destinationPath: "/tapes/x.uef", overwrite: true) else {
             return XCTFail("expected notConnected from createTape()")
         }
     }

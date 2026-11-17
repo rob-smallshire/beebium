@@ -116,7 +116,7 @@ final class DialogLocationsTests: XCTestCase {
     func testNeverRemembersAnExcludedDirectory() throws {
         let templates = try makeDirectory("blank-tapes")
         let locations = store(excluding: [templates])
-        let inside = templates.appendingPathComponent("Blank C15 (15 minutes).uef")
+        let inside = templates.appendingPathComponent("C15.uef")
         locations.remember(inside, for: .insertTape)
         XCTAssertTrue(samePath(locations.startDirectory(for: .insertTape), documents),
                       "choosing a file in a template directory must not change the remembered location")
