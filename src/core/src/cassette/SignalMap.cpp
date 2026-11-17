@@ -105,12 +105,12 @@ void SignalMapper::map(Opener open, bool keep_current) {
     wake_.notify_one();
 }
 
-void SignalMapper::update(size_t first, std::span<const uint8_t> levels) {
+void SignalMapper::update(size_t first, std::span<const uint8_t> levels, bool quietly) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!ready_.load(std::memory_order_relaxed) || first >= levels_.size()) return;
     const size_t count = std::min(levels.size(), levels_.size() - first);
     std::copy_n(levels.begin(), count, levels_.begin() + static_cast<std::ptrdiff_t>(first));
-    generation_.fetch_add(1, std::memory_order_acq_rel);
+    if (!quietly) generation_.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void SignalMapper::clear() {

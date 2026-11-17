@@ -395,3 +395,117 @@ TEST_CASE("Recording silence over signal erases it in the head's wake", "[casset
     }
     CHECK(publishes.back().head_second >= 3);
 }
+
+// =============================================================================
+// The append point (round 10)
+// =============================================================================
+
+namespace {
+
+// Gap 2 s, carrier 3 s, data 2 s, gap 1 s, then 0.3 s of carrier and 2 s of
+// data ending near 10.3 s, and ten seconds of silence after.
+TapeBuilder recorded_then_blank() {
+    const auto bytes = filler(240);
+    TapeBuilder builder;
+    builder.gap(2.0).carrier(7200).bytes_8n1(bytes).gap(1.0).carrier(720).bytes_8n1(bytes).gap(10.0);
+    return builder;
+}
+
+}  // namespace
+
+TEST_CASE("The append point is two seconds after the last second of signal", "[cassette][append]") {
+    using beebium::signal_map_append_second;
+    SECTION("a tape recorded to 10.3 s, then blank") {
+        const auto levels = map_of(recorded_then_blank().uef(), "appendable.uef");
+        REQUIRE(levels.size() == 21);
+        CHECK(levels[10] != 0);
+        CHECK(levels[11] == 0);
+        CHECK(signal_map_append_second(levels) == 13);   // floor(10.3) + 1 + 2
+    }
+    SECTION("a blank tape: the start") {
+        CHECK(signal_map_append_second(std::vector<uint8_t>(900, 0)) == 0);
+    }
+    SECTION("a lone loud second near the end: after it") {
+        std::vector<uint8_t> levels(60, 0);
+        levels[5] = 255;
+        levels[57] = 40;
+        CHECK(signal_map_append_second(levels) == 60);
+    }
+    SECTION("signal to the last second: past the end") {
+        CHECK(signal_map_append_second(std::vector<uint8_t>(10, 255)) == 12);
+    }
+}
+
+TEST_CASE("The deck seeks to the append point as any seek, counting a recording just made",
+          "[cassette][append]") {
+    beebium::test::ScopedTempDir dir("beebium_signal_map_");
+    beebium::CassetteDeck deck;
+    auto ready = [](const auto& m) { return m.ready; };
+    auto insert = [&](const std::vector<uint8_t>& bytes, const std::string& name) {
+        const auto filepath = dir.path() / name;
+        TapeBuilder::write(filepath, bytes);
+        deck.insert(beebium::open_tape_file(filepath), name, "", filepath);
+        REQUIRE(wait_for_deck(deck, ready).ready);
+    };
+
+    SECTION("not ready: nothing, and the deck untouched") {
+        CHECK_FALSE(deck.seek_to_append_point());   // empty
+        TapeBuilder long_silence;
+        long_silence.gap(600.0).carrier(2400);
+        WavOptions wav;
+        wav.rate = 22050;
+        const auto filepath = dir.path() / "long.wav";
+        TapeBuilder::write(filepath, long_silence.wav(wav));
+        deck.insert(beebium::open_tape_file(filepath), "long.wav", "", filepath);
+        deck.seek(beebium::seconds_to_tape_time(5.0));
+        if (!deck.signal_map().ready) {
+            CHECK_FALSE(deck.seek_to_append_point());
+            CHECK(deck.position() == beebium::seconds_to_tape_time(5.0));
+        }
+    }
+    SECTION("a playing deck lands at the point and plays on") {
+        insert(recorded_then_blank().uef(), "appendable.uef");
+        deck.play();
+        const auto point = deck.seek_to_append_point();
+        REQUIRE(point);
+        CHECK(point->position == beebium::signal_map_second_start(13));
+        CHECK_FALSE(point->at_end);
+        CHECK(deck.position() == point->position);
+        CHECK(deck.transport() == beebium::CassetteDeck::Transport::Playing);
+    }
+    SECTION("a full tape: at the end, stopped") {
+        TapeBuilder full;
+        full.carrier(24000);   // 10 s
+        insert(full.uef(), "full.uef");
+        deck.play();
+        const auto point = deck.seek_to_append_point();
+        REQUIRE(point);
+        CHECK(point->at_end);
+        CHECK(point->position == *deck.duration());
+        CHECK(deck.transport() == beebium::CassetteDeck::Transport::Stopped);
+    }
+    SECTION("a recording deck: the recording ends and counts, tail and all") {
+        TapeBuilder blank;
+        blank.gap(60.0);
+        insert(blank.uef(), "blank.uef");
+        // Tone from 0 for 4.6 s: the wake's last publish is at 4 s, so the
+        // tail after it is counted only because ending the recording flushes it.
+        deck.record();
+        bool level = false;
+        const auto until = beebium::seconds_to_tape_time(4.6);
+        for (beebium::TapeTime t = 0; t < until; ++t) {
+            deck.clock(true);
+            if (t % 256 == 0) deck.edge(t, level = !level);
+        }
+        const uint32_t generation = deck.published().signal_map_generation;
+        const auto point = deck.seek_to_append_point();
+        REQUIRE(point);
+        CHECK(deck.transport() == beebium::CassetteDeck::Transport::Stopped);
+        CHECK(point->position == beebium::signal_map_second_start(4 + 1 + 2));
+        // The walk of the image written back follows, one generation on, and
+        // agrees.
+        const auto walked = wait_for_deck(deck, [&](const auto& m) { return m.generation > generation; });
+        CHECK(walked.generation == generation + 1);
+        CHECK(beebium::signal_map_append_second(walked.levels) == 7);
+    }
+}

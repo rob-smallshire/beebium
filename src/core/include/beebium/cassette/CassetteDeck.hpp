@@ -212,6 +212,30 @@ public:
         publish();
     }
 
+    // Where a seek to the append point left the head, and whether the point
+    // was at or past the end of the tape, where the deck stopped.
+    struct AppendPoint {
+        TapeTime position = 0;
+        bool at_end = false;
+    };
+
+    // Seek to the append point (SignalMap.hpp), from the map as it stands: a
+    // recording in progress is ended first, as any seek ends one, and what it
+    // recorded is counted. A playing deck plays on, as after any seek; a point
+    // at or past the end stops the deck at the end. Nothing if the deck is
+    // empty or live, or no map is ready yet.
+    std::optional<AppendPoint> seek_to_append_point() {
+        if (!tape_ || live_ || !signal_map_.ready()) return std::nullopt;
+        end_recording();
+        const SignalMapper::Map map = signal_map_.snapshot();
+        if (!map.ready) return std::nullopt;
+        const TapeTime point = signal_map_second_start(signal_map_append_second(map.levels));
+        const auto length = tape_->duration();
+        const bool at_end = length && point >= *length;
+        seek(point);
+        return AppendPoint{position_, at_end};
+    }
+
     // Press record: from here, while the relay is closed, the tape moves and
     // what passes under the head is replaced by what the machine sends. At the
     // end of the tape the deck stays stopped. Throws std::runtime_error with a
@@ -399,6 +423,9 @@ private:
         pending_ = tape_->next();
         auto bytes = std::make_shared<const std::vector<uint8_t>>(recorder->encode());
         if (!filepath_.empty() && recorder->dirty()) write_back(*bytes);
+        // The wake to the head, so the map counts all of the recording at once;
+        // the walk that follows publishes the new generation.
+        publish_wake(true);
         map_image(std::move(bytes), true);
     }
 
@@ -451,12 +478,13 @@ private:
 
     // Publish the wake: every second completed since the recording began, and
     // the passed part of the one under the head.
-    void publish_wake() {
+    void publish_wake(bool quietly = false) {
+        if (position_ >= wake_second_end_) roll_wake();
         wake_publish_buffer_ = wake_levels_;
         if (position_ > wake_from_) {
             wake_publish_buffer_.push_back(wake_level(wake_covered_until(position_), position_ - wake_from_));
         }
-        signal_map_.update(wake_first_second_, wake_publish_buffer_);
+        signal_map_.update(wake_first_second_, wake_publish_buffer_, quietly);
         wake_next_publish_ = position_ + SIGNAL_MAP_RECORDING_PUBLISH_CLOCKS;
     }
 

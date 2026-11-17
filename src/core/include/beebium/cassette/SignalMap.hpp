@@ -61,6 +61,20 @@ inline uint64_t signal_map_second_of(TapeTime t) {
     return s;
 }
 
+// The append point: where to start a recording that follows the last one on a
+// tape. The end of the last second of the map with a non-zero level, plus a
+// margin of APPEND_MARGIN_SECONDS (a Decision), so the next leader starts 2 to
+// 3 s after the last edge; 0 for a map that is silent throughout. Returned as
+// a second of the map, which can lie past the tape's end.
+inline constexpr uint64_t APPEND_MARGIN_SECONDS = 2;
+
+inline uint64_t signal_map_append_second(std::span<const uint8_t> levels) {
+    for (size_t s = levels.size(); s > 0; --s) {
+        if (levels[s - 1] != 0) return s + APPEND_MARGIN_SECONDS;
+    }
+    return 0;
+}
+
 // Walk `tape` from its start to its end and return its levels, or nothing if
 // `cancelled` became true first (it is read once an item).
 std::optional<std::vector<uint8_t>> compute_signal_map(TapeSignal& tape,
@@ -95,10 +109,11 @@ public:
     // same tape, newly recorded on); otherwise there is none until then.
     // From any thread.
     void map(Opener open, bool keep_current = false);
-    // Write `levels`, from second `first` on, into the published map and
-    // publish it as a new generation: a recording's wake. Nothing if no map
-    // is ready. From any thread; holds the mutex for the copy.
-    void update(size_t first, std::span<const uint8_t> levels);
+    // Write `levels`, from second `first` on, into the published map: a
+    // recording's wake. A new generation is published unless `quietly` (a
+    // walk that will publish one is about to follow). Nothing if no map is
+    // ready. From any thread; holds the mutex for the copy.
+    void update(size_t first, std::span<const uint8_t> levels, bool quietly = false);
     // No map until the next map(), cancelling any job. From any thread.
     void clear();
 
