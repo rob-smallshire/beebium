@@ -314,7 +314,8 @@ std::vector<UefChunk> classify_tape_edges(const EdgeTrack& track) {
     auto finish_region = [&](TapeTime last_edge) {
         if (halves.empty()) return;
         // The last half-cycle's length is unknown: it takes its partner's class.
-        halves.push_back(halves.size() >= 1 ? halves.back() : SHORT);
+        const uint8_t last_half = halves.back();
+        halves.push_back(last_half);
         cycles.clear();
         size_t i = 0;
         while (i + 1 < halves.size()) {
