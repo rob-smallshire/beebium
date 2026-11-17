@@ -97,9 +97,10 @@ final class CassetteDeckFormattingTests: XCTestCase {
                             transport: Beebium_TapeTransport = .stopped,
                             motorOn: Bool = false,
                             isLive: Bool = false,
-                            recordable: Bool = true) -> CassetteKeyAppearance {
+                            recordable: Bool = true,
+                            appendRefusal: String = "") -> CassetteKeyAppearance {
         CassetteKeys.appearance(of: key, transport: transport, motorOn: motorOn,
-                                isLive: isLive, recordable: recordable)
+                                isLive: isLive, recordable: recordable, appendRefusal: appendRefusal)
     }
 
     func testEmptyDeckShowsNoTransportRow() {
@@ -110,6 +111,14 @@ final class CassetteDeckFormattingTests: XCTestCase {
                        "an empty deck must not show the transport row")
         XCTAssertTrue(CassetteDeckLayout.showsTransport(tapeInserted: true),
                       "a deck with a tape in must show the transport row")
+    }
+
+    func testTransportRowIsInTapeGeographyOrder() {
+        // One group at the left edge, left to right in the tape's geography;
+        // Eject is not a transport key and sits apart at the right edge.
+        XCTAssertEqual(CassetteDeckLayout.transportRow,
+                       [.backToStart, .rewind, .stop, .play, .record, .fastForward, .toEnd],
+                       "the deck row runs in the tape's geography")
     }
 
     func testStoppedTapeLeavesEveryKeyLiveNothingDownAndUncoloured() {
@@ -190,6 +199,31 @@ final class CassetteDeckFormattingTests: XCTestCase {
         XCTAssertEqual(CassetteKeys.recordHelp(recordable: false, refusal: "   "),
                        "This tape cannot be recorded onto",
                        "with no server sentence, a generic fallback")
+    }
+
+    func testToEndIsEnabledOnlyWhenTheAppendIsAllowed() {
+        // An empty refusal means the server would accept the append seek: the
+        // key is live, and (being momentary) never down or coloured.
+        XCTAssertEqual(appearance(.toEnd, appendRefusal: ""),
+                       CassetteKeyAppearance(enabled: true, depressed: false, colour: .none))
+        // A non-empty refusal greys it (a live tape, a not-ready map, an at-end
+        // tape -- the server decides, the client does not re-derive the reason).
+        let notReady = "The tape's signal map is not ready yet; try again in a moment."
+        XCTAssertEqual(appearance(.toEnd, appendRefusal: notReady),
+                       CassetteKeyAppearance(enabled: false, depressed: false, colour: .none))
+        // Never down or coloured whatever the transport or motor.
+        let moving = appearance(.toEnd, transport: .recording, motorOn: true, appendRefusal: "")
+        XCTAssertFalse(moving.depressed)
+        XCTAssertEqual(moving.colour, .none)
+    }
+
+    func testAppendHelpIsTheServerRefusalWhenGreyed() {
+        XCTAssertEqual(CassetteKeys.appendHelp(refusal: ""), "To the end of the recordings")
+        let notReady = "The tape's signal map is not ready yet; try again in a moment."
+        XCTAssertEqual(CassetteKeys.appendHelp(refusal: notReady), notReady,
+                       "a refused append shows the server's own sentence")
+        XCTAssertEqual(CassetteKeys.appendHelp(refusal: "   "), "To the end of the recordings",
+                       "no refusal reads as allowed")
     }
 
     func testLiveInputGreysWindsSeekAndRecordButNotPlayOrStop() {

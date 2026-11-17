@@ -102,7 +102,7 @@ enum CassetteTransportText {
 
 /// A transport key on the deck row.
 enum CassetteKey: CaseIterable {
-    case rewind, backToStart, play, stop, record, fastForward
+    case rewind, backToStart, play, stop, record, fastForward, toEnd
 }
 
 /// A transport key's colour. Colour means the tape is moving: a key is coloured
@@ -135,6 +135,14 @@ enum CassetteDeckLayout {
     /// Whether the transport key row, the counter and the position timeline are
     /// shown. They appear only with a tape in; an empty deck omits them.
     static func showsTransport(tapeInserted: Bool) -> Bool { tapeInserted }
+
+    /// The transport keys in row order, left to right, as one group at the left
+    /// edge in the tape's own geography: the start of the tape at the left, the
+    /// end of the recordings at the right of the group (section 9.0). Eject is
+    /// not here -- it sits apart at the right edge.
+    static let transportRow: [CassetteKey] = [
+        .backToStart, .rewind, .stop, .play, .record, .fastForward, .toEnd,
+    ]
 }
 
 /// The deck row latches, like a mechanical deck (section 9.0): the key for the
@@ -161,7 +169,8 @@ enum CassetteKeys {
                            transport: Beebium_TapeTransport,
                            motorOn: Bool,
                            isLive: Bool,
-                           recordable: Bool) -> CassetteKeyAppearance {
+                           recordable: Bool,
+                           appendRefusal: String) -> CassetteKeyAppearance {
         switch key {
         case .rewind:
             let winding = transport == .rewinding
@@ -189,7 +198,22 @@ enum CassetteKeys {
             let recording = transport == .recording
             let colour: CassetteKeyColour = !recording ? .none : (motorOn ? .red : .grey)
             return CassetteKeyAppearance(enabled: recordable, depressed: recording, colour: colour)
+        case .toEnd:
+            // Momentary, never down or coloured. Greyed purely on the server's
+            // append refusal -- empty means the append seek is allowed; a live
+            // tape, a not-ready signal map or an at-end tape each fill it.
+            return CassetteKeyAppearance(enabled: appendRefusal.isEmpty,
+                                         depressed: false, colour: .none)
         }
+    }
+
+    /// The To the end of the recordings key's help: "To the end of the
+    /// recordings" when the append seek is allowed, otherwise the server's own
+    /// refusal sentence verbatim (a live tape, a not-ready map, an at-end tape).
+    /// Pure, so it is tested without a view.
+    static func appendHelp(refusal: String) -> String {
+        let trimmed = refusal.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "To the end of the recordings" : trimmed
     }
 
     /// The Record key's help: "Record" when the tape can be recorded, otherwise
@@ -452,23 +476,34 @@ struct CassetteDeckView: View {
 
     // MARK: - Transport controls
 
-    /// The deck row with a tape in (section 9.0). The two keys that lose the
-    /// user's place sit at the edges, apart from the often-pressed transport
-    /// group: Back to the beginning alone at the left edge, Eject alone at the
-    /// right edge, and Rewind, Play, Stop, Fast forward and Record centred as one
-    /// group between them. Browse is not here: a tape cannot be inserted over an
-    /// occupied deck, so the only way to fill the deck is reached by ejecting.
+    /// The deck row with a tape in (section 9.0). The transport keys are one
+    /// group at the left edge, laid out in the tape's own geography (Back to the
+    /// beginning, Rewind, Stop, Play, Record, Fast forward, To the end of the
+    /// recordings -- see CassetteDeckLayout.transportRow), then a stretch, then
+    /// Eject alone at the right edge. Browse is not here: a tape cannot be
+    /// inserted over an occupied deck, so the deck is filled by ejecting first.
     private var transportControls: some View {
         HStack(spacing: 8) {
-            backToStartButton
-            Spacer()
-            rewindButton
-            playButton
-            stopButton
-            fastForwardButton
-            recordButton
+            ForEach(CassetteDeckLayout.transportRow, id: \.self) { key in
+                transportButton(for: key)
+            }
             Spacer()
             ejectButton
+        }
+    }
+
+    /// The button for one transport key, so the row is built from
+    /// CassetteDeckLayout.transportRow and its order cannot drift from the test.
+    @ViewBuilder
+    private func transportButton(for key: CassetteKey) -> some View {
+        switch key {
+        case .backToStart: backToStartButton
+        case .rewind: rewindButton
+        case .stop: stopButton
+        case .play: playButton
+        case .record: recordButton
+        case .fastForward: fastForwardButton
+        case .toEnd: toEndButton
         }
     }
 
@@ -598,6 +633,17 @@ struct CassetteDeckView: View {
         }
     }
 
+    /// To the end of the recordings: the mirror of Back to the beginning, a seek
+    /// to the tape's append point so a new recording follows the last. Momentary;
+    /// greyed with the server's sentence as help while the append is refused.
+    private var toEndButton: some View {
+        transportKey("forward.end.fill",
+                     help: CassetteKeys.appendHelp(refusal: cassetteClient.appendRefusal),
+                     key: .toEnd) {
+            run { await cassetteClient.seekToAppendPoint() }
+        }
+    }
+
     private var playButton: some View {
         transportKey("play.fill", help: "Play", key: .play) {
             run { await cassetteClient.play() }
@@ -656,7 +702,8 @@ struct CassetteDeckView: View {
                               action: @escaping () -> Void) -> some View {
         let appearance = CassetteKeys.appearance(
             of: key, transport: transport, motorOn: cassetteClient.motorOn,
-            isLive: isLive, recordable: cassetteClient.tape?.recordable ?? false)
+            isLive: isLive, recordable: cassetteClient.tape?.recordable ?? false,
+            appendRefusal: cassetteClient.appendRefusal)
         return Button {
             if !appearance.depressed { action() }
         } label: {

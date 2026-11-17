@@ -149,6 +149,12 @@ final class CassetteClient: ObservableObject, Disconnectable {
     /// a recording) -- never polled. Nil when there is no current map.
     private var signalMapGeneration: UInt32?
 
+    /// Why a seek to the tape's append point would be refused, as a sentence
+    /// (the server's verbatim), or empty when it would be accepted. Greys the
+    /// deck's To the end of the recordings key and gives its help, as
+    /// `TapeMetadata.recordRefusal` does for Record.
+    @Published private(set) var appendRefusal: String = ""
+
     /// How a status stream ended, reduced to what the client state depends on.
     enum StreamEnd: Equatable {
         /// We cancelled it (disconnect / reconnect), or the server closed it OK.
@@ -206,6 +212,7 @@ final class CassetteClient: ObservableObject, Disconnectable {
         signalMapGeneration = nil
         signalMapSeconds = 0
         signalMapLevels = []
+        appendRefusal = ""
     }
 
     // MARK: - Live input
@@ -308,6 +315,25 @@ final class CassetteClient: ObservableObject, Disconnectable {
         var request = Beebium_SeekRequest()
         request.positionSeconds = positionSeconds
         return await call { try await $0.seek(request).response.get() }
+    }
+
+    /// Seek to the tape's append point -- the end of its recordings -- so a new
+    /// recording follows them rather than overwriting. The server refuses with a
+    /// sentence on a live tape or while the signal map is not ready; the deck
+    /// greys the key from `appendRefusal` first, so this is the backstop. The new
+    /// head position and an at-the-end stop arrive through the status stream.
+    func seekToAppendPoint() async -> Result<Void, CassetteError> {
+        guard let client = client else { return .failure(.notConnected) }
+        do {
+            let response = try await client.seekToAppendPoint(
+                Beebium_SeekToAppendPointRequest()).response.get()
+            if response.success {
+                return .success(())
+            }
+            return .failure(.operationFailed(response.error, kind: response.kind))
+        } catch {
+            return .failure(.operationFailed(error.localizedDescription, kind: .unspecified))
+        }
     }
 
     /// Create a blank tape from a shipped template, copying it to a path on the
@@ -423,6 +449,7 @@ final class CassetteClient: ObservableObject, Disconnectable {
         liveRingFill = status.liveRingFill
         liveOverruns = status.liveOverruns
         liveUnderruns = status.liveUnderruns
+        appendRefusal = status.appendRefusal
         isLoaded = true
         isStale = false
         errorMessage = nil
