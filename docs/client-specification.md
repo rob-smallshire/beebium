@@ -1645,9 +1645,13 @@ section sits above the floppy drives, which sit above the hard discs.
   while the deck is stopped. Every key stays enabled while a tape is in, and
   pressing a key that is already down does nothing (the server's `Play`, `Stop`
   and `Record` are idempotent). A key is greyed only for what the deck cannot do:
-  Record on a tape that is not recordable or on a live input, the winds and a
-  seek on a live input, and every key while the deck is empty; each greyed key
-  keeps its explanatory help text. A key never changes its enabled state to show
+  Record on a tape that is not recordable or on a live input, and the winds and a
+  seek on a live input; each greyed key keeps its explanatory help text. While
+  the deck is empty the key row, the counter and the position indicator are
+  absent, not greyed (MANDATORY): an empty deck shows only the ways to fill it
+  (browse, drop, recent tapes, a new blank tape, a live input), and the keys
+  appear with the tape, so nothing shifts when the insert controls give way to
+  the deck. A key never changes its enabled state to show
   the transport, so a lit key never reads as the opposite of the truth.
 - The Record key. The deck has a Record key, which sends `Record`. It is drawn in
   the ordinary key colour and turns red only while the deck is recording, so red
@@ -1774,8 +1778,8 @@ sharing the filesystem (section 3.2), as for a floppy.
 Scenarios: insert a UEF -> the deck shows the tape, stopped at 0; press Play -> the
 transport reads playing and, with the motor off, the deck reads "Playing, motor off";
 type `*LOAD ""` and the relay closes -> the motor LED lights in the indicator row and
-the position advances. Press Play on an empty deck -> a client may disable the keys
-while the deck is empty (both apps do); one that does not shows the server's
+the position advances. Press Play on an empty deck -> not possible from the
+GUI, since the keys are absent while the deck is empty; a scripted client shows the server's
 deck-empty sentence persistently. Insert onto an occupied deck -> refused with
 a deck-occupied sentence and an Eject offer. While playing, drag the position marker to the
 middle and release -> one `Seek`, and the deck plays on from there, with no sound
