@@ -675,6 +675,32 @@ TEST_CASE("A key follows the deck, not the click, and a key already down sends n
     CHECK(d.pressed() == std::vector<std::string>{"play", "stop"});
 }
 
+TEST_CASE("A map republished every moment while recording is swapped in, never cleared between",
+          "[cassette][signal]") {
+    Connected c;
+    c.server.cassette.load("file:///home/me/tapes/Mine.uef");
+    REQUIRE(wait_until([&] { return c.deck().tape_inserted; }));
+    c.server.cassette.publish_signal_map(std::string(10, '\0'));
+    REQUIRE(wait_until([&] { return c.cassette.signal_map().levels.size() == 10; }));
+    c.server.cassette.set_transport(beebium::TAPE_TRANSPORT_RECORDING);
+    int cleared = 0;
+    QObject::connect(&c.cassette, &SessionCassette::signal_map_changed, [&] {
+        if (c.cassette.signal_map().levels.isEmpty()) {
+            ++cleared;
+        }
+    });
+    // The head's wake: one more second of tone each time, faster than the
+    // client can fetch them all.
+    std::string levels(10, '\0');
+    for (int second = 0; second < 10; ++second) {
+        levels[static_cast<std::size_t>(second)] = '\xff';
+        c.server.cassette.publish_signal_map(levels);
+        QCoreApplication::processEvents();
+    }
+    REQUIRE(wait_until([&] { return c.cassette.signal_map().levels == QByteArray::fromStdString(levels); }));
+    CHECK(cleared == 0);
+}
+
 TEST_CASE("The timeline is coloured where the signal map says the tape carries signal",
           "[cassette][deck][signal]") {
     Deck d;
