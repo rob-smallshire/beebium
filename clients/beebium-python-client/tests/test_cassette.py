@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import time
 from pathlib import Path
@@ -212,3 +213,57 @@ def test_a_wav_inserts_with_its_rate_and_channel(bbc, tmp_path: Path):
     with pytest.raises(CassetteError) as bad:
         bbc.cassette.insert(wav, channel="centre")
     assert str(bad.value) == "A WAV's channel is left or right, not centre."
+
+
+def _wait_for_signal_map(bbc, generation: int):
+    """The signal map once the server has published one after `generation`."""
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        status = bbc.cassette.status()
+        if status.signal_map_ready and status.signal_map_generation > generation:
+            return bbc.cassette.signal_map(), status
+        time.sleep(0.02)
+    raise AssertionError("The signal map was not ready within 30 seconds.")
+
+
+def test_signal_map_of_a_tape_and_of_a_recording(bbc, tmp_path: Path):
+    with pytest.raises(CassetteError) as empty:
+        bbc.cassette.signal_map()
+    assert empty.value.kind == CassetteErrorKind.DECK_EMPTY
+
+    # 2.5 s of gap, 2.5 s of carrier, 1 s of gap, 2.5 s of carrier: 8.5 s.
+    tape = tape_builder.write(tmp_path / "spans.uef", tape_builder.uef_of_spans(
+        [("gap", 2.5), ("carrier", 2.5), ("gap", 1.0), ("carrier", 2.5)]))
+    before = bbc.cassette.status().signal_map_generation
+    bbc.cassette.insert(tape)
+    signal_map, status = _wait_for_signal_map(bbc, before)
+    assert signal_map.ready
+    assert signal_map.seconds == 9 == len(signal_map.levels)
+    expected = [0, 0, 128, 255, 255, 0, 255, 255, 255]
+    levels = list(signal_map.levels)
+    assert all(abs(level - want) <= 10 for level, want in zip(levels, expected, strict=True)), levels
+    bbc.cassette.eject()
+
+    # A blank C15 is silent; a SAVE recorded on it is not.
+    bbc.expect("BASIC")
+    blank = bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "recorded")
+    before = bbc.cassette.status().signal_map_generation
+    bbc.cassette.insert(blank)
+    signal_map, status = _wait_for_signal_map(bbc, before)
+    assert signal_map.seconds == 900 and not any(signal_map.levels)
+
+    bbc.keyboard.type('10 PRINT "HELLO FROM TAPE"\r*TAPE\rSAVE "HELLO"\r')
+    bbc.expect("RECORD then RETURN")
+    bbc.cassette.record()
+    bbc.keyboard.press_return()
+    with contextlib.closing(bbc.cassette.events()) as events:
+        for event in events:
+            if not event.motor_on and event.position_seconds > 0:
+                break
+    before = status.signal_map_generation
+    bbc.cassette.stop()
+    signal_map, status = _wait_for_signal_map(bbc, before)
+    assert status.signal_map_generation == before + 1
+    end = int(status.position_seconds)
+    assert sum(1 for level in signal_map.levels[:end + 1] if level >= 128) >= 5
+    assert not any(signal_map.levels[end + 2:])

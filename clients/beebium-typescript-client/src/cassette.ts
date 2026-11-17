@@ -33,6 +33,7 @@ import type {
     DeckStatus as ProtoDeckStatus,
     InsertTapeResponse as ProtoInsertTapeResponse,
     TapeMetadata as ProtoTapeMetadata,
+    TapeSignalMap as ProtoTapeSignalMap,
 } from "./generated/cassette.js";
 import {
     CassetteErrorKind as ProtoCassetteErrorKind,
@@ -146,6 +147,24 @@ export interface DeckStatus {
     liveOverruns: number;
     /** Samples of silence a live tape made up because its ring was empty. */
     liveUnderruns: number;
+    /** Whether the tape's signal map is ready (see Cassette.signalMap). */
+    signalMapReady: boolean;
+    /** How many signal maps the server has published; fetch again when it changes. */
+    signalMapGeneration: number;
+}
+
+/**
+ * Where the tape carries signal: one level a second, 0 (silent throughout) to
+ * 255 (signal throughout), the fraction of that second within a run of edges,
+ * carrier included.
+ */
+export interface SignalMap {
+    /** False while the map is being computed, and for a live tape. */
+    ready: boolean;
+    /** The number of levels, the tape's duration rounded up. */
+    seconds: number;
+    /** One a second; empty until ready. */
+    levels: Uint8Array;
 }
 
 function toErrorKind(proto: ProtoCassetteErrorKind): CassetteErrorKind {
@@ -233,6 +252,8 @@ function toDeckStatus(proto: ProtoDeckStatus): DeckStatus {
         liveRingFill: proto.liveRingFill,
         liveOverruns: Number(proto.liveOverruns),
         liveUnderruns: Number(proto.liveUnderruns),
+        signalMapReady: proto.signalMapReady,
+        signalMapGeneration: proto.signalMapGeneration,
     };
 }
 
@@ -467,6 +488,19 @@ export class Cassette {
             sampleRate: rate, sampleFormat: "s16", channels: channels === 2 ? 2 : 1,
             channel: channels === 2 ? options?.channel : undefined, deviceName: basename(wavFilepath),
         });
+    }
+
+    /**
+     * Where the tape in the deck carries signal, a level a second. The server
+     * computes it off the emulation thread when a tape goes in and again when
+     * a recording ends; until then, and for a live tape, `ready` is false.
+     * DeckStatus.signalMapGeneration changes each time a new map is ready.
+     * Throws CassetteError (DECK_EMPTY with no tape, or NO_CASSETTE_INTERFACE).
+     */
+    async signalMap(): Promise<SignalMap> {
+        const response = await this.call<object, ProtoTapeSignalMap>("getTapeSignalMap", {});
+        check(response);
+        return { ready: response.ready, seconds: response.seconds, levels: new Uint8Array(response.levels) };
     }
 
     /** The deck's state, read without stopping the machine. */

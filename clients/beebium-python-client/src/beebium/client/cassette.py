@@ -150,6 +150,19 @@ class DeckStatus:
     live_ring_fill: float = 0.0  # a live tape's ring, 0 to 1
     live_overruns: int = 0  # samples a live tape dropped because its ring was full
     live_underruns: int = 0  # samples of silence a live tape made up because its ring was empty
+    signal_map_ready: bool = False  # whether the tape's signal map is ready (see Cassette.signal_map)
+    signal_map_generation: int = 0  # how many signal maps the server has published; fetch again when it changes
+
+
+@dataclass(frozen=True)
+class SignalMap:
+    """Where the tape carries signal: one level a second, 0 (silent
+    throughout) to 255 (signal throughout), the fraction of that second
+    within a run of edges, carrier included."""
+
+    ready: bool  # False while the map is being computed, and for a live tape
+    seconds: int  # the number of levels, the tape's duration rounded up
+    levels: bytes  # one a second, empty until ready
 
 
 @dataclass(frozen=True)
@@ -187,6 +200,8 @@ def _deck_status(proto: cassette_pb2.DeckStatus) -> DeckStatus:
         live_ring_fill=proto.live_ring_fill,
         live_overruns=proto.live_overruns,
         live_underruns=proto.live_underruns,
+        signal_map_ready=proto.signal_map_ready,
+        signal_map_generation=proto.signal_map_generation,
     )
 
 
@@ -385,6 +400,21 @@ class Cassette:
     def status(self) -> DeckStatus:
         """The deck's state, read without stopping the machine."""
         return _deck_status(self._stub.GetDeckStatus(cassette_pb2.GetDeckStatusRequest()))
+
+    def signal_map(self) -> SignalMap:
+        """Where the tape in the deck carries signal, a level a second.
+
+        The server computes it off the emulation thread when a tape goes in
+        and again when a recording ends; until then, and for a live tape,
+        `ready` is False. DeckStatus.signal_map_generation changes each time
+        a new map is ready.
+
+        Raises:
+            CassetteError: DECK_EMPTY with no tape, or NO_CASSETTE_INTERFACE.
+        """
+        response = self._stub.GetTapeSignalMap(cassette_pb2.GetTapeSignalMapRequest())
+        _check(response)
+        return SignalMap(ready=response.ready, seconds=response.seconds, levels=bytes(response.levels))
 
     def events(self, min_interval_ms: int = 100) -> Iterator[DeckStatus]:
         """The deck's status now, then on every change of presence, transport,

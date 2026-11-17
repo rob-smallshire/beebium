@@ -95,13 +95,35 @@ describe("Cassette", () => {
                 positionSeconds: 3.25,
                 motorOn: true,
                 ulaPart: "ferranti",
+                signalMapReady: true,
+                signalMapGeneration: 4,
             }),
         });
         const status = await new Cassette(stub as any).status();
+        expect(status.signalMapReady).toBe(true);
+        expect(status.signalMapGeneration).toBe(4);
         expect(status.tape?.name).toBe("game.uef");
         expect(status.transport).toBe(TapeTransport.PLAYING);
         expect(status.positionSeconds).toBe(3.25);
         expect(status.motorOn).toBe(true);
+    });
+
+    it("fetches the signal map, and throws DECK_EMPTY with no tape", async () => {
+        let inserted = true;
+        const stub = createMockStub({
+            getTapeSignalMap: () =>
+                inserted
+                    ? { success: true, error: "", kind: 0, ready: true, seconds: 3, levels: Buffer.from([0, 128, 255]) }
+                    : { success: false, error: "There is no tape in the deck.", kind: KIND_DECK_EMPTY,
+                        ready: false, seconds: 0, levels: Buffer.alloc(0) },
+        });
+        const cassette = new Cassette(stub as any);
+        const map = await cassette.signalMap();
+        expect(map.ready).toBe(true);
+        expect(map.seconds).toBe(3);
+        expect(Array.from(map.levels)).toEqual([0, 128, 255]);
+        inserted = false;
+        await expect(cassette.signalMap()).rejects.toMatchObject({ kind: CassetteErrorKind.DECK_EMPTY });
     });
 
     it("reports an empty deck as no tape", async () => {

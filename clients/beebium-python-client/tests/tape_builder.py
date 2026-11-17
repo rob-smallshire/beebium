@@ -75,6 +75,17 @@ def uef_of_carrier(seconds: float) -> bytes:
     return b"UEF File!\x00\x0a\x00" + _carrier(int(seconds * 2400))
 
 
+def uef_of_spans(spans: list[tuple[str, float]]) -> bytes:
+    """A tape of ("gap", seconds) and ("carrier", seconds) spans, in order."""
+    out = b"UEF File!\x00\x0a\x00"
+    for kind, seconds in spans:
+        if kind == "gap":
+            out += _chunk(0x0116, struct.pack("<f", seconds))
+        else:
+            out += _carrier(round(seconds * 2400))
+    return out
+
+
 def csw_of_pulses(pulses: list[int], sample_rate: int = 44100) -> bytes:
     """A CSW v2, RLE, of these pulse lengths in samples (each under 256)."""
     header = (b"Compressed Square Wave\x1a" + bytes([2, 0])

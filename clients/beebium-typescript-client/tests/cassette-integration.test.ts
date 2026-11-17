@@ -88,6 +88,49 @@ describe("cassette integration", () => {
         });
     });
 
+    it("maps where a tape carries signal, and maps it again after a recording", async () => {
+        await withServer(async (conn, server) => {
+            const bbc = new Beebium(conn, server, server.provenanceUuid);
+            const dirpath = mkdtempSync(join(tmpdir(), "beebium-cassette-"));
+            await expect(bbc.cassette.signalMap()).rejects.toMatchObject({ kind: CassetteErrorKind.DECK_EMPTY });
+
+            const waitForMap = async (after: number) => {
+                const deadline = Date.now() + 30_000;
+                for (;;) {
+                    const status = await bbc.cassette.status();
+                    if (status.signalMapReady && status.signalMapGeneration > after) return status;
+                    if (Date.now() > deadline) throw new Error("The signal map was not ready within 30 seconds.");
+                    await new Promise((r) => setTimeout(r, 20));
+                }
+            };
+
+            const filepath = join(dirpath, "tone.uef");
+            writeFileSync(filepath, toneUef(3));
+            let before = (await bbc.cassette.status()).signalMapGeneration;
+            await bbc.cassette.insert(filepath);
+            await waitForMap(before);
+            const tone = await bbc.cassette.signalMap();
+            expect(tone.ready).toBe(true);
+            expect(tone.seconds).toBe(3);
+            expect(Array.from(tone.levels).every((level) => level >= 250)).toBe(true);
+            await bbc.cassette.eject();
+
+            // A blank C15 is silent; recording on it maps it again.
+            const blank = await bbc.cassette.createTape("Blank C15 (15 minutes)", join(dirpath, "side-a"));
+            before = (await bbc.cassette.status()).signalMapGeneration;
+            await bbc.cassette.insert(blank);
+            const mapped = await waitForMap(before);
+            const silent = await bbc.cassette.signalMap();
+            expect(silent.seconds).toBe(900);
+            expect(silent.levels.every((level) => level === 0)).toBe(true);
+            await bbc.cassette.record();
+            await bbc.cassette.stop();
+            const again = await waitForMap(mapped.signalMapGeneration);
+            expect(again.signalMapGeneration).toBe(mapped.signalMapGeneration + 1);
+            await bbc.cassette.eject();
+        });
+    });
+
     it("streams live audio as a tape and returns the summary", async () => {
         await withServer(async (conn, server) => {
             const bbc = new Beebium(conn, server, server.provenanceUuid);
