@@ -177,12 +177,19 @@ cross-language compatibility story (see
 The bundle still links glibc dynamically (a fully static glibc breaks `dlopen`
 and NSS, and Beebium `dlopen`s its plugins). A binary linked against an *older*
 glibc runs on any *newer*-glibc system, so the bundle is built in a
-**`debian:bookworm`** container (glibc 2.36). That floor covers Ubuntu 22.04+,
-Raspberry Pi OS (Bookworm), and Arch (glibc 2.43+). Building natively on the
-target distro would invert this and break portability, so we never do that.
-The image's compiler, GCC 12, is the compiler floor too, and CI builds and tests
-its "Build and Test Server (Linux)" lane with it (`CC`/`CXX` in `ci.yml`), so a
-move of the floor changes the Dockerfile's `BASE` and that lane together.
+**`debian:trixie`** container (glibc 2.41). Trixie is the oldest distribution a
+Beebium client ships for, and the floor covers Debian 13, Raspberry Pi OS
+(Trixie), Ubuntu 26.04, current Fedora and Arch. It does not cover Ubuntu 22.04
+or 24.04 (glibc 2.35 and 2.39) or Raspberry Pi OS (Bookworm): the bundle does not
+run there. Building natively on the target distro would invert this and break
+portability, so we never do that.
+
+The image's compiler, GCC 14, is the compiler floor too. The self-hosted arm64
+lane of `ci.yml` (Raspberry Pi OS Trixie) builds and tests with it natively, and
+the bundle build proves it again; the hosted "Build and Test Server (Linux)"
+lane builds with its Ubuntu image's default compiler, so it covers the newest
+GCC. A move of the floor changes the Dockerfile's `BASE`, the arm64 runner's OS
+and the wheel tags (`manylinux_2_41_*` in `release.yml`) together.
 
 ### mDNS advertisement without a runtime dependency
 
@@ -578,8 +585,10 @@ and [Windows](#windows) sections.)
 
 - **`.deb`** (`beebium-server_<version>_<arch>.deb`) - for Debian / Ubuntu /
   Raspberry Pi OS. Runtime dependencies are derived with `dpkg-shlibdeps`; since
-  gRPC/protobuf are static, it depends only on `libc6 (>= 2.36)`, `libgcc-s1`,
-  `libstdc++6`. The maintainer scripts create and remove the `/usr/bin` symlinks,
+  gRPC/protobuf are static, it depends only on `libc6 (>= 2.38)`, `libgcc-s1`,
+  `libstdc++6 (>= 14)`. Those versions follow the symbols the binaries use, so
+  they can sit below the build image's own (glibc 2.41); the supported floor is
+  still trixie. The maintainer scripts create and remove the `/usr/bin` symlinks,
   one per installed `/opt/beebium/bin/beebium-model-*`; the smoke-deb job asserts
   every server is linked after install and none is left after removal
   (`scripts/check-server-path-links.sh`).
@@ -588,7 +597,7 @@ and [Windows](#windows) sections.)
   (and openSUSE): `sudo dnf install ./<file>.rpm`. It lays the same `/opt/beebium`
   system tree with the same `/usr/bin` symlinks, created and removed by `%post`/
   `%preun` scriptlets. RPM's `find-requires` derives the base-library
-  dependencies (and the versioned glibc floor, `libc.so.6(GLIBC_2.36)`)
+  dependencies (and the versioned glibc floor, `libc.so.6(GLIBC_2.38)`)
   automatically from the ELF binaries, so no dependencies are declared by hand.
   Built by the same bundle image (which carries `rpmbuild`); see
   [linux-rpm-packaging.md](plans/linux-rpm-packaging.md) for the design and the
@@ -704,7 +713,7 @@ the from-scratch fallback above, so nothing breaks; it is only slower.
 A GHCR image is content-addressed and permanent (it is not subject to the 7-day
 Actions-cache eviction), and the tag rotates automatically only when the
 dependency inputs change. Crucially, the Linux dependencies are built **inside
-the pinned `debian:bookworm` build floor**, so their ABI is fixed by that image,
+the pinned `debian:trixie` build floor**, so their ABI is fixed by that image,
 not by the mutable hosted-runner image. This is the difference from the Windows
 NuGet binary cache, whose keys ride the hosted `windows-2022` toolchain: there a
 runner-image bump silently moves the vcpkg ABI hash and invalidates the cache
@@ -730,7 +739,7 @@ published assets.
 3. **Build-isolation smoke** (CI, a *clean* runner separate from the build,
    against the *just-built* artifact) — proves the artifact installs and runs
    without the build environment. Linux `smoke-deb` (install the `.deb` in a
-   fresh `debian:bookworm`, plus the Python-client interaction test),
+   fresh `debian:trixie`, plus the Python-client interaction test),
    `smoke-rpm` (`dnf install` the `.rpm` in a fresh `fedora:latest`, same
    interaction test) and `smoke-tarball` (extract the relocatable `.tar.gz` in a
    fresh Arch); Windows `smoke` (extract the `.zip` on a fresh runner and run a
@@ -772,7 +781,7 @@ the `.tar.gz`/`.zip` verbatim into `beebium/server/_bundle/` and emits
 `beebium_server-<ver>-py3-none-<platform-tag>.whl`, so the server bytes are
 byte-identical to the GitHub Release and have passed the same install-smoke
 layers. One wheel per OS/arch across all five platforms: Linux uses the PEP 600
-tags `manylinux_2_36_{x86_64,aarch64}` for the bookworm glibc floor the bundles
+tags `manylinux_2_41_{x86_64,aarch64}` for the trixie glibc floor the bundles
 are built against; macOS uses `macosx_11_0_arm64` / `macosx_12_0_x86_64` (the
 deployment floors the bundle build sets — see below); and Windows uses
 `win_amd64` (repackaged from the self-contained `.zip`; the binaries append
@@ -837,7 +846,7 @@ install beebium beebium-server` is the supported one-line-ish form.
 from-source static gRPC build is too expensive for per-push runs) and on
 `workflow_call` (the release flow reuses it). It builds both architectures on
 native runners (`ubuntu-latest` for `amd64`, `ubuntu-24.04-arm` for `arm64`, free
-on public repos), then exercises the produced packages in clean `debian:bookworm`
+on public repos), then exercises the produced packages in clean `debian:trixie`
 (`.deb`, with the Python interaction smoke), `fedora:latest` (`.rpm` via `dnf`,
 same interaction smoke) and Arch (`archlinux` for x86_64, Arch Linux ARM for
 arm64) containers. Each arch's build uploads **only its own arch's files** — two

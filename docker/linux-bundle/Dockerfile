@@ -7,9 +7,11 @@
 # /opt-style tree, proves it runs in this build-floor image, and emits a
 # distributable tarball.
 #
-# The build floor is debian:bookworm (glibc 2.36) on purpose: a bundle linked
-# against an older glibc runs on any newer-glibc distro, so one artifact covers
-# Ubuntu 22.04+, Raspberry Pi OS (Bookworm), and Arch (glibc 2.43). Building
+# The build floor is debian:trixie (glibc 2.41, GCC 14) on purpose: a bundle
+# linked against an older glibc runs on any newer-glibc distro, so one artifact
+# covers Debian 13, Raspberry Pi OS (Trixie), Ubuntu 26.04, Fedora and Arch.
+# Trixie is the oldest distribution a Beebium client ships for; the bundle does
+# not run on Ubuntu 24.04 or older, or on Raspberry Pi OS (Bookworm). Building
 # natively on the target distro would invert that and break portability.
 #
 # Per-arch build (run arm64 natively on Apple Silicon; amd64 is emulated):
@@ -18,7 +20,7 @@
 #       --build-arg VCPKG_TRIPLET=arm64-linux-static \
 #       --target artifact --output type=local,dest=./_artifacts .
 
-ARG BASE=debian:bookworm
+ARG BASE=debian:trixie
 # The builder stage starts FROM this. It defaults to the local `build-env` stage
 # below, so a fresh checkout or fork builds the vcpkg dependencies from scratch
 # with no registry access. The release workflow overrides it with a prebuilt

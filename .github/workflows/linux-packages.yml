@@ -128,12 +128,12 @@ jobs:
           docker run --rm \
             -v "$PWD:/work" -w /work \
             -e BEEBIUM_ROM_DIR=/opt/beebium/share/beebium/roms \
-            debian:bookworm bash -c '
+            debian:trixie bash -c '
               set -euo pipefail
               apt-get update -qq
               apt-get install -y -qq \
                 ./_artifacts/beebium-server_*_${{ matrix.arch }}.deb \
-                curl ca-certificates
+                python3 python3-venv
               echo "::group::bundle smoke (self-containment + boot + bare-command)"
               bash scripts/smoke-installed-tree.sh /opt/beebium
               echo "::endgroup::"
@@ -141,16 +141,10 @@ jobs:
               bash scripts/check-server-path-links.sh installed
               echo "::endgroup::"
               echo "::group::interaction smoke (client drives the installed server)"
-              # The Python client requires Python >=3.12, but debian:bookworm
-              # (the .deb glibc-floor target) ships 3.11. Provide 3.12 with uv --
-              # the project manages Python with uv anyway -- rather than testing
-              # the server on a non-target distro.
-              export HOME=/root
-              curl -LsSf https://astral.sh/uv/install.sh | sh
-              export PATH="/root/.local/bin:${PATH}"
-              uv venv --python 3.12 /venv
+              # Python 3.13 from the floor distribution runs the client.
+              python3 -m venv /venv
               . /venv/bin/activate
-              uv pip install --quiet ./clients/beebium-python-client pytest pytest-timeout
+              pip install --quiet ./clients/beebium-python-client pytest pytest-timeout
               pytest -q packaging/smoke/test_smoke.py
               echo "::endgroup::"
               echo "::group::removal takes every /usr/bin link (prerm)"

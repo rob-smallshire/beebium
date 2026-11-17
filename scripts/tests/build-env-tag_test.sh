@@ -21,7 +21,8 @@ mkdir -p "${tmp}/scripts" "${tmp}/triplets" "${tmp}/docker/linux-bundle"
 cp "${tag_script}" "${tmp}/scripts/build-env-tag.sh"
 printf 'set(VCPKG_CRT_LINKAGE dynamic)\n' > "${tmp}/triplets/x64-linux-static.cmake"
 cat > "${tmp}/docker/linux-bundle/Dockerfile" <<'DOCKER'
-FROM debian:bookworm AS build-env
+ARG BASE=debian:trixie
+FROM ${BASE} AS build-env
 RUN true
 ARG BUILDENV_IMAGE=build-env
 FROM ${BUILDENV_IMAGE} AS builder
@@ -54,4 +55,9 @@ write_manifest "0.1.4" "grpc-different"
 tag_dep="$(bash "${tmp}/scripts/build-env-tag.sh")"
 [ "${tag_v014}" != "${tag_dep}" ] || fail "a dependency change did not rotate the tag"
 
-echo "PASS: the build-env tag ignores the version field and tracks dependency changes"
+# A change of the base image (the build floor) must rotate the tag.
+sed -i.bak 's/^ARG BASE=debian:trixie$/ARG BASE=debian:forky/' "${tmp}/docker/linux-bundle/Dockerfile"
+tag_base="$(bash "${tmp}/scripts/build-env-tag.sh")"
+[ "${tag_dep}" != "${tag_base}" ] || fail "a base image change did not rotate the tag"
+
+echo "PASS: the build-env tag ignores the version field and tracks dependency and base image changes"

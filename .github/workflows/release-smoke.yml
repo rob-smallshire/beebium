@@ -57,18 +57,13 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/work" -w /work \
             -e BEEBIUM_ROM_DIR=/opt/beebium/share/beebium/roms \
-            debian:bookworm bash -c '
+            debian:trixie bash -c '
               set -euo pipefail
               apt-get update -qq
-              apt-get install -y -qq ./beebium.deb curl ca-certificates
+              apt-get install -y -qq ./beebium.deb python3 python3-venv
               bash scripts/smoke-installed-tree.sh /opt/beebium
-              # Python client needs >=3.12; bookworm ships 3.11, so use uv to
-              # provide 3.12 (the project manages Python with uv).
-              export HOME=/root
-              curl -LsSf https://astral.sh/uv/install.sh | sh
-              export PATH="/root/.local/bin:${PATH}"
-              uv venv --python 3.12 /venv && . /venv/bin/activate
-              uv pip install --quiet ./clients/beebium-python-client pytest pytest-timeout
+              python3 -m venv /venv && . /venv/bin/activate
+              pip install --quiet ./clients/beebium-python-client pytest pytest-timeout
               pytest -q packaging/smoke/test_smoke.py
             '
 

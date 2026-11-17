@@ -14,7 +14,7 @@
 
 The wheel carries native binaries, so it is not pure Python and must not be
 tagged ``py3-none-any``. build_wheel.py sets ``BEEBIUM_WHEEL_TAG`` (e.g.
-``manylinux_2_36_aarch64``); this marks the wheel non-pure and sets its tag to
+``manylinux_2_41_aarch64``); this marks the wheel non-pure and sets its tag to
 ``py3-none-<tag>``, so a single ``uv build --wheel`` emits the correctly named
 wheel with no post-build retag. With the variable unset the build stays
 pure-Python (``py3-none-any``), which is only useful for local inspection.

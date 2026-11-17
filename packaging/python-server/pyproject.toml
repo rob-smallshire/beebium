@@ -59,7 +59,7 @@ packages = ["src/beebium"]
 artifacts = ["src/beebium/server/_bundle/**"]
 
 # Mark the wheel non-pure and stamp the platform tag. build_wheel.py sets
-# BEEBIUM_WHEEL_TAG (e.g. manylinux_2_36_aarch64) before `uv build --wheel`, so
+# BEEBIUM_WHEEL_TAG (e.g. manylinux_2_41_aarch64) before `uv build --wheel`, so
 # one build step emits beebium_server-<ver>-py3-none-<tag>.whl directly -- no
 # post-build retag. A plain `uv build` with no tag set stays py3-none-any.
 [tool.hatch.build.targets.wheel.hooks.custom]

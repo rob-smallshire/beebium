@@ -30,7 +30,7 @@ We deliberately do **not** pursue a source-build RPM or official Fedora-repo
 inclusion: Fedora's grpc/protobuf packaging churns and Fedora policy dislikes
 bundled/static dependencies — exactly the coupling the self-contained static
 bundle was designed to avoid. The static bundle sidesteps all of it, and because
-it is built on the `debian:bookworm` glibc-2.36 floor it runs on Fedora (whose
+it is built on the `debian:trixie` glibc-2.41 floor it runs on Fedora (whose
 glibc is newer) unchanged. See [packaging.md](../packaging.md) for the bundle
 rationale and the glibc floor.
 
@@ -58,7 +58,7 @@ Two real differences from the `.deb` to get right:
 Everything else (the `/opt/beebium` prefix, the `/usr/bin` symlinks onto the four
 servers, auto-derived runtime dependencies, the minimal base-library footprint)
 carries over unchanged. RPM's `find-requires` scans the ELF `NEEDED`/symbol
-versions and produces versioned `libc.so.6(GLIBC_2.36)` requires automatically —
+versions and produces versioned `libc.so.6(GLIBC_2.38)` requires automatically —
 so the glibc floor is encoded in the package with no extra work, and Fedora's
 newer glibc satisfies it.
 

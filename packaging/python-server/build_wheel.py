@@ -26,7 +26,7 @@ Release, and the wheel is just a repackaging -- no compile. ``_bundle/`` is
 gitignored and exists only at build time.
 
 Example:
-    build_wheel.py beebium-server-0.1.3-linux-arm64.tar.gz manylinux_2_36_aarch64
+    build_wheel.py beebium-server-0.1.3-linux-arm64.tar.gz manylinux_2_41_aarch64
 """
 
 from __future__ import annotations

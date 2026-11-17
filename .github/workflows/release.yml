@@ -165,8 +165,8 @@ jobs:
           set -euo pipefail
           V="$(grep -E '^current_version' "${GITHUB_WORKSPACE}/.bumpversion.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
           B="${GITHUB_WORKSPACE}/_bundles"
-          python build_wheel.py "${B}/beebium-server-${V}-linux-amd64.tar.gz"  manylinux_2_36_x86_64
-          python build_wheel.py "${B}/beebium-server-${V}-linux-arm64.tar.gz"  manylinux_2_36_aarch64
+          python build_wheel.py "${B}/beebium-server-${V}-linux-amd64.tar.gz"  manylinux_2_41_x86_64
+          python build_wheel.py "${B}/beebium-server-${V}-linux-arm64.tar.gz"  manylinux_2_41_aarch64
           python build_wheel.py "${B}/beebium-server-${V}-macos-arm64.tar.gz"  macosx_11_0_arm64
           python build_wheel.py "${B}/beebium-server-${V}-macos-x86_64.tar.gz" macosx_12_0_x86_64
           python build_wheel.py "${B}/beebium-server-${V}-windows-x64.zip"     win_amd64
@@ -181,8 +181,8 @@ jobs:
           set -euo pipefail
           V="$(grep -E '^current_version' "${GITHUB_WORKSPACE}/.bumpversion.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
           expected="$(printf '%s\n' \
-            "beebium_server-${V}-py3-none-manylinux_2_36_x86_64.whl" \
-            "beebium_server-${V}-py3-none-manylinux_2_36_aarch64.whl" \
+            "beebium_server-${V}-py3-none-manylinux_2_41_x86_64.whl" \
+            "beebium_server-${V}-py3-none-manylinux_2_41_aarch64.whl" \
             "beebium_server-${V}-py3-none-macosx_11_0_arm64.whl" \
             "beebium_server-${V}-py3-none-macosx_12_0_x86_64.whl" \
             "beebium_server-${V}-py3-none-win_amd64.whl" | sort)"
@@ -219,12 +219,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The Linux wheels need glibc 2.41 (the trixie bundle floor), so they
+          # install only on Ubuntu 26.04 or newer; name it rather than trust
+          # ubuntu-latest, which moves between images.
           - arch: amd64
-            runner: ubuntu-latest
-            tag: manylinux_2_36_x86_64
+            runner: ubuntu-26.04
+            tag: manylinux_2_41_x86_64
           - arch: arm64
-            runner: ubuntu-24.04-arm
-            tag: manylinux_2_36_aarch64
+            runner: ubuntu-26.04-arm
+            tag: manylinux_2_41_aarch64
           - arch: macos-arm64
             runner: macos-15
             tag: macosx_11_0_arm64

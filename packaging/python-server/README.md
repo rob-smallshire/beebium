@@ -45,8 +45,8 @@ machine.
 
 | Platform | Wheel tag |
 |----------|-----------|
-| Linux x86-64 (glibc 2.36+) | `manylinux_2_36_x86_64` |
-| Linux ARM64 / aarch64 (glibc 2.36+) | `manylinux_2_36_aarch64` |
+| Linux x86-64 (glibc 2.41+) | `manylinux_2_41_x86_64` |
+| Linux ARM64 / aarch64 (glibc 2.41+) | `manylinux_2_41_aarch64` |
 | macOS Apple Silicon (arm64, macOS 11+) | `macosx_11_0_arm64` |
 | macOS Intel (x86-64, macOS 12+) | `macosx_12_0_x86_64` |
 | Windows x64 | `win_amd64` |
