@@ -125,6 +125,17 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     header->addWidget(title);
     header->addWidget(motor_);
     header->addStretch(1);
+    // The ways in for an empty deck, on the header rather than among the
+    // keys, so the key row keeps its edges for the two keys that lose the
+    // user's place.
+    browse_ = new QToolButton(this);
+    browse_->setObjectName(QStringLiteral("browseTape"));
+    browse_->setText(tr("Browse..."));
+    browse_->setIcon(themed("folder", QStyle::SP_DirIcon, this));
+    browse_->setPopupMode(QToolButton::MenuButtonPopup);
+    menu_ = new QMenu(browse_);
+    browse_->setMenu(menu_);
+    header->addWidget(browse_);
     layout->addLayout(header);
 
     name_ = new ElidedLabel(this);
@@ -195,20 +206,12 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     layout->addWidget(message_line_);
     message_line_->hide();
 
-    // The keys, after the macOS client's deck: Browse with its menu, then
-    // Rewind, Back to the beginning, Play, Stop, Record and Fast forward,
-    // and Eject at the end.
+    // The keys (client specification 9.0): Back to the beginning alone at
+    // the left edge and Eject alone at the right, the two that lose the
+    // user's place, with Rewind, Play, Stop, Fast forward and Record
+    // centred as one group between them.
     auto* keys = new QHBoxLayout;
     keys->setSpacing(0);
-    browse_ = new QToolButton(this);
-    browse_->setObjectName(QStringLiteral("browseTape"));
-    browse_->setText(tr("Browse..."));
-    browse_->setIcon(themed("folder", QStyle::SP_DirIcon, this));
-    browse_->setPopupMode(QToolButton::MenuButtonPopup);
-    menu_ = new QMenu(browse_);
-    browse_->setMenu(menu_);
-    keys->addWidget(browse_);
-    keys->addStretch(1);
     const auto add_key = [&](CassetteKey key, const QString& name, const QString& tip, QIcon icon) {
         auto* button = new QToolButton(this);
         button->setObjectName(name);
@@ -218,18 +221,19 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
         keys->addWidget(button);
         keys_[key] = button;
     };
-    add_key(CassetteKey::rewind, QStringLiteral("rewind"), tr("Rewind"),
-            themed("media-seek-backward", QStyle::SP_MediaSeekBackward, this));
     // Back to the beginning: a seek to 0, the instant return to the start.
     add_key(CassetteKey::seek, QStringLiteral("beginning"), tr("Back to the beginning"),
             themed("media-skip-backward", QStyle::SP_MediaSkipBackward, this));
+    keys->addStretch(1);
+    add_key(CassetteKey::rewind, QStringLiteral("rewind"), tr("Rewind"),
+            themed("media-seek-backward", QStyle::SP_MediaSeekBackward, this));
     add_key(CassetteKey::play, QStringLiteral("play"), tr("Play"),
             themed("media-playback-start", QStyle::SP_MediaPlay, this));
     add_key(CassetteKey::stop, QStringLiteral("stop"), tr("Stop"),
             themed("media-playback-stop", QStyle::SP_MediaStop, this));
-    add_key(CassetteKey::record, QStringLiteral("record"), tr("Record"), record_icon());
     add_key(CassetteKey::fast_forward, QStringLiteral("fastForward"), tr("Fast forward"),
             themed("media-seek-forward", QStyle::SP_MediaSeekForward, this));
+    add_key(CassetteKey::record, QStringLiteral("record"), tr("Record"), record_icon());
     keys->addStretch(1);
     add_key(CassetteKey::eject, QStringLiteral("ejectTape"), tr("Eject tape"),
             themed("media-eject", QStyle::SP_ArrowUp, this));

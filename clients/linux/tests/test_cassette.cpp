@@ -28,6 +28,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLayout>
 #include <QMenu>
 #include <QPushButton>
 #include <QSlider>
@@ -36,6 +37,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdlib>
 #include <memory>
 #include <optional>
 
@@ -390,6 +392,40 @@ TEST_CASE("A loaded tape shows its name, what it is, its state, the counter and 
     CHECK(d.row.key(CassetteKey::record)->isEnabled());
     CHECK(d.row.key(CassetteKey::eject)->isEnabled());
     CHECK_FALSE(d.row.browse_button()->isEnabled());
+}
+
+TEST_CASE("Back to the beginning and Eject sit apart at the edges, the transport centred between",
+          "[cassette][deck][layout]") {
+    Deck d;
+    d.load();
+    d.row.resize(360, 320);
+    d.row.show();
+    d.row.layout()->activate();
+    const auto at = [&](CassetteKey key) {
+        QToolButton* button = d.row.key(key);
+        return QRect(button->mapTo(&d.row, QPoint(0, 0)), button->size());
+    };
+    const QRect inside = d.row.layout()->contentsRect();
+    const QRect beginning = at(CassetteKey::seek);
+    const QRect eject = at(CassetteKey::eject);
+    CHECK(beginning.left() == inside.left());
+    CHECK(eject.right() == inside.right());
+    // Rewind, Play, Stop, Fast forward and Record, in that order, as one group.
+    const std::vector<CassetteKey> transport{CassetteKey::rewind, CassetteKey::play,
+                                             CassetteKey::stop, CassetteKey::fast_forward,
+                                             CassetteKey::record};
+    for (std::size_t i = 0; i + 1 < transport.size(); ++i) {
+        CHECK(at(transport[i]).right() < at(transport[i + 1]).left());
+        CHECK(at(transport[i]).top() == beginning.top());
+    }
+    const int before = at(transport.front()).left() - beginning.right();
+    const int after = eject.left() - at(transport.back()).right();
+    CHECK(before > 1);
+    CHECK(std::abs(before - after) <= 1);
+    // Browse is not among the keys: it sits above them.
+    const QRect browse(d.row.browse_button()->mapTo(&d.row, QPoint(0, 0)),
+                       d.row.browse_button()->size());
+    CHECK(browse.bottom() < beginning.top());
 }
 
 TEST_CASE("A tape of unknown length has the counter alone, with no slider", "[cassette][deck]") {
