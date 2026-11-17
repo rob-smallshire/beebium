@@ -59,9 +59,9 @@ pip install beebium beebium-server
 
 Self-contained for `amd64` and `arm64` — no gRPC/protobuf to install.
 
-- **Debian / Ubuntu / Raspberry Pi OS** — `sudo apt install ./<file>.deb`: [amd64](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_amd64.deb) · [arm64](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_arm64.deb)
+- **Debian 13, Ubuntu 26.04, Raspberry Pi OS trixie, or newer (glibc 2.41)** — `sudo apt install ./<file>.deb`: [amd64](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_amd64.deb) · [arm64](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server_@@V@@_arm64.deb)
 - **Fedora / RHEL / openSUSE** — `sudo dnf install ./<file>.rpm`: [x86_64](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server-@@V@@-1.x86_64.rpm) · [aarch64](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server-@@V@@-1.aarch64.rpm)
-- **Other distros** — extract anywhere and add `bin/` to your `PATH`: [amd64 .tar.gz](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server-@@V@@-linux-amd64.tar.gz) · [arm64 .tar.gz](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server-@@V@@-linux-arm64.tar.gz)
+- **Other distros with glibc 2.41 or newer** — extract anywhere and add `bin/` to your `PATH`: [amd64 .tar.gz](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server-@@V@@-linux-amd64.tar.gz) · [arm64 .tar.gz](https://github.com/rob-smallshire/beebium/releases/download/v@@V@@/beebium-server-@@V@@-linux-arm64.tar.gz)
 
 ### macOS
 
