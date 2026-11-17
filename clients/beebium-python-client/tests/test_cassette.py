@@ -260,7 +260,10 @@ def test_signal_map_of_a_tape_and_of_a_recording(bbc, tmp_path: Path):
         for event in events:
             if not event.motor_on and event.position_seconds > 0:
                 break
-    before = status.signal_map_generation
+    # While it recorded, the map followed the head; the relay is open now, so
+    # the head is still and the next map is the walk of the image written back.
+    before = bbc.cassette.status().signal_map_generation
+    assert before > status.signal_map_generation
     bbc.cassette.stop()
     signal_map, status = _wait_for_signal_map(bbc, before)
     assert status.signal_map_generation == before + 1

@@ -21,6 +21,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <thread>
 #include <vector>
 
@@ -44,6 +45,21 @@ namespace beebium {
 // A Decision: 4 ms of ULA clocks. A 300 baud zero's half-cycle is 1.67 ms, so
 // every legitimate tone is a run.
 inline constexpr TapeTime SIGNAL_RUN_SPACING = 4 * ULA_CLOCK_NUMERATOR / (1000 * ULA_CLOCK_DENOMINATOR);
+
+// While a deck records, its map is kept current in the head's wake and
+// republished at most once per this much tape time (a Decision).
+inline constexpr TapeTime SIGNAL_MAP_RECORDING_PUBLISH_CLOCKS = ULA_CLOCK_NUMERATOR / ULA_CLOCK_DENOMINATOR;
+
+// The tape time at which second `s` of the map begins, exactly.
+inline TapeTime signal_map_second_start(uint64_t s) { return s * ULA_CLOCK_NUMERATOR / ULA_CLOCK_DENOMINATOR; }
+
+// The second of the map tape time `t` falls in: the last whose start is at or
+// before it. (Both conversions floor, so the quotient can be one short.)
+inline uint64_t signal_map_second_of(TapeTime t) {
+    uint64_t s = t * ULA_CLOCK_DENOMINATOR / ULA_CLOCK_NUMERATOR;
+    while (signal_map_second_start(s + 1) <= t) ++s;
+    return s;
+}
 
 // Walk `tape` from its start to its end and return its levels, or nothing if
 // `cancelled` became true first (it is read once an item).
@@ -74,8 +90,15 @@ public:
     SignalMapper& operator=(const SignalMapper&) = delete;
     ~SignalMapper();
 
-    // Map the tape `open` opens, superseding any map or job before. From any thread.
-    void map(Opener open);
+    // Map the tape `open` opens, superseding any job before. The map before
+    // stays published until the new one replaces it if `keep_current` (the
+    // same tape, newly recorded on); otherwise there is none until then.
+    // From any thread.
+    void map(Opener open, bool keep_current = false);
+    // Write `levels`, from second `first` on, into the published map and
+    // publish it as a new generation: a recording's wake. Nothing if no map
+    // is ready. From any thread; holds the mutex for the copy.
+    void update(size_t first, std::span<const uint8_t> levels);
     // No map until the next map(), cancelling any job. From any thread.
     void clear();
 

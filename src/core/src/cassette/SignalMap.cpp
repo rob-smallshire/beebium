@@ -20,16 +20,8 @@ namespace beebium {
 
 namespace {
 
-// The tape time at which second `s` begins, exactly.
-TapeTime second_start(uint64_t s) { return s * ULA_CLOCK_NUMERATOR / ULA_CLOCK_DENOMINATOR; }
-
-// The second tape time `t` falls in: the last whose start is at or before it.
-// (Both conversions floor, so the quotient can be one short at a boundary.)
-uint64_t second_of(TapeTime t) {
-    uint64_t s = t * ULA_CLOCK_DENOMINATOR / ULA_CLOCK_NUMERATOR;
-    while (second_start(s + 1) <= t) ++s;
-    return s;
-}
+TapeTime second_start(uint64_t s) { return signal_map_second_start(s); }
+uint64_t second_of(TapeTime t) { return signal_map_second_of(t); }
 
 }  // namespace
 
@@ -98,17 +90,27 @@ SignalMapper::~SignalMapper() {
     if (worker_.joinable()) worker_.join();
 }
 
-void SignalMapper::map(Opener open) {
+void SignalMapper::map(Opener open, bool keep_current) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         ++job_;
         pending_ = std::move(open);
-        levels_.clear();
-        ready_.store(false, std::memory_order_release);
+        if (!keep_current) {
+            levels_.clear();
+            ready_.store(false, std::memory_order_release);
+        }
         cancelled_.store(true, std::memory_order_relaxed);
         if (!worker_.joinable()) worker_ = std::thread([this] { run(); });
     }
     wake_.notify_one();
+}
+
+void SignalMapper::update(size_t first, std::span<const uint8_t> levels) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!ready_.load(std::memory_order_relaxed) || first >= levels_.size()) return;
+    const size_t count = std::min(levels.size(), levels_.size() - first);
+    std::copy_n(levels.begin(), count, levels_.begin() + static_cast<std::ptrdiff_t>(first));
+    generation_.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void SignalMapper::clear() {

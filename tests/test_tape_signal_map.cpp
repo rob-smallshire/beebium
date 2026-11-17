@@ -25,6 +25,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -274,4 +275,117 @@ TEST_CASE("The deck maps a tape on insert and forgets it on eject", "[cassette][
         CHECK_FALSE(deck.signal_map().ready);
         CHECK(deck.signal_map().generation == 0);
     }
+}
+
+// =============================================================================
+// The map in the recording head's wake
+// =============================================================================
+
+namespace {
+
+struct WakePublish {
+    uint64_t head_second;            // the second under the head at the publish
+    beebium::TapeTime head;          // where the head was
+    std::vector<uint8_t> levels;
+};
+
+// Record from `start` seconds: tone (an edge every 256 clocks, about 2400 Hz)
+// where `tone(t)` says, silence elsewhere, for `seconds`, capturing the map at
+// every publish; then stop.
+template <typename Tone>
+std::vector<WakePublish> record_wake(beebium::CassetteDeck& deck, double start, double seconds, Tone tone,
+                                     uint32_t* final_generation = nullptr) {
+    deck.seek(beebium::seconds_to_tape_time(start));
+    deck.record();
+    std::vector<WakePublish> publishes;
+    uint32_t generation = deck.published().signal_map_generation;
+    const auto clocks = beebium::seconds_to_tape_time(seconds);
+    bool level = false;
+    for (beebium::TapeTime i = 0; i < clocks; ++i) {
+        const beebium::TapeTime head = deck.position();
+        deck.clock(true);
+        if (head % 256 == 0 && tone(static_cast<double>(head) / beebium::ULA_CLOCK_HZ)) {
+            level = !level;
+            deck.edge(head, level);
+        }
+        const uint32_t now = deck.published().signal_map_generation;
+        if (now != generation) {
+            generation = now;
+            publishes.push_back({beebium::signal_map_second_of(head), head, deck.signal_map().levels});
+        }
+    }
+    deck.stop();
+    if (final_generation) *final_generation = generation;
+    return publishes;
+}
+
+}  // namespace
+
+TEST_CASE("While recording, the map follows the head a second at a time", "[cassette][signal_map][recording]") {
+    beebium::CassetteDeck deck;
+    TapeBuilder blank;
+    blank.gap(60.0);
+    deck.insert(open_tape_image(blank.uef(), "blank.uef"), "blank.uef");
+    const auto before = wait_for_deck(deck, [](const auto& m) { return m.ready; });
+    REQUIRE(before.ready);
+    REQUIRE(before.levels.size() == 60);
+
+    // From 0.5 s: tone for 3 s, silence for 2 s, tone for 1 s.
+    uint32_t generation = 0;
+    const auto publishes = record_wake(deck, 0.5, 6.0, [](double t) { return t < 3.5 || t >= 5.5; }, &generation);
+    CHECK(publishes.size() >= 5);
+    CHECK(publishes.size() <= 7);
+    CHECK(generation == before.generation + publishes.size());
+
+    // What each second reads once the head has passed it: second 0 is the half
+    // the recording covered, all tone.
+    const int complete[6] = {255, 255, 255, 128, 0, 128};
+    for (const auto& publish : publishes) {
+        CAPTURE(publish.head_second, publish.head);
+        REQUIRE(publish.levels.size() == 60);
+        for (uint64_t s = 0; s < publish.head_second; ++s) {
+            CAPTURE(s, static_cast<int>(publish.levels[s]));
+            CHECK(std::abs(static_cast<int>(publish.levels[s]) - complete[s]) <= 3);
+        }
+        // The second under the head: the passed half of it, as the schedule has it.
+        // (Publishes fall half a second into a second, so its passed part is
+        // one half of the schedule.)
+        const double into = static_cast<double>(publish.head) / beebium::ULA_CLOCK_HZ;
+        const double middle = (static_cast<double>(publish.head_second) + into) / 2.0;
+        const bool tone_half = middle < 3.5 || middle >= 5.5;
+        CAPTURE(static_cast<int>(publish.levels[publish.head_second]));
+        CHECK(std::abs(static_cast<int>(publish.levels[publish.head_second]) - (tone_half ? 255 : 0)) <= 3);
+        // Seconds ahead keep the blank's silence.
+        for (uint64_t s = publish.head_second + 1; s < 60; ++s) CHECK(publish.levels[s] == 0);
+    }
+
+    // The recording's end: the walk of the image replaces the wake, one
+    // generation on, and agrees with it.
+    const auto after = wait_for_deck(deck, [&](const auto& m) { return m.generation > generation; });
+    REQUIRE(after.ready);
+    CHECK(after.generation == generation + 1);
+    const int walked[7] = {128, 255, 255, 128, 0, 128, 128};  // second 0 and 6 are half recorded
+    for (size_t s = 0; s < 7; ++s) {
+        CAPTURE(s, static_cast<int>(after.levels[s]));
+        CHECK(std::abs(static_cast<int>(after.levels[s]) - walked[s]) <= 3);
+    }
+}
+
+TEST_CASE("Recording silence over signal erases it in the head's wake", "[cassette][signal_map][recording]") {
+    beebium::CassetteDeck deck;
+    TapeBuilder carrier;
+    carrier.carrier(24000);  // 10 s
+    deck.insert(open_tape_image(carrier.uef(), "carrier.uef"), "carrier.uef");
+    const auto before = wait_for_deck(deck, [](const auto& m) { return m.ready; });
+    REQUIRE(before.ready);
+    REQUIRE(before.levels.size() == 10);
+
+    const auto publishes = record_wake(deck, 0.0, 4.5, [](double) { return false; });
+    REQUIRE_FALSE(publishes.empty());
+    for (const auto& publish : publishes) {
+        CAPTURE(publish.head_second);
+        for (uint64_t s = 0; s < publish.head_second; ++s) CHECK(publish.levels[s] == 0);
+        for (uint64_t s = publish.head_second + 1; s < 10; ++s) CHECK(publish.levels[s] == 255);
+    }
+    CHECK(publishes.back().head_second >= 3);
 }

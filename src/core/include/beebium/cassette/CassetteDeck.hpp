@@ -17,6 +17,7 @@
 #include "TapeSignal.hpp"
 #include "TapeSink.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <concepts>
 #include <filesystem>
@@ -26,6 +27,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace beebium {
 
@@ -73,7 +75,14 @@ namespace beebium {
 // WAV's channel as played), or from a UEF's encoded image if it has no file;
 // when a recording ends, from the image the deck encodes then, the bytes it
 // writes back. A live tape, and a tape that Beebium only reads inserted with no
-// file, have none. The emulation thread only posts the job.
+// file, have none. The emulation thread only posts the job. While recording,
+// the deck keeps the map current in the head's wake itself, from the edges and
+// clocks it records: the same run rule, applied to each second as the head
+// passes it (a completed second is final, the one under the head is the
+// fraction of its passed part in a run, seconds ahead keep their levels), and
+// republished at most once per SIGNAL_MAP_RECORDING_PUBLISH_CLOCKS of tape
+// time. When the recording ends, the walk of the image written back replaces
+// it, the wake's map staying published until then.
 class CassetteDeck final : public TapeSink {
 public:
     enum class Transport : uint8_t { Stopped, Playing, Rewinding, FastForwarding, Recording };
@@ -211,6 +220,7 @@ public:
         } else {
             transport_ = Transport::Recording;
             tape_->recorder()->begin_recording(position_);
+            begin_wake();
         }
         publish();
     }
@@ -263,7 +273,9 @@ public:
     // TapeSink: the tone synthesiser's output, on the clock the deck has just
     // run. Written at the head while recording with the relay closed.
     void edge(TapeTime, bool level) override {
-        if (head_writing_) tape_->recorder()->record_edge(head_time_, level);
+        if (!head_writing_) return;
+        tape_->recorder()->record_edge(head_time_, level);
+        wake_edge(head_time_);
     }
     void silence_until(TapeTime) override {}
 
@@ -342,6 +354,8 @@ private:
             publish();
             return;
         }
+        if (position_ >= wake_second_end_) roll_wake();
+        if (position_ >= wake_next_publish_) publish_wake();
         head_time_ = position_;
         head_writing_ = true;
         tape_->recorder()->erase_before(position_ + 1);
@@ -364,7 +378,65 @@ private:
         pending_ = tape_->next();
         auto bytes = std::make_shared<const std::vector<uint8_t>>(recorder->encode());
         if (!filepath_.empty() && recorder->dirty()) write_back(*bytes);
-        map_image(std::move(bytes));
+        map_image(std::move(bytes), true);
+    }
+
+    // --- The signal map in the head's wake, while recording ---
+
+    void begin_wake() {
+        wake_first_second_ = signal_map_second_of(position_);
+        wake_second_ = wake_first_second_;
+        wake_second_end_ = signal_map_second_start(wake_second_ + 1);
+        wake_from_ = position_;
+        wake_covered_ = 0;
+        wake_in_run_ = false;
+        wake_levels_.clear();
+        wake_next_publish_ = position_ + SIGNAL_MAP_RECORDING_PUBLISH_CLOCKS;
+    }
+
+    // An edge written at `time`: a run goes on while edges come less than
+    // SIGNAL_RUN_SPACING apart, and the second under the head gains what it
+    // covers since the last.
+    void wake_edge(TapeTime time) {
+        if (wake_in_run_ && time - wake_last_edge_ < SIGNAL_RUN_SPACING) {
+            wake_covered_ += time - std::max(wake_last_edge_, wake_from_);
+        }
+        wake_in_run_ = true;
+        wake_last_edge_ = time;
+    }
+
+    // The clocks of the second under the head in a run, up to `until`.
+    TapeTime wake_covered_until(TapeTime until) const {
+        TapeTime covered = wake_covered_;
+        if (wake_in_run_ && until - wake_last_edge_ < SIGNAL_RUN_SPACING) {
+            covered += until - std::max(wake_last_edge_, wake_from_);
+        }
+        return covered;
+    }
+
+    static uint8_t wake_level(TapeTime covered, TapeTime span) {
+        if (span == 0) return 0;
+        return static_cast<uint8_t>((std::min(covered, span) * 255 + span / 2) / span);
+    }
+
+    // The head has finished a second: its level is final.
+    void roll_wake() {
+        wake_levels_.push_back(wake_level(wake_covered_until(wake_second_end_), wake_second_end_ - wake_from_));
+        ++wake_second_;
+        wake_from_ = wake_second_end_;
+        wake_second_end_ = signal_map_second_start(wake_second_ + 1);
+        wake_covered_ = 0;
+    }
+
+    // Publish the wake: every second completed since the recording began, and
+    // the passed part of the one under the head.
+    void publish_wake() {
+        wake_publish_buffer_ = wake_levels_;
+        if (position_ > wake_from_) {
+            wake_publish_buffer_.push_back(wake_level(wake_covered_until(position_), position_ - wake_from_));
+        }
+        signal_map_.update(wake_first_second_, wake_publish_buffer_);
+        wake_next_publish_ = position_ + SIGNAL_MAP_RECORDING_PUBLISH_CLOCKS;
     }
 
     // Write `bytes`, the tape's encoded image, to its file, and mark it clean.
@@ -390,8 +462,9 @@ private:
         }
     }
 
-    void map_image(std::shared_ptr<const std::vector<uint8_t>> bytes) {
-        signal_map_.map([bytes = std::move(bytes), name = name_] { return open_tape_image(*bytes, name); });
+    void map_image(std::shared_ptr<const std::vector<uint8_t>> bytes, bool keep_current = false) {
+        signal_map_.map([bytes = std::move(bytes), name = name_] { return open_tape_image(*bytes, name); },
+                        keep_current);
     }
 
     bool write_atomically(const std::vector<uint8_t>& bytes) const {
@@ -505,6 +578,18 @@ private:
     TapeItem pending_ = TapeItem::end(0);
     bool relay_closed_ = false;
     uint32_t clocks_since_publish_ = 0;
+
+    // The signal map in the head's wake while recording (emulation thread only).
+    uint64_t wake_first_second_ = 0;     // the second the recording began in
+    uint64_t wake_second_ = 0;           // the second under the head
+    TapeTime wake_second_end_ = 0;       // where it ends
+    TapeTime wake_from_ = 0;             // where its passed part begins
+    TapeTime wake_covered_ = 0;          // clocks of that part in a run, to the last edge
+    bool wake_in_run_ = false;
+    TapeTime wake_last_edge_ = 0;
+    TapeTime wake_next_publish_ = 0;
+    std::vector<uint8_t> wake_levels_;   // completed seconds since wake_first_second_
+    std::vector<uint8_t> wake_publish_buffer_;
 
     std::atomic<bool> published_has_tape_{false};
     std::atomic<Transport> published_transport_{Transport::Stopped};

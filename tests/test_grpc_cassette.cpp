@@ -1121,3 +1121,61 @@ TEST_CASE("A program SAVEd to a newly created tape lands in the new tape, not it
     }
     CHECK(ran);
 }
+
+TEST_CASE("While a SAVE records, the status stream shows the signal map advancing",
+          "[grpc][cassette][signal_map][recording][mos]") {
+    CassetteFixture fixture;
+    if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    const auto created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "wake");
+    REQUIRE(created.success());
+    REQUIRE(fixture.insert(created.path()).success());
+    REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.signal_map_ready(); }, 10'000));
+
+    grpc::ClientContext context;
+    beebium::SubscribeDeckStatusRequest request;
+    auto reader = fixture.stub().SubscribeDeckStatus(&context, request);
+    beebium::DeckStatus status;
+    REQUIRE(reader->Read(&status));
+    const uint32_t start_generation = status.signal_map_generation();
+
+    fixture.start_running(true);  // real speed: the wake is published a second of tape time apart
+    fixture.run_emulated(4'000'000);
+    fixture.type("10 ?&70=42\r*TAPE\rSAVE \"WAKE\"\r");
+    fixture.run_emulated(4'000'000);
+    REQUIRE(fixture.record().success());
+    fixture.type("\r");
+
+    // Read the stream until the SAVE is over: the relay closed, then open
+    // again with the tape moved.
+    std::vector<uint32_t> generations;
+    bool motor_was_on = false;
+    while (reader->Read(&status)) {
+        const uint32_t last = generations.empty() ? start_generation : generations.back();
+        if (status.transport() == beebium::TAPE_TRANSPORT_RECORDING && status.signal_map_ready() &&
+            status.signal_map_generation() != last) {
+            generations.push_back(status.signal_map_generation());
+            // Between publishes the map is the last one published.
+            const auto first = signal_map(fixture);
+            const auto again = signal_map(fixture);
+            if (fixture.status().signal_map_generation() == status.signal_map_generation()) {
+                CHECK(first.levels() == again.levels());
+            }
+            REQUIRE(first.ready());
+            CHECK(first.seconds() == 900);
+        }
+        if (status.motor_on()) motor_was_on = true;
+        if (motor_was_on && !status.motor_on() && status.position_seconds() > 0.0) break;
+    }
+    context.TryCancel();
+    REQUIRE(fixture.call<beebium::StopRequest>(&beebium::CassetteService::Stub::Stop).success());
+    CAPTURE(generations.size());
+    CHECK(generations.size() >= 3);
+    for (size_t i = 1; i < generations.size(); ++i) CHECK(generations[i] > generations[i - 1]);
+    CHECK(generations.front() > start_generation);
+
+    // The map shows the SAVE's leader and blocks in the head's wake.
+    const auto map = signal_map(fixture);
+    const auto loud = std::count_if(map.levels().begin(), map.levels().end(),
+                                    [](char level) { return static_cast<uint8_t>(level) >= 128; });
+    CHECK(loud >= 5);
+}

@@ -644,12 +644,16 @@ TEST_CASE("A recording's signal map shows where it landed", "[cassette][mos][rec
     beeb.step(7'000'000);
     beeb.type("\r");
     beeb.step(36'000'000);
+    // While it recorded, the map followed the head a second at a time.
+    const uint32_t wake_generation = beeb.deck().published().signal_map_generation;
+    CHECK(wake_generation > blank.generation + 3);
     beeb.deck().stop();
     const auto end_second = static_cast<size_t>(static_cast<double>(beeb.deck().position()) / beebium::ULA_CLOCK_HZ);
 
-    const auto recorded = wait_for_map(beeb.deck(), [&](const auto& m) { return m.ready && m.generation > blank.generation; });
+    // The walk of the image written back replaces the wake, one generation on.
+    const auto recorded = wait_for_map(beeb.deck(), [&](const auto& m) { return m.ready && m.generation > wake_generation; });
     REQUIRE(recorded.ready);
-    CHECK(recorded.generation == blank.generation + 1);
+    CHECK(recorded.generation == wake_generation + 1);
     REQUIRE(recorded.levels.size() == 900);
     // The SAVE's leader and blocks: several seconds of signal before the head
     // stopped, and silence beyond.
