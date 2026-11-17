@@ -138,6 +138,40 @@ TEST_CASE("ACIA master reset clears status and suppresses IRQ/TDRE", "[serial][m
     CHECK_FALSE(acia.irq_pending());
 }
 
+TEST_CASE("ACIA control write mid-character leaves the character and the TDR alone", "[serial][mc6850]") {
+    // MOS 1.20 writes &35 (transmit interrupt on, /RTS low) at the start of
+    // each cassette block with the sync byte &2A already in the shift
+    // register. Only a master reset touches the transmitter: the character in
+    // flight finishes and the byte waiting in the TDR follows it, once each.
+    Mc6850 acia;
+    acia.write_control(control_for(Mc6850::COUNTER_DIVIDE_16, 5));  // &15: 8N1, /16
+    acia.write_data(0x2A);
+    std::vector<uint8_t> bits;
+    unsigned clocks = 0;
+    auto run = [&](unsigned n) {
+        for (unsigned i = 0; i < n; ++i, ++clocks) {
+            if (const auto r = acia.transmit_clock()) bits.push_back(r->bit);
+        }
+    };
+    run(16 * 3);                   // the start bit and two data bits of &2A
+    acia.write_data(0x50);         // "P" waits in the TDR
+    CHECK((acia.status() & Mc6850::SR_TDRE) == 0);
+    acia.write_control(0x35);      // mid-character: transmit interrupt on
+    run(16 * 30);
+    // Decode the line: frames of start, eight data bits LSB first, stop.
+    std::vector<uint8_t> bytes;
+    for (size_t i = 0; i + 10 <= bits.size();) {
+        if (bits[i] != 0) { ++i; continue; }
+        uint8_t v = 0;
+        for (int b = 0; b < 8; ++b) v |= static_cast<uint8_t>(bits[i + 1 + b] << b);
+        CHECK(bits[i + 9] == 1);
+        bytes.push_back(v);
+        i += 10;
+    }
+    CHECK(bytes == std::vector<uint8_t>{0x2A, 0x50});
+    CHECK((acia.status() & Mc6850::SR_TDRE) != 0);
+}
+
 TEST_CASE("ACIA master reset mid-character abandons it and holds TxD at mark", "[serial][mc6850]") {
     Mc6850 acia;
     acia.write_control(control_for(Mc6850::COUNTER_DIVIDE_16, 5));  // 8N1

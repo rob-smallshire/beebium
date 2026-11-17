@@ -340,9 +340,14 @@ std::vector<uint8_t> save_and_chain_back(const std::vector<uint8_t>& program_uef
     beeb.deck().eject();
 
     beeb.deck().insert(open_tape_file(blank_filepath), blank_filepath.filename().string(), "", blank_filepath);
-    beeb.type("CLS\rSAVE \"OK\"\r");
-    REQUIRE(beeb.run_until_screen("RECORD then RETURN", 5.0));
+    // Record pressed first, with the relay still open, as a user at a deck
+    // does; then SAVE, and RETURN at the prompt.
     beeb.deck().record();
+    CHECK(beeb.deck().transport() == CassetteDeck::Transport::Recording);
+    beeb.type("CLS\rSAVE \"PROGRAM\"\r");
+    REQUIRE(beeb.run_until_screen("RECORD then RETURN", 5.0));
+    // A person takes a moment to press RETURN; the motor is on meanwhile.
+    beeb.step(4'600'000);
     beeb.type("\r");
     REQUIRE(run_until_relay_rests(beeb, 60.0));
     INFO(beeb.screen());
@@ -352,7 +357,7 @@ std::vector<uint8_t> save_and_chain_back(const std::vector<uint8_t>& program_uef
     // Back to the start, and load it.
     beeb.deck().seek(0);
     beeb.deck().play();
-    beeb.type("NEW\r?&70=0\rCLS\rCHAIN \"OK\"\r");
+    beeb.type("NEW\r?&70=0\rCLS\rCHAIN \"PROGRAM\"\r");
     const bool loaded = beeb.run_until_screen("TAPE OK 42", 60.0);
     INFO(beeb.screen());
     CHECK(loaded);
@@ -379,14 +384,17 @@ void check_saved_shape(const std::vector<uint8_t>& written, bool baud_300) {
         CHECK((c.id == 0x0110 || c.id == 0x0100 || c.id == 0x0112 || c.id == 0x0116 || c.id == 0x0117));
         const double cycles = c.id == 0x0110 ? (c.body[0] | (c.body[1] << 8)) : 0.0;
         if (c.id == 0x0117 && !data_at) baud_300_before_data = (c.body[0] | (c.body[1] << 8)) == 300;
-        if (c.id == 0x0100 && !data_at && c.body == std::vector<uint8_t>{0xAA}) continue;
+        if (c.id == 0x0100 && !data_at && c.body == std::vector<uint8_t>{0xAA}) {
+            // The leader proper follows the last dummy byte; the carrier before
+            // it is the wait at "RECORD then RETURN".
+            leader_cycles = 0.0;
+            continue;
+        }
         if (c.id == 0x0100 && !data_at) {
             data_at = i;
-            REQUIRE(c.body.size() > 4);
+            REQUIRE(c.body.size() > 9);
             CHECK(c.body[0] == 0x2A);
-            CHECK(c.body[1] == 'O');
-            CHECK(c.body[2] == 'K');
-            CHECK(c.body[3] == 0x00);
+            CHECK(std::string(c.body.begin() + 1, c.body.begin() + 9) == std::string("PROGRAM\0", 8));
         }
         if (!data_at) leader_cycles += cycles;
         else tail_cycles += cycles;
