@@ -390,8 +390,9 @@ TEST_CASE("A loaded tape shows its name, what it is, its state, the counter and 
     CHECK(d.row.slider()->isVisibleTo(&d.row));
     CHECK(d.row.slider()->maximum() == 6000);
     CHECK(d.row.key(CassetteKey::play)->isEnabled());
-    CHECK_FALSE(d.row.key(CassetteKey::stop)->isEnabled());
-    CHECK_FALSE(d.row.key(CassetteKey::seek)->isEnabled());  // already at the beginning
+    CHECK_FALSE(d.row.key(CassetteKey::play)->isChecked());
+    CHECK(d.row.key(CassetteKey::stop)->isEnabled());
+    CHECK(d.row.key(CassetteKey::seek)->isEnabled());
     CHECK(d.row.key(CassetteKey::record)->isEnabled());
     CHECK(d.row.key(CassetteKey::eject)->isEnabled());
     CHECK_FALSE(d.row.browse_button()->isEnabled());
@@ -474,6 +475,116 @@ TEST_CASE("A C90's counter reads 90:00, in digits of one width", "[cassette][dec
     }
 }
 
+namespace {
+
+// Whether the Record key is drawn red as it stands: its icon for its
+// enabled and checked state, read at the centre.
+bool drawn_red(QToolButton* button) {
+    const QImage image = button->icon()
+                             .pixmap(QSize(20, 20), button->isEnabled() ? QIcon::Normal : QIcon::Disabled,
+                                     button->isChecked() ? QIcon::On : QIcon::Off)
+                             .toImage();
+    const QColor centre = image.pixelColor(image.width() / 2, image.height() / 2);
+    return centre.alpha() > 200 && centre.red() > 150 && centre.green() < 100 && centre.blue() < 100;
+}
+
+}  // namespace
+
+TEST_CASE("The keys latch: the current transport's key is down, and only the impossible is grey",
+          "[cassette][deck][latch]") {
+    enum class Tape { empty, uef, csw, live };
+    using T = beebium::TapeTransport;
+    struct Case {
+        Tape tape;
+        T transport;
+    };
+    std::vector<Case> cases{{Tape::empty, beebium::TAPE_TRANSPORT_STOPPED}};
+    for (Tape tape : {Tape::uef, Tape::csw}) {
+        for (T transport : {beebium::TAPE_TRANSPORT_STOPPED, beebium::TAPE_TRANSPORT_PLAYING,
+                            beebium::TAPE_TRANSPORT_RECORDING, beebium::TAPE_TRANSPORT_REWINDING,
+                            beebium::TAPE_TRANSPORT_FAST_FORWARDING}) {
+            if (tape == Tape::csw && transport == beebium::TAPE_TRANSPORT_RECORDING) {
+                continue;  // never recorded on
+            }
+            cases.push_back({tape, transport});
+        }
+    }
+    cases.push_back({Tape::live, beebium::TAPE_TRANSPORT_STOPPED});
+    cases.push_back({Tape::live, beebium::TAPE_TRANSPORT_PLAYING});
+
+    for (const Case& c : cases) {
+        CAPTURE(static_cast<int>(c.tape), static_cast<int>(c.transport));
+        Deck d;
+        if (c.tape == Tape::uef) {
+            d.load("file:///home/me/tapes/Elite.uef");
+        } else if (c.tape == Tape::csw) {
+            d.load("file:///home/me/tapes/Elite.csw");
+        } else if (c.tape == Tape::live) {
+            d.server.cassette.load_live("Line In");
+            REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+        }
+        d.server.cassette.set_position(30.0);
+        d.server.cassette.set_transport(c.transport);
+        const auto shown = [](T transport) {
+            switch (transport) {
+            case beebium::TAPE_TRANSPORT_PLAYING: return DeckState::Transport::playing;
+            case beebium::TAPE_TRANSPORT_RECORDING: return DeckState::Transport::recording;
+            case beebium::TAPE_TRANSPORT_REWINDING: return DeckState::Transport::rewinding;
+            case beebium::TAPE_TRANSPORT_FAST_FORWARDING:
+                return DeckState::Transport::fast_forwarding;
+            default: return DeckState::Transport::stopped;
+            }
+        };
+        REQUIRE(wait_until([&] {
+            return d.cassette.deck().position_seconds == 30.0 &&
+                   d.cassette.deck().transport == shown(c.transport);
+        }));
+        const bool in = c.tape != Tape::empty;
+        const bool live = c.tape == Tape::live;
+        const bool recordable = c.tape == Tape::uef;
+        const bool recording = c.transport == beebium::TAPE_TRANSPORT_RECORDING;
+        // Enabled for all the deck can do, whatever it is doing.
+        CHECK(d.row.key(CassetteKey::play)->isEnabled() == in);
+        CHECK(d.row.key(CassetteKey::stop)->isEnabled() == in);
+        CHECK(d.row.key(CassetteKey::eject)->isEnabled() == in);
+        CHECK(d.row.key(CassetteKey::rewind)->isEnabled() == (in && !live));
+        CHECK(d.row.key(CassetteKey::fast_forward)->isEnabled() == (in && !live));
+        CHECK(d.row.key(CassetteKey::seek)->isEnabled() == (in && !live));
+        CHECK(d.row.key(CassetteKey::record)->isEnabled() == (in && recordable));
+        // Down for what it is doing: Record implies Play; Stop is momentary.
+        CHECK(d.row.key(CassetteKey::play)->isChecked() ==
+              (c.transport == beebium::TAPE_TRANSPORT_PLAYING || recording));
+        CHECK(d.row.key(CassetteKey::record)->isChecked() == recording);
+        CHECK(d.row.key(CassetteKey::rewind)->isChecked() ==
+              (c.transport == beebium::TAPE_TRANSPORT_REWINDING));
+        CHECK(d.row.key(CassetteKey::fast_forward)->isChecked() ==
+              (c.transport == beebium::TAPE_TRANSPORT_FAST_FORWARDING));
+        CHECK_FALSE(d.row.key(CassetteKey::stop)->isChecked());
+        CHECK_FALSE(d.row.key(CassetteKey::seek)->isChecked());
+        CHECK_FALSE(d.row.key(CassetteKey::eject)->isChecked());
+        // Red means recording and nothing else.
+        CHECK(drawn_red(d.row.key(CassetteKey::record)) == recording);
+    }
+}
+
+TEST_CASE("A key follows the deck, not the click, and a key already down sends nothing",
+          "[cassette][deck][latch]") {
+    Deck d;
+    d.load();
+    QToolButton* play = d.row.key(CassetteKey::play);
+    play->click();
+    // Not down until the server says the deck plays.
+    CHECK_FALSE(play->isChecked());
+    REQUIRE(wait_until([&] { return play->isChecked(); }));
+    play->click();
+    QCoreApplication::processEvents();
+    CHECK(play->isChecked());
+    CHECK(d.pressed() == std::vector<std::string>{"play"});
+    d.row.key(CassetteKey::stop)->click();
+    REQUIRE(wait_until([&] { return !play->isChecked(); }));
+    CHECK(d.pressed() == std::vector<std::string>{"play", "stop"});
+}
+
 TEST_CASE("A tape of unknown length has the counter alone, with no slider", "[cassette][deck]") {
     Deck d;
     d.server.cassette.duration_seconds = 0.0;
@@ -490,7 +601,7 @@ TEST_CASE("Play with the motor off reads as a tape waiting; the relay shows as a
     d.row.key(CassetteKey::play)->click();
     REQUIRE(wait_until([&] { return d.row.state_text() == QStringLiteral("Playing, motor off"); }));
     CHECK_FALSE(d.row.motor_shown());
-    CHECK_FALSE(d.row.key(CassetteKey::play)->isEnabled());
+    CHECK(d.row.key(CassetteKey::play)->isChecked());
     CHECK(d.row.key(CassetteKey::stop)->isEnabled());
     d.server.cassette.set_motor(true);
     REQUIRE(wait_until([&] { return d.row.motor_shown(); }));

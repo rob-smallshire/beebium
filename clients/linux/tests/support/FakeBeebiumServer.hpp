@@ -755,6 +755,29 @@ public:
         }
         publish();
     }
+    // The transport as the server reports it, however it got there.
+    void set_transport(beebium::TapeTransport transport) {
+        {
+            std::lock_guard lock(calls_mutex);
+            status_.set_transport(transport);
+        }
+        publish();
+    }
+    // A live input in the deck, as another client's stream puts it there.
+    void load_live(const std::string& name) {
+        {
+            std::lock_guard lock(calls_mutex);
+            status_.set_tape_inserted(true);
+            beebium::TapeMetadata& tape = *status_.mutable_tape();
+            tape.Clear();
+            tape.set_name(name);
+            tape.set_format("LIVE");
+            tape.set_sample_rate(48000);
+            status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
+            status_.set_position_seconds(0.0);
+        }
+        publish();
+    }
     // A tape in the deck as a preset puts it there, without an insert call.
     void load(const std::string& url) {
         {

@@ -127,6 +127,8 @@ private:
     const DeckState& deck() const { return cassette_.deck(); }
     void present();
     void present_position();
+    // Each latching key down or up as the deck reports its transport.
+    void latch_keys();
     void insert(const QString& path);
     void press(CassetteKey key);
     void seek_to_slider();

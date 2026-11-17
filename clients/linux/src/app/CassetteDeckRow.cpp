@@ -88,13 +88,35 @@ QPixmap dot(const QColor& colour, int size) {
     return pixmap;
 }
 
-// The Record key's red, drawn rather than themed, so it is red everywhere;
-// grey while it cannot be pressed.
-QIcon record_icon() {
+// The Record key, drawn rather than themed: in the keys' own colour, and
+// red only while it is down, so red means recording and nothing else (client
+// specification 9.0); grey while it cannot be pressed.
+QIcon record_icon(const QColor& key_colour) {
     QIcon icon;
-    icon.addPixmap(dot(QColor(0xd7, 0x26, 0x1e), 20), QIcon::Normal);
-    icon.addPixmap(dot(QColor(0xa0, 0xa0, 0xa0, 0x80), 20), QIcon::Disabled);
+    icon.addPixmap(dot(key_colour, 20), QIcon::Normal, QIcon::Off);
+    icon.addPixmap(dot(QColor(0xd7, 0x26, 0x1e), 20), QIcon::Normal, QIcon::On);
+    for (QIcon::State state : {QIcon::Off, QIcon::On}) {
+        icon.addPixmap(dot(QColor(0xa0, 0xa0, 0xa0, 0x80), 20), QIcon::Disabled, state);
+    }
     return icon;
+}
+
+// Whether a key is down for the deck as the server reports it: the
+// current transport's key, and Play with Record, since Record implies
+// Play. Stop, Back to the beginning and Eject are momentary.
+bool key_down(CassetteKey key, const DeckState& deck) {
+    if (!deck.tape_inserted) {
+        return false;
+    }
+    using Transport = DeckState::Transport;
+    switch (key) {
+    case CassetteKey::play:
+        return deck.transport == Transport::playing || deck.transport == Transport::recording;
+    case CassetteKey::record: return deck.transport == Transport::recording;
+    case CassetteKey::rewind: return deck.transport == Transport::rewinding;
+    case CassetteKey::fast_forward: return deck.transport == Transport::fast_forwarding;
+    default: return false;
+    }
 }
 
 QIcon themed(const char* name, QStyle::StandardPixmap fallback, const QWidget* widget) {
@@ -274,7 +296,14 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
             themed("media-playback-stop", QStyle::SP_MediaStop, this));
     add_key(CassetteKey::fast_forward, QStringLiteral("fastForward"), tr("Fast forward"),
             themed("media-seek-forward", QStyle::SP_MediaSeekForward, this));
-    add_key(CassetteKey::record, QStringLiteral("record"), tr("Record"), record_icon());
+    add_key(CassetteKey::record, QStringLiteral("record"), tr("Record"),
+            record_icon(palette().color(QPalette::Active, QPalette::ButtonText)));
+    // The transport keys latch, as a mechanical deck's do: the one down is
+    // the deck's status display.
+    for (CassetteKey latching :
+         {CassetteKey::rewind, CassetteKey::play, CassetteKey::fast_forward, CassetteKey::record}) {
+        keys_[latching]->setCheckable(true);
+    }
     keys->addStretch(1);
     add_key(CassetteKey::eject, QStringLiteral("ejectTape"), tr("Eject tape"),
             themed("media-eject", QStyle::SP_ArrowUp, this));
@@ -295,6 +324,13 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     connect(menu_, &QMenu::aboutToShow, this, &CassetteDeckRow::rebuild_menu);
     for (const auto& [key, button] : keys_) {
         connect(button, &QToolButton::clicked, this, [this, key = key] {
+            // A key is down only as the server reports the deck, never for
+            // the click; one already down does nothing more.
+            const bool down = key_down(key, deck());
+            latch_keys();
+            if (down) {
+                return;
+            }
             if (key == CassetteKey::seek) {
                 clear_message();
                 cassette_.seek(0.0);
@@ -408,8 +444,8 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
 
 void CassetteDeckRow::refresh() {
     // While the tape moves only its position changes, four times a second:
-    // the counter, the timeline and Back to the beginning are all it redraws
-    // (on a Pi every repaint beside the picture copies the window).
+    // the counter and the timeline are all it redraws (on a Pi every
+    // repaint beside the picture copies the window).
     DeckState still = deck();
     still.position_seconds = 0.0;
     still.live_ring_fill = 0.0;
@@ -435,7 +471,6 @@ void CassetteDeckRow::present() {
     const DeckState& deck = this->deck();
     const bool local = shares_ && shares_();
     const bool inserted = deck.tape_inserted;
-    const auto transport = deck.transport;
     motor_->setVisible(deck.motor_on);
 
     // A tape's name is the deck's main line; an empty deck's hint is set a
@@ -493,14 +528,15 @@ void CassetteDeckRow::present() {
     const bool live = deck.live();
     const QString live_reason = tr("A live input plays as it comes, so it cannot be wound, sought "
                                    "or recorded on");
-    key(CassetteKey::rewind)->setEnabled(inserted && !live &&
-                                         transport != DeckState::Transport::rewinding);
+    // A key is greyed only for what the deck cannot do, never to show the
+    // transport: the key down shows that (client specification 9.0).
+    key(CassetteKey::rewind)->setEnabled(inserted && !live);
     key(CassetteKey::rewind)->setToolTip(live ? live_reason : tr("Rewind"));
-    key(CassetteKey::play)->setEnabled(inserted && transport != DeckState::Transport::playing);
-    key(CassetteKey::stop)->setEnabled(inserted && transport != DeckState::Transport::stopped);
-    key(CassetteKey::fast_forward)
-        ->setEnabled(inserted && !live && transport != DeckState::Transport::fast_forwarding);
+    key(CassetteKey::play)->setEnabled(inserted);
+    key(CassetteKey::stop)->setEnabled(inserted);
+    key(CassetteKey::fast_forward)->setEnabled(inserted && !live);
     key(CassetteKey::fast_forward)->setToolTip(live ? live_reason : tr("Fast forward"));
+    key(CassetteKey::seek)->setEnabled(inserted && !live);
     key(CassetteKey::seek)->setToolTip(live ? live_reason : tr("Back to the beginning"));
     // Ejecting this client's own live input closes its stream, and the deck
     // lets the tape go once it has played what the server holds.
@@ -512,8 +548,7 @@ void CassetteDeckRow::present() {
                                         : tr("Eject tape"));
     // Disabled with its reason for a tape Beebium only reads.
     QToolButton* record = key(CassetteKey::record);
-    record->setEnabled(inserted && !live && deck.tape.recordable &&
-                       transport != DeckState::Transport::recording);
+    record->setEnabled(inserted && !live && deck.tape.recordable);
     record->setToolTip(!inserted ? tr("Insert a tape to record")
                        : live    ? live_reason
                        : !deck.tape.recordable
@@ -521,6 +556,15 @@ void CassetteDeckRow::present() {
                                  .arg(deck.tape.format)
                            : tr("Record"));
     live_->setVisible(live);
+    latch_keys();
+}
+
+void CassetteDeckRow::latch_keys() {
+    for (const auto& [key, button] : keys_) {
+        if (button->isCheckable()) {
+            button->setChecked(key_down(key, deck()));
+        }
+    }
 }
 
 void CassetteDeckRow::present_position() {
@@ -533,7 +577,6 @@ void CassetteDeckRow::present_position() {
     if (deck().tape.duration_seconds > 0.0) {
         slider_->setValue(static_cast<int>(std::lround(position * SLIDER_SCALE)));
     }
-    key(CassetteKey::seek)->setEnabled(deck().tape_inserted && !deck().live() && position > 0.0);
     if (deck().live()) {
         live_->setText(tr("Ring %1% - %2 overruns - %3 underruns")
                            .arg(qRound(deck().live_ring_fill * 100.0))
