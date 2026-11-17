@@ -147,7 +147,10 @@ A correction to round 3, from the datasheet (page 4-534: master reset
 "initializes both the receiver and transmitter"): a master reset abandons a
 character being sent, sets TDRE, and holds TxD at mark for as long as it
 lasts, so the Serial ULA synthesises carrier through it, as MOS 1.20's SAVE
-tail needs.
+tail needs. A second correction to round 3, an unverified decision: a byte
+written to an idle transmitter is taken one full bit time after the write (the
+write restarts the bit-rate counter), the datasheet's "within 1-bit time" at
+its limit; taken sooner, MOS 1.20 could send a block's sync byte twice.
 
 Framing errors (bad stop bit), parity errors, and receiver overrun (a new
 character arriving before RDR is read) are all modelled and surface in the

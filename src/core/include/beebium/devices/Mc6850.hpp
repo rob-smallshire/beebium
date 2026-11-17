@@ -47,7 +47,14 @@ namespace beebium {
 //
 // Transmitter: every 1, 16 or 64 clocks it advances one bit of the frame and
 // reports the new TxD level and the bit's role, so the Serial ULA can
-// assemble bytes for a host transport or drive cassette tones.
+// assemble bytes for a host transport or drive cassette tones. A byte written
+// to an idle transmitter is taken one full bit time after the write: the write
+// restarts the bit-rate counter. The datasheet (page 4-533) says only that the
+// transfer comes "within 1-bit time" of the write; this takes it at that limit,
+// an unverified decision of the cassette programme. MOS 1.20's cassette block
+// writer leaves about 115 cycles after sending a block's sync byte before it
+// places the next, and a transmitter that took the sync byte sooner would raise
+// TDRE inside that window and have the sync byte sent twice.
 //
 // /DCD: a low-to-high transition sets status bit 2 and raises the receive
 // interrupt when CR7 is set. The bit stays set until the data register is
@@ -158,8 +165,14 @@ public:
     }
 
     void write_data(uint8_t value) {
-        // Loading TDR clears TDRE; the byte is serialised from the next bit
-        // boundary of the transmit clock.
+        // Loading TDR clears TDRE. An idle transmitter (nothing in flight,
+        // nothing waiting) restarts its bit-rate counter, so the transfer to
+        // the shift register, the start bit and TDRE come one full bit time
+        // (16 or 64 transmit clocks, one at /1) after the write; with a
+        // character in flight the byte follows at its stop bit's end.
+        if (tx_state_ == TxState::Idle && tx_tdre_) {
+            tx_count_ = 0;
+        }
         tdr_ = value;
         tx_tdre_ = false;
         irq_tx_ = false;

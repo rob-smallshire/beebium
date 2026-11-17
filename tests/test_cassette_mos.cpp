@@ -517,3 +517,80 @@ TEST_CASE("MOS 1.20 does not load tape_ok from a WAV of sines at 0 degrees", "[c
     CHECK_FALSE(loads_from_wav(wav, "tape_ok_0.wav"));
 }
 
+
+// =============================================================================
+// SAVE on the timetable that found two recording faults
+// =============================================================================
+
+namespace {
+
+// A program SAVEd as "PROG" to a copy of the C15 blank, with record pressed
+// and RETURN typed at moments set by `k` (a timetable that, before the idle
+// transmitter's restart, doubled the sync byte at k = 19). Returns the beeb,
+// stopped, and the written file's chunks.
+struct ProgSave {
+    std::unique_ptr<TapeBeeb> beeb = std::make_unique<TapeBeeb>();
+    std::vector<SavedChunk> chunks;
+    std::vector<uint8_t> block;
+};
+
+ProgSave save_prog(int k, const std::filesystem::path& blank_filepath) {
+    ProgSave save;
+    TapeBeeb& beeb = *save.beeb;
+    beeb.step(4'000'000);
+    beeb.type("10 PRINT \"HELLO FROM TAPE\"\r*TAPE\r");
+    beeb.step(2'000'000 + 137'000 * static_cast<uint64_t>(k));
+    beeb.deck().insert(open_tape_file(blank_filepath), blank_filepath.filename().string(), "", blank_filepath);
+    beeb.deck().record();
+    beeb.type("SAVE \"PROG\"\r");
+    beeb.step(7'000'000 + 73'000 * static_cast<uint64_t>(k));
+    beeb.type("\r");
+    beeb.step(36'000'000);
+    beeb.deck().stop();
+    save.chunks = chunks_of(read_file(blank_filepath));
+    for (const auto& c : save.chunks) {
+        if (c.id == 0x0100 && c.body.size() > 6) save.block = c.body;
+    }
+    return save;
+}
+
+std::filesystem::path blank_copy(const beebium::test::ScopedTempDir& dir, const std::string& name) {
+    const auto filepath = dir.path() / name;
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef", filepath);
+    return filepath;
+}
+
+}  // namespace
+
+TEST_CASE("A SAVE whose sync byte the transmitter took at once records its header whole",
+          "[cassette][mos][recording]") {
+    // Before an idle transmitter waited a full bit for a written byte, this
+    // timetable had MOS 1.20 send the sync byte twice and lose the name's
+    // first letter: the transmit interrupt came inside the gap the block
+    // writer leaves between sending &2A and placing the next byte.
+    if (!roms_present()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    beebium::test::ScopedTempDir dir("beebium_cassette_prog_");
+    const auto save = save_prog(19, blank_copy(dir, "k19.uef"));
+    REQUIRE(save.block.size() >= 6);
+    CHECK(std::vector<uint8_t>(save.block.begin(), save.block.begin() + 6) ==
+          std::vector<uint8_t>{0x2A, 'P', 'R', 'O', 'G', 0x00});
+}
+
+TEST_CASE("A SAVE that ends with a stray FF frame still loads", "[cassette][mos][recording]") {
+    // On this timetable the last byte MOS writes before its master reset gets
+    // its start bit onto the line, as it can on the machine: the recording ends
+    // with an &FF frame after the data CRC, which loading never reads.
+    if (!roms_present()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    beebium::test::ScopedTempDir dir("beebium_cassette_prog_");
+    auto save = save_prog(3, blank_copy(dir, "k3.uef"));
+    REQUIRE(save.block.size() == 54);
+    CHECK(save.block.back() == 0xFF);
+    TapeBeeb& beeb = *save.beeb;
+    beeb.deck().seek(0);
+    beeb.deck().play();
+    beeb.type("NEW\rCLS\rCHAIN \"PROG\"\r");
+    const bool loaded = beeb.run_until_screen("HELLO FROM TAPE", 60.0);
+    INFO(beeb.screen());
+    CHECK(loaded);
+    CHECK(beeb.screen().find("Data?") == std::string::npos);
+}

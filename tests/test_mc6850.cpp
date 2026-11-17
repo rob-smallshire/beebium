@@ -172,6 +172,57 @@ TEST_CASE("ACIA control write mid-character leaves the character and the TDR alo
     CHECK((acia.status() & Mc6850::SR_TDRE) != 0);
 }
 
+TEST_CASE("ACIA idle transmitter takes a written byte one full bit time after the write", "[serial][mc6850]") {
+    for (const auto& [divide, clocks_per_bit] : {std::pair{Mc6850::COUNTER_DIVIDE_16, 16u},
+                                                 std::pair{Mc6850::COUNTER_DIVIDE_64, 64u},
+                                                 std::pair{Mc6850::COUNTER_DIVIDE_1, 1u}}) {
+        CAPTURE(clocks_per_bit);
+        for (const unsigned idle_clocks : {0u, 3u, 7u, 15u, 40u}) {
+            CAPTURE(idle_clocks);
+            Mc6850 acia;
+            acia.write_control(control_for(divide, 5));
+            // An idle line for a while: the bit counter's phase is anything.
+            for (unsigned i = 0; i < idle_clocks; ++i) acia.transmit_clock();
+            acia.write_data(0x2A);
+            // Nothing is taken, and TDRE stays clear, until a full bit has passed.
+            for (unsigned i = 1; i < clocks_per_bit; ++i) {
+                const auto r = acia.transmit_clock();
+                if (r) CHECK(r->type == Mc6850::BitType::Idle);
+                CHECK((acia.status() & Mc6850::SR_TDRE) == 0);
+            }
+            const auto start = acia.transmit_clock();
+            REQUIRE(start);
+            CHECK(start->type == Mc6850::BitType::Start);
+            CHECK(start->bit == 0);
+            CHECK((acia.status() & Mc6850::SR_TDRE) != 0);
+        }
+    }
+}
+
+TEST_CASE("ACIA byte written during a character is taken at its stop bit's end", "[serial][mc6850]") {
+    Mc6850 acia;
+    acia.write_control(control_for(Mc6850::COUNTER_DIVIDE_16, 5));
+    acia.write_data(0x2A);
+    unsigned clock = 0;
+    std::optional<unsigned> first_start, second_start;
+    for (; clock < 16 * 30; ++clock) {
+        const auto r = acia.transmit_clock();
+        if (!r || r->type != Mc6850::BitType::Start) continue;
+        if (!first_start) {
+            first_start = clock;
+            acia.write_data(0x50);  // while &2A is in flight
+        } else {
+            second_start = clock;
+            break;
+        }
+    }
+    REQUIRE(first_start);
+    REQUIRE(second_start);
+    // Start, eight data bits and a stop bit: ten bits, and the next start bit
+    // follows the stop bit at once.
+    CHECK(*second_start - *first_start == 16 * 10);
+}
+
 TEST_CASE("ACIA master reset mid-character abandons it and holds TxD at mark", "[serial][mc6850]") {
     Mc6850 acia;
     acia.write_control(control_for(Mc6850::COUNTER_DIVIDE_16, 5));  // 8N1

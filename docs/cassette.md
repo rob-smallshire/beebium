@@ -375,6 +375,9 @@ carrier between blocks, and about 5.1 s of carrier after the last, with `&0117` 
 data after `*TAPE3`. Its tail of carrier depends on the ACIA holding TxD at mark through the
 master reset the MOS issues with a character just begun (see
 [serial-acia.md](serial-acia.md)).
+That last character can also leave a trace: when its start bit reaches TxD before the master
+reset and a synthesiser cell samples it, the recording ends with a stray &FF frame after the
+last block's CRC, as a real machine's can. Loading never reads past the CRC, so it is harmless.
 
 ## Blank tapes
 
@@ -597,6 +600,12 @@ corpus:
     constant moves on one take.
 11. The live source's ring of two seconds and its priming level of a quarter of a second
     (`LiveSource::RING_SECONDS` and `PRIME_SECONDS`).
+12. The time from a write to the 6850's TDR to the start bit on TxD, with the transmitter idle:
+    the model takes one full bit time (the write restarts the bit-rate counter), the datasheet
+    says "within 1-bit time". With a real machine and a logic analyser, at 1200 baud: trigger on
+    the write to &FE09 while TxD idles at mark, and measure to TxD's falling edge. Anything
+    under about 60 µs would mean MOS 1.20's block writer (which places the next byte about
+    115 cycles after sending the sync byte) could send the sync byte twice.
 
 ## Not yet built
 
