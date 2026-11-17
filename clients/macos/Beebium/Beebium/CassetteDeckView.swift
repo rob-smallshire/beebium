@@ -70,6 +70,63 @@ enum CassetteTransportText {
     }
 }
 
+/// A transport key on the deck row.
+enum CassetteKey: CaseIterable {
+    case rewind, backToStart, play, stop, record, fastForward
+}
+
+/// How a transport key is drawn: whether it accepts a press, whether it is down
+/// (the lit status key), and whether it is red.
+struct CassetteKeyAppearance: Equatable {
+    var enabled: Bool
+    var depressed: Bool
+    var red: Bool
+}
+
+/// The deck row latches, like a mechanical deck (section 9.0): the key for the
+/// current transport is drawn depressed and so reads as the status display,
+/// every key stays live while a tape is in, and greying is reserved for what the
+/// deck cannot do. Pure, so the whole matrix is tested without a view.
+enum CassetteKeys {
+    /// The appearance of `key` for a deck in the given state. An empty deck can
+    /// do nothing, so every key is greyed and none is lit. With a tape in, a key
+    /// is greyed only where the deck cannot act -- a wind, seek or Back to the
+    /// beginning on a live input, or Record on a live input or a non-recordable
+    /// tape -- and is otherwise live and latches when it is the current
+    /// transport. Play is down while Playing and also while Recording, since
+    /// Record implies Play; Stop and Back to the beginning are momentary and
+    /// never latch; Record alone is red, and only while Recording.
+    static func appearance(of key: CassetteKey,
+                           transport: Beebium_TapeTransport,
+                           tapeInserted: Bool,
+                           isLive: Bool,
+                           recordable: Bool) -> CassetteKeyAppearance {
+        guard tapeInserted else {
+            return CassetteKeyAppearance(enabled: false, depressed: false, red: false)
+        }
+        switch key {
+        case .rewind:
+            return CassetteKeyAppearance(enabled: !isLive,
+                                         depressed: transport == .rewinding, red: false)
+        case .fastForward:
+            return CassetteKeyAppearance(enabled: !isLive,
+                                         depressed: transport == .fastForwarding, red: false)
+        case .backToStart:
+            return CassetteKeyAppearance(enabled: !isLive, depressed: false, red: false)
+        case .play:
+            return CassetteKeyAppearance(
+                enabled: true,
+                depressed: transport == .playing || transport == .recording, red: false)
+        case .stop:
+            return CassetteKeyAppearance(enabled: true, depressed: false, red: false)
+        case .record:
+            let recording = transport == .recording
+            return CassetteKeyAppearance(enabled: !isLive && recordable,
+                                         depressed: recording, red: recording)
+        }
+    }
+}
+
 /// The one cassette deck, shown at the top of the storage sidebar above the
 /// floppy drives when the model has a cassette interface. A transport with a
 /// counter and a scrubbing timeline, as a real deck is: Play, Stop, Rewind, Fast
@@ -428,14 +485,14 @@ struct CassetteDeckView: View {
 
     private var rewindButton: some View {
         transportKey("backward.fill", help: isLive ? "A live input cannot be wound" : "Rewind",
-                     enabled: tapeInserted && !isLive && transport != .rewinding) {
+                     key: .rewind) {
             run { await cassetteClient.rewind() }
         }
     }
 
     private var fastForwardButton: some View {
         transportKey("forward.fill", help: isLive ? "A live input cannot be wound" : "Fast forward",
-                     enabled: tapeInserted && !isLive && transport != .fastForwarding) {
+                     key: .fastForward) {
             run { await cassetteClient.fastForward() }
         }
     }
@@ -443,39 +500,34 @@ struct CassetteDeckView: View {
     private var backToStartButton: some View {
         transportKey("backward.end.fill",
                      help: isLive ? "A live input cannot be sought" : "Back to the beginning",
-                     enabled: tapeInserted && !isLive && cassetteClient.positionSeconds > 0) {
+                     key: .backToStart) {
             seek(to: 0)
         }
     }
 
     private var playButton: some View {
-        transportKey("play.fill", help: "Play", enabled: tapeInserted && transport != .playing) {
+        transportKey("play.fill", help: "Play", key: .play) {
             run { await cassetteClient.play() }
         }
     }
 
     private var stopButton: some View {
-        transportKey("stop.fill", help: "Stop", enabled: tapeInserted && transport != .stopped) {
+        transportKey("stop.fill", help: "Stop", key: .stop) {
             run { await cassetteClient.stop() }
         }
     }
 
-    /// The red Record key. Disabled with an explanation for a tape that is not
-    /// recordable (a CSW): recording stays the user's deliberate choice, and the
-    /// disabled key says why rather than letting the server refuse after a press.
+    /// The Record key. It is drawn in the ordinary key colour and turns red only
+    /// while Recording (section 9.0), never as a standing invitation. It is
+    /// greyed, with an explanation, for a tape that cannot be recorded onto (a
+    /// CSW or a live input), so the disabled key says why rather than letting the
+    /// server refuse after a press.
     private var recordButton: some View {
-        let recordable = cassetteClient.tape?.recordable ?? false
-        let enabled = tapeInserted && !isLive && recordable && transport != .recording && !isProcessing
-        return Button {
+        transportKey("record.circle.fill",
+                     help: recordHelp(recordable: cassetteClient.tape?.recordable ?? false),
+                     key: .record) {
             run { await cassetteClient.record() }
-        } label: {
-            Image(systemName: "record.circle.fill")
-                .font(.system(size: 14))
-                .foregroundColor(enabled ? .red : .secondary.opacity(0.4))
         }
-        .buttonStyle(.borderless)
-        .disabled(!enabled)
-        .help(recordHelp(recordable: recordable))
     }
 
     private func recordHelp(recordable: Bool) -> String {
@@ -507,17 +559,40 @@ struct CassetteDeckView: View {
         .help(isLive ? "Stop the live input" : "Eject tape")
     }
 
-    /// One transport key: a borderless glyph button, dimmed when disabled.
-    private func transportKey(_ symbol: String, help: String, enabled: Bool,
+    /// One transport key: a borderless glyph that latches. It is drawn depressed
+    /// (a filled rounded background, the ordinary key colour at full strength)
+    /// while it is the lit status key, red only for Record while Recording, and
+    /// dimmed only when the deck cannot do it. Every key stays enabled while a
+    /// tape is in; a press on a key already down does nothing (the server's
+    /// transport is idempotent, so the short-circuit is a local nicety).
+    private func transportKey(_ symbol: String, help: String, key: CassetteKey,
                               action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        let appearance = CassetteKeys.appearance(
+            of: key, transport: transport, tapeInserted: tapeInserted,
+            isLive: isLive, recordable: cassetteClient.tape?.recordable ?? false)
+        return Button {
+            if !appearance.depressed { action() }
+        } label: {
             Image(systemName: symbol)
                 .font(.system(size: 14))
-                .foregroundColor(enabled ? .primary.opacity(0.7) : .secondary.opacity(0.3))
+                .foregroundColor(transportKeyColor(appearance))
+                .padding(2)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(appearance.depressed ? Color.secondary.opacity(0.25) : Color.clear))
         }
         .buttonStyle(.borderless)
-        .disabled(!enabled || isProcessing)
+        .disabled(!appearance.enabled)
         .help(help)
+    }
+
+    /// A transport key's glyph colour: dim when it cannot be pressed, red for
+    /// Record while Recording, and otherwise the ordinary key colour -- at full
+    /// strength while down, a little muted while up.
+    private func transportKeyColor(_ appearance: CassetteKeyAppearance) -> Color {
+        if !appearance.enabled { return .secondary.opacity(0.3) }
+        if appearance.red { return .red }
+        return .primary.opacity(appearance.depressed ? 1.0 : 0.7)
     }
 
     // MARK: - Actions

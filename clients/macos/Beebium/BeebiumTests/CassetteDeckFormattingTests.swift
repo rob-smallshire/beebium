@@ -90,4 +90,87 @@ final class CassetteDeckFormattingTests: XCTestCase {
         XCTAssertEqual(TapeTimelineGeometry.position(atX: 50, width: 0, duration: 300), 0)
         XCTAssertEqual(TapeTimelineGeometry.position(atX: 50, width: 200, duration: 0), 0)
     }
+
+    // MARK: - Latching transport keys
+
+    private func appearance(_ key: CassetteKey,
+                            transport: Beebium_TapeTransport = .stopped,
+                            tapeInserted: Bool = true,
+                            isLive: Bool = false,
+                            recordable: Bool = true) -> CassetteKeyAppearance {
+        CassetteKeys.appearance(of: key, transport: transport, tapeInserted: tapeInserted,
+                                isLive: isLive, recordable: recordable)
+    }
+
+    func testEmptyDeckGreysEveryKeyWithNoneLit() {
+        for key in CassetteKey.allCases {
+            let a = appearance(key, transport: .stopped, tapeInserted: false)
+            XCTAssertEqual(a, CassetteKeyAppearance(enabled: false, depressed: false, red: false),
+                           "empty deck must grey \(key) and light nothing")
+        }
+    }
+
+    func testStoppedTapeLeavesEveryKeyLiveAndNothingDown() {
+        for key in CassetteKey.allCases {
+            let a = appearance(key, transport: .stopped)
+            XCTAssertTrue(a.enabled, "\(key) must stay live with a recordable tape in")
+            XCTAssertFalse(a.depressed, "nothing is down while Stopped, including \(key)")
+            XCTAssertFalse(a.red, "\(key) must not be red while Stopped")
+        }
+    }
+
+    func testPlayingLatchesOnlyPlay() {
+        XCTAssertEqual(appearance(.play, transport: .playing),
+                       CassetteKeyAppearance(enabled: true, depressed: true, red: false))
+        for key in [CassetteKey.stop, .rewind, .fastForward, .backToStart, .record] {
+            XCTAssertFalse(appearance(key, transport: .playing).depressed,
+                           "\(key) must not be down while Playing")
+        }
+        // Record stays live and ordinary-coloured while Playing, not red.
+        XCTAssertEqual(appearance(.record, transport: .playing),
+                       CassetteKeyAppearance(enabled: true, depressed: false, red: false))
+    }
+
+    func testRecordingLatchesRecordAndPlayTogetherWithRecordRed() {
+        XCTAssertEqual(appearance(.record, transport: .recording),
+                       CassetteKeyAppearance(enabled: true, depressed: true, red: true))
+        // Record implies Play, so Play is down too -- but never red.
+        XCTAssertEqual(appearance(.play, transport: .recording),
+                       CassetteKeyAppearance(enabled: true, depressed: true, red: false))
+        XCTAssertFalse(appearance(.stop, transport: .recording).depressed)
+    }
+
+    func testWindsLatchTheWindInProgress() {
+        XCTAssertTrue(appearance(.rewind, transport: .rewinding).depressed)
+        XCTAssertFalse(appearance(.fastForward, transport: .rewinding).depressed)
+        XCTAssertTrue(appearance(.fastForward, transport: .fastForwarding).depressed)
+        XCTAssertFalse(appearance(.rewind, transport: .fastForwarding).depressed)
+        // A wind is never red.
+        XCTAssertFalse(appearance(.rewind, transport: .rewinding).red)
+    }
+
+    func testNonRecordableTapeGreysRecordOnly() {
+        XCTAssertEqual(appearance(.record, transport: .stopped, recordable: false),
+                       CassetteKeyAppearance(enabled: false, depressed: false, red: false))
+        XCTAssertTrue(appearance(.play, transport: .stopped, recordable: false).enabled)
+        XCTAssertTrue(appearance(.stop, transport: .stopped, recordable: false).enabled)
+    }
+
+    func testLiveInputGreysWindsSeekAndRecordButNotPlayOrStop() {
+        for key in [CassetteKey.rewind, .fastForward, .backToStart, .record] {
+            XCTAssertFalse(appearance(key, transport: .playing, isLive: true, recordable: false).enabled,
+                           "\(key) must be greyed on a live input")
+        }
+        XCTAssertTrue(appearance(.play, transport: .playing, isLive: true, recordable: false).enabled)
+        XCTAssertTrue(appearance(.stop, transport: .playing, isLive: true, recordable: false).enabled)
+        // A live input still latches Play while it is playing.
+        XCTAssertTrue(appearance(.play, transport: .playing, isLive: true, recordable: false).depressed)
+    }
+
+    func testBackToTheBeginningStaysLiveEvenAtTheStart() {
+        // It no longer greys at position 0: the ruling greys it only on a live
+        // input, and the server's Seek(0) is harmless when already there.
+        XCTAssertTrue(appearance(.backToStart, transport: .stopped).enabled)
+        XCTAssertFalse(appearance(.backToStart, transport: .stopped).depressed)
+    }
 }
