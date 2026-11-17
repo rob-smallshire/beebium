@@ -865,3 +865,78 @@ TEST_CASE("MOS 1.20 loads tape_ok streamed live in real time", "[grpc][cassette]
         fixture.machine().with_emulation_paused([&] { fixture.machine().write(0x70, 0); });
     }
 }
+
+// =============================================================================
+// Data-race witnesses for the recording path (meaningful under TSan)
+// =============================================================================
+
+namespace {
+
+// The ACIA idle with /RTS low and the Serial ULA on cassette with the motor
+// on: the tone synthesiser sends carrier and a recording deck records it.
+void send_carrier(CassetteFixture& fixture) {
+    fixture.machine().with_emulation_paused([&] {
+        fixture.machine().write(0xFE08, 0x15);
+        fixture.machine().write(0xFE10, 0x85);
+    });
+}
+
+}  // namespace
+
+TEST_CASE("Recording through the service is race-free against a client's status stream and keys",
+          "[grpc][cassette][race]") {
+    CassetteFixture fixture;
+    if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    const auto filepath = fixture.dirpath() / "witness.uef";
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef", filepath);
+    fixture.start_running();
+    fixture.run_emulated(2'000'000);
+    REQUIRE(fixture.insert(filepath.string()).success());
+    send_carrier(fixture);
+    REQUIRE(fixture.record().success());
+
+    std::atomic<bool> done{false};
+    std::thread watcher([&] {
+        grpc::ClientContext context;
+        beebium::SubscribeDeckStatusRequest request;
+        request.set_min_interval_ms(1);
+        auto reader = fixture.stub().SubscribeDeckStatus(&context, request);
+        beebium::DeckStatus status;
+        while (!done && reader->Read(&status)) {}
+        context.TryCancel();
+        reader->Finish();
+    });
+    for (int i = 0; i < 40; ++i) {
+        fixture.run_emulated(20'000);
+        (void)fixture.status();
+        if (i % 4 == 1) (void)fixture.stop();
+        if (i % 4 == 2) (void)fixture.seek(0.1 * i);
+        if (i % 4 == 3) (void)fixture.record();
+        if (i % 8 == 7) (void)fixture.play();
+    }
+    REQUIRE(fixture.stop().success());
+    done = true;
+    watcher.join();
+    fixture.stop_running();
+    CHECK(fixture.status().transport() == beebium::TAPE_TRANSPORT_STOPPED);
+}
+
+TEST_CASE("Recording mutated without the pause races (the witness's control)", "[.][race]") {
+    // The same, but Stop and Record reach the deck directly from this thread
+    // while the emulation thread records: TSan reports it.
+    CassetteFixture fixture;
+    if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    const auto filepath = fixture.dirpath() / "control.uef";
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef", filepath);
+    fixture.start_running();
+    fixture.run_emulated(2'000'000);
+    REQUIRE(fixture.insert(filepath.string()).success());
+    send_carrier(fixture);
+    auto& deck = fixture.machine().state().memory.cassette_deck;
+    for (int i = 0; i < 20; ++i) {
+        deck.record();
+        fixture.run_emulated(20'000);
+        deck.stop();
+    }
+    fixture.stop_running();
+}
