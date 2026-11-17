@@ -38,7 +38,10 @@ permissions:
 jobs:
   bridge-recipe:
     name: PiEconetBridge recipe (Linux)
-    runs-on: ubuntu-latest
+    # Pinned to ubuntu-24.04 with server-linux, whose dynamically linked
+    # beebium-server-linux artifact runs here against the distribution gRPC
+    # (see the comment there).
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       # The bridge listens on 32768; Beebium binds its own port, which the

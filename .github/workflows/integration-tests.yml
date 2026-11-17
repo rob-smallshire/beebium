@@ -38,7 +38,9 @@ permissions:
 jobs:
   integration-tests:
     name: Integration Tests (Linux)
-    runs-on: ubuntu-latest
+    # Pinned to ubuntu-24.04 with ci.yml's server-linux: the GCC 12 floor
+    # cannot link 26.04's distribution protobuf (see the comment there).
+    runs-on: ubuntu-24.04
     timeout-minutes: 360
 
     env:

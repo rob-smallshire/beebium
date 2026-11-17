@@ -343,7 +343,14 @@ jobs:
 
   server-linux:
     name: Build and Test Server (Linux)
-    runs-on: ubuntu-latest
+    # Pinned to 24.04, not ubuntu-latest. On 2026-11-17 ubuntu-latest rolled to
+    # 26.04 (image 20261111.196.1), whose distribution libprotobuf is built with
+    # 26.04's GCC and needs a libstdc++ (GLIBCXX_3.4.32, CXXABI_1.3.15) that the
+    # GCC 12 floor lane cannot link: CI run 44181846536 failed at the first link.
+    # Every job that builds against the distribution gRPC/protobuf, or runs the
+    # beebium-server-linux artifact built here, is pinned with it. Move them
+    # together, with the compiler floor, when the floor moves past GCC 12.
+    runs-on: ubuntu-24.04
     needs: preflight
 
     env:
@@ -987,7 +994,10 @@ jobs:
 
   typescript-integration-linux:
     name: TypeScript Client Integration Tests (Linux)
-    runs-on: ubuntu-latest
+    # Pinned to ubuntu-24.04 with server-linux, whose dynamically linked
+    # beebium-server-linux artifact runs here against the distribution gRPC
+    # (see the comment there).
+    runs-on: ubuntu-24.04
     needs: server-linux
 
     steps:
@@ -1221,7 +1231,10 @@ jobs:
 
   python-integration-linux:
     name: Python Client Integration Tests (Linux)
-    runs-on: ubuntu-latest
+    # Pinned to ubuntu-24.04 with server-linux, whose dynamically linked
+    # beebium-server-linux artifact runs here against the distribution gRPC
+    # (see the comment there).
+    runs-on: ubuntu-24.04
     needs: server-linux
 
     steps:
@@ -1310,7 +1323,10 @@ jobs:
   # those two are run with -m slow; tube-save has no such gate.
   scenario-integration-linux:
     name: Scenario Integration Tests (Linux)
-    runs-on: ubuntu-latest
+    # Pinned to ubuntu-24.04 with server-linux, whose dynamically linked
+    # beebium-server-linux artifact runs here against the distribution gRPC
+    # (see the comment there).
+    runs-on: ubuntu-24.04
     needs: server-linux
 
     steps:
