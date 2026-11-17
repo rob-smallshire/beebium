@@ -325,8 +325,8 @@ export class Beebium {
      * machine code), then press play. Resolves at once; wait for the screen in
      * emulated time to know the load has finished.
      */
-    async bootTape(tapeFilepath: string, command = 'CHAIN""'): Promise<void> {
-        await this.cassette.insert(tapeFilepath);
+    async bootTape(tapeFilepath: string, command = 'CHAIN""', channel?: "left" | "right"): Promise<void> {
+        await this.cassette.insert(tapeFilepath, channel);
         await this.keyboard.type("*TAPE\r" + command + "\r");
         await this.cassette.play();
     }

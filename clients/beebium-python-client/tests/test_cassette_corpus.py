@@ -12,6 +12,11 @@
 
 """Commercial tapes that stress the cassette path, loaded with boot_tape (#208).
 
+Two collections share the directory BEEBIUM_TAPE_CORPUS_DIRPATH names: UEF and
+CSW images identified by SHA-256 (below), and a corpus of recordings supplied for
+the project as WAV files, named by file and each with a TOML beside it saying
+which channel carries the signal (the WAV cases at the end).
+
 The tapes are third-party images, never committed. They are read from the
 directory BEEBIUM_TAPE_CORPUS_DIRPATH names (beebjit's test/tapes is one such
 collection) and identified by SHA-256, so a file of the same name with other
@@ -29,6 +34,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tomllib
+import wave
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -112,3 +119,134 @@ def test_corpus_tape_reaches_its_first_screen(tape: CorpusTape, mos_filepath, ba
                 f"{tape.seconds} emulated seconds; the screen reads:\n{text}")
     except ServerNotFoundError as e:
         pytest.skip(str(e))
+
+
+# =============================================================================
+# The WAV corpus: recordings of real tapes, played through the front end
+# =============================================================================
+
+
+def _wav_take(name: str) -> tuple[Path, str]:
+    """The take's WAV and the channel its TOML names, or SKIP."""
+    dirpath = _corpus_dirpath()
+    wav_filepath = dirpath / f"{name}.wav"
+    toml_filepath = dirpath / f"{name}.toml"
+    if not wav_filepath.is_file() or not toml_filepath.is_file():
+        pytest.skip(f"The corpus has no {name}.wav with its TOML.")
+    with toml_filepath.open("rb") as f:
+        channel = tomllib.load(f).get("signal_channel", "left")
+    return wav_filepath, channel
+
+
+def _run_until(bbc: Beebium, text: str, seconds: int) -> str:
+    """Step emulated time a second at a time until `text` is on the screen."""
+    screen = ""
+    for _ in range(seconds):
+        bbc.debugger.step_cycles(2_000_000)
+        screen = bbc.video.screen_text().text
+        if text in screen:
+            break
+    return screen
+
+
+@pytest.fixture
+def corpus_bbc(mos_filepath, basic_filepath, beebium_server_filepath):
+    try:
+        with Beebium.launch(mos_filepath=mos_filepath, basic_filepath=basic_filepath,
+                            server=beebium_server_filepath) as bbc:
+            yield bbc
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+
+
+# Plan B2, side 1: one program, recorded at a normal level twice and at three
+# set levels. Its title screen comes up about 320 s in.
+_PLAN_B2_LOADING = ["plan-b2-side1-001", "plan-b2-side1-002", "plan-b2-side1-level-normal",
+                    "plan-b2-side1-level-high"]
+
+
+@pytest.mark.parametrize("take", _PLAN_B2_LOADING)
+def test_plan_b2_take_loads_cleanly(take: str, corpus_bbc):
+    wav_filepath, channel = _wav_take(take)
+    corpus_bbc.boot_tape(wav_filepath, channel=channel)
+    corpus_bbc.debugger.stop()
+    screen = _run_until(corpus_bbc, "Press space to start", 380)
+    assert "Press space to start" in screen, f"{take} did not reach its title screen; the screen reads:\n{screen}"
+    assert "Data?" not in screen and "Block?" not in screen
+
+
+def test_plan_b2_low_level_take_is_a_known_failure(corpus_bbc):
+    """Known failure, not hidden: the low-level take does not load through the
+    front end as modelled. With the comparator's hysteresis at a third of this
+    take's filtered peak, the two tones' crossings are delayed differently and
+    many blocks fail their CRC (261 Data? over 300 s when measured). Whether it
+    loads on a real machine is not yet known. If a change makes it load, this
+    test fails: update docs/cassette.md and turn this into a loading case."""
+    wav_filepath, channel = _wav_take("plan-b2-side1-level-low")
+    corpus_bbc.boot_tape(wav_filepath, channel=channel)
+    corpus_bbc.debugger.stop()
+    screen = _run_until(corpus_bbc, "Press space to start", 380)
+    assert "Press space to start" not in screen
+    assert "Data?" in screen
+
+
+def test_cascade_50_chains_a_program_past_the_bad_patches(corpus_bbc):
+    """Cascade 50, side 1, take 1: its TOML warns of bad patches, and the
+    catalogue shows Data? in GAL and PLA while MAZ, SPA, LUN and STA read
+    cleanly. LUN lies past GAL's bad patch; CHAIN "LUN" searches past it."""
+    wav_filepath, channel = _wav_take("cascade50-side1-001")
+    corpus_bbc.boot_tape(wav_filepath, command='CHAIN "LUN"', channel=channel)
+    corpus_bbc.debugger.stop()
+    screen = _run_until(corpus_bbc, "ANY KEY TO PLAY", 340)
+    assert "LUNAR LANDER" in screen and "ANY KEY TO PLAY" in screen, screen
+
+
+def _end_of_longest_toneless_stretch(wav_filepath: Path, channel: str) -> float:
+    """Where the longest stretch without tone ends, in seconds: the point the
+    recording was stopped and the tape rewound. Without tone is near silence,
+    or what a deck puts out while it rewinds, a level that hardly crosses its
+    own mean (the front end's DC block gives no edges for it either)."""
+    with wave.open(str(wav_filepath), "rb") as w:
+        rate, channels, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
+        assert width == 2
+        index = 0 if channel == "left" or channels == 1 else 1
+        window = rate // 10
+        quiet_from, longest = None, (0.0, 0.0)
+        t = 0.0
+        while True:
+            frames = w.readframes(window)
+            if not frames:
+                break
+            samples = memoryview(frames).cast("h")[index::channels]
+            mean = sum(samples) / len(samples)
+            crossings = sum(1 for a, b in zip(samples[:-1], samples[1:], strict=True) if (a - mean) * (b - mean) < 0)
+            peak = max(abs(s - mean) for s in samples) / 32768.0
+            if crossings < 20 or peak < 0.01:
+                if quiet_from is None:
+                    quiet_from = t
+            elif quiet_from is not None:
+                if t - quiet_from > longest[1] - longest[0]:
+                    longest = (quiet_from, t)
+                quiet_from = None
+            t += window / rate
+    return longest[1]
+
+
+def test_palace_of_magic_loads_after_seeking_past_its_rewind(corpus_bbc):
+    """A partial take with a play-stop-rewind-play in it: the first pass loads
+    the loader and part of the game, then the tape was stopped and rewound, so
+    the replay begins again within the loader. Seek past the rewind (a few
+    seconds without tone) and the loader loads from the replay, runs, and the game's blocks follow
+    until the take ends."""
+    wav_filepath, channel = _wav_take("palace-of-magic-side1-partial-rewind")
+    resume = _end_of_longest_toneless_stretch(wav_filepath, channel)
+    assert 90.0 < resume < 100.0, resume
+    corpus_bbc.cassette.insert(wav_filepath, channel=channel)
+    corpus_bbc.cassette.seek(resume)
+    corpus_bbc.debugger.ensure_running()
+    corpus_bbc.keyboard.type('*TAPE\rCHAIN""\r')
+    corpus_bbc.cassette.play()
+    corpus_bbc.debugger.stop()
+    screen = _run_until(corpus_bbc, "POM        02", 40)
+    assert "PALACE OF MAGIC" in screen and "POM        02" in screen, screen
+    assert "Rewind tape" not in screen and "Data?" not in screen

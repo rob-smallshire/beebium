@@ -198,8 +198,10 @@ bbc.expect("FIRE 1")
 
 ### Play a tape
 
-The cassette deck takes UEF and CSW tape images. Inserting leaves the deck
-stopped; play is separate, as on a real deck, and the tape moves only while the
+The cassette deck takes UEF and CSW tape images, and WAV recordings, which it
+plays through a model of the machine's cassette input (pass
+`insert(path, channel="left")` to choose a stereo WAV's channel; by default the
+louder is played). Inserting leaves the deck stopped; play is separate, as on a real deck, and the tape moves only while the
 emulated machine's motor relay is closed. `bbc.cassette.events()` streams the
 deck's status, and an unsuccessful request raises `CassetteError` with the
 server's sentence and a `kind`.

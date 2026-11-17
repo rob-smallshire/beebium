@@ -44,6 +44,8 @@ const TAPE = {
     targetMachine: "",
     durationSeconds: 12.5,
     recordable: true,
+    sampleRate: 0,
+    channel: "",
 };
 
 describe("Cassette", () => {
@@ -71,7 +73,7 @@ describe("Cassette", () => {
             play: () => ({ success: false, error: "There is no tape in the deck.", kind: KIND_DECK_EMPTY }),
             insertTape: () => ({
                 success: false,
-                error: "The file notes.txt is not a UEF or CSW tape image.",
+                error: "The file notes.txt is not a UEF, CSW or WAV tape image.",
                 kind: KIND_UNSUPPORTED_FORMAT,
             }),
         });
@@ -176,5 +178,20 @@ describe("Cassette", () => {
         await expect(cassette.createTape("x", "/tmp/y")).rejects.toMatchObject({
             kind: CreateTapeErrorKind.UNKNOWN_LABEL,
         });
+    });
+
+    it("passes a WAV's channel and reports its rate", async () => {
+        const stub = createMockStub({
+            insertTape: () => ({
+                success: true, error: "", kind: 0,
+                tape: { ...TAPE, name: "take.wav", format: "WAV", recordable: false, sampleRate: 48000, channel: "right" },
+            }),
+        });
+        const tape = await new Cassette(stub as any).insert("/tapes/take.wav", "right");
+        expect(stub.insertTape.mock.calls[0][0].channel).toBe("right");
+        expect(tape.sampleRate).toBe(48000);
+        expect(tape.channel).toBe("right");
+        await new Cassette(stub as any).insert("/tapes/take.wav");
+        expect(stub.insertTape.mock.calls[1][0]).not.toHaveProperty("channel");
     });
 });

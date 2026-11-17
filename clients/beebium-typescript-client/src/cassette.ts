@@ -91,14 +91,18 @@ export interface BlankTape {
 export interface TapeMetadata {
     name: string;
     url: string;
-    /** "UEF" or "CSW". */
+    /** "UEF", "CSW" or "WAV". */
     format: string;
     title: string;
     origin: string;
     targetMachine: string;
     durationSeconds: number;
-    /** Whether {@link Cassette.record} can record on it: a UEF can, a CSW cannot. */
+    /** Whether {@link Cassette.record} can record on it: a UEF can, a CSW or WAV cannot. */
     recordable: boolean;
+    /** A WAV's rate in Hz; 0 for UEF and CSW. */
+    sampleRate: number;
+    /** The WAV channel played, "left" or "right"; empty for UEF and CSW. */
+    channel: string;
 }
 
 /** The deck as the server last published it. */
@@ -179,6 +183,8 @@ function toTapeMetadata(proto: ProtoTapeMetadata): TapeMetadata {
         targetMachine: proto.targetMachine,
         durationSeconds: proto.durationSeconds,
         recordable: proto.recordable,
+        sampleRate: proto.sampleRate,
+        channel: proto.channel,
     };
 }
 
@@ -221,10 +227,14 @@ export class Cassette {
         return promisify<Req, Res>(this.stub as unknown as Record<string, Function>, method, request);
     }
 
-    /** Insert a UEF or CSW tape image the server can reach; the deck is left stopped. */
-    async insert(pathOrUrl: string): Promise<TapeMetadata> {
-        const response = await this.call<{ url: string }, ProtoInsertTapeResponse>(
-            "insertTape", { url: toTapeUrl(pathOrUrl) });
+    /**
+     * Insert a UEF, CSW or WAV tape image the server can reach; the deck is left
+     * stopped. A WAV plays through a model of the machine's cassette input;
+     * `channel` chooses a stereo WAV's ("left" or "right"), by default the louder.
+     */
+    async insert(pathOrUrl: string, channel?: "left" | "right"): Promise<TapeMetadata> {
+        const response = await this.call<{ url: string; channel?: string }, ProtoInsertTapeResponse>(
+            "insertTape", channel === undefined ? { url: toTapeUrl(pathOrUrl) } : { url: toTapeUrl(pathOrUrl), channel });
         check(response);
         return toTapeMetadata(response.tape!);
     }

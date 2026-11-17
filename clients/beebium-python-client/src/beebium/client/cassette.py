@@ -108,12 +108,14 @@ class TapeMetadata:
 
     name: str
     url: str
-    format: str  # "UEF" or "CSW"
+    format: str  # "UEF", "CSW" or "WAV"
     title: str
     origin: str
     target_machine: str
     duration_seconds: float
-    recordable: bool  # whether record() can record on it: a UEF can, a CSW cannot
+    recordable: bool  # whether record() can record on it: a UEF can, a CSW or WAV cannot
+    sample_rate: int = 0  # a WAV's rate in Hz; 0 for UEF and CSW
+    channel: str = ""  # the WAV channel played, "left" or "right"; empty for UEF and CSW
 
 
 @dataclass(frozen=True)
@@ -150,6 +152,8 @@ def _tape_metadata(proto: cassette_pb2.TapeMetadata) -> TapeMetadata:
         target_machine=proto.target_machine,
         duration_seconds=proto.duration_seconds,
         recordable=proto.recordable,
+        sample_rate=proto.sample_rate,
+        channel=proto.channel,
     )
 
 
@@ -190,12 +194,21 @@ class Cassette:
     def __init__(self, stub: cassette_pb2_grpc.CassetteServiceStub):
         self._stub = stub
 
-    def insert(self, path_or_url: str | Path) -> TapeMetadata:
-        """Insert a UEF or CSW tape image the server can reach, judged by content.
+    def insert(self, path_or_url: str | Path, channel: str | None = None) -> TapeMetadata:
+        """Insert a UEF, CSW or WAV tape image the server can reach, judged by
+        content. A WAV is played through a model of the machine's cassette input.
 
         The deck is left stopped at the start of the tape.
+
+        Args:
+            path_or_url: The tape image.
+            channel: For a stereo WAV, "left" or "right"; by default the server
+                plays the louder.
         """
-        response = self._stub.InsertTape(cassette_pb2.InsertTapeRequest(url=_url_of(path_or_url)))
+        request = cassette_pb2.InsertTapeRequest(url=_url_of(path_or_url))
+        if channel is not None:
+            request.channel = channel
+        response = self._stub.InsertTape(request)
         _check(response)
         return _tape_metadata(response.tape)
 

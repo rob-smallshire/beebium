@@ -613,7 +613,7 @@ class Beebium:
         self.keyboard.shift_break(hold_time=hold_time,
                                   shift_hold_after=shift_hold_after)
 
-    def boot_tape(self, tape_filepath, *, command: str = 'CHAIN""') -> None:
+    def boot_tape(self, tape_filepath, *, command: str = 'CHAIN""', channel: str | None = None) -> None:
         """Insert a tape and load it, as a user does at the keyboard.
 
         Inserts ``tape_filepath``, types ``*TAPE`` and ``command`` (``CHAIN""``
@@ -626,10 +626,11 @@ class Beebium:
         Leaves the machine: RUNNING.
 
         Args:
-            tape_filepath: Path to the UEF or CSW tape image.
+            tape_filepath: Path to the UEF, CSW or WAV tape image.
             command: What to type after ``*TAPE`` to load the tape.
+            channel: For a stereo WAV, "left" or "right"; by default the louder.
         """
-        self.cassette.insert(tape_filepath)
+        self.cassette.insert(tape_filepath, channel=channel)
         self.debugger.ensure_running()
         self.keyboard.type("*TAPE\r" + command + "\r")
         self.cassette.play()

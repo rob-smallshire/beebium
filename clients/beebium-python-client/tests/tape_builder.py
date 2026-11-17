@@ -83,6 +83,33 @@ def csw_of_pulses(pulses: list[int], sample_rate: int = 44100) -> bytes:
     return header + bytes(pulses)
 
 
+def wav_of_carrier(seconds: float, *, rate: int = 48000, stereo_signal_channel: int | None = None) -> bytes:
+    """A 16-bit WAV of 2400 Hz carrier as sines at 90 degrees (a cosine a
+    half-cycle), amplitude 0.5; stereo with the signal in one channel and
+    silence in the other if asked."""
+    import math
+    import wave
+    from io import BytesIO
+    frames = bytearray()
+    half = rate / 4800.0
+    for n in range(int(seconds * rate)):
+        k, u = divmod(n / half, 1.0)
+        v = int(0.5 * 32767 * math.cos(math.pi * u) * (1 if int(k) % 2 == 0 else -1))
+        sample = struct.pack("<h", v)
+        if stereo_signal_channel is None:
+            frames += sample
+        else:
+            silent = struct.pack("<h", 0)
+            frames += (sample + silent) if stereo_signal_channel == 0 else (silent + sample)
+    out = BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setnchannels(1 if stereo_signal_channel is None else 2)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(bytes(frames))
+    return out.getvalue()
+
+
 def write(filepath: Path, data: bytes) -> Path:
     filepath.write_bytes(data)
     return filepath

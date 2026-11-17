@@ -196,3 +196,19 @@ def test_record_is_a_transport_and_a_csw_is_read_only(bbc, tmp_path: Path):
     assert bbc.cassette.status().transport == TapeTransport.RECORDING
     bbc.cassette.stop()
     assert bbc.cassette.status().transport == TapeTransport.STOPPED
+
+
+def test_a_wav_inserts_with_its_rate_and_channel(bbc, tmp_path: Path):
+    wav = tape_builder.write(tmp_path / "take.wav", tape_builder.wav_of_carrier(1.0, stereo_signal_channel=1))
+    louder = bbc.cassette.insert(wav)
+    assert louder.format == "WAV"
+    assert louder.sample_rate == 48000
+    assert louder.channel == "right"
+    assert not louder.recordable
+    bbc.cassette.eject()
+    chosen = bbc.cassette.insert(wav, channel="left")
+    assert chosen.channel == "left"
+    bbc.cassette.eject()
+    with pytest.raises(CassetteError) as bad:
+        bbc.cassette.insert(wav, channel="centre")
+    assert str(bad.value) == "A WAV's channel is left or right, not centre."
