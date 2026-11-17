@@ -36,10 +36,12 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QSlider>
+#include <QStyleOptionSlider>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -99,6 +101,45 @@ QIcon themed(const char* name, QStyle::StandardPixmap fallback, const QWidget* w
     return QIcon::fromTheme(QString::fromLatin1(name), widget->style()->standardIcon(fallback));
 }
 
+// Where the head is on the tape: a marker above a plain bar (client
+// specification 9.0). A slider in all but its look, so it drags, steps on
+// a click and seeks on release as one does; but it colours neither side of
+// the bar, since a tape has no played and unplayed portion.
+class TapeTimeline : public QSlider {
+public:
+    explicit TapeTimeline(QWidget* parent) : QSlider(Qt::Horizontal, parent) {}
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QStyleOptionSlider option;
+        initStyleOption(&option);
+        // The style's own handle, so the marker sits where a press takes it.
+        const QRect handle =
+            style()->subControlRect(QStyle::CC_Slider, &option, QStyle::SC_SliderHandle, this);
+        const qreal x = handle.center().x() + 0.5;
+        const qreal half = handle.width() / 2.0;
+        const qreal bar_y = height() - BAR_THICKNESS - 2.0;
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(Qt::NoPen);
+        const QPalette::ColorGroup group = isEnabled() ? QPalette::Active : QPalette::Disabled;
+        painter.setBrush(palette().color(group, QPalette::Mid));
+        painter.drawRoundedRect(QRectF(half, bar_y, width() - 2.0 * half, BAR_THICKNESS),
+                                BAR_THICKNESS / 2.0, BAR_THICKNESS / 2.0);
+        // A pointer down onto the bar, its tip at the head.
+        const qreal tip = bar_y - 1.0;
+        const qreal top = std::max(1.0, tip - MARKER_HEIGHT);
+        const qreal spread = (tip - top) * 0.6;
+        const QPointF marker[] = {{x - spread, top}, {x + spread, top}, {x, tip}};
+        painter.setBrush(palette().color(group, QPalette::WindowText));
+        painter.drawPolygon(marker, 3);
+    }
+
+private:
+    static constexpr qreal BAR_THICKNESS = 3.0;
+    static constexpr qreal MARKER_HEIGHT = 9.0;
+};
+
 }  // namespace
 
 CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* settings, Shares shares,
@@ -157,8 +198,8 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     layout->addWidget(live_);
 
     // The counter, the tape's length beside it when known, and beneath them
-    // the slider the user scrubs with: the only guide to where anything is
-    // on the tape, as on a real deck.
+    // the timeline the user scrubs with: the only guide to where anything
+    // is on the tape, as on a real deck.
     position_line_ = new QWidget(this);
     auto* position = new QVBoxLayout(position_line_);
     position->setContentsMargins(0, 0, 0, 0);
@@ -177,7 +218,7 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     counters->addStretch(1);
     counters->addWidget(duration_);
     position->addLayout(counters);
-    slider_ = new QSlider(Qt::Horizontal, position_line_);
+    slider_ = new TapeTimeline(position_line_);
     slider_->setObjectName(QStringLiteral("tapePosition"));
     slider_->setToolTip(tr("Drag to wind the tape; it moves when you let go"));
     position->addWidget(slider_);
@@ -264,13 +305,13 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     }
     connect(eject_offer_, &QPushButton::clicked, this, [this] { press(CassetteKey::eject); });
     connect(dismiss_, &QToolButton::clicked, this, &CassetteDeckRow::clear_message);
-    // The slider seeks when let go, not while it moves; while it is held the
+    // The timeline seeks when let go, not while it moves; while it is held the
     // counter shows where the tape would go.
     connect(slider_, &QSlider::sliderMoved, this, [this](int value) {
         counter_->setText(tape_counter_text(static_cast<double>(value) / SLIDER_SCALE));
     });
     connect(slider_, &QSlider::sliderReleased, this, &CassetteDeckRow::seek_to_slider);
-    // A click on the groove steps the slider without a drag: a seek too.
+    // A click on the bar steps the marker without a drag: a seek too.
     connect(slider_, &QSlider::actionTriggered, this, [this](int action) {
         if (action != QAbstractSlider::SliderMove && action != QAbstractSlider::SliderNoAction) {
             QTimer::singleShot(0, this, &CassetteDeckRow::seek_to_slider);
@@ -367,7 +408,7 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
 
 void CassetteDeckRow::refresh() {
     // While the tape moves only its position changes, four times a second:
-    // the counter, the slider and Back to the beginning are all it redraws
+    // the counter, the timeline and Back to the beginning are all it redraws
     // (on a Pi every repaint beside the picture copies the window).
     DeckState still = deck();
     still.position_seconds = 0.0;
@@ -423,7 +464,7 @@ void CassetteDeckRow::present() {
     metadata_->setVisible(inserted && !metadata_->whole().isEmpty());
     position_line_->setVisible(inserted);
     const double duration = deck.tape.duration_seconds;
-    // An unknown length has the counter alone, with no proportional slider.
+    // An unknown length has the counter alone, with no proportional timeline.
     duration_->setVisible(duration > 0.0);
     slider_->setVisible(duration > 0.0);
     duration_->setText(duration > 0.0 ? tape_counter_text(duration) : QString());
@@ -483,7 +524,7 @@ void CassetteDeckRow::present() {
 }
 
 void CassetteDeckRow::present_position() {
-    // Held, the slider and the counter are the user's until let go.
+    // Held, the marker and the counter are the user's until let go.
     if (slider_->isSliderDown()) {
         return;
     }

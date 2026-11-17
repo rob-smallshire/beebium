@@ -28,6 +28,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QLayout>
 #include <QMenu>
 #include <QPushButton>
@@ -426,6 +427,31 @@ TEST_CASE("Back to the beginning and Eject sit apart at the edges, the transport
     const QRect browse(d.row.browse_button()->mapTo(&d.row, QPoint(0, 0)),
                        d.row.browse_button()->size());
     CHECK(browse.bottom() < beginning.top());
+}
+
+TEST_CASE("The position is a marker on a plain timeline, neither side of it coloured",
+          "[cassette][deck][layout]") {
+    Deck d;
+    d.load();
+    d.row.resize(360, 320);
+    d.row.show();
+    d.row.layout()->activate();
+    QSlider* slider = d.row.slider();
+    slider->setValue(slider->maximum() / 2);
+    const QImage image = slider->grab().toImage();
+    const auto column = [&](double fraction) {
+        const int x = static_cast<int>(image.width() * fraction);
+        std::vector<QRgb> pixels;
+        for (int y = 0; y < image.height(); ++y) {
+            pixels.push_back(image.pixel(x, y));
+        }
+        return pixels;
+    };
+    // A tape has no played and unplayed portion: the bar reads the same
+    // either side of the head.
+    CHECK(column(0.25) == column(0.75));
+    // And the head is marked where it is.
+    CHECK(column(0.5) != column(0.25));
 }
 
 TEST_CASE("A tape of unknown length has the counter alone, with no slider", "[cassette][deck]") {

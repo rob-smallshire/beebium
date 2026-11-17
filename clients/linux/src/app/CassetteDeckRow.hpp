@@ -62,15 +62,16 @@ struct CassetteMessage {
 
 // The cassette deck, above the floppy drives (client specification 9.0):
 // the loaded tape's name, format and metadata; the transport and the motor
-// relay; the tape counter and a slider to scrub with; the keys; and the
-// three ways in for an empty deck, Browse, a drop and the recent tapes, with
-// New Blank Tape beside them (9.0.1). No catalogue, no waveform, no sound.
+// relay; the tape counter and a marker on a timeline to scrub with; the
+// keys; and the three ways in for an empty deck, Browse, a drop and the
+// recent tapes, with New Blank Tape beside them (9.0.1). No catalogue, no
+// waveform, no sound.
 class CassetteDeckRow : public QWidget {
     Q_OBJECT
 
 public:
     static constexpr int NOTICE_MS = 6000;
-    // The slider's steps per second of tape.
+    // The timeline's steps per second of tape.
     static constexpr int SLIDER_SCALE = 10;
 
     using Shares = std::function<bool()>;
