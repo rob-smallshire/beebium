@@ -1637,7 +1637,21 @@ section sits above the floppy drives, which sit above the hard discs.
   duration of 0 (unknown) the client shows the counter without a proportional
   indicator. The counter and the indicator are the user's only guide to where
   anything is on the tape, as on a real deck.
-- The Record key. The deck has a red Record key, which sends `Record`.
+- The keys latch (MANDATORY). The deck's keys are drawn as a mechanical deck's
+  are: the key for the current transport is shown depressed (the toolkit's
+  selected style) and that is the status display; Play is down while playing,
+  Rewind or Fast forward while winding, and Record and Play together while
+  recording, since Record implies Play. Stop is momentary and nothing is down
+  while the deck is stopped. Every key stays enabled while a tape is in, and
+  pressing a key that is already down does nothing (the server's `Play`, `Stop`
+  and `Record` are idempotent). A key is greyed only for what the deck cannot do:
+  Record on a tape that is not recordable or on a live input, the winds and a
+  seek on a live input, and every key while the deck is empty; each greyed key
+  keeps its explanatory help text. A key never changes its enabled state to show
+  the transport, so a lit key never reads as the opposite of the truth.
+- The Record key. The deck has a Record key, which sends `Record`. It is drawn in
+  the ordinary key colour and turns red only while the deck is recording, so red
+  means recording and nothing else.
   Recording is a transport the user selects, as play is: the tape moves only while
   the motor relay is closed, and everything that passes under the head is replaced
   by what the machine sends, silence included, so a recording deck erases while
@@ -1645,7 +1659,7 @@ section sits above the floppy drives, which sit above the hard discs.
   (9.0.1) or one to record over, press Record, then type `SAVE "NAME"` and press
   RETURN at the MOS's prompt. Stop ends a recording, as do Play, a seek, a wind,
   Eject and the end of the tape. Only a tape whose `TapeMetadata.recordable` is true
-  (a UEF) can be recorded on; for any other (a CSW) the client disables Record with
+  (a UEF) can be recorded on; for any other (a CSW) the client greys Record with
   an explanation, or sends it and shows the server's read-only sentence ("The tape
   <name> is a CSW image, and Beebium records only on UEF tapes."). The server writes
   a recorded tape back to its file itself, when the recording ends, on eject, on
