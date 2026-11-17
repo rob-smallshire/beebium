@@ -110,6 +110,12 @@ final class CassetteClient: ObservableObject, Disconnectable {
 
     @Published private(set) var errorMessage: String?
 
+    /// A live stream's refusal or failure, as a sentence (the server's verbatim
+    /// when it has one), for the deck to surface. Nil when there is nothing to
+    /// show. A lost connection is left to the status stream's staleness, so this
+    /// carries only a genuine stream error.
+    @Published private(set) var liveError: String?
+
     /// For a live tape (an audio input streamed from this host): how full the
     /// server's ring is, from 0 to 1, and the samples it has dropped on overrun
     /// and made up as silence on underrun. Zero and meaningless for a
@@ -140,6 +146,12 @@ final class CassetteClient: ObservableObject, Disconnectable {
     }
 
     private var client: Beebium_CassetteServiceNIOClient?
+
+    /// The live audio capture while a host input is streaming, else nil. Held
+    /// until the stream ends (its completion clears it), so a graceful close can
+    /// play out before the capture is released.
+    private var liveCapture: LiveAudioCapture?
+
     private var statusStreamCall:
         ServerStreamingCall<Beebium_SubscribeDeckStatusRequest, Beebium_DeckStatus>?
 
@@ -160,6 +172,8 @@ final class CassetteClient: ObservableObject, Disconnectable {
 
     func disconnect() {
         streamGeneration &+= 1
+        liveCapture?.cancel()
+        liveCapture = nil
         statusStreamCall?.cancel(promise: nil)
         statusStreamCall = nil
         client = nil
@@ -175,7 +189,58 @@ final class CassetteClient: ObservableObject, Disconnectable {
         liveOverruns = 0
         liveUnderruns = 0
         errorMessage = nil
+        liveError = nil
         blankTapes = []
+    }
+
+    // MARK: - Live input
+
+    /// Stream a host input device to the deck as the live tape. The capture runs
+    /// until `stopLiveInput()` (a graceful close, after which the server plays
+    /// out its ring and ejects) or the connection is lost. The caller has
+    /// already obtained microphone authorisation.
+    func startLiveInput(device: LiveAudioDevice) -> Result<Void, CassetteError> {
+        guard let client = client else { return .failure(.notConnected) }
+        liveCapture?.cancel()
+        liveError = nil
+        let capture = LiveAudioCapture()
+        do {
+            try capture.start(device: device, client: client) { [weak self] result in
+                Task { @MainActor [weak self] in self?.liveInputEnded(result) }
+            }
+            liveCapture = capture
+            return .success(())
+        } catch {
+            liveCapture = nil
+            return .failure(.operationFailed(error.localizedDescription, kind: .unspecified))
+        }
+    }
+
+    /// Half-close the live stream: stop capturing and let the server play out
+    /// its ring and eject the live tape. Does nothing when no live stream runs.
+    func stopLiveInput() {
+        liveCapture?.stop()
+    }
+
+    func clearLiveError() {
+        liveError = nil
+    }
+
+    /// Release the live capture when its stream ends, and surface a genuine
+    /// refusal or failure. A lost connection is left to the status stream's own
+    /// staleness, so it is not doubled as a live error.
+    private func liveInputEnded(_ result: Result<Beebium_StreamAudioSummary, Error>) {
+        liveCapture = nil
+        switch result {
+        case .success(let summary):
+            if !summary.error.isEmpty {
+                NSLog("[CassetteClient] Live stream refused: %@", summary.error)
+                liveError = summary.error
+            }
+        case .failure(let error):
+            NSLog("[CassetteClient] Live stream failed: %@", error.localizedDescription)
+            liveError = isStale ? nil : error.localizedDescription
+        }
     }
 
     // MARK: - Deck keys

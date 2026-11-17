@@ -216,4 +216,14 @@ final class CassetteClientTests: XCTestCase {
             return XCTFail("expected notConnected from insertTape()")
         }
     }
+
+    func testLiveInputIsRefusedWithoutAConnection() {
+        let client = CassetteClient()
+        let device = LiveAudioDevice(id: 1, name: "Built-in Microphone")
+        guard case .failure(.notConnected) = client.startLiveInput(device: device) else {
+            return XCTFail("expected notConnected from startLiveInput()")
+        }
+        // Stopping when nothing is streaming is a harmless no-op.
+        client.stopLiveInput()
+    }
 }
