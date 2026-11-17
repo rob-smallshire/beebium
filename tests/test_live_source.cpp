@@ -78,10 +78,43 @@ TEST_CASE("Live source paced one sample a period gives a tone's edges and no run
     CHECK(source->overruns() == 0);
     CHECK(source->received() == 100 * CHUNK);
     CHECK(source->consumed() == 100 * CHUNK);
-    REQUIRE(edges.size() > 4000);
+    // A quarter of a second priming, then three quarters of tone.
+    REQUIRE(edges.size() > 3500);
     for (size_t i = edges.size() / 2; i + 1 < edges.size(); ++i) {
         CHECK(std::llabs(static_cast<long long>(edges[i + 1] - edges[i]) - 256) <= 2);
     }
+}
+
+TEST_CASE("Live source primes a quarter of a second before it plays, and again after starving", "[cassette][live]") {
+    auto source = std::make_shared<LiveSource>(RATE);
+    LiveTape tape(source, "left");
+    tape.next();
+    CHECK(source->prime_level() == RATE / 4);
+    // A stream that starts late: silence while nothing comes, and no underrun.
+    CHECK(consume(tape, RATE / 2).empty());
+    CHECK(source->underruns() == 0);
+    CHECK(source->priming());
+    // Less than the priming level: still waiting, still nothing counted.
+    source->push(tone(2400.0, 0, RATE / 5));
+    CHECK(consume(tape, RATE / 10).empty());
+    CHECK(source->priming());
+    CHECK(source->underruns() == 0);
+    // Past it: the tone plays, everything that came, and then the ring starves.
+    source->push(tone(2400.0, RATE / 5, RATE / 10));
+    const auto edges = consume(tape, RATE * 3 / 10);
+    CHECK_FALSE(edges.empty());
+    CHECK(source->underruns() == 0);
+    // Starved: silence, counted, until the ring has primed again.
+    consume(tape, RATE / 10);
+    CHECK(source->underruns() == RATE / 10);
+    CHECK(source->priming());
+    source->push(tone(2400.0, 0, RATE / 10));  // not enough to prime
+    consume(tape, RATE / 10);
+    CHECK(source->underruns() == 2 * RATE / 10);
+    source->push(tone(2400.0, 0, RATE / 5));   // now a quarter of a second and more
+    consume(tape, 10);
+    CHECK_FALSE(source->priming());
+    CHECK(source->underruns() == 2 * RATE / 10);
 }
 
 TEST_CASE("Live source gives silence and counts it when the stream stops", "[cassette][live]") {
@@ -158,8 +191,9 @@ TEST_CASE("Live source ring holds up with a producer and a consumer on two threa
     bool ordered = true;
     while (!done || source.fill() > 0.0) {
         const uint64_t underruns = source.underruns();
+        const bool priming = source.priming();
         const float v = source.next_sample();
-        if (source.underruns() != underruns) continue;
+        if (source.underruns() != underruns || (priming && source.priming())) continue;
         ordered = ordered && v > previous;
         previous = v;
         ++read;
@@ -203,16 +237,17 @@ std::vector<TapeTime> edges_of_bytes(const std::vector<uint8_t>& bytes, AudioDec
     LiveTape tape(source, channel == 0 ? "left" : "right");
     tape.next();
     AudioDecoder decoder(format, channels, channel);
-    std::vector<TapeTime> edges;
+    // Decode it all, a frame split here and there, then take it: the ring
+    // primes at the same sample whatever the format.
     std::vector<float> samples;
+    size_t total = 0;
     for (size_t at = 0; at < bytes.size(); at += 1001) {
         samples.clear();
         decoder.decode(std::span<const uint8_t>(bytes).subspan(at, std::min<size_t>(1001, bytes.size() - at)), samples);
         source->push(samples);
-        const auto more = consume(tape, samples.size());
-        edges.insert(edges.end(), more.begin(), more.end());
+        total += samples.size();
     }
-    return edges;
+    return consume(tape, total);
 }
 
 }  // namespace
@@ -220,7 +255,7 @@ std::vector<TapeTime> edges_of_bytes(const std::vector<uint8_t>& bytes, AudioDec
 TEST_CASE("Live audio in S16 and F32, mono and either stereo channel, gives the same edges", "[cassette][live]") {
     const auto mono = tone(2400.0, 0, RATE);
     const auto reference = edges_of_bytes(encode(mono, AudioDecoder::Format::F32, 1, 0), AudioDecoder::Format::F32, 1, 0);
-    REQUIRE(reference.size() > 4000);
+    REQUIRE(reference.size() > 3500);
     struct Case { AudioDecoder::Format format; unsigned channels; unsigned channel; };
     for (const Case c : {Case{AudioDecoder::Format::S16, 1, 0}, Case{AudioDecoder::Format::S16, 2, 0},
                          Case{AudioDecoder::Format::S16, 2, 1}, Case{AudioDecoder::Format::F32, 2, 0},

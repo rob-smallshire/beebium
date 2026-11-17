@@ -93,16 +93,27 @@ public:
         return filepath;
     }
 
-    void start_running() {
+    // Run the machine on a thread of its own: as fast as it goes, or at real
+    // speed (2 MHz of emulated cycles a second of wall time).
+    void start_running(bool real_speed = false) {
         if (thread_.joinable()) return;
         done_ = false;
-        thread_ = std::thread([this] {
+        thread_ = std::thread([this, real_speed] {
+            const auto start_wall = std::chrono::steady_clock::now();
+            const uint64_t start_cycles = machine_.cycles_since_reset();
             while (!done_.load()) {
                 machine_.wait_if_paused();
                 if (done_.load()) break;
-                beebium::ModelB::EmulationBusyScope busy(machine_);
-                if (!busy.active()) continue;
-                machine_.run(10'000);
+                {
+                    beebium::ModelB::EmulationBusyScope busy(machine_);
+                    if (!busy.active()) continue;
+                    machine_.run(10'000);
+                }
+                if (real_speed) {
+                    const auto due = start_wall + std::chrono::microseconds(
+                        (machine_.cycles_since_reset() - start_cycles) / 2);
+                    std::this_thread::sleep_until(due);
+                }
             }
         });
     }
@@ -578,4 +589,247 @@ TEST_CASE("CassetteService lists the blank tapes and creates one that records", 
     CHECK(inserted.tape().recordable());
     CHECK(inserted.tape().duration_seconds() == 1800.0);
     CHECK(fixture.record().success());
+}
+
+// =============================================================================
+// Round 8: StreamAudio, the live tape
+// =============================================================================
+
+namespace {
+
+// A client stream of live audio.
+struct AudioStream {
+    grpc::ClientContext context;
+    beebium::StreamAudioSummary summary;
+    std::unique_ptr<grpc::ClientWriter<beebium::AudioInputChunk>> writer;
+
+    explicit AudioStream(beebium::CassetteService::Stub& stub)
+        : writer(stub.StreamAudio(&context, &summary)) {}
+
+    bool format(uint32_t rate = 48000, beebium::AudioSampleFormat sample_format = beebium::AUDIO_SAMPLE_FORMAT_S16,
+                uint32_t channels = 1, const std::string& device = "Test line in") {
+        beebium::AudioInputChunk chunk;
+        auto* f = chunk.mutable_format();
+        f->set_sample_rate(rate);
+        f->set_sample_format(sample_format);
+        f->set_channels(channels);
+        f->set_device_name(device);
+        return writer->Write(chunk);
+    }
+
+    bool samples(const std::vector<int16_t>& s16) {
+        beebium::AudioInputChunk chunk;
+        chunk.set_samples(std::string(reinterpret_cast<const char*>(s16.data()), s16.size() * 2));
+        return writer->Write(chunk);
+    }
+
+    grpc::Status finish() {
+        writer->WritesDone();
+        return writer->Finish();
+    }
+};
+
+// 10 ms of a 2400 Hz cosine at amplitude 0.5, 16-bit, from sample `from`.
+std::vector<int16_t> carrier_chunk(uint64_t from) {
+    std::vector<int16_t> out(480);
+    for (size_t i = 0; i < out.size(); ++i) {
+        out[i] = static_cast<int16_t>(16000.0 * std::cos(2.0 * 3.14159265358979 * 2400.0 * static_cast<double>(from + i) / 48000.0));
+    }
+    return out;
+}
+
+template <typename Predicate>
+bool wait_for_status(CassetteFixture& fixture, Predicate predicate, int milliseconds = 2000) {
+    for (int i = 0; i < milliseconds / 10; ++i) {
+        if (predicate(fixture.status())) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+}
+
+}  // namespace
+
+TEST_CASE("StreamAudio is refused with a tape in, without a format first, and on a second format",
+          "[grpc][cassette][live]") {
+    CassetteFixture fixture;
+    {
+        REQUIRE(fixture.insert(fixture.write("tone.uef", tone_tape()).string()).success());
+        AudioStream stream(fixture.stub());
+        stream.format();
+        REQUIRE(stream.finish().ok());
+        CHECK(stream.summary.kind() == beebium::CASSETTE_ERROR_KIND_DECK_OCCUPIED);
+        CHECK(stream.summary.error() == "The deck already holds tone.uef; eject it before streaming Test line in.");
+        REQUIRE(fixture.eject().success());
+    }
+    {
+        AudioStream stream(fixture.stub());
+        stream.samples(carrier_chunk(0));
+        REQUIRE(stream.finish().ok());
+        CHECK(stream.summary.kind() == beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT);
+        CHECK(stream.summary.error() == "A live stream begins with its format.");
+        CHECK_FALSE(fixture.status().tape_inserted());
+    }
+    {
+        AudioStream stream(fixture.stub());
+        stream.format(44000, beebium::AUDIO_SAMPLE_FORMAT_S16, 3);
+        REQUIRE(stream.finish().ok());
+        CHECK(stream.summary.kind() == beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT);
+        CHECK(stream.summary.error() == "A live stream has one or two channels, not 3.");
+    }
+    {
+        AudioStream stream(fixture.stub());
+        stream.format();
+        stream.samples(carrier_chunk(0));
+        stream.format();
+        REQUIRE(stream.finish().ok());
+        CHECK(stream.summary.kind() == beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT);
+        CHECK(stream.summary.error() == "A live stream's format comes once, at its start.");
+        CHECK(wait_for_status(fixture, [](const auto& s) { return !s.tape_inserted(); }));
+    }
+}
+
+TEST_CASE("StreamAudio inserts a live tape the deck plays, and closing the stream ejects it",
+          "[grpc][cassette][live]") {
+    CassetteFixture fixture;
+    fixture.start_running(true);
+    AudioStream stream(fixture.stub());
+    REQUIRE(stream.format());
+    REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.tape_inserted(); }));
+    auto status = fixture.status();
+    CHECK(status.tape().format() == "LIVE");
+    CHECK(status.tape().name() == "Test line in");
+    CHECK(status.tape().sample_rate() == 48000);
+    CHECK(status.tape().channel() == "left");
+    CHECK(status.tape().duration_seconds() == 0.0);
+    CHECK_FALSE(status.tape().recordable());
+    CHECK(status.transport() == beebium::TAPE_TRANSPORT_STOPPED);
+
+    // What a live tape cannot do.
+    for (auto response : {fixture.seek(1.0), fixture.rewind(), fixture.fast_forward(), fixture.record()}) {
+        CHECK_FALSE(response.success());
+        CHECK(response.kind() == beebium::CASSETTE_ERROR_KIND_LIVE_SOURCE);
+    }
+    CHECK(fixture.seek(1.0).error() == "The live input Test line in cannot be seeked.");
+    REQUIRE(fixture.play().success());
+
+    // Half a second of carrier, a bit ahead of real time.
+    uint64_t sent = 0;
+    const auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < 50; ++i) {
+        REQUIRE(stream.samples(carrier_chunk(sent)));
+        sent += 480;
+        std::this_thread::sleep_until(start + std::chrono::milliseconds(10 * i));
+    }
+    status = fixture.status();
+    CHECK(status.transport() == beebium::TAPE_TRANSPORT_PLAYING);
+    CHECK(status.position_seconds() > 0.2);
+    CHECK(status.live_ring_fill() >= 0.0);
+    CHECK(status.live_ring_fill() < 0.2);
+    CHECK(status.live_overruns() == 0);
+
+    REQUIRE(stream.finish().ok());
+    CHECK(stream.summary.error().empty());
+    CHECK(stream.summary.samples_received() == sent);
+    CHECK(stream.summary.samples_dropped() == 0);
+    CHECK(wait_for_status(fixture, [](const auto& s) { return !s.tape_inserted(); }));
+}
+
+TEST_CASE("EjectTape ends a live stream from the server", "[grpc][cassette][live]") {
+    CassetteFixture fixture;
+    fixture.start_running(true);
+    AudioStream stream(fixture.stub());
+    REQUIRE(stream.format());
+    REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.tape_inserted(); }));
+    REQUIRE(stream.samples(carrier_chunk(0)));
+    REQUIRE(fixture.eject().success());
+    // The client's next write finds the stream over, or the server ends it.
+    for (int i = 0; i < 100 && stream.samples(carrier_chunk(480 * (i + 1))); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    REQUIRE(stream.finish().ok());
+    CHECK(stream.summary.samples_received() >= 480);
+    CHECK_FALSE(fixture.status().tape_inserted());
+}
+
+namespace {
+
+std::optional<std::vector<uint8_t>> tokenised_tape_ok() {
+    const auto tok_filepath = beebium::test::unique_temp_path("beebium_grpc_cassette_tok_", ".tok");
+    const std::string command = "uvx oaknut-basic tokenise " +
+        (ASSETS_DIRPATH / "cassette" / "tape_ok.bas").string() + " " + tok_filepath.string() +
+        " >/dev/null 2>&1";
+    if (std::system(command.c_str()) != 0) return std::nullopt;
+    auto program = read_file(tok_filepath);
+    std::error_code ec;
+    std::filesystem::remove(tok_filepath, ec);
+    return program;
+}
+
+// tape_ok as a 48 kHz WAV of 90-degree sines, as 16-bit mono samples.
+std::optional<std::vector<int16_t>> tape_ok_samples() {
+    const auto program = tokenised_tape_ok();
+    if (!program) return std::nullopt;
+    TapeBuilder builder;
+    builder.gap(0.5).file("TAPEOK", 0xFFFF0E00, 0xFFFF8023, *program, {}).gap(0.5);
+    beebium::test::WavOptions o;
+    o.shape = beebium::test::WavOptions::Shape::Shifted90;
+    const auto wav = builder.wav(o);
+    std::vector<int16_t> samples((wav.size() - 44) / 2);
+    std::memcpy(samples.data(), wav.data() + 44, samples.size() * 2);
+    return samples;
+}
+
+// Stream `samples` in 10 ms chunks, paced to wall-clock time, while `during`
+// runs at each chunk's index.
+template <typename During>
+void stream_in_real_time(AudioStream& stream, const std::vector<int16_t>& samples, During during) {
+    const auto start = std::chrono::steady_clock::now();
+    for (size_t at = 0, chunk = 0; at < samples.size(); at += 480, ++chunk) {
+        std::vector<int16_t> part(samples.begin() + static_cast<std::ptrdiff_t>(at),
+                                  samples.begin() + static_cast<std::ptrdiff_t>(std::min(samples.size(), at + 480)));
+        if (!stream.samples(part)) return;
+        during(chunk);
+        std::this_thread::sleep_until(start + std::chrono::milliseconds(10 * (chunk + 1)));
+    }
+}
+
+}  // namespace
+
+TEST_CASE("MOS 1.20 loads tape_ok streamed live in real time", "[grpc][cassette][live][mos]") {
+    CassetteFixture fixture;
+    if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    const auto samples = tape_ok_samples();
+    if (!samples) SKIP("oaknut-basic is not available through uvx, so the test program cannot be tokenised.");
+    for (const bool blip : {false, true}) {
+        CAPTURE(blip);
+        fixture.start_running(true);
+        fixture.run_emulated(4'000'000);  // past the start-up
+        fixture.type("*TAPE\rCHAIN\"\"\r");
+        AudioStream stream(fixture.stub());
+        REQUIRE(stream.format());
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.tape_inserted(); }));
+        REQUIRE(fixture.play().success());
+        stream_in_real_time(stream, *samples, [&](size_t chunk) {
+            // During the leader, open the relay for 50 ms and close it again
+            // a few times: a live tape plays on regardless.
+            if (!blip || chunk < 100 || chunk > 400 || chunk % 100 >= 5) return;
+            fixture.machine().with_emulation_paused([&] {
+                auto& ula = fixture.machine().memory().serial_socket.ula();
+                const uint8_t control = ula.control();
+                fixture.machine().memory().serial_socket.write_ula(0, chunk % 100 == 4 ? control | 0x80 : control & 0x7F);
+            });
+        });
+        REQUIRE(stream.finish().ok());
+        CAPTURE(stream.summary.samples_received(), stream.summary.samples_dropped(),
+                stream.summary.silence_samples_inserted());
+        CHECK(stream.summary.samples_dropped() == 0);
+        bool ran = false;
+        for (int i = 0; i < 100 && !ran; ++i) {
+            fixture.machine().with_emulation_paused([&] { ran = fixture.machine().peek(0x70) == 42; });
+            if (!ran) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        CHECK(ran);
+        fixture.stop_running();
+        fixture.machine().with_emulation_paused([&] { fixture.machine().write(0x70, 0); });
+    }
 }

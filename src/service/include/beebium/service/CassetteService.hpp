@@ -16,10 +16,12 @@
 #include "cassette.grpc.pb.h"
 #include "beebium/cassette/BlankTapes.hpp"
 #include "beebium/cassette/CassetteDeck.hpp"
+#include "beebium/cassette/LiveSource.hpp"
 #include "beebium/cassette/TapeImage.hpp"
 #include "beebium/disc/DiscUrl.hpp"
 
 #include <grpcpp/grpcpp.h>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -116,7 +118,7 @@ public:
                 } else if (request->channel() == "right") {
                     channel = WavChannel::Right;
                 } else {
-                    fail(response, beebium::CASSETTE_ERROR_KIND_UNSPECIFIED,
+                    fail(response, beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT,
                          "A WAV's channel is left or right, not " + request->channel() + ".");
                     return grpc::Status::OK;
                 }
@@ -157,23 +159,115 @@ public:
     }
 
     grpc::Status Rewind(grpc::ServerContext*, const RewindRequest*, CassetteResponse* response) override {
-        return with_tape(response, [](CassetteDeck& deck) { deck.rewind(); });
+        return with_tape_not_live(response, "rewound", [](CassetteDeck& deck) { deck.rewind(); });
     }
 
     grpc::Status FastForward(grpc::ServerContext*, const FastForwardRequest*,
                              CassetteResponse* response) override {
-        return with_tape(response, [](CassetteDeck& deck) { deck.fast_forward(); });
+        return with_tape_not_live(response, "fast-forwarded", [](CassetteDeck& deck) { deck.fast_forward(); });
     }
 
     grpc::Status Record(grpc::ServerContext*, const RecordRequest*, CassetteResponse* response) override {
         std::optional<std::string> refused;
-        const grpc::Status status = with_tape(response, [&](CassetteDeck& deck) {
+        const grpc::Status status = with_tape_not_live(response, "recorded on", [&](CassetteDeck& deck) {
             refused = deck.why_not_recordable();
             if (refused) return;
             deck.record();
         });
         if (refused) fail(response, beebium::CASSETTE_ERROR_KIND_READ_ONLY, *refused);
         return status;
+    }
+
+    grpc::Status StreamAudio(grpc::ServerContext*, grpc::ServerReader<AudioInputChunk>* reader,
+                             StreamAudioSummary* summary) override {
+        auto refuse = [&](beebium::CassetteErrorKind kind, const std::string& sentence) {
+            summary->set_error(sentence);
+            summary->set_kind(kind);
+            return grpc::Status::OK;
+        };
+        if constexpr (!HasCassette<Memory>) {
+            return refuse(beebium::CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE, "This machine has no cassette interface.");
+        } else {
+            AudioInputChunk chunk;
+            if (!reader->Read(&chunk) || !chunk.has_format()) {
+                return refuse(beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT, "A live stream begins with its format.");
+            }
+            const AudioInputFormat& format = chunk.format();
+            if (format.sample_rate() < 8000 || format.sample_rate() > 192000) {
+                return refuse(beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT,
+                              "A live stream's rate is 8000 to 192000 Hz, not " +
+                                  std::to_string(format.sample_rate()) + ".");
+            }
+            if (format.sample_format() != beebium::AUDIO_SAMPLE_FORMAT_S16 &&
+                format.sample_format() != beebium::AUDIO_SAMPLE_FORMAT_F32) {
+                return refuse(beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT,
+                              "A live stream's samples are signed 16-bit or 32-bit float.");
+            }
+            if (format.channels() != 1 && format.channels() != 2) {
+                return refuse(beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT,
+                              "A live stream has one or two channels, not " + std::to_string(format.channels()) + ".");
+            }
+            if (!format.channel().empty() && format.channel() != "left" && format.channel() != "right") {
+                return refuse(beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT,
+                              "A live stream's channel is left or right, not " + format.channel() + ".");
+            }
+            const bool right = format.channels() == 2 && format.channel() == "right";
+            const std::string name = format.device_name().empty() ? "Live input" : format.device_name();
+
+            auto& deck = machine_.state().memory.cassette_deck;
+            auto source = std::make_shared<LiveSource>(format.sample_rate());
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (deck.published().has_tape) {
+                    std::string current;
+                    machine_.with_emulation_paused([&] { current = deck.name(); });
+                    return refuse(beebium::CASSETTE_ERROR_KIND_DECK_OCCUPIED,
+                                  "The deck already holds " + current + "; eject it before streaming " + name + ".");
+                }
+                machine_.with_emulation_paused([&] {
+                    deck.insert(std::make_unique<LiveTape>(source, right ? "right" : "left"), name);
+                });
+                live_source_ = source;
+                live_active_ = true;
+                refresh_tape_locked();
+            }
+
+            // The samples: decoded here, on this thread, and pushed to the
+            // ring, the only seam between the stream and the emulation.
+            AudioDecoder decoder(format.sample_format() == beebium::AUDIO_SAMPLE_FORMAT_S16 ? AudioDecoder::Format::S16
+                                                                                             : AudioDecoder::Format::F32,
+                                 format.channels(), right ? 1 : 0);
+            std::vector<float> samples;
+            while (!source->closed() && reader->Read(&chunk)) {
+                if (chunk.has_format()) {
+                    summary->set_error("A live stream's format comes once, at its start.");
+                    summary->set_kind(beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT);
+                    break;
+                }
+                samples.clear();
+                decoder.decode(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(chunk.samples().data()),
+                                                        chunk.samples().size()),
+                               samples);
+                source->push(samples);
+            }
+
+            // The stream is over: the live tape goes, unless the deck let it go
+            // already (an eject ends the stream).
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (!source->closed()) {
+                    machine_.with_emulation_paused([&] { deck.eject(); });
+                }
+                if (live_source_ == source) {
+                    live_source_.reset();
+                    live_active_ = false;
+                }
+            }
+            summary->set_samples_received(source->received());
+            summary->set_samples_dropped(source->overruns());
+            summary->set_silence_samples_inserted(source->underruns());
+            return grpc::Status::OK;
+        }
     }
 
     grpc::Status ListBlankTapes(grpc::ServerContext*, const ListBlankTapesRequest*,
@@ -213,7 +307,7 @@ public:
             fail(response, beebium::CASSETTE_ERROR_KIND_INVALID_POSITION, text.str());
             return grpc::Status::OK;
         }
-        return with_tape(response, [seconds](CassetteDeck& deck) {
+        return with_tape_not_live(response, "seeked", [seconds](CassetteDeck& deck) {
             deck.seek(seconds_to_tape_time(seconds));
         });
     }
@@ -245,8 +339,11 @@ public:
             const CassetteDeck::Published now = published_now();
             const bool changed = now.sequence != last.sequence || now.tape_generation != last.tape_generation;
             // A wind covers WIND_SPEED times the tape a clock that playing does.
-            const bool playing = (now.transport == CassetteDeck::Transport::Playing ||
-                                  now.transport == CassetteDeck::Transport::Recording) && now.relay_closed;
+            // A live tape moves whether or not the deck plays or the relay is closed.
+            const bool live = live_active_.load(std::memory_order_relaxed);
+            const bool playing = live || ((now.transport == CassetteDeck::Transport::Playing ||
+                                           now.transport == CassetteDeck::Transport::Recording) &&
+                                          now.relay_closed);
             const bool winding = now.transport == CassetteDeck::Transport::Rewinding ||
                                  now.transport == CassetteDeck::Transport::FastForwarding;
             const TapeTime travelled = now.position > last.position ? now.position - last.position
@@ -309,6 +406,22 @@ private:
         }
     }
 
+    // As with_tape, refused with LIVE_SOURCE for a live tape, which cannot be
+    // `done` (seeked, rewound, ...).
+    template <typename Action>
+    grpc::Status with_tape_not_live(CassetteResponse* response, const char* done, Action action) {
+        std::optional<std::string> live;
+        const grpc::Status status = with_tape(response, [&](CassetteDeck& deck) {
+            if (deck.live()) {
+                live = "The live input " + deck.name() + " cannot be " + done + ".";
+                return;
+            }
+            action(deck);
+        });
+        if (live) fail(response, beebium::CASSETTE_ERROR_KIND_LIVE_SOURCE, *live);
+        return status;
+    }
+
     CassetteDeck::Published published_now() const {
         if constexpr (HasCassette<Memory>) {
             return machine_.state().memory.cassette_deck.published();
@@ -367,6 +480,11 @@ private:
             status.set_motor_on(published.relay_closed);
             status.set_ula_part(machine_.state().memory.serial_socket.ula().part() == SerialUla::Part::VLSI
                                     ? "vlsi" : "ferranti");
+            if (live_source_) {
+                status.set_live_ring_fill(live_source_->fill());
+                status.set_live_overruns(live_source_->overruns());
+                status.set_live_underruns(live_source_->underruns());
+            }
         }
     }
 
@@ -375,6 +493,10 @@ private:
     TapeMetadata tape_metadata_;
     std::optional<uint64_t> tape_generation_;
     std::optional<std::filesystem::path> blank_tapes_dirpath_;
+    // The live tape's source while a stream plays one (under mutex_), and
+    // whether one does (for the status stream's pacing, without the lock).
+    std::shared_ptr<LiveSource> live_source_;
+    std::atomic<bool> live_active_{false};
 };
 
 }  // namespace beebium::service

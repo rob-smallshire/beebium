@@ -30,10 +30,15 @@ namespace beebium {
 // one consumer (the emulation thread), a sample a sample period of emulated
 // time. The ring holds RING_SECONDS at the stream's rate.
 //
-// Neither end waits. When the ring is empty the consumer gets silence and
-// counts each sample it lacked (an underrun); when it is full the producer
-// drops the oldest samples to make room and counts them (an overrun), so the
-// newest are kept. There is no resampling and no clock recovery: at real speed
+// Neither end waits. The consumer starts by priming: it takes silence, not
+// counted, until the ring holds PRIME_SECONDS of samples, a cushion against
+// the jitter of the stream's arrival (a quarter of a second of latency between
+// the deck and the machine). Then it takes a sample a sample period. When the
+// ring runs empty it gets silence and counts each sample it lacked (an
+// underrun) until the ring has primed again. When the ring is full the
+// producer drops the oldest samples to make room and counts them (an
+// overrun), so the newest are kept. The priming level is a Decision with the
+// front end's constants. There is no resampling and no clock recovery: at real speed
 // the host's clock and emulated time drift by parts per million and the ring
 // absorbs it for hours; below real speed it overruns, above it underruns.
 //
@@ -45,6 +50,7 @@ namespace beebium {
 class LiveSource final : public SampledSource {
 public:
     static constexpr double RING_SECONDS = 2.0;
+    static constexpr double PRIME_SECONDS = 0.25;
 
     explicit LiveSource(uint32_t rate);
 
@@ -79,10 +85,14 @@ public:
     bool closed() const { return closed_.load(std::memory_order_acquire); }
 
     size_t capacity() const { return capacity_; }
+    size_t prime_level() const { return prime_; }
+    // Whether the consumer is waiting for the ring to prime.
+    bool priming() const { return priming_.load(std::memory_order_relaxed); }
 
 private:
     uint32_t rate_;
     size_t capacity_;            // samples the ring holds
+    size_t prime_;               // samples the ring holds before the consumer takes them
     size_t mask_;                // slots - 1; slots is the power of two at or above capacity
     std::vector<std::atomic<float>> slots_;
     std::atomic<uint64_t> write_{0};  // samples written, ever
@@ -93,6 +103,8 @@ private:
     std::atomic<uint64_t> underruns_{0};
     std::atomic<uint64_t> consumed_{0};
     std::atomic<bool> closed_{false};
+    std::atomic<bool> priming_{true};   // written by the consumer only
+    bool starved_ = false;              // priming again after an underrun (consumer only)
 };
 
 // Streamed audio bytes to mono samples: little-endian signed 16-bit or 32-bit

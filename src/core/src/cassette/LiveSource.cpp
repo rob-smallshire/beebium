@@ -21,6 +21,7 @@ namespace beebium {
 LiveSource::LiveSource(uint32_t rate)
     : rate_(rate),
       capacity_(static_cast<size_t>(RING_SECONDS * rate)),
+      prime_(static_cast<size_t>(PRIME_SECONDS * rate)),
       mask_(std::bit_ceil(capacity_) - 1),
       slots_(mask_ + 1) {}
 
@@ -53,9 +54,20 @@ void LiveSource::push(std::span<const float> samples) {
 float LiveSource::next_sample() {
     consumed_.fetch_add(1, std::memory_order_relaxed);
     uint64_t r = read_.load(std::memory_order_acquire);
+    if (priming_.load(std::memory_order_relaxed)) {
+        if (write_.load(std::memory_order_acquire) - r < prime_) {
+            // Silence while the ring primes: counted only after a starve.
+            if (starved_) underruns_.fetch_add(1, std::memory_order_relaxed);
+            return 0.0f;
+        }
+        priming_.store(false, std::memory_order_relaxed);
+    }
     for (;;) {
         if (r >= write_.load(std::memory_order_acquire)) {
+            // Starved: silence, counted, until the ring has primed again.
             underruns_.fetch_add(1, std::memory_order_relaxed);
+            starved_ = true;
+            priming_.store(true, std::memory_order_relaxed);
             return 0.0f;
         }
         const float value = slots_[r & mask_].load(std::memory_order_relaxed);

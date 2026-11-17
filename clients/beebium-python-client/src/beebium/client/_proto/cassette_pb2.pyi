@@ -56,6 +56,10 @@ class _CassetteErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Cas
     """a seek to a negative position"""
     CASSETTE_ERROR_KIND_READ_ONLY: _CassetteErrorKind.ValueType  # 9
     """record on a tape Beebium only reads (a CSW)"""
+    CASSETTE_ERROR_KIND_LIVE_SOURCE: _CassetteErrorKind.ValueType  # 10
+    """seek, wind or record on a live tape"""
+    CASSETTE_ERROR_KIND_INVALID_FORMAT: _CassetteErrorKind.ValueType  # 11
+    """a live stream's or a WAV channel's format refused"""
 
 class CassetteErrorKind(_CassetteErrorKind, metaclass=_CassetteErrorKindEnumTypeWrapper): ...
 
@@ -78,6 +82,10 @@ CASSETTE_ERROR_KIND_INVALID_POSITION: CassetteErrorKind.ValueType  # 8
 """a seek to a negative position"""
 CASSETTE_ERROR_KIND_READ_ONLY: CassetteErrorKind.ValueType  # 9
 """record on a tape Beebium only reads (a CSW)"""
+CASSETTE_ERROR_KIND_LIVE_SOURCE: CassetteErrorKind.ValueType  # 10
+"""seek, wind or record on a live tape"""
+CASSETTE_ERROR_KIND_INVALID_FORMAT: CassetteErrorKind.ValueType  # 11
+"""a live stream's or a WAV channel's format refused"""
 Global___CassetteErrorKind: _TypeAlias = CassetteErrorKind  # noqa: Y015
 
 class _TapeTransport:
@@ -100,6 +108,27 @@ TAPE_TRANSPORT_RECORDING: TapeTransport.ValueType  # 2
 TAPE_TRANSPORT_REWINDING: TapeTransport.ValueType  # 3
 TAPE_TRANSPORT_FAST_FORWARDING: TapeTransport.ValueType  # 4
 Global___TapeTransport: _TypeAlias = TapeTransport  # noqa: Y015
+
+class _AudioSampleFormat:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _AudioSampleFormatEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_AudioSampleFormat.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    AUDIO_SAMPLE_FORMAT_UNSPECIFIED: _AudioSampleFormat.ValueType  # 0
+    AUDIO_SAMPLE_FORMAT_S16: _AudioSampleFormat.ValueType  # 1
+    """signed 16-bit"""
+    AUDIO_SAMPLE_FORMAT_F32: _AudioSampleFormat.ValueType  # 2
+    """32-bit float, full scale +/-1"""
+
+class AudioSampleFormat(_AudioSampleFormat, metaclass=_AudioSampleFormatEnumTypeWrapper): ...
+
+AUDIO_SAMPLE_FORMAT_UNSPECIFIED: AudioSampleFormat.ValueType  # 0
+AUDIO_SAMPLE_FORMAT_S16: AudioSampleFormat.ValueType  # 1
+"""signed 16-bit"""
+AUDIO_SAMPLE_FORMAT_F32: AudioSampleFormat.ValueType  # 2
+"""32-bit float, full scale +/-1"""
+Global___AudioSampleFormat: _TypeAlias = AudioSampleFormat  # noqa: Y015
 
 class _CreateTapeErrorKind:
     ValueType = _typing.NewType("ValueType", _builtins.int)
@@ -197,6 +226,9 @@ class DeckStatus(_message.Message):
     POSITION_SECONDS_FIELD_NUMBER: _builtins.int
     MOTOR_ON_FIELD_NUMBER: _builtins.int
     ULA_PART_FIELD_NUMBER: _builtins.int
+    LIVE_RING_FILL_FIELD_NUMBER: _builtins.int
+    LIVE_OVERRUNS_FIELD_NUMBER: _builtins.int
+    LIVE_UNDERRUNS_FIELD_NUMBER: _builtins.int
     has_cassette_interface: _builtins.bool
     """false on a model without one"""
     tape_inserted: _builtins.bool
@@ -208,6 +240,12 @@ class DeckStatus(_message.Message):
     """the relay, latch bit 7, whether or not a tape is in"""
     ula_part: _builtins.str
     """"ferranti" or "vlsi" """
+    live_ring_fill: _builtins.float
+    """For a live tape: how full its ring is (0 to 1), and the samples dropped
+    because it was full and those made up as silence because it was empty.
+    """
+    live_overruns: _builtins.int
+    live_underruns: _builtins.int
     @_builtins.property
     def tape(self) -> Global___TapeMetadata:
         """set when tape_inserted"""
@@ -222,10 +260,13 @@ class DeckStatus(_message.Message):
         position_seconds: _builtins.float = ...,
         motor_on: _builtins.bool = ...,
         ula_part: _builtins.str = ...,
+        live_ring_fill: _builtins.float = ...,
+        live_overruns: _builtins.int = ...,
+        live_underruns: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["tape", b"tape"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["has_cassette_interface", b"has_cassette_interface", "motor_on", b"motor_on", "position_seconds", b"position_seconds", "tape", b"tape", "tape_inserted", b"tape_inserted", "transport", b"transport", "ula_part", b"ula_part"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["has_cassette_interface", b"has_cassette_interface", "live_overruns", b"live_overruns", "live_ring_fill", b"live_ring_fill", "live_underruns", b"live_underruns", "motor_on", b"motor_on", "position_seconds", b"position_seconds", "tape", b"tape", "tape_inserted", b"tape_inserted", "transport", b"transport", "ula_part", b"ula_part"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -404,6 +445,103 @@ class RecordRequest(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___RecordRequest: _TypeAlias = RecordRequest  # noqa: Y015
+
+@_typing.final
+class AudioInputChunk(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    FORMAT_FIELD_NUMBER: _builtins.int
+    SAMPLES_FIELD_NUMBER: _builtins.int
+    samples: _builtins.bytes
+    """then samples, little-endian, in the stated format"""
+    @_builtins.property
+    def format(self) -> Global___AudioInputFormat:
+        """the first message, once"""
+
+    def __init__(
+        self,
+        *,
+        format: Global___AudioInputFormat | None = ...,
+        samples: _builtins.bytes = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["format", b"format", "payload", b"payload", "samples", b"samples"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["format", b"format", "payload", b"payload", "samples", b"samples"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType_payload: _TypeAlias = _typing.Literal["format", "samples"]  # noqa: Y015
+    _WhichOneofArgType_payload: _TypeAlias = _typing.Literal["payload", b"payload"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType_payload) -> _WhichOneofReturnType_payload | None: ...
+
+Global___AudioInputChunk: _TypeAlias = AudioInputChunk  # noqa: Y015
+
+@_typing.final
+class AudioInputFormat(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SAMPLE_RATE_FIELD_NUMBER: _builtins.int
+    SAMPLE_FORMAT_FIELD_NUMBER: _builtins.int
+    CHANNELS_FIELD_NUMBER: _builtins.int
+    CHANNEL_FIELD_NUMBER: _builtins.int
+    DEVICE_NAME_FIELD_NUMBER: _builtins.int
+    sample_rate: _builtins.int
+    """8000 to 192000"""
+    sample_format: Global___AudioSampleFormat.ValueType
+    channels: _builtins.int
+    """1 or 2"""
+    channel: _builtins.str
+    """for 2 channels: "left" or "right"; absent means left"""
+    device_name: _builtins.str
+    """the host device, for display; names the live tape"""
+    def __init__(
+        self,
+        *,
+        sample_rate: _builtins.int = ...,
+        sample_format: Global___AudioSampleFormat.ValueType = ...,
+        channels: _builtins.int = ...,
+        channel: _builtins.str = ...,
+        device_name: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["channel", b"channel", "channels", b"channels", "device_name", b"device_name", "sample_format", b"sample_format", "sample_rate", b"sample_rate"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AudioInputFormat: _TypeAlias = AudioInputFormat  # noqa: Y015
+
+@_typing.final
+class StreamAudioSummary(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SAMPLES_RECEIVED_FIELD_NUMBER: _builtins.int
+    SAMPLES_DROPPED_FIELD_NUMBER: _builtins.int
+    SILENCE_SAMPLES_INSERTED_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
+    samples_received: _builtins.int
+    samples_dropped: _builtins.int
+    """overruns"""
+    silence_samples_inserted: _builtins.int
+    """underruns"""
+    error: _builtins.str
+    """a sentence when the stream was refused or failed"""
+    kind: Global___CassetteErrorKind.ValueType
+    def __init__(
+        self,
+        *,
+        samples_received: _builtins.int = ...,
+        samples_dropped: _builtins.int = ...,
+        silence_samples_inserted: _builtins.int = ...,
+        error: _builtins.str = ...,
+        kind: Global___CassetteErrorKind.ValueType = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "kind", b"kind", "samples_dropped", b"samples_dropped", "samples_received", b"samples_received", "silence_samples_inserted", b"silence_samples_inserted"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___StreamAudioSummary: _TypeAlias = StreamAudioSummary  # noqa: Y015
 
 @_typing.final
 class ListBlankTapesRequest(_message.Message):

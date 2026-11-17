@@ -42,6 +42,17 @@ service CassetteService {
     rpc ListBlankTapes(ListBlankTapesRequest) returns (ListBlankTapesResponse);
     rpc CreateTape(CreateTapeRequest) returns (CreateTapeResponse);
 
+    // A live audio input, streamed by a client from its host: the stream is
+    // the live tape. The first message is the format, once; the rest are
+    // samples. Refused with DECK_OCCUPIED while a tape is in, and with
+    // INVALID_FORMAT if the first message is not a format or a second one
+    // comes. A valid format inserts the live tape, stopped; the client then
+    // calls Play. The relay does not gate it. Closing the stream ejects it,
+    // and EjectTape ends the stream. The ring between the stream and the
+    // emulation absorbs the drift between the host's clock and emulated
+    // time; there is no resampling, so a live load is for real speed.
+    rpc StreamAudio(stream AudioInputChunk) returns (StreamAudioSummary);
+
     // The deck's state, read without stopping the machine.
     rpc GetDeckStatus(GetDeckStatusRequest) returns (DeckStatus);
 
@@ -62,6 +73,8 @@ enum CassetteErrorKind {
     CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop, seek, wind or record with no tape
     CASSETTE_ERROR_KIND_INVALID_POSITION = 8;       // a seek to a negative position
     CASSETTE_ERROR_KIND_READ_ONLY = 9;              // record on a tape Beebium only reads (a CSW)
+    CASSETTE_ERROR_KIND_LIVE_SOURCE = 10;           // seek, wind or record on a live tape
+    CASSETTE_ERROR_KIND_INVALID_FORMAT = 11;        // a live stream's or a WAV channel's format refused
 }
 
 enum TapeTransport {
@@ -93,6 +106,11 @@ message DeckStatus {
     double position_seconds = 5;      // tape time, in seconds of the ULA clock
     bool motor_on = 6;                // the relay, latch bit 7, whether or not a tape is in
     string ula_part = 7;              // "ferranti" or "vlsi"
+    // For a live tape: how full its ring is (0 to 1), and the samples dropped
+    // because it was full and those made up as silence because it was empty.
+    double live_ring_fill = 8;
+    uint64 live_overruns = 9;
+    uint64 live_underruns = 10;
 }
 
 message InsertTapeRequest {
@@ -119,6 +137,35 @@ message StopRequest {}
 message RewindRequest {}
 message FastForwardRequest {}
 message RecordRequest {}
+
+message AudioInputChunk {
+    oneof payload {
+        AudioInputFormat format = 1;  // the first message, once
+        bytes samples = 2;            // then samples, little-endian, in the stated format
+    }
+}
+
+enum AudioSampleFormat {
+    AUDIO_SAMPLE_FORMAT_UNSPECIFIED = 0;
+    AUDIO_SAMPLE_FORMAT_S16 = 1;      // signed 16-bit
+    AUDIO_SAMPLE_FORMAT_F32 = 2;      // 32-bit float, full scale +/-1
+}
+
+message AudioInputFormat {
+    uint32 sample_rate = 1;           // 8000 to 192000
+    AudioSampleFormat sample_format = 2;
+    uint32 channels = 3;              // 1 or 2
+    string channel = 4;               // for 2 channels: "left" or "right"; absent means left
+    string device_name = 5;           // the host device, for display; names the live tape
+}
+
+message StreamAudioSummary {
+    uint64 samples_received = 1;
+    uint64 samples_dropped = 2;       // overruns
+    uint64 silence_samples_inserted = 3;  // underruns
+    string error = 4;                 // a sentence when the stream was refused or failed
+    CassetteErrorKind kind = 5;
+}
 
 message ListBlankTapesRequest {}
 

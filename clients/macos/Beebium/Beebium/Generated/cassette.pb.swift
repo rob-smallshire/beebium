@@ -8,6 +8,7 @@
 // For information on using the generated types, please see the documentation:
 //   https://github.com/apple/swift-protobuf/
 
+import Foundation
 import SwiftProtobuf
 
 // If the compiler emits an error on this type, it is because this file
@@ -50,6 +51,12 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
 
   /// record on a tape Beebium only reads (a CSW)
   case readOnly // = 9
+
+  /// seek, wind or record on a live tape
+  case liveSource // = 10
+
+  /// a live stream's or a WAV channel's format refused
+  case invalidFormat // = 11
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -68,6 +75,8 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 7: self = .deckEmpty
     case 8: self = .invalidPosition
     case 9: self = .readOnly
+    case 10: self = .liveSource
+    case 11: self = .invalidFormat
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -84,6 +93,8 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .deckEmpty: return 7
     case .invalidPosition: return 8
     case .readOnly: return 9
+    case .liveSource: return 10
+    case .invalidFormat: return 11
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -100,6 +111,8 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     .deckEmpty,
     .invalidPosition,
     .readOnly,
+    .liveSource,
+    .invalidFormat,
   ]
 
 }
@@ -146,6 +159,48 @@ public enum Beebium_TapeTransport: SwiftProtobuf.Enum, Swift.CaseIterable {
     .recording,
     .rewinding,
     .fastForwarding,
+  ]
+
+}
+
+public enum Beebium_AudioSampleFormat: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// signed 16-bit
+  case s16 // = 1
+
+  /// 32-bit float, full scale +/-1
+  case f32 // = 2
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .s16
+    case 2: self = .f32
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .s16: return 1
+    case .f32: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Beebium_AudioSampleFormat] = [
+    .unspecified,
+    .s16,
+    .f32,
   ]
 
 }
@@ -244,43 +299,78 @@ public struct Beebium_TapeMetadata: Sendable {
   public init() {}
 }
 
-public struct Beebium_DeckStatus: Sendable {
+public struct Beebium_DeckStatus: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// false on a model without one
-  public var hasCassetteInterface_p: Bool = false
+  public var hasCassetteInterface_p: Bool {
+    get {return _storage._hasCassetteInterface_p}
+    set {_uniqueStorage()._hasCassetteInterface_p = newValue}
+  }
 
   /// (not has_tape: protobuf derives has_tape() from field 3)
-  public var tapeInserted: Bool = false
+  public var tapeInserted: Bool {
+    get {return _storage._tapeInserted}
+    set {_uniqueStorage()._tapeInserted = newValue}
+  }
 
   /// set when tape_inserted
   public var tape: Beebium_TapeMetadata {
-    get {return _tape ?? Beebium_TapeMetadata()}
-    set {_tape = newValue}
+    get {return _storage._tape ?? Beebium_TapeMetadata()}
+    set {_uniqueStorage()._tape = newValue}
   }
   /// Returns true if `tape` has been explicitly set.
-  public var hasTape: Bool {return self._tape != nil}
+  public var hasTape: Bool {return _storage._tape != nil}
   /// Clears the value of `tape`. Subsequent reads from it will return its default value.
-  public mutating func clearTape() {self._tape = nil}
+  public mutating func clearTape() {_uniqueStorage()._tape = nil}
 
-  public var transport: Beebium_TapeTransport = .stopped
+  public var transport: Beebium_TapeTransport {
+    get {return _storage._transport}
+    set {_uniqueStorage()._transport = newValue}
+  }
 
   /// tape time, in seconds of the ULA clock
-  public var positionSeconds: Double = 0
+  public var positionSeconds: Double {
+    get {return _storage._positionSeconds}
+    set {_uniqueStorage()._positionSeconds = newValue}
+  }
 
   /// the relay, latch bit 7, whether or not a tape is in
-  public var motorOn: Bool = false
+  public var motorOn: Bool {
+    get {return _storage._motorOn}
+    set {_uniqueStorage()._motorOn = newValue}
+  }
 
   /// "ferranti" or "vlsi"
-  public var ulaPart: String = String()
+  public var ulaPart: String {
+    get {return _storage._ulaPart}
+    set {_uniqueStorage()._ulaPart = newValue}
+  }
+
+  /// For a live tape: how full its ring is (0 to 1), and the samples dropped
+  /// because it was full and those made up as silence because it was empty.
+  public var liveRingFill: Double {
+    get {return _storage._liveRingFill}
+    set {_uniqueStorage()._liveRingFill = newValue}
+  }
+
+  public var liveOverruns: UInt64 {
+    get {return _storage._liveOverruns}
+    set {_uniqueStorage()._liveOverruns = newValue}
+  }
+
+  public var liveUnderruns: UInt64 {
+    get {return _storage._liveUnderruns}
+    set {_uniqueStorage()._liveUnderruns = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _tape: Beebium_TapeMetadata? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public struct Beebium_InsertTapeRequest: Sendable {
@@ -414,6 +504,91 @@ public struct Beebium_RecordRequest: Sendable {
   public init() {}
 }
 
+public struct Beebium_AudioInputChunk: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var payload: Beebium_AudioInputChunk.OneOf_Payload? = nil
+
+  /// the first message, once
+  public var format: Beebium_AudioInputFormat {
+    get {
+      if case .format(let v)? = payload {return v}
+      return Beebium_AudioInputFormat()
+    }
+    set {payload = .format(newValue)}
+  }
+
+  /// then samples, little-endian, in the stated format
+  public var samples: Data {
+    get {
+      if case .samples(let v)? = payload {return v}
+      return Data()
+    }
+    set {payload = .samples(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public enum OneOf_Payload: Equatable, Sendable {
+    /// the first message, once
+    case format(Beebium_AudioInputFormat)
+    /// then samples, little-endian, in the stated format
+    case samples(Data)
+
+  }
+
+  public init() {}
+}
+
+public struct Beebium_AudioInputFormat: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// 8000 to 192000
+  public var sampleRate: UInt32 = 0
+
+  public var sampleFormat: Beebium_AudioSampleFormat = .unspecified
+
+  /// 1 or 2
+  public var channels: UInt32 = 0
+
+  /// for 2 channels: "left" or "right"; absent means left
+  public var channel: String = String()
+
+  /// the host device, for display; names the live tape
+  public var deviceName: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Beebium_StreamAudioSummary: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var samplesReceived: UInt64 = 0
+
+  /// overruns
+  public var samplesDropped: UInt64 = 0
+
+  /// underruns
+  public var silenceSamplesInserted: UInt64 = 0
+
+  /// a sentence when the stream was refused or failed
+  public var error: String = String()
+
+  public var kind: Beebium_CassetteErrorKind = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public struct Beebium_ListBlankTapesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -540,11 +715,15 @@ public struct Beebium_SubscribeDeckStatusRequest: Sendable {
 fileprivate let _protobuf_package = "beebium"
 
 extension Beebium_CassetteErrorKind: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CASSETTE_ERROR_KIND_UNSPECIFIED\0\u{1}CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE\0\u{1}CASSETTE_ERROR_KIND_CANNOT_OPEN\0\u{1}CASSETTE_ERROR_KIND_UNREADABLE\0\u{1}CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT\0\u{1}CASSETTE_ERROR_KIND_INVALID_IMAGE\0\u{1}CASSETTE_ERROR_KIND_DECK_OCCUPIED\0\u{1}CASSETTE_ERROR_KIND_DECK_EMPTY\0\u{1}CASSETTE_ERROR_KIND_INVALID_POSITION\0\u{1}CASSETTE_ERROR_KIND_READ_ONLY\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CASSETTE_ERROR_KIND_UNSPECIFIED\0\u{1}CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE\0\u{1}CASSETTE_ERROR_KIND_CANNOT_OPEN\0\u{1}CASSETTE_ERROR_KIND_UNREADABLE\0\u{1}CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT\0\u{1}CASSETTE_ERROR_KIND_INVALID_IMAGE\0\u{1}CASSETTE_ERROR_KIND_DECK_OCCUPIED\0\u{1}CASSETTE_ERROR_KIND_DECK_EMPTY\0\u{1}CASSETTE_ERROR_KIND_INVALID_POSITION\0\u{1}CASSETTE_ERROR_KIND_READ_ONLY\0\u{1}CASSETTE_ERROR_KIND_LIVE_SOURCE\0\u{1}CASSETTE_ERROR_KIND_INVALID_FORMAT\0")
 }
 
 extension Beebium_TapeTransport: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TAPE_TRANSPORT_STOPPED\0\u{1}TAPE_TRANSPORT_PLAYING\0\u{1}TAPE_TRANSPORT_RECORDING\0\u{1}TAPE_TRANSPORT_REWINDING\0\u{1}TAPE_TRANSPORT_FAST_FORWARDING\0")
+}
+
+extension Beebium_AudioSampleFormat: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0AUDIO_SAMPLE_FORMAT_UNSPECIFIED\0\u{1}AUDIO_SAMPLE_FORMAT_S16\0\u{1}AUDIO_SAMPLE_FORMAT_F32\0")
 }
 
 extension Beebium_CreateTapeErrorKind: SwiftProtobuf._ProtoNameProviding {
@@ -628,63 +807,132 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 
 extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeckStatus"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_cassette_interface\0\u{3}tape_inserted\0\u{1}tape\0\u{1}transport\0\u{3}position_seconds\0\u{3}motor_on\0\u{3}ula_part\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_cassette_interface\0\u{3}tape_inserted\0\u{1}tape\0\u{1}transport\0\u{3}position_seconds\0\u{3}motor_on\0\u{3}ula_part\0\u{3}live_ring_fill\0\u{3}live_overruns\0\u{3}live_underruns\0")
+
+  fileprivate class _StorageClass {
+    var _hasCassetteInterface_p: Bool = false
+    var _tapeInserted: Bool = false
+    var _tape: Beebium_TapeMetadata? = nil
+    var _transport: Beebium_TapeTransport = .stopped
+    var _positionSeconds: Double = 0
+    var _motorOn: Bool = false
+    var _ulaPart: String = String()
+    var _liveRingFill: Double = 0
+    var _liveOverruns: UInt64 = 0
+    var _liveUnderruns: UInt64 = 0
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _hasCassetteInterface_p = source._hasCassetteInterface_p
+      _tapeInserted = source._tapeInserted
+      _tape = source._tape
+      _transport = source._transport
+      _positionSeconds = source._positionSeconds
+      _motorOn = source._motorOn
+      _ulaPart = source._ulaPart
+      _liveRingFill = source._liveRingFill
+      _liveOverruns = source._liveOverruns
+      _liveUnderruns = source._liveUnderruns
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularBoolField(value: &self.hasCassetteInterface_p) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.tapeInserted) }()
-      case 3: try { try decoder.decodeSingularMessageField(value: &self._tape) }()
-      case 4: try { try decoder.decodeSingularEnumField(value: &self.transport) }()
-      case 5: try { try decoder.decodeSingularDoubleField(value: &self.positionSeconds) }()
-      case 6: try { try decoder.decodeSingularBoolField(value: &self.motorOn) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self.ulaPart) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularBoolField(value: &_storage._hasCassetteInterface_p) }()
+        case 2: try { try decoder.decodeSingularBoolField(value: &_storage._tapeInserted) }()
+        case 3: try { try decoder.decodeSingularMessageField(value: &_storage._tape) }()
+        case 4: try { try decoder.decodeSingularEnumField(value: &_storage._transport) }()
+        case 5: try { try decoder.decodeSingularDoubleField(value: &_storage._positionSeconds) }()
+        case 6: try { try decoder.decodeSingularBoolField(value: &_storage._motorOn) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._ulaPart) }()
+        case 8: try { try decoder.decodeSingularDoubleField(value: &_storage._liveRingFill) }()
+        case 9: try { try decoder.decodeSingularUInt64Field(value: &_storage._liveOverruns) }()
+        case 10: try { try decoder.decodeSingularUInt64Field(value: &_storage._liveUnderruns) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if self.hasCassetteInterface_p != false {
-      try visitor.visitSingularBoolField(value: self.hasCassetteInterface_p, fieldNumber: 1)
-    }
-    if self.tapeInserted != false {
-      try visitor.visitSingularBoolField(value: self.tapeInserted, fieldNumber: 2)
-    }
-    try { if let v = self._tape {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
-    } }()
-    if self.transport != .stopped {
-      try visitor.visitSingularEnumField(value: self.transport, fieldNumber: 4)
-    }
-    if self.positionSeconds.bitPattern != 0 {
-      try visitor.visitSingularDoubleField(value: self.positionSeconds, fieldNumber: 5)
-    }
-    if self.motorOn != false {
-      try visitor.visitSingularBoolField(value: self.motorOn, fieldNumber: 6)
-    }
-    if !self.ulaPart.isEmpty {
-      try visitor.visitSingularStringField(value: self.ulaPart, fieldNumber: 7)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if _storage._hasCassetteInterface_p != false {
+        try visitor.visitSingularBoolField(value: _storage._hasCassetteInterface_p, fieldNumber: 1)
+      }
+      if _storage._tapeInserted != false {
+        try visitor.visitSingularBoolField(value: _storage._tapeInserted, fieldNumber: 2)
+      }
+      try { if let v = _storage._tape {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+      } }()
+      if _storage._transport != .stopped {
+        try visitor.visitSingularEnumField(value: _storage._transport, fieldNumber: 4)
+      }
+      if _storage._positionSeconds.bitPattern != 0 {
+        try visitor.visitSingularDoubleField(value: _storage._positionSeconds, fieldNumber: 5)
+      }
+      if _storage._motorOn != false {
+        try visitor.visitSingularBoolField(value: _storage._motorOn, fieldNumber: 6)
+      }
+      if !_storage._ulaPart.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._ulaPart, fieldNumber: 7)
+      }
+      if _storage._liveRingFill.bitPattern != 0 {
+        try visitor.visitSingularDoubleField(value: _storage._liveRingFill, fieldNumber: 8)
+      }
+      if _storage._liveOverruns != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._liveOverruns, fieldNumber: 9)
+      }
+      if _storage._liveUnderruns != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._liveUnderruns, fieldNumber: 10)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Beebium_DeckStatus, rhs: Beebium_DeckStatus) -> Bool {
-    if lhs.hasCassetteInterface_p != rhs.hasCassetteInterface_p {return false}
-    if lhs.tapeInserted != rhs.tapeInserted {return false}
-    if lhs._tape != rhs._tape {return false}
-    if lhs.transport != rhs.transport {return false}
-    if lhs.positionSeconds != rhs.positionSeconds {return false}
-    if lhs.motorOn != rhs.motorOn {return false}
-    if lhs.ulaPart != rhs.ulaPart {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._hasCassetteInterface_p != rhs_storage._hasCassetteInterface_p {return false}
+        if _storage._tapeInserted != rhs_storage._tapeInserted {return false}
+        if _storage._tape != rhs_storage._tape {return false}
+        if _storage._transport != rhs_storage._transport {return false}
+        if _storage._positionSeconds != rhs_storage._positionSeconds {return false}
+        if _storage._motorOn != rhs_storage._motorOn {return false}
+        if _storage._ulaPart != rhs_storage._ulaPart {return false}
+        if _storage._liveRingFill != rhs_storage._liveRingFill {return false}
+        if _storage._liveOverruns != rhs_storage._liveOverruns {return false}
+        if _storage._liveUnderruns != rhs_storage._liveUnderruns {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -927,6 +1175,168 @@ extension Beebium_RecordRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 
   public static func ==(lhs: Beebium_RecordRequest, rhs: Beebium_RecordRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AudioInputChunk: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AudioInputChunk"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}format\0\u{1}samples\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
+        var v: Beebium_AudioInputFormat?
+        var hadOneofValue = false
+        if let current = self.payload {
+          hadOneofValue = true
+          if case .format(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.payload = .format(v)
+        }
+      }()
+      case 2: try {
+        var v: Data?
+        try decoder.decodeSingularBytesField(value: &v)
+        if let v = v {
+          if self.payload != nil {try decoder.handleConflictingOneOf()}
+          self.payload = .samples(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.payload {
+    case .format?: try {
+      guard case .format(let v)? = self.payload else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    }()
+    case .samples?: try {
+      guard case .samples(let v)? = self.payload else { preconditionFailure() }
+      try visitor.visitSingularBytesField(value: v, fieldNumber: 2)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_AudioInputChunk, rhs: Beebium_AudioInputChunk) -> Bool {
+    if lhs.payload != rhs.payload {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AudioInputFormat: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AudioInputFormat"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}sample_rate\0\u{3}sample_format\0\u{1}channels\0\u{1}channel\0\u{3}device_name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.sampleRate) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self.sampleFormat) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.channels) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.channel) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.deviceName) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.sampleRate != 0 {
+      try visitor.visitSingularUInt32Field(value: self.sampleRate, fieldNumber: 1)
+    }
+    if self.sampleFormat != .unspecified {
+      try visitor.visitSingularEnumField(value: self.sampleFormat, fieldNumber: 2)
+    }
+    if self.channels != 0 {
+      try visitor.visitSingularUInt32Field(value: self.channels, fieldNumber: 3)
+    }
+    if !self.channel.isEmpty {
+      try visitor.visitSingularStringField(value: self.channel, fieldNumber: 4)
+    }
+    if !self.deviceName.isEmpty {
+      try visitor.visitSingularStringField(value: self.deviceName, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_AudioInputFormat, rhs: Beebium_AudioInputFormat) -> Bool {
+    if lhs.sampleRate != rhs.sampleRate {return false}
+    if lhs.sampleFormat != rhs.sampleFormat {return false}
+    if lhs.channels != rhs.channels {return false}
+    if lhs.channel != rhs.channel {return false}
+    if lhs.deviceName != rhs.deviceName {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_StreamAudioSummary: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".StreamAudioSummary"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}samples_received\0\u{3}samples_dropped\0\u{3}silence_samples_inserted\0\u{1}error\0\u{1}kind\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.samplesReceived) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.samplesDropped) }()
+      case 3: try { try decoder.decodeSingularUInt64Field(value: &self.silenceSamplesInserted) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 5: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.samplesReceived != 0 {
+      try visitor.visitSingularUInt64Field(value: self.samplesReceived, fieldNumber: 1)
+    }
+    if self.samplesDropped != 0 {
+      try visitor.visitSingularUInt64Field(value: self.samplesDropped, fieldNumber: 2)
+    }
+    if self.silenceSamplesInserted != 0 {
+      try visitor.visitSingularUInt64Field(value: self.silenceSamplesInserted, fieldNumber: 3)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 4)
+    }
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_StreamAudioSummary, rhs: Beebium_StreamAudioSummary) -> Bool {
+    if lhs.samplesReceived != rhs.samplesReceived {return false}
+    if lhs.samplesDropped != rhs.samplesDropped {return false}
+    if lhs.silenceSamplesInserted != rhs.silenceSamplesInserted {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.kind != rhs.kind {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

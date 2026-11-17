@@ -83,6 +83,17 @@ class CassetteServiceStub:
     on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
     """
     CreateTape: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.CreateTapeRequest, _cassette_pb2.CreateTapeResponse]
+    StreamAudio: _grpc.StreamUnaryMultiCallable[_cassette_pb2.AudioInputChunk, _cassette_pb2.StreamAudioSummary]
+    """A live audio input, streamed by a client from its host: the stream is
+    the live tape. The first message is the format, once; the rest are
+    samples. Refused with DECK_OCCUPIED while a tape is in, and with
+    INVALID_FORMAT if the first message is not a format or a second one
+    comes. A valid format inserts the live tape, stopped; the client then
+    calls Play. The relay does not gate it. Closing the stream ejects it,
+    and EjectTape ends the stream. The ring between the stream and the
+    emulation absorbs the drift between the host's clock and emulated
+    time; there is no resampling, so a live load is for real speed.
+    """
     GetDeckStatus: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.GetDeckStatusRequest, _cassette_pb2.DeckStatus]
     """The deck's state, read without stopping the machine."""
     SubscribeDeckStatus: _grpc.UnaryStreamMultiCallable[_cassette_pb2.SubscribeDeckStatusRequest, _cassette_pb2.DeckStatus]
@@ -134,6 +145,17 @@ class CassetteServiceAsyncStub(CassetteServiceStub):
     on the server's host, as DiscService's ListBlankDiscs and CreateDisc.
     """
     CreateTape: _aio.UnaryUnaryMultiCallable[_cassette_pb2.CreateTapeRequest, _cassette_pb2.CreateTapeResponse]  # type: ignore[assignment]
+    StreamAudio: _aio.StreamUnaryMultiCallable[_cassette_pb2.AudioInputChunk, _cassette_pb2.StreamAudioSummary]  # type: ignore[assignment]
+    """A live audio input, streamed by a client from its host: the stream is
+    the live tape. The first message is the format, once; the rest are
+    samples. Refused with DECK_OCCUPIED while a tape is in, and with
+    INVALID_FORMAT if the first message is not a format or a second one
+    comes. A valid format inserts the live tape, stopped; the client then
+    calls Play. The relay does not gate it. Closing the stream ejects it,
+    and EjectTape ends the stream. The ring between the stream and the
+    emulation absorbs the drift between the host's clock and emulated
+    time; there is no resampling, so a live load is for real speed.
+    """
     GetDeckStatus: _aio.UnaryUnaryMultiCallable[_cassette_pb2.GetDeckStatusRequest, _cassette_pb2.DeckStatus]  # type: ignore[assignment]
     """The deck's state, read without stopping the machine."""
     SubscribeDeckStatus: _aio.UnaryStreamMultiCallable[_cassette_pb2.SubscribeDeckStatusRequest, _cassette_pb2.DeckStatus]  # type: ignore[assignment]
@@ -242,6 +264,23 @@ class CassetteServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _cassette_pb2.CreateTapeRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_cassette_pb2.CreateTapeResponse, _abc.Awaitable[_cassette_pb2.CreateTapeResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def StreamAudio(
+        self,
+        request_iterator: _MaybeAsyncIterator[_cassette_pb2.AudioInputChunk],
+        context: _ServicerContext,
+    ) -> _typing.Union[_cassette_pb2.StreamAudioSummary, _abc.Awaitable[_cassette_pb2.StreamAudioSummary]]:
+        """A live audio input, streamed by a client from its host: the stream is
+        the live tape. The first message is the format, once; the rest are
+        samples. Refused with DECK_OCCUPIED while a tape is in, and with
+        INVALID_FORMAT if the first message is not a format or a second one
+        comes. A valid format inserts the live tape, stopped; the client then
+        calls Play. The relay does not gate it. Closing the stream ejects it,
+        and EjectTape ends the stream. The ring between the stream and the
+        emulation absorbs the drift between the host's clock and emulated
+        time; there is no resampling, so a live load is for real speed.
+        """
 
     @_abc_1.abstractmethod
     def GetDeckStatus(

@@ -103,6 +103,11 @@ class CassetteServiceStub(object):
                 request_serializer=cassette__pb2.CreateTapeRequest.SerializeToString,
                 response_deserializer=cassette__pb2.CreateTapeResponse.FromString,
                 _registered_method=True)
+        self.StreamAudio = channel.stream_unary(
+                '/beebium.CassetteService/StreamAudio',
+                request_serializer=cassette__pb2.AudioInputChunk.SerializeToString,
+                response_deserializer=cassette__pb2.StreamAudioSummary.FromString,
+                _registered_method=True)
         self.GetDeckStatus = channel.unary_unary(
                 '/beebium.CassetteService/GetDeckStatus',
                 request_serializer=cassette__pb2.GetDeckStatusRequest.SerializeToString,
@@ -201,6 +206,21 @@ class CassetteServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def StreamAudio(self, request_iterator, context):
+        """A live audio input, streamed by a client from its host: the stream is
+        the live tape. The first message is the format, once; the rest are
+        samples. Refused with DECK_OCCUPIED while a tape is in, and with
+        INVALID_FORMAT if the first message is not a format or a second one
+        comes. A valid format inserts the live tape, stopped; the client then
+        calls Play. The relay does not gate it. Closing the stream ejects it,
+        and EjectTape ends the stream. The ring between the stream and the
+        emulation absorbs the drift between the host's clock and emulated
+        time; there is no resampling, so a live load is for real speed.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetDeckStatus(self, request, context):
         """The deck's state, read without stopping the machine.
         """
@@ -269,6 +289,11 @@ def add_CassetteServiceServicer_to_server(servicer, server):
                     servicer.CreateTape,
                     request_deserializer=cassette__pb2.CreateTapeRequest.FromString,
                     response_serializer=cassette__pb2.CreateTapeResponse.SerializeToString,
+            ),
+            'StreamAudio': grpc.stream_unary_rpc_method_handler(
+                    servicer.StreamAudio,
+                    request_deserializer=cassette__pb2.AudioInputChunk.FromString,
+                    response_serializer=cassette__pb2.StreamAudioSummary.SerializeToString,
             ),
             'GetDeckStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDeckStatus,
@@ -558,6 +583,33 @@ class CassetteService(object):
             '/beebium.CassetteService/CreateTape',
             cassette__pb2.CreateTapeRequest.SerializeToString,
             cassette__pb2.CreateTapeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StreamAudio(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_unary(
+            request_iterator,
+            target,
+            '/beebium.CassetteService/StreamAudio',
+            cassette__pb2.AudioInputChunk.SerializeToString,
+            cassette__pb2.StreamAudioSummary.FromString,
             options,
             channel_credentials,
             insecure,

@@ -74,6 +74,10 @@ public protocol Beebium_CassetteServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse>
 
+  func streamAudio(
+    callOptions: CallOptions?
+  ) -> ClientStreamingCall<Beebium_AudioInputChunk, Beebium_StreamAudioSummary>
+
   func getDeckStatus(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions?
@@ -281,6 +285,32 @@ extension Beebium_CassetteServiceClientProtocol {
     )
   }
 
+  /// A live audio input, streamed by a client from its host: the stream is
+  /// the live tape. The first message is the format, once; the rest are
+  /// samples. Refused with DECK_OCCUPIED while a tape is in, and with
+  /// INVALID_FORMAT if the first message is not a format or a second one
+  /// comes. A valid format inserts the live tape, stopped; the client then
+  /// calls Play. The relay does not gate it. Closing the stream ejects it,
+  /// and EjectTape ends the stream. The ring between the stream and the
+  /// emulation absorbs the drift between the host's clock and emulated
+  /// time; there is no resampling, so a live load is for real speed.
+  ///
+  /// Callers should use the `send` method on the returned object to send messages
+  /// to the server. The caller should send an `.end` after the final message has been sent.
+  ///
+  /// - Parameters:
+  ///   - callOptions: Call options.
+  /// - Returns: A `ClientStreamingCall` with futures for the metadata, status and response.
+  public func streamAudio(
+    callOptions: CallOptions? = nil
+  ) -> ClientStreamingCall<Beebium_AudioInputChunk, Beebium_StreamAudioSummary> {
+    return self.makeClientStreamingCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.streamAudio.path,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStreamAudioInterceptors() ?? []
+    )
+  }
+
   /// The deck's state, read without stopping the machine.
   ///
   /// - Parameters:
@@ -442,6 +472,10 @@ public protocol Beebium_CassetteServiceAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse>
 
+  func makeStreamAudioCall(
+    callOptions: CallOptions?
+  ) -> GRPCAsyncClientStreamingCall<Beebium_AudioInputChunk, Beebium_StreamAudioSummary>
+
   func makeGetDeckStatusCall(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions?
@@ -580,6 +614,16 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeCreateTapeInterceptors() ?? []
+    )
+  }
+
+  public func makeStreamAudioCall(
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncClientStreamingCall<Beebium_AudioInputChunk, Beebium_StreamAudioSummary> {
+    return self.makeAsyncClientStreamingCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.streamAudio.path,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStreamAudioInterceptors() ?? []
     )
   }
 
@@ -730,6 +774,30 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
     )
   }
 
+  public func streamAudio<RequestStream>(
+    _ requests: RequestStream,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_StreamAudioSummary where RequestStream: Sequence, RequestStream.Element == Beebium_AudioInputChunk {
+    return try await self.performAsyncClientStreamingCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.streamAudio.path,
+      requests: requests,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStreamAudioInterceptors() ?? []
+    )
+  }
+
+  public func streamAudio<RequestStream>(
+    _ requests: RequestStream,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_StreamAudioSummary where RequestStream: AsyncSequence & Sendable, RequestStream.Element == Beebium_AudioInputChunk {
+    return try await self.performAsyncClientStreamingCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.streamAudio.path,
+      requests: requests,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStreamAudioInterceptors() ?? []
+    )
+  }
+
   public func getDeckStatus(
     _ request: Beebium_GetDeckStatusRequest,
     callOptions: CallOptions? = nil
@@ -804,6 +872,9 @@ public protocol Beebium_CassetteServiceClientInterceptorFactoryProtocol: Sendabl
   /// - Returns: Interceptors to use when invoking 'createTape'.
   func makeCreateTapeInterceptors() -> [ClientInterceptor<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse>]
 
+  /// - Returns: Interceptors to use when invoking 'streamAudio'.
+  func makeStreamAudioInterceptors() -> [ClientInterceptor<Beebium_AudioInputChunk, Beebium_StreamAudioSummary>]
+
   /// - Returns: Interceptors to use when invoking 'getDeckStatus'.
   func makeGetDeckStatusInterceptors() -> [ClientInterceptor<Beebium_GetDeckStatusRequest, Beebium_DeckStatus>]
 
@@ -826,6 +897,7 @@ public enum Beebium_CassetteServiceClientMetadata {
       Beebium_CassetteServiceClientMetadata.Methods.record,
       Beebium_CassetteServiceClientMetadata.Methods.listBlankTapes,
       Beebium_CassetteServiceClientMetadata.Methods.createTape,
+      Beebium_CassetteServiceClientMetadata.Methods.streamAudio,
       Beebium_CassetteServiceClientMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceClientMetadata.Methods.subscribeDeckStatus,
     ]
@@ -892,6 +964,12 @@ public enum Beebium_CassetteServiceClientMetadata {
       type: GRPCCallType.unary
     )
 
+    public static let streamAudio = GRPCMethodDescriptor(
+      name: "StreamAudio",
+      path: "/beebium.CassetteService/StreamAudio",
+      type: GRPCCallType.clientStreaming
+    )
+
     public static let getDeckStatus = GRPCMethodDescriptor(
       name: "GetDeckStatus",
       path: "/beebium.CassetteService/GetDeckStatus",
@@ -953,6 +1031,17 @@ public protocol Beebium_CassetteServiceProvider: CallHandlerProvider {
   func listBlankTapes(request: Beebium_ListBlankTapesRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListBlankTapesResponse>
 
   func createTape(request: Beebium_CreateTapeRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CreateTapeResponse>
+
+  /// A live audio input, streamed by a client from its host: the stream is
+  /// the live tape. The first message is the format, once; the rest are
+  /// samples. Refused with DECK_OCCUPIED while a tape is in, and with
+  /// INVALID_FORMAT if the first message is not a format or a second one
+  /// comes. A valid format inserts the live tape, stopped; the client then
+  /// calls Play. The relay does not gate it. Closing the stream ejects it,
+  /// and EjectTape ends the stream. The ring between the stream and the
+  /// emulation absorbs the drift between the host's clock and emulated
+  /// time; there is no resampling, so a live load is for real speed.
+  func streamAudio(context: UnaryResponseCallContext<Beebium_StreamAudioSummary>) -> EventLoopFuture<(StreamEvent<Beebium_AudioInputChunk>) -> Void>
 
   /// The deck's state, read without stopping the machine.
   func getDeckStatus(request: Beebium_GetDeckStatusRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_DeckStatus>
@@ -1065,6 +1154,15 @@ extension Beebium_CassetteServiceProvider {
         userFunction: self.createTape(request:context:)
       )
 
+    case "StreamAudio":
+      return ClientStreamingServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AudioInputChunk>(),
+        responseSerializer: ProtobufSerializer<Beebium_StreamAudioSummary>(),
+        interceptors: self.interceptors?.makeStreamAudioInterceptors() ?? [],
+        observerFactory: self.streamAudio(context:)
+      )
+
     case "GetDeckStatus":
       return UnaryServerHandler(
         context: context,
@@ -1168,6 +1266,20 @@ public protocol Beebium_CassetteServiceAsyncProvider: CallHandlerProvider, Senda
     request: Beebium_CreateTapeRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_CreateTapeResponse
+
+  /// A live audio input, streamed by a client from its host: the stream is
+  /// the live tape. The first message is the format, once; the rest are
+  /// samples. Refused with DECK_OCCUPIED while a tape is in, and with
+  /// INVALID_FORMAT if the first message is not a format or a second one
+  /// comes. A valid format inserts the live tape, stopped; the client then
+  /// calls Play. The relay does not gate it. Closing the stream ejects it,
+  /// and EjectTape ends the stream. The ring between the stream and the
+  /// emulation absorbs the drift between the host's clock and emulated
+  /// time; there is no resampling, so a live load is for real speed.
+  func streamAudio(
+    requestStream: GRPCAsyncRequestStream<Beebium_AudioInputChunk>,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_StreamAudioSummary
 
   /// The deck's state, read without stopping the machine.
   func getDeckStatus(
@@ -1294,6 +1406,15 @@ extension Beebium_CassetteServiceAsyncProvider {
         wrapping: { try await self.createTape(request: $0, context: $1) }
       )
 
+    case "StreamAudio":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AudioInputChunk>(),
+        responseSerializer: ProtobufSerializer<Beebium_StreamAudioSummary>(),
+        interceptors: self.interceptors?.makeStreamAudioInterceptors() ?? [],
+        wrapping: { try await self.streamAudio(requestStream: $0, context: $1) }
+      )
+
     case "GetDeckStatus":
       return GRPCAsyncServerHandler(
         context: context,
@@ -1360,6 +1481,10 @@ public protocol Beebium_CassetteServiceServerInterceptorFactoryProtocol: Sendabl
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeCreateTapeInterceptors() -> [ServerInterceptor<Beebium_CreateTapeRequest, Beebium_CreateTapeResponse>]
 
+  /// - Returns: Interceptors to use when handling 'streamAudio'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeStreamAudioInterceptors() -> [ServerInterceptor<Beebium_AudioInputChunk, Beebium_StreamAudioSummary>]
+
   /// - Returns: Interceptors to use when handling 'getDeckStatus'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetDeckStatusInterceptors() -> [ServerInterceptor<Beebium_GetDeckStatusRequest, Beebium_DeckStatus>]
@@ -1384,6 +1509,7 @@ public enum Beebium_CassetteServiceServerMetadata {
       Beebium_CassetteServiceServerMetadata.Methods.record,
       Beebium_CassetteServiceServerMetadata.Methods.listBlankTapes,
       Beebium_CassetteServiceServerMetadata.Methods.createTape,
+      Beebium_CassetteServiceServerMetadata.Methods.streamAudio,
       Beebium_CassetteServiceServerMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceServerMetadata.Methods.subscribeDeckStatus,
     ]
@@ -1448,6 +1574,12 @@ public enum Beebium_CassetteServiceServerMetadata {
       name: "CreateTape",
       path: "/beebium.CassetteService/CreateTape",
       type: GRPCCallType.unary
+    )
+
+    public static let streamAudio = GRPCMethodDescriptor(
+      name: "StreamAudio",
+      path: "/beebium.CassetteService/StreamAudio",
+      type: GRPCCallType.clientStreaming
     )
 
     public static let getDeckStatus = GRPCMethodDescriptor(
