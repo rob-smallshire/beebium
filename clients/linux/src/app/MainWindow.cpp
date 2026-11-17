@@ -370,10 +370,9 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                     break;
                 case PasteOutcome::Result::refused:
                 case PasteOutcome::Result::failed: {
-                    ServerMessageDialog dialog(tr("Could Not Paste"),
-                                               tr("The text could not be typed into the machine."),
-                                               outcome.message, this);
-                    dialog.exec();
+                    show_server_message(this, tr("Could Not Paste"),
+                                        tr("The text could not be typed into the machine."),
+                                        outcome.message);
                     break;
                 }
                 }
@@ -819,11 +818,10 @@ void MainWindow::save(std::function<void(bool saved)> then) {
                           [this, then, connection](const CallOutcome& outcome) {
                               disconnect(*connection);
                               if (!outcome.ok) {
-                                  ServerMessageDialog dialog(
-                                      tr("Could Not Save"),
+                                  show_server_message(
+                                      this, tr("Could Not Save"),
                                       tr("Beebium could not save %1.").arg(session_->machine_name()),
-                                      outcome.message, this);
-                                  dialog.exec();
+                                      outcome.message);
                               }
                               if (then) {
                                   then(outcome.ok);
@@ -874,11 +872,10 @@ void MainWindow::save_as(std::function<void(bool saved)> then) {
                           [this, then, connection, destination](const CallOutcome& outcome) {
                               disconnect(*connection);
                               if (!outcome.ok) {
-                                  ServerMessageDialog dialog(
-                                      tr("Could Not Save"),
+                                  show_server_message(
+                                      this, tr("Could Not Save"),
                                       tr("Beebium could not save the machine to %1.").arg(destination),
-                                      outcome.message, this);
-                                  dialog.exec();
+                                      outcome.message);
                               }
                               if (then) {
                                   then(outcome.ok);
@@ -904,11 +901,9 @@ void MainWindow::move_to() {
                           [this, connection, name](const CallOutcome& outcome) {
                               disconnect(*connection);
                               if (!outcome.ok) {
-                                  ServerMessageDialog dialog(
-                                      tr("Could Not Move"),
-                                      move_failure_sentence(outcome.code, name),
-                                      outcome.message, this);
-                                  dialog.exec();
+                                  show_server_message(
+                                      this, tr("Could Not Move"),
+                                      move_failure_sentence(outcome.code, name), outcome.message);
                               }
                           });
     // A machine of that name already in the folder is the server's to
@@ -929,11 +924,10 @@ void MainWindow::rename() {
                           [this, connection, name](const CallOutcome& outcome) {
                               disconnect(*connection);
                               if (!outcome.ok) {
-                                  ServerMessageDialog dialog(
-                                      tr("Could Not Rename"),
+                                  show_server_message(
+                                      this, tr("Could Not Rename"),
                                       tr("Beebium could not rename the machine to %1.").arg(name),
-                                      outcome.message, this);
-                                  dialog.exec();
+                                      outcome.message);
                               }
                           });
     session_->set_name(name);
@@ -980,10 +974,9 @@ void MainWindow::build_selection() {
     services.nothing_to_copy = [] { QApplication::beep(); };
     services.copy_failed = [this](const std::string& message) {
         std::fprintf(stderr, "beebium: could not copy the screen's text: %s\n", message.c_str());
-        ServerMessageDialog dialog(tr("Could Not Copy"),
-                                   tr("The text on the screen could not be read."),
-                                   QString::fromStdString(message), this);
-        dialog.exec();
+        show_server_message(this, tr("Could Not Copy"),
+                            tr("The text on the screen could not be read."),
+                            QString::fromStdString(message));
     };
     services.hold_lost = [] {
         std::fprintf(stderr, "beebium: the held screen expired, ending the selection\n");

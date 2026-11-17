@@ -267,6 +267,18 @@ void Application::after_failed_request() {
     }
 }
 
+void Application::report_failed_request(const QString& title, const QString& sentence,
+                                        const QString& server_message, QWidget* parent) {
+    ServerMessageDialog* dialog = show_server_message(parent, title, sentence, server_message);
+    // Queued, so the request ends after the dialog is wholly gone.
+    connect(dialog, &QObject::destroyed, this,
+            [this] {
+                after_failed_request();
+                end_work();
+            },
+            Qt::QueuedConnection);
+}
+
 void Application::check_finished() {
     if (home_) {
         home_->running_machines_page()->refresh();
@@ -449,14 +461,10 @@ void Application::launch_preset_by_id(const QString& id, QWidget* parent) {
                          }
                      }
                  }
-                 ServerMessageDialog dialog(tr("Could Not Start"),
-                                            result.ok()
-                                                ? tr("There is no preset called %1.").arg(id)
-                                                : tr("The presets could not be read."),
-                                            result.standard_error, guard);
-                 dialog.exec();
-                 after_failed_request();
-                 end_work();
+                 report_failed_request(tr("Could Not Start"),
+                                       result.ok() ? tr("There is no preset called %1.").arg(id)
+                                                   : tr("The presets could not be read."),
+                                       result.standard_error, guard);
              });
 }
 
@@ -475,13 +483,10 @@ void Application::launch_preset_file(const QString& filepath, QWidget* parent) {
                  const QJsonObject preset = QJsonDocument::fromJson(result.standard_output).object();
                  const QString model = preset.value(QStringLiteral("model")).toString();
                  if (!result.ok() || model.isEmpty()) {
-                     ServerMessageDialog dialog(
+                     report_failed_request(
                          tr("Could Not Open"),
                          tr("Beebium could not read a preset at %1.").arg(filepath),
                          result.standard_error, guard);
-                     dialog.exec();
-                     after_failed_request();
-                     end_work();
                      return;
                  }
                  PresetListing listing;
@@ -533,13 +538,10 @@ void Application::launch_saved_machine(const QString& dirpath, QWidget* parent) 
                  const auto machine = result.ok() ? parse_machine_description(result.standard_output)
                                                   : std::nullopt;
                  if (!machine) {
-                     ServerMessageDialog dialog(
+                     report_failed_request(
                          tr("Could Not Open"),
                          tr("Beebium could not read a saved machine at %1.").arg(dirpath),
                          result.standard_error, guard);
-                     dialog.exec();
-                     after_failed_request();
-                     end_work();
                      return;
                  }
                  if (machine->running()) {
@@ -583,15 +585,12 @@ void Application::launch(const QString& executable_filepath, const QStringList& 
                              return;
                          }
                          const auto& failure = std::get<LaunchFailure>(result);
-                         ServerMessageDialog dialog(
+                         report_failed_request(
                              tr("Could Not Start"),
                              failure.timed_out
                                  ? tr("%1 did not start in time, so Beebium stopped it.").arg(what)
                                  : tr("Beebium could not start %1.").arg(what),
                              failure.server_message, guard);
-                         dialog.exec();
-                         after_failed_request();
-                         end_work();
                      });
 }
 

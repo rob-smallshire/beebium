@@ -138,6 +138,11 @@ private:
     void end_work();
     // A request that opened nothing leaves the user somewhere: the home window.
     void after_failed_request();
+    // A request's failure, in the server's words, over `parent` (or alone
+    // without one): the request ends once the dialog has gone, whether
+    // closed or deleted with its parent.
+    void report_failed_request(const QString& title, const QString& sentence,
+                               const QString& server_message, QWidget* parent);
     void check_finished();
 
     QRhiWidget::Api graphics_api_;

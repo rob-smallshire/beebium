@@ -273,3 +273,18 @@ TEST_CASE("A server message opens over its window without blocking, and is delet
     dialog->reject();
     REQUIRE(wait_until([&] { return dialog.isNull(); }));
 }
+
+TEST_CASE("A machine that could not run says so without holding the event loop",
+          "[app][window][errors]") {
+    MainWindow window(QRhiWidget::Api::OpenGL);
+    window.show();
+    beebium::linux_client::CallOutcome refused;
+    refused.message = QStringLiteral("no ROM in slot 15");
+    // Returns at once: a nested event loop would hold the test here.
+    Q_EMIT window.session().run_finished(refused);
+    auto* dialog = window.findChild<beebium::linux_client::ServerMessageDialog*>();
+    REQUIRE(dialog);
+    CHECK(dialog->isVisible());
+    CHECK(dialog->server_message() == QStringLiteral("no ROM in slot 15"));
+    CHECK(dialog->testAttribute(Qt::WA_DeleteOnClose));
+}
