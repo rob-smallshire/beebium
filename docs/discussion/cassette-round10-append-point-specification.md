@@ -57,9 +57,10 @@ message SeekToAppendPointResponse {
 ## Clients (the GUI round that follows)
 
 Client specification 9.0, the deck keys: a **To the end of the recordings** key (the
-skip-to-end mirror of Back to the beginning's icon) sits beside Back to the beginning at the
-left edge of the row, so the two jump keys read as a pair and stay away from Eject; the centred
-transport group and Eject are unchanged. It is momentary, never depressed, never coloured. It is
+skip-to-end mirror of Back to the beginning's icon). With it the row is re-ordered (Rob,
+2026-11-17 night) into the tape's own geography, one group from the left edge: Back to the
+beginning, Rewind, Stop, Play, Record, Fast forward, To the end of the recordings; Eject stays
+alone at the right edge with the stretch between. It is momentary, never depressed, never coloured. It is
 enabled while a tape is in and the signal map is ready, greyed with the server's sentence as
 help text for a live tape and while the map is not ready. Pressing it seeks; the counter and the
 marker follow; when the response says `at_end` the client shows the transport text the deck
