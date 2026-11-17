@@ -248,6 +248,10 @@ beebium_linux_add_test(test_storage QT
     SOURCES test_storage.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_cassette QT
+    SOURCES test_cassette.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_typing QT
     SOURCES test_typing.cpp
     LIBRARIES beebium_linux_app)

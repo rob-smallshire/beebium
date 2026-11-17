@@ -21,6 +21,7 @@
 #include "beebium/host_identity/HostFingerprint.hpp"
 
 #include "audio.grpc.pb.h"
+#include "cassette.grpc.pb.h"
 #include "disc.grpc.pb.h"
 #include "econet.grpc.pb.h"
 #include "econet_transport.grpc.pb.h"
@@ -653,6 +654,318 @@ private:
     std::deque<std::optional<beebium::DiscEvent>> script_;
 };
 
+// The cassette deck as the server keeps it: an insert leaves it stopped at
+// the start; the keys change the transport as the deck's state table says;
+// every change goes out on the status stream, the current status first.
+// A tape whose URL ends in .csw is a CSW, which cannot be recorded on.
+// Blank tapes are two templates; CreateTape writes an empty .uef.
+class ScriptedCassetteService final : public beebium::CassetteService::Service {
+public:
+    std::mutex calls_mutex;
+    bool has_interface = true;
+    double duration_seconds = 600.0;
+    // The next insert fails with this kind and sentence, when set.
+    std::optional<std::pair<beebium::CassetteErrorKind, std::string>> fail_next_insert;
+    std::vector<std::string> inserted_urls;
+    // The keys pressed, in order: "play", "stop", "seek 12.5", ...
+    std::vector<std::string> calls;
+    std::uint32_t min_interval_ms = 0;
+    std::atomic<int> subscriptions{0};
+
+    // As the machine moves the relay or the tape.
+    void set_motor(bool on) {
+        {
+            std::lock_guard lock(calls_mutex);
+            status_.set_motor_on(on);
+        }
+        publish();
+    }
+    void set_position(double seconds) {
+        {
+            std::lock_guard lock(calls_mutex);
+            status_.set_position_seconds(seconds);
+        }
+        publish();
+    }
+    // A tape in the deck as a preset puts it there, without an insert call.
+    void load(const std::string& url) {
+        {
+            std::lock_guard lock(calls_mutex);
+            take(url);
+        }
+        publish();
+    }
+    std::vector<std::string> pressed() {
+        std::lock_guard lock(calls_mutex);
+        return calls;
+    }
+
+    grpc::Status InsertTape(grpc::ServerContext*, const beebium::InsertTapeRequest* request,
+                            beebium::InsertTapeResponse* response) override {
+        {
+            std::lock_guard lock(calls_mutex);
+            inserted_urls.push_back(request->url());
+            if (refused(response)) {
+                return grpc::Status::OK;
+            }
+            if (fail_next_insert) {
+                response->set_kind(fail_next_insert->first);
+                response->set_error(fail_next_insert->second);
+                fail_next_insert.reset();
+                return grpc::Status::OK;
+            }
+            if (status_.tape_inserted()) {
+                response->set_kind(beebium::CASSETTE_ERROR_KIND_DECK_OCCUPIED);
+                response->set_error("The cassette deck already holds " + status_.tape().name() +
+                                    "; eject it before inserting " + name_of(request->url()) + ".");
+                return grpc::Status::OK;
+            }
+            take(request->url());
+            response->set_success(true);
+            *response->mutable_tape() = status_.tape();
+        }
+        publish();
+        return grpc::Status::OK;
+    }
+
+    grpc::Status EjectTape(grpc::ServerContext*, const beebium::EjectTapeRequest*,
+                           beebium::CassetteResponse* response) override {
+        return key("eject", response, [this] {
+            status_.set_tape_inserted(false);
+            status_.clear_tape();
+            status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
+            status_.set_position_seconds(0.0);
+        });
+    }
+    grpc::Status Play(grpc::ServerContext*, const beebium::PlayRequest*,
+                      beebium::CassetteResponse* response) override {
+        return key("play", response, [this] {
+            status_.set_transport(at_end() ? beebium::TAPE_TRANSPORT_STOPPED
+                                           : beebium::TAPE_TRANSPORT_PLAYING);
+        });
+    }
+    grpc::Status Stop(grpc::ServerContext*, const beebium::StopRequest*,
+                      beebium::CassetteResponse* response) override {
+        return key("stop", response,
+                   [this] { status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED); });
+    }
+    grpc::Status Rewind(grpc::ServerContext*, const beebium::RewindRequest*,
+                        beebium::CassetteResponse* response) override {
+        return key("rewind", response, [this] {
+            status_.set_transport(status_.position_seconds() <= 0.0
+                                      ? beebium::TAPE_TRANSPORT_STOPPED
+                                      : beebium::TAPE_TRANSPORT_REWINDING);
+        });
+    }
+    grpc::Status FastForward(grpc::ServerContext*, const beebium::FastForwardRequest*,
+                             beebium::CassetteResponse* response) override {
+        return key("fast forward", response, [this] {
+            status_.set_transport(at_end() ? beebium::TAPE_TRANSPORT_STOPPED
+                                           : beebium::TAPE_TRANSPORT_FAST_FORWARDING);
+        });
+    }
+    grpc::Status Record(grpc::ServerContext*, const beebium::RecordRequest*,
+                        beebium::CassetteResponse* response) override {
+        {
+            std::lock_guard lock(calls_mutex);
+            if (status_.tape_inserted() && !status_.tape().recordable()) {
+                calls.push_back("record");
+                response->set_kind(beebium::CASSETTE_ERROR_KIND_READ_ONLY);
+                response->set_error("The tape " + status_.tape().name() +
+                                    " is a CSW image, and Beebium records only on UEF tapes.");
+                return grpc::Status::OK;
+            }
+        }
+        return key("record", response, [this] {
+            status_.set_transport(at_end() ? beebium::TAPE_TRANSPORT_STOPPED
+                                           : beebium::TAPE_TRANSPORT_RECORDING);
+        });
+    }
+    grpc::Status Seek(grpc::ServerContext*, const beebium::SeekRequest* request,
+                      beebium::CassetteResponse* response) override {
+        const double to = request->position_seconds();
+        if (to < 0.0) {
+            std::lock_guard lock(calls_mutex);
+            calls.push_back("seek " + number(to));
+            response->set_kind(beebium::CASSETTE_ERROR_KIND_INVALID_POSITION);
+            response->set_error("A tape position cannot be negative.");
+            return grpc::Status::OK;
+        }
+        return key("seek " + number(to), response, [this, to] {
+            const double end = status_.tape().duration_seconds();
+            status_.set_position_seconds(end > 0.0 ? std::min(to, end) : to);
+            const auto transport = status_.transport();
+            if (at_end() || (transport != beebium::TAPE_TRANSPORT_STOPPED &&
+                             transport != beebium::TAPE_TRANSPORT_PLAYING)) {
+                status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
+            }
+        });
+    }
+
+    grpc::Status ListBlankTapes(grpc::ServerContext*, const beebium::ListBlankTapesRequest*,
+                                beebium::ListBlankTapesResponse* response) override {
+        for (int minutes : {15, 30}) {
+            auto* tape = response->add_tapes();
+            const std::string label =
+                "Blank C" + std::to_string(minutes) + " (" + std::to_string(minutes) + " minutes)";
+            tape->set_label(label);
+            tape->set_filename(label + ".uef");
+            tape->set_kind("tape");
+            tape->set_duration_seconds(minutes * 30.0);
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status CreateTape(grpc::ServerContext*, const beebium::CreateTapeRequest* request,
+                            beebium::CreateTapeResponse* response) override {
+        const std::string& label = request->label();
+        if (label != "Blank C15 (15 minutes)" && label != "Blank C30 (30 minutes)") {
+            response->set_kind(beebium::CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL);
+            response->set_error("no blank tape is called " + label);
+            return grpc::Status::OK;
+        }
+        std::string path = request->destination_path();
+        const auto dot = path.find_last_of('.');
+        const auto slash = path.find_last_of('/');
+        if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) {
+            path += ".uef";
+        } else if (path.substr(dot) != ".uef") {
+            response->set_kind(beebium::CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION);
+            response->set_error("a blank tape must end in .uef");
+            return grpc::Status::OK;
+        }
+        std::FILE* file = std::fopen(path.c_str(), "wb");
+        if (!file) {
+            response->set_kind(beebium::CREATE_TAPE_ERROR_KIND_WRITE_FAILED);
+            response->set_error("cannot write " + path);
+            return grpc::Status::OK;
+        }
+        std::fclose(file);
+        response->set_success(true);
+        response->set_path(path);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status GetDeckStatus(grpc::ServerContext*, const beebium::GetDeckStatusRequest*,
+                               beebium::DeckStatus* response) override {
+        std::lock_guard lock(calls_mutex);
+        *response = current();
+        return grpc::Status::OK;
+    }
+
+    grpc::Status SubscribeDeckStatus(grpc::ServerContext* context,
+                                     const beebium::SubscribeDeckStatusRequest* request,
+                                     grpc::ServerWriter<beebium::DeckStatus>* writer) override {
+        {
+            std::lock_guard lock(calls_mutex);
+            min_interval_ms = request->min_interval_ms();
+        }
+        ++subscriptions;
+        std::uint64_t sent = 0;
+        for (bool first = true;; first = false) {
+            std::unique_lock lock(mutex_);
+            if (!first) {
+                changed_.wait_for(lock, 20ms, [&] { return version_ != sent; });
+            }
+            if (context->IsCancelled()) {
+                return grpc::Status::CANCELLED;
+            }
+            if (!first && version_ == sent) {
+                continue;
+            }
+            sent = version_;
+            lock.unlock();
+            beebium::DeckStatus status;
+            {
+                std::lock_guard calls_lock(calls_mutex);
+                status = current();
+            }
+            writer->Write(status);
+        }
+    }
+
+private:
+    static std::string number(double value) {
+        char text[32];
+        std::snprintf(text, sizeof text, "%g", value);
+        return text;
+    }
+    static std::string name_of(const std::string& url) {
+        std::string name = url.substr(url.find_last_of('/') + 1);
+        for (std::size_t at; (at = name.find("%20")) != std::string::npos;) {
+            name.replace(at, 3, " ");
+        }
+        return name;
+    }
+    bool at_end() const {
+        const double end = status_.tape().duration_seconds();
+        return end > 0.0 && status_.position_seconds() >= end;
+    }
+    beebium::DeckStatus current() const {
+        beebium::DeckStatus status = status_;
+        status.set_has_cassette_interface(has_interface);
+        status.set_ula_part("ferranti");
+        return status;
+    }
+    bool refused(beebium::InsertTapeResponse* response) const {
+        if (has_interface) {
+            return false;
+        }
+        response->set_kind(beebium::CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE);
+        response->set_error("This machine has no cassette interface.");
+        return true;
+    }
+    void take(const std::string& url) {
+        const std::string name = name_of(url);
+        const bool csw = name.size() > 4 && name.substr(name.size() - 4) == ".csw";
+        status_.set_tape_inserted(true);
+        beebium::TapeMetadata& tape = *status_.mutable_tape();
+        tape.set_name(name);
+        tape.set_url(url);
+        tape.set_format(csw ? "CSW" : "UEF");
+        tape.set_title(csw ? "" : "Side A");
+        tape.set_origin(csw ? "CSW tools" : "");
+        tape.set_target_machine(csw ? "" : "BBC Model B");
+        tape.set_duration_seconds(duration_seconds);
+        tape.set_recordable(!csw);
+        status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
+        status_.set_position_seconds(0.0);
+    }
+    template <typename Change>
+    grpc::Status key(const std::string& name, beebium::CassetteResponse* response, Change change) {
+        {
+            std::lock_guard lock(calls_mutex);
+            calls.push_back(name);
+            if (!has_interface) {
+                response->set_kind(beebium::CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE);
+                response->set_error("This machine has no cassette interface.");
+                return grpc::Status::OK;
+            }
+            if (!status_.tape_inserted()) {
+                response->set_kind(beebium::CASSETTE_ERROR_KIND_DECK_EMPTY);
+                response->set_error("There is no tape in the cassette deck.");
+                return grpc::Status::OK;
+            }
+            change();
+            response->set_success(true);
+        }
+        publish();
+        return grpc::Status::OK;
+    }
+    void publish() {
+        {
+            std::lock_guard lock(mutex_);
+            ++version_;
+        }
+        changed_.notify_all();
+    }
+
+    beebium::DeckStatus status_;
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::uint64_t version_ = 0;
+};
+
 // The server's LEDs: the two lock LEDs, then the drives', as it registers
 // them, and a scripted stream of brightness updates.
 class ScriptedIndicatorService final : public beebium::IndicatorService::Service {
@@ -1244,6 +1557,7 @@ struct FakeServer {
     BlockedDebuggerService debugger;
     ScriptedAudioService audio;
     ScriptedDiscService disc;
+    ScriptedCassetteService cassette;
     ScriptedIndicatorService indicators;
     int port = 0;
     std::unique_ptr<grpc::Server> server;
@@ -1257,6 +1571,7 @@ struct FakeServer {
         builder.RegisterService(&debugger);
         builder.RegisterService(&audio);
         builder.RegisterService(&disc);
+        builder.RegisterService(&cassette);
         builder.RegisterService(&indicators);
         builder.RegisterService(&sideways);
         builder.RegisterService(&extension_ui);

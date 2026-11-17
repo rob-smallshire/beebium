@@ -328,6 +328,7 @@ add_library(beebium_linux_app STATIC
     src/app/SavedMachines.cpp
     src/app/SavedMachinesPage.cpp
     src/app/SessionAudio.cpp
+    src/app/SessionCassette.cpp
     src/app/SessionDiscs.cpp
     src/app/SessionIndicators.cpp
     src/app/SessionEconet.cpp
