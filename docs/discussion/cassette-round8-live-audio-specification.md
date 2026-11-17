@@ -13,6 +13,12 @@ user chooses and applies no voice processing.
   `ReaderWriterQueue` or the project's existing SPSC ring) of mono `float` samples, sized for
   2 seconds at the stream's rate. The gRPC thread produces; the emulation thread consumes, one
   sample per sample period of emulated time, as `SampledTape` does for a WAV.
+- **Priming** (`Decision`, 2026-11-17): the source yields silence, not counted as underrun,
+  until the ring holds 250 ms of samples, then consumes; after a genuine underrun it re-primes
+  the same way and the underrun count records the event once with the samples missed. The
+  priming level is a named constant in the `Decision` group. Without it, wall-clock jitter in
+  the producer showed as holes of 400 to 1000 samples and the MOS live load failed three runs
+  in five.
 - **Underrun** (`Decision`, programme): when the ring is empty the source yields silence (no
   edges) and counts the gap; the guest hears nothing, which the filing system reports as it
   would a dropout. **Overrun**: when the ring is full the oldest samples are dropped and
