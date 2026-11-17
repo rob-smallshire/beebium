@@ -545,15 +545,24 @@ TEST_CASE("A C90's counter reads 90:00, in digits of one width", "[cassette][dec
 
 namespace {
 
-// Whether the Record key is drawn red as it stands: its icon for its
-// enabled and checked state, read at the centre.
-bool drawn_red(QToolButton* button) {
+// Whether a key is drawn in a colour as it stands: any solid pixel of its
+// icon, for its enabled and checked state, of that colour.
+bool drawn_in(QToolButton* button, const QColor& colour) {
     const QImage image = button->icon()
                              .pixmap(QSize(20, 20), button->isEnabled() ? QIcon::Normal : QIcon::Disabled,
                                      button->isChecked() ? QIcon::On : QIcon::Off)
                              .toImage();
-    const QColor centre = image.pixelColor(image.width() / 2, image.height() / 2);
-    return centre.alpha() > 200 && centre.red() > 150 && centre.green() < 100 && centre.blue() < 100;
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            const QColor pixel = image.pixelColor(x, y);
+            if (pixel.alpha() > 200 && std::abs(pixel.red() - colour.red()) <= 8 &&
+                std::abs(pixel.green() - colour.green()) <= 8 &&
+                std::abs(pixel.blue() - colour.blue()) <= 8) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 }  // namespace
@@ -565,23 +574,26 @@ TEST_CASE("The keys latch: the current transport's key is down, and only the imp
     struct Case {
         Tape tape;
         T transport;
+        bool motor;
     };
-    std::vector<Case> cases{{Tape::empty, beebium::TAPE_TRANSPORT_STOPPED}};
-    for (Tape tape : {Tape::uef, Tape::csw}) {
-        for (T transport : {beebium::TAPE_TRANSPORT_STOPPED, beebium::TAPE_TRANSPORT_PLAYING,
-                            beebium::TAPE_TRANSPORT_RECORDING, beebium::TAPE_TRANSPORT_REWINDING,
-                            beebium::TAPE_TRANSPORT_FAST_FORWARDING}) {
-            if (tape == Tape::csw && transport == beebium::TAPE_TRANSPORT_RECORDING) {
-                continue;  // never recorded on
+    std::vector<Case> cases{{Tape::empty, beebium::TAPE_TRANSPORT_STOPPED, false}};
+    for (bool motor : {false, true}) {
+        for (Tape tape : {Tape::uef, Tape::csw}) {
+            for (T transport : {beebium::TAPE_TRANSPORT_STOPPED, beebium::TAPE_TRANSPORT_PLAYING,
+                                beebium::TAPE_TRANSPORT_RECORDING, beebium::TAPE_TRANSPORT_REWINDING,
+                                beebium::TAPE_TRANSPORT_FAST_FORWARDING}) {
+                if (tape == Tape::csw && transport == beebium::TAPE_TRANSPORT_RECORDING) {
+                    continue;  // never recorded on
+                }
+                cases.push_back({tape, transport, motor});
             }
-            cases.push_back({tape, transport});
         }
+        cases.push_back({Tape::live, beebium::TAPE_TRANSPORT_STOPPED, motor});
+        cases.push_back({Tape::live, beebium::TAPE_TRANSPORT_PLAYING, motor});
     }
-    cases.push_back({Tape::live, beebium::TAPE_TRANSPORT_STOPPED});
-    cases.push_back({Tape::live, beebium::TAPE_TRANSPORT_PLAYING});
 
     for (const Case& c : cases) {
-        CAPTURE(static_cast<int>(c.tape), static_cast<int>(c.transport));
+        CAPTURE(static_cast<int>(c.tape), static_cast<int>(c.transport), c.motor);
         Deck d;
         if (c.tape == Tape::uef) {
             d.load("file:///home/me/tapes/Elite.uef");
@@ -592,6 +604,7 @@ TEST_CASE("The keys latch: the current transport's key is down, and only the imp
             REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
         }
         d.server.cassette.set_position(30.0);
+        d.server.cassette.set_motor(c.motor);
         d.server.cassette.set_transport(c.transport);
         const auto shown = [](T transport) {
             switch (transport) {
@@ -604,7 +617,7 @@ TEST_CASE("The keys latch: the current transport's key is down, and only the imp
             }
         };
         REQUIRE(wait_until([&] {
-            return d.cassette.deck().position_seconds == 30.0 &&
+            return d.cassette.deck().position_seconds == 30.0 && d.cassette.deck().motor_on == c.motor &&
                    d.cassette.deck().transport == shown(c.transport);
         }));
         const bool in = c.tape != Tape::empty;
@@ -637,8 +650,33 @@ TEST_CASE("The keys latch: the current transport's key is down, and only the imp
         CHECK_FALSE(d.row.key(CassetteKey::stop)->isChecked());
         CHECK_FALSE(d.row.key(CassetteKey::seek)->isChecked());
         CHECK_FALSE(d.row.key(CassetteKey::eject)->isChecked());
-        // Red means recording and nothing else.
-        CHECK(drawn_red(d.row.key(CassetteKey::record)) == recording);
+        // Colour means tape moving: Play green while playing and red while
+        // recording, Record red, each only with the relay closed; a wind
+        // blue whatever the relay. A key not down is never coloured.
+        const QColor green = CassetteDeckRow::PLAYING_COLOUR;
+        const QColor red = CassetteDeckRow::RECORDING_COLOUR;
+        const QColor blue = d.row.palette().color(QPalette::Active, QPalette::Highlight);
+        const bool playing = c.transport == beebium::TAPE_TRANSPORT_PLAYING;
+        QToolButton* play = d.row.key(CassetteKey::play);
+        QToolButton* record = d.row.key(CassetteKey::record);
+        CHECK(drawn_in(play, green) == (playing && c.motor));
+        CHECK(drawn_in(play, red) == (recording && c.motor));
+        CHECK_FALSE(drawn_in(play, blue));
+        CHECK(drawn_in(record, red) == (recording && c.motor));
+        CHECK_FALSE(drawn_in(record, green));
+        CHECK(drawn_in(d.row.key(CassetteKey::rewind), blue) ==
+              (c.transport == beebium::TAPE_TRANSPORT_REWINDING));
+        CHECK(drawn_in(d.row.key(CassetteKey::fast_forward), blue) ==
+              (c.transport == beebium::TAPE_TRANSPORT_FAST_FORWARDING));
+        for (CassetteKey key : {CassetteKey::rewind, CassetteKey::fast_forward}) {
+            CHECK_FALSE(drawn_in(d.row.key(key), green));
+            CHECK_FALSE(drawn_in(d.row.key(key), red));
+        }
+        for (CassetteKey key : {CassetteKey::stop, CassetteKey::seek, CassetteKey::eject}) {
+            for (const QColor& colour : {green, red, blue}) {
+                CHECK_FALSE(drawn_in(d.row.key(key), colour));
+            }
+        }
     }
 }
 

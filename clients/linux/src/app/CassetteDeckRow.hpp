@@ -16,6 +16,8 @@
 #include "app/LiveInput.hpp"
 #include "app/SessionCassette.hpp"
 
+#include <QColor>
+#include <QIcon>
 #include <QStringList>
 #include <QStyle>
 #include <QTimer>
@@ -71,6 +73,11 @@ class CassetteDeckRow : public QWidget {
 
 public:
     static constexpr int NOTICE_MS = 6000;
+    // The colours of tape moving (client specification 9.0, The keys
+    // latch): Play while playing, Play and Record while recording; a wind
+    // takes the palette's highlight.
+    static const QColor PLAYING_COLOUR;
+    static const QColor RECORDING_COLOUR;
     // The timeline's steps per second of tape.
     static constexpr int SLIDER_SCALE = 10;
 
@@ -160,6 +167,10 @@ private:
     QToolButton* browse_;
     QMenu* menu_;
     std::map<CassetteKey, QToolButton*> keys_;
+    // Each key's icon as themed, and the colour it is drawn in now (0 for
+    // none), so a key is redrawn only when its colour changes.
+    std::map<CassetteKey, QIcon> plain_icons_;
+    std::map<CassetteKey, QRgb> drawn_colours_;
     AudioInputs inputs_;
     LiveCapture* capture_ = nullptr;
     std::unique_ptr<LiveChunker> chunker_;

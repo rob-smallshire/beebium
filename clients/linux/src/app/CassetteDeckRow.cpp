@@ -90,15 +90,36 @@ QPixmap dot(const QColor& colour, int size) {
     return pixmap;
 }
 
-// The Record key, drawn rather than themed: in the keys' own colour, and
-// red only while it is down, so red means recording and nothing else (client
-// specification 9.0); grey while it cannot be pressed.
+// The Record key, drawn rather than themed: in the keys' own colour, grey
+// while down with the tape still, and faint while it cannot be pressed. It
+// is red only while tape is being recorded, drawn so by tinted() (client
+// specification 9.0).
 QIcon record_icon(const QColor& key_colour) {
     QIcon icon;
     icon.addPixmap(dot(key_colour, 20), QIcon::Normal, QIcon::Off);
-    icon.addPixmap(dot(QColor(0xd7, 0x26, 0x1e), 20), QIcon::Normal, QIcon::On);
+    icon.addPixmap(dot(QColor(0x80, 0x80, 0x80), 20), QIcon::Normal, QIcon::On);
     for (QIcon::State state : {QIcon::Off, QIcon::On}) {
         icon.addPixmap(dot(QColor(0xa0, 0xa0, 0xa0, 0x80), 20), QIcon::Disabled, state);
+    }
+    return icon;
+}
+
+// A key's icon drawn solid in one colour, its shape kept: how a key shows
+// tape moving, on any theme's icons and on light and dark palettes alike.
+QIcon tinted(const QIcon& plain, const QColor& colour) {
+    QIcon icon;
+    for (int size : {16, 20, 24, 32, 40}) {
+        for (QIcon::State state : {QIcon::Off, QIcon::On}) {
+            QPixmap pixmap = plain.pixmap(QSize(size, size), QIcon::Normal, state);
+            if (pixmap.isNull()) {
+                continue;
+            }
+            QPainter painter(&pixmap);
+            painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            painter.fillRect(pixmap.rect(), colour);
+            painter.end();
+            icon.addPixmap(pixmap, QIcon::Normal, state);
+        }
     }
     return icon;
 }
@@ -199,6 +220,9 @@ private:
 };
 
 }  // namespace
+
+const QColor CassetteDeckRow::PLAYING_COLOUR = QColor(0x2e, 0xb8, 0x4d);
+const QColor CassetteDeckRow::RECORDING_COLOUR = QColor(0xd7, 0x26, 0x1e);
 
 CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* settings, Shares shares,
                                  QWidget* parent)
@@ -322,6 +346,7 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
         button->setIcon(icon);
         keys->addWidget(button);
         keys_[key] = button;
+        plain_icons_[key] = icon;
     };
     // Back to the beginning: a seek to 0, the instant return to the start.
     add_key(CassetteKey::seek, QStringLiteral("beginning"), tr("Back to the beginning"),
@@ -612,9 +637,28 @@ void CassetteDeckRow::present() {
 }
 
 void CassetteDeckRow::latch_keys() {
+    // Down for the transport selected; coloured while tape moves (9.0):
+    // a play or a recording only with the relay closed, a wind always.
+    const DeckState& deck = this->deck();
     for (const auto& [key, button] : keys_) {
-        if (button->isCheckable()) {
-            button->setChecked(key_down(key, deck()));
+        if (!button->isCheckable()) {
+            continue;
+        }
+        const bool down = key_down(key, deck);
+        button->setChecked(down);
+        QColor colour;
+        if (down) {
+            const bool recording = deck.transport == DeckState::Transport::recording;
+            if (key == CassetteKey::rewind || key == CassetteKey::fast_forward) {
+                colour = palette().color(QPalette::Active, QPalette::Highlight);
+            } else if (deck.motor_on) {
+                colour = key == CassetteKey::record || recording ? RECORDING_COLOUR : PLAYING_COLOUR;
+            }
+        }
+        const QRgb drawn = colour.isValid() ? colour.rgba() : 0;
+        if (drawn_colours_[key] != drawn) {
+            drawn_colours_[key] = drawn;
+            button->setIcon(colour.isValid() ? tinted(plain_icons_[key], colour) : plain_icons_[key]);
         }
     }
 }
