@@ -23,6 +23,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <string>
+#include <thread>
 
 namespace beebium::linux_client {
 
@@ -78,6 +83,9 @@ DeckState deck_state_from(const beebium::DeckStatus& status) {
     deck.transport = transport_of(status.transport());
     deck.position_seconds = std::max(0.0, status.position_seconds());
     deck.motor_on = status.motor_on();
+    deck.live_ring_fill = std::clamp(status.live_ring_fill(), 0.0, 1.0);
+    deck.live_overruns = status.live_overruns();
+    deck.live_underruns = status.live_underruns();
     return deck;
 }
 
@@ -128,6 +136,124 @@ QString BlankTapeTemplate::extension() const {
     const int dot = filename.lastIndexOf(QLatin1Char('.'));
     return dot < 0 ? QStringLiteral(".uef") : filename.mid(dot).toLower();
 }
+
+// One StreamAudio call on a thread of its own: the format first, then each
+// chunk as the capture gives it, then, once finished, the end of the sending
+// side and the server's summary. Cancelled with the connection.
+class LiveStream {
+public:
+    // About two seconds of 10 ms chunks: more waiting than that is a server
+    // not taking them, and the oldest go first, as the server's own ring
+    // drops its oldest.
+    static constexpr std::size_t QUEUE_CAP = 200;
+
+    using Done = std::function<void(const LiveSummary&)>;
+
+    LiveStream(std::shared_ptr<beebium::CassetteService::Stub> stub, const LiveInputFormat& format,
+               Done done)
+        : stub_(std::move(stub)), done_(std::move(done)) {
+        beebium::AudioInputFormat* proto = first_.mutable_format();
+        proto->set_sample_rate(format.sample_rate);
+        proto->set_sample_format(format.sample == LiveInputFormat::Sample::s16
+                                     ? beebium::AUDIO_SAMPLE_FORMAT_S16
+                                     : beebium::AUDIO_SAMPLE_FORMAT_F32);
+        proto->set_channels(format.channels);
+        proto->set_channel(format.channel.toStdString());
+        proto->set_device_name(format.device_name.toStdString());
+        thread_ = std::thread([this] { run(); });
+    }
+
+    ~LiveStream() {
+        {
+            std::lock_guard lock(mutex_);
+            cancelled_ = true;
+        }
+        context_.TryCancel();
+        changed_.notify_all();
+        thread_.join();
+    }
+
+    void push(const QByteArray& samples) {
+        {
+            std::lock_guard lock(mutex_);
+            if (finishing_) {
+                return;
+            }
+            queue_.emplace_back(samples.constData(), static_cast<std::size_t>(samples.size()));
+            while (queue_.size() > QUEUE_CAP) {
+                queue_.pop_front();
+            }
+        }
+        changed_.notify_all();
+    }
+
+    void finish() {
+        {
+            std::lock_guard lock(mutex_);
+            finishing_ = true;
+        }
+        changed_.notify_all();
+    }
+
+private:
+    void run() {
+        beebium::StreamAudioSummary summary;
+        auto writer = stub_->StreamAudio(&context_, &summary);
+        bool open = writer->Write(first_);
+        while (open) {
+            std::string samples;
+            {
+                std::unique_lock lock(mutex_);
+                changed_.wait(lock, [this] { return cancelled_ || finishing_ || !queue_.empty(); });
+                if (cancelled_) {
+                    break;
+                }
+                if (queue_.empty()) {
+                    break;  // finishing, and all of it sent
+                }
+                samples = std::move(queue_.front());
+                queue_.pop_front();
+            }
+            beebium::AudioInputChunk chunk;
+            chunk.set_samples(std::move(samples));
+            open = writer->Write(chunk);
+        }
+        if (open) {
+            writer->WritesDone();
+        }
+        const grpc::Status status = writer->Finish();
+        LiveSummary result;
+        if (!status.ok()) {
+            result.outcome = failed_call(status);
+        } else {
+            result.outcome.ok = summary.error().empty();
+            result.outcome.kind = static_cast<int>(summary.kind());
+            result.outcome.message = QString::fromStdString(summary.error());
+        }
+        result.samples_received = summary.samples_received();
+        result.samples_dropped = summary.samples_dropped();
+        result.silence_inserted = summary.silence_samples_inserted();
+        bool cancelled = false;
+        {
+            std::lock_guard lock(mutex_);
+            cancelled = cancelled_;
+        }
+        if (!cancelled) {
+            done_(result);
+        }
+    }
+
+    std::shared_ptr<beebium::CassetteService::Stub> stub_;
+    Done done_;
+    beebium::AudioInputChunk first_;
+    grpc::ClientContext context_;
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::deque<std::string> queue_;
+    bool finishing_ = false;
+    bool cancelled_ = false;
+    std::thread thread_;
+};
 
 SessionCassette::SessionCassette(QObject* parent) : QObject(parent) {}
 
@@ -181,6 +307,9 @@ void SessionCassette::start(std::shared_ptr<grpc::Channel> channel) {
 
 void SessionCassette::stop() {
     ++generation_;
+    // The connection's end is the stream's: cancelled, with no summary.
+    live_.reset();
+    live_finishing_ = false;
     if (stream_) {
         stream_->stop();
         stream_.reset();
@@ -293,6 +422,45 @@ void SessionCassette::call_key(CassetteKey key, double position_seconds) {
             return status.ok() ? outcome_of(response) : failed_call(status);
         },
         [this, key](const CassetteOutcome& outcome) { Q_EMIT key_finished(key, outcome); });
+}
+
+void SessionCassette::start_live(const LiveInputFormat& format) {
+    if (!stub_ || live_) {
+        return;
+    }
+    live_finishing_ = false;
+    const unsigned generation = generation_;
+    QPointer<SessionCassette> guard(this);
+    live_ = std::make_unique<LiveStream>(stub_, format, [guard, generation](const LiveSummary& summary) {
+        if (!guard) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, generation, summary] {
+                if (!guard || generation != guard->generation_) {
+                    return;
+                }
+                guard->live_.reset();
+                guard->live_finishing_ = false;
+                Q_EMIT guard->live_ended(summary);
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void SessionCassette::push_live(const QByteArray& samples) {
+    if (live_ && !live_finishing_) {
+        live_->push(samples);
+    }
+}
+
+void SessionCassette::finish_live() {
+    if (live_ && !live_finishing_) {
+        live_finishing_ = true;
+        live_->finish();
+        Q_EMIT deck_changed();
+    }
 }
 
 void SessionCassette::create_tape(const QString& label, const QString& path) {

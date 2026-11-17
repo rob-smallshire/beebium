@@ -13,12 +13,15 @@
 #ifndef BEEBIUM_LINUX_APP_SESSION_CASSETTE_HPP
 #define BEEBIUM_LINUX_APP_SESSION_CASSETTE_HPP
 
+#include "app/LiveInput.hpp"
+
 #include "cassette.grpc.pb.h"
 
 #include <QObject>
 #include <QString>
 #include <QStringList>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -31,13 +34,14 @@ class ClientContext;
 namespace beebium::linux_client {
 
 class CassetteStatusStream;
+class LiveStream;
 class RpcWorker;
 
 // The tape in the deck, as the server describes it (client specification 9.0).
 struct TapeInfo {
     QString name;    // the file's name
     QString url;     // as it was inserted: a file:// URL or a path
-    QString format;  // "UEF", "CSW" or "WAV"
+    QString format;  // "UEF", "CSW", "WAV" or "LIVE"
     QString title;   // the image's own title, else empty
     QString origin;  // the tool that made the image, else empty
     QString target_machine;
@@ -61,6 +65,14 @@ struct DeckState {
     Transport transport = Transport::stopped;
     double position_seconds = 0.0;
     bool motor_on = false;
+    // A live tape's ring: how full (0 to 1), and the samples it dropped
+    // (overruns) and made up as silence (underruns).
+    double live_ring_fill = 0.0;
+    std::uint64_t live_overruns = 0;
+    std::uint64_t live_underruns = 0;
+
+    // A live input is the tape: it cannot be wound, sought or recorded on.
+    bool live() const { return tape_inserted && tape.format == QStringLiteral("LIVE"); }
 
     friend bool operator==(const DeckState&, const DeckState&) = default;
 };
@@ -97,6 +109,15 @@ struct CassetteOutcome {
     QString created_path;
 };
 
+// How a live stream ended: the call's outcome (the server's sentence when
+// it refused the stream) and its counts of samples.
+struct LiveSummary {
+    CassetteOutcome outcome;
+    std::uint64_t samples_received = 0;
+    std::uint64_t samples_dropped = 0;
+    std::uint64_t silence_inserted = 0;
+};
+
 // A blank tape template the server ships (9.0.1).
 struct BlankTapeTemplate {
     QString label;     // "Blank C30 (30 minutes)"
@@ -128,6 +149,18 @@ public:
     // Copy a template to `path` on the server's host.
     void create_tape(const QString& label, const QString& path);
 
+    // A live input as the tape (9.0, Live input): the stream opens with the
+    // format, and the server puts the live tape in, stopped. Samples go as
+    // they come; a refusal is heard at the next write. Finishing closes the
+    // stream's sending side, and the deck lets the tape go once it has
+    // played out what the server holds.
+    void start_live(const LiveInputFormat& format);
+    void push_live(const QByteArray& samples);
+    void finish_live();
+    // A stream of this session's is open, finishing or not.
+    bool streaming() const { return live_ != nullptr; }
+    bool live_finishing() const { return live_finishing_; }
+
 Q_SIGNALS:
     void deck_changed();
     void insert_finished(const QString& path, const beebium::linux_client::CassetteOutcome& outcome);
@@ -135,6 +168,7 @@ Q_SIGNALS:
                       const beebium::linux_client::CassetteOutcome& outcome);
     void create_finished(const QString& label, const beebium::linux_client::CassetteOutcome& outcome);
     void blank_tapes_changed();
+    void live_ended(const beebium::linux_client::LiveSummary& summary);
 
 private:
     void on_status(unsigned generation, const beebium::DeckStatus& status);
@@ -146,6 +180,8 @@ private:
 
     std::shared_ptr<beebium::CassetteService::Stub> stub_;
     std::unique_ptr<CassetteStatusStream> stream_;
+    std::unique_ptr<LiveStream> live_;
+    bool live_finishing_ = false;
     std::unique_ptr<RpcWorker> rpc_;
     DeckState deck_;
     std::vector<BlankTapeTemplate> blank_tapes_;

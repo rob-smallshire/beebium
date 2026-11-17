@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_APP_CASSETTE_DECK_ROW_HPP
 #define BEEBIUM_LINUX_APP_CASSETTE_DECK_ROW_HPP
 
+#include "app/LiveInput.hpp"
 #include "app/SessionCassette.hpp"
 
 #include <QStringList>
@@ -22,6 +23,7 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 
 class QLabel;
@@ -37,7 +39,8 @@ class ElidedLabel;
 
 // The icon a refused cassette request shows, chosen by the server's kind,
 // never from its text (client specification 9.0): a note for what the user
-// can put right at the deck (empty, occupied, read-only, a bad position),
+// can put right at the deck (empty, occupied, read-only, a bad position, a
+// live input asked to wind),
 // a warning for a tape that would not go in, and for a kind not known here.
 QStyle::StandardPixmap cassette_error_icon(int kind);
 // The sentence that leads a blank tape's failure; the server's lower-case
@@ -71,11 +74,19 @@ public:
     static constexpr int SLIDER_SCALE = 10;
 
     using Shares = std::function<bool()>;
+    using AudioInputs = std::function<std::vector<AudioInputDevice>()>;
 
     CassetteDeckRow(SessionCassette& cassette, ClientSettings* settings, Shares shares,
                     QWidget* parent = nullptr);
 
     void refresh();
+
+    // Where the Live Input menu's devices come from, and what captures one:
+    // the host's, unless a test says otherwise. The row owns the capture.
+    void set_audio_inputs(AudioInputs inputs) { inputs_ = std::move(inputs); }
+    void set_capture(LiveCapture* capture);
+    // Start a live input as the tape, as the menu's entry does.
+    void choose_live_input(const AudioInputDevice& device, const QString& channel);
 
     void show_failure(const CassetteMessage& message);
     void show_notice(const QString& text);
@@ -88,6 +99,7 @@ public:
     QString metadata_text() const;
     QString counter_text() const;
     QString duration_text() const;  // empty when the length is unknown
+    QString live_text() const;      // the ring, for a live tape
     QString message_text() const;
     bool motor_shown() const;
     QSlider* slider() const { return slider_; }
@@ -138,9 +150,13 @@ private:
     QLabel* message_text_;
     QPushButton* eject_offer_;
     QToolButton* dismiss_;
+    QLabel* live_;
     QToolButton* browse_;
     QMenu* menu_;
     std::map<CassetteKey, QToolButton*> keys_;
+    AudioInputs inputs_;
+    LiveCapture* capture_ = nullptr;
+    std::unique_ptr<LiveChunker> chunker_;
     QTimer notice_timer_;
     CassetteMessage message_;
     // The deck as last presented, its position aside.

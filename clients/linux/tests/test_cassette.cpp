@@ -362,7 +362,15 @@ TEST_CASE("An empty deck offers Browse where the server is local, and keys only 
     d.row.refresh();
     d.row.clear_message();
     CHECK(d.row.name_text() == QStringLiteral("Empty - server is on another host"));
-    CHECK_FALSE(d.row.browse_button()->isEnabled());
+    // Still offered, for the live inputs its menu holds; its files are not.
+    CHECK(d.row.browse_button()->isEnabled());
+    Q_EMIT d.row.browse_menu()->aboutToShow();
+    CHECK_FALSE(action_named(d.row.browse_menu(), QStringLiteral("Browse..."))->isEnabled());
+    CHECK_FALSE(action_named(d.row.browse_menu(), QStringLiteral("Recent"))->isEnabled());
+    CHECK_FALSE(action_named(d.row.browse_menu(), QStringLiteral("New Blank Tape"))->isEnabled());
+    CHECK(action_named(d.row.browse_menu(), QStringLiteral("Live Input"))->isEnabled());
+    d.row.browse_button()->click();
+    CHECK(d.row.message_text() == QStringLiteral("The server is on another host, so it cannot open files here"));
 }
 
 TEST_CASE("A loaded tape shows its name, what it is, its state, the counter and its length",
@@ -686,4 +694,326 @@ TEST_CASE("A deck without a disc controller is still storage; neither says there
         Storage s(false, false);
         CHECK(s.sidebar->status_text() == QStringLiteral("No Storage Devices"));
     }
+}
+
+namespace {
+
+// An input that prefers `rate`, `channels` and `sample`, and takes whatever
+// `takes` allows besides.
+AudioInputDevice input(int rate, int channels, AudioInputDevice::Sample sample,
+                       std::function<bool(int, int, AudioInputDevice::Sample)> takes = {}) {
+    AudioInputDevice device;
+    device.id = "dev";
+    device.name = QStringLiteral("USB Audio CODEC Analog Stereo");
+    device.preferred_rate = rate;
+    device.preferred_channels = channels;
+    device.preferred_sample = sample;
+    device.supports = [=](int r, int c, AudioInputDevice::Sample s) {
+        if (r == rate && c == channels && s == sample) {
+            return true;
+        }
+        return takes ? takes(r, c, s) : false;
+    };
+    return device;
+}
+
+}  // namespace
+
+TEST_CASE("A device's own rate and format go to the stream, one channel taken of two",
+          "[cassette][live]") {
+    const auto stereo = live_input_format(input(48000, 2, AudioInputDevice::Sample::int16));
+    REQUIRE(stereo);
+    CHECK(stereo->sample_rate == 48000);
+    CHECK(stereo->sample == LiveInputFormat::Sample::s16);
+    CHECK(stereo->channels == 2);
+    CHECK(stereo->channel == QStringLiteral("left"));  // the default
+    CHECK(stereo->device_name == QStringLiteral("USB Audio CODEC Analog Stereo"));
+    CHECK(stereo->bytes_per_frame() == 4);
+    const auto right =
+        live_input_format(input(48000, 2, AudioInputDevice::Sample::int16), QStringLiteral("right"));
+    REQUIRE(right);
+    CHECK(right->channel == QStringLiteral("right"));
+    const auto mono = live_input_format(input(44100, 1, AudioInputDevice::Sample::f32));
+    REQUIRE(mono);
+    CHECK(mono->sample == LiveInputFormat::Sample::f32);
+    CHECK(mono->channels == 1);
+    CHECK(mono->channel.isEmpty());
+    CHECK(mono->bytes_per_frame() == 4);
+}
+
+TEST_CASE("A device in another sample format is asked for float, then 16-bit; none is no stream",
+          "[cassette][live]") {
+    using Sample = AudioInputDevice::Sample;
+    const auto takes_float = [](int, int, Sample s) { return s == Sample::f32; };
+    const auto takes_s16 = [](int, int, Sample s) { return s == Sample::int16; };
+    CHECK(live_input_format(input(48000, 2, Sample::int32, takes_float))->sample ==
+          LiveInputFormat::Sample::f32);
+    CHECK(live_input_format(input(48000, 2, Sample::uint8, takes_s16))->sample ==
+          LiveInputFormat::Sample::s16);
+    CHECK_FALSE(live_input_format(input(48000, 2, Sample::int32)));
+    // More than two channels: two, if the device gives two.
+    const auto six = live_input_format(input(48000, 6, Sample::f32, [](int, int c, Sample s) {
+        return c == 2 && s == Sample::f32;
+    }));
+    REQUIRE(six);
+    CHECK(six->channels == 2);
+    // Rates the server does not take.
+    CHECK_FALSE(live_input_format(input(4000, 1, Sample::int16)));
+    CHECK_FALSE(live_input_format(input(384000, 1, Sample::int16)));
+}
+
+TEST_CASE("Captured bytes go out in 10 ms chunks of whole frames", "[cassette][live]") {
+    LiveInputFormat format;
+    format.sample_rate = 48000;
+    format.sample = LiveInputFormat::Sample::s16;
+    format.channels = 2;
+    LiveChunker chunker(format);
+    CHECK(chunker.chunk_bytes() == 480 * 4);
+    CHECK(chunker.feed(QByteArray(1000, 'a')).empty());
+    const auto chunks = chunker.feed(QByteArray(3000, 'b'));
+    REQUIRE(chunks.size() == 2);
+    CHECK(chunks[0].size() == 1920);
+    CHECK(chunks[0].left(1000) == QByteArray(1000, 'a'));
+    CHECK(chunks[1] == QByteArray(1920, 'b'));
+    // 4000 - 3840 = 160 held; a partial frame is not sent at the end.
+    chunker.feed(QByteArray(2, 'c'));
+    CHECK(chunker.rest().size() == 160);
+    CHECK(chunker.rest().isEmpty());
+}
+
+namespace {
+
+LiveInputFormat stereo_s16(const char* name = "Line In") {
+    LiveInputFormat format;
+    format.sample_rate = 44100;
+    format.sample = LiveInputFormat::Sample::s16;
+    format.channels = 2;
+    format.channel = QStringLiteral("right");
+    format.device_name = QString::fromLatin1(name);
+    return format;
+}
+
+}  // namespace
+
+TEST_CASE("A live stream puts the live tape in, stopped; its samples go; closing it ejects",
+          "[cassette][live]") {
+    Connected c;
+    std::optional<LiveSummary> ended;
+    QObject::connect(&c.cassette, &SessionCassette::live_ended,
+                     [&](const LiveSummary& summary) { ended = summary; });
+    c.cassette.start_live(stereo_s16());
+    REQUIRE(wait_until([&] { return c.deck().tape_inserted; }));
+    CHECK(c.deck().live());
+    CHECK(c.deck().tape.name == QStringLiteral("Line In"));
+    CHECK(c.deck().transport == DeckState::Transport::stopped);
+    {
+        std::lock_guard lock(c.server.cassette.calls_mutex);
+        REQUIRE(c.server.cassette.live_formats.size() == 1);
+        const auto& sent = c.server.cassette.live_formats[0];
+        CHECK(sent.sample_rate() == 44100);
+        CHECK(sent.sample_format() == beebium::AUDIO_SAMPLE_FORMAT_S16);
+        CHECK(sent.channels() == 2);
+        CHECK(sent.channel() == "right");
+        CHECK(sent.device_name() == "Line In");
+    }
+    CHECK(c.cassette.streaming());
+    c.cassette.push_live(QByteArray(1764, '\x01'));
+    c.cassette.push_live(QByteArray(1764, '\x02'));
+    REQUIRE(wait_until([&] { return c.server.cassette.live_bytes_taken() == 3528; }));
+    c.cassette.finish_live();
+    CHECK(c.cassette.live_finishing());
+    REQUIRE(wait_until([&] { return ended.has_value(); }));
+    CHECK(ended->outcome.ok);
+    CHECK(ended->samples_received == 1764);
+    CHECK_FALSE(c.cassette.streaming());
+    REQUIRE(wait_until([&] { return !c.deck().tape_inserted; }));
+    std::lock_guard lock(c.server.cassette.calls_mutex);
+    CHECK(c.server.cassette.live_closed_by_client);
+}
+
+TEST_CASE("A live stream onto an occupied deck ends with the server's sentence", "[cassette][live]") {
+    Connected c;
+    c.insert(QStringLiteral("/tmp/Elite.uef"));
+    std::optional<LiveSummary> ended;
+    QObject::connect(&c.cassette, &SessionCassette::live_ended,
+                     [&](const LiveSummary& summary) { ended = summary; });
+    c.cassette.start_live(stereo_s16());
+    // The refusal is heard at the next write, as the capture's next chunk.
+    REQUIRE(wait_until([&] {
+        c.cassette.push_live(QByteArray(1764, '\0'));
+        return ended.has_value();
+    }));
+    CHECK_FALSE(ended->outcome.ok);
+    CHECK(ended->outcome.kind == beebium::CASSETTE_ERROR_KIND_DECK_OCCUPIED);
+    CHECK(ended->outcome.message ==
+          QStringLiteral("The cassette deck already holds Elite.uef; eject it before playing a live input."));
+    CHECK_FALSE(c.cassette.streaming());
+}
+
+TEST_CASE("A live tape's ring is the deck's, and the connection's end is the stream's",
+          "[cassette][live]") {
+    Connected c;
+    c.cassette.start_live(stereo_s16());
+    REQUIRE(wait_until([&] { return c.deck().live(); }));
+    c.server.cassette.set_live_ring(0.42, 3, 7);
+    REQUIRE(wait_until([&] { return c.deck().live_overruns == 3; }));
+    CHECK(c.deck().live_ring_fill == 0.42);
+    CHECK(c.deck().live_underruns == 7);
+    bool ended = false;
+    QObject::connect(&c.cassette, &SessionCassette::live_ended, [&] { ended = true; });
+    c.cassette.stop();
+    CHECK_FALSE(c.cassette.streaming());
+    QCoreApplication::processEvents();
+    CHECK_FALSE(ended);  // cancelled with the connection: no summary to give
+}
+
+namespace {
+
+// A capture that opens whatever it is asked to, and gives what the test
+// hands it, as an input's samples would come.
+class FakeCapture : public LiveCapture {
+public:
+    bool refuse = false;
+    std::optional<LiveInputFormat> started;
+    bool running = false;
+    bool start(const AudioInputDevice& device, const LiveInputFormat& format,
+               QString* refusal) override {
+        if (refuse) {
+            *refusal = QStringLiteral("The audio input %1 could not be opened.").arg(device.name);
+            return false;
+        }
+        started = format;
+        running = true;
+        return true;
+    }
+    void stop() override { running = false; }
+    bool capturing() const override { return running; }
+    void give(const QByteArray& samples) { Q_EMIT chunk(samples); }
+};
+
+struct LiveDeck : Deck {
+    FakeCapture* capture = new FakeCapture;
+    std::vector<AudioInputDevice> inputs{input(48000, 2, AudioInputDevice::Sample::int16),
+                                         input(44100, 1, AudioInputDevice::Sample::f32)};
+    LiveDeck() {
+        inputs[1].id = "mic";
+        inputs[1].name = QStringLiteral("Built-in Microphone");
+        row.set_audio_inputs([this] { return inputs; });
+        row.set_capture(capture);
+    }
+};
+
+}  // namespace
+
+TEST_CASE("The Live Input menu lists the host's inputs by name; a stereo one offers either channel",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    Q_EMIT d.row.browse_menu()->aboutToShow();
+    QAction* live = action_named(d.row.browse_menu(), QStringLiteral("Live Input"));
+    REQUIRE(live);
+    REQUIRE(live->menu());
+    QAction* stereo = action_named(live->menu(), QStringLiteral("USB Audio CODEC Analog Stereo"));
+    REQUIRE(stereo);
+    REQUIRE(stereo->menu());
+    CHECK(action_named(stereo->menu(), QStringLiteral("Left Channel")));
+    QAction* right = action_named(stereo->menu(), QStringLiteral("Right Channel"));
+    REQUIRE(right);
+    QAction* mic = action_named(live->menu(), QStringLiteral("Built-in Microphone"));
+    REQUIRE(mic);
+    CHECK_FALSE(mic->menu());
+    right->trigger();
+    REQUIRE(d.capture->started);
+    CHECK(d.capture->started->channel == QStringLiteral("right"));
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    std::lock_guard lock(d.server.cassette.calls_mutex);
+    REQUIRE(d.server.cassette.live_formats.size() == 1);
+    CHECK(d.server.cassette.live_formats[0].sample_rate() == 48000);
+    CHECK(d.server.cassette.live_formats[0].channel() == "right");
+    CHECK(d.server.cassette.live_formats[0].device_name() == "USB Audio CODEC Analog Stereo");
+}
+
+TEST_CASE("With no audio inputs the menu says so", "[cassette][deck][live]") {
+    LiveDeck d;
+    d.inputs.clear();
+    Q_EMIT d.row.browse_menu()->aboutToShow();
+    QAction* live = action_named(d.row.browse_menu(), QStringLiteral("Live Input"));
+    REQUIRE(live);
+    QAction* none = action_named(live->menu(), QStringLiteral("No audio inputs"));
+    REQUIRE(none);
+    CHECK_FALSE(none->isEnabled());
+}
+
+TEST_CASE("A live tape plays and stops, but cannot be wound, sought or recorded on; its ring shows",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    d.row.choose_live_input(d.inputs[1], {});
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    CHECK(d.row.name_text() == QStringLiteral("Built-in Microphone"));
+    CHECK(d.row.metadata_text() == QStringLiteral("LIVE - 44.1 kHz"));
+    CHECK(d.row.state_text() == QStringLiteral("Stopped"));
+    CHECK(d.row.counter_text() == QStringLiteral("0:00"));
+    CHECK_FALSE(d.row.slider()->isVisibleTo(&d.row));
+    CHECK(d.row.key(CassetteKey::play)->isEnabled());
+    for (CassetteKey key : {CassetteKey::rewind, CassetteKey::fast_forward, CassetteKey::seek,
+                            CassetteKey::record}) {
+        CHECK_FALSE(d.row.key(key)->isEnabled());
+    }
+    CHECK(d.row.key(CassetteKey::record)->toolTip() ==
+          QStringLiteral("A live input plays as it comes, so it cannot be wound, sought or recorded on"));
+    CHECK(d.row.live_text() == QStringLiteral("Ring 0% - 0 overruns - 0 underruns"));
+    d.server.cassette.set_live_ring(0.42, 3, 7);
+    REQUIRE(wait_until(
+        [&] { return d.row.live_text() == QStringLiteral("Ring 42% - 3 overruns - 7 underruns"); }));
+    d.row.key(CassetteKey::play)->click();
+    REQUIRE(wait_until([&] { return d.row.state_text() == QStringLiteral("Playing, motor off"); }));
+}
+
+TEST_CASE("The input's samples go to the stream in whole 10 ms chunks", "[cassette][deck][live]") {
+    LiveDeck d;
+    d.row.choose_live_input(d.inputs[1], {});  // 44.1 kHz float mono: 441 frames of 4 bytes
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    d.capture->give(QByteArray(1000, '\x01'));
+    d.capture->give(QByteArray(1000, '\x02'));
+    REQUIRE(wait_until([&] { return d.server.cassette.live_bytes_taken() == 1764; }));
+    QCoreApplication::processEvents();
+    CHECK(d.server.cassette.live_bytes_taken() == 1764);
+}
+
+TEST_CASE("Ejecting this client's live input ends its stream, and the deck lets the tape go",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    d.row.choose_live_input(d.inputs[1], {});
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    CHECK(d.row.key(CassetteKey::eject)->toolTip() == QStringLiteral("End the live input"));
+    d.row.key(CassetteKey::eject)->click();
+    CHECK_FALSE(d.capture->running);
+    REQUIRE(wait_until([&] { return !d.cassette.deck().tape_inserted; }));
+    REQUIRE(wait_until([&] { return !d.cassette.streaming(); }));
+    // The stream's close, not EjectTape.
+    CHECK(d.pressed().empty());
+    std::lock_guard lock(d.server.cassette.calls_mutex);
+    CHECK(d.server.cassette.live_closed_by_client);
+}
+
+TEST_CASE("An input that will not open says so, and no stream begins", "[cassette][deck][live]") {
+    LiveDeck d;
+    d.capture->refuse = true;
+    d.row.choose_live_input(d.inputs[1], {});
+    CHECK(d.row.message_text() == QStringLiteral("The audio input Built-in Microphone could not be opened."));
+    CHECK_FALSE(d.cassette.streaming());
+}
+
+TEST_CASE("A live input onto an occupied deck shows the server's sentence and offers Eject",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    d.load();
+    d.row.choose_live_input(d.inputs[1], {});
+    REQUIRE(wait_until([&] {
+        d.capture->give(QByteArray(1764, '\0'));
+        return !d.row.message_text().isEmpty();
+    }));
+    CHECK(d.row.message_text() ==
+          QStringLiteral("The cassette deck already holds Elite.uef; eject it before playing a live input."));
+    CHECK(d.row.eject_offer()->isVisibleTo(&d.row));
+    CHECK_FALSE(d.capture->running);
 }

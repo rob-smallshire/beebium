@@ -51,6 +51,7 @@ QStyle::StandardPixmap cassette_error_icon(int kind) {
     case beebium::CASSETTE_ERROR_KIND_DECK_OCCUPIED:
     case beebium::CASSETTE_ERROR_KIND_READ_ONLY:
     case beebium::CASSETTE_ERROR_KIND_INVALID_POSITION:
+    case beebium::CASSETTE_ERROR_KIND_LIVE_SOURCE:
         return QStyle::SP_MessageBoxInformation;
     default:
         return QStyle::SP_MessageBoxWarning;
@@ -134,6 +135,15 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     layout->addWidget(name_);
     layout->addWidget(state_);
     layout->addWidget(metadata_);
+    // A live tape's ring: how full, and what it dropped and made up.
+    live_ = new QLabel(this);
+    live_->setObjectName(QStringLiteral("liveRing"));
+    live_->setEnabled(false);
+    live_->setToolTip(tr("The server's buffer for the live input: how full it is, the samples it "
+                         "dropped when full (overruns) and the silence it played when empty "
+                         "(underruns)"));
+    live_->hide();
+    layout->addWidget(live_);
 
     // The counter, the tape's length beside it when known, and beneath them
     // the slider the user scrubs with: the only guide to where anything is
@@ -318,6 +328,29 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
                 // insert does.
                 insert(outcome.created_path);
             });
+    inputs_ = [] { return audio_input_devices(); };
+    set_capture(new LiveCapture(this));
+    connect(&cassette_, &SessionCassette::live_ended, this, [this](const LiveSummary& summary) {
+        if (capture_) {
+            capture_->stop();
+        }
+        chunker_.reset();
+        if (summary.outcome.ok) {
+            return;
+        }
+        CassetteMessage failure;
+        failure.kind = CassetteMessage::Kind::failure;
+        if (!summary.outcome.reached) {
+            failure.text = tr("Beebium could not reach the cassette deck to play the live input.");
+            failure.detail = summary.outcome.message;
+        } else {
+            failure.text = summary.outcome.message;
+            failure.icon = cassette_error_icon(summary.outcome.kind);
+            failure.offer_eject =
+                summary.outcome.kind == beebium::CASSETTE_ERROR_KIND_DECK_OCCUPIED;
+        }
+        show_failure(failure);
+    });
     notice_timer_.setSingleShot(true);
     notice_timer_.setInterval(NOTICE_MS);
     connect(&notice_timer_, &QTimer::timeout, this, [this] {
@@ -334,6 +367,9 @@ void CassetteDeckRow::refresh() {
     // (on a Pi every repaint beside the picture copies the window).
     DeckState still = deck();
     still.position_seconds = 0.0;
+    still.live_ring_fill = 0.0;
+    still.live_overruns = 0;
+    still.live_underruns = 0;
     const bool local = shares_ && shares_();
     if (presented_ && still == *presented_ && local == presented_local_) {
         present_position();
@@ -400,27 +436,46 @@ void CassetteDeckRow::present() {
                              inserted);
     dismiss_->setVisible(message_.kind == CassetteMessage::Kind::failure);
 
-    // Browse hands the server a path: an empty deck, a server sharing this
-    // filesystem (3.2).
-    browse_->setEnabled(!inserted && local);
+    // Browse hands the server a path, so its files want a server sharing
+    // this filesystem (3.2); its menu's live inputs do not, so it is
+    // offered for any empty deck.
+    browse_->setEnabled(!inserted);
     browse_->setToolTip(local ? tr("Choose a tape image to insert; the arrow offers recent and "
-                                   "blank tapes")
-                              : tr("The server is on another host, so it cannot open files here"));
-    key(CassetteKey::rewind)->setEnabled(inserted && transport != DeckState::Transport::rewinding);
+                                   "blank tapes, and live inputs")
+                              : tr("The server is on another host, so it cannot open files here; "
+                                   "the arrow offers live inputs"));
+    // A live input plays as it comes: no winding, seeking or recording.
+    const bool live = deck.live();
+    const QString live_reason = tr("A live input plays as it comes, so it cannot be wound, sought "
+                                   "or recorded on");
+    key(CassetteKey::rewind)->setEnabled(inserted && !live &&
+                                         transport != DeckState::Transport::rewinding);
+    key(CassetteKey::rewind)->setToolTip(live ? live_reason : tr("Rewind"));
     key(CassetteKey::play)->setEnabled(inserted && transport != DeckState::Transport::playing);
     key(CassetteKey::stop)->setEnabled(inserted && transport != DeckState::Transport::stopped);
     key(CassetteKey::fast_forward)
-        ->setEnabled(inserted && transport != DeckState::Transport::fast_forwarding);
-    key(CassetteKey::eject)->setEnabled(inserted);
+        ->setEnabled(inserted && !live && transport != DeckState::Transport::fast_forwarding);
+    key(CassetteKey::fast_forward)->setToolTip(live ? live_reason : tr("Fast forward"));
+    key(CassetteKey::seek)->setToolTip(live ? live_reason : tr("Back to the beginning"));
+    // Ejecting this client's own live input closes its stream, and the deck
+    // lets the tape go once it has played what the server holds.
+    const bool finishing = live && cassette_.live_finishing();
+    key(CassetteKey::eject)->setEnabled(inserted && !finishing);
+    key(CassetteKey::eject)->setToolTip(
+        finishing ? tr("The live input ends once the deck has played what the server holds")
+        : live && cassette_.streaming() ? tr("End the live input")
+                                        : tr("Eject tape"));
     // Disabled with its reason for a tape Beebium only reads.
     QToolButton* record = key(CassetteKey::record);
-    record->setEnabled(inserted && deck.tape.recordable &&
+    record->setEnabled(inserted && !live && deck.tape.recordable &&
                        transport != DeckState::Transport::recording);
     record->setToolTip(!inserted ? tr("Insert a tape to record")
+                       : live    ? live_reason
                        : !deck.tape.recordable
                            ? tr("This tape is a %1 image, and Beebium records only on UEF tapes")
                                  .arg(deck.tape.format)
                            : tr("Record"));
+    live_->setVisible(live);
 }
 
 void CassetteDeckRow::present_position() {
@@ -433,7 +488,13 @@ void CassetteDeckRow::present_position() {
     if (deck().tape.duration_seconds > 0.0) {
         slider_->setValue(static_cast<int>(std::lround(position * SLIDER_SCALE)));
     }
-    key(CassetteKey::seek)->setEnabled(deck().tape_inserted && position > 0.0);
+    key(CassetteKey::seek)->setEnabled(deck().tape_inserted && !deck().live() && position > 0.0);
+    if (deck().live()) {
+        live_->setText(tr("Ring %1% - %2 overruns - %3 underruns")
+                           .arg(qRound(deck().live_ring_fill * 100.0))
+                           .arg(deck().live_overruns)
+                           .arg(deck().live_underruns));
+    }
 }
 
 void CassetteDeckRow::seek_to_slider() {
@@ -507,10 +568,77 @@ void CassetteDeckRow::insert(const QString& path) {
 
 void CassetteDeckRow::press(CassetteKey key) {
     clear_message();
+    if (key == CassetteKey::eject && deck().live() && cassette_.streaming()) {
+        // The last whole frames, then the end of the stream.
+        if (capture_) {
+            capture_->stop();
+        }
+        if (chunker_) {
+            const QByteArray rest = chunker_->rest();
+            if (!rest.isEmpty()) {
+                cassette_.push_live(rest);
+            }
+        }
+        cassette_.finish_live();
+        return;
+    }
     cassette_.press(key);
 }
 
+QString CassetteDeckRow::live_text() const {
+    return live_->isVisibleTo(this) ? live_->text() : QString();
+}
+
+void CassetteDeckRow::set_capture(LiveCapture* capture) {
+    if (capture_ && capture_->parent() == this) {
+        capture_->stop();
+        delete capture_;
+    }
+    capture_ = capture;
+    capture_->setParent(this);
+    connect(capture_, &LiveCapture::chunk, this, [this](const QByteArray& samples) {
+        if (!chunker_) {
+            return;
+        }
+        for (const QByteArray& chunk : chunker_->feed(samples)) {
+            cassette_.push_live(chunk);
+        }
+    });
+    connect(capture_, &LiveCapture::failed, this, [this](const QString& sentence) {
+        chunker_.reset();
+        cassette_.finish_live();
+        CassetteMessage failure;
+        failure.text = sentence;
+        show_failure(failure);
+    });
+}
+
+void CassetteDeckRow::choose_live_input(const AudioInputDevice& device, const QString& channel) {
+    clear_message();
+    const auto format = live_input_format(device, channel);
+    if (!format) {
+        CassetteMessage failure;
+        failure.text = tr("The audio input %1 gives no sound in a form the cassette deck takes.")
+                           .arg(device.name);
+        show_failure(failure);
+        return;
+    }
+    QString refusal;
+    if (!capture_ || !capture_->start(device, *format, &refusal)) {
+        CassetteMessage failure;
+        failure.text = refusal;
+        show_failure(failure);
+        return;
+    }
+    chunker_ = std::make_unique<LiveChunker>(*format);
+    cassette_.start_live(*format);
+}
+
 void CassetteDeckRow::browse() {
+    if (!(shares_ && shares_())) {
+        show_notice(tr("The server is on another host, so it cannot open files here"));
+        return;
+    }
     // A convenience: the server judges the format by content, so any file
     // can still be chosen.
     const QString filter = tr("Tape images (*.uef *.csw *.wav);;All files (*)");
@@ -525,8 +653,13 @@ void CassetteDeckRow::browse() {
 
 void CassetteDeckRow::rebuild_menu() {
     menu_->clear();
-    menu_->addAction(tr("Browse..."), this, &CassetteDeckRow::browse);
+    const bool local = shares_ && shares_();
+    const QString remote = tr("The server is on another host, so it cannot open files here");
+    QAction* browse = menu_->addAction(tr("Browse..."), this, &CassetteDeckRow::browse);
+    browse->setEnabled(local);
+    browse->setToolTip(local ? QString() : remote);
     QMenu* recent = menu_->addMenu(tr("Recent"));
+    recent->menuAction()->setEnabled(local);
     const QStringList paths = settings_ ? settings_->recent_tapes() : QStringList{};
     const QStringList labels = recent_disc_labels(paths);
     for (int i = 0; i < paths.size(); ++i) {
@@ -555,7 +688,28 @@ void CassetteDeckRow::rebuild_menu() {
     for (const BlankTapeTemplate& tape : cassette_.blank_tapes()) {
         blank->addAction(tape.label, this, [this, tape] { new_blank_tape(tape); });
     }
-    blank->setEnabled(!cassette_.blank_tapes().empty());
+    blank->setEnabled(local && !cassette_.blank_tapes().empty());
+    menu_->addSeparator();
+    // The host's audio inputs by the platform's own names, every kind: a
+    // line-in and a microphone are not told apart on every platform.
+    QMenu* inputs = menu_->addMenu(tr("Live Input"));
+    inputs->setToolTipsVisible(true);
+    const std::vector<AudioInputDevice> devices = inputs_ ? inputs_() : std::vector<AudioInputDevice>{};
+    for (const AudioInputDevice& device : devices) {
+        if (device.preferred_channels >= 2) {
+            // Either channel of two, the left the default as the server's.
+            QMenu* channels = inputs->addMenu(device.name);
+            channels->addAction(tr("Left Channel"), this,
+                                [this, device] { choose_live_input(device, QStringLiteral("left")); });
+            channels->addAction(tr("Right Channel"), this,
+                                [this, device] { choose_live_input(device, QStringLiteral("right")); });
+        } else {
+            inputs->addAction(device.name, this, [this, device] { choose_live_input(device, {}); });
+        }
+    }
+    if (devices.empty()) {
+        inputs->addAction(tr("No audio inputs"))->setEnabled(false);
+    }
 }
 
 void CassetteDeckRow::new_blank_tape(const BlankTapeTemplate& blank) {

@@ -672,6 +672,73 @@ public:
     std::vector<std::string> calls;
     std::uint32_t min_interval_ms = 0;
     std::atomic<int> subscriptions{0};
+    // The live streams: each one's format, and the bytes of samples taken.
+    std::vector<beebium::AudioInputFormat> live_formats;
+    std::size_t live_bytes = 0;
+    bool live_closed_by_client = false;
+
+    // A live tape's ring, as the server reports it.
+    void set_live_ring(double fill, std::uint64_t overruns, std::uint64_t underruns) {
+        {
+            std::lock_guard lock(calls_mutex);
+            status_.set_live_ring_fill(fill);
+            status_.set_live_overruns(overruns);
+            status_.set_live_underruns(underruns);
+        }
+        publish();
+    }
+    std::size_t live_bytes_taken() {
+        std::lock_guard lock(calls_mutex);
+        return live_bytes;
+    }
+
+    grpc::Status StreamAudio(grpc::ServerContext* context,
+                             grpc::ServerReader<beebium::AudioInputChunk>* reader,
+                             beebium::StreamAudioSummary* summary) override {
+        beebium::AudioInputChunk chunk;
+        if (!reader->Read(&chunk) || !chunk.has_format()) {
+            summary->set_kind(beebium::CASSETTE_ERROR_KIND_INVALID_FORMAT);
+            summary->set_error("A live stream begins with its format.");
+            return grpc::Status::OK;
+        }
+        {
+            std::lock_guard lock(calls_mutex);
+            if (status_.tape_inserted()) {
+                summary->set_kind(beebium::CASSETTE_ERROR_KIND_DECK_OCCUPIED);
+                summary->set_error("The cassette deck already holds " + status_.tape().name() +
+                                   "; eject it before playing a live input.");
+                return grpc::Status::OK;
+            }
+            live_formats.push_back(chunk.format());
+            status_.set_tape_inserted(true);
+            beebium::TapeMetadata& tape = *status_.mutable_tape();
+            tape.Clear();
+            tape.set_name(chunk.format().device_name());
+            tape.set_format("LIVE");
+            tape.set_sample_rate(chunk.format().sample_rate());
+            status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
+            status_.set_position_seconds(0.0);
+            live_context_ = context;
+        }
+        publish();
+        std::uint64_t bytes = 0;
+        while (reader->Read(&chunk)) {
+            bytes += chunk.samples().size();
+            std::lock_guard lock(calls_mutex);
+            live_bytes += chunk.samples().size();
+        }
+        {
+            std::lock_guard lock(calls_mutex);
+            live_closed_by_client = !context->IsCancelled() && live_context_ == context;
+            if (live_context_ == context) {
+                eject_locked();
+                live_context_ = nullptr;
+            }
+        }
+        publish();
+        summary->set_samples_received(bytes / 2);
+        return grpc::Status::OK;
+    }
 
     // As the machine moves the relay or the tape.
     void set_motor(bool on) {
@@ -732,10 +799,12 @@ public:
     grpc::Status EjectTape(grpc::ServerContext*, const beebium::EjectTapeRequest*,
                            beebium::CassetteResponse* response) override {
         return key("eject", response, [this] {
-            status_.set_tape_inserted(false);
-            status_.clear_tape();
-            status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
-            status_.set_position_seconds(0.0);
+            // Ejecting a live tape ends its stream.
+            if (live_context_) {
+                live_context_->TryCancel();
+                live_context_ = nullptr;
+            }
+            eject_locked();
         });
     }
     grpc::Status Play(grpc::ServerContext*, const beebium::PlayRequest*,
@@ -752,6 +821,9 @@ public:
     }
     grpc::Status Rewind(grpc::ServerContext*, const beebium::RewindRequest*,
                         beebium::CassetteResponse* response) override {
+        if (refuse_live("rewind", response)) {
+            return grpc::Status::OK;
+        }
         return key("rewind", response, [this] {
             status_.set_transport(status_.position_seconds() <= 0.0
                                       ? beebium::TAPE_TRANSPORT_STOPPED
@@ -760,6 +832,9 @@ public:
     }
     grpc::Status FastForward(grpc::ServerContext*, const beebium::FastForwardRequest*,
                              beebium::CassetteResponse* response) override {
+        if (refuse_live("fast forward", response)) {
+            return grpc::Status::OK;
+        }
         return key("fast forward", response, [this] {
             status_.set_transport(at_end() ? beebium::TAPE_TRANSPORT_STOPPED
                                            : beebium::TAPE_TRANSPORT_FAST_FORWARDING);
@@ -767,6 +842,9 @@ public:
     }
     grpc::Status Record(grpc::ServerContext*, const beebium::RecordRequest*,
                         beebium::CassetteResponse* response) override {
+        if (refuse_live("record", response)) {
+            return grpc::Status::OK;
+        }
         {
             std::lock_guard lock(calls_mutex);
             if (status_.tape_inserted() && !status_.tape().recordable()) {
@@ -785,6 +863,9 @@ public:
     grpc::Status Seek(grpc::ServerContext*, const beebium::SeekRequest* request,
                       beebium::CassetteResponse* response) override {
         const double to = request->position_seconds();
+        if (refuse_live("seek " + number(to), response)) {
+            return grpc::Status::OK;
+        }
         if (to < 0.0) {
             std::lock_guard lock(calls_mutex);
             calls.push_back("seek " + number(to));
@@ -898,6 +979,26 @@ private:
         }
         return name;
     }
+    void eject_locked() {
+        status_.set_tape_inserted(false);
+        status_.clear_tape();
+        status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
+        status_.set_position_seconds(0.0);
+        status_.set_live_ring_fill(0.0);
+        status_.set_live_overruns(0);
+        status_.set_live_underruns(0);
+    }
+    bool refuse_live(const std::string& name, beebium::CassetteResponse* response) {
+        std::lock_guard lock(calls_mutex);
+        if (!status_.tape_inserted() || status_.tape().format() != "LIVE") {
+            return false;
+        }
+        calls.push_back(name);
+        response->set_kind(beebium::CASSETTE_ERROR_KIND_LIVE_SOURCE);
+        response->set_error("A live input plays as it comes, so it cannot be wound, sought or "
+                            "recorded on.");
+        return true;
+    }
     bool at_end() const {
         const double end = status_.tape().duration_seconds();
         return end > 0.0 && status_.position_seconds() >= end;
@@ -970,6 +1071,7 @@ private:
     }
 
     beebium::DeckStatus status_;
+    grpc::ServerContext* live_context_ = nullptr;
     std::mutex mutex_;
     std::condition_variable changed_;
     std::uint64_t version_ = 0;
