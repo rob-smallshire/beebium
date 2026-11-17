@@ -178,10 +178,18 @@ std::optional<QString> NewMachineDialog::choose(const FormBrowse& browse) {
     }
     const QString title = QString::fromStdString(browse.label);
     const QString current = QString::fromStdString(browse.current);
+    QStringList patterns;
+    for (const std::string& extension : browse.extensions) {
+        patterns << QStringLiteral("*.") + QString::fromStdString(extension);
+    }
+    // The types offered first; the server judges, so any file can be chosen.
+    const QString filter =
+        patterns.isEmpty() ? QString()
+                           : tr("%1 (%2);;All files (*)").arg(title, patterns.join(QLatin1Char(' ')));
     QString chosen;
     switch (browse.chooser) {
     case FormBrowse::Chooser::open_file:
-        chosen = QFileDialog::getOpenFileName(this, title, current);
+        chosen = QFileDialog::getOpenFileName(this, title, current, filter);
         break;
     case FormBrowse::Chooser::save_file:
         chosen = QFileDialog::getSaveFileName(this, title, current);

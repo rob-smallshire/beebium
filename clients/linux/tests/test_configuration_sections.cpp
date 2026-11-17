@@ -110,6 +110,108 @@ TEST_CASE("A model with its controller built in has no socket to choose", "[conf
     CHECK(storage->drive_count() == 2);
 }
 
+namespace {
+
+// A model-b schema as a server with the cassette deck describes it: the
+// recorded one, with the storage section's cassette added.
+std::string schema_with_cassette() {
+    auto schema = ordered_json::parse(model_b_schema_text());
+    for (auto& section : schema["sections"]) {
+        if (section.value("type", std::string()) == "storage") {
+            section["cassette"] = ordered_json::parse(
+                R"({"has_cassette": true, "label": "Cassette", "image_types": ["uef", "csw", "wav"]})");
+        }
+    }
+    return schema.dump();
+}
+
+ordered_json model_b_with_deck() {
+    auto document = model_b_with_disc();
+    document["storage"]["cassette"] = ordered_json::parse(R"({"image_uri": null})");
+    return document;
+}
+
+}  // namespace
+
+TEST_CASE("A tape chosen for the cassette is written as a file URI, and an emptied deck as null",
+          "[configuration][storage][cassette]") {
+    ConfigurationFixture f(model_b_with_deck(),
+                           [](ConfigurationFixture& f) { f.schema_text = schema_with_cassette(); });
+    auto* storage = f.section<StorageSection>();
+    REQUIRE(storage->cassette_row()->isVisibleTo(storage));
+    CHECK(storage->cassette_label()->text() == QStringLiteral("Cassette"));
+    std::optional<FormBrowse> asked;
+    f.dialog->set_chooser([&](const FormBrowse& browse) {
+        asked = browse;
+        return std::optional<QString>(QStringLiteral("/home/me/tapes/Elite Side A.uef"));
+    });
+    const int before = f.resolutions;
+    storage->tape_browse()->click();
+    REQUIRE(asked);
+    // The schema's label and image types, not the client's.
+    CHECK(asked->label == "Cassette");
+    CHECK(asked->extensions == std::vector<std::string>{"uef", "csw", "wav"});
+    CHECK(f.dialog->draft().get("/storage/cassette/image_uri") ==
+          ordered_json("file:///home/me/tapes/Elite%20Side%20A.uef"));
+    CHECK(storage->tape_field()->text() == QStringLiteral("/home/me/tapes/Elite Side A.uef"));
+    REQUIRE(wait_until([&] { return f.resolutions > before; }));
+    CHECK(f.section_names().first() == QStringLiteral("Storage •"));
+    storage->tape_clear()->click();
+    CHECK(f.dialog->draft().json()["storage"]["cassette"]["image_uri"].is_null());
+    CHECK(f.section_names().first() == QStringLiteral("Storage"));
+}
+
+TEST_CASE("The Cassette row sits above the drives", "[configuration][storage][cassette]") {
+    ConfigurationFixture f(model_b_with_deck(),
+                           [](ConfigurationFixture& f) { f.schema_text = schema_with_cassette(); });
+    auto* storage = f.section<StorageSection>();
+    f.dialog->show();
+    REQUIRE(wait_until([&] { return storage->tape_field()->isVisible() && storage->drive_field(0)->isVisible(); }));
+    CHECK(storage->tape_field()->mapTo(storage, QPoint(0, 0)).y() <
+          storage->drive_field(0)->mapTo(storage, QPoint(0, 0)).y());
+}
+
+TEST_CASE("A tape dropped on the Cassette row is written as a browsed one is",
+          "[configuration][storage][cassette]") {
+    ConfigurationFixture f(model_b_with_deck(),
+                           [](ConfigurationFixture& f) { f.schema_text = schema_with_cassette(); });
+    auto* storage = f.section<StorageSection>();
+    storage->drop_tape({QStringLiteral("/home/me/tapes/Repton.csw")});
+    CHECK(f.dialog->draft().get("/storage/cassette/image_uri") ==
+          ordered_json("file:///home/me/tapes/Repton.csw"));
+    // One tape at a time: a drop of several changes nothing.
+    storage->drop_tape({QStringLiteral("/a.uef"), QStringLiteral("/b.uef")});
+    CHECK(f.dialog->draft().get("/storage/cassette/image_uri") ==
+          ordered_json("file:///home/me/tapes/Repton.csw"));
+}
+
+TEST_CASE("A model whose schema has no cassette has no Cassette row",
+          "[configuration][storage][cassette]") {
+    ConfigurationFixture f(model_b_with_disc());
+    auto* storage = f.section<StorageSection>();
+    CHECK_FALSE(storage->cassette_row()->isVisibleTo(storage));
+}
+
+TEST_CASE("A missing tape is the server's warning beneath the Cassette row",
+          "[configuration][storage][cassette]") {
+    ConfigurationFixture f(model_b_with_deck(),
+                           [](ConfigurationFixture& f) { f.schema_text = schema_with_cassette(); });
+    f.diagnostics = ordered_json::parse(R"([{"severity": "warning", "path": "/storage/cassette/image_uri",
+        "location": "Cassette", "message": "tape image not found: /gone.uef"}])");
+    f.answer = QStringLiteral("/gone.uef");
+    auto* storage = f.section<StorageSection>();
+    storage->tape_browse()->click();
+    REQUIRE(wait_until([&] { return !f.dialog->diagnostics().empty(); }));
+    bool shown = false;
+    for (QLabel* label : storage->cassette_row()->findChildren<QLabel*>()) {
+        shown = shown || (label->isVisibleTo(storage) &&
+                          label->text() == QStringLiteral("tape image not found: /gone.uef"));
+    }
+    CHECK(shown);
+    // A warning, not an error: the machine can still be made.
+    CHECK(f.dialog->create_button()->isEnabled());
+}
+
 TEST_CASE("A drive's diagnostics show beneath it, verbatim", "[configuration][storage]") {
     ConfigurationFixture f(model_b_with_disc());
     f.diagnostics = ordered_json::parse(R"([{"severity": "warning", "path": "/storage/floppy_drives/1",

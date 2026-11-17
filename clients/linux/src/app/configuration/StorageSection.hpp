@@ -17,6 +17,7 @@
 #include "preset/HardDiscsDraft.hpp"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 class QComboBox;
@@ -31,9 +32,11 @@ namespace beebium::linux_client {
 class DiagnosticLine;
 
 // The configuration editor's Storage section (client specification 5.2,
-// 9), as the macOS client's: the disc controller in its socket, from the
-// schema's options, and a floppy drive's disc for each drive while a
-// controller is fitted. Images are written as file:// URIs.
+// 9), as the macOS client's: the cassette's tape where the schema reports a
+// cassette, then the disc controller in its socket, from the schema's
+// options, and a floppy drive's disc for each drive while a controller is
+// fitted. Images are written as file:// URIs, which the server reads for a
+// tape as for a disc.
 class StorageSection : public ConfigurationSection {
     Q_OBJECT
 
@@ -45,6 +48,15 @@ public:
     bool changed() const override;
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
+
+    // The Cassette row, above the drives (9.0).
+    QWidget* cassette_row() const { return cassette_row_; }
+    QLabel* cassette_label() const { return cassette_label_; }
+    QLineEdit* tape_field() const { return tape_field_; }
+    QPushButton* tape_browse() const { return tape_browse_; }
+    QPushButton* tape_clear() const { return tape_clear_; }
+    // As a drop of these files on the row would go: one tape, written.
+    void drop_tape(const QStringList& paths);
 
     QComboBox* controller() const { return controller_; }
     int drive_count() const { return static_cast<int>(drives_.size()); }
@@ -91,8 +103,17 @@ private:
     void disc_edited();
     bool controller_fitted() const;
     void set_image(int drive, const QString& path);
+    void set_tape(const QString& path);
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
     NewMachineDialog& dialog_;
+    QWidget* cassette_row_;
+    QLabel* cassette_label_;
+    QLineEdit* tape_field_;
+    QPushButton* tape_browse_;
+    QPushButton* tape_clear_;
+    DiagnosticLine* tape_diagnostic_;
+    std::vector<std::string> tape_types_;
     QWidget* controller_row_;
     QComboBox* controller_;
     QLabel* controller_description_;

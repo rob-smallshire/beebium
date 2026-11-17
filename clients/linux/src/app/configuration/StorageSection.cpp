@@ -15,6 +15,8 @@
 #include "app/configuration/SectionWidgets.hpp"
 
 #include <QComboBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFileInfo>
 #include <QFrame>
 #include <QIcon>
@@ -24,8 +26,10 @@
 #include <QToolButton>
 #include <QHBoxLayout>
 #include <QLineEdit>
+#include <QMimeData>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QUrl>
 #include <QVBoxLayout>
 
 namespace beebium::linux_client {
@@ -35,6 +39,48 @@ using nlohmann::ordered_json;
 StorageSection::StorageSection(NewMachineDialog& dialog) : dialog_(dialog) {
     setObjectName(QStringLiteral("storageSection"));
     auto* layout = new QVBoxLayout(this);
+    // The cassette first, as the sidebar puts the deck above the drives.
+    cassette_row_ = new QWidget(this);
+    cassette_row_->setObjectName(QStringLiteral("cassetteRow"));
+    auto* cassette = new QVBoxLayout(cassette_row_);
+    cassette->setContentsMargins(0, 0, 0, 8);
+    cassette_label_ = section_heading(tr("Cassette"), cassette_row_);
+    cassette->addWidget(cassette_label_);
+    auto* tape_line = new QHBoxLayout;
+    tape_field_ = new QLineEdit(cassette_row_);
+    tape_field_->setObjectName(QStringLiteral("tape"));
+    tape_field_->setPlaceholderText(tr("No tape"));
+    // A drop is the row's, as a tape, not the field's, as text.
+    tape_field_->setAcceptDrops(false);
+    tape_browse_ = new QPushButton(tr("Browse..."), cassette_row_);
+    tape_clear_ = new QPushButton(tr("Clear"), cassette_row_);
+    tape_line->addWidget(tape_field_, 1);
+    tape_line->addWidget(tape_browse_);
+    tape_line->addWidget(tape_clear_);
+    cassette->addLayout(tape_line);
+    tape_diagnostic_ = new DiagnosticLine(cassette_row_);
+    cassette->addWidget(tape_diagnostic_);
+    cassette_row_->setAcceptDrops(true);
+    cassette_row_->installEventFilter(this);
+    layout->addWidget(cassette_row_);
+    connect(tape_field_, &QLineEdit::editingFinished, this,
+            [this] { set_tape(tape_field_->text().trimmed()); });
+    connect(tape_clear_, &QPushButton::clicked, this, [this] {
+        tape_field_->clear();
+        set_tape(QString());
+    });
+    connect(tape_browse_, &QPushButton::clicked, this, [this] {
+        FormBrowse browse;
+        browse.chooser = FormBrowse::Chooser::open_file;
+        browse.label = cassette_label_->text().toStdString();
+        browse.current = tape_field_->text().toStdString();
+        browse.extensions = tape_types_;
+        if (const auto path = dialog_.choose(browse)) {
+            tape_field_->setText(*path);
+            set_tape(*path);
+        }
+    });
+
     controller_row_ = new QWidget(this);
     auto* controller_layout = new QVBoxLayout(controller_row_);
     controller_layout->setContentsMargins(0, 0, 0, 0);
@@ -101,6 +147,25 @@ bool StorageSection::controller_fitted() const {
 
 void StorageSection::reload() {
     const auto& schema = dialog_.schema();
+    // The row and its label and image types are the schema's (9.0).
+    const ordered_json* storage = schema ? schema->section("storage") : nullptr;
+    const ordered_json deck =
+        storage && storage->contains("cassette") ? (*storage)["cassette"] : ordered_json();
+    const bool has_cassette = deck.is_object() && deck.value("has_cassette", false);
+    cassette_row_->setVisible(has_cassette);
+    tape_types_.clear();
+    if (has_cassette) {
+        cassette_label_->setText(QString::fromStdString(deck.value("label", std::string("Cassette"))));
+        for (const auto& type : deck.value("image_types", ordered_json::array())) {
+            if (type.is_string()) {
+                tape_types_.push_back(type.get<std::string>());
+            }
+        }
+        const auto tape = dialog_.draft().get("/storage/cassette/image_uri");
+        tape_field_->setText(tape && tape->is_string() ? path_of_uri(tape->get<std::string>())
+                                                       : QString());
+    }
+
     options_ = schema ? schema->fdc_options() : std::vector<SchemaFdcOption>{};
     const auto socket = dialog_.draft().get("/storage/fdc_socket");
     // A model with its controller built in has no socket to choose.
@@ -195,6 +260,52 @@ void StorageSection::set_image(int drive, const QString& path) {
     entry["image_uri"] = written;
     dialog_.draft().set("/storage/floppy_drives", *drives);
     Q_EMIT edited();
+}
+
+void StorageSection::set_tape(const QString& path) {
+    // An empty deck is null, as the server writes it.
+    const ordered_json written = path.isEmpty() ? ordered_json() : ordered_json(uri_of_path(path));
+    auto cassette = dialog_.draft().get("/storage/cassette");
+    ordered_json entry = cassette && cassette->is_object() ? *cassette : ordered_json::object();
+    if (entry.contains("image_uri") && entry["image_uri"] == written) {
+        return;
+    }
+    entry["image_uri"] = written;
+    dialog_.draft().set("/storage/cassette", entry);
+    Q_EMIT edited();
+}
+
+void StorageSection::drop_tape(const QStringList& paths) {
+    if (paths.size() != 1) {
+        return;
+    }
+    tape_field_->setText(paths.front());
+    set_tape(paths.front());
+}
+
+bool StorageSection::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == cassette_row_) {
+        if (event->type() == QEvent::DragEnter) {
+            auto* drag = static_cast<QDragEnterEvent*>(event);
+            if (drag->mimeData()->hasUrls()) {
+                drag->acceptProposedAction();
+            }
+            return true;
+        }
+        if (event->type() == QEvent::Drop) {
+            auto* drop = static_cast<QDropEvent*>(event);
+            QStringList paths;
+            for (const QUrl& url : drop->mimeData()->urls()) {
+                if (url.isLocalFile()) {
+                    paths << url.toLocalFile();
+                }
+            }
+            drop->acceptProposedAction();
+            drop_tape(paths);
+            return true;
+        }
+    }
+    return ConfigurationSection::eventFilter(watched, event);
 }
 
 bool StorageSection::changed() const {
@@ -381,6 +492,7 @@ void StorageSection::set_diagnostics(const std::vector<PresetDiagnostic>& diagno
     for (DiscRow& row : discs_) {
         row.diagnostic->show_for(diagnostics, "/extensions/" + std::to_string(row.disc.index));
     }
+    tape_diagnostic_->show_for(diagnostics, "/storage/cassette");
     controller_diagnostic_->show_for(diagnostics, "/storage/fdc_socket");
     for (std::size_t i = 0; i < drives_.size(); ++i) {
         drives_[i].diagnostic->show_for(diagnostics, "/storage/floppy_drives/" + std::to_string(i));

@@ -35,6 +35,9 @@ struct FormBrowse {
     Chooser chooser = Chooser::open_file;
     std::string current;
     std::string label;  // the parameter's, for the chooser's title
+    // The file types the chooser offers first, by extension without the dot
+    // ("uef"); any file can still be chosen. Empty for no filter.
+    std::vector<std::string> extensions;
 };
 
 // What applying an action did.
