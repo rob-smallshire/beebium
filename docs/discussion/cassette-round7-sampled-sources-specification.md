@@ -38,6 +38,29 @@ F7.1), run per sample at the source's rate, producing edges in tape time:
 The constants are `constexpr` parameters named in one place and asserted by tests, marked
 `Decision (unverified)` as a group in `cassette.md`. The filter state resets on seek.
 
+**Findings during the round (2026-11-17), ruled:**
+
+- The filters run at an internal rate of at least 88.2 kHz with the input interpolated between
+  samples, because the bilinear transform's warping at 22.05 kHz moved the 1200 Hz tone by
+  7 clocks against 48 kHz. Accepted; the pacing figure in the report is with this in place.
+- Sine phase matters, as the findings predicted for hardware. Sines continuous at each edge
+  (0°) do not load through the model: the low tone leads by about +65° and the high lags by
+  about -5°, so at every tone change the first low half-cycle shrinks to about 320 clocks and
+  the first high stretches to about 450, gaining four receive clocks a transition. Sines of the
+  phase a playback head's differentiation gives (90°, a cosine per half-cycle, the most common
+  phase in Quadbike's statistics) load, as do squares. Tests 6 and 7 render sines at 90°; a
+  further case records that 0° sines do not load, as an unverified prediction of the model.
+- The corpus's low-level take of Plan B2 side 1 (peak 0.18, RMS 0.05) does not load with the
+  programme's constants: 261 `Data?` in 300 s, against clean loads of the normal and high
+  takes. About 18,900 short half-cycles land at 320 to 383 clocks against the 350-clock
+  timeout, and lowering h to 0.015 or 0.01 does not cure it (85 `Data?` at 0.01, which also
+  lets full-scale hum through). The constants stay as ruled. The corpus test asserts the normal
+  and high takes load cleanly and records the low take as a known failure with its `Data?`
+  count, until the take can be tried on a real machine (its TOML says the problems are
+  unknown; the recording level was deliberately low). `cassette.md`'s decisions-unverified
+  list gains the level-dependent timing question with the histograms. No constant moves on
+  one take.
+
 ## `SampledTape`
 
 A `TapeSignal` over a `SampledSource` and a `FrontEnd`: `next()` pulls samples until the front
@@ -94,8 +117,8 @@ Rob.
 
 7. `tape_ok` as a WAV at 48 kHz (sines, amplitude 0.5) loads and runs through MOS 1.20 with
    `--tape`; at amplitude 0.18 with added noise at 0.02 (the corpus's low take, F5.6) it loads;
-   as a square wave (the clipped take) it loads; as a WAV of the UEF's signal shifted 90° as a
-   sine it loads (T30963: a sine-like 90° signal loads on real hardware).
+   as a square wave (the clipped take) it loads; the sines are rendered at 90° (see the findings
+   above); as 0° sines it does not load, recorded as the model's unverified prediction.
 
 ### Python, `tests/test_cassette_corpus.py`, the WAV corpus
 
