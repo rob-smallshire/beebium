@@ -54,4 +54,40 @@ final class CassetteDeckFormattingTests: XCTestCase {
         XCTAssertEqual(CassetteTransportText.label(transport: .recording, motorOn: false),
                        "Recording, motor off")
     }
+
+    // MARK: - Position timeline geometry
+
+    func testTimelinePointerSitsProportionallyAlongTheTape() {
+        XCTAssertEqual(TapeTimelineGeometry.fraction(position: 0, duration: 300), 0)
+        XCTAssertEqual(TapeTimelineGeometry.fraction(position: 150, duration: 300), 0.5)
+        XCTAssertEqual(TapeTimelineGeometry.fraction(position: 300, duration: 300), 1)
+    }
+
+    func testTimelinePointerClampsPastTheEnd() {
+        XCTAssertEqual(TapeTimelineGeometry.fraction(position: 400, duration: 300), 1)
+    }
+
+    func testTimelinePointerReadsTheStartWhenThereIsNoDuration() {
+        XCTAssertEqual(TapeTimelineGeometry.fraction(position: 10, duration: 0), 0)
+        XCTAssertEqual(TapeTimelineGeometry.fraction(position: 10, duration: -5), 0)
+        XCTAssertEqual(TapeTimelineGeometry.fraction(position: -1, duration: 300), 0)
+        XCTAssertEqual(TapeTimelineGeometry.fraction(position: .nan, duration: 300), 0)
+        XCTAssertEqual(TapeTimelineGeometry.fraction(position: .infinity, duration: 300), 0)
+    }
+
+    func testTimelineScrubMapsAPointOnTheBarToAPosition() {
+        XCTAssertEqual(TapeTimelineGeometry.position(atX: 0, width: 200, duration: 300), 0)
+        XCTAssertEqual(TapeTimelineGeometry.position(atX: 100, width: 200, duration: 300), 150)
+        XCTAssertEqual(TapeTimelineGeometry.position(atX: 200, width: 200, duration: 300), 300)
+    }
+
+    func testTimelineScrubClampsOutsideTheBar() {
+        XCTAssertEqual(TapeTimelineGeometry.position(atX: -40, width: 200, duration: 300), 0)
+        XCTAssertEqual(TapeTimelineGeometry.position(atX: 260, width: 200, duration: 300), 300)
+    }
+
+    func testTimelineScrubReadsTheStartForAnEmptyBar() {
+        XCTAssertEqual(TapeTimelineGeometry.position(atX: 50, width: 0, duration: 300), 0)
+        XCTAssertEqual(TapeTimelineGeometry.position(atX: 50, width: 200, duration: 0), 0)
+    }
 }

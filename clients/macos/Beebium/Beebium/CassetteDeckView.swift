@@ -27,6 +27,28 @@ enum CassettePosition {
     }
 }
 
+/// The geometry of the position timeline: where the pointer sits for a given
+/// position, and which position a drag points to. Pure, so the clamping and the
+/// unknown-duration case are tested without a view. A tape has no played and
+/// unplayed portion, so this maps a position to a point on a plain bar, not a
+/// fill.
+enum TapeTimelineGeometry {
+    /// The pointer's place along the bar as a fraction 0...1 of a known
+    /// duration. An unknown or non-positive duration, or a non-finite or
+    /// negative position, reads as the start; past the end clamps to the end.
+    static func fraction(position: Double, duration: Double) -> Double {
+        guard duration > 0, position.isFinite, position > 0 else { return 0 }
+        return min(position / duration, 1)
+    }
+
+    /// The tape position a drag to `x` on a bar of `width` points to, clamped to
+    /// the tape. A non-positive width or duration reads as the start.
+    static func position(atX x: Double, width: Double, duration: Double) -> Double {
+        guard width > 0, duration > 0 else { return 0 }
+        return min(max(x / width, 0), 1) * duration
+    }
+}
+
 /// The deck's status line: the transport in words, carrying the motor relay
 /// where its being open is the ordinary waiting state rather than motion.
 /// Pure, so the phrasing is tested without a view.
@@ -50,7 +72,7 @@ enum CassetteTransportText {
 
 /// The one cassette deck, shown at the top of the storage sidebar above the
 /// floppy drives when the model has a cassette interface. A transport with a
-/// counter and a scrubbing slider, as a real deck is: Play, Stop, Rewind, Fast
+/// counter and a scrubbing timeline, as a real deck is: Play, Stop, Rewind, Fast
 /// forward, Back to the beginning (Seek 0), Record and Eject, driven from the
 /// deck-status stream (CassetteClient). Insert mirrors a floppy drive (Browse,
 /// drag and drop, Recent). No block catalogue, waveform, decoded filenames or
@@ -67,9 +89,9 @@ struct CassetteDeckView: View {
     @State private var isProcessing = false
     @State private var dropRefusal: DiscDropRefusal?
     @StateObject private var deckError = TransientMessage()
-    /// Non-nil while the user drags the position slider: the scrub position the
-    /// thumb follows. Nil the rest of the time, when the slider follows the
-    /// deck. A seek happens on release, never while the slider moves.
+    /// Non-nil while the user drags the position timeline: the scrub position
+    /// the pointer follows. Nil the rest of the time, when the pointer follows
+    /// the deck. A seek happens on release, never while the pointer moves.
     @State private var scrubSeconds: Double?
 
     private var tapeInserted: Bool { cassetteClient.tapeInserted }
@@ -176,7 +198,7 @@ struct CassetteDeckView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            counterAndSlider
+            counterAndTimeline
             liveMeter
         }
     }
@@ -223,10 +245,11 @@ struct CassetteDeckView: View {
     }
 
     /// The counter, and -- when the server reports a duration -- the scrubbing
-    /// slider beneath it. With an unknown duration (0) there is no proportional
-    /// slider, only the counter, as a real deck with no tape length to show.
+    /// timeline beneath it. With an unknown duration (0) there is no
+    /// proportional timeline, only the counter, as a real deck with no tape
+    /// length to show.
     @ViewBuilder
-    private var counterAndSlider: some View {
+    private var counterAndTimeline: some View {
         let position = scrubSeconds ?? cassetteClient.positionSeconds
         HStack {
             Text(CassettePosition.format(position))
@@ -241,23 +264,16 @@ struct CassetteDeckView: View {
         }
 
         if duration > 0 {
-            Slider(
-                value: Binding(
-                    get: { min(scrubSeconds ?? cassetteClient.positionSeconds, duration) },
-                    set: { scrubSeconds = $0 }
-                ),
-                in: 0...duration,
-                onEditingChanged: { editing in
-                    if editing {
-                        scrubSeconds = cassetteClient.positionSeconds
-                    } else if let target = scrubSeconds {
-                        scrubSeconds = nil
-                        seek(to: target)
-                    }
+            TapeTimeline(
+                position: min(scrubSeconds ?? cassetteClient.positionSeconds, duration),
+                duration: duration,
+                isEnabled: !isProcessing,
+                onScrub: { scrubSeconds = $0 },
+                onCommit: { target in
+                    scrubSeconds = nil
+                    seek(to: target)
                 }
             )
-            .controlSize(.small)
-            .disabled(isProcessing)
         }
     }
 
@@ -294,17 +310,23 @@ struct CassetteDeckView: View {
 
     // MARK: - Transport controls
 
+    /// The deck row (section 9.0). The two keys that lose the user's place sit
+    /// at the edges, apart from the often-pressed transport group: Back to the
+    /// beginning alone at the left edge (with Browse in its place while the deck
+    /// is empty), Eject alone at the right edge, and Rewind, Play, Stop, Fast
+    /// forward and Record centred as one group between them.
     private var transportControls: some View {
         HStack(spacing: 8) {
             if !tapeInserted {
                 browseButton
             }
-            rewindButton
             backToStartButton
+            Spacer()
+            rewindButton
             playButton
             stopButton
-            recordButton
             fastForwardButton
+            recordButton
             Spacer()
             ejectButton
         }
@@ -640,5 +662,60 @@ struct CassetteDeckView: View {
                 }
             }
         }
+    }
+}
+
+/// The position timeline: a pointer on a plain bar, no fill either side, since a
+/// tape has no played and unplayed portion (section 9.0). Dragging anywhere
+/// along the bar scrubs the pointer; the seek happens on release, as the slider
+/// it replaces did. The pointer follows the deck -- including winds -- while the
+/// bar is not being touched. Shown only when the server reports a duration.
+private struct TapeTimeline: View {
+    /// The position the pointer shows, in seconds (the scrub position while
+    /// dragging, the deck position otherwise), already clamped to the tape.
+    let position: Double
+    let duration: Double
+    let isEnabled: Bool
+    /// Called continuously while dragging, with the scrubbed-to position.
+    let onScrub: (Double) -> Void
+    /// Called once on release, with the position to seek to.
+    let onCommit: (Double) -> Void
+
+    private let barHeight: CGFloat = 3
+    private let pointerSize: CGFloat = 9
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let fraction = TapeTimelineGeometry.fraction(position: position, duration: duration)
+            ZStack(alignment: .topLeading) {
+                // The plain bar, centred in the row, with no colouring of either
+                // side of the pointer.
+                Capsule()
+                    .fill(Color.secondary.opacity(0.3))
+                    .frame(height: barHeight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                // The pointer, its tip on the bar at the position.
+                Image(systemName: "arrowtriangle.down.fill")
+                    .font(.system(size: pointerSize))
+                    .foregroundColor(isEnabled ? .secondary : Color.secondary.opacity(0.4))
+                    .offset(x: CGFloat(fraction) * width - pointerSize / 2, y: 0)
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        guard isEnabled else { return }
+                        onScrub(TapeTimelineGeometry.position(
+                            atX: Double(value.location.x), width: Double(width), duration: duration))
+                    }
+                    .onEnded { value in
+                        guard isEnabled else { return }
+                        onCommit(TapeTimelineGeometry.position(
+                            atX: Double(value.location.x), width: Double(width), duration: duration))
+                    }
+            )
+        }
+        .frame(height: 16)
     }
 }
