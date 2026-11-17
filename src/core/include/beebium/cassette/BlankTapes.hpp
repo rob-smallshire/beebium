@@ -66,18 +66,42 @@ inline std::vector<BlankTapeTemplate> list_blank_tapes(const std::optional<std::
     return tapes;
 }
 
+// Copy the blank tape with this label into place. A failure's error is a
+// sentence, as every cassette error is.
 inline CreateBlankDiscResult create_blank_tape(const std::optional<std::filesystem::path>& dirpath,
                                                const std::string& label,
                                                const std::filesystem::path& destination_filepath,
                                                bool overwrite) {
-    for (const auto& tape : list_blank_tapes(dirpath)) {
-        if (tape.label == label) {
-            return copy_blank_template(tape.filepath, tape.size_bytes, destination_filepath, overwrite, "tape");
-        }
-    }
     CreateBlankDiscResult result;
     result.kind = CreateBlankDiscErrorKind::UnknownLabel;
-    result.error = "no blank tape named '" + label + "'";
+    for (const auto& tape : list_blank_tapes(dirpath)) {
+        if (tape.label == label) {
+            result = copy_blank_template(tape.filepath, tape.size_bytes, destination_filepath, overwrite, "tape");
+            break;
+        }
+    }
+    const std::string destination = destination_filepath.string();
+    switch (result.kind) {
+        case CreateBlankDiscErrorKind::None:
+            break;
+        case CreateBlankDiscErrorKind::UnknownLabel:
+            result.error = "There is no blank tape called " + label + ".";
+            break;
+        case CreateBlankDiscErrorKind::DestinationExists:
+            result.error = destination.empty() || std::filesystem::is_directory(destination_filepath)
+                               ? "A blank tape cannot be created at " + destination + ", which is a folder."
+                               : "There is already a file at " + destination +
+                                     "; choose another name, or replace it.";
+            break;
+        case CreateBlankDiscErrorKind::WrongExtension:
+            result.error = "A blank tape is a .uef file, so it cannot be created as " +
+                           destination_filepath.filename().string() + ".";
+            break;
+        case CreateBlankDiscErrorKind::WriteFailed:
+            result.error = destination.empty() ? std::string("A blank tape needs somewhere to be created.")
+                                               : "The blank tape could not be written to " + destination + ".";
+            break;
+    }
     return result;
 }
 

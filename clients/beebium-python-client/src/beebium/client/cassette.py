@@ -282,7 +282,7 @@ class Cassette:
             label=label, destination_path=str(destination_filepath), overwrite=overwrite))
         if not response.success:
             raise CreateTapeError(
-                f"Creating a blank tape failed: {response.error}",
+                response.error,
                 kind=_CREATE_TAPE_ERROR_KIND_FROM_PROTO.get(response.kind, CreateTapeErrorKind.UNSPECIFIED))
         return Path(response.path)
 

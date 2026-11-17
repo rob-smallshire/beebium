@@ -313,7 +313,7 @@ export class Cassette {
             ProtoCreateTapeResponse
         >("createTape", { label, destinationPath: destinationFilepath, overwrite });
         if (!response.success) {
-            throw new CreateTapeError(`Creating a blank tape failed: ${response.error}`,
+            throw new CreateTapeError(response.error,
                 toCreateTapeErrorKind(response.kind));
         }
         return response.path;

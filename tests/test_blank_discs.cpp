@@ -382,3 +382,15 @@ TEST_CASE("create-tape copies a template, adds .uef and refuses what create-disc
     CHECK(run<CreateTape>({"Blank C120", (out / "y.uef").string()}, OutputFormat::Tsv, output) ==
           ExitCode::NOINPUT);
 }
+
+TEST_CASE("create_blank_tape explains a failure in a sentence", "[blank-tapes]") {
+    const fs::path templates_dirpath = BEEBIUM_BLANK_TAPES_DIR;
+    ScopedTempDir out{"beebium-blank-tape-out-"};
+    auto unknown = beebium::create_blank_tape(templates_dirpath, "Blank C120", out / "a.uef", false);
+    CHECK(unknown.error == "There is no blank tape called Blank C120.");
+    auto wrong = beebium::create_blank_tape(templates_dirpath, "Blank C15 (15 minutes)", out / "a.csw", false);
+    CHECK(wrong.error == "A blank tape is a .uef file, so it cannot be created as a.csw.");
+    REQUIRE(beebium::create_blank_tape(templates_dirpath, "Blank C15 (15 minutes)", out / "a.uef", false));
+    auto exists = beebium::create_blank_tape(templates_dirpath, "Blank C15 (15 minutes)", out / "a.uef", false);
+    CHECK(exists.error == "There is already a file at " + (out / "a.uef").string() + "; choose another name, or replace it.");
+}
