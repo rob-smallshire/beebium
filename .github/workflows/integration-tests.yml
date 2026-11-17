@@ -19,7 +19,7 @@ name: Integration Tests (weekly)
 #                           Docker recipe) on the runner
 #
 # The servers are built here, from the commit under test, as ci.yml's Linux
-# server job builds them (distribution gRPC, the GCC 12 floor), without the
+# server job builds them (distribution gRPC, the image's default GCC), without the
 # C++ tests. Each suite finds the variant it needs in build/src/server, so
 # BEEBIUM_SERVER is left unset.
 
@@ -38,17 +38,13 @@ permissions:
 jobs:
   integration-tests:
     name: Integration Tests (Linux)
-    # Pinned to ubuntu-24.04 with ci.yml's server-linux: the GCC 12 floor
-    # cannot link 26.04's distribution protobuf (see the comment there).
-    runs-on: ubuntu-24.04
+    # The same image as ci.yml's server-linux (see the comment there).
+    runs-on: ubuntu-26.04
     timeout-minutes: 360
 
     env:
-      # As ci.yml's server-linux job: capped compiles for the runner's RAM,
-      # and the GCC 12 compiler floor.
+      # As ci.yml's server-linux job: capped compiles for the runner's RAM.
       CMAKE_BUILD_PARALLEL_LEVEL: "2"
-      CC: gcc-12
-      CXX: g++-12
       BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
       BEEBIUM_SERVER_DIR: ${{ github.workspace }}/build/src/server
       # Every test in a suite: the l3fs, l3fs-clock and wfsinit suites skip
@@ -63,7 +59,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-12 g++-12 cmake pkg-config libgrpc++-dev libprotobuf-dev \
+          sudo apt-get install -y cmake pkg-config libgrpc++-dev libprotobuf-dev \
             protobuf-compiler-grpc uuid-dev libavahi-client-dev
 
       # Retry configure, as ci.yml does: FetchContent downloads at configure
