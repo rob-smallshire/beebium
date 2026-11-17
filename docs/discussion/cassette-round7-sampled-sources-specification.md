@@ -24,9 +24,12 @@ findings §1.5, §5.6, §7. Live audio (round 8) reuses everything here but the 
 F7.1), run per sample at the source's rate, producing edges in tape time:
 
 1. DC blocking: one-pole high-pass, 20 Hz.
-2. Second-order high-pass at 1.29 kHz and second-order low-pass at 4.13 kHz, Butterworth
-   biquads designed at the source's rate (bilinear transform) so the low tone's crossings move
-   as on the machine (about +65° at 1200 Hz).
+2. Second-order high-pass at 1.29 kHz and second-order low-pass at 4.13 kHz as biquads designed
+   at the source's rate (bilinear transform), with the circuit's own Q, not Butterworth's: the
+   two Sallen-Key stages have equal components and gains K of about 1.27 and 1.26 (findings
+   §5), so Q = 1/(3 - K), about 0.58 each. This gives the machine's phase shifts (+67° at
+   1200 Hz, -3° at 2400 Hz; Butterworth would give +73°). No make-up gain: the filters pass
+   about 0.51 at 1200 Hz and 0.71 at 2400 Hz, and h below is defined against that output.
 3. Comparator with hysteresis: the output flips when the filtered signal passes +h or -h, with
    h = 0.02 of full scale. No normalisation, no automatic gain.
 4. Each flip is an edge at the sample's tape time, interpolated linearly between the two
@@ -66,9 +69,10 @@ Rob.
 ### Catch2, `tests/test_front_end.cpp`, `[cassette][front_end]`
 
 1. Filters: a 1200 Hz sine at 48 kHz passes with the expected phase shift (+65° ± 5°) and a
-   2400 Hz sine with about -5°; 50 Hz hum at full scale produces no edges; 8 kHz at full scale
-   produces no edges.
-2. Comparator: a 1200 Hz sine at amplitude 0.05 produces edges at the rate 2400/s; at
+   2400 Hz sine with about -5°; 50 Hz hum at full scale produces no edges; 8 kHz is attenuated
+   by at least 13 dB and at amplitude 0.05 produces no edges (a second-order band-pass of these
+   corners cannot reject full-scale 8 kHz, and the real gain-50 clipper would square it too).
+2. Comparator: a 1200 Hz sine at amplitude 0.08 produces edges at the rate 2400/s; at
    amplitude 0.01 it produces none; a 2400 Hz square at amplitude 1.0 produces 4800/s; noise at
    amplitude 0.015 produces none; the same noise under a 0.2 sine produces exactly the sine's
    edges.
