@@ -34,6 +34,18 @@ could also learn by watching the level meter while winding.
   recording ends (the span under the head changed), from the deck's current in-memory image,
   under the same rule. A live tape has no map (no duration).
 - Not persisted; cheap enough to recompute on each insert (a UEF or CSW walk is milliseconds).
+- **Live update while recording** (Rob, 2026-11-17 evening, after seeing the map change only
+  when a scrub ended the recording): while the transport is `Recording` the deck keeps the map
+  current in the arrow's wake. The deck sees every recorded edge and every clock of tape time
+  with the relay closed, so it applies the same run rule incrementally to the second under the
+  head: as the head moves, the level of the current second is the fraction of the part passed
+  so far that lies in a run (so a second being written in silence falls to 0 as the head
+  erases it, and one being written with tone rises to 255), and a completed second is final.
+  The map is republished with `signal_map_generation` incremented at most once per second of
+  tape time while recording (`Decision`: a named constant), and once more when the recording
+  ends, when the full walk of the written-back image replaces the incremental map as the
+  authority. Seconds the head has not reached keep their old levels. No client change: both
+  GUIs refetch on a generation change already; the fetch is the map's few kilobytes a second.
 
 ## Service and clients
 
@@ -104,6 +116,18 @@ filenames and audio stay excluded.
 8. Report (not a test): the wall time of the map for `plan-b2-side1-level-normal.wav`
    (55 MB) and the longest Cascade 50 take (312 MB) from the corpus on this Mac, and the
    thread it runs on.
+
+### Live update while recording
+
+8a. Catch2 `[cassette][signal_map]`: a recording deck over a blank C15 with a tone synthesised
+    for 3 s, silence for 2 s, tone for 1 s (round 6's machinery or direct `record_edge`
+    calls): the generation advances about once per second of tape time (5 to 7 times over
+    6 s), the map after each publish has 255 for completed tone seconds and 0 for completed
+    silent seconds, the second under the head carries a partial level, and seconds ahead of
+    the head are untouched; a recording over a tape that already had signal turns the erased
+    seconds to 0 as the head passes. `[grpc][cassette][signal_map]`: the status stream shows
+    the generation advancing during a recording, and `GetTapeSignalMap` between publishes is
+    consistent with the last one.
 
 ### Regression
 
