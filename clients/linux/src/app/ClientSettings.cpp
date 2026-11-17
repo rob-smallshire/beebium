@@ -26,6 +26,7 @@ const QString MODE7_CHARACTERS_KEY = QStringLiteral("screenText/mode7Characters"
 const QString VIDEO_PIXELS_KEY = QStringLiteral("video/defaultPixels");
 const QString VIDEO_BOXING_KEY = QStringLiteral("video/defaultBoxingColour");
 const QString RECENT_DISCS_KEY = QStringLiteral("discs/recent");
+const QString RECENT_TAPES_KEY = QStringLiteral("tapes/recent");
 
 QString cleaned(const QString& dirpath) {
     return QDir::cleanPath(dirpath);
@@ -144,6 +145,27 @@ void ClientSettings::remember_disc(const QString& filepath) {
 
 void ClientSettings::clear_discs() {
     settings_->remove(RECENT_DISCS_KEY);
+    settings_->sync();
+}
+
+QStringList ClientSettings::recent_tapes() const {
+    return settings_->value(RECENT_TAPES_KEY).toStringList();
+}
+
+void ClientSettings::remember_tape(const QString& filepath) {
+    QStringList recents = recent_tapes();
+    const QString path = cleaned(filepath);
+    recents.removeAll(path);
+    recents.prepend(path);
+    while (static_cast<std::size_t>(recents.size()) > RECENT_TAPES_CAP) {
+        recents.removeLast();
+    }
+    settings_->setValue(RECENT_TAPES_KEY, recents);
+    settings_->sync();
+}
+
+void ClientSettings::clear_tapes() {
+    settings_->remove(RECENT_TAPES_KEY);
     settings_->sync();
 }
 

@@ -33,6 +33,7 @@ public:
     static constexpr std::size_t RECENT_CONNECTIONS_CAP = 10;
     static constexpr std::size_t RECENT_MACHINES_CAP = 20;
     static constexpr std::size_t RECENT_DISCS_CAP = 10;
+    static constexpr std::size_t RECENT_TAPES_CAP = 10;
 
     // The user's settings in the standard place.
     ClientSettings();
@@ -57,6 +58,13 @@ public:
     QStringList recent_discs() const;
     void remember_disc(const QString& filepath);
     void clear_discs();
+
+    // Tape images inserted in a cassette deck by the user here, most recent
+    // first, kept apart from the discs (client specification 9.0, 9.2): only
+    // an insert the server accepted, never a tape a preset put in the deck.
+    QStringList recent_tapes() const;
+    void remember_tape(const QString& filepath);
+    void clear_tapes();
 
     // Where this host's servers are, when the search should not decide;
     // empty to search (docs/deployment.md).

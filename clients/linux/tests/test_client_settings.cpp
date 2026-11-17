@@ -119,6 +119,30 @@ TEST_CASE("Recent discs are kept newest first, one per path, ten at most",
     CHECK(reopened.recent_discs().isEmpty());
 }
 
+TEST_CASE("Recent tapes are kept apart from discs, newest first, one per path, ten at most",
+          "[settings][tapes]") {
+    QTemporaryDir directory;
+    const QString filepath = directory.filePath(QStringLiteral("Beebium.conf"));
+    {
+        ClientSettings settings(filepath);
+        settings.remember_disc(QStringLiteral("/d/Elite.ssd"));
+        for (int i = 0; i < 12; ++i) {
+            settings.remember_tape(QStringLiteral("/t/%1.uef").arg(i));
+        }
+        settings.remember_tape(QStringLiteral("/t/./5.uef"));  // again, by another spelling
+    }
+    ClientSettings reopened(filepath);
+    const QStringList tapes = reopened.recent_tapes();
+    CHECK(static_cast<std::size_t>(tapes.size()) == ClientSettings::RECENT_TAPES_CAP);
+    CHECK(tapes.front() == QStringLiteral("/t/5.uef"));
+    CHECK(tapes.count(QStringLiteral("/t/5.uef")) == 1);
+    CHECK(tapes[1] == QStringLiteral("/t/11.uef"));
+    CHECK(reopened.recent_discs() == QStringList{QStringLiteral("/d/Elite.ssd")});
+    reopened.clear_tapes();
+    CHECK(reopened.recent_tapes().isEmpty());
+    CHECK(reopened.recent_discs().size() == 1);
+}
+
 TEST_CASE("Video defaults for new windows persist across runs: style, pixels, boxing colour",
           "[settings][video]") {
     QTemporaryDir directory;
