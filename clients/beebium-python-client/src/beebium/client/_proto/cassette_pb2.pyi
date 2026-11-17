@@ -179,7 +179,7 @@ class TapeMetadata(_message.Message):
     url: _builtins.str
     """the source, as given"""
     format: _builtins.str
-    """"UEF", "CSW" or "WAV" """
+    """"UEF", "CSW", "WAV" or "LIVE" """
     title: _builtins.str
     """the image's own title (UEF &0009), else empty"""
     origin: _builtins.str
@@ -189,10 +189,11 @@ class TapeMetadata(_message.Message):
     duration_seconds: _builtins.float
     """the tape's length; 0 when unknown"""
     recordable: _builtins.bool
+    """whether Record can record on it (a UEF can; a CSW, WAV or live tape cannot)"""
     sample_rate: _builtins.int
-    """a WAV's rate in Hz; 0 for UEF and CSW"""
+    """a WAV's or live stream's rate in Hz; 0 for UEF and CSW"""
     channel: _builtins.str
-    """the WAV channel played, "left" or "right"; empty for UEF and CSW          // whether Record can record on it (a UEF can, a CSW cannot)"""
+    """a stereo WAV's or live stream's channel, "left" or "right"; empty for a mono source, UEF and CSW"""
     def __init__(
         self,
         *,

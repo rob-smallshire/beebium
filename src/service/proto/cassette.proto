@@ -88,14 +88,14 @@ enum TapeTransport {
 message TapeMetadata {
     string name = 1;              // the file's name
     string url = 2;               // the source, as given
-    string format = 3;            // "UEF", "CSW" or "WAV"
+    string format = 3;            // "UEF", "CSW", "WAV" or "LIVE"
     string title = 4;             // the image's own title (UEF &0009), else empty
     string origin = 5;            // the tool that made the image (UEF &0000, the CSW's application), else empty
     string target_machine = 6;    // the machine the image says it is for (UEF &0005), else empty
     double duration_seconds = 7;  // the tape's length; 0 when unknown
-    bool recordable = 8;
-    uint32 sample_rate = 9;       // a WAV's rate in Hz; 0 for UEF and CSW
-    string channel = 10;          // the WAV channel played, "left" or "right"; empty for UEF and CSW          // whether Record can record on it (a UEF can, a CSW cannot)
+    bool recordable = 8;          // whether Record can record on it (a UEF can; a CSW, WAV or live tape cannot)
+    uint32 sample_rate = 9;       // a WAV's or live stream's rate in Hz; 0 for UEF and CSW
+    string channel = 10;          // a stereo WAV's or live stream's channel, "left" or "right"; empty for a mono source, UEF and CSW
 }
 
 message DeckStatus {

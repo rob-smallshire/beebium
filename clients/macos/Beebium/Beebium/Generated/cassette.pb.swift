@@ -271,7 +271,7 @@ public struct Beebium_TapeMetadata: Sendable {
   /// the source, as given
   public var url: String = String()
 
-  /// "UEF", "CSW" or "WAV"
+  /// "UEF", "CSW", "WAV" or "LIVE"
   public var format: String = String()
 
   /// the image's own title (UEF &0009), else empty
@@ -286,12 +286,13 @@ public struct Beebium_TapeMetadata: Sendable {
   /// the tape's length; 0 when unknown
   public var durationSeconds: Double = 0
 
+  /// whether Record can record on it (a UEF can; a CSW, WAV or live tape cannot)
   public var recordable: Bool = false
 
-  /// a WAV's rate in Hz; 0 for UEF and CSW
+  /// a WAV's or live stream's rate in Hz; 0 for UEF and CSW
   public var sampleRate: UInt32 = 0
 
-  /// the WAV channel played, "left" or "right"; empty for UEF and CSW          // whether Record can record on it (a UEF can, a CSW cannot)
+  /// a stereo WAV's or live stream's channel, "left" or "right"; empty for a mono source, UEF and CSW
   public var channel: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
