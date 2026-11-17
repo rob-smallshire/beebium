@@ -105,6 +105,7 @@
 		4411EAC5C231A84B8A6222F6 /* RecentTapesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D94F0D823798B1C497D7EE18 /* RecentTapesTests.swift */; };
 		44CFFA37FCA909B67E296E53 /* RomTitleCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89D4F5285CFD741418E4365C /* RomTitleCache.swift */; };
 		44FF38917718C8C09556A62A /* indicator.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C4898953F0003B85113EC0 /* indicator.grpc.swift */; };
+		459E43892ABC4B7BD46E2F08 /* LiveAudioInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A5E04E69549C0592476FEBE /* LiveAudioInputTests.swift */; };
 		47FD133746DA2EEA77B73EDC /* econet.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = D969BBA00E4077B69BBCACAF /* econet.pb.swift */; };
 		49FEE51472DA8FB96B3587EA /* econet_transport.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6020BCD62F9F79F3019AB3D /* econet_transport.pb.swift */; };
 		4AD0CF022E27D94F9FB1FEDC /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FAB928B6093490D60EECA734 /* MetalKit.framework */; };
@@ -183,6 +184,7 @@
 		9B710F684F62B2B4976E205E /* AudioMixerStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D01B8A395DCAD93419F4DD /* AudioMixerStateTests.swift */; };
 		9BD942F6034AE7F95F5D4B88 /* PasteCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941A103B3E9E8B477D32DF75 /* PasteCoordinator.swift */; };
 		9E04292AEA136B391E1E68CE /* BiquadFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */; };
+		9E6BD7756D46B5F8B132A645 /* LiveAudioInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABF3E2FCB57443565412E4D6 /* LiveAudioInput.swift */; };
 		9F0D659309F36B7DD20F0070 /* KeyboardMappingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E27CCAEA2B3295D30B7E900 /* KeyboardMappingManager.swift */; };
 		9FD319C4AF922A8D60CB43CA /* LockStateReconcilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B50A78CE4E5CCC31E34AE2 /* LockStateReconcilerTests.swift */; };
 		A005244A2347799984C194E6 /* audio.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0CD29C9A89B375C692C019 /* audio.pb.swift */; };
@@ -501,6 +503,7 @@
 		98CC380EE84A3739099222DE /* cassette.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = cassette.grpc.swift; sourceTree = "<group>"; };
 		992C39260909EB85C84D2C20 /* SidebarMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarMode.swift; sourceTree = "<group>"; };
 		9A0C6F5673F086F459EA3FDC /* ScsiDiscEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScsiDiscEditor.swift; sourceTree = "<group>"; };
+		9A5E04E69549C0592476FEBE /* LiveAudioInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAudioInputTests.swift; sourceTree = "<group>"; };
 		9B12B8134D637D81FD9FD50D /* StructuredListAdapterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredListAdapterTests.swift; sourceTree = "<group>"; };
 		9C2BCB8ED24D409A21A27A8C /* PopoverTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverTextField.swift; sourceTree = "<group>"; };
 		9CD03C0FA5A6E6032A953101 /* SelectionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -527,6 +530,7 @@
 		A9DC98B37B62CE999A94A076 /* LockStateReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockStateReconciler.swift; sourceTree = "<group>"; };
 		AA2084B8844488BD2A4B9313 /* ServerAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAvailabilityTests.swift; sourceTree = "<group>"; };
 		AA381491DEE3F058B098A69B /* PresetDiagnosticLocationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDiagnosticLocationTests.swift; sourceTree = "<group>"; };
+		ABF3E2FCB57443565412E4D6 /* LiveAudioInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAudioInput.swift; sourceTree = "<group>"; };
 		ACF28DF4AE69E637FF844362 /* MachineNameTemplateSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNameTemplateSupportTests.swift; sourceTree = "<group>"; };
 		AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileReferenceMenuTests.swift; sourceTree = "<group>"; };
 		AEEB6BB6DCFD584275228F28 /* SidewaysSocketEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysSocketEditor.swift; sourceTree = "<group>"; };
@@ -895,6 +899,7 @@
 				9E27CCAEA2B3295D30B7E900 /* KeyboardMappingManager.swift */,
 				B98CF59648104556C3677412 /* KeyboardMTKView.swift */,
 				FF6041795434C164F849A27B /* KeyInput.swift */,
+				ABF3E2FCB57443565412E4D6 /* LiveAudioInput.swift */,
 				A9DC98B37B62CE999A94A076 /* LockStateReconciler.swift */,
 				931AE2E6A601AA13D780FC6A /* LockSyncPolicy.swift */,
 				7319BB6A760A9042161B98EB /* MachineManager.swift */,
@@ -1014,6 +1019,7 @@
 				7BB655B9391362AB6D1F5101 /* KeyboardMappingFileTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
 				53D393AA6F8EA8027CA2417C /* KeyboardMappingToggleTests.swift */,
+				9A5E04E69549C0592476FEBE /* LiveAudioInputTests.swift */,
 				77B50A78CE4E5CCC31E34AE2 /* LockStateReconcilerTests.swift */,
 				A452738F56C6C80444FBD7B3 /* LockSyncPolicyTests.swift */,
 				AF430DED2C73395105133172 /* MachineDocumentTests.swift */,
@@ -1234,6 +1240,7 @@
 				35CCC11B17FEB11EF5844F10 /* KeyboardMappingFileTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
 				16CAAB94F87050BB11380B59 /* KeyboardMappingToggleTests.swift in Sources */,
+				459E43892ABC4B7BD46E2F08 /* LiveAudioInputTests.swift in Sources */,
 				9FD319C4AF922A8D60CB43CA /* LockStateReconcilerTests.swift in Sources */,
 				582166736131C819C1974BDE /* LockSyncPolicyTests.swift in Sources */,
 				6C07D515E3BA347721F82C7A /* MachineDocumentTests.swift in Sources */,
@@ -1369,6 +1376,7 @@
 				9F0D659309F36B7DD20F0070 /* KeyboardMappingManager.swift in Sources */,
 				B0A2354141FA9EC4227A8007 /* KeyboardSectionView.swift in Sources */,
 				1F9774ADF4454EEA179ED3EA /* KeyboardSettingsPane.swift in Sources */,
+				9E6BD7756D46B5F8B132A645 /* LiveAudioInput.swift in Sources */,
 				674B2003EFDBCA5697E614C0 /* LockStateReconciler.swift in Sources */,
 				F9DCB28FBA6728EEC04A0D6D /* LockSyncPolicy.swift in Sources */,
 				F8E43B3F7BBA3554BE190043 /* MacKeyCode.swift in Sources */,

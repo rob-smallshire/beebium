@@ -1,0 +1,180 @@
+// Copyright © 2026 Robert Smallshire <robert@smallshire.org.uk>
+//
+// This file is part of Beebium.
+//
+// Beebium is free software: you can redistribute it and/or modify it under the terms of the
+// GNU General Public License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version. Beebium is distributed in the hope that it will
+// be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+// You should have received a copy of the GNU General Public License along with Beebium.
+// If not, see <https://www.gnu.org/licenses/>.
+
+import AVFAudio
+import XCTest
+@testable import Beebium
+
+/// Tests for the pure pieces of live audio input: the device-to-stream format
+/// mapping, the interleaving and sample-format encoding, the re-chunking into
+/// server-sized chunks, and the microphone-usage-string gate.
+final class LiveAudioInputTests: XCTestCase {
+
+    private func format(_ common: AVAudioCommonFormat, _ rate: Double, _ channels: AVAudioChannelCount)
+        -> AVAudioFormat {
+        AVAudioFormat(commonFormat: common, sampleRate: rate, channels: channels, interleaved: false)!
+    }
+
+    // MARK: - inputFormat
+
+    func testStereoFloatDeviceMapsToTheStreamFormat() {
+        let result = LiveAudioInput.inputFormat(
+            from: format(.pcmFormatFloat32, 48000, 2), deviceName: "Line In")
+        XCTAssertEqual(result?.sampleRate, 48000)
+        XCTAssertEqual(result?.sampleFormat, .f32)
+        XCTAssertEqual(result?.channels, 2)
+        XCTAssertEqual(result?.channel, "left", "a stereo stream takes the left channel by default")
+        XCTAssertEqual(result?.deviceName, "Line In")
+    }
+
+    func testMonoDeviceCarriesNoChannelSelection() {
+        let result = LiveAudioInput.inputFormat(
+            from: format(.pcmFormatFloat32, 44100, 1), deviceName: "Built-in Microphone")
+        XCTAssertEqual(result?.channels, 1)
+        XCTAssertEqual(result?.channel, "", "a mono stream names no channel")
+        XCTAssertEqual(result?.sampleRate, 44100)
+    }
+
+    func testInt16DeviceMapsToS16() {
+        let result = LiveAudioInput.inputFormat(
+            from: format(.pcmFormatInt16, 22050, 2), deviceName: "USB Audio")
+        XCTAssertEqual(result?.sampleFormat, .s16)
+        XCTAssertEqual(result?.sampleRate, 22050)
+    }
+
+    func testAMultiChannelDeviceIsTakenAsStereo() {
+        // A format with more than two channels needs an explicit layout.
+        let layout = AVAudioChannelLayout(
+            layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | 8)!
+        let eightChannel = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000,
+                                         interleaved: false, channelLayout: layout)
+        let result = LiveAudioInput.inputFormat(from: eightChannel, deviceName: "Interface")
+        XCTAssertEqual(result?.channels, 2, "more than two inputs contribute their first two")
+        XCTAssertEqual(result?.channel, "left")
+    }
+
+    func testRateOutOfRangeIsRejected() {
+        XCTAssertNil(LiveAudioInput.inputFormat(from: format(.pcmFormatFloat32, 4000, 1),
+                                                deviceName: "Slow"))
+        XCTAssertNil(LiveAudioInput.inputFormat(from: format(.pcmFormatFloat32, 200000, 1),
+                                                deviceName: "Fast"))
+    }
+
+    func testUnsupportedSampleFormatIsRejected() {
+        XCTAssertNil(LiveAudioInput.inputFormat(from: format(.pcmFormatInt32, 48000, 1),
+                                                deviceName: "Int32"))
+    }
+
+    // MARK: - frameBytes / framesPerChunk
+
+    func testFrameBytes() {
+        var stereoF32 = Beebium_AudioInputFormat()
+        stereoF32.sampleFormat = .f32
+        stereoF32.channels = 2
+        XCTAssertEqual(LiveAudioInput.frameBytes(for: stereoF32), 8)
+
+        var monoS16 = Beebium_AudioInputFormat()
+        monoS16.sampleFormat = .s16
+        monoS16.channels = 1
+        XCTAssertEqual(LiveAudioInput.frameBytes(for: monoS16), 2)
+    }
+
+    func testFramesPerChunkIsAboutFifteenMilliseconds() {
+        XCTAssertEqual(LiveAudioInput.framesPerChunk(sampleRate: 48000), 720)
+        XCTAssertEqual(LiveAudioInput.framesPerChunk(sampleRate: 44100), 662)   // 661.5 rounds up
+        XCTAssertEqual(LiveAudioInput.framesPerChunk(sampleRate: 8000), 120)
+    }
+
+    // MARK: - interleaving and encoding
+
+    func testFloatChannelsAreInterleavedAsLittleEndianFloats() {
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[0.5, -0.5], [0.25, -0.25]], sampleFormat: .f32)
+        // Two frames, two channels, four bytes each: L0 R0 L1 R1.
+        XCTAssertEqual(data.count, 2 * 2 * 4)
+        let values = data.withUnsafeBytes { raw -> [Float] in
+            stride(from: 0, to: raw.count, by: 4).map { offset in
+                Float(bitPattern: UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: offset,
+                                                                         as: UInt32.self)))
+            }
+        }
+        XCTAssertEqual(values, [0.5, 0.25, -0.5, -0.25])
+    }
+
+    func testFloatIsEncodedAndClampedAsSignedSixteenBit() {
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[1.0, -1.0, 0.0, 2.0]], sampleFormat: .s16)
+        XCTAssertEqual(data.count, 4 * 2)
+        let values = data.withUnsafeBytes { raw -> [Int16] in
+            stride(from: 0, to: raw.count, by: 2).map { offset in
+                Int16(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: Int16.self))
+            }
+        }
+        // Full scale maps to +/-32767; silence to 0; an over-unity sample clamps.
+        XCTAssertEqual(values, [32767, -32767, 0, 32767])
+    }
+
+    func testInterleavingTakesTheShorterChannelLength() {
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[0.0, 0.0, 0.0], [0.0]], sampleFormat: .f32)
+        XCTAssertEqual(data.count, 1 * 2 * 4, "frames are taken only where both channels have samples")
+    }
+
+    func testBufferSamplesTakeTheRequestedChannels() {
+        let fmt = format(.pcmFormatFloat32, 48000, 2)
+        let buffer = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: 2)!
+        buffer.frameLength = 2
+        buffer.floatChannelData![0][0] = 0.5
+        buffer.floatChannelData![0][1] = 0.25
+        buffer.floatChannelData![1][0] = -0.5
+        buffer.floatChannelData![1][1] = -0.25
+        let data = LiveAudioInput.samples(from: buffer, channels: 2, sampleFormat: .f32)
+        XCTAssertEqual(data.count, 2 * 2 * 4)
+    }
+
+    // MARK: - Chunker
+
+    func testChunkerEmitsFixedSizeChunksAndBuffersTheRemainder() {
+        var chunker = LiveAudioInput.Chunker(chunkBytes: 8)
+        XCTAssertEqual(chunker.take(Data(repeating: 1, count: 20)).map(\.count), [8, 8],
+                       "two full chunks from 20 bytes, 4 left over")
+        XCTAssertEqual(chunker.take(Data(repeating: 2, count: 3)).map(\.count), [],
+                       "4 + 3 is under a chunk, so none emitted yet")
+        XCTAssertEqual(chunker.take(Data(repeating: 3, count: 5)).map(\.count), [8],
+                       "7 + 5 completes one chunk, 4 left over")
+        XCTAssertEqual(chunker.drain().count, 4)
+        XCTAssertTrue(chunker.drain().isEmpty, "draining empties the buffer")
+    }
+
+    func testChunkerLosesNoBytes() {
+        var chunker = LiveAudioInput.Chunker(chunkBytes: 10)
+        var reassembled = Data()
+        for n in [7, 5, 11, 1, 20] {
+            for chunk in chunker.take(Data(repeating: UInt8(n), count: n)) { reassembled.append(chunk) }
+        }
+        reassembled.append(chunker.drain())
+        XCTAssertEqual(reassembled.count, 7 + 5 + 11 + 1 + 20)
+    }
+
+    // MARK: - Usage string gate
+
+    func testUsageStringGate() {
+        XCTAssertTrue(LiveAudioInput.usageStringPresent(
+            in: ["NSMicrophoneUsageDescription": "Beebium streams a tape deck to the cassette input."]))
+        XCTAssertFalse(LiveAudioInput.usageStringPresent(in: [:]))
+        XCTAssertFalse(LiveAudioInput.usageStringPresent(in: nil))
+        XCTAssertFalse(LiveAudioInput.usageStringPresent(in: ["NSMicrophoneUsageDescription": "  "]),
+                       "a blank string is as good as absent")
+        XCTAssertFalse(LiveAudioInput.usageStringPresent(in: ["NSMicrophoneUsageDescription": 42]),
+                       "a non-string value does not count")
+    }
+}
