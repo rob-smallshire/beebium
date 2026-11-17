@@ -418,11 +418,11 @@ struct CassetteDeckView: View {
         Task { @MainActor in
             let panel = NSOpenPanel()
             panel.title = "Select Tape Image"
-            // Filtering by the two tape extensions is a convenience only; the
+            // Filtering by the tape extensions is a convenience only; the
             // server still judges the format by content, so a mislabelled file
             // is accepted by the panel and refused by the server (section 9.0).
-            panel.allowedContentTypes = [UTType(filenameExtension: "uef"),
-                                         UTType(filenameExtension: "csw")].compactMap { $0 }
+            panel.allowedContentTypes = ["uef", "csw", "wav"]
+                .compactMap { UTType(filenameExtension: $0) }
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
             if panel.runModal() == .OK, let url = panel.url {
