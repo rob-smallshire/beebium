@@ -28,6 +28,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -35,6 +37,7 @@
 #include <iterator>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace beebium;
@@ -598,4 +601,62 @@ TEST_CASE("A SAVE that ends with a stray FF frame still loads", "[cassette][mos]
     INFO(beeb.screen());
     CHECK(loaded);
     CHECK(beeb.screen().find("Data?") == std::string::npos);
+}
+
+// =============================================================================
+// The signal map of a tape recorded on (round 9)
+// =============================================================================
+
+namespace {
+
+// Wait, in wall time, for the deck's signal map to satisfy `done`.
+template <typename Done>
+beebium::SignalMapper::Map wait_for_map(const beebium::CassetteDeck& deck, Done done) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    auto map = deck.signal_map();
+    while (!done(map) && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        map = deck.signal_map();
+    }
+    return map;
+}
+
+}  // namespace
+
+TEST_CASE("A recording's signal map shows where it landed", "[cassette][mos][recording][signal_map]") {
+    if (!roms_present()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    beebium::test::ScopedTempDir dir("beebium_cassette_map_");
+    const auto blank_filepath = blank_copy(dir, "mapped.uef");
+    TapeBeeb beeb;
+    beeb.step(4'000'000);
+    beeb.type("10 PRINT \"HELLO FROM TAPE\"\r*TAPE\r");
+    beeb.step(2'000'000);
+    beeb.deck().insert(open_tape_file(blank_filepath), blank_filepath.filename().string(), "", blank_filepath);
+
+    // A blank C15: fifteen minutes of silence.
+    const auto blank = wait_for_map(beeb.deck(), [](const auto& m) { return m.ready; });
+    REQUIRE(blank.ready);
+    REQUIRE(blank.levels.size() == 900);
+    CHECK(std::all_of(blank.levels.begin(), blank.levels.end(), [](uint8_t level) { return level == 0; }));
+
+    beeb.deck().record();
+    beeb.type("SAVE \"PROG\"\r");
+    beeb.step(7'000'000);
+    beeb.type("\r");
+    beeb.step(36'000'000);
+    beeb.deck().stop();
+    const auto end_second = static_cast<size_t>(static_cast<double>(beeb.deck().position()) / beebium::ULA_CLOCK_HZ);
+
+    const auto recorded = wait_for_map(beeb.deck(), [&](const auto& m) { return m.ready && m.generation > blank.generation; });
+    REQUIRE(recorded.ready);
+    CHECK(recorded.generation == blank.generation + 1);
+    REQUIRE(recorded.levels.size() == 900);
+    // The SAVE's leader and blocks: several seconds of signal before the head
+    // stopped, and silence beyond.
+    const auto loud = std::count_if(recorded.levels.begin(), recorded.levels.begin() + static_cast<std::ptrdiff_t>(end_second + 1),
+                                    [](uint8_t level) { return level >= 128; });
+    CAPTURE(end_second, loud);
+    CHECK(loud >= 5);
+    CHECK(std::all_of(recorded.levels.begin() + static_cast<std::ptrdiff_t>(end_second + 2), recorded.levels.end(),
+                      [](uint8_t level) { return level == 0; }));
 }

@@ -115,6 +115,7 @@ struct WavOptions {
     double amplitude = 0.5;
     Shape shape = Shape::Sine;
     double noise = 0.0;                // uniform, peak, added to the signal
+    double hum = 0.0;                  // a 50 Hz sine at this peak where the tape is silent
     unsigned signal_channel = 0;       // 0 left, 1 right
     double other_amplitude = 0.0;      // the other channel: the signal at this amplitude
 };
@@ -360,7 +361,8 @@ public:
             const double t = static_cast<double>(k) * clocks_per_second / o.rate;
             while (h + 1 < halves.size() && halves[h + 1].start <= t) ++h;
             double v = 0.0;
-            if (!halves.empty() && t >= halves[h].start && t < halves[h].start + halves[h].length) {
+            const bool in_half = !halves.empty() && t >= halves[h].start && t < halves[h].start + halves[h].length;
+            if (in_half) {
                 const double u = (t - halves[h].start) / halves[h].length;
                 switch (o.shape) {
                     case WavOptions::Shape::Sine: v = std::sin(std::numbers::pi * u); break;
@@ -369,7 +371,8 @@ public:
                 }
                 v *= halves[h].sign;
             }
-            const double signal = v * o.amplitude;
+            double signal = v * o.amplitude;
+            if (!in_half && o.hum > 0.0) signal = o.hum * std::sin(2.0 * std::numbers::pi * 50.0 * k / o.rate);
             for (unsigned c = 0; c < o.channels; ++c) {
                 put((c == o.signal_channel ? signal : v * o.other_amplitude) + noise());
             }

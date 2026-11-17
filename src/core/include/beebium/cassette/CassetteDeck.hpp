@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include "SignalMap.hpp"
+#include "TapeImage.hpp"
 #include "TapeSignal.hpp"
 #include "TapeSink.hpp"
 
@@ -64,6 +66,14 @@ namespace beebium {
 // generation when they change, and the position whenever the transport moves
 // and every POSITION_PUBLISH_CLOCKS while playing, so the clock path pays a
 // counter rather than a store a clock.
+//
+// The deck keeps the tape's signal map (SignalMap.hpp), computed by its own
+// worker from a TapeSignal opened afresh on the same image, never from the
+// tape the emulation thread plays: on insert, from the tape's file (a stereo
+// WAV's channel as played), or from a UEF's encoded image if it has no file;
+// when a recording ends, from the image the deck encodes then, the bytes it
+// writes back. A live tape, and a tape that Beebium only reads inserted with no
+// file, have none. The emulation thread only posts the job.
 class CassetteDeck final : public TapeSink {
 public:
     enum class Transport : uint8_t { Stopped, Playing, Rewinding, FastForwarding, Recording };
@@ -83,6 +93,8 @@ public:
         bool relay_closed = false;
         uint64_t tape_generation = 0;  // bumped on every insert and eject
         uint64_t sequence = 0;         // bumped on every change but the position's
+        bool signal_map_ready = false;
+        uint32_t signal_map_generation = 0;  // bumped each time a signal map is published
     };
 
     CassetteDeck() = default;
@@ -110,6 +122,7 @@ public:
         position_ = 0;
         tape_->rewind();
         pending_ = tape_->next();
+        map_inserted_tape();
         published_tape_generation_.fetch_add(1, std::memory_order_relaxed);
         publish();
     }
@@ -118,6 +131,7 @@ public:
         end_recording();
         flush();
         live_ = false;
+        signal_map_.clear();
         tape_.reset();
         name_.clear();
         url_.clear();
@@ -265,9 +279,7 @@ public:
         if (was_recording) recorder->end_recording();
         const std::vector<uint8_t> bytes = recorder->encode();
         if (was_recording) recorder->begin_recording(position_);
-        if (!write_atomically(bytes)) return false;
-        recorder->mark_clean();
-        return true;
+        return write_back(bytes);
     }
 
     // The published state, from any thread.
@@ -279,6 +291,8 @@ public:
         p.position = published_position_.load(std::memory_order_relaxed);
         p.relay_closed = published_relay_.load(std::memory_order_relaxed);
         p.tape_generation = published_tape_generation_.load(std::memory_order_relaxed);
+        p.signal_map_ready = signal_map_.ready();
+        p.signal_map_generation = signal_map_.generation();
         return p;
     }
 
@@ -311,6 +325,9 @@ public:
         static const TapeImageMetadata none;
         return tape_ ? tape_->metadata() : none;
     }
+    // The tape's signal map, from any thread.
+    SignalMapper::Map signal_map() const { return signal_map_.snapshot(); }
+
     // Whether the tape is silent at the current position.
     bool in_gap() const { return pending_.type == TapeItem::Type::Gap; }
 
@@ -335,15 +352,46 @@ private:
         }
     }
 
-    // Leave the Recording transport, stopped, and write the tape back.
+    // Leave the Recording transport, stopped, write the tape back, and map
+    // it again from the same encoded image.
     void end_recording() {
         if (transport_ != Transport::Recording) return;
         head_writing_ = false;
-        tape_->recorder()->end_recording();
+        TapeRecorder* recorder = tape_->recorder();
+        recorder->end_recording();
         transport_ = Transport::Stopped;
         tape_->seek(position_);
         pending_ = tape_->next();
-        flush();
+        auto bytes = std::make_shared<const std::vector<uint8_t>>(recorder->encode());
+        if (!filepath_.empty() && recorder->dirty()) write_back(*bytes);
+        map_image(std::move(bytes));
+    }
+
+    // Write `bytes`, the tape's encoded image, to its file, and mark it clean.
+    bool write_back(const std::vector<uint8_t>& bytes) {
+        if (!write_atomically(bytes)) return false;
+        tape_->recorder()->mark_clean();
+        return true;
+    }
+
+    // Map a tape just inserted: from its file, or a UEF's image with none.
+    void map_inserted_tape() {
+        if (live_) {
+            signal_map_.clear();
+        } else if (!filepath_.empty()) {
+            std::optional<WavChannel> channel;
+            if (tape_->metadata().channel == "left") channel = WavChannel::Left;
+            if (tape_->metadata().channel == "right") channel = WavChannel::Right;
+            signal_map_.map([filepath = filepath_, channel] { return open_tape_file(filepath, channel); });
+        } else if (TapeRecorder* recorder = tape_->recorder()) {
+            map_image(std::make_shared<const std::vector<uint8_t>>(recorder->encode()));
+        } else {
+            signal_map_.clear();
+        }
+    }
+
+    void map_image(std::shared_ptr<const std::vector<uint8_t>> bytes) {
+        signal_map_.map([bytes = std::move(bytes), name = name_] { return open_tape_image(*bytes, name); });
     }
 
     bool write_atomically(const std::vector<uint8_t>& bytes) const {
@@ -464,6 +512,10 @@ private:
     std::atomic<bool> published_relay_{false};
     std::atomic<uint64_t> published_tape_generation_{0};
     std::atomic<uint64_t> published_sequence_{0};
+
+    // Last, so it is destroyed first: its destructor cancels the walk and
+    // joins the worker before anything else of the deck goes.
+    SignalMapper signal_map_;
 };
 
 // A hardware policy with a cassette interface declares `has_cassette = true`

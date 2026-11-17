@@ -27,7 +27,7 @@ TapeTime SampledTape::time_of(double samples) const {
 }
 
 TapeItem SampledTape::next() {
-    for (;;) {
+    for (size_t scanned = 0;; ++scanned) {
         if (block_pos_ >= block_size_) {
             block_size_ = source_->read(block_);
             block_pos_ = 0;
@@ -39,6 +39,9 @@ TapeItem SampledTape::next() {
             // Between sample n - 1 and sample n.
             return TapeItem::edge(time_of(static_cast<double>(n) - 1.0 + *f), front_end_.high());
         }
+        // A block of silence: no edge before sample n, the earliest the next
+        // one (between n and n + 1) can fall.
+        if (scanned + 1 >= BLOCK_SAMPLES) return TapeItem::gap(time_of(static_cast<double>(n)));
     }
 }
 

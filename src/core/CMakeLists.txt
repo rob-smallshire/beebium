@@ -27,6 +27,7 @@ add_library(beebium_core STATIC
     src/cassette/LiveSource.cpp
     src/cassette/CswTape.cpp
     src/cassette/TapeImage.cpp
+    src/cassette/SignalMap.cpp
     include/beebium/cassette/TapeSignal.hpp
     include/beebium/cassette/UefTape.hpp
     include/beebium/cassette/UefWriter.hpp
@@ -39,6 +40,7 @@ add_library(beebium_core STATIC
     include/beebium/cassette/TapeImage.hpp
     include/beebium/cassette/TapeSink.hpp
     include/beebium/cassette/CassetteDeck.hpp
+    include/beebium/cassette/SignalMap.hpp
     include/beebium/cassette/CassetteMotorLed.hpp
     src/TubeUla.cpp
     src/CoprocessorCpu.cpp

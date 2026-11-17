@@ -22,7 +22,10 @@
 namespace beebium {
 
 // A tape that is sound: a SampledSource squared by the FrontEnd into edges.
-// next() pulls samples until the front end flips or the source ends. A sample's
+// next() pulls samples until the front end flips, the source ends, or
+// BLOCK_SAMPLES pass without a flip, when it returns a Gap to the last sample
+// taken, so no call scans more than a block of silence (the emulation thread's
+// cost a call, and how soon a signal map's walk notices it is cancelled). A sample's
 // tape time is its index x (16 MHz / 13) / rate, and an edge falls between two
 // samples where the front end interpolates it. A seek starts the front end
 // afresh, at rest. It cannot be recorded on.

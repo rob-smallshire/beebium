@@ -504,6 +504,11 @@ add_executable(test_tape_signal test_tape_signal.cpp)
 target_link_libraries(test_tape_signal PRIVATE beebium_core Catch2::Catch2WithMain ZLIB::ZLIB)
 catch_discover_tests(test_tape_signal)
 
+# Cassette (#208, round 9): the tape signal map.
+add_executable(test_tape_signal_map test_tape_signal_map.cpp)
+target_link_libraries(test_tape_signal_map PRIVATE beebium_core Catch2::Catch2WithMain ZLIB::ZLIB)
+catch_discover_tests(test_tape_signal_map)
+
 # Cassette (#208): the Serial ULA's cassette side and the deck.
 add_executable(test_live_source test_live_source.cpp)
 target_link_libraries(test_live_source PRIVATE beebium_core Catch2::Catch2WithMain)
