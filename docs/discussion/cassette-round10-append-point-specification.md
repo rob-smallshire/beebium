@@ -47,9 +47,11 @@ message SeekToAppendPointResponse {
   `CassetteErrorKinds.swift` switch by the macOS developer in the GUI round; the server round
   lands the proto and stubs first, and the macOS build is red for that interval, which the
   architect sequences.
-- `DeckStatus` is unchanged: the position moves as for any seek, and the clients' counters and
-  markers follow. A client that wants to grey the key before the map is ready already has
-  `signal_map_ready`.
+- `DeckStatus` gains `string append_refusal = 13`: empty when `SeekToAppendPoint` would be
+  accepted, else the sentence it would refuse with (live input, map not ready, no tape). The
+  clients grey the key on a non-empty refusal and show the sentence as its help text, as they do
+  with `TapeMetadata.record_refusal` for Record, so no client words a reason itself. The
+  position moves as for any seek, and the clients' counters and markers follow.
 - Python `bbc.cassette.seek_to_append_point() -> AppendPoint(position_seconds, at_end)`,
   raising `CassetteError` on refusal; TypeScript the mirror. The fingerprint changes (the same
   minor).
@@ -61,8 +63,8 @@ skip-to-end mirror of Back to the beginning's icon). With it the row is re-order
 2026-11-17 night) into the tape's own geography, one group from the left edge: Back to the
 beginning, Rewind, Stop, Play, Record, Fast forward, To the end of the recordings; Eject stays
 alone at the right edge with the stretch between. It is momentary, never depressed, never coloured. It is
-enabled while a tape is in and the signal map is ready, greyed with the server's sentence as
-help text for a live tape and while the map is not ready. Pressing it seeks; the counter and the
+enabled while `DeckStatus.append_refusal` is empty, greyed with that sentence as help text
+otherwise. Pressing it seeks; the counter and the
 marker follow; when the response says `at_end` the client shows the transport text the deck
 reports (stopped at the end) and need say nothing more. Pressing it while recording ends the
 recording, as any seek does.
