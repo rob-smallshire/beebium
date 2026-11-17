@@ -118,6 +118,11 @@ class CassetteServiceStub(object):
                 request_serializer=cassette__pb2.SubscribeDeckStatusRequest.SerializeToString,
                 response_deserializer=cassette__pb2.DeckStatus.FromString,
                 _registered_method=True)
+        self.GetTapeSignalMap = channel.unary_unary(
+                '/beebium.CassetteService/GetTapeSignalMap',
+                request_serializer=cassette__pb2.GetTapeSignalMapRequest.SerializeToString,
+                response_deserializer=cassette__pb2.TapeSignalMap.FromString,
+                _registered_method=True)
 
 
 class CassetteServiceServicer(object):
@@ -237,6 +242,16 @@ class CassetteServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetTapeSignalMap(self, request, context):
+        """Where the tape carries signal, a level a second, computed off the
+        emulation thread when a tape is inserted and again when a recording
+        ends. Until it is ready, and for a live tape, ready is false;
+        DeckStatus.signal_map_generation says when to fetch it again.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CassetteServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -304,6 +319,11 @@ def add_CassetteServiceServicer_to_server(servicer, server):
                     servicer.SubscribeDeckStatus,
                     request_deserializer=cassette__pb2.SubscribeDeckStatusRequest.FromString,
                     response_serializer=cassette__pb2.DeckStatus.SerializeToString,
+            ),
+            'GetTapeSignalMap': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTapeSignalMap,
+                    request_deserializer=cassette__pb2.GetTapeSignalMapRequest.FromString,
+                    response_serializer=cassette__pb2.TapeSignalMap.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -664,6 +684,33 @@ class CassetteService(object):
             '/beebium.CassetteService/SubscribeDeckStatus',
             cassette__pb2.SubscribeDeckStatusRequest.SerializeToString,
             cassette__pb2.DeckStatus.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTapeSignalMap(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.CassetteService/GetTapeSignalMap',
+            cassette__pb2.GetTapeSignalMapRequest.SerializeToString,
+            cassette__pb2.TapeSignalMap.FromString,
             options,
             channel_credentials,
             insecure,

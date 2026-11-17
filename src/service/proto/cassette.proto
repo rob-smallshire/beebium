@@ -60,6 +60,12 @@ service CassetteService {
     // transport, relay or tape, and while the deck plays the position no more
     // often than min_interval_ms of emulated time.
     rpc SubscribeDeckStatus(SubscribeDeckStatusRequest) returns (stream DeckStatus);
+
+    // Where the tape carries signal, a level a second, computed off the
+    // emulation thread when a tape is inserted and again when a recording
+    // ends. Until it is ready, and for a live tape, ready is false;
+    // DeckStatus.signal_map_generation says when to fetch it again.
+    rpc GetTapeSignalMap(GetTapeSignalMapRequest) returns (TapeSignalMap);
 }
 
 enum CassetteErrorKind {
@@ -70,7 +76,7 @@ enum CassetteErrorKind {
     CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT = 4;     // not a UEF or CSW
     CASSETTE_ERROR_KIND_INVALID_IMAGE = 5;          // recognised, but refused (a disc chunk, a version, a value out of range)
     CASSETTE_ERROR_KIND_DECK_OCCUPIED = 6;          // insert with a tape in
-    CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop, seek, wind or record with no tape
+    CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop, seek, wind, record or a signal map with no tape
     CASSETTE_ERROR_KIND_INVALID_POSITION = 8;       // a seek to a negative position
     CASSETTE_ERROR_KIND_READ_ONLY = 9;              // record on a tape Beebium only reads (a CSW)
     CASSETTE_ERROR_KIND_LIVE_SOURCE = 10;           // seek, wind or record on a live tape
@@ -111,6 +117,10 @@ message DeckStatus {
     double live_ring_fill = 8;
     uint64 live_overruns = 9;
     uint64 live_underruns = 10;
+    // The tape's signal map: whether one is ready for the tape in the deck,
+    // and how many have been published, so a client knows when to fetch it.
+    bool signal_map_ready = 11;
+    uint32 signal_map_generation = 12;
 }
 
 message InsertTapeRequest {
@@ -212,4 +222,18 @@ message GetDeckStatusRequest {}
 
 message SubscribeDeckStatusRequest {
     uint32 min_interval_ms = 1;       // default 100
+}
+
+message GetTapeSignalMapRequest {}
+
+// One level a second of tape, the fraction of that second within a run of
+// edges (each less than 4 ms after the last), carrier included: 0 silent
+// throughout, 255 signal throughout.
+message TapeSignalMap {
+    bool success = 1;                 // false with no tape, or no cassette interface
+    string error = 2;                 // a sentence when !success
+    CassetteErrorKind kind = 3;       // DECK_EMPTY or NO_CASSETTE_INTERFACE
+    bool ready = 4;                   // false while the map is being computed, or for a live tape
+    uint32 seconds = 5;               // the number of levels, the tape's duration rounded up
+    bytes levels = 6;                 // one byte a second, 0 (silent) to 255 (signal throughout)
 }

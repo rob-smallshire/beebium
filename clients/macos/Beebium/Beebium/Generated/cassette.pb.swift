@@ -43,7 +43,7 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// insert with a tape in
   case deckOccupied // = 6
 
-  /// eject, play, stop, seek, wind or record with no tape
+  /// eject, play, stop, seek, wind, record or a signal map with no tape
   case deckEmpty // = 7
 
   /// a seek to a negative position
@@ -365,6 +365,18 @@ public struct Beebium_DeckStatus: @unchecked Sendable {
   public var liveUnderruns: UInt64 {
     get {return _storage._liveUnderruns}
     set {_uniqueStorage()._liveUnderruns = newValue}
+  }
+
+  /// The tape's signal map: whether one is ready for the tape in the deck,
+  /// and how many have been published, so a client knows when to fetch it.
+  public var signalMapReady: Bool {
+    get {return _storage._signalMapReady}
+    set {_uniqueStorage()._signalMapReady = newValue}
+  }
+
+  public var signalMapGeneration: UInt32 {
+    get {return _storage._signalMapGeneration}
+    set {_uniqueStorage()._signalMapGeneration = newValue}
   }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -711,6 +723,47 @@ public struct Beebium_SubscribeDeckStatusRequest: Sendable {
   public init() {}
 }
 
+public struct Beebium_GetTapeSignalMapRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// One level a second of tape, the fraction of that second within a run of
+/// edges (each less than 4 ms after the last), carrier included: 0 silent
+/// throughout, 255 signal throughout.
+public struct Beebium_TapeSignalMap: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// false with no tape, or no cassette interface
+  public var success: Bool = false
+
+  /// a sentence when !success
+  public var error: String = String()
+
+  /// DECK_EMPTY or NO_CASSETTE_INTERFACE
+  public var kind: Beebium_CassetteErrorKind = .unspecified
+
+  /// false while the map is being computed, or for a live tape
+  public var ready: Bool = false
+
+  /// the number of levels, the tape's duration rounded up
+  public var seconds: UInt32 = 0
+
+  /// one byte a second, 0 (silent) to 255 (signal throughout)
+  public var levels: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "beebium"
@@ -808,7 +861,7 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 
 extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeckStatus"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_cassette_interface\0\u{3}tape_inserted\0\u{1}tape\0\u{1}transport\0\u{3}position_seconds\0\u{3}motor_on\0\u{3}ula_part\0\u{3}live_ring_fill\0\u{3}live_overruns\0\u{3}live_underruns\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_cassette_interface\0\u{3}tape_inserted\0\u{1}tape\0\u{1}transport\0\u{3}position_seconds\0\u{3}motor_on\0\u{3}ula_part\0\u{3}live_ring_fill\0\u{3}live_overruns\0\u{3}live_underruns\0\u{3}signal_map_ready\0\u{3}signal_map_generation\0")
 
   fileprivate class _StorageClass {
     var _hasCassetteInterface_p: Bool = false
@@ -821,6 +874,8 @@ extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     var _liveRingFill: Double = 0
     var _liveOverruns: UInt64 = 0
     var _liveUnderruns: UInt64 = 0
+    var _signalMapReady: Bool = false
+    var _signalMapGeneration: UInt32 = 0
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -841,6 +896,8 @@ extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       _liveRingFill = source._liveRingFill
       _liveOverruns = source._liveOverruns
       _liveUnderruns = source._liveUnderruns
+      _signalMapReady = source._signalMapReady
+      _signalMapGeneration = source._signalMapGeneration
     }
   }
 
@@ -869,6 +926,8 @@ extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
         case 8: try { try decoder.decodeSingularDoubleField(value: &_storage._liveRingFill) }()
         case 9: try { try decoder.decodeSingularUInt64Field(value: &_storage._liveOverruns) }()
         case 10: try { try decoder.decodeSingularUInt64Field(value: &_storage._liveUnderruns) }()
+        case 11: try { try decoder.decodeSingularBoolField(value: &_storage._signalMapReady) }()
+        case 12: try { try decoder.decodeSingularUInt32Field(value: &_storage._signalMapGeneration) }()
         default: break
         }
       }
@@ -911,6 +970,12 @@ extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       if _storage._liveUnderruns != 0 {
         try visitor.visitSingularUInt64Field(value: _storage._liveUnderruns, fieldNumber: 10)
       }
+      if _storage._signalMapReady != false {
+        try visitor.visitSingularBoolField(value: _storage._signalMapReady, fieldNumber: 11)
+      }
+      if _storage._signalMapGeneration != 0 {
+        try visitor.visitSingularUInt32Field(value: _storage._signalMapGeneration, fieldNumber: 12)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -930,6 +995,8 @@ extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
         if _storage._liveRingFill != rhs_storage._liveRingFill {return false}
         if _storage._liveOverruns != rhs_storage._liveOverruns {return false}
         if _storage._liveUnderruns != rhs_storage._liveUnderruns {return false}
+        if _storage._signalMapReady != rhs_storage._signalMapReady {return false}
+        if _storage._signalMapGeneration != rhs_storage._signalMapGeneration {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -1601,6 +1668,80 @@ extension Beebium_SubscribeDeckStatusRequest: SwiftProtobuf.Message, SwiftProtob
 
   public static func ==(lhs: Beebium_SubscribeDeckStatusRequest, rhs: Beebium_SubscribeDeckStatusRequest) -> Bool {
     if lhs.minIntervalMs != rhs.minIntervalMs {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_GetTapeSignalMapRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetTapeSignalMapRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_GetTapeSignalMapRequest, rhs: Beebium_GetTapeSignalMapRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TapeSignalMap: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TapeSignalMap"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}kind\0\u{1}ready\0\u{1}seconds\0\u{1}levels\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.ready) }()
+      case 5: try { try decoder.decodeSingularUInt32Field(value: &self.seconds) }()
+      case 6: try { try decoder.decodeSingularBytesField(value: &self.levels) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 3)
+    }
+    if self.ready != false {
+      try visitor.visitSingularBoolField(value: self.ready, fieldNumber: 4)
+    }
+    if self.seconds != 0 {
+      try visitor.visitSingularUInt32Field(value: self.seconds, fieldNumber: 5)
+    }
+    if !self.levels.isEmpty {
+      try visitor.visitSingularBytesField(value: self.levels, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Beebium_TapeSignalMap, rhs: Beebium_TapeSignalMap) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.kind != rhs.kind {return false}
+    if lhs.ready != rhs.ready {return false}
+    if lhs.seconds != rhs.seconds {return false}
+    if lhs.levels != rhs.levels {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

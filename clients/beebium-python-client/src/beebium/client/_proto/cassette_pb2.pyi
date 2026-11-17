@@ -51,7 +51,7 @@ class _CassetteErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Cas
     CASSETTE_ERROR_KIND_DECK_OCCUPIED: _CassetteErrorKind.ValueType  # 6
     """insert with a tape in"""
     CASSETTE_ERROR_KIND_DECK_EMPTY: _CassetteErrorKind.ValueType  # 7
-    """eject, play, stop, seek, wind or record with no tape"""
+    """eject, play, stop, seek, wind, record or a signal map with no tape"""
     CASSETTE_ERROR_KIND_INVALID_POSITION: _CassetteErrorKind.ValueType  # 8
     """a seek to a negative position"""
     CASSETTE_ERROR_KIND_READ_ONLY: _CassetteErrorKind.ValueType  # 9
@@ -77,7 +77,7 @@ CASSETTE_ERROR_KIND_INVALID_IMAGE: CassetteErrorKind.ValueType  # 5
 CASSETTE_ERROR_KIND_DECK_OCCUPIED: CassetteErrorKind.ValueType  # 6
 """insert with a tape in"""
 CASSETTE_ERROR_KIND_DECK_EMPTY: CassetteErrorKind.ValueType  # 7
-"""eject, play, stop, seek, wind or record with no tape"""
+"""eject, play, stop, seek, wind, record or a signal map with no tape"""
 CASSETTE_ERROR_KIND_INVALID_POSITION: CassetteErrorKind.ValueType  # 8
 """a seek to a negative position"""
 CASSETTE_ERROR_KIND_READ_ONLY: CassetteErrorKind.ValueType  # 9
@@ -230,6 +230,8 @@ class DeckStatus(_message.Message):
     LIVE_RING_FILL_FIELD_NUMBER: _builtins.int
     LIVE_OVERRUNS_FIELD_NUMBER: _builtins.int
     LIVE_UNDERRUNS_FIELD_NUMBER: _builtins.int
+    SIGNAL_MAP_READY_FIELD_NUMBER: _builtins.int
+    SIGNAL_MAP_GENERATION_FIELD_NUMBER: _builtins.int
     has_cassette_interface: _builtins.bool
     """false on a model without one"""
     tape_inserted: _builtins.bool
@@ -247,6 +249,11 @@ class DeckStatus(_message.Message):
     """
     live_overruns: _builtins.int
     live_underruns: _builtins.int
+    signal_map_ready: _builtins.bool
+    """The tape's signal map: whether one is ready for the tape in the deck,
+    and how many have been published, so a client knows when to fetch it.
+    """
+    signal_map_generation: _builtins.int
     @_builtins.property
     def tape(self) -> Global___TapeMetadata:
         """set when tape_inserted"""
@@ -264,10 +271,12 @@ class DeckStatus(_message.Message):
         live_ring_fill: _builtins.float = ...,
         live_overruns: _builtins.int = ...,
         live_underruns: _builtins.int = ...,
+        signal_map_ready: _builtins.bool = ...,
+        signal_map_generation: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["tape", b"tape"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["has_cassette_interface", b"has_cassette_interface", "live_overruns", b"live_overruns", "live_ring_fill", b"live_ring_fill", "live_underruns", b"live_underruns", "motor_on", b"motor_on", "position_seconds", b"position_seconds", "tape", b"tape", "tape_inserted", b"tape_inserted", "transport", b"transport", "ula_part", b"ula_part"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["has_cassette_interface", b"has_cassette_interface", "live_overruns", b"live_overruns", "live_ring_fill", b"live_ring_fill", "live_underruns", b"live_underruns", "motor_on", b"motor_on", "position_seconds", b"position_seconds", "signal_map_generation", b"signal_map_generation", "signal_map_ready", b"signal_map_ready", "tape", b"tape", "tape_inserted", b"tape_inserted", "transport", b"transport", "ula_part", b"ula_part"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -728,3 +737,63 @@ class SubscribeDeckStatusRequest(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___SubscribeDeckStatusRequest: _TypeAlias = SubscribeDeckStatusRequest  # noqa: Y015
+
+@_typing.final
+class GetTapeSignalMapRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___GetTapeSignalMapRequest: _TypeAlias = GetTapeSignalMapRequest  # noqa: Y015
+
+@_typing.final
+class TapeSignalMap(_message.Message):
+    """One level a second of tape, the fraction of that second within a run of
+    edges (each less than 4 ms after the last), carrier included: 0 silent
+    throughout, 255 signal throughout.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUCCESS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
+    READY_FIELD_NUMBER: _builtins.int
+    SECONDS_FIELD_NUMBER: _builtins.int
+    LEVELS_FIELD_NUMBER: _builtins.int
+    success: _builtins.bool
+    """false with no tape, or no cassette interface"""
+    error: _builtins.str
+    """a sentence when !success"""
+    kind: Global___CassetteErrorKind.ValueType
+    """DECK_EMPTY or NO_CASSETTE_INTERFACE"""
+    ready: _builtins.bool
+    """false while the map is being computed, or for a live tape"""
+    seconds: _builtins.int
+    """the number of levels, the tape's duration rounded up"""
+    levels: _builtins.bytes
+    """one byte a second, 0 (silent) to 255 (signal throughout)"""
+    def __init__(
+        self,
+        *,
+        success: _builtins.bool = ...,
+        error: _builtins.str = ...,
+        kind: Global___CassetteErrorKind.ValueType = ...,
+        ready: _builtins.bool = ...,
+        seconds: _builtins.int = ...,
+        levels: _builtins.bytes = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "kind", b"kind", "levels", b"levels", "ready", b"ready", "seconds", b"seconds", "success", b"success"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___TapeSignalMap: _TypeAlias = TapeSignalMap  # noqa: Y015

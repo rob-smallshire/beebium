@@ -29,6 +29,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -960,4 +961,96 @@ TEST_CASE("Recording mutated without the pause races (the witness's control)", "
         deck.stop();
     }
     fixture.stop_running();
+}
+
+// =============================================================================
+// The signal map (round 9)
+// =============================================================================
+
+namespace {
+
+beebium::TapeSignalMap signal_map(CassetteFixture& fixture) {
+    grpc::ClientContext context;
+    beebium::GetTapeSignalMapRequest request;
+    beebium::TapeSignalMap response;
+    REQUIRE(fixture.stub().GetTapeSignalMap(&context, request, &response).ok());
+    return response;
+}
+
+}  // namespace
+
+TEST_CASE("GetTapeSignalMap reports a deck's map, empty, live or from a file", "[grpc][cassette][signal_map]") {
+    CassetteFixture fixture;
+
+    // No tape.
+    {
+        const auto map = signal_map(fixture);
+        CHECK_FALSE(map.success());
+        CHECK(map.kind() == beebium::CASSETTE_ERROR_KIND_DECK_EMPTY);
+        CHECK(map.error() == "There is no tape in the deck.");
+        CHECK_FALSE(fixture.status().signal_map_ready());
+    }
+
+    // A UEF: 2.5 s of gap, 3 s of carrier, 2 s of data, 1 s of gap, 1 s of
+    // carrier and 2 s of data.
+    std::vector<uint8_t> data(240);
+    for (size_t i = 0; i < data.size(); ++i) data[i] = static_cast<uint8_t>(i * 37 + 11);
+    TapeBuilder builder;
+    builder.gap(2.5).carrier(7200).bytes_8n1(data).gap(1.0).carrier(2400).bytes_8n1(data);
+    const uint32_t generation_before = fixture.status().signal_map_generation();
+    REQUIRE(fixture.insert(fixture.write("two_blocks.uef", builder.uef()).string()).success());
+    REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.signal_map_ready(); }));
+    const auto status = fixture.status();
+    CHECK(status.signal_map_generation() == generation_before + 1);
+
+    const auto map = signal_map(fixture);
+    REQUIRE(map.success());
+    REQUIRE(map.ready());
+    CHECK(map.seconds() == static_cast<uint32_t>(std::ceil(status.tape().duration_seconds())));
+    REQUIRE(map.levels().size() == map.seconds());
+    REQUIRE(map.seconds() == 12);
+    const int expected[12] = {0, 0, 128, 255, 255, 255, 255, 128, 128, 255, 255, 255};
+    for (size_t s = 0; s < 12; ++s) {
+        const int level = static_cast<uint8_t>(map.levels()[s]);
+        CAPTURE(s, level);
+        CHECK(std::abs(level - expected[s]) <= 10);
+    }
+
+    // Ejected: empty again, and the status says no map.
+    REQUIRE(fixture.call<beebium::EjectTapeRequest>(&beebium::CassetteService::Stub::EjectTape).success());
+    CHECK_FALSE(fixture.status().signal_map_ready());
+    CHECK(signal_map(fixture).kind() == beebium::CASSETTE_ERROR_KIND_DECK_EMPTY);
+
+    // A live tape has no map.
+    {
+        AudioStream stream(fixture.stub());
+        REQUIRE(stream.format());
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.tape_inserted(); }));
+        const auto live = signal_map(fixture);
+        CHECK(live.success());
+        CHECK_FALSE(live.ready());
+        CHECK(live.seconds() == 0);
+        CHECK_FALSE(fixture.status().signal_map_ready());
+        REQUIRE(stream.finish().ok());
+    }
+}
+
+TEST_CASE("The status stream reports a signal map becoming ready", "[grpc][cassette][signal_map]") {
+    CassetteFixture fixture;
+    TapeBuilder builder;
+    builder.gap(1.0).carrier(2400);
+    const auto filepath = fixture.write("short.uef", builder.uef());
+
+    grpc::ClientContext context;
+    beebium::SubscribeDeckStatusRequest request;
+    auto reader = fixture.stub().SubscribeDeckStatus(&context, request);
+    beebium::DeckStatus status;
+    REQUIRE(reader->Read(&status));  // the current status at once
+    CHECK_FALSE(status.signal_map_ready());
+
+    REQUIRE(fixture.insert(filepath.string()).success());
+    bool ready = false;
+    for (int i = 0; i < 20 && !ready && reader->Read(&status); ++i) ready = status.signal_map_ready();
+    CHECK(ready);
+    context.TryCancel();
 }

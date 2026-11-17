@@ -101,6 +101,12 @@ class CassetteServiceStub:
     transport, relay or tape, and while the deck plays the position no more
     often than min_interval_ms of emulated time.
     """
+    GetTapeSignalMap: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.GetTapeSignalMapRequest, _cassette_pb2.TapeSignalMap]
+    """Where the tape carries signal, a level a second, computed off the
+    emulation thread when a tape is inserted and again when a recording
+    ends. Until it is ready, and for a live tape, ready is false;
+    DeckStatus.signal_map_generation says when to fetch it again.
+    """
 
 @_typing.type_check_only
 class CassetteServiceAsyncStub(CassetteServiceStub):
@@ -162,6 +168,12 @@ class CassetteServiceAsyncStub(CassetteServiceStub):
     """The current status at once, then a status on every change of presence,
     transport, relay or tape, and while the deck plays the position no more
     often than min_interval_ms of emulated time.
+    """
+    GetTapeSignalMap: _aio.UnaryUnaryMultiCallable[_cassette_pb2.GetTapeSignalMapRequest, _cassette_pb2.TapeSignalMap]  # type: ignore[assignment]
+    """Where the tape carries signal, a level a second, computed off the
+    emulation thread when a tape is inserted and again when a recording
+    ends. Until it is ready, and for a live tape, ready is false;
+    DeckStatus.signal_map_generation says when to fetch it again.
     """
 
 class CassetteServiceServicer(metaclass=_abc_1.ABCMeta):
@@ -299,6 +311,18 @@ class CassetteServiceServicer(metaclass=_abc_1.ABCMeta):
         """The current status at once, then a status on every change of presence,
         transport, relay or tape, and while the deck plays the position no more
         often than min_interval_ms of emulated time.
+        """
+
+    @_abc_1.abstractmethod
+    def GetTapeSignalMap(
+        self,
+        request: _cassette_pb2.GetTapeSignalMapRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_cassette_pb2.TapeSignalMap, _abc.Awaitable[_cassette_pb2.TapeSignalMap]]:
+        """Where the tape carries signal, a level a second, computed off the
+        emulation thread when a tape is inserted and again when a recording
+        ends. Until it is ready, and for a live tape, ready is false;
+        DeckStatus.signal_map_generation says when to fetch it again.
         """
 
 def add_CassetteServiceServicer_to_server(servicer: CassetteServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

@@ -328,6 +328,29 @@ public:
         return grpc::Status::OK;
     }
 
+    grpc::Status GetTapeSignalMap(grpc::ServerContext*, const GetTapeSignalMapRequest*,
+                                  TapeSignalMap* response) override {
+        if constexpr (!HasCassette<Memory>) {
+            no_interface(response);
+            return grpc::Status::OK;
+        } else {
+            // The map is the deck's worker's; reading it needs no pause.
+            auto& deck = machine_.state().memory.cassette_deck;
+            if (!deck.published().has_tape) {
+                fail(response, beebium::CASSETTE_ERROR_KIND_DECK_EMPTY, "There is no tape in the deck.");
+                return grpc::Status::OK;
+            }
+            const SignalMapper::Map map = deck.signal_map();
+            response->set_success(true);
+            response->set_ready(map.ready);
+            if (map.ready) {
+                response->set_seconds(static_cast<uint32_t>(map.levels.size()));
+                response->set_levels(map.levels.data(), map.levels.size());
+            }
+            return grpc::Status::OK;
+        }
+    }
+
     grpc::Status SubscribeDeckStatus(grpc::ServerContext* context, const SubscribeDeckStatusRequest* request,
                                      grpc::ServerWriter<DeckStatus>* writer) override {
         const uint32_t interval_ms = request->min_interval_ms() > 0 ? request->min_interval_ms() : 100;
@@ -346,7 +369,9 @@ public:
         while (!context->IsCancelled()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             const CassetteDeck::Published now = published_now();
-            const bool changed = now.sequence != last.sequence || now.tape_generation != last.tape_generation;
+            const bool changed = now.sequence != last.sequence || now.tape_generation != last.tape_generation ||
+                                 now.signal_map_ready != last.signal_map_ready ||
+                                 now.signal_map_generation != last.signal_map_generation;
             // A wind covers WIND_SPEED times the tape a clock that playing does.
             // A live tape moves whether or not the deck plays or the relay is closed.
             const bool live = live_active_.load(std::memory_order_relaxed);
@@ -487,6 +512,8 @@ private:
             status.set_transport(proto_transport(published.transport));
             status.set_position_seconds(static_cast<double>(published.position) / ULA_CLOCK_HZ);
             status.set_motor_on(published.relay_closed);
+            status.set_signal_map_ready(published.has_tape && published.signal_map_ready);
+            status.set_signal_map_generation(published.signal_map_generation);
             status.set_ula_part(machine_.state().memory.serial_socket.ula().part() == SerialUla::Part::VLSI
                                     ? "vlsi" : "ferranti");
             if (live_source_) {

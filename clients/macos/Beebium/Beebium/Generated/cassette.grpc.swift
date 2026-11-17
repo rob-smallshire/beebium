@@ -88,6 +88,11 @@ public protocol Beebium_CassetteServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?,
     handler: @escaping (Beebium_DeckStatus) -> Void
   ) -> ServerStreamingCall<Beebium_SubscribeDeckStatusRequest, Beebium_DeckStatus>
+
+  func getTapeSignalMap(
+    _ request: Beebium_GetTapeSignalMapRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap>
 }
 
 extension Beebium_CassetteServiceClientProtocol {
@@ -351,6 +356,27 @@ extension Beebium_CassetteServiceClientProtocol {
       handler: handler
     )
   }
+
+  /// Where the tape carries signal, a level a second, computed off the
+  /// emulation thread when a tape is inserted and again when a recording
+  /// ends. Until it is ready, and for a live tape, ready is false;
+  /// DeckStatus.signal_map_generation says when to fetch it again.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetTapeSignalMap.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  public func getTapeSignalMap(
+    _ request: Beebium_GetTapeSignalMapRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap> {
+    return self.makeUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.getTapeSignalMap.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetTapeSignalMapInterceptors() ?? []
+    )
+  }
 }
 
 @available(*, deprecated)
@@ -485,6 +511,11 @@ public protocol Beebium_CassetteServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_SubscribeDeckStatusRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncServerStreamingCall<Beebium_SubscribeDeckStatusRequest, Beebium_DeckStatus>
+
+  func makeGetTapeSignalMapCall(
+    _ request: Beebium_GetTapeSignalMapRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -648,6 +679,18 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeSubscribeDeckStatusInterceptors() ?? []
+    )
+  }
+
+  public func makeGetTapeSignalMapCall(
+    _ request: Beebium_GetTapeSignalMapRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.getTapeSignalMap.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetTapeSignalMapInterceptors() ?? []
     )
   }
 }
@@ -821,6 +864,18 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeSubscribeDeckStatusInterceptors() ?? []
     )
   }
+
+  public func getTapeSignalMap(
+    _ request: Beebium_GetTapeSignalMapRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_TapeSignalMap {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.getTapeSignalMap.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetTapeSignalMapInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -880,6 +935,9 @@ public protocol Beebium_CassetteServiceClientInterceptorFactoryProtocol: Sendabl
 
   /// - Returns: Interceptors to use when invoking 'subscribeDeckStatus'.
   func makeSubscribeDeckStatusInterceptors() -> [ClientInterceptor<Beebium_SubscribeDeckStatusRequest, Beebium_DeckStatus>]
+
+  /// - Returns: Interceptors to use when invoking 'getTapeSignalMap'.
+  func makeGetTapeSignalMapInterceptors() -> [ClientInterceptor<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap>]
 }
 
 public enum Beebium_CassetteServiceClientMetadata {
@@ -900,6 +958,7 @@ public enum Beebium_CassetteServiceClientMetadata {
       Beebium_CassetteServiceClientMetadata.Methods.streamAudio,
       Beebium_CassetteServiceClientMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceClientMetadata.Methods.subscribeDeckStatus,
+      Beebium_CassetteServiceClientMetadata.Methods.getTapeSignalMap,
     ]
   )
 
@@ -981,6 +1040,12 @@ public enum Beebium_CassetteServiceClientMetadata {
       path: "/beebium.CassetteService/SubscribeDeckStatus",
       type: GRPCCallType.serverStreaming
     )
+
+    public static let getTapeSignalMap = GRPCMethodDescriptor(
+      name: "GetTapeSignalMap",
+      path: "/beebium.CassetteService/GetTapeSignalMap",
+      type: GRPCCallType.unary
+    )
   }
 }
 
@@ -1050,6 +1115,12 @@ public protocol Beebium_CassetteServiceProvider: CallHandlerProvider {
   /// transport, relay or tape, and while the deck plays the position no more
   /// often than min_interval_ms of emulated time.
   func subscribeDeckStatus(request: Beebium_SubscribeDeckStatusRequest, context: StreamingResponseCallContext<Beebium_DeckStatus>) -> EventLoopFuture<GRPCStatus>
+
+  /// Where the tape carries signal, a level a second, computed off the
+  /// emulation thread when a tape is inserted and again when a recording
+  /// ends. Until it is ready, and for a live tape, ready is false;
+  /// DeckStatus.signal_map_generation says when to fetch it again.
+  func getTapeSignalMap(request: Beebium_GetTapeSignalMapRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_TapeSignalMap>
 }
 
 extension Beebium_CassetteServiceProvider {
@@ -1181,6 +1252,15 @@ extension Beebium_CassetteServiceProvider {
         userFunction: self.subscribeDeckStatus(request:context:)
       )
 
+    case "GetTapeSignalMap":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetTapeSignalMapRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_TapeSignalMap>(),
+        interceptors: self.interceptors?.makeGetTapeSignalMapInterceptors() ?? [],
+        userFunction: self.getTapeSignalMap(request:context:)
+      )
+
     default:
       return nil
     }
@@ -1295,6 +1375,15 @@ public protocol Beebium_CassetteServiceAsyncProvider: CallHandlerProvider, Senda
     responseStream: GRPCAsyncResponseStreamWriter<Beebium_DeckStatus>,
     context: GRPCAsyncServerCallContext
   ) async throws
+
+  /// Where the tape carries signal, a level a second, computed off the
+  /// emulation thread when a tape is inserted and again when a recording
+  /// ends. Until it is ready, and for a live tape, ready is false;
+  /// DeckStatus.signal_map_generation says when to fetch it again.
+  func getTapeSignalMap(
+    request: Beebium_GetTapeSignalMapRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_TapeSignalMap
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -1433,6 +1522,15 @@ extension Beebium_CassetteServiceAsyncProvider {
         wrapping: { try await self.subscribeDeckStatus(request: $0, responseStream: $1, context: $2) }
       )
 
+    case "GetTapeSignalMap":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetTapeSignalMapRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_TapeSignalMap>(),
+        interceptors: self.interceptors?.makeGetTapeSignalMapInterceptors() ?? [],
+        wrapping: { try await self.getTapeSignalMap(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -1492,6 +1590,10 @@ public protocol Beebium_CassetteServiceServerInterceptorFactoryProtocol: Sendabl
   /// - Returns: Interceptors to use when handling 'subscribeDeckStatus'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeSubscribeDeckStatusInterceptors() -> [ServerInterceptor<Beebium_SubscribeDeckStatusRequest, Beebium_DeckStatus>]
+
+  /// - Returns: Interceptors to use when handling 'getTapeSignalMap'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetTapeSignalMapInterceptors() -> [ServerInterceptor<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap>]
 }
 
 public enum Beebium_CassetteServiceServerMetadata {
@@ -1512,6 +1614,7 @@ public enum Beebium_CassetteServiceServerMetadata {
       Beebium_CassetteServiceServerMetadata.Methods.streamAudio,
       Beebium_CassetteServiceServerMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceServerMetadata.Methods.subscribeDeckStatus,
+      Beebium_CassetteServiceServerMetadata.Methods.getTapeSignalMap,
     ]
   )
 
@@ -1592,6 +1695,12 @@ public enum Beebium_CassetteServiceServerMetadata {
       name: "SubscribeDeckStatus",
       path: "/beebium.CassetteService/SubscribeDeckStatus",
       type: GRPCCallType.serverStreaming
+    )
+
+    public static let getTapeSignalMap = GRPCMethodDescriptor(
+      name: "GetTapeSignalMap",
+      path: "/beebium.CassetteService/GetTapeSignalMap",
+      type: GRPCCallType.unary
     )
   }
 }
