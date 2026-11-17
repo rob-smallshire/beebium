@@ -37,7 +37,7 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// not a UEF or CSW
   case unsupportedFormat // = 4
 
-  /// recognised, but refused (a disc chunk, a version, a value out of range)
+  /// recognised, but refused (a disc chunk, a version, a value out of range, a blank tape template)
   case invalidImage // = 5
 
   /// insert with a tape in
@@ -49,7 +49,7 @@ public enum Beebium_CassetteErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// a seek to a negative position
   case invalidPosition // = 8
 
-  /// record on a tape Beebium only reads (a CSW)
+  /// record on a tape that cannot be recorded on (a CSW or WAV, or a file the server cannot write)
   case readOnly // = 9
 
   /// seek, wind or record on a live tape
@@ -286,7 +286,7 @@ public struct Beebium_TapeMetadata: Sendable {
   /// the tape's length; 0 when unknown
   public var durationSeconds: Double = 0
 
-  /// whether Record can record on it (a UEF can; a CSW, WAV or live tape cannot)
+  /// whether Record can record on it: a UEF whose file the server can write
   public var recordable: Bool = false
 
   /// a WAV's or live stream's rate in Hz; 0 for UEF and CSW
@@ -294,6 +294,9 @@ public struct Beebium_TapeMetadata: Sendable {
 
   /// a stereo WAV's or live stream's channel, "left" or "right"; empty for a mono source, UEF and CSW
   public var channel: String = String()
+
+  /// when !recordable, why, as a sentence (the one Record refuses with)
+  public var recordRefusal: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -786,7 +789,7 @@ extension Beebium_CreateTapeErrorKind: SwiftProtobuf._ProtoNameProviding {
 
 extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TapeMetadata"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}url\0\u{1}format\0\u{1}title\0\u{1}origin\0\u{3}target_machine\0\u{3}duration_seconds\0\u{1}recordable\0\u{3}sample_rate\0\u{1}channel\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}url\0\u{1}format\0\u{1}title\0\u{1}origin\0\u{3}target_machine\0\u{3}duration_seconds\0\u{1}recordable\0\u{3}sample_rate\0\u{1}channel\0\u{3}record_refusal\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -804,6 +807,7 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 8: try { try decoder.decodeSingularBoolField(value: &self.recordable) }()
       case 9: try { try decoder.decodeSingularUInt32Field(value: &self.sampleRate) }()
       case 10: try { try decoder.decodeSingularStringField(value: &self.channel) }()
+      case 11: try { try decoder.decodeSingularStringField(value: &self.recordRefusal) }()
       default: break
       }
     }
@@ -840,6 +844,9 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if !self.channel.isEmpty {
       try visitor.visitSingularStringField(value: self.channel, fieldNumber: 10)
     }
+    if !self.recordRefusal.isEmpty {
+      try visitor.visitSingularStringField(value: self.recordRefusal, fieldNumber: 11)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -854,6 +861,7 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.recordable != rhs.recordable {return false}
     if lhs.sampleRate != rhs.sampleRate {return false}
     if lhs.channel != rhs.channel {return false}
+    if lhs.recordRefusal != rhs.recordRefusal {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

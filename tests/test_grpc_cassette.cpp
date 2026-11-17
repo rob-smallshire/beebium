@@ -1179,3 +1179,69 @@ TEST_CASE("While a SAVE records, the status stream shows the signal map advancin
                                     [](char level) { return static_cast<uint8_t>(level) >= 128; });
     CHECK(loud >= 5);
 }
+
+// =============================================================================
+// Templates are never tapes; a tape is recordable only where it can be written
+// =============================================================================
+
+TEST_CASE("InsertTape refuses one of the server's blank tape templates", "[grpc][cassette][recording]") {
+    CassetteFixture fixture;
+    const std::filesystem::path templates_dirpath = BEEBIUM_BLANK_TAPES_DIR;
+    const std::string sentence = "The tape Blank C15 (15 minutes).uef is one of the server's blank tape templates, "
+                                 "which are copied, never inserted; make a tape from it with create-tape and "
+                                 "insert that.";
+    // By its own path, and by a roundabout one to the same file.
+    for (const auto& filepath : {templates_dirpath / "Blank C15 (15 minutes).uef",
+                                 templates_dirpath / ".." / templates_dirpath.filename() / "Blank C15 (15 minutes).uef"}) {
+        CAPTURE(filepath.string());
+        const auto refused = fixture.insert(filepath.string());
+        CHECK_FALSE(refused.success());
+        CHECK(refused.kind() == beebium::CASSETTE_ERROR_KIND_INVALID_IMAGE);
+        CHECK(refused.error() == sentence);
+        CHECK_FALSE(fixture.status().tape_inserted());
+    }
+    // A copy made from it is a tape.
+    const auto created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "copy");
+    REQUIRE(created.success());
+    const auto inserted = fixture.insert(created.path());
+    CHECK(inserted.success());
+    CHECK(inserted.tape().recordable());
+    CHECK(inserted.tape().record_refusal().empty());
+}
+
+TEST_CASE("A tape the server cannot record on says why, and Record refuses with the same sentence",
+          "[grpc][cassette][recording]") {
+    CassetteFixture fixture;
+    TapeBuilder builder;
+    builder.gap(10.0);
+
+    SECTION("a CSW") {
+        REQUIRE(fixture.insert(fixture.write("game.csw", builder.csw()).string()).success());
+        const auto tape = fixture.status().tape();
+        CHECK_FALSE(tape.recordable());
+        CHECK(tape.record_refusal() == "The tape game.csw is a CSW image, and Beebium records only on UEF tapes.");
+        const auto refused = fixture.record();
+        CHECK(refused.kind() == beebium::CASSETTE_ERROR_KIND_READ_ONLY);
+        CHECK(refused.error() == tape.record_refusal());
+    }
+    SECTION("a UEF whose file is read-only") {
+#ifdef _WIN32
+        SKIP("Permissions set through std::filesystem do not make a file read-only to its owner on Windows.");
+#else
+        const auto filepath = fixture.write("ro.uef", builder.uef());
+        std::filesystem::permissions(filepath, std::filesystem::perms::owner_read);
+        const auto inserted = fixture.insert(filepath.string());
+        REQUIRE(inserted.success());
+        CHECK_FALSE(inserted.tape().recordable());
+        CHECK(inserted.tape().record_refusal() ==
+              "Beebium cannot write the tape ro.uef or the folder it is in, so it does not record on it; "
+              "record on a copy you can write.");
+        const auto refused = fixture.record();
+        CHECK_FALSE(refused.success());
+        CHECK(refused.kind() == beebium::CASSETTE_ERROR_KIND_READ_ONLY);
+        CHECK(refused.error() == inserted.tape().record_refusal());
+        CHECK(fixture.status().transport() == beebium::TAPE_TRANSPORT_STOPPED);
+        std::filesystem::permissions(filepath, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write);
+#endif
+    }
+}

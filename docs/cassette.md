@@ -326,7 +326,18 @@ The service reads these without stopping the machine.
 A UEF can be recorded on; a CSW is only read, and `record()` on one is refused with a sentence
 naming the tape and its format. A UEF that carries an &0113 change of base frequency is read
 only too, for now: the writer describes every tape at the nominal 1200 Hz base and would lose
-the changes, so `record()` is refused with `READ_ONLY` and a sentence saying so. Recording is a transport, as on a real deck: the user presses
+the changes, so `record()` is refused with `READ_ONLY` and a sentence saying so.
+
+A UEF is recordable only where its recording can be kept: in a file the server can write, in
+a folder it can write, since a write-back is a new file renamed over the old. A UEF on a
+read-only file or in a read-only folder is refused ("Beebium cannot write the tape ro.uef or the
+folder it is in, so it does not record on it; record on a copy you can write."), and so is one
+held only in memory with no file, which only tests insert. The deck asks the file system when
+a key is pressed and when the status describes the tape, never on the clock path. Every
+refusal's sentence is also `TapeMetadata.record_refusal`, so a client can show why before the
+user presses record.
+
+Recording is a transport, as on a real deck: the user presses
 record, and from then on, while the relay is closed, the tape moves as it does in play and
 every clock that passes under the head replaces what the tape held there with what the Serial
 ULA's tone synthesiser sends, an edge or nothing. RTS high, or RS423 selected, sends nothing, so
@@ -398,7 +409,13 @@ and `CreateTape` copies one into place on the server's host as `DiscService.Crea
 disc: a destination without an extension gets `.uef`, another extension is refused, and an
 existing destination is refused unless `overwrite` is set. The CLI's `list-blank-tapes` and
 `create-tape` do the same (see [cli.md](cli.md)). Creating a tape and inserting it are separate
-steps, and the new tape is recordable because it is a UEF.
+steps, and the new tape is recordable because it is a UEF in a file the user can write.
+
+A template is never a tape: `InsertTape` refuses a file in the server's own blank tapes
+directory, compared as canonical paths, with `INVALID_IMAGE` and a sentence pointing at
+`create-tape`. Recording on a template would change every tape made from it afterwards. The
+source tree's `tapes/blank/` is not the server's business; a client keeps the user from saving
+over a template (client specification 9.0.1).
 
 ## CassetteService
 
@@ -410,7 +427,7 @@ steps, and the new tape is recordable because it is a UEF.
 | `InsertTape(url, channel)` | Opens a UEF, CSW or WAV image the server can reach, given as a `file://` URI or an absolute path and judged by content, and leaves the deck stopped at the start. `channel`, `"left"` or `"right"`, chooses a stereo WAV's; without it the louder plays. Returns the tape's metadata. The file is read off the emulation thread; the insertion is made under pause |
 | `EjectTape()` | Stops the deck and removes the tape |
 | `Play()`, `Stop()` | The deck's keys. Play at the end of the tape succeeds and leaves the deck stopped |
-| `Record()` | Press record; refused with `READ_ONLY` for a tape that cannot be recorded on (a CSW) |
+| `Record()` | Press record; refused with `READ_ONLY` for a tape that cannot be recorded on (a CSW or WAV, or a UEF whose file or folder the server cannot write), with the sentence `TapeMetadata.record_refusal` carries |
 | `Rewind()`, `FastForward()` | Wind at 30 times real speed, ungated by the relay, until stop, play, seek, eject or an end of the tape |
 | `Seek(position_seconds)` | Moves the tape at once and ends a wind; a negative position is refused, and one beyond the end lands at the end |
 | `GetDeckStatus()` | Presence, the tape and its metadata (name, URL, format, title, origin, target machine, duration to the millisecond, whether it is recordable), transport, position, relay, the ULA part, and whether the tape's signal map is ready and how many have been published |
@@ -427,11 +444,11 @@ the client gave, and a `CassetteErrorKind`:
 | `CANNOT_OPEN` | The file could not be found, is empty, or could not be opened |
 | `UNREADABLE` | The file could not be read |
 | `UNSUPPORTED_FORMAT` | It is not a UEF, CSW or WAV tape image, or is a WAV of an encoding or channel count Beebium does not play |
-| `INVALID_IMAGE` | It is a UEF or CSW whose contents break the format, or holds a disc, ROM or machine state |
+| `INVALID_IMAGE` | It is a UEF or CSW whose contents break the format, or holds a disc, ROM or machine state, or it is one of the server's blank tape templates |
 | `DECK_OCCUPIED` | A tape is already in; the sentence names both tapes |
 | `DECK_EMPTY` | Play, stop, record, rewind, fast forward, seek, eject or a signal map with no tape in |
 | `INVALID_POSITION` | A seek before the start of the tape |
-| `READ_ONLY` | Record on a tape Beebium only reads (a CSW, or a UEF with an &0113 change of base frequency) |
+| `READ_ONLY` | Record on a tape Beebium only reads (a CSW or WAV, a UEF with an &0113 change of base frequency, or a UEF whose file or folder the server cannot write) |
 
 For example: "The deck already holds game.uef; eject it before inserting other.uef."
 

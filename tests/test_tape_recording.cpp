@@ -38,6 +38,15 @@ using beebium::test::TapeBuilder;
 
 namespace {
 
+// A tape on a file of its own in `dir`, inserted as a client inserts one: the
+// deck records only on a tape it can write back.
+void insert_on_file(beebium::CassetteDeck& deck, const beebium::test::ScopedTempDir& dir,
+                    const std::vector<uint8_t>& bytes, const std::string& name) {
+    const auto filepath = dir.path() / name;
+    beebium::test::TapeBuilder::write(filepath, bytes);
+    deck.insert(beebium::open_tape_file(filepath), name, "", filepath);
+}
+
 constexpr double SHORT_HALF = ULA_CLOCK_HZ / 4800.0;
 constexpr double LONG_HALF = ULA_CLOCK_HZ / 2400.0;
 
@@ -367,8 +376,9 @@ TEST_CASE("Recording silence over a carrier tape from 20 s to 30 s leaves carrie
           "[uef][recording]") {
     TapeBuilder builder;
     builder.carrier(60 * 2400);
+    ScopedTempDir dir("beebium_tape_recording_");
     CassetteDeck deck;
-    deck.insert(UefTape::open(builder.uef(), "carrier.uef"), "carrier.uef");
+    insert_on_file(deck, dir, builder.uef(), "carrier.uef");
     const TapeTime from = seconds_to_tape_time(20.0);
     const TapeTime to = seconds_to_tape_time(30.0);
     deck.seek(from);
@@ -401,8 +411,9 @@ TEST_CASE("Recording silence over a carrier tape from 20 s to 30 s leaves carrie
 TEST_CASE("Recording reaches the end of the tape and stops there", "[uef][recording]") {
     TapeBuilder builder;
     builder.carrier(2400);
+    ScopedTempDir dir("beebium_tape_recording_");
     CassetteDeck deck;
-    deck.insert(UefTape::open(builder.uef(), "short.uef"), "short.uef");
+    insert_on_file(deck, dir, builder.uef(), "short.uef");
     const TapeTime end = *deck.duration();
     deck.seek(end - 1000);
     deck.record();
@@ -414,8 +425,9 @@ TEST_CASE("Recording reaches the end of the tape and stops there", "[uef][record
 TEST_CASE("A recording through the deck reads back as what was sent", "[uef][recording]") {
     TapeBuilder builder;
     builder.gap(30.0);
+    ScopedTempDir dir("beebium_tape_recording_");
     CassetteDeck deck;
-    deck.insert(UefTape::open(builder.uef(), "blank.uef"), "blank.uef");
+    insert_on_file(deck, dir, builder.uef(), "blank.uef");
     const TapeTime from = seconds_to_tape_time(1.0);
     deck.seek(from);
     deck.record();
@@ -441,8 +453,9 @@ TEST_CASE("Recording ends on play, a wind and a seek, and nothing is lost when t
           "[uef][recording]") {
     TapeBuilder builder;
     builder.gap(10.0);
+    ScopedTempDir dir("beebium_tape_recording_");
     CassetteDeck deck;
-    deck.insert(UefTape::open(builder.uef(), "blank.uef"), "blank.uef");
+    insert_on_file(deck, dir, builder.uef(), "blank.uef");
     deck.record();
     run(deck, 1000, false);
     CHECK(deck.position() == 0);   // the relay is open: the tape does not move
@@ -578,6 +591,58 @@ TEST_CASE("A tape that cannot be written back is left whole and the failure said
 // =============================================================================
 // 5. Tapes that cannot be recorded on
 // =============================================================================
+
+TEST_CASE("Record on a UEF held only in memory is refused with a sentence", "[uef][recording]") {
+    TapeBuilder builder;
+    builder.gap(10.0);
+    CassetteDeck deck;
+    deck.insert(UefTape::open(builder.uef(), "memory.uef"), "memory.uef");
+    CHECK_FALSE(deck.recordable());
+    const std::string sentence = "The tape memory.uef is held only in memory, with no file to keep a recording in, "
+                                 "so Beebium does not record on it.";
+    CHECK(deck.why_not_recordable() == sentence);
+    CHECK_THROWS_WITH(deck.record(), sentence);
+    CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
+}
+
+TEST_CASE("Record on a UEF whose file or folder Beebium cannot write is refused", "[uef][recording]") {
+#ifdef _WIN32
+    SKIP("Permissions set through std::filesystem do not make a file read-only to its owner on Windows.");
+#else
+    ScopedTempDir dir("beebium_tape_recording_");
+    TapeBuilder builder;
+    builder.gap(10.0);
+    const std::string sentence = "Beebium cannot write the tape ro.uef or the folder it is in, so it does not "
+                                 "record on it; record on a copy you can write.";
+    namespace fs = std::filesystem;
+
+    SECTION("a read-only file") {
+        const auto filepath = dir.path() / "ro.uef";
+        TapeBuilder::write(filepath, builder.uef());
+        fs::permissions(filepath, fs::perms::owner_read);
+        CassetteDeck deck;
+        deck.insert(open_tape_file(filepath), "ro.uef", "", filepath);
+        CHECK_FALSE(deck.recordable());
+        CHECK_THROWS_WITH(deck.record(), sentence);
+        fs::permissions(filepath, fs::perms::owner_read | fs::perms::owner_write);
+        CHECK(deck.recordable());   // asked afresh at each key press
+    }
+    SECTION("a writable file in a read-only folder, where a write-back cannot replace it") {
+        const auto subdirpath = dir.path() / "ro";
+        fs::create_directory(subdirpath);
+        const auto filepath = subdirpath / "ro.uef";
+        TapeBuilder::write(filepath, builder.uef());
+        fs::permissions(subdirpath, fs::perms::owner_read | fs::perms::owner_exec);
+        {
+            CassetteDeck deck;
+            deck.insert(open_tape_file(filepath), "ro.uef", "", filepath);
+            CHECK_FALSE(deck.recordable());
+            CHECK_THROWS_WITH(deck.record(), sentence);
+        }
+        fs::permissions(subdirpath, fs::perms::owner_all);
+    }
+#endif
+}
 
 TEST_CASE("Record on a CSW or an empty deck is refused with a sentence", "[uef][recording]") {
     CassetteDeck deck;

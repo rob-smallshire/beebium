@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -270,3 +271,32 @@ def test_signal_map_of_a_tape_and_of_a_recording(bbc, tmp_path: Path):
     end = int(status.position_seconds)
     assert sum(1 for level in signal_map.levels[:end + 1] if level >= 128) >= 5
     assert not any(signal_map.levels[end + 2:])
+
+
+def test_a_blank_tape_template_is_never_inserted(bbc, beebium_server_filepath, tmp_path: Path):
+    template = Path(beebium_server_filepath).parent / "blank-tapes" / "Blank C15 (15 minutes).uef"
+    with pytest.raises(CassetteError) as refused:
+        bbc.cassette.insert(template)
+    assert refused.value.kind == CassetteErrorKind.INVALID_IMAGE
+    assert "blank tape templates" in str(refused.value) and "create-tape" in str(refused.value)
+    assert bbc.cassette.status().tape is None
+
+    metadata = bbc.cassette.insert(bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "copy"))
+    assert metadata.recordable and metadata.record_refusal == ""
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="chmod does not make a file read-only to its owner on Windows")
+def test_a_read_only_tape_is_not_recordable_and_says_why(bbc, tmp_path: Path):
+    tape = tape_builder.write(tmp_path / "ro.uef", tape_builder.uef_of_spans([("gap", 10.0)]))
+    tape.chmod(0o444)
+    try:
+        metadata = bbc.cassette.insert(tape)
+        assert not metadata.recordable
+        assert metadata.record_refusal == ("Beebium cannot write the tape ro.uef or the folder it is in, so it does "
+                                           "not record on it; record on a copy you can write.")
+        with pytest.raises(CassetteError) as refused:
+            bbc.cassette.record()
+        assert refused.value.kind == CassetteErrorKind.READ_ONLY
+        assert str(refused.value) == metadata.record_refusal
+    finally:
+        tape.chmod(0o644)

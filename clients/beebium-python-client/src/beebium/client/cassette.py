@@ -120,9 +120,10 @@ class TapeMetadata:
     origin: str
     target_machine: str
     duration_seconds: float
-    recordable: bool  # whether record() can record on it: a UEF can, a CSW or WAV cannot
+    recordable: bool  # whether record() can record on it: a UEF whose file the server can write
     sample_rate: int = 0  # a WAV's rate in Hz; 0 for UEF and CSW
-    channel: str = ""  # the WAV channel played, "left" or "right"; empty for UEF and CSW
+    channel: str = ""  # a stereo WAV's or live stream's channel, "left" or "right"; empty for a mono source
+    record_refusal: str = ""  # when not recordable, why, as the sentence record() would raise
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,7 @@ def _tape_metadata(proto: cassette_pb2.TapeMetadata) -> TapeMetadata:
         recordable=proto.recordable,
         sample_rate=proto.sample_rate,
         channel=proto.channel,
+        record_refusal=proto.record_refusal,
     )
 
 

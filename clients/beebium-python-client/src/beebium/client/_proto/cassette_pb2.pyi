@@ -47,7 +47,7 @@ class _CassetteErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Cas
     CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT: _CassetteErrorKind.ValueType  # 4
     """not a UEF or CSW"""
     CASSETTE_ERROR_KIND_INVALID_IMAGE: _CassetteErrorKind.ValueType  # 5
-    """recognised, but refused (a disc chunk, a version, a value out of range)"""
+    """recognised, but refused (a disc chunk, a version, a value out of range, a blank tape template)"""
     CASSETTE_ERROR_KIND_DECK_OCCUPIED: _CassetteErrorKind.ValueType  # 6
     """insert with a tape in"""
     CASSETTE_ERROR_KIND_DECK_EMPTY: _CassetteErrorKind.ValueType  # 7
@@ -55,7 +55,7 @@ class _CassetteErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Cas
     CASSETTE_ERROR_KIND_INVALID_POSITION: _CassetteErrorKind.ValueType  # 8
     """a seek to a negative position"""
     CASSETTE_ERROR_KIND_READ_ONLY: _CassetteErrorKind.ValueType  # 9
-    """record on a tape Beebium only reads (a CSW)"""
+    """record on a tape that cannot be recorded on (a CSW or WAV, or a file the server cannot write)"""
     CASSETTE_ERROR_KIND_LIVE_SOURCE: _CassetteErrorKind.ValueType  # 10
     """seek, wind or record on a live tape"""
     CASSETTE_ERROR_KIND_INVALID_FORMAT: _CassetteErrorKind.ValueType  # 11
@@ -73,7 +73,7 @@ CASSETTE_ERROR_KIND_UNREADABLE: CassetteErrorKind.ValueType  # 3
 CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT: CassetteErrorKind.ValueType  # 4
 """not a UEF or CSW"""
 CASSETTE_ERROR_KIND_INVALID_IMAGE: CassetteErrorKind.ValueType  # 5
-"""recognised, but refused (a disc chunk, a version, a value out of range)"""
+"""recognised, but refused (a disc chunk, a version, a value out of range, a blank tape template)"""
 CASSETTE_ERROR_KIND_DECK_OCCUPIED: CassetteErrorKind.ValueType  # 6
 """insert with a tape in"""
 CASSETTE_ERROR_KIND_DECK_EMPTY: CassetteErrorKind.ValueType  # 7
@@ -81,7 +81,7 @@ CASSETTE_ERROR_KIND_DECK_EMPTY: CassetteErrorKind.ValueType  # 7
 CASSETTE_ERROR_KIND_INVALID_POSITION: CassetteErrorKind.ValueType  # 8
 """a seek to a negative position"""
 CASSETTE_ERROR_KIND_READ_ONLY: CassetteErrorKind.ValueType  # 9
-"""record on a tape Beebium only reads (a CSW)"""
+"""record on a tape that cannot be recorded on (a CSW or WAV, or a file the server cannot write)"""
 CASSETTE_ERROR_KIND_LIVE_SOURCE: CassetteErrorKind.ValueType  # 10
 """seek, wind or record on a live tape"""
 CASSETTE_ERROR_KIND_INVALID_FORMAT: CassetteErrorKind.ValueType  # 11
@@ -174,6 +174,7 @@ class TapeMetadata(_message.Message):
     RECORDABLE_FIELD_NUMBER: _builtins.int
     SAMPLE_RATE_FIELD_NUMBER: _builtins.int
     CHANNEL_FIELD_NUMBER: _builtins.int
+    RECORD_REFUSAL_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """the file's name"""
     url: _builtins.str
@@ -189,11 +190,13 @@ class TapeMetadata(_message.Message):
     duration_seconds: _builtins.float
     """the tape's length; 0 when unknown"""
     recordable: _builtins.bool
-    """whether Record can record on it (a UEF can; a CSW, WAV or live tape cannot)"""
+    """whether Record can record on it: a UEF whose file the server can write"""
     sample_rate: _builtins.int
     """a WAV's or live stream's rate in Hz; 0 for UEF and CSW"""
     channel: _builtins.str
     """a stereo WAV's or live stream's channel, "left" or "right"; empty for a mono source, UEF and CSW"""
+    record_refusal: _builtins.str
+    """when !recordable, why, as a sentence (the one Record refuses with)"""
     def __init__(
         self,
         *,
@@ -207,10 +210,11 @@ class TapeMetadata(_message.Message):
         recordable: _builtins.bool = ...,
         sample_rate: _builtins.int = ...,
         channel: _builtins.str = ...,
+        record_refusal: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["channel", b"channel", "duration_seconds", b"duration_seconds", "format", b"format", "name", b"name", "origin", b"origin", "recordable", b"recordable", "sample_rate", b"sample_rate", "target_machine", b"target_machine", "title", b"title", "url", b"url"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["channel", b"channel", "duration_seconds", b"duration_seconds", "format", b"format", "name", b"name", "origin", b"origin", "record_refusal", b"record_refusal", "recordable", b"recordable", "sample_rate", b"sample_rate", "target_machine", b"target_machine", "title", b"title", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

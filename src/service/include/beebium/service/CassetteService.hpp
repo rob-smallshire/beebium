@@ -111,6 +111,15 @@ public:
                 return grpc::Status::OK;
             }
 
+            // A blank tape template is copied (CreateTape), never inserted:
+            // recording on it would change the template itself.
+            if (is_blank_tape_template(filepath)) {
+                fail(response, beebium::CASSETTE_ERROR_KIND_INVALID_IMAGE,
+                     "The tape " + name + " is one of the server's blank tape templates, which are copied, "
+                     "never inserted; make a tape from it with create-tape and insert that.");
+                return grpc::Status::OK;
+            }
+
             std::optional<WavChannel> channel;
             if (request->has_channel()) {
                 if (request->channel() == "left") {
@@ -398,6 +407,18 @@ public:
     }
 
 private:
+    // Whether `filepath` is a file in the server's own blank tapes directory,
+    // compared as canonical paths.
+    bool is_blank_tape_template(const std::filesystem::path& filepath) const {
+        if (!blank_tapes_dirpath_) return false;
+        std::error_code ec;
+        const auto templates_dirpath = std::filesystem::canonical(*blank_tapes_dirpath_, ec);
+        if (ec) return false;
+        const auto canonical_filepath = std::filesystem::weakly_canonical(filepath, ec);
+        if (ec) return false;
+        return canonical_filepath.parent_path() == templates_dirpath;
+    }
+
     // A file:// URI or a path.
     static std::filesystem::path filepath_of(const std::string& url) {
         if (url.find("://") != std::string::npos) {
@@ -483,7 +504,9 @@ private:
                 if (const auto length = deck.duration()) {
                     metadata.set_duration_seconds(reported_seconds(*length));
                 }
-                metadata.set_recordable(deck.recordable());
+                const auto refusal = deck.why_not_recordable();
+                metadata.set_recordable(!refusal);
+                if (refusal) metadata.set_record_refusal(*refusal);
                 metadata.set_sample_rate(deck.metadata().sample_rate);
                 metadata.set_channel(deck.metadata().channel);
             });

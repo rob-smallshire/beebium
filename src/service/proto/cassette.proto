@@ -74,11 +74,11 @@ enum CassetteErrorKind {
     CASSETTE_ERROR_KIND_CANNOT_OPEN = 2;            // missing, or no permission
     CASSETTE_ERROR_KIND_UNREADABLE = 3;             // opened, but could not be read to the end
     CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT = 4;     // not a UEF or CSW
-    CASSETTE_ERROR_KIND_INVALID_IMAGE = 5;          // recognised, but refused (a disc chunk, a version, a value out of range)
+    CASSETTE_ERROR_KIND_INVALID_IMAGE = 5;          // recognised, but refused (a disc chunk, a version, a value out of range, a blank tape template)
     CASSETTE_ERROR_KIND_DECK_OCCUPIED = 6;          // insert with a tape in
     CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop, seek, wind, record or a signal map with no tape
     CASSETTE_ERROR_KIND_INVALID_POSITION = 8;       // a seek to a negative position
-    CASSETTE_ERROR_KIND_READ_ONLY = 9;              // record on a tape Beebium only reads (a CSW)
+    CASSETTE_ERROR_KIND_READ_ONLY = 9;              // record on a tape that cannot be recorded on (a CSW or WAV, or a file the server cannot write)
     CASSETTE_ERROR_KIND_LIVE_SOURCE = 10;           // seek, wind or record on a live tape
     CASSETTE_ERROR_KIND_INVALID_FORMAT = 11;        // a live stream's or a WAV channel's format refused
 }
@@ -99,9 +99,10 @@ message TapeMetadata {
     string origin = 5;            // the tool that made the image (UEF &0000, the CSW's application), else empty
     string target_machine = 6;    // the machine the image says it is for (UEF &0005), else empty
     double duration_seconds = 7;  // the tape's length; 0 when unknown
-    bool recordable = 8;          // whether Record can record on it (a UEF can; a CSW, WAV or live tape cannot)
+    bool recordable = 8;          // whether Record can record on it: a UEF whose file the server can write
     uint32 sample_rate = 9;       // a WAV's or live stream's rate in Hz; 0 for UEF and CSW
     string channel = 10;          // a stereo WAV's or live stream's channel, "left" or "right"; empty for a mono source, UEF and CSW
+    string record_refusal = 11;   // when !recordable, why, as a sentence (the one Record refuses with)
 }
 
 message DeckStatus {

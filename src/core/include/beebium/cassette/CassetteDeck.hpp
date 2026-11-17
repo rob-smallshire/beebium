@@ -29,6 +29,12 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace beebium {
 
 // The cassette deck: the user's transport around one tape.
@@ -230,20 +236,35 @@ public:
     // Whether the deck holds a live tape.
     bool live() const { return live_; }
 
-    // Whether the tape in the deck can be recorded on.
-    bool recordable() const { return tape_ != nullptr && tape_->recorder() != nullptr; }
+    // Whether the tape in the deck can be recorded on: a UEF whose file the
+    // deck can write back to, the file and the folder it is in both writable.
+    // (A tape held only in memory has nowhere to keep a recording.)
+    bool recordable() const { return tape_ != nullptr && !why_not_recordable(); }
 
     // Why the tape in the deck cannot be recorded on, as a sentence, or
-    // nothing when it can (or the deck is empty).
+    // nothing when it can (or the deck is empty). Asks the file system, so it
+    // is for a key press or a status, never the clock path.
     std::optional<std::string> why_not_recordable() const {
-        if (!tape_ || recordable()) return std::nullopt;
+        if (!tape_) return std::nullopt;
         if (live_) return "The live input " + name_ + " cannot be recorded on.";
-        if (tape_->kind() != TapeKind::Uef) {
-            return "The tape " + name_ + " is a " + tape_kind_text(tape_->kind()) +
-                   " image, and Beebium records only on UEF tapes.";
+        if (tape_->recorder() == nullptr) {
+            if (tape_->kind() != TapeKind::Uef) {
+                return "The tape " + name_ + " is a " + tape_kind_text(tape_->kind()) +
+                       " image, and Beebium records only on UEF tapes.";
+            }
+            return "The tape " + name_ + " changes its base frequency (UEF chunk &0113), which Beebium "
+                   "cannot yet write back, so it does not record on it.";
         }
-        return "The tape " + name_ + " changes its base frequency (UEF chunk &0113), which Beebium "
-               "cannot yet write back, so it does not record on it.";
+        if (filepath_.empty()) {
+            return "The tape " + name_ + " is held only in memory, with no file to keep a recording in, "
+                   "so Beebium does not record on it.";
+        }
+        if (!can_write(filepath_) || !can_write(filepath_.has_parent_path() ? filepath_.parent_path()
+                                                                            : std::filesystem::path("."))) {
+            return "Beebium cannot write the tape " + name_ + " or the folder it is in, so it does not "
+                   "record on it; record on a copy you can write.";
+        }
+        return std::nullopt;
     }
 
     // One ULA clock with the relay as the machine has it. Returns true if an
@@ -465,6 +486,15 @@ private:
     void map_image(std::shared_ptr<const std::vector<uint8_t>> bytes, bool keep_current = false) {
         signal_map_.map([bytes = std::move(bytes), name = name_] { return open_tape_image(*bytes, name); },
                         keep_current);
+    }
+
+    // Whether this process may write `path`, a file or a folder.
+    static bool can_write(const std::filesystem::path& path) {
+#ifdef _WIN32
+        return _waccess(path.c_str(), 2) == 0;
+#else
+        return ::access(path.c_str(), W_OK) == 0;
+#endif
     }
 
     bool write_atomically(const std::vector<uint8_t>& bytes) const {

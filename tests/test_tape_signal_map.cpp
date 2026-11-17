@@ -322,10 +322,13 @@ std::vector<WakePublish> record_wake(beebium::CassetteDeck& deck, double start, 
 }  // namespace
 
 TEST_CASE("While recording, the map follows the head a second at a time", "[cassette][signal_map][recording]") {
+    beebium::test::ScopedTempDir dir("beebium_signal_map_");
     beebium::CassetteDeck deck;
     TapeBuilder blank;
     blank.gap(60.0);
-    deck.insert(open_tape_image(blank.uef(), "blank.uef"), "blank.uef");
+    const auto filepath = dir.path() / "blank.uef";
+    TapeBuilder::write(filepath, blank.uef());
+    deck.insert(beebium::open_tape_file(filepath), "blank.uef", "", filepath);
     const auto before = wait_for_deck(deck, [](const auto& m) { return m.ready; });
     REQUIRE(before.ready);
     REQUIRE(before.levels.size() == 60);
@@ -372,10 +375,13 @@ TEST_CASE("While recording, the map follows the head a second at a time", "[cass
 }
 
 TEST_CASE("Recording silence over signal erases it in the head's wake", "[cassette][signal_map][recording]") {
+    beebium::test::ScopedTempDir dir("beebium_signal_map_");
     beebium::CassetteDeck deck;
     TapeBuilder carrier;
     carrier.carrier(24000);  // 10 s
-    deck.insert(open_tape_image(carrier.uef(), "carrier.uef"), "carrier.uef");
+    const auto filepath = dir.path() / "carrier.uef";
+    TapeBuilder::write(filepath, carrier.uef());
+    deck.insert(beebium::open_tape_file(filepath), "carrier.uef", "", filepath);
     const auto before = wait_for_deck(deck, [](const auto& m) { return m.ready; });
     REQUIRE(before.ready);
     REQUIRE(before.levels.size() == 10);

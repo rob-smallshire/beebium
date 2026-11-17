@@ -122,8 +122,10 @@ export interface TapeMetadata {
     origin: string;
     targetMachine: string;
     durationSeconds: number;
-    /** Whether {@link Cassette.record} can record on it: a UEF can, a CSW or WAV cannot. */
+    /** Whether {@link Cassette.record} can record on it: a UEF whose file the server can write. */
     recordable: boolean;
+    /** When not recordable, why, as the sentence {@link Cassette.record} would reject with. */
+    recordRefusal: string;
     /** A WAV's rate in Hz; 0 for UEF and CSW. */
     sampleRate: number;
     /** The WAV channel played, "left" or "right"; empty for UEF and CSW. */
@@ -238,6 +240,7 @@ function toTapeMetadata(proto: ProtoTapeMetadata): TapeMetadata {
         recordable: proto.recordable,
         sampleRate: proto.sampleRate,
         channel: proto.channel,
+        recordRefusal: proto.recordRefusal,
     };
 }
 
