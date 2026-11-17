@@ -1663,8 +1663,12 @@ section sits above the floppy drives, which sit above the hard discs.
   (9.0.1) or one to record over, press Record, then type `SAVE "NAME"` and press
   RETURN at the MOS's prompt. Stop ends a recording, as do Play, a seek, a wind,
   Eject and the end of the tape. Only a tape whose `TapeMetadata.recordable` is true
-  (a UEF) can be recorded on; for any other (a CSW) the client greys Record with
-  an explanation, or sends it and shows the server's read-only sentence ("The tape
+  can be recorded on: a UEF whose file the server can write. For any other (a CSW, a
+  WAV, a live input, or a UEF in a place the server cannot write, such as an
+  installed template directory) the server sets `recordable` false and
+  `TapeMetadata.record_refusal` to the sentence that says why; the client greys
+  Record and shows that sentence as its explanation, or sends `Record` and shows the
+  server's read-only sentence ("The tape
   <name> is a CSW image, and Beebium records only on UEF tapes."). The server writes
   a recorded tape back to its file itself, when the recording ends, on eject, on
   Save and at shutdown; the client has no save step for a tape.
@@ -1843,6 +1847,19 @@ name lacking the extension -> `.uef` is added and the server accepts. Save over 
 existing file -> the chooser confirms and the create replaces it. Create success ->
 the tape is inserted, stopped at 0, its duration the template's, and appears in
 recents. A server on another host -> the feature is disabled with an explanation.
+
+Templates are never tapes (MANDATORY). The server refuses `InsertTape` of a file inside
+its own blank-tapes directory with a sentence naming `create-tape`, so a template cannot
+be recorded over by way of the deck; a client's Recent Tapes therefore never holds one
+for long, and a client that can tell (a path inside the server's blank-tapes directory
+reported by `ListBlankTapes`, or the repository's own `tapes/blank/` when developing)
+does not offer it. The save panel for a new blank tape proposes the template's label as
+the file name in the user's own tapes directory, as the blank-disc panel does; it never
+proposes the template directory as the destination. Scenario: New Blank Tape -> C15 ->
+save -> the deck holds the new file, stopped at 0, `recordable` true, and the template's
+bytes are unchanged after a `SAVE`; open a template file directly -> refused with the
+server's sentence; a recording onto a created tape then `Eject` -> the new file holds the
+recording and the template is byte-identical to before.
 
 ### 9.1 Mounting disc images
 
