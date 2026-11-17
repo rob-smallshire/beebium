@@ -179,6 +179,18 @@ copies; a concurrent `DisableEconet` drops the socket's own reference, but the
 object lives until the reader's copy does. No raw pointer outlives the object it
 names.
 
+**A device's own worker.** The cassette deck's `SignalMapper` (see
+[cassette.md](cassette.md#signal-map)) is the one device-owned worker thread
+beside the emulation thread. It shares nothing with the emulated state: each job
+opens its own `TapeSignal` from what the job owns (a file path, or a shared copy
+of the encoded bytes), never the tape the emulation thread plays. The emulation
+thread, or a service thread with the emulation paused, only posts a job under the
+mapper's own mutex. It never waits for a walk. The latest job wins; a cancelled
+walk stops within one item of its tape, and the mapper, destroyed first among the
+deck's members, cancels and joins its worker, so no walk outlives the deck.
+Readers take the published map under that mutex, or its ready flag and generation
+from atomics.
+
 ## Hot-path accessors stay lock-free
 
 The emulation thread reads device members on its per-cycle path (the Econet

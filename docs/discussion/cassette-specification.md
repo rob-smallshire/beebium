@@ -464,9 +464,11 @@ cassette agent, and ends with the full gate from a separate Release worktree.
    partial-rewind take loads after a seek), the DCD-test WAVs.
 6. **Round 8: live audio.** *Done.* `StreamAudio`, the ring, the timing policy, Python
    `stream_audio` fed from a WAV (which makes the WAV corpus the live test vector too).
-7. **Round 9: signal map.** *In progress.* One level per second of tape, silent or not,
-   computed from the `TapeSignal` the deck would play (`cassette-round9-signal-map-specification.md`),
-   `GetTapeSignalMap`, and the GUI clients colouring the position bar grey and blue by it.
+7. **Round 9: signal map.** *Server done; the GUI round follows.* One level per second of tape,
+   silent or not, computed from the `TapeSignal` the deck would play on a worker the deck owns
+   (`cassette-round9-signal-map-specification.md`), `GetTapeSignalMap` and the status fields,
+   Python `signal_map()` and TypeScript `signalMap()`; the GUI clients then colour the position
+   bar grey and blue by it.
 8. **Later**: recording to CSW; the VLSI part's selection in presets; a Master Compact's
    `has_cassette = false` when that variant exists. The GUI clients' live-input round is done.
 

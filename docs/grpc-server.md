@@ -438,7 +438,8 @@ only while the deck plays or records and the machine's motor relay (Serial ULA l
 | `CreateTape` | Copy the template with `label` to `destination_path` on the server's host, byte for byte, as `DiscService`'s `CreateDisc` does for a disc, and return the new tape's absolute `path`. A destination without an extension gets `.uef`; one with another extension is refused (`WRONG_EXTENSION`), as is an existing destination unless `overwrite` is set (`DESTINATION_EXISTS`), an unknown label (`UNKNOWN_LABEL`) and a copy that cannot be written (`WRITE_FAILED`), with the same messages as `create-tape` (see [cli.md](cli.md#create-tape)). The copy is not inserted: `InsertTape` does that. |
 | `GetDeckStatus` | One `DeckStatus`. |
 | `StreamAudio` | Client stream of `AudioInputChunk`: first an `AudioInputFormat` (`sample_rate` 8000 to 192000, `sample_format` S16 or F32, `channels` 1 or 2, the `channel` to take from two, and a `device_name`), once, then `samples`, little-endian. The stream is the live tape: a valid format inserts it, stopped, format `LIVE`, named after the device; the client calls `Play`, and the relay does not gate it. Refused with `DECK_OCCUPIED` while a tape is in, and with `INVALID_FORMAT` when the first message is not a format, the format is out of range, or a second comes. When the client closes the stream, a playing deck plays out what the ring holds and then ejects the tape; a stopped one ejects at once. `EjectTape` ends the stream. Returns a `StreamAudioSummary`: `samples_received`, `samples_dropped` (overruns) and `silence_samples_inserted` (underruns), and `error` and `kind` for a refusal. A live load is for real speed: there is no resampling (see [cassette.md](cassette.md#live-input)). |
-| `SubscribeDeckStatus` | Server stream of `DeckStatus`: the current status at once, then one on every change of presence, transport, relay or tape, and, while the deck plays or records, the position no more often than `min_interval_ms` (default 100) of emulated time; while it winds, as often as the position moves thirty times that much tape. |
+| `GetTapeSignalMap` | The tape's signal map, `TapeSignalMap`: `success`, `error` and `kind` (`DECK_EMPTY` with no tape, `NO_CASSETTE_INTERFACE`), then `ready`, `seconds` (the tape's duration rounded up) and `levels`, one byte a second from 0 (silent throughout) to 255 (signal throughout): the fraction of that second within a run of edges less than 4 ms apart, carrier included. The server computes it off the emulation thread when a tape is inserted and again when a recording ends; until then, and for a live tape, `ready` is false (see [cassette.md](cassette.md#signal-map)). |
+| `SubscribeDeckStatus` | Server stream of `DeckStatus`: the current status at once, then one on every change of presence, transport, relay, tape or signal map, and, while the deck plays or records, the position no more often than `min_interval_ms` (default 100) of emulated time; while it winds, as often as the position moves thirty times that much tape. |
 
 `DeckStatus` gives `has_cassette_interface`, `tape_inserted`, the `tape`
 (`TapeMetadata`: the file's `name`, the `url` as given, `format` `"UEF"`,
@@ -448,8 +449,9 @@ it carries them, `duration_seconds`, 0 when unknown, `recordable`, whether
 and for a WAV or a live tape its `sample_rate` and, from a stereo source, the `channel` played, empty for mono), the `transport`
 (`TAPE_TRANSPORT_STOPPED`, `_PLAYING`, `_RECORDING`, `_REWINDING` or
 `_FAST_FORWARDING`), `position_seconds` in tape time,
-`motor_on` (the relay, whether or not a tape is in), for a live tape `live_ring_fill` (0 to 1), `live_overruns` and `live_underruns`, and `ula_part`
-(`"ferranti"` or `"vlsi"`). The presence field is `tape_inserted` rather than
+`motor_on` (the relay, whether or not a tape is in), for a live tape `live_ring_fill` (0 to 1), `live_overruns` and `live_underruns`, `ula_part`
+(`"ferranti"` or `"vlsi"`), and `signal_map_ready` and `signal_map_generation`, which counts the
+signal maps published so a client knows when to fetch one with `GetTapeSignalMap`. The presence field is `tape_inserted` rather than
 `has_tape` because protobuf derives `has_tape()` from the `tape` field. The
 status is read without stopping the machine, from values the deck publishes
 atomically as it runs.

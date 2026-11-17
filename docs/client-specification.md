@@ -1758,7 +1758,7 @@ status at once and then on every change of presence, transport, relay or tape, a
 the position while the deck plays, records or winds; it is never polled.
 
 Rests on: `cassette.proto CassetteService.InsertTape`, `EjectTape`, `Play`, `Record`, `Stop`,
-`Rewind`, `FastForward`, `Seek`, `GetDeckStatus`, `SubscribeDeckStatus`; CLI `describe-preset-schema` and
+`Rewind`, `FastForward`, `Seek`, `GetDeckStatus`, `SubscribeDeckStatus`, `GetTapeSignalMap`; CLI `describe-preset-schema` and
 `resolve-preset` for the configurator row.
 
 Conformance:
@@ -2610,7 +2610,7 @@ AND 1` in BBC BASIC reads 1. Attach the Delta 14B/1 adapter -> one controller,
 | keyboard.proto | KeyboardService: KeyDown, KeyUp, BreakDown, BreakUp, GetLockState, TypeQuickly, WatchTypingStatus, ClearTyping, GetAllKeyMappings | 5.5, 7.1-7.5 |
 | controller.proto | ControllerService: ListControllers, GetControls, SetControls | 14 |
 | audio.proto | AudioService: GetAudioFormat, SubscribeAudio | 8.1-8.3 |
-| cassette.proto | CassetteService: InsertTape, EjectTape, Play, Record, Stop, Rewind, FastForward, Seek, GetDeckStatus, SubscribeDeckStatus, ListBlankTapes, CreateTape | 5.3, 9.0, 9.0.1 |
+| cassette.proto | CassetteService: InsertTape, EjectTape, Play, Record, Stop, Rewind, FastForward, Seek, GetDeckStatus, SubscribeDeckStatus, GetTapeSignalMap, ListBlankTapes, CreateTape | 5.3, 9.0, 9.0.1 |
 | disc.proto | DiscService: InsertDisc, EjectDisc, CancelEject, GetDriveStatus, SubscribeDiscEvents, ListBlankDiscs, CreateDisc | 9.1-9.7 |
 | indicator.proto | IndicatorService: ListIndicators, Subscribe | 10 |
 | sideways.proto | SidewaysService: GetSlotStatus, SubscribeEvents, SetSlotProtection | 11 |

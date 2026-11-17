@@ -55,7 +55,7 @@ beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, ...)
 | KeyboardService | keyboard.proto | Key press/release, type-ahead |
 | ControllerService | controller.proto | Controllers a person holds (joystick, ...): list, get and set their named axes and buttons |
 | DiscService | disc.proto | Disc image mounting, drive status |
-| CassetteService | cassette.proto | Cassette deck: insert/eject UEF, CSW and WAV tapes, live audio input (StreamAudio), play/record/stop/seek, deck status stream, blank tape templates (ListBlankTapes/CreateTape) |
+| CassetteService | cassette.proto | Cassette deck: insert/eject UEF, CSW and WAV tapes, live audio input (StreamAudio), play/record/stop/seek, deck status stream, the tape's signal map (GetTapeSignalMap), blank tape templates (ListBlankTapes/CreateTape) |
 | IndicatorService | indicator.proto | LED status (caps lock, disc activity) |
 | SidewaysService | sideways.proto | Sideways ROM/RAM slot management |
 | SystemService | system.proto | Pause/resume/reset, machine control, SystemInfo/host fingerprint, WatchServerStatus |
@@ -245,7 +245,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 - `client-specification.md` - The normative client behavioural specification: what any Beebium client lets a user accomplish and how each capability behaves, derived from the macOS client (the first implementation, not the canon), with Core and optional conformance profiles, mandatory versus platform-latitude versus macOS-only marked, testable scenarios, and the proto-to-capability map; Linux and later clients are built against it
 - `clock-architecture.md` - Timing model and synchronisation
 - `disc-subsystem.md` - Disc controller and image formats
-- `cassette.md` - The cassette interface as built: the Serial ULA's cassette side, the UEF and CSW tape sources, WAV through the front-end model, live audio input, the deck, CassetteService, the motor LED, presets and machine directories, `--tape`, and testing
+- `cassette.md` - The cassette interface as built: the Serial ULA's cassette side, the UEF and CSW tape sources, WAV through the front-end model, live audio input, the deck, the signal map, CassetteService, the motor LED, presets and machine directories, `--tape`, and testing
 - `sound-subsystem.md` - SN76489 and audio pipeline
 - `video-subsystem.md` - Display rendering pipeline
 - `grpc-server.md` - Service API documentation
