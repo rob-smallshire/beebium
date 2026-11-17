@@ -91,6 +91,7 @@ DeckState deck_state_from(const beebium::DeckStatus& status) {
     deck.live_underruns = status.live_underruns();
     deck.signal_map_ready = status.signal_map_ready();
     deck.signal_map_generation = status.signal_map_generation();
+    deck.append_refusal = QString::fromStdString(status.append_refusal());
     return deck;
 }
 
@@ -484,6 +485,18 @@ void SessionCassette::call_key(CassetteKey key, double position_seconds) {
                 beebium::SeekRequest request;
                 request.set_position_seconds(position_seconds);
                 status = stub->Seek(&context, request, &response);
+                break;
+            }
+            case CassetteKey::append: {
+                // The server finds where the recordings end and seeks
+                // there; the counter and the marker follow the status.
+                // At the end, with no room, the deck stops: its state
+                // says so, and nothing more is shown.
+                beebium::SeekToAppendPointResponse append;
+                status = stub->SeekToAppendPoint(&context, {}, &append);
+                response.set_success(append.success());
+                response.set_kind(append.kind());
+                response.set_error(append.error());
                 break;
             }
             }

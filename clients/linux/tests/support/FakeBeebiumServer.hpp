@@ -942,6 +942,40 @@ public:
         });
     }
 
+    // After the last second with any signal; at the end, with no room, the
+    // deck stopped there.
+    grpc::Status SeekToAppendPoint(grpc::ServerContext*, const beebium::SeekToAppendPointRequest*,
+                                   beebium::SeekToAppendPointResponse* response) override {
+        {
+            std::lock_guard lock(calls_mutex);
+            calls.push_back("append");
+            if (const std::string refusal = append_refusal(); !refusal.empty()) {
+                response->set_kind(!status_.tape_inserted()             ? beebium::CASSETTE_ERROR_KIND_DECK_EMPTY
+                                   : status_.tape().format() == "LIVE" ? beebium::CASSETTE_ERROR_KIND_LIVE_SOURCE
+                                                                       : beebium::CASSETTE_ERROR_KIND_NOT_READY);
+                response->set_error(refusal);
+                return grpc::Status::OK;
+            }
+            std::size_t end = signal_levels_.size();
+            while (end > 0 && signal_levels_[end - 1] == '\0') {
+                --end;
+            }
+            const double duration = status_.tape().duration_seconds();
+            const bool full = static_cast<double>(end) >= duration;
+            status_.set_position_seconds(full ? duration : static_cast<double>(end));
+            const auto transport = status_.transport();
+            if (full || (transport != beebium::TAPE_TRANSPORT_STOPPED &&
+                         transport != beebium::TAPE_TRANSPORT_PLAYING)) {
+                status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
+            }
+            response->set_success(true);
+            response->set_position_seconds(status_.position_seconds());
+            response->set_at_end(full);
+        }
+        publish();
+        return grpc::Status::OK;
+    }
+
     grpc::Status ListBlankTapes(grpc::ServerContext*, const beebium::ListBlankTapesRequest*,
                                 beebium::ListBlankTapesResponse* response) override {
         for (int minutes : {15, 30}) {
@@ -1062,8 +1096,22 @@ private:
         const double end = status_.tape().duration_seconds();
         return end > 0.0 && status_.position_seconds() >= end;
     }
+    // What SeekToAppendPoint would refuse with now, as the server says it.
+    std::string append_refusal() const {
+        if (!status_.tape_inserted()) {
+            return "There is no tape in the cassette deck.";
+        }
+        if (status_.tape().format() == "LIVE") {
+            return "A live input has no end to append to.";
+        }
+        if (!status_.signal_map_ready()) {
+            return "The tape's signal map is not ready yet; try again in a moment.";
+        }
+        return {};
+    }
     beebium::DeckStatus current() const {
         beebium::DeckStatus status = status_;
+        status.set_append_refusal(append_refusal());
         status.set_has_cassette_interface(has_interface);
         status.set_ula_part("ferranti");
         return status;

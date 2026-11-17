@@ -56,6 +56,7 @@ QStyle::StandardPixmap cassette_error_icon(int kind) {
     case beebium::CASSETTE_ERROR_KIND_READ_ONLY:
     case beebium::CASSETTE_ERROR_KIND_INVALID_POSITION:
     case beebium::CASSETTE_ERROR_KIND_LIVE_SOURCE:
+    case beebium::CASSETTE_ERROR_KIND_NOT_READY:
         return QStyle::SP_MessageBoxInformation;
     default:
         return QStyle::SP_MessageBoxWarning;
@@ -329,11 +330,12 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     layout->addWidget(message_line_);
     message_line_->hide();
 
-    // The keys (client specification 9.0): Back to the beginning alone at
-    // the left edge and Eject alone at the right, the two that lose the
-    // user's place, with Rewind, Play, Stop, Fast forward and Record
-    // centred as one group between them. They appear with the tape: an
-    // empty deck shows only the ways to fill it.
+    // The keys (client specification 9.0), in the tape's own order from its
+    // start on the left to its end on the right, as one group from the left
+    // edge: Back to the beginning, Rewind, Stop, Play, Record, Fast forward,
+    // To the end of the recordings; Eject, which takes the tape away, alone
+    // at the right edge. They appear with the tape: an empty deck shows
+    // only the ways to fill it.
     key_row_ = new QWidget(this);
     auto* keys = new QHBoxLayout(key_row_);
     keys->setContentsMargins(0, 0, 0, 0);
@@ -351,17 +353,20 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     // Back to the beginning: a seek to 0, the instant return to the start.
     add_key(CassetteKey::seek, QStringLiteral("beginning"), tr("Back to the beginning"),
             themed("media-skip-backward", QStyle::SP_MediaSkipBackward, this));
-    keys->addStretch(1);
     add_key(CassetteKey::rewind, QStringLiteral("rewind"), tr("Rewind"),
             themed("media-seek-backward", QStyle::SP_MediaSeekBackward, this));
-    add_key(CassetteKey::play, QStringLiteral("play"), tr("Play"),
-            themed("media-playback-start", QStyle::SP_MediaPlay, this));
     add_key(CassetteKey::stop, QStringLiteral("stop"), tr("Stop"),
             themed("media-playback-stop", QStyle::SP_MediaStop, this));
-    add_key(CassetteKey::fast_forward, QStringLiteral("fastForward"), tr("Fast forward"),
-            themed("media-seek-forward", QStyle::SP_MediaSeekForward, this));
+    add_key(CassetteKey::play, QStringLiteral("play"), tr("Play"),
+            themed("media-playback-start", QStyle::SP_MediaPlay, this));
     add_key(CassetteKey::record, QStringLiteral("record"), tr("Record"),
             record_icon(palette().color(QPalette::Active, QPalette::ButtonText)));
+    add_key(CassetteKey::fast_forward, QStringLiteral("fastForward"), tr("Fast forward"),
+            themed("media-seek-forward", QStyle::SP_MediaSeekForward, this));
+    // To the end of the recordings: the server seeks to where they end,
+    // ready to record after them. Momentary, as Back to the beginning.
+    add_key(CassetteKey::append, QStringLiteral("toEnd"), tr("To the end of the recordings"),
+            themed("media-skip-forward", QStyle::SP_MediaSkipForward, this));
     // The transport keys latch, as a mechanical deck's do: the one down is
     // the deck's status display.
     for (CassetteKey latching :
@@ -614,6 +619,12 @@ void CassetteDeckRow::present() {
     key(CassetteKey::fast_forward)->setToolTip(live ? live_reason : tr("Fast forward"));
     key(CassetteKey::seek)->setEnabled(inserted && !live);
     key(CassetteKey::seek)->setToolTip(live ? live_reason : tr("Back to the beginning"));
+    // Greyed whenever the server says it would refuse (a live input, the
+    // signal map not ready yet), with its sentence as the reason.
+    key(CassetteKey::append)->setEnabled(inserted && deck.append_refusal.isEmpty());
+    key(CassetteKey::append)->setToolTip(deck.append_refusal.isEmpty()
+                                             ? tr("To the end of the recordings")
+                                             : deck.append_refusal);
     // Ejecting this client's own live input closes its stream, and the deck
     // lets the tape go once it has played what the server holds.
     const bool finishing = live && cassette_.live_finishing();

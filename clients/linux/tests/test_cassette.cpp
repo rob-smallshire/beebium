@@ -466,7 +466,7 @@ TEST_CASE("A loaded tape shows its name, what it is, its state, the counter and 
     CHECK_FALSE(d.row.browse_button()->isEnabled());
 }
 
-TEST_CASE("Back to the beginning and Eject sit apart at the edges, the transport centred between",
+TEST_CASE("The keys run in the tape's order from the left edge, Eject alone at the right",
           "[cassette][deck][layout]") {
     Deck d;
     d.load();
@@ -478,26 +478,26 @@ TEST_CASE("Back to the beginning and Eject sit apart at the edges, the transport
         return QRect(button->mapTo(&d.row, QPoint(0, 0)), button->size());
     };
     const QRect inside = d.row.layout()->contentsRect();
-    const QRect beginning = at(CassetteKey::seek);
-    const QRect eject = at(CassetteKey::eject);
-    CHECK(beginning.left() == inside.left());
-    CHECK(eject.right() == inside.right());
-    // Rewind, Play, Stop, Fast forward and Record, in that order, as one group.
-    const std::vector<CassetteKey> transport{CassetteKey::rewind, CassetteKey::play,
-                                             CassetteKey::stop, CassetteKey::fast_forward,
-                                             CassetteKey::record};
-    for (std::size_t i = 0; i + 1 < transport.size(); ++i) {
-        CHECK(at(transport[i]).right() < at(transport[i + 1]).left());
-        CHECK(at(transport[i]).top() == beginning.top());
+    // From the tape's start on the left to its end on the right, as one
+    // group, side by side.
+    const std::vector<CassetteKey> group{CassetteKey::seek,   CassetteKey::rewind,
+                                         CassetteKey::stop,   CassetteKey::play,
+                                         CassetteKey::record, CassetteKey::fast_forward,
+                                         CassetteKey::append};
+    CHECK(at(group.front()).left() == inside.left());
+    for (std::size_t i = 0; i + 1 < group.size(); ++i) {
+        CAPTURE(i);
+        CHECK(at(group[i]).right() + 1 == at(group[i + 1]).left());
+        CHECK(at(group[i + 1]).top() == at(group.front()).top());
     }
-    const int before = at(transport.front()).left() - beginning.right();
-    const int after = eject.left() - at(transport.back()).right();
-    CHECK(before > 1);
-    CHECK(std::abs(before - after) <= 1);
+    // The key that takes the tape away, apart at the right edge.
+    const QRect eject = at(CassetteKey::eject);
+    CHECK(eject.right() == inside.right());
+    CHECK(eject.left() - at(group.back()).right() > 1);
     // Browse is not among the keys: it sits above them.
     const QRect browse(d.row.browse_button()->mapTo(&d.row, QPoint(0, 0)),
                        d.row.browse_button()->size());
-    CHECK(browse.bottom() < beginning.top());
+    CHECK(browse.bottom() < at(group.front()).top());
 }
 
 TEST_CASE("The position is a marker on a plain timeline, neither side of it coloured",
@@ -650,6 +650,15 @@ TEST_CASE("The keys latch: the current transport's key is down, and only the imp
         CHECK_FALSE(d.row.key(CassetteKey::stop)->isChecked());
         CHECK_FALSE(d.row.key(CassetteKey::seek)->isChecked());
         CHECK_FALSE(d.row.key(CassetteKey::eject)->isChecked());
+        CHECK_FALSE(d.row.key(CassetteKey::append)->isChecked());
+        // To the end of the recordings: greyed while the server says it
+        // would refuse (here the map is never ready, or the tape is live),
+        // with the server's sentence as its reason.
+        QToolButton* append = d.row.key(CassetteKey::append);
+        CHECK_FALSE(append->isEnabled());
+        CHECK(append->toolTip() ==
+              (live ? QStringLiteral("A live input has no end to append to.")
+                    : QStringLiteral("The tape's signal map is not ready yet; try again in a moment.")));
         // Colour means tape moving: Play green while playing and red while
         // recording, Record red, each only with the relay closed; a wind
         // blue whatever the relay. A key not down is never coloured.
@@ -672,12 +681,62 @@ TEST_CASE("The keys latch: the current transport's key is down, and only the imp
             CHECK_FALSE(drawn_in(d.row.key(key), green));
             CHECK_FALSE(drawn_in(d.row.key(key), red));
         }
-        for (CassetteKey key : {CassetteKey::stop, CassetteKey::seek, CassetteKey::eject}) {
+        for (CassetteKey key :
+             {CassetteKey::stop, CassetteKey::seek, CassetteKey::eject, CassetteKey::append}) {
             for (const QColor& colour : {green, red, blue}) {
                 CHECK_FALSE(drawn_in(d.row.key(key), colour));
             }
         }
     }
+}
+
+TEST_CASE("To the end of the recordings seeks to where they end once the map is ready",
+          "[cassette][deck][append]") {
+    Deck d;
+    d.load();  // ten minutes
+    QToolButton* append = d.row.key(CassetteKey::append);
+    REQUIRE_FALSE(append->isEnabled());
+    // Recordings for the first 75 seconds.
+    std::string levels(600, '\0');
+    std::fill(levels.begin(), levels.begin() + 75, '\xff');
+    d.server.cassette.publish_signal_map(levels);
+    REQUIRE(wait_until([&] { return append->isEnabled(); }));
+    CHECK(append->toolTip() == QStringLiteral("To the end of the recordings"));
+    CHECK_FALSE(append->isCheckable());
+    append->click();
+    REQUIRE(wait_until([&] { return d.row.counter_text() == QStringLiteral("1:15"); }));
+    CHECK(d.pressed() == std::vector<std::string>{"append"});
+    CHECK(d.row.slider()->value() == 750);
+    CHECK(d.row.state_text() == QStringLiteral("Stopped"));
+    CHECK(d.row.message_text().isEmpty());
+}
+
+TEST_CASE("To the end of the recordings on a full tape stops at its end, the deck saying no more",
+          "[cassette][deck][append]") {
+    Deck d;
+    d.load();
+    d.server.cassette.publish_signal_map(std::string(600, '\xff'));
+    QToolButton* append = d.row.key(CassetteKey::append);
+    REQUIRE(wait_until([&] { return append->isEnabled(); }));
+    d.row.key(CassetteKey::play)->click();
+    REQUIRE(wait_until([&] { return d.row.key(CassetteKey::play)->isChecked(); }));
+    append->click();
+    REQUIRE(wait_until([&] { return d.row.counter_text() == QStringLiteral("10:00"); }));
+    REQUIRE(wait_until([&] { return d.row.state_text() == QStringLiteral("Stopped"); }));
+    CHECK(d.row.message_text().isEmpty());
+}
+
+TEST_CASE("A refused seek to the end of the recordings shows the server's sentence as a note",
+          "[cassette][deck][append]") {
+    Deck d;
+    d.load();
+    // As if the map went away between the status and the press.
+    d.cassette.press(CassetteKey::append);
+    REQUIRE(wait_until([&] { return !d.row.message_text().isEmpty(); }));
+    CHECK(d.row.message_text() ==
+          QStringLiteral("The tape's signal map is not ready yet; try again in a moment."));
+    CHECK(d.row.message().icon == QStyle::SP_MessageBoxInformation);
+    CHECK(cassette_error_icon(beebium::CASSETTE_ERROR_KIND_NOT_READY) == QStyle::SP_MessageBoxInformation);
 }
 
 TEST_CASE("The keys appear with the tape and go with it", "[cassette][deck][latch]") {

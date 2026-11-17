@@ -77,6 +77,9 @@ struct DeckState {
     // published: a new one after a recording.
     bool signal_map_ready = false;
     std::uint32_t signal_map_generation = 0;
+    // Why To the end of the recordings would be refused now, as the
+    // server says it; empty when it would be accepted.
+    QString append_refusal;
 
     // A live input is the tape: it cannot be wound, sought or recorded on.
     bool live() const { return tape_inserted && tape.format == QStringLiteral("LIVE"); }
@@ -114,8 +117,9 @@ struct SignalMap {
 // half signal (128). Nothing is lit without levels.
 std::vector<bool> signal_columns(unsigned seconds, const QByteArray& levels, int width);
 
-// The keys of the deck, and Eject.
-enum class CassetteKey { play, stop, rewind, fast_forward, record, seek, eject };
+// The keys of the deck, and Eject. `seek` is Back to the beginning (and
+// the timeline's seeks); `append`, To the end of the recordings.
+enum class CassetteKey { play, stop, rewind, fast_forward, record, seek, append, eject };
 
 // How a cassette call went. A refused InsertTape or key carries the
 // server's sentence, shown verbatim; a refused CreateTape a lower-case
