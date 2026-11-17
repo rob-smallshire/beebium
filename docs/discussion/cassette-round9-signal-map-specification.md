@@ -39,9 +39,12 @@ could also learn by watching the level meter while winding.
 
 ```
 message TapeSignalMap {
-    bool ready = 1;                // false while the map is being computed, or for a live tape
-    uint32 seconds = 2;            // the number of levels, the tape's duration rounded up
-    bytes levels = 3;              // one byte per second, 0 (silent) to 255 (signal throughout)
+    bool success = 1;              // false with no tape (DECK_EMPTY) or no cassette interface
+    string error = 2;              // a sentence when !success
+    CassetteErrorKind kind = 3;
+    bool ready = 4;                // false while the map is being computed, or for a live tape
+    uint32 seconds = 5;            // the number of levels, the tape's duration rounded up
+    bytes levels = 6;              // one byte per second, 0 (silent) to 255 (signal throughout)
 }
 rpc GetTapeSignalMap(GetTapeSignalMapRequest) returns (TapeSignalMap);
 ```
@@ -49,7 +52,11 @@ rpc GetTapeSignalMap(GetTapeSignalMapRequest) returns (TapeSignalMap);
 - A separate RPC, not a `DeckStatus` field: the status streams many times a second and the map
   is kilobytes. `DeckStatus` gains `bool signal_map_ready = N` (and a `signal_map_generation`
   `uint32` that increments each time a map is published) so a client knows when to fetch it, or
-  fetch it again after a recording. With no tape: `DECK_EMPTY`; with a live tape: `ready` false.
+  fetch it again after a recording. Errors are in-band like every other cassette response
+  (`success`, `error`, `kind`): with no tape `DECK_EMPTY`; with a live tape `success` true and
+  `ready` false. The walk runs on one worker thread the deck owns (latest job wins; an insert,
+  eject or recording cancels a walk in progress and a stale walk never publishes; the deck's
+  destructor cancels and joins it); the emulation thread only posts jobs.
 - Python `bbc.cassette.signal_map() -> SignalMap(ready, seconds, levels: bytes)`; TypeScript the
   mirror. Fingerprint changes (already a minor).
 
