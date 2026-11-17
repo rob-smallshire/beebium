@@ -33,9 +33,9 @@ the server's screen text rather than the teletext grid.
 from __future__ import annotations
 
 import hashlib
-import time
 import os
 import threading
+import time
 import tomllib
 import wave
 from dataclasses import dataclass
