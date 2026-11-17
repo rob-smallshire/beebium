@@ -17,7 +17,9 @@ marked `Decision (unverified)` and listed at the end.
 - The cassette motor LED, which the Model B and B+ have on the keyboard beside the lock LEDs,
   shows the relay state whether or not a deck is connected.
 - The tape user interface shows a position, perhaps as a slider. No block catalogue and no
-  waveform: those belong to a transcription or analysis tool, not to Beebium.
+  waveform: those belong to a transcription or analysis tool, not to Beebium. A coarse
+  silent-or-not map along the position bar is allowed (round 9): it shows where the tape is
+  quiet, not what is on it.
 - Recording (SAVE to tape) onto a tape with room for it, and a **new blank tape** facility like
   the blank-disc one (Rob, 2026-11-16): canned blank tapes of several lengths, a C15 at least,
   bundled as template images that are copied into place when the user asks, their file names
@@ -462,9 +464,11 @@ cassette agent, and ends with the full gate from a separate Release worktree.
    partial-rewind take loads after a seek), the DCD-test WAVs.
 6. **Round 8: live audio.** *Done.* `StreamAudio`, the ring, the timing policy, Python
    `stream_audio` fed from a WAV (which makes the WAV corpus the live test vector too).
-7. **Later**: recording to CSW; the GUI clients' live-input round against chapter 9.0's "Live
-   input"; the VLSI part's selection in presets; a Master Compact's `has_cassette = false`
-   when that variant exists.
+7. **Round 9: signal map.** *In progress.* One level per second of tape, silent or not,
+   computed from the `TapeSignal` the deck would play (`cassette-round9-signal-map-specification.md`),
+   `GetTapeSignalMap`, and the GUI clients colouring the position bar grey and blue by it.
+8. **Later**: recording to CSW; the VLSI part's selection in presets; a Master Compact's
+   `has_cassette = false` when that variant exists. The GUI clients' live-input round is done.
 
 ## Decisions to verify on hardware or against the corpus
 

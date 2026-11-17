@@ -1681,11 +1681,21 @@ section sits above the floppy drives, which sit above the hard discs.
   such; so is "Recording, motor off", before a `SAVE` is typed.
 - The loaded tape shows its name and format, and the image's own title, origin and
   target machine where the server reports them.
-- What is not shown or heard. The client shows no block catalogue, no waveform and
-  no decoded filenames, and plays no tape audio at any time: not while playing,
-  winding or scrubbing. The tape reaches only the Serial ULA; no client synthesises
-  or plays cassette sound. The deck is a transport, as a real one is; what is on
-  the tape is the machine's business.
+- The signal map. When the server reports the tape's signal map ready
+  (`DeckStatus.signal_map_ready`, fetched with `GetTapeSignalMap`: one level per
+  second of tape, 0 silent to 255 signal throughout), the position indicator's bar
+  is coloured by it: grey where a second's level is below 128 and the platform's
+  accent colour where it is at or above, at pixel resolution by taking the maximum
+  over the seconds a pixel spans (LATITUDE: a client may shade by level instead).
+  Until the map is ready, and for a live tape, the bar is plain. The client fetches
+  the map again when `signal_map_generation` changes (after a recording). The map
+  shows where the tape is quiet, not what is on it: a real deck's level meter would
+  tell its user as much while winding.
+- What is not shown or heard. Beyond the signal map, the client shows no block
+  catalogue, no waveform and no decoded filenames, and plays no tape audio at any
+  time: not while playing, winding or scrubbing. The tape reaches only the Serial
+  ULA; no client synthesises or plays cassette sound. The deck is a transport, as a
+  real one is; what is on the tape is the machine's business.
 - Errors. Every refused cassette request returns a sentence naming the tape, and a
   `CassetteErrorKind` (no cassette interface, cannot open, unreadable, unsupported
   format, invalid image, deck occupied, deck empty, invalid position, read only). The client
