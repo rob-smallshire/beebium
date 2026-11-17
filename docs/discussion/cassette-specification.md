@@ -460,10 +460,10 @@ cassette agent, and ends with the full gate from a separate Release worktree.
 5. **Round 7: sampled sources.** *Done.* WAV, the front end, the corpus tests (every take of Plan B2
    at all three levels loads its first file; a Cascade 50 take loads a named program; the
    partial-rewind take loads after a seek), the DCD-test WAVs.
-6. **Round 8: live audio.** `StreamAudio`, the ring, the timing policy, Python
+6. **Round 8: live audio.** *Done.* `StreamAudio`, the ring, the timing policy, Python
    `stream_audio` fed from a WAV (which makes the WAV corpus the live test vector too).
-7. **Later**: recording to CSW; GUI client rounds against the chapter (they may start after
-   round 6); the VLSI part's selection in presets; a Master Compact's `has_cassette = false`
+7. **Later**: recording to CSW; the GUI clients' live-input round against chapter 9.0's "Live
+   input"; the VLSI part's selection in presets; a Master Compact's `has_cassette = false`
    when that variant exists.
 
 ## Decisions to verify on hardware or against the corpus

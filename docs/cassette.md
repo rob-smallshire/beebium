@@ -40,6 +40,7 @@ The serial side of the same chips, RS423, is in [serial-acia.md](serial-acia.md)
 | One deck per machine: insert, eject, play, stop, rewind, fast forward, seek; the tape moving only while it plays with the relay closed, or while it winds | Motor inertia: the relay starts and stops the tape instantly. Tape audio: the tape reaches only the Serial ULA, and no client plays it |
 | The motor relay as an indicator | |
 | Recording on a UEF, written back to its file; four blank tapes | Recording on a CSW |
+| A live audio input streamed by a client, through a primed ring and the same front end | Resampling or clock recovery: a live load is for real speed |
 
 Nothing in the model knows what any MOS does with the cassette. MOS 1.20 appears only in
 tests, as a test vector.
@@ -235,6 +236,48 @@ half-cycles at each change of tone across the Serial ULA's 350-clock timeout; th
 90°, the phase a playback head's differentiation gives a recording, loads, as do square waves.
 If a WAV made by a tool rather than recorded from a deck will not load, its phase is the first
 thing to check.
+
+### Live input
+
+A client can stream an audio input on its host, a real cassette deck's line-out, to the deck
+as the live tape, through `CassetteService.StreamAudio`. The samples go through the same front
+end as a WAV's.
+
+`LiveSource` (`cassette/LiveSource.hpp`) is a `SampledSource` fed through a lock-free ring of two
+seconds at the stream's rate: the thread the stream arrives on decodes the samples (S16 or F32,
+little-endian, one channel taken from two) and pushes them; the emulation thread takes one
+sample a sample period of emulated time. The ring is the only seam between them
+(`docs/emulation-thread-ownership.md`). Neither end waits:
+
+- **Priming.** The consumer starts by taking silence, uncounted, until the ring holds a quarter of
+  a second, a cushion against the jitter of the stream's arrival. It adds a quarter of a second
+  of latency between the deck and the machine.
+- **Underrun.** When the ring runs empty the consumer takes silence and counts each sample it
+  lacked until the ring has primed again. The machine hears a dropout.
+- **Overrun.** When the ring is full the producer drops the oldest samples to make room and counts
+  them, so the newest are kept. The machine hears a discontinuity.
+
+There is no resampling and no clock recovery: a live load is for real speed. At real speed the
+host's clock and emulated time drift by parts per million and the ring absorbs it for hours;
+below real speed the ring overruns at the rate of the shortfall, above it underruns. The status
+shows which.
+
+`LiveTape` is the `TapeSignal` over the source and a `FrontEnd`, of format `LIVE`. It is paced by
+emulated time: each item it gives is one sample's edge or a gap to its time. It has no end and
+no length. The deck plays it whenever it is playing, whatever the relay: a deck without a remote
+lead keeps playing and the real ULA keeps listening, and the relay still re-arms the high-tone
+detector. Stopped, the deck takes the samples and they go nowhere, so the ring does not fill.
+Seek, rewind, fast forward and record are refused with `LIVE_SOURCE`. The position counts the
+samples taken since the stream began.
+
+The live tape goes in, stopped, when a stream's format arrives, named after the device the
+client gives. When the client closes the stream, a playing deck plays out what the ring holds and
+the tape goes when it is empty, as a tape that runs out; a stopped deck lets it go at once.
+`EjectTape` ejects it at once and ends the stream. The stream's summary gives the samples
+received, dropped and made up as silence.
+
+On this Mac a 48 kHz stereo WAV streamed live with the deck playing adds 0.35% of real time to
+the emulation thread's work: the ring, the front end, and a tape item a sample.
 
 ## The deck
 
@@ -473,11 +516,13 @@ The tests build their tapes when they run; no tape image is typed into the Beeb.
 | `tests/test_tape_signal.cpp` | Every UEF chunk the reader renders, refuses or skips; gzip; metadata; seek and duration; CSW against the same tape's UEF to within one clock, both versions, polarity, long pulses, and the refusals. WAV: every sample format, the refusals, the louder channel and a chosen one, reading from the file and seeking, and a UEF rendered as 90° sines playing as the same half-cycle classes |
 | `tests/test_front_end.cpp` | The model's constants; its phase at 1200 and 2400 Hz; 50 Hz and 8 kHz rejection; the comparator at 0.08 and 0.01, a full-scale square, noise alone and under a sine; interpolated edges 256 ± 2 clocks apart at 48 kHz; the same edges within 2 clocks at 22050, 44100, 48000 and 96000 Hz |
 | `tests/test_cassette_mos.cpp` | With MOS 1.20 as a test vector: `*TAPE` and `CHAIN""` loading and running a BASIC program from UEF, at 300 baud after `*TAPE3`, and from CSW. `Data?` and `Rewind tape` for a bad data CRC; `Block?` for a block out of sequence. The Welcome tape's short leaders. `*CAT` with the tape running only while the relay is on; searching until the deck plays. `SAVE` to a copy of the C15 blank with the deck recording, at 1200 baud and at 300, `CHAIN`ed back in the same machine and a fresh one, and the written file's chunks. `tape_ok` as a WAV: 90° sines, sines at 0.18 with noise at 0.02, and square waves load; 0° sines do not (the model's prediction) |
-| `tests/test_grpc_cassette.cpp` | `CassetteService`: status on a fresh machine; a stereo WAV's rate and its louder or chosen channel; insert, refusal of a second tape, and the error kinds; winding at 30 times real speed with the motor off; play gated by the relay; the status stream; a BASIC program loaded through MOS 1.20; `Record` on an empty deck, a CSW and a UEF, the file rewritten on `Stop`; the blank tapes listed, created, refused and recorded on |
+| `tests/test_grpc_cassette.cpp` | `CassetteService`: status on a fresh machine; a stereo WAV's rate and its louder or chosen channel; insert, refusal of a second tape, and the error kinds; winding at 30 times real speed with the motor off; play gated by the relay; the status stream; a BASIC program loaded through MOS 1.20; `Record` on an empty deck, a CSW and a UEF, the file rewritten on `Stop`; the blank tapes listed, created, refused and recorded on. `StreamAudio`: its refusals; a live tape inserted, played, refusing what it cannot do, carrying its fill and counts; a stream that ends playing out its ring when the deck plays and going at once when it is stopped; `EjectTape` ending a stream; MOS 1.20 loading tape_ok streamed in real time to a machine at real speed, with and without the relay blipping during the leader |
 | `tests/test_blank_discs.cpp` | `list-blank-tapes` and `create-tape` over the committed templates, beside the disc subcommands |
+| `tests/test_live_source.cpp` | The ring: a tone paced through it with no runs and its edges 256 clocks apart; priming a late stream, starving and priming again; an ended stream played out without priming; silence counted when a stream stops; a stream 10% fast dropping at the excess rate, the oldest; a producer and consumer on two threads; S16 and F32, mono and either stereo channel, in chunks that split frames, giving the same edges; the deck's rules for a live tape |
 | `tests/test_grpc_indicator.cpp` | The motor LED registered on every model after the lock LEDs, following latch bit 7 |
 | `tests/test_preset_subcommands.cpp` | `resolve-preset` and `describe-preset-schema` for the deck; a preset's tape inserted stopped; `--tape` winning and playing; a bare name found in `tapes/` |
 | `clients/beebium-python-client/tests/test_cassette.py` | `bbc.cassette` round trips and winding, errors with kinds and sentences, the status stream, `boot_tape` running a tokenised BASIC program, blank tapes listed and created, and record as a transport with a CSW read-only; the README's recording snippet SAVEs to a new C15 and CHAINs it back |
+| `clients/beebium-python-client/tests/test_cassette_live.py` | `stream_audio`'s summary; a live tape's refusals; the refusals of a stream; `stream_wav` of tape_ok in real time loading through MOS 1.20 |
 | `clients/beebium-python-client/tests/test_saved_machines.py` | A saved machine resuming its tape where it was saved, and a run-time tape not recorded |
 | `clients/beebium-typescript-client/tests/cassette.test.ts`, `cassette-integration.test.ts` | The TypeScript mirror, with mocked stubs and against a server |
 
@@ -500,6 +545,8 @@ channel:
   no `Data?` or `Block?`; the level-low take is a known failure (below), asserted as one;
 - Cascade 50, side 1, take 1, whose TOML warns of bad patches (`Data?` in GAL and PLA): `CHAIN
   "LUN"` loads the program that lies past them;
+- Plan B2, side 1, take 001, streamed live in real time through `stream_wav` (marked slow: it
+  takes as long as the tape);
 - Palace of Magic, side 1, the partial take with a play-stop-rewind-play in it: seeked past the
   rewind, found in the WAV as the longest stretch without tone, the loader loads from the replay
   and the game's blocks follow.
@@ -548,9 +595,12 @@ corpus:
     plausible account. The real machine's gain-50 clipper has a far smaller hysteresis relative to
     the signal than the model's. Whether the take loads on a real Beeb is not yet known, and no
     constant moves on one take.
+11. The live source's ring of two seconds and its priming level of a quarter of a second
+    (`LiveSource::RING_SECONDS` and `PRIME_SECONDS`).
 
 ## Not yet built
 
-- **Round 8:** live audio, streamed to the deck by a client from a host input device.
-- **Later:** recording to CSW, selecting the VLSI part from a preset, and the GUI clients' deck,
-  built against chapter 9.0 of the [client specification](client-specification.md).
+- Recording to CSW.
+- Selecting the VLSI part from a preset.
+- The GUI clients' live input (an input-device picker and the ring shown), built against chapter
+  9.0 of the [client specification](client-specification.md), as their deck is.

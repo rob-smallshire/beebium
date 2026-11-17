@@ -437,6 +437,7 @@ only while the deck plays or records and the machine's motor relay (Serial ULA l
 | `ListBlankTapes` | The blank tape templates the server ships, in file name order, as `BlankTape`s: `label` (the file name without its extension, which `CreateTape` takes), `filename`, `kind` (`"tape"`), `size_bytes` and `duration_seconds`. The templates are found as the blank discs are (see [deployment.md](deployment.md#blank-tape-templates)). |
 | `CreateTape` | Copy the template with `label` to `destination_path` on the server's host, byte for byte, as `DiscService`'s `CreateDisc` does for a disc, and return the new tape's absolute `path`. A destination without an extension gets `.uef`; one with another extension is refused (`WRONG_EXTENSION`), as is an existing destination unless `overwrite` is set (`DESTINATION_EXISTS`), an unknown label (`UNKNOWN_LABEL`) and a copy that cannot be written (`WRITE_FAILED`), with the same messages as `create-tape` (see [cli.md](cli.md#create-tape)). The copy is not inserted: `InsertTape` does that. |
 | `GetDeckStatus` | One `DeckStatus`. |
+| `StreamAudio` | Client stream of `AudioInputChunk`: first an `AudioInputFormat` (`sample_rate` 8000 to 192000, `sample_format` S16 or F32, `channels` 1 or 2, the `channel` to take from two, and a `device_name`), once, then `samples`, little-endian. The stream is the live tape: a valid format inserts it, stopped, format `LIVE`, named after the device; the client calls `Play`, and the relay does not gate it. Refused with `DECK_OCCUPIED` while a tape is in, and with `INVALID_FORMAT` when the first message is not a format, the format is out of range, or a second comes. When the client closes the stream, a playing deck plays out what the ring holds and then ejects the tape; a stopped one ejects at once. `EjectTape` ends the stream. Returns a `StreamAudioSummary`: `samples_received`, `samples_dropped` (overruns) and `silence_samples_inserted` (underruns), and `error` and `kind` for a refusal. A live load is for real speed: there is no resampling (see [cassette.md](cassette.md#live-input)). |
 | `SubscribeDeckStatus` | Server stream of `DeckStatus`: the current status at once, then one on every change of presence, transport, relay or tape, and, while the deck plays or records, the position no more often than `min_interval_ms` (default 100) of emulated time; while it winds, as often as the position moves thirty times that much tape. |
 
 `DeckStatus` gives `has_cassette_interface`, `tape_inserted`, the `tape`
@@ -447,7 +448,7 @@ it carries them, `duration_seconds`, 0 when unknown, `recordable`, whether
 and for a WAV its `sample_rate` and the `channel` played), the `transport`
 (`TAPE_TRANSPORT_STOPPED`, `_PLAYING`, `_RECORDING`, `_REWINDING` or
 `_FAST_FORWARDING`), `position_seconds` in tape time,
-`motor_on` (the relay, whether or not a tape is in) and `ula_part`
+`motor_on` (the relay, whether or not a tape is in), for a live tape `live_ring_fill` (0 to 1), `live_overruns` and `live_underruns`, and `ula_part`
 (`"ferranti"` or `"vlsi"`). The presence field is `tape_inserted` rather than
 `has_tape` because protobuf derives `has_tape()` from the `tape` field. The
 status is read without stopping the machine, from values the deck publishes

@@ -1682,10 +1682,21 @@ section sits above the floppy drives, which sit above the hard discs.
 - Saved machines. A saved machine records the position of its configured tape on
   Save, and reopens with that tape at that position, stopped (5.3). A tape inserted
   at run time is not recorded on Save, as a floppy inserted at run time is not.
-- Live input. A later round adds an input-device picker for loading from a live
-  source: the audio input devices the host lists, with no voice processing
-  applied. The macOS app will need the audio-input entitlement for it. Nothing in
-  this section depends on it.
+- Live input. A picker lists the audio input devices the host reports, with the
+  names the platform gives them and no filtering by kind (a line-in and a
+  microphone are not distinguishable on every platform). Choosing one opens
+  `StreamAudio` with the device's native rate, sample format and channels (the
+  channel to take, for a stereo device) and its name, and the deck shows the live
+  tape, stopped, format `LIVE`. The deck's keys behave as for any tape, with Seek,
+  Rewind, Fast forward and Record disabled (the server refuses them with
+  `LIVE_SOURCE`); Play is separate, as ever, and the counter runs while samples
+  arrive. The ring's fill and the overrun and underrun counts (`live_ring_fill`,
+  `live_overruns`, `live_underruns`) are shown, as a small meter or two numbers
+  (LATITUDE). The capture applies no voice processing (MANDATORY): no automatic
+  gain, noise suppression or echo cancellation; on macOS this means the plain input
+  format, not the voice-processing audio unit. Stopping the stream ejects the live
+  tape, once the deck has played out what the server's ring holds. The macOS app's
+  audio-input entitlement and usage string are to be supplied for it (MACOS-ONLY).
 
 States and transitions:
 
