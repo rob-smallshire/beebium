@@ -17,7 +17,9 @@ from __future__ import annotations
 import contextlib
 import subprocess
 import sys
+import threading
 import time
+import wave
 from pathlib import Path
 
 import pytest
@@ -299,3 +301,71 @@ def test_a_read_only_tape_is_not_recordable_and_says_why(bbc, tmp_path: Path):
         assert str(refused.value) == metadata.record_refusal
     finally:
         tape.chmod(0o644)
+
+
+def test_seek_to_append_point_lands_past_the_last_recording(bbc, tmp_path: Path):
+    with pytest.raises(CassetteError) as empty:
+        bbc.cassette.seek_to_append_point()
+    assert empty.value.kind == CassetteErrorKind.DECK_EMPTY
+    assert bbc.cassette.status().append_refusal == str(empty.value)
+
+    # Recorded to 8.5 s, then ten seconds blank: the point is 8 + 1 + 2 = 11 s.
+    tape = tape_builder.write(tmp_path / "appendable.uef", tape_builder.uef_of_spans(
+        [("gap", 2.0), ("carrier", 3.0), ("gap", 1.0), ("carrier", 2.5), ("gap", 10.0)]))
+    before = bbc.cassette.status().signal_map_generation
+    bbc.cassette.insert(tape)
+    _wait_for_signal_map(bbc, before)
+    assert bbc.cassette.status().append_refusal == ""
+    point = bbc.cassette.seek_to_append_point()
+    assert abs(point.position_seconds - 11.0) < 1e-6 and not point.at_end
+    assert abs(bbc.cassette.status().position_seconds - 11.0) < 1e-3
+    bbc.cassette.eject()
+
+    # A blank tape: the start.
+    before = bbc.cassette.status().signal_map_generation
+    bbc.cassette.insert(bbc.cassette.create_tape("C15", tmp_path / "blank"))
+    _wait_for_signal_map(bbc, before)
+    bbc.cassette.seek(30.0)
+    point = bbc.cassette.seek_to_append_point()
+    assert point.position_seconds == 0.0 and not point.at_end
+    bbc.cassette.eject()
+
+
+def test_seek_to_append_point_refuses_a_map_not_ready_and_a_live_tape(bbc, tmp_path: Path):
+    # Ten minutes of silence at 22050 Hz takes a while to map.
+    slow = tmp_path / "slow.wav"
+    with wave.open(str(slow), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(22050)
+        wav.writeframes(bytes(2 * 22050 * 600))
+    bbc.cassette.insert(slow)
+    if not bbc.cassette.status().signal_map_ready:
+        with pytest.raises(CassetteError) as not_ready:
+            bbc.cassette.seek_to_append_point()
+        assert not_ready.value.kind == CassetteErrorKind.NOT_READY
+        assert str(not_ready.value) == "The tape's signal map is not ready yet; try again in a moment."
+    bbc.cassette.eject()
+
+    gate = threading.Event()
+
+    def silence():
+        while not gate.is_set():
+            yield bytes(2 * 480)
+            time.sleep(0.01)
+
+    thread = threading.Thread(target=lambda: bbc.cassette.stream_audio(silence(), 48000, sample_format="s16",
+                                                                       device_name="Line in"))
+    thread.start()
+    try:
+        deadline = time.monotonic() + 10
+        while bbc.cassette.status().tape is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        with pytest.raises(CassetteError) as live:
+            bbc.cassette.seek_to_append_point()
+        assert live.value.kind == CassetteErrorKind.LIVE_SOURCE
+        assert str(live.value) == "A live input has no end to append to."
+        assert bbc.cassette.status().append_refusal == str(live.value)
+    finally:
+        gate.set()
+        thread.join(10)

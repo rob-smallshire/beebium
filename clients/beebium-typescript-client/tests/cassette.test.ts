@@ -126,6 +126,29 @@ describe("Cassette", () => {
         await expect(cassette.signalMap()).rejects.toMatchObject({ kind: CassetteErrorKind.DECK_EMPTY });
     });
 
+    it("seeks to the append point, and rejects NOT_READY with the server's sentence", async () => {
+        let ready = true;
+        const stub = createMockStub({
+            seekToAppendPoint: () =>
+                ready
+                    ? { success: true, error: "", kind: 0, positionSeconds: 13, atEnd: false }
+                    : { success: false, error: "The tape's signal map is not ready yet; try again in a moment.",
+                        kind: 12, positionSeconds: 0, atEnd: false },
+            getDeckStatus: () => ({
+                hasCassetteInterface: true, tapeInserted: false, transport: 0, positionSeconds: 0,
+                motorOn: false, ulaPart: "ferranti", appendRefusal: "There is no tape in the deck.",
+            }),
+        });
+        const cassette = new Cassette(stub as any);
+        expect(await cassette.seekToAppendPoint()).toEqual({ positionSeconds: 13, atEnd: false });
+        ready = false;
+        await expect(cassette.seekToAppendPoint()).rejects.toMatchObject({
+            message: "The tape's signal map is not ready yet; try again in a moment.",
+            kind: CassetteErrorKind.NOT_READY,
+        });
+        expect((await cassette.status()).appendRefusal).toBe("There is no tape in the deck.");
+    });
+
     it("reports an empty deck as no tape", async () => {
         const stub = createMockStub({
             getDeckStatus: () => ({

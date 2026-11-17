@@ -34,6 +34,7 @@ import type {
     InsertTapeResponse as ProtoInsertTapeResponse,
     TapeMetadata as ProtoTapeMetadata,
     TapeSignalMap as ProtoTapeSignalMap,
+    SeekToAppendPointResponse as ProtoSeekToAppendPointResponse,
 } from "./generated/cassette.js";
 import {
     CassetteErrorKind as ProtoCassetteErrorKind,
@@ -71,6 +72,7 @@ export enum CassetteErrorKind {
     READ_ONLY = "read_only",
     LIVE_SOURCE = "live_source",
     INVALID_FORMAT = "invalid_format",
+    NOT_READY = "not_ready",
 }
 
 /** How a live stream went, when it ended. */
@@ -153,6 +155,15 @@ export interface DeckStatus {
     signalMapReady: boolean;
     /** How many signal maps the server has published; fetch again when it changes. */
     signalMapGeneration: number;
+    /** Why {@link Cassette.seekToAppendPoint} would be refused now, as its sentence; empty if it would not. */
+    appendRefusal: string;
+}
+
+/** Where {@link Cassette.seekToAppendPoint} left the head. */
+export interface AppendPoint {
+    positionSeconds: number;
+    /** The point was at or past the end of the tape: no room, and the deck stopped there. */
+    atEnd: boolean;
 }
 
 /**
@@ -193,6 +204,8 @@ function toErrorKind(proto: ProtoCassetteErrorKind): CassetteErrorKind {
             return CassetteErrorKind.LIVE_SOURCE;
         case ProtoCassetteErrorKind.CASSETTE_ERROR_KIND_INVALID_FORMAT:
             return CassetteErrorKind.INVALID_FORMAT;
+        case ProtoCassetteErrorKind.CASSETTE_ERROR_KIND_NOT_READY:
+            return CassetteErrorKind.NOT_READY;
         default:
             return CassetteErrorKind.UNSPECIFIED;
     }
@@ -257,6 +270,7 @@ function toDeckStatus(proto: ProtoDeckStatus): DeckStatus {
         liveUnderruns: Number(proto.liveUnderruns),
         signalMapReady: proto.signalMapReady,
         signalMapGeneration: proto.signalMapGeneration,
+        appendRefusal: proto.appendRefusal,
     };
 }
 
@@ -319,6 +333,20 @@ export class Cassette {
     async seek(seconds: number): Promise<void> {
         check(await this.call<{ positionSeconds: number }, ProtoCassetteResponse>(
             "seek", { positionSeconds: seconds }));
+    }
+
+    /**
+     * Move the tape to just past its last recording: the end of the last second
+     * of its signal map with any signal, plus two seconds; the start of a silent
+     * tape. Like seek(), it ends a recording or a wind first and a playing deck
+     * plays on; a point at or past the end stops the deck there, with `atEnd`.
+     * Throws CassetteError (DECK_EMPTY, LIVE_SOURCE, or NOT_READY while the
+     * signal map is still being computed).
+     */
+    async seekToAppendPoint(): Promise<AppendPoint> {
+        const response = await this.call<object, ProtoSeekToAppendPointResponse>("seekToAppendPoint", {});
+        check(response);
+        return { positionSeconds: response.positionSeconds, atEnd: response.atEnd };
     }
 
     /**

@@ -71,6 +71,7 @@ class CassetteErrorKind(Enum):
     READ_ONLY = "read_only"
     LIVE_SOURCE = "live_source"
     INVALID_FORMAT = "invalid_format"
+    NOT_READY = "not_ready"
 
 
 class CreateTapeErrorKind(Enum):
@@ -106,6 +107,7 @@ _ERROR_KIND_FROM_PROTO = {
     cassette_pb2.CASSETTE_ERROR_KIND_READ_ONLY: CassetteErrorKind.READ_ONLY,
     cassette_pb2.CASSETTE_ERROR_KIND_LIVE_SOURCE: CassetteErrorKind.LIVE_SOURCE,
     cassette_pb2.CASSETTE_ERROR_KIND_INVALID_FORMAT: CassetteErrorKind.INVALID_FORMAT,
+    cassette_pb2.CASSETTE_ERROR_KIND_NOT_READY: CassetteErrorKind.NOT_READY,
 }
 
 
@@ -153,6 +155,15 @@ class DeckStatus:
     live_underruns: int = 0  # samples of silence a live tape made up because its ring was empty
     signal_map_ready: bool = False  # whether the tape's signal map is ready (see Cassette.signal_map)
     signal_map_generation: int = 0  # how many signal maps the server has published; fetch again when it changes
+    append_refusal: str = ""  # why seek_to_append_point() would be refused now, as its sentence; empty if it would not
+
+
+@dataclass(frozen=True)
+class AppendPoint:
+    """Where seek_to_append_point() left the head."""
+
+    position_seconds: float
+    at_end: bool  # the point was at or past the end of the tape: no room, and the deck stopped there
 
 
 @dataclass(frozen=True)
@@ -204,6 +215,7 @@ def _deck_status(proto: cassette_pb2.DeckStatus) -> DeckStatus:
         live_underruns=proto.live_underruns,
         signal_map_ready=proto.signal_map_ready,
         signal_map_generation=proto.signal_map_generation,
+        append_refusal=proto.append_refusal,
     )
 
 
@@ -266,6 +278,21 @@ class Cassette:
     def seek(self, seconds: float) -> None:
         """Move the tape to `seconds` from its start; beyond the end lands at the end."""
         _check(self._stub.Seek(cassette_pb2.SeekRequest(position_seconds=seconds)))
+
+    def seek_to_append_point(self) -> AppendPoint:
+        """Move the tape to just past its last recording: the end of the last
+        second of its signal map with any signal, plus two seconds, ready to
+        record another after it; the start of a silent tape. Like seek(), it
+        ends a recording or a wind first and a playing deck plays on; a point
+        at or past the end stops the deck there, with `at_end` set.
+
+        Raises:
+            CassetteError: DECK_EMPTY, LIVE_SOURCE, or NOT_READY while the
+                tape's signal map is still being computed.
+        """
+        response = self._stub.SeekToAppendPoint(cassette_pb2.SeekToAppendPointRequest())
+        _check(response)
+        return AppendPoint(position_seconds=response.position_seconds, at_end=response.at_end)
 
     def rewind(self) -> None:
         """Wind backwards at 30 times real speed, whether or not the motor
