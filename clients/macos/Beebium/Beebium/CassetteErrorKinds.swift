@@ -31,6 +31,7 @@ extension Beebium_CassetteErrorKind {
         case .readOnly: return "Read-only tape"
         case .liveSource: return "Not on a live tape"
         case .invalidFormat: return "Invalid audio format"
+        case .notReady: return "Signal map not ready"
         case .unspecified, .UNRECOGNIZED: return nil
         }
     }
