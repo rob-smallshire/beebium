@@ -55,7 +55,7 @@ beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, ...)
 | KeyboardService | keyboard.proto | Key press/release, type-ahead |
 | ControllerService | controller.proto | Controllers a person holds (joystick, ...): list, get and set their named axes and buttons |
 | DiscService | disc.proto | Disc image mounting, drive status |
-| CassetteService | cassette.proto | Cassette deck: insert/eject UEF, CSW and WAV tapes, live audio input (StreamAudio), play/record/stop/seek, deck status stream, the tape's signal map (GetTapeSignalMap), blank tape templates (ListBlankTapes/CreateTape) |
+| CassetteService | cassette.proto | Cassette deck: insert/eject UEF, CSW and WAV tapes, live audio input (StreamAudio), play/record/stop/seek, deck status stream, the tape's signal map (GetTapeSignalMap), the append point (SeekToAppendPoint), blank tape templates (ListBlankTapes/CreateTape) |
 | IndicatorService | indicator.proto | LED status (caps lock, disc activity) |
 | SidewaysService | sideways.proto | Sideways ROM/RAM slot management |
 | SystemService | system.proto | Pause/resume/reset, machine control, SystemInfo/host fingerprint, WatchServerStatus |

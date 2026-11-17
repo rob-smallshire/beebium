@@ -431,6 +431,7 @@ over a template (client specification 9.0.1).
 | `Seek(position_seconds)` | Moves the tape at once and ends a wind; a negative position is refused, and one beyond the end lands at the end |
 | `GetDeckStatus()` | Presence, the tape and its metadata (name, URL, format, title, origin, target machine, duration to the millisecond, whether it is recordable), transport, position, relay, the ULA part, and whether the tape's signal map is ready and how many have been published |
 | `GetTapeSignalMap()` | The tape's signal map, a level a second; see Signal map |
+| `SeekToAppendPoint()` | Seek to two seconds past the last recording, returning the position and whether it was at the end; see The append point |
 | `ListBlankTapes()`, `CreateTape(label, destination_path, overwrite)` | The blank tapes, and a copy of one into place; see Blank tapes |
 | `SubscribeDeckStatus(min_interval_ms)` | The status at once, then on every change of presence, transport, relay or tape, and while the deck plays or records the position, at most every `min_interval_ms` of emulated time (default 100); while it winds, every thirty times that much tape |
 
@@ -448,6 +449,9 @@ the client gave, and a `CassetteErrorKind`:
 | `DECK_EMPTY` | Play, stop, record, rewind, fast forward, seek, eject or a signal map with no tape in |
 | `INVALID_POSITION` | A seek before the start of the tape |
 | `READ_ONLY` | Record on a tape Beebium only reads (a CSW or WAV, a UEF with an &0113 change of base frequency, or a UEF whose file or folder the server cannot write) |
+| `LIVE_SOURCE` | Seek, wind, record or append on a live tape |
+| `INVALID_FORMAT` | A live stream's format, or a WAV channel, refused |
+| `NOT_READY` | `SeekToAppendPoint` before the tape's signal map is computed |
 
 For example: "The deck already holds game.uef; eject it before inserting other.uef."
 
@@ -556,6 +560,36 @@ fetch it again after a recording. The Python client has `bbc.cassette.signal_map
 `cassette.signalMap()`, with `levels` a `Uint8Array`. The GUI clients draw it on the position
 bar: client specification 9.0.
 
+## The append point
+
+A key that takes the tape to just past its last recording, so the user can add to a tape without
+scrubbing for the end of the blue: the not-quite mirror of seeking back to the beginning.
+
+- **The rule** (`signal_map_append_second`, `cassette/SignalMap.hpp`): the end of the last
+  second of the signal map whose level is not zero, plus `APPEND_MARGIN_SECONDS` = 2 (a
+  Decision). With the last loud second at index L, the point is L + 1 + 2 seconds. The last
+  edge lies somewhere in second L, so the next leader starts 2 to 3 s after it: the gap a careful
+  user leaves, so one recording's leader does not butt against the last block before it. A map
+  silent throughout gives 0, where Back to the beginning goes. Signal is what the map says:
+  hum above the comparator's threshold reads as recorded, as a deck's meter would. Long gaps
+  between programs do not fool it, since it finds the last recording, not the first gap.
+- **The seek** (`CassetteDeck::seek_to_append_point`) is the deck's own seek to that point. A
+  recording or a wind ends first, a playing deck plays on, and a point at or past the end of the
+  tape lands at the end and stops the deck, with `at_end` said: there is no room.
+- **A recording just made counts.** Ending a recording flushes the wake into the map up to the
+  head, including what was recorded since the last once-a-second publish (see Signal map, While
+  recording). So the seek uses the whole recording at once, without waiting for the walk of the
+  image written back. The flush publishes no generation; the walk that follows publishes one.
+- **Refusals**, in-band: `DECK_EMPTY` with no tape; `LIVE_SOURCE` for a live tape ("A live input
+  has no end to append to."); and `NOT_READY` before the map is computed ("The tape's signal map
+  is not ready yet; try again in a moment."). `DeckStatus.append_refusal` carries the sentence the
+  seek would refuse with now, empty when it would be accepted. The status and the RPC take it from
+  one place, so a client shows the server's reason on a greyed key and never words it itself.
+
+`CassetteService.SeekToAppendPoint` performs it and returns `position_seconds` and `at_end`. The
+Python client has `bbc.cassette.seek_to_append_point()`, returning an `AppendPoint`, and the
+TypeScript client has `cassette.seekToAppendPoint()`.
+
 ## The motor LED
 
 `CassetteMotorLed` (`cassette/CassetteMotorLed.hpp`) registers the indicator
@@ -637,8 +671,8 @@ The tests build their tapes when they run; no tape image is typed into the Beeb.
 | `tests/test_tape_signal.cpp` | Every UEF chunk the reader renders, refuses or skips; gzip; metadata; seek and duration; CSW against the same tape's UEF to within one clock, both versions, polarity, long pulses, and the refusals. WAV: every sample format, the refusals, the louder channel and a chosen one, reading from the file and seeking, and a UEF rendered as 90° sines playing as the same half-cycle classes |
 | `tests/test_front_end.cpp` | The model's constants; its phase at 1200 and 2400 Hz; 50 Hz and 8 kHz rejection; the comparator at 0.08 and 0.01, a full-scale square, noise alone and under a sine; interpolated edges 256 ± 2 clocks apart at 48 kHz; the same edges within 2 clocks at 22050, 44100, 48000 and 96000 Hz |
 | `tests/test_cassette_mos.cpp` | With MOS 1.20 as a test vector: `*TAPE` and `CHAIN""` loading and running a BASIC program from UEF, at 300 baud after `*TAPE3`, and from CSW. `Data?` and `Rewind tape` for a bad data CRC; `Block?` for a block out of sequence. The Welcome tape's short leaders. `*CAT` with the tape running only while the relay is on; searching until the deck plays. `SAVE` to a copy of the C15 blank with the deck recording, at 1200 baud and at 300, `CHAIN`ed back in the same machine and a fresh one, and the written file's chunks. `tape_ok` as a WAV: 90° sines, sines at 0.18 with noise at 0.02, and square waves load; 0° sines do not (the model's prediction) |
-| `tests/test_tape_signal_map.cpp` | The signal map: a builder UEF of gaps, carrier and blocks to its levels, including half-second boundaries; a 300 baud block as signal throughout; the same tape as a WAV within 16 a second, clean, with noise at 0.01 and with 50 Hz hum at 0.5 in its gaps, and as a CSW within 2; a superseded job never publishing; clearing or destroying the mapper stopping a ten-minute WAV walk within 100 ms; the deck mapping a CSW and a stereo WAV from their files and a UEF from its image, none for a file-less CSW or a live tape, and forgetting the map on eject; while recording, completed seconds exact in the head's wake, the second under the head its passed part, seconds ahead untouched, five to seven publishes over six seconds and one more for the walk at the end, and silence recorded over carrier erasing it in the wake |
-| `tests/test_grpc_cassette.cpp` | `CassetteService`: status on a fresh machine; a stereo WAV's rate and its louder or chosen channel; insert, refusal of a second tape, and the error kinds; winding at 30 times real speed with the motor off; play gated by the relay; the status stream; a BASIC program loaded through MOS 1.20; `Record` on an empty deck, a CSW and a UEF, the file rewritten on `Stop`; the blank tapes listed, created, refused and recorded on. `StreamAudio`: its refusals; a live tape inserted, played, refusing what it cannot do, carrying its fill and counts; a stream that ends playing out its ring when the deck plays and going at once when it is stopped; `EjectTape` ending a stream; MOS 1.20 loading tape_ok streamed in real time to a machine at real speed, with and without the relay blipping during the leader. `GetTapeSignalMap`: `DECK_EMPTY` with no tape, a UEF's levels and seconds once ready, the generation counting, a live tape never ready, and the status stream reporting the map ready; during a MOS SAVE at real speed, the generation advancing in the status stream and the map fetched within a generation unchanged. A SAVE to a tape made with `CreateTape` landing in that tape, every template unchanged |
+| `tests/test_tape_signal_map.cpp` | The signal map: a builder UEF of gaps, carrier and blocks to its levels, including half-second boundaries; a 300 baud block as signal throughout; the same tape as a WAV within 16 a second, clean, with noise at 0.01 and with 50 Hz hum at 0.5 in its gaps, and as a CSW within 2; a superseded job never publishing; clearing or destroying the mapper stopping a ten-minute WAV walk within 100 ms; the deck mapping a CSW and a stereo WAV from their files and a UEF from its image, none for a file-less CSW or a live tape, and forgetting the map on eject; while recording, completed seconds exact in the head's wake, the second under the head its passed part, seconds ahead untouched, five to seven publishes over six seconds and one more for the walk at the end, and silence recorded over carrier erasing it in the wake; the append point's rule (a tape recorded to 10.3 s gives 13 s, a blank 0, a lone loud second passed, a full tape past its end) and the deck's seek to it, playing on, stopping at the end, and counting a recording just ended, its last unpublished part included |
+| `tests/test_grpc_cassette.cpp` | `CassetteService`: status on a fresh machine; a stereo WAV's rate and its louder or chosen channel; insert, refusal of a second tape, and the error kinds; winding at 30 times real speed with the motor off; play gated by the relay; the status stream; a BASIC program loaded through MOS 1.20; `Record` on an empty deck, a CSW and a UEF, the file rewritten on `Stop`; the blank tapes listed, created, refused and recorded on. `StreamAudio`: its refusals; a live tape inserted, played, refusing what it cannot do, carrying its fill and counts; a stream that ends playing out its ring when the deck plays and going at once when it is stopped; `EjectTape` ending a stream; MOS 1.20 loading tape_ok streamed in real time to a machine at real speed, with and without the relay blipping during the leader. `GetTapeSignalMap`: `DECK_EMPTY` with no tape, a UEF's levels and seconds once ready, the generation counting, a live tape never ready, and the status stream reporting the map ready; during a MOS SAVE at real speed, the generation advancing in the status stream and the map fetched within a generation unchanged. A SAVE to a tape made with `CreateTape` landing in that tape, every template unchanged. `SeekToAppendPoint`: each refusal matched beforehand by `append_refusal`, a recorded tape landing at 13 s and playing on, a full tape at its end; and MOS 1.20 SAVEing two programs one after the other with it, both listed by `*CAT` and the second loading with `CHAIN` |
 | `tests/test_blank_discs.cpp` | `list-blank-tapes` and `create-tape` over the committed templates, beside the disc subcommands |
 | `tests/test_live_source.cpp` | The ring: a tone paced through it with no runs and its edges 256 clocks apart; priming a late stream, starving and priming again; an ended stream played out without priming; silence counted when a stream stops; a stream 10% fast dropping at the excess rate, the oldest; a producer and consumer on two threads; S16 and F32, mono and either stereo channel, in chunks that split frames, giving the same edges; the deck's rules for a live tape |
 | `tests/test_grpc_indicator.cpp` | The motor LED listed on every model between the lock LEDs and the drives, following latch bit 7 |
@@ -729,6 +763,8 @@ corpus:
     the last ends a run, so a second is silent where no tone is.
 14. Republishing a recording's wake at most once per second of tape time
     (`SIGNAL_MAP_RECORDING_PUBLISH_CLOCKS`).
+15. The append point's margin of two seconds after the last second of signal
+    (`APPEND_MARGIN_SECONDS`).
 
 Known simplification, not a Decision: a recording written back to a UEF can be a few clocks
 longer than the tape in the deck. A recorded C15 comes back 11 clocks (9 µs) over 900 s,

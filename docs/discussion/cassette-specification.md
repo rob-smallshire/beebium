@@ -469,7 +469,7 @@ cassette agent, and ends with the full gate from a separate Release worktree.
    (`cassette-round9-signal-map-specification.md`), `GetTapeSignalMap` and the status fields,
    Python `signal_map()` and TypeScript `signalMap()`; the GUI clients then colour the position
    bar grey and blue by it.
-8. **Round 10: the append point.** *In progress.* `SeekToAppendPoint` takes the tape to two
+8. **Round 10: the append point.** *Server done; the GUI round follows.* `SeekToAppendPoint` takes the tape to two
    seconds past the last second of signal in round 9's map (`cassette-round10-append-point-specification.md`);
    the GUI clients add a To the end of the recordings key beside Back to the beginning.
 9. **Later**: recording to CSW; the VLSI part's selection in presets; a Master Compact's
