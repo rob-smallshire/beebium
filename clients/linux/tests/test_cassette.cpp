@@ -28,7 +28,9 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontMetrics>
 #include <QImage>
+#include <QLabel>
 #include <QLayout>
 #include <QMenu>
 #include <QPushButton>
@@ -452,6 +454,24 @@ TEST_CASE("The position is a marker on a plain timeline, neither side of it colo
     CHECK(column(0.25) == column(0.75));
     // And the head is marked where it is.
     CHECK(column(0.5) != column(0.25));
+}
+
+TEST_CASE("A C90's counter reads 90:00, in digits of one width", "[cassette][deck][counter]") {
+    Deck d;
+    d.server.cassette.duration_seconds = 5400.0;
+    d.load();
+    CHECK(d.row.duration_text() == QStringLiteral("90:00"));
+    d.server.cassette.set_position(3599.0);
+    REQUIRE(wait_until([&] { return d.row.counter_text() == QStringLiteral("59:59"); }));
+    d.server.cassette.set_position(3600.0);
+    REQUIRE(wait_until([&] { return d.row.counter_text() == QStringLiteral("60:00"); }));
+    // Every digit as wide as every other, so the counter does not jitter.
+    auto* counter = d.row.findChild<QLabel*>(QStringLiteral("tapeCounter"));
+    REQUIRE(counter);
+    const QFontMetrics metrics(counter->font());
+    for (QChar digit : QStringLiteral("123456789")) {
+        CHECK(metrics.horizontalAdvance(digit) == metrics.horizontalAdvance(QLatin1Char('0')));
+    }
 }
 
 TEST_CASE("A tape of unknown length has the counter alone, with no slider", "[cassette][deck]") {
