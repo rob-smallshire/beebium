@@ -318,6 +318,45 @@ Conformance:
 This rule governs the persistence requirements referenced from sections 6.6
 (video settings) and 13.3 (settings and preferences).
 
+### 3.6 Where a file dialog starts
+
+Every open and save dialog in a client (Insert Disc, Insert Tape, New Blank Disc,
+New Blank Tape, Open Machine, Save Machine and Save As, the ROM and mapping-file
+choosers, extension file parameters, and any later one) starts somewhere the user
+would expect, and the client, not the platform's shared per-app memory, decides
+where. Ruled 2026-11-17 after a blank tape template was recorded over.
+
+Conformance:
+
+- MANDATORY: each dialog function remembers, as a client-only setting (3.5), the
+  directory the user last chose in it, separately per function and per direction.
+  Open and save never share a remembered location: the user opens media from
+  wherever a collection lives and saves new media where they keep their own work.
+- MANDATORY: on first use, or when the remembered directory no longer exists or,
+  for a save, is not writable, the dialog starts in the platform's Documents folder
+  (macOS `~/Documents`, Linux `XDG_DOCUMENTS_DIR`, Windows the Documents known
+  folder). Never the home directory, never the hidden application-support or
+  `.local/share` tree, and the client creates no subfolder of its own.
+- MANDATORY: a dialog never starts in, and never remembers, a directory that is one
+  of the server's template directories (`blank-discs`, `blank-tapes`) or the
+  per-user state tree the server manages (`machine-directory.md`, `deployment.md`);
+  a file the user nevertheless chooses there is honoured, and the remembered
+  location is left unchanged.
+- MANDATORY: the dialog sets its starting directory explicitly from the remembered
+  location on every presentation, rather than relying on the platform's own
+  last-directory memory, which is shared across an application's dialogs.
+- LATITUDE: proposed file names (a blank's template label, a machine's name), the
+  dialog's filters, and whether a dialog that the platform presents through a
+  portal can honour the start directory at all (where it cannot, the client still
+  records the chosen directory).
+
+Scenarios: New Blank Tape on a fresh install -> the panel opens in Documents;
+save into a folder -> the next New Blank Tape opens there, and Insert Tape still
+opens where it last did; delete that folder -> the next New Blank Tape opens in
+Documents again; choose a file inside the server's `blank-tapes` directory in an
+open panel -> the file is offered to the server (which refuses a template, 9.0.1),
+and the next open panel starts where the previous remembered location was.
+
 
 ## 4. Connection and server lifecycle
 
