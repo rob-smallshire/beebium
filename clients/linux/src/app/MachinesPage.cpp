@@ -12,6 +12,7 @@
 
 #include "app/MachinesPage.hpp"
 
+#include "app/DialogLocations.hpp"
 #include "app/FileReveal.hpp"
 #include "app/configuration/SectionWidgets.hpp"
 #include "servers/PresetLibrary.hpp"
@@ -87,15 +88,18 @@ QString failure(const QString& sentence, const QString& server) {
 
 }  // namespace
 
-MachinesPage::MachinesPage(PresetLibraryHost host, QWidget* parent)
+MachinesPage::MachinesPage(PresetLibraryHost host, QWidget* parent, ClientSettings* settings)
     : QWidget(parent), host_(std::move(host)) {
     setObjectName(QStringLiteral("machinesPage"));
     ask_name_ = [this](const QString& suggested, const QStringList& taken) {
         return ask_duplicate_name(this, suggested, taken);
     };
-    ask_filepath_ = [this](const QString& suggested) -> std::optional<QString> {
-        const QString filepath = QFileDialog::getSaveFileName(
-            this, tr("Export Preset"), suggested, tr("Beebium presets (*.beebium-preset)"));
+    ask_filepath_ = [this, settings](const QString& suggested) -> std::optional<QString> {
+        // The suggested name, where Export Preset last saved, else
+        // Documents (3.6).
+        const QString filepath =
+            save_file(this, DialogLocations(settings), QStringLiteral("export-preset"), tr("Export Preset"),
+                      QFileInfo(suggested).fileName(), tr("Beebium presets (*.beebium-preset)"));
         return filepath.isEmpty() ? std::nullopt : std::optional<QString>(filepath);
     };
     confirm_delete_ = [this](const QString& name) {

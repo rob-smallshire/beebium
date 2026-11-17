@@ -13,6 +13,7 @@
 #include "app/MainWindow.hpp"
 
 #include "app/ClientSettings.hpp"
+#include "app/DialogLocations.hpp"
 #include "app/CloseDecision.hpp"
 #include "app/ConnectionOverlay.hpp"
 #include "app/ConnectionRecovery.hpp"
@@ -837,11 +838,11 @@ void MainWindow::save_as(std::function<void(bool saved)> then) {
         }
         return;
     }
-    const QString suggested =
-        QDir(QDir::homePath()).filePath(machine_dirpath_for(session_->machine_name()));
-    const QString chosen = QFileDialog::getSaveFileName(
-        this, tr("Save Machine As"), suggested, tr("Beebium machines (*.beebium-machine)"),
-        nullptr, QFileDialog::DontConfirmOverwrite);
+    // The machine's name, where Save As last saved, else Documents (3.6).
+    const QString chosen = save_file(
+        this, DialogLocations(settings_), QStringLiteral("save-machine"), tr("Save Machine As"),
+        QFileInfo(machine_dirpath_for(session_->machine_name())).fileName(),
+        tr("Beebium machines (*.beebium-machine)"), QFileDialog::DontConfirmOverwrite);
     if (chosen.isEmpty()) {
         if (then) {
             then(false);
@@ -887,8 +888,9 @@ void MainWindow::save_as(std::function<void(bool saved)> then) {
 void MainWindow::move_to() {
     const QString name = session_->machine_name();
     const QString current_dirpath = session_->machine_dirpath();
-    const QString folder = QFileDialog::getExistingDirectory(
-        this, tr("Move %1 To").arg(name), QFileInfo(current_dirpath).path());
+    // A destination folder: where Move To last moved one, else Documents.
+    const QString folder = choose_directory(this, DialogLocations(settings_), QStringLiteral("move-machine"),
+                                            DialogDirection::save, tr("Move %1 To").arg(name));
     if (folder.isEmpty()) {
         return;
     }

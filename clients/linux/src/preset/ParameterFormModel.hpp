@@ -31,6 +31,8 @@ namespace beebium::linux_client {
 // server writes, a directory chooser for a dirpath.
 struct FormBrowse {
     enum class Chooser { open_file, save_file, directory };
+    // What the chooser is for: a parameter's key, or a section's own
+    // ("rom-image"); where its dialog starts is kept by it (3.6).
     std::string key;
     Chooser chooser = Chooser::open_file;
     std::string current;

@@ -287,6 +287,7 @@ QMenu* MemorySection::row_menu(int number) {
 void MemorySection::browse(int number) {
     const std::size_t i = static_cast<std::size_t>(number);
     FormBrowse request;
+    request.key = "rom-image";
     request.chooser = FormBrowse::Chooser::open_file;
     request.label = sideways_->sockets()[i].label;
     request.current = image_filepath(sideways_->content(i)).toStdString();

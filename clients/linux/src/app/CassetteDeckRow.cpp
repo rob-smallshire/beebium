@@ -13,6 +13,7 @@
 #include "app/CassetteDeckRow.hpp"
 
 #include "app/ClientSettings.hpp"
+#include "app/DialogLocations.hpp"
 #include "app/ElidedLabel.hpp"
 #include "app/FileReveal.hpp"
 #include "app/SessionDiscs.hpp"
@@ -781,10 +782,9 @@ void CassetteDeckRow::browse() {
     // A convenience: the server judges the format by content, so any file
     // can still be chosen.
     const QString filter = tr("Tape images (*.uef *.csw *.wav);;All files (*)");
-    const QStringList recents = settings_ ? settings_->recent_tapes() : QStringList{};
-    const QString start =
-        recents.isEmpty() ? QDir::homePath() : QFileInfo(recents.front()).absolutePath();
-    const QString path = QFileDialog::getOpenFileName(this, tr("Insert a Tape"), start, filter);
+    // Where Insert Tape last chose, else Documents (3.6).
+    const QString path = open_file(this, DialogLocations(settings_), QStringLiteral("insert-tape"),
+                                   tr("Insert a Tape"), filter);
     if (!path.isEmpty()) {
         insert(path);
     }
@@ -855,10 +855,11 @@ void CassetteDeckRow::new_blank_tape(const BlankTapeTemplate& blank) {
     // Only the template's own extension is offered, and added if the name
     // lacks it; the server refuses any other (9.0.1).
     const QString extension = blank.extension();
-    const QString suggested = QDir(QDir::homePath()).filePath(blank.label + extension);
-    QString path = QFileDialog::getSaveFileName(
-        this, tr("New Blank Tape"), suggested,
-        tr("%1 tape image (*%2)").arg(extension.mid(1).toUpper(), extension));
+    // The template's label as the name, where New Blank Tape last saved,
+    // else Documents; never among the templates (3.6).
+    QString path = save_file(this, DialogLocations(settings_), QStringLiteral("new-blank-tape"),
+                             tr("New Blank Tape"), blank.label + extension,
+                             tr("%1 tape image (*%2)").arg(extension.mid(1).toUpper(), extension));
     if (path.isEmpty()) {
         return;
     }

@@ -13,6 +13,7 @@
 #include "app/NewMachineDialog.hpp"
 
 #include "app/ClientSettings.hpp"
+#include "app/DialogLocations.hpp"
 #include "app/SidebarMode.hpp"
 #include "app/configuration/AttachmentChooser.hpp"
 #include "app/configuration/SectionWidgets.hpp"
@@ -23,6 +24,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -186,16 +188,22 @@ std::optional<QString> NewMachineDialog::choose(const FormBrowse& browse) {
     const QString filter =
         patterns.isEmpty() ? QString()
                            : tr("%1 (%2);;All files (*)").arg(title, patterns.join(QLatin1Char(' ')));
+    // Each chooser starts where it last chose, else Documents (3.6); a
+    // save proposes the current value's name.
+    const QString function =
+        QStringLiteral("configure-") +
+        (browse.key.empty() ? QStringLiteral("file") : QString::fromStdString(browse.key));
+    const DialogLocations locations(settings_);
     QString chosen;
     switch (browse.chooser) {
     case FormBrowse::Chooser::open_file:
-        chosen = QFileDialog::getOpenFileName(this, title, current, filter);
+        chosen = open_file(this, locations, function, title, filter);
         break;
     case FormBrowse::Chooser::save_file:
-        chosen = QFileDialog::getSaveFileName(this, title, current);
+        chosen = save_file(this, locations, function, title, QFileInfo(current).fileName(), filter);
         break;
     case FormBrowse::Chooser::directory:
-        chosen = QFileDialog::getExistingDirectory(this, title, current);
+        chosen = choose_directory(this, locations, function, DialogDirection::open, title);
         break;
     }
     return chosen.isEmpty() ? std::nullopt : std::optional<QString>(chosen);

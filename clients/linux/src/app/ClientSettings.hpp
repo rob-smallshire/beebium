@@ -68,6 +68,12 @@ public:
     void forget_tape(const QString& filepath);
     void clear_tapes();
 
+    // The folder each file dialog function last chose in, by "<function>/
+    // open" or "<function>/save" (client specification 3.6); see
+    // DialogLocations, which decides what is kept.
+    QString dialog_dirpath(const QString& key) const;
+    void set_dialog_dirpath(const QString& key, const QString& dirpath);
+
     // Where this host's servers are, when the search should not decide;
     // empty to search (docs/deployment.md).
     QString servers_dirpath() const;

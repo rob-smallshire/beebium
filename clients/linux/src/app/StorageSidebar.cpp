@@ -14,6 +14,7 @@
 
 #include "app/CassetteDeckRow.hpp"
 #include "app/ClientSettings.hpp"
+#include "app/DialogLocations.hpp"
 #include "app/ElidedLabel.hpp"
 #include "app/ErrorPresentation.hpp"
 #include "app/FileReveal.hpp"
@@ -384,11 +385,9 @@ void DriveRow::browse() {
     const QString filter = patterns.isEmpty()
                                ? tr("All files (*)")
                                : tr("Disc images (%1);;All files (*)").arg(patterns.join(QLatin1Char(' ')));
-    const QString recent = settings_ && !settings_->recent_discs().isEmpty()
-                               ? QFileInfo(settings_->recent_discs().front()).absolutePath()
-                               : QDir::homePath();
-    const QString path = QFileDialog::getOpenFileName(
-        this, tr("Insert a Disc in Drive %1").arg(number_), recent, filter);
+    // Where Insert Disc last chose, else Documents (3.6).
+    const QString path = open_file(this, DialogLocations(settings_), QStringLiteral("insert-disc"),
+                                   tr("Insert a Disc in Drive %1").arg(number_), filter);
     if (!path.isEmpty()) {
         clear_message();
         discs_.insert(number_, path);
@@ -435,10 +434,11 @@ void DriveRow::new_blank_disc(const BlankDiscTemplate& blank) {
     // The server knows the format from the extension: only the template's
     // own is offered, and added if the name lacks it (9.3).
     const QString extension = blank.extension();
-    const QString suggested = QDir(QDir::homePath()).filePath(blank.label + extension);
-    QString path = QFileDialog::getSaveFileName(
-        this, tr("New Blank Disc"), suggested,
-        tr("%1 disc image (*%2)").arg(extension.mid(1).toUpper(), extension));
+    // The template's label as the name, where New Blank Disc last saved,
+    // else Documents; never among the templates (3.6).
+    QString path = save_file(this, DialogLocations(settings_), QStringLiteral("new-blank-disc"),
+                             tr("New Blank Disc"), blank.label + extension,
+                             tr("%1 disc image (*%2)").arg(extension.mid(1).toUpper(), extension));
     if (path.isEmpty()) {
         return;
     }

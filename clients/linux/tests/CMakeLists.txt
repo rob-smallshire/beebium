@@ -271,6 +271,10 @@ beebium_linux_add_test(test_cassette_recording QT
 target_compile_definitions(test_cassette_recording PRIVATE
     BEEBIUM_TEST_SERVER_FILEPATH="${BEEBIUM_TEST_SERVER_FILEPATH}")
 
+beebium_linux_add_test(test_dialog_locations QT
+    SOURCES test_dialog_locations.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_typing QT
     SOURCES test_typing.cpp
     LIBRARIES beebium_linux_app)

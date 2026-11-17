@@ -13,6 +13,7 @@
 #include "app/Application.hpp"
 
 #include "app/DeepLink.hpp"
+#include "app/DialogLocations.hpp"
 #include "app/ErrorPresentation.hpp"
 #include "app/MachineSession.hpp"
 #include "app/MainWindow.hpp"
@@ -500,8 +501,10 @@ void Application::launch_preset_file(const QString& filepath, QWidget* parent) {
 }
 
 void Application::browse_for_machine(QWidget* parent) {
-    const QString dirpath = QFileDialog::getExistingDirectory(
-        parent, tr("Open Machine"), QDir::homePath(), QFileDialog::ShowDirsOnly);
+    // A machine is a folder chosen as an item: the folder holding it is
+    // where Open Machine starts next (3.6).
+    const QString dirpath = choose_directory(parent, DialogLocations(&settings_), QStringLiteral("open-machine"),
+                                             DialogDirection::open, tr("Open Machine"), true);
     if (!dirpath.isEmpty()) {
         launch_saved_machine(dirpath, parent);
     }

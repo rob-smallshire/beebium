@@ -71,6 +71,7 @@ StorageSection::StorageSection(NewMachineDialog& dialog) : dialog_(dialog) {
     });
     connect(tape_browse_, &QPushButton::clicked, this, [this] {
         FormBrowse browse;
+        browse.key = "cassette-image";
         browse.chooser = FormBrowse::Chooser::open_file;
         browse.label = cassette_label_->text().toStdString();
         browse.current = tape_field_->text().toStdString();
@@ -234,6 +235,7 @@ void StorageSection::reload() {
         });
         connect(drive.browse, &QPushButton::clicked, this, [this, number, label] {
             FormBrowse browse;
+            browse.key = "disc-image";
             browse.chooser = FormBrowse::Chooser::open_file;
             browse.label = label.toStdString();
             browse.current = drives_[static_cast<std::size_t>(number)].field->text().toStdString();
@@ -474,6 +476,7 @@ void StorageSection::show_hard_discs() {
         });
         connect(row.browse, &QPushButton::clicked, this, [this, disc] {
             FormBrowse browse;
+            browse.key = "hard-disc-image";
             browse.chooser = FormBrowse::Chooser::open_file;
             browse.label = tr("Select Hard Disc Image").toStdString();
             browse.current = disc.image;

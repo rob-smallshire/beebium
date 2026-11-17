@@ -12,7 +12,8 @@
 
 #include "app/ParameterForm.hpp"
 
-#include <QFileDialog>
+#include "app/DialogLocations.hpp"
+
 #include <QFileInfo>
 #include <QMetaObject>
 #include <QVBoxLayout>
@@ -82,16 +83,20 @@ std::optional<QString> ParameterForm::choose(const FormBrowse& browse) {
     }
     const QString title = QString::fromStdString(browse.label);
     const QString current = QString::fromStdString(browse.current);
+    // A form with no chooser of its owner's has no settings to keep where
+    // it chose: it starts in Documents (3.6).
+    const QString function = QStringLiteral("configure-") + QString::fromStdString(browse.key);
+    const DialogLocations locations(nullptr);
     QString chosen;
     switch (browse.chooser) {
     case FormBrowse::Chooser::open_file:
-        chosen = QFileDialog::getOpenFileName(this, title, current);
+        chosen = open_file(this, locations, function, title);
         break;
     case FormBrowse::Chooser::save_file:
-        chosen = QFileDialog::getSaveFileName(this, title, current);
+        chosen = save_file(this, locations, function, title, QFileInfo(current).fileName());
         break;
     case FormBrowse::Chooser::directory:
-        chosen = QFileDialog::getExistingDirectory(this, title, current);
+        chosen = choose_directory(this, locations, function, DialogDirection::open, title);
         break;
     }
     if (chosen.isEmpty()) {

@@ -172,6 +172,15 @@ void ClientSettings::forget_tape(const QString& filepath) {
     }
 }
 
+QString ClientSettings::dialog_dirpath(const QString& key) const {
+    return settings_->value(QStringLiteral("dialogs/") + key).toString();
+}
+
+void ClientSettings::set_dialog_dirpath(const QString& key, const QString& dirpath) {
+    settings_->setValue(QStringLiteral("dialogs/") + key, dirpath);
+    settings_->sync();
+}
+
 void ClientSettings::clear_tapes() {
     settings_->remove(RECENT_TAPES_KEY);
     settings_->sync();

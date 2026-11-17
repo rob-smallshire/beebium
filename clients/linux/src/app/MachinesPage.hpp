@@ -29,6 +29,8 @@ class QStackedWidget;
 
 namespace beebium::linux_client {
 
+class ClientSettings;
+
 // What the preset library needs of this host's servers, as functions so
 // tests can stand in for them. Each command reports its success, or the
 // server's own words when it failed.
@@ -51,7 +53,9 @@ class MachinesPage : public QWidget {
     Q_OBJECT
 
 public:
-    explicit MachinesPage(PresetLibraryHost host, QWidget* parent = nullptr);
+    // `settings`, where given, keeps where Export Preset last saved (3.6).
+    explicit MachinesPage(PresetLibraryHost host, QWidget* parent = nullptr,
+                          ClientSettings* settings = nullptr);
 
     // Read the library afresh.
     void reload();

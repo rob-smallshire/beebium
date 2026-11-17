@@ -13,6 +13,7 @@
 #include "app/SettingsDialog.hpp"
 
 #include "app/ClientSettings.hpp"
+#include "app/DialogLocations.hpp"
 #include "servers/ServerLocator.hpp"
 
 #include <QComboBox>
@@ -31,15 +32,18 @@ namespace beebium::linux_client {
 
 namespace {
 
-QWidget* with_browse(QLineEdit* edit, QWidget* parent, const QString& caption) {
+// A folder row, its Browse keyed on its own (3.6).
+QWidget* with_browse(QLineEdit* edit, QWidget* parent, const QString& caption,
+                     ClientSettings* settings, const QString& function) {
     auto* row = new QWidget(parent);
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(edit, 1);
     auto* browse = new QPushButton(QObject::tr("Browse..."), row);
     layout->addWidget(browse);
-    QObject::connect(browse, &QPushButton::clicked, row, [edit, row, caption] {
-        const QString dirpath = QFileDialog::getExistingDirectory(row, caption, edit->text());
+    QObject::connect(browse, &QPushButton::clicked, row, [edit, row, caption, settings, function] {
+        const QString dirpath = choose_directory(row, DialogLocations(settings), function,
+                                                 DialogDirection::open, caption);
         if (!dirpath.isEmpty()) {
             edit->setText(dirpath);
         }
@@ -61,7 +65,8 @@ SettingsDialog::SettingsDialog(ClientSettings& settings, PresetLibraryHost libra
 
     servers_ = new QLineEdit(settings_.servers_dirpath(), this);
     servers_->setPlaceholderText(tr("Search PATH, then /opt/beebium/bin"));
-    form->addRow(tr("&Servers:"), with_browse(servers_, this, tr("Where the Beebium Servers Are")));
+    form->addRow(tr("&Servers:"), with_browse(servers_, this, tr("Where the Beebium Servers Are"), &settings_,
+                                               QStringLiteral("servers-folder")));
     servers_found_ = new QLabel(this);
     servers_found_->setWordWrap(true);
     servers_found_->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -69,7 +74,8 @@ SettingsDialog::SettingsDialog(ClientSettings& settings, PresetLibraryHost libra
 
     roms_ = new QLineEdit(settings_.rom_dirpath(), this);
     roms_->setPlaceholderText(tr("The servers' own"));
-    form->addRow(tr("&ROMs:"), with_browse(roms_, this, tr("Where the ROMs Are")));
+    form->addRow(tr("&ROMs:"), with_browse(roms_, this, tr("Where the ROMs Are"), &settings_,
+                                            QStringLiteral("roms-folder")));
     paths_layout->addLayout(form);
     paths_layout->addStretch(1);
     pages->addTab(paths, tr("&Paths"));
@@ -109,7 +115,7 @@ SettingsDialog::SettingsDialog(ClientSettings& settings, PresetLibraryHost libra
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     cancel_ = buttons->button(QDialogButtonBox::Cancel);
     if (library.list_presets) {
-        machines_ = new MachinesPage(std::move(library), pages);
+        machines_ = new MachinesPage(std::move(library), pages, &settings_);
         pages->addTab(machines_, tr("&Machines"));
         connect(machines_, &MachinesPage::changed, this, [this] { cancel_->setText(tr("Close")); });
     }
