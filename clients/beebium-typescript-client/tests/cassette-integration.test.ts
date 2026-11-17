@@ -87,4 +87,24 @@ describe("cassette integration", () => {
             await bbc.cassette.eject();
         });
     });
+
+    it("streams live audio as a tape and returns the summary", async () => {
+        await withServer(async (conn, server) => {
+            const bbc = new Beebium(conn, server, server.provenanceUuid);
+            // Half a second of 2400 Hz in 10 ms float32 chunks.
+            const chunks: Uint8Array[] = [];
+            for (let c = 0; c < 50; ++c) {
+                const samples = new Float32Array(480);
+                for (let i = 0; i < 480; ++i) samples[i] = 0.5 * Math.cos(2 * Math.PI * 2400 * (c * 480 + i) / 48000);
+                chunks.push(new Uint8Array(samples.buffer));
+            }
+            const summary = await bbc.cassette.streamAudio(chunks, { sampleRate: 48000, deviceName: "Test line in" });
+            expect(summary.samplesReceived).toBe(24000);
+            expect(summary.samplesDropped).toBe(0);
+            expect((await bbc.cassette.status()).tape).toBeUndefined();
+
+            await expect(bbc.cassette.streamAudio(chunks.slice(0, 2), { sampleRate: 1000 }))
+                .rejects.toMatchObject({ kind: CassetteErrorKind.INVALID_FORMAT });
+        });
+    });
 });

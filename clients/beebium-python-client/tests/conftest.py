@@ -164,3 +164,10 @@ def commstar_prestel_bbc(
             yield bbc
     except ServerNotFoundError as e:
         pytest.skip(str(e))
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "slow: a test that runs for minutes of wall time (a tape streamed live in real time).",
+    )

@@ -110,6 +110,54 @@ def wav_of_carrier(seconds: float, *, rate: int = 48000, stereo_signal_channel: 
     return out.getvalue()
 
 
+def wav_of_mos_file(name: str, load: int, exec_: int, data: bytes, *, rate: int = 48000,
+                    amplitude: float = 0.5) -> bytes:
+    """One file as MOS 1.20 saves it (half a second of silence, the 5.1 s
+    leader, the blocks as 8N1 at 1200 baud with 0.9 s between, 5.1 s after),
+    as a 16-bit mono WAV of sines at 90 degrees: a cosine a half-cycle, the
+    phase a playback head gives a recording."""
+    import math
+    import wave
+    from io import BytesIO
+    halves: list[float] = []  # half-cycle lengths in seconds; 0 marks silence
+
+    def carrier(cycles: int) -> None:
+        halves.extend([1 / 4800] * (2 * cycles))
+
+    def byte(value: int) -> None:
+        for bit in [0] + [(value >> i) & 1 for i in range(8)] + [1]:
+            halves.extend([1 / 4800] * 4 if bit else [1 / 2400] * 2)
+
+    carrier(LEADER_CYCLES)
+    blocks = max(1, (len(data) + 255) // 256)
+    for i in range(blocks):
+        part = data[i * 256:(i + 1) * 256]
+        last = i + 1 == blocks
+        for b in mos_block(name, load, exec_, i, part, 0x80 if last else 0x00):
+            byte(b)
+        carrier(LEADER_CYCLES if last else BETWEEN_CYCLES)
+
+    frames = bytearray(struct.pack("<h", 0) * int(0.5 * rate))
+    t = 0.0
+    sign = 1
+    n = 0
+    for length in halves:
+        end = t + length
+        while n / rate < end:
+            u = (n / rate - t) / length
+            frames += struct.pack("<h", int(sign * amplitude * 32767 * math.cos(math.pi * u)))
+            n += 1
+        t = end
+        sign = -sign
+    out = BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(bytes(frames))
+    return out.getvalue()
+
+
 def write(filepath: Path, data: bytes) -> Path:
     filepath.write_bytes(data)
     return filepath

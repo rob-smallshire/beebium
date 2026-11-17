@@ -157,7 +157,9 @@ launch, with `Beebium.launch(extra_args=["--joystick"])`:
 The cassette deck takes UEF and CSW tape images, and WAV recordings, which it
 plays through a model of the machine's cassette input (pass
 `insert(path, channel="left")` to choose a stereo WAV's channel; by default the
-louder is played). Inserting leaves the deck stopped; play is separate, as on a real deck, and the tape moves only while the
+louder is played). A live input plays too: `bbc.cassette.stream_audio(chunks,
+rate)` streams samples as the live tape, and `stream_wav(path)` paces a WAV to
+real time as a deck's line-out would arrive. Inserting leaves the deck stopped; play is separate, as on a real deck, and the tape moves only while the
 emulated machine's motor relay is closed. `bbc.cassette.events()` streams the
 deck's status, and an unsuccessful request raises `CassetteError` with the
 server's sentence and a `kind`.

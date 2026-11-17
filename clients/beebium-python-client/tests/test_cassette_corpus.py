@@ -33,7 +33,9 @@ the server's screen text rather than the teletext grid.
 from __future__ import annotations
 
 import hashlib
+import time
 import os
+import threading
 import tomllib
 import wave
 from dataclasses import dataclass
@@ -250,3 +252,27 @@ def test_palace_of_magic_loads_after_seeking_past_its_rewind(corpus_bbc):
     screen = _run_until(corpus_bbc, "POM        02", 40)
     assert "PALACE OF MAGIC" in screen and "POM        02" in screen, screen
     assert "Rewind tape" not in screen and "Data?" not in screen
+
+
+@pytest.mark.slow
+def test_plan_b2_take_loads_streamed_live(corpus_bbc):
+    """The normal take as a live stream: the WAV read in blocks and paced to
+    wall-clock time, as a deck's line-out arrives, through StreamAudio. It
+    takes as long as the tape: about five and a half minutes."""
+    wav_filepath, channel = _wav_take("plan-b2-side1-001")
+    corpus_bbc.keyboard.type('*TAPE\rCHAIN""\r')
+    result = {}
+    thread = threading.Thread(
+        target=lambda: result.update(summary=corpus_bbc.cassette.stream_wav(wav_filepath, channel=channel)))
+    thread.start()
+    try:
+        deadline = time.monotonic() + 10
+        while corpus_bbc.cassette.status().tape is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        corpus_bbc.cassette.play()
+        corpus_bbc.expect("Press space to start", timeout=420, sample_interval_seconds=5.0)
+        status = corpus_bbc.cassette.status()
+        assert status.live_overruns == 0
+    finally:
+        corpus_bbc.cassette.eject()
+        thread.join(30)

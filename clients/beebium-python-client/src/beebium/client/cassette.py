@@ -21,7 +21,10 @@ motor relay is closed, which the filing system does when it wants the tape
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import time
+import wave
+from array import array
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -66,6 +69,8 @@ class CassetteErrorKind(Enum):
     DECK_EMPTY = "deck_empty"
     INVALID_POSITION = "invalid_position"
     READ_ONLY = "read_only"
+    LIVE_SOURCE = "live_source"
+    INVALID_FORMAT = "invalid_format"
 
 
 class CreateTapeErrorKind(Enum):
@@ -99,6 +104,8 @@ _ERROR_KIND_FROM_PROTO = {
     cassette_pb2.CASSETTE_ERROR_KIND_DECK_EMPTY: CassetteErrorKind.DECK_EMPTY,
     cassette_pb2.CASSETTE_ERROR_KIND_INVALID_POSITION: CassetteErrorKind.INVALID_POSITION,
     cassette_pb2.CASSETTE_ERROR_KIND_READ_ONLY: CassetteErrorKind.READ_ONLY,
+    cassette_pb2.CASSETTE_ERROR_KIND_LIVE_SOURCE: CassetteErrorKind.LIVE_SOURCE,
+    cassette_pb2.CASSETTE_ERROR_KIND_INVALID_FORMAT: CassetteErrorKind.INVALID_FORMAT,
 }
 
 
@@ -140,6 +147,18 @@ class DeckStatus:
     position_seconds: float
     motor_on: bool  # the machine's relay, whether or not a tape is in
     ula_part: str  # "ferranti" or "vlsi"
+    live_ring_fill: float = 0.0  # a live tape's ring, 0 to 1
+    live_overruns: int = 0  # samples a live tape dropped because its ring was full
+    live_underruns: int = 0  # samples of silence a live tape made up because its ring was empty
+
+
+@dataclass(frozen=True)
+class StreamAudioSummary:
+    """How a live stream went, when it ended."""
+
+    samples_received: int
+    samples_dropped: int  # overruns: the ring was full
+    silence_samples_inserted: int  # underruns: the ring was empty
 
 
 def _tape_metadata(proto: cassette_pb2.TapeMetadata) -> TapeMetadata:
@@ -165,6 +184,9 @@ def _deck_status(proto: cassette_pb2.DeckStatus) -> DeckStatus:
         position_seconds=proto.position_seconds,
         motor_on=proto.motor_on,
         ula_part=proto.ula_part,
+        live_ring_fill=proto.live_ring_fill,
+        live_overruns=proto.live_overruns,
+        live_underruns=proto.live_underruns,
     )
 
 
@@ -285,6 +307,80 @@ class Cassette:
                 response.error,
                 kind=_CREATE_TAPE_ERROR_KIND_FROM_PROTO.get(response.kind, CreateTapeErrorKind.UNSPECIFIED))
         return Path(response.path)
+
+    def stream_audio(self, samples: Iterable[bytes | array], sample_rate: int, *,
+                     sample_format: str = "f32", channels: int = 1, channel: str | None = None,
+                     device_name: str | None = None) -> StreamAudioSummary:
+        """Play `samples` as the live tape, as a client capturing a deck's
+        line-out would: little-endian chunks of "s16" or "f32" samples at
+        `sample_rate`, mono or stereo (`channel` "left" or "right" for stereo).
+        The deck gets the live tape, stopped, once the stream begins; call
+        :meth:`play` (from another thread) to hear it. The relay does not gate
+        it. Returns when the samples run out (the live tape is then ejected) or
+        the tape is ejected.
+
+        The server plays the stream in emulated time at its own rate and does
+        not resample, so the samples should arrive at real time; see
+        :meth:`stream_wav`.
+
+        Raises:
+            CassetteError: With kind DECK_OCCUPIED or INVALID_FORMAT if the
+                stream is refused.
+        """
+        formats = {"s16": cassette_pb2.AUDIO_SAMPLE_FORMAT_S16, "f32": cassette_pb2.AUDIO_SAMPLE_FORMAT_F32}
+        if sample_format not in formats:
+            raise ValueError(f'sample_format is "s16" or "f32", not {sample_format!r}')
+        audio_format = cassette_pb2.AudioInputFormat(
+            sample_rate=sample_rate, sample_format=formats[sample_format], channels=channels,
+            channel=channel or "", device_name=device_name or "")
+
+        def chunks():
+            yield cassette_pb2.AudioInputChunk(format=audio_format)
+            for chunk in samples:
+                data = chunk.tobytes() if isinstance(chunk, array) else bytes(chunk)
+                yield cassette_pb2.AudioInputChunk(samples=data)
+
+        summary = self._stub.StreamAudio(chunks())
+        if summary.error:
+            raise CassetteError(summary.error,
+                                kind=_ERROR_KIND_FROM_PROTO.get(summary.kind, CassetteErrorKind.UNSPECIFIED))
+        return StreamAudioSummary(samples_received=summary.samples_received,
+                                  samples_dropped=summary.samples_dropped,
+                                  silence_samples_inserted=summary.silence_samples_inserted)
+
+    def stream_wav(self, wav_filepath: str | Path, *, realtime: bool = True, channel: str | None = None,
+                   block_seconds: float = 0.01) -> StreamAudioSummary:
+        """Play a 16-bit PCM WAV as the live tape, read in blocks and, with
+        `realtime`, paced to wall-clock time, as a deck's line-out arrives.
+        Blocking: start it on a thread and call :meth:`play` once the deck
+        shows the live tape."""
+        wav = wave.open(str(wav_filepath), "rb")
+        if wav.getsampwidth() != 2:
+            wav.close()
+            raise ValueError("stream_wav plays 16-bit PCM WAVs")
+        rate, wav_channels = wav.getframerate(), wav.getnchannels()
+        frames = max(1, int(rate * block_seconds))
+
+        def blocks():
+            start = time.monotonic()
+            sent = 0
+            try:
+                while True:
+                    data = wav.readframes(frames)
+                    if not data:
+                        return
+                    yield data
+                    sent += len(data) // (2 * wav_channels)
+                    if realtime:
+                        delay = start + sent / rate - time.monotonic()
+                        if delay > 0:
+                            time.sleep(delay)
+            finally:
+                wav.close()
+
+        return self.stream_audio(blocks(), rate, sample_format="s16", channels=wav_channels,
+                                 channel=channel if wav_channels == 2 else None,
+                                 device_name=Path(wav_filepath).name)
 
     def status(self) -> DeckStatus:
         """The deck's state, read without stopping the machine."""
