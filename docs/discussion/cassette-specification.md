@@ -341,7 +341,7 @@ byte-reproducible from `scripts/make_blank_tapes.py` (a UEF whose tape content i
 the tape's length, with an origin chunk naming Beebium and no date), copied into the build
 tree and installed to `share/beebium/blank-tapes` beside `blank-discs`. The label is the file
 name without its extension and is what the user is offered. `Decision`: the lengths are the
-compact cassette's, C15, C30, C60 and C90, labelled "Blank C15 (15 minutes)" and so on, and the
+compact cassette's, C15, C30, C60 and C90, labelled "C15" and so on, and the
 whole nominal length is one Beebium tape: the deck has no side to turn over, and a side-flip
 gesture would be a GUI addition for no gain. A blank tape named by a preset is copied into the
 machine's directory like any preset media, so what the Beeb records lands in the machine's own
@@ -483,3 +483,7 @@ cassette agent, and ends with the full gate from a separate Release worktree.
 6. The &0114 bit order.
 7. The front-end constants: 1.29 kHz, 4.13 kHz, 2% hysteresis, 20 Hz DC block.
 8. The instantaneous motor (no inertia) against Atic Atac.
+
+Label ruling (Rob, 2026-11-17): the blank tape templates are labelled `C15`, `C30`, `C60` and
+`C90`, and their files are named the same; "Blank" is said by the New Blank Tape menu and the
+minutes by the C-number, so the earlier `Blank C15 (15 minutes)` form was redundant.
