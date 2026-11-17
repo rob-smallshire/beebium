@@ -463,12 +463,23 @@ TEST_CASE("Record is red and disabled with its reason for a tape Beebium only re
 TEST_CASE("A WAV tape shows its rate and channel beside its format, and is not recorded on",
           "[cassette][deck][wav]") {
     Deck d;
-    d.load("file:///home/me/tapes/Recorded%20side.wav");
-    CHECK(d.row.name_text() == QStringLiteral("Recorded side.wav"));
+    d.load("file:///home/me/tapes/Recorded%20side%20stereo.wav");
+    CHECK(d.row.name_text() == QStringLiteral("Recorded side stereo.wav"));
     CHECK(d.row.metadata_text() == QStringLiteral("WAV - 44.1 kHz - left channel"));
     CHECK_FALSE(d.row.key(CassetteKey::record)->isEnabled());
     CHECK(d.row.key(CassetteKey::record)->toolTip() ==
           QStringLiteral("This tape is a WAV image, and Beebium records only on UEF tapes"));
+}
+
+TEST_CASE("A mono source shows no channel: a WAV of one, and a live input of one",
+          "[cassette][deck][wav][live]") {
+    Deck d;
+    d.load("file:///home/me/tapes/Mono%20side.wav");
+    CHECK(d.row.metadata_text() == QStringLiteral("WAV - 44.1 kHz"));
+    TapeInfo live;
+    live.format = QStringLiteral("LIVE");
+    live.sample_rate = 48000;
+    CHECK(tape_description(live) == QStringList{QStringLiteral("LIVE"), QStringLiteral("48 kHz")});
 }
 
 TEST_CASE("A refused request shows the server's sentence in full, its kind choosing the icon",

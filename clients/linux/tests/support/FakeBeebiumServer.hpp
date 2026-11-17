@@ -1035,8 +1035,12 @@ private:
         tape.set_duration_seconds(duration_seconds);
         tape.set_recordable(uef);
         if (wav) {
+            // A channel only for a stereo WAV (one with "stereo" in its
+            // name here), as the server reports it; none for mono.
             tape.set_sample_rate(44100);
-            tape.set_channel("left");
+            if (name.find("stereo") != std::string::npos) {
+                tape.set_channel("left");
+            }
         }
         status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
         status_.set_position_seconds(0.0);
