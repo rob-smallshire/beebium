@@ -157,6 +157,23 @@ final class CassetteDeckFormattingTests: XCTestCase {
         XCTAssertTrue(appearance(.stop, transport: .stopped, recordable: false).enabled)
     }
 
+    func testRecordIsGreyedPurelyByRecordable() {
+        XCTAssertTrue(appearance(.record, transport: .stopped, recordable: true).enabled)
+        XCTAssertFalse(appearance(.record, transport: .stopped, recordable: false).enabled)
+        // A live input is non-recordable, so the flag alone greys it.
+        XCTAssertFalse(appearance(.record, transport: .playing, isLive: true, recordable: false).enabled)
+    }
+
+    func testRecordHelpIsTheServerRefusalWhenNotRecordable() {
+        XCTAssertEqual(CassetteKeys.recordHelp(recordable: true, refusal: "ignored"), "Record")
+        let csw = "The tape game.csw is a CSW image, and Beebium records only on UEF tapes."
+        XCTAssertEqual(CassetteKeys.recordHelp(recordable: false, refusal: csw), csw,
+                       "a non-recordable tape shows the server's own sentence")
+        XCTAssertEqual(CassetteKeys.recordHelp(recordable: false, refusal: "   "),
+                       "This tape cannot be recorded onto",
+                       "with no server sentence, a generic fallback")
+    }
+
     func testLiveInputGreysWindsSeekAndRecordButNotPlayOrStop() {
         for key in [CassetteKey.rewind, .fastForward, .backToStart, .record] {
             XCTAssertFalse(appearance(key, transport: .playing, isLive: true, recordable: false).enabled,

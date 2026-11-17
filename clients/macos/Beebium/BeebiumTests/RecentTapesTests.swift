@@ -74,6 +74,23 @@ final class RecentTapesTests: XCTestCase {
         XCTAssertTrue(reloaded.tapes.isEmpty)
     }
 
+    func testRemoveForgetsOnePathAndPersists() {
+        let manager = RecentTapesManager(defaults: defaults)
+        manager.record(filepath: "/tapes/a.uef")
+        manager.record(filepath: "/tapes/b.uef")
+        manager.remove(filepath: "/tapes/a.uef")
+        XCTAssertEqual(paths(manager), ["/tapes/b.uef"])
+        let reloaded = RecentTapesManager(defaults: defaults)
+        XCTAssertEqual(paths(reloaded), ["/tapes/b.uef"], "the removal must persist")
+    }
+
+    func testRemoveOfAnAbsentPathIsHarmless() {
+        let manager = RecentTapesManager(defaults: defaults)
+        manager.record(filepath: "/tapes/a.uef")
+        manager.remove(filepath: "/tapes/not-there.uef")
+        XCTAssertEqual(paths(manager), ["/tapes/a.uef"])
+    }
+
     func testRoundTripThroughPersistence() {
         let manager = RecentTapesManager(defaults: defaults)
         manager.record(filepath: "/tapes/a.uef")

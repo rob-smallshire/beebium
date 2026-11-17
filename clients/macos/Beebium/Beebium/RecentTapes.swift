@@ -71,6 +71,15 @@ final class RecentTapesManager: ObservableObject {
         save()
     }
 
+    /// Forget the tape at `filepath`, if the list holds it. Used when the server
+    /// refuses to insert it -- a shipped template, or a file that has gone or
+    /// gone bad -- so a path that no longer loads stops being offered.
+    func remove(filepath: String) {
+        let countBefore = tapes.count
+        tapes.removeAll { $0.filepath == filepath }
+        if tapes.count != countBefore { save() }
+    }
+
     /// Forget every recent tape.
     func clear() {
         tapes = []

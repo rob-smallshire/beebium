@@ -441,11 +441,11 @@ final class CassetteClient: ObservableObject, Disconnectable {
             return
         }
         guard signalMapGeneration != status.signalMapGeneration else { return }
-        // A new (or first) ready generation: drop any stale map, then fetch the
-        // new one. The timeline shows the plain bar until the fetch returns.
+        // A new (or first) ready generation: fetch it. The previous map is kept
+        // on screen until the new levels arrive and replace it, so a map that
+        // republishes every second while recording colours in the recording
+        // head's wake without a plain-bar flash between fetches.
         signalMapGeneration = status.signalMapGeneration
-        signalMapSeconds = 0
-        signalMapLevels = []
         fetchSignalMap(streamGeneration: streamGeneration)
     }
 

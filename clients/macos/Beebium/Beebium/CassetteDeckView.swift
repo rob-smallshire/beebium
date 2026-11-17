@@ -158,10 +158,23 @@ enum CassetteKeys {
         case .stop:
             return CassetteKeyAppearance(enabled: true, depressed: false, red: false)
         case .record:
+            // Greyed purely on the server's recordable flag, which is false for
+            // a CSW, a WAV, a live input and a read-only UEF alike; red and down
+            // together only while Recording.
             let recording = transport == .recording
-            return CassetteKeyAppearance(enabled: !isLive && recordable,
+            return CassetteKeyAppearance(enabled: recordable,
                                          depressed: recording, red: recording)
         }
+    }
+
+    /// The Record key's help: "Record" when the tape can be recorded, otherwise
+    /// the server's own refusal sentence -- a CSW, a WAV, a live input and a
+    /// read-only UEF each give their own -- with a generic fallback if the server
+    /// sent none. Pure, so it is tested without a view.
+    static func recordHelp(recordable: Bool, refusal: String) -> String {
+        if recordable { return "Record" }
+        let trimmed = refusal.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "This tape cannot be recorded onto" : trimmed
     }
 }
 
@@ -575,24 +588,17 @@ struct CassetteDeckView: View {
 
     /// The Record key. It is drawn in the ordinary key colour and turns red only
     /// while Recording (section 9.0), never as a standing invitation. It is
-    /// greyed, with an explanation, for a tape that cannot be recorded onto (a
-    /// CSW or a live input), so the disabled key says why rather than letting the
-    /// server refuse after a press.
+    /// greyed for a tape that cannot be recorded onto -- a CSW, a WAV, a live
+    /// input or a read-only UEF -- with the server's own refusal sentence as its
+    /// help, so the disabled key says why rather than letting the server refuse
+    /// after a press.
     private var recordButton: some View {
         transportKey("record.circle.fill",
-                     help: recordHelp(recordable: cassetteClient.tape?.recordable ?? false),
+                     help: CassetteKeys.recordHelp(recordable: cassetteClient.tape?.recordable ?? false,
+                                                   refusal: cassetteClient.tape?.recordRefusal ?? ""),
                      key: .record) {
             run { await cassetteClient.record() }
         }
-    }
-
-    private func recordHelp(recordable: Bool) -> String {
-        if !tapeInserted { return "Insert a tape to record" }
-        if isLive { return "A live input cannot be recorded onto" }
-        if !recordable {
-            return "This tape is a CSW image, and Beebium records only on UEF tapes"
-        }
-        return "Record"
     }
 
     private var ejectButton: some View {
@@ -738,6 +744,13 @@ struct CassetteDeckView: View {
                     recentTapes.record(filepath: url.path)
                 case .failure(let error):
                     NSLog("[CassetteDeckView] Insert failed: \(error.localizedDescription)")
+                    // A path the server refuses -- a shipped template, a file
+                    // that has gone or gone bad -- should stop being offered, so
+                    // a refused insert drops it from Recent Tapes. A plain
+                    // not-connected is transient and leaves the list alone.
+                    if case .operationFailed = error {
+                        recentTapes.remove(filepath: url.path)
+                    }
                     deckError.showFailure(error.kind.markerLabel ?? "Insert failed",
                                           detail: error.localizedDescription)
                 }
