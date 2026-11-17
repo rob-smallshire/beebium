@@ -371,14 +371,7 @@ void CassetteDeckRow::present() {
     if (inserted) {
         name_->set_whole(deck.tape.name);
         name_->set_note(path_for_disc_url(deck.tape.url));
-        QStringList parts;
-        for (const QString& part :
-             {deck.tape.format, deck.tape.title, deck.tape.origin, deck.tape.target_machine}) {
-            if (!part.isEmpty()) {
-                parts << part;
-            }
-        }
-        metadata_->set_whole(parts.join(QStringLiteral(" - ")));
+        metadata_->set_whole(tape_description(deck.tape).join(QStringLiteral(" - ")));
     } else {
         name_->set_whole(local ? tr("Empty - Drop tape image here")
                                : tr("Empty - server is on another host"));
@@ -520,7 +513,7 @@ void CassetteDeckRow::press(CassetteKey key) {
 void CassetteDeckRow::browse() {
     // A convenience: the server judges the format by content, so any file
     // can still be chosen.
-    const QString filter = tr("Tape images (*.uef *.csw);;All files (*)");
+    const QString filter = tr("Tape images (*.uef *.csw *.wav);;All files (*)");
     const QStringList recents = settings_ ? settings_->recent_tapes() : QStringList{};
     const QString start =
         recents.isEmpty() ? QDir::homePath() : QFileInfo(recents.front()).absolutePath();

@@ -17,6 +17,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 #include <memory>
@@ -36,12 +37,14 @@ class RpcWorker;
 struct TapeInfo {
     QString name;    // the file's name
     QString url;     // as it was inserted: a file:// URL or a path
-    QString format;  // "UEF" or "CSW"
+    QString format;  // "UEF", "CSW" or "WAV"
     QString title;   // the image's own title, else empty
     QString origin;  // the tool that made the image, else empty
     QString target_machine;
     double duration_seconds = 0.0;  // 0 when unknown
-    bool recordable = false;        // a UEF can be recorded on, a CSW cannot
+    bool recordable = false;        // a UEF can be recorded on, a CSW or WAV cannot
+    unsigned sample_rate = 0;       // a WAV's, in Hz; 0 for UEF and CSW
+    QString channel;                // the WAV channel played, "left" or "right"
 
     friend bool operator==(const TapeInfo&, const TapeInfo&) = default;
 };
@@ -63,6 +66,11 @@ struct DeckState {
 };
 
 DeckState deck_state_from(const beebium::DeckStatus& status);
+
+// What the tape is, as the deck's second line reads it, in order: the
+// format, a WAV's sample rate and channel beside it, then the image's own
+// title, origin and target machine, each where it is known.
+QStringList tape_description(const TapeInfo& tape);
 
 // A position as the tape counter shows it: minutes and seconds, "0:00",
 // "12:05", "75:30", the seconds whole and never rounded up.

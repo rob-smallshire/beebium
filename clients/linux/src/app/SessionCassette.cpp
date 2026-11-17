@@ -72,11 +72,33 @@ DeckState deck_state_from(const beebium::DeckStatus& status) {
         deck.tape.target_machine = QString::fromStdString(tape.target_machine());
         deck.tape.duration_seconds = std::max(0.0, tape.duration_seconds());
         deck.tape.recordable = tape.recordable();
+        deck.tape.sample_rate = tape.sample_rate();
+        deck.tape.channel = QString::fromStdString(tape.channel());
     }
     deck.transport = transport_of(status.transport());
     deck.position_seconds = std::max(0.0, status.position_seconds());
     deck.motor_on = status.motor_on();
     return deck;
+}
+
+QStringList tape_description(const TapeInfo& tape) {
+    QStringList parts;
+    if (!tape.format.isEmpty()) {
+        parts << tape.format;
+    }
+    if (tape.sample_rate > 0) {
+        parts << QCoreApplication::translate("Cassette", "%1 kHz")
+                     .arg(QString::number(tape.sample_rate / 1000.0, 'g', 4));
+    }
+    if (!tape.channel.isEmpty()) {
+        parts << QCoreApplication::translate("Cassette", "%1 channel").arg(tape.channel);
+    }
+    for (const QString& part : {tape.title, tape.origin, tape.target_machine}) {
+        if (!part.isEmpty()) {
+            parts << part;
+        }
+    }
+    return parts;
 }
 
 QString tape_counter_text(double seconds) {

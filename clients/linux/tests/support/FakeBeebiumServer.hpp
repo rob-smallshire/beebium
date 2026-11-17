@@ -657,7 +657,8 @@ private:
 // The cassette deck as the server keeps it: an insert leaves it stopped at
 // the start; the keys change the transport as the deck's state table says;
 // every change goes out on the status stream, the current status first.
-// A tape whose URL ends in .csw is a CSW, which cannot be recorded on.
+// A tape whose URL ends in .csw is a CSW, one in .wav a WAV, neither of
+// which can be recorded on.
 // Blank tapes are two templates; CreateTape writes an empty .uef.
 class ScriptedCassetteService final : public beebium::CassetteService::Service {
 public:
@@ -917,17 +918,25 @@ private:
     }
     void take(const std::string& url) {
         const std::string name = name_of(url);
-        const bool csw = name.size() > 4 && name.substr(name.size() - 4) == ".csw";
+        const std::string suffix = name.size() > 4 ? name.substr(name.size() - 4) : std::string();
+        const bool csw = suffix == ".csw";
+        const bool wav = suffix == ".wav";
+        const bool uef = !csw && !wav;
         status_.set_tape_inserted(true);
         beebium::TapeMetadata& tape = *status_.mutable_tape();
+        tape.Clear();
         tape.set_name(name);
         tape.set_url(url);
-        tape.set_format(csw ? "CSW" : "UEF");
-        tape.set_title(csw ? "" : "Side A");
+        tape.set_format(csw ? "CSW" : wav ? "WAV" : "UEF");
+        tape.set_title(uef ? "Side A" : "");
         tape.set_origin(csw ? "CSW tools" : "");
-        tape.set_target_machine(csw ? "" : "BBC Model B");
+        tape.set_target_machine(uef ? "BBC Model B" : "");
         tape.set_duration_seconds(duration_seconds);
-        tape.set_recordable(!csw);
+        tape.set_recordable(uef);
+        if (wav) {
+            tape.set_sample_rate(44100);
+            tape.set_channel("left");
+        }
         status_.set_transport(beebium::TAPE_TRANSPORT_STOPPED);
         status_.set_position_seconds(0.0);
     }

@@ -127,6 +127,22 @@ TEST_CASE("An empty deck's status carries no tape, whatever the message holds", 
     CHECK(deck.tape == TapeInfo{});
 }
 
+TEST_CASE("A tape is described by its format, a WAV's rate and channel, then its own words",
+          "[cassette]") {
+    const DeckState uef = deck_state_from(waiting_tape());
+    CHECK(tape_description(uef.tape) ==
+          QStringList{QStringLiteral("UEF"), QStringLiteral("Elite"), QStringLiteral("UEF tools 0.1"),
+                      QStringLiteral("BBC Model B")});
+    TapeInfo wav;
+    wav.format = QStringLiteral("WAV");
+    wav.sample_rate = 44100;
+    wav.channel = QStringLiteral("right");
+    CHECK(tape_description(wav) == QStringList{QStringLiteral("WAV"), QStringLiteral("44.1 kHz"),
+                                               QStringLiteral("right channel")});
+    wav.sample_rate = 48000;
+    CHECK(tape_description(wav).at(1) == QStringLiteral("48 kHz"));
+}
+
 TEST_CASE("The tape counter reads minutes and whole seconds", "[cassette]") {
     CHECK(tape_counter_text(0.0) == QStringLiteral("0:00"));
     CHECK(tape_counter_text(5.99) == QStringLiteral("0:05"));
@@ -434,6 +450,17 @@ TEST_CASE("Record is red and disabled with its reason for a tape Beebium only re
     CHECK(record->toolTip() ==
           QStringLiteral("This tape is a CSW image, and Beebium records only on UEF tapes"));
     CHECK(d.row.metadata_text() == QStringLiteral("CSW - CSW tools"));
+}
+
+TEST_CASE("A WAV tape shows its rate and channel beside its format, and is not recorded on",
+          "[cassette][deck][wav]") {
+    Deck d;
+    d.load("file:///home/me/tapes/Recorded%20side.wav");
+    CHECK(d.row.name_text() == QStringLiteral("Recorded side.wav"));
+    CHECK(d.row.metadata_text() == QStringLiteral("WAV - 44.1 kHz - left channel"));
+    CHECK_FALSE(d.row.key(CassetteKey::record)->isEnabled());
+    CHECK(d.row.key(CassetteKey::record)->toolTip() ==
+          QStringLiteral("This tape is a WAV image, and Beebium records only on UEF tapes"));
 }
 
 TEST_CASE("A refused request shows the server's sentence in full, its kind choosing the icon",
