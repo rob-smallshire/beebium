@@ -57,9 +57,23 @@ struct TapeImageMetadata {
     std::string target_machine;
     std::string instructions;
     std::vector<std::string> position_markers;
+    // A sampled tape's: its rate, and the channel played ("left" or "right";
+    // "left" for mono). Zero and empty otherwise.
+    uint32_t sample_rate = 0;
+    std::string channel;
 };
 
-enum class TapeKind : uint8_t { Uef, Csw };
+enum class TapeKind : uint8_t { Uef, Csw, Wav };
+
+// The kind as a client sees it: "UEF", "CSW" or "WAV".
+inline const char* tape_kind_text(TapeKind kind) {
+    switch (kind) {
+        case TapeKind::Csw: return "CSW";
+        case TapeKind::Wav: return "WAV";
+        case TapeKind::Uef: break;
+    }
+    return "UEF";
+}
 
 // Why a tape image could not be opened. The message is a sentence naming the
 // file; the kind lets a service classify it.

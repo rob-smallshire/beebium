@@ -201,8 +201,9 @@ public:
     // nothing when it can (or the deck is empty).
     std::optional<std::string> why_not_recordable() const {
         if (!tape_ || recordable()) return std::nullopt;
-        if (tape_->kind() == TapeKind::Csw) {
-            return "The tape " + name_ + " is a CSW image, and Beebium records only on UEF tapes.";
+        if (tape_->kind() != TapeKind::Uef) {
+            return "The tape " + name_ + " is a " + tape_kind_text(tape_->kind()) +
+                   " image, and Beebium records only on UEF tapes.";
         }
         return "The tape " + name_ + " changes its base frequency (UEF chunk &0113), which Beebium "
                "cannot yet write back, so it does not record on it.";

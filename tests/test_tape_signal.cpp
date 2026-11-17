@@ -16,6 +16,8 @@
 #include "support/tape_builder.hpp"
 
 #include <beebium/cassette/CswTape.hpp>
+#include <beebium/cassette/SampledSource.hpp>
+#include <beebium/cassette/SampledTape.hpp>
 #include <beebium/cassette/TapeImage.hpp>
 #include <beebium/cassette/UefTape.hpp>
 
@@ -31,6 +33,7 @@
 using namespace beebium;
 using beebium::test::CswOptions;
 using beebium::test::TapeBuilder;
+using beebium::test::WavOptions;
 
 namespace {
 
@@ -341,7 +344,7 @@ TEST_CASE("UEF of a major version other than 0 is refused", "[uef]") {
 TEST_CASE("A file that is neither UEF nor CSW is refused", "[uef][csw]") {
     const std::vector<uint8_t> bytes = {'h', 'e', 'l', 'l', 'o'};
     CHECK_THROWS_WITH(open_tape_image(bytes, "notes.txt"),
-                      "The file notes.txt is not a UEF or CSW tape image.");
+                      "The file notes.txt is not a UEF, CSW or WAV tape image.");
 }
 
 // =============================================================================
@@ -455,4 +458,220 @@ TEST_CASE("CSW with a sample rate of 0 is refused", "[csw]") {
     std::memset(&bytes[0x19], 0, 4);
     CHECK_THROWS_WITH(CswTape::open(bytes, "zero.csw"),
                       "The file zero.csw gives a sample rate of 0, so it cannot be played.");
+}
+
+// =============================================================================
+// 5. WAV files
+// =============================================================================
+
+namespace {
+
+// Edge times of a tape, up to its end.
+std::vector<TapeTime> wav_edge_times(TapeSignal& tape) {
+    std::vector<TapeTime> times;
+    tape.rewind();
+    for (TapeItem item = tape.next(); item.type != TapeItem::Type::End; item = tape.next()) {
+        if (item.type == TapeItem::Type::Edge) times.push_back(item.time);
+    }
+    return times;
+}
+
+TapeBuilder one_second_of_carrier() {
+    TapeBuilder builder;
+    builder.carrier(2400);
+    return builder;
+}
+
+std::vector<uint8_t> wav_header_with(uint16_t format, uint16_t channels, uint16_t bits) {
+    WavOptions o;
+    o.channels = 1;
+    o.bits = 16;
+    auto bytes = TapeBuilder::wav_file(std::vector<uint8_t>(400, 0), o);
+    bytes[20] = static_cast<uint8_t>(format);
+    bytes[21] = static_cast<uint8_t>(format >> 8);
+    bytes[22] = static_cast<uint8_t>(channels);
+    bytes[34] = static_cast<uint8_t>(bits);
+    const unsigned block = channels * bits / 8;
+    bytes[32] = static_cast<uint8_t>(block);
+    return bytes;
+}
+
+}  // namespace
+
+TEST_CASE("WAV of every supported format plays as the same carrier", "[wav]") {
+    struct Format { unsigned bits; bool is_float; unsigned channels; bool extensible; };
+    const Format formats[] = {
+        {8, false, 1, false}, {16, false, 1, false}, {24, false, 1, false}, {32, false, 1, false},
+        {32, true, 1, false}, {16, false, 2, false}, {24, false, 2, true}, {32, true, 2, true},
+    };
+    const auto builder = one_second_of_carrier();
+    std::vector<TapeTime> reference;
+    for (const Format f : formats) {
+        CAPTURE(f.bits, f.is_float, f.channels, f.extensible);
+        WavOptions o;
+        o.bits = f.bits;
+        o.is_float = f.is_float;
+        o.channels = f.channels;
+        o.extensible = f.extensible;
+        auto tape = open_tape_image(builder.wav(o), "carrier.wav");
+        CHECK(tape->kind() == TapeKind::Wav);
+        CHECK(tape->metadata().sample_rate == 48000);
+        CHECK(tape->metadata().channel == "left");
+        CHECK_FALSE(tape->recordable());
+        const auto times = wav_edge_times(*tape);
+        CHECK(times.size() > 4700);
+        if (reference.empty()) {
+            reference = times;
+        } else {
+            REQUIRE(times.size() == reference.size());
+            for (size_t i = 0; i < times.size(); ++i) CHECK(std::llabs(static_cast<long long>(times[i] - reference[i])) <= 2);
+        }
+    }
+}
+
+TEST_CASE("WAV formats Beebium does not play are refused with a sentence", "[wav]") {
+    auto kind_of = [](const std::vector<uint8_t>& bytes) {
+        try {
+            open_tape_image(bytes, "odd.wav");
+        } catch (const TapeImageError& e) {
+            return std::make_pair(e.kind(), std::string(e.what()));
+        }
+        FAIL("not refused");
+        return std::make_pair(TapeImageError::Kind::CannotOpen, std::string());
+    };
+    auto [adpcm, adpcm_text] = kind_of(wav_header_with(0x0002, 1, 4));
+    CHECK(adpcm == TapeImageError::Kind::UnsupportedFormat);
+    CHECK(adpcm_text == "The file odd.wav is a WAV of a compressed or unusual encoding; Beebium plays PCM and "
+                        "32-bit float WAVs.");
+    auto [mulaw, mulaw_text] = kind_of(wav_header_with(0x0007, 1, 8));
+    CHECK(mulaw == TapeImageError::Kind::UnsupportedFormat);
+    auto [three, three_text] = kind_of(wav_header_with(0x0001, 3, 16));
+    CHECK(three == TapeImageError::Kind::UnsupportedFormat);
+    CHECK(three_text == "The file odd.wav is a WAV of 3 channels; Beebium plays mono and stereo.");
+
+    auto truncated = one_second_of_carrier().wav();
+    truncated.resize(truncated.size() / 2);
+    auto [cut, cut_text] = kind_of(truncated);
+    CHECK(cut == TapeImageError::Kind::InvalidImage);
+    CHECK(cut_text == "The file odd.wav is a WAV whose data runs past the end of the file.");
+}
+
+TEST_CASE("A stereo WAV plays its louder channel unless one is chosen", "[wav]") {
+    WavOptions o;
+    o.channels = 2;
+    o.signal_channel = 1;      // the tape on the right
+    o.amplitude = 0.5;
+    o.other_amplitude = 0.05;  // a quiet copy on the left
+    const auto bytes = one_second_of_carrier().wav(o);
+
+    auto louder = WavSource::open(ByteReader::of_memory(bytes), "stereo.wav");
+    CHECK(louder->channels() == 2);
+    CHECK(louder->channel() == WavChannel::Right);
+    auto tape = open_tape_image(bytes, "stereo.wav");
+    CHECK(tape->metadata().channel == "right");
+    CHECK(wav_edge_times(*tape).size() > 4700);
+
+    auto chosen = open_tape_image(bytes, "stereo.wav", WavChannel::Left);
+    CHECK(chosen->metadata().channel == "left");
+    CHECK(wav_edge_times(*chosen).size() > 4700);   // 0.05 is still above the threshold at 2400 Hz
+    std::vector<float> first(100);
+    auto left = WavSource::open(ByteReader::of_memory(bytes), "stereo.wav", WavChannel::Left);
+    left->read(first);
+    float peak = 0.0f;
+    for (float s : first) peak = std::max(peak, std::fabs(s));
+    CHECK(peak < 0.06f);
+}
+
+TEST_CASE("A WAV file is read from the file, not loaded", "[wav]") {
+    const auto bytes = one_second_of_carrier().wav();
+    const auto filepath = std::filesystem::temp_directory_path() / ("beebium_wav_" + std::to_string(::getpid()) + ".wav");
+    TapeBuilder::write(filepath, bytes);
+    {
+        auto tape = open_tape_file(filepath);
+        CHECK(tape->kind() == TapeKind::Wav);
+        const auto from_file = wav_edge_times(*tape);
+        auto in_memory = open_tape_image(bytes, "carrier.wav");
+        CHECK(from_file == wav_edge_times(*in_memory));
+        // Seeking back reads the same edges again.
+        tape->seek(seconds_to_tape_time(0.5));
+        const TapeItem item = tape->next();
+        CHECK(item.type == TapeItem::Type::Edge);
+        CHECK(item.time >= seconds_to_tape_time(0.5));
+    }
+    std::filesystem::remove(filepath);
+}
+
+// =============================================================================
+// 6. A UEF as sines
+// =============================================================================
+
+namespace {
+
+// Each silence's length, and between them each half-cycle's class (true short).
+struct CycleSignature {
+    std::vector<double> gaps;
+    std::vector<std::vector<bool>> regions;
+};
+
+CycleSignature cycle_signature(TapeSignal& tape) {
+    constexpr double short_half = 16'000'000.0 / 13.0 / 4800.0;
+    constexpr double long_half = 16'000'000.0 / 13.0 / 2400.0;
+    CycleSignature s;
+    std::optional<TapeTime> last;
+    tape.rewind();
+    for (TapeItem item = tape.next(); item.type != TapeItem::Type::End; item = tape.next()) {
+        if (item.type != TapeItem::Type::Edge) continue;
+        if (!last || item.time - *last > 1024) {
+            s.gaps.push_back(last ? static_cast<double>(item.time - *last) : static_cast<double>(item.time));
+            s.regions.emplace_back();
+        } else {
+            const double d = static_cast<double>(item.time - *last);
+            s.regions.back().push_back(std::fabs(d - short_half) < std::fabs(d - long_half));
+        }
+        last = item.time;
+    }
+    return s;
+}
+
+}  // namespace
+
+TEST_CASE("A UEF rendered as sines plays as the same cycles", "[wav]") {
+    // Sines at 90 degrees, a cosine a half-cycle: the phase a playback head's
+    // differentiation gives. (At 0 degrees the front end's shift of the low
+    // tone moves each tone change's half-cycles across the separator's
+    // timeout; the MOS tests record that.)
+    const std::vector<uint8_t> data = {1, 2, 3, 0x2A, 0xFF, 0x00, 0x55, 0xAA};
+    TapeBuilder builder;
+    builder.gap(0.5).file("TEST", 0x1900, 0x8023, data, {}).gap(1.0).carrier(500);
+    auto uef = UefTape::open(builder.uef(), "sines.uef");
+    WavOptions o;
+    o.shape = WavOptions::Shape::Shifted90;
+    auto wav = open_tape_image(builder.wav(o), "sines.wav");
+
+    const auto a = cycle_signature(*uef);
+    const auto b = cycle_signature(*wav);
+    REQUIRE(a.regions.size() == b.regions.size());
+    for (size_t i = 0; i < a.regions.size(); ++i) {
+        CAPTURE(i);
+        // The filters take a half-cycle or two to rise to the threshold where
+        // a tone starts from silence, and ring for a half-cycle or two where
+        // it stops dead, as the machine's would: align the starts by up to two
+        // half-cycles, and allow up to two more or fewer overall.
+        const auto& x = a.regions[i];
+        const auto& y = b.regions[i];
+        CHECK(std::llabs(static_cast<long long>(x.size()) - static_cast<long long>(y.size())) <= 2);
+        size_t best = SIZE_MAX;
+        for (size_t skip_x = 0; skip_x <= 2; ++skip_x) {
+            for (size_t skip_y = 0; skip_y <= 2; ++skip_y) {
+                const size_t n = std::min(x.size() - skip_x, y.size() - skip_y) - 2;
+                size_t differences = 0;
+                for (size_t k = 0; k < n; ++k) differences += x[skip_x + k] != y[skip_y + k] ? 1 : 0;
+                best = std::min(best, differences);
+            }
+        }
+        CHECK(best == 0);
+        // A silence is measured from the last edge, and the ringing adds up to
+        // two half-cycles to the region before it.
+        CHECK(std::fabs(a.gaps[i] - b.gaps[i]) <= 3.0 * 16'000'000.0 / 13.0 / 2400.0);
+    }
 }

@@ -316,7 +316,7 @@ private:
                 metadata.set_name(deck.name());
                 metadata.set_url(deck.url());
                 const auto kind = deck.kind();
-                metadata.set_format(kind && *kind == TapeKind::Csw ? "CSW" : "UEF");
+                metadata.set_format(kind ? tape_kind_text(*kind) : "UEF");
                 metadata.set_title(deck.metadata().title);
                 metadata.set_origin(deck.metadata().origin);
                 metadata.set_target_machine(deck.metadata().target_machine);

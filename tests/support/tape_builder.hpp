@@ -21,9 +21,13 @@
 // (5.1 s before the first block, 0.9 s between, 5.1 s after) follow the
 // cassette research findings, sections 2.3 and 2.4.
 
+#include <beebium/cassette/UefTape.hpp>
+
 #include <zlib.h>
 
 #include <algorithm>
+#include <cmath>
+#include <numbers>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -95,6 +99,24 @@ struct CswOptions {
     bool z_rle = true;           // v2 only
     bool initial_high = true;    // matches a UEF's default 180 degree phase
     uint32_t sample_rate = 48000;
+};
+
+// A WAV of a tape's signal: each half-cycle between two edges rendered as a
+// half of a sine (or a square, or a sine shifted by 90 degrees, which is a
+// cosine and still continuous at each edge), at the edge's level. A silence
+// (more than 1100 clocks with no edge) follows a nominal 2400 Hz half-cycle.
+struct WavOptions {
+    enum class Shape { Sine, Square, Shifted90 };
+    uint32_t rate = 48000;
+    unsigned bits = 16;
+    unsigned channels = 1;
+    bool is_float = false;
+    bool extensible = false;           // WAVE_FORMAT_EXTENSIBLE
+    double amplitude = 0.5;
+    Shape shape = Shape::Sine;
+    double noise = 0.0;                // uniform, peak, added to the signal
+    unsigned signal_channel = 0;       // 0 left, 1 right
+    double other_amplitude = 0.0;      // the other channel: the signal at this amplitude
 };
 
 class TapeBuilder {
@@ -272,6 +294,120 @@ public:
             const auto payload = options.z_rle ? compress(data, false) : data;
             out.insert(out.end(), payload.begin(), payload.end());
         }
+        return out;
+    }
+
+    // The tape as a WAV (see WavOptions).
+    std::vector<uint8_t> wav(const WavOptions& options = {}) const { return wav_of_uef(uef(), options); }
+
+    static std::vector<uint8_t> wav_of_uef(const std::vector<uint8_t>& uef_bytes, const WavOptions& o) {
+        const double clocks_per_second = 16'000'000.0 / 13.0;
+        auto tape = beebium::UefTape::open(uef_bytes, "builder.uef");
+        struct Half { double start, length; double sign; };
+        std::vector<Half> halves;
+        std::vector<std::pair<double, bool>> edges;
+        for (auto item = tape->next(); item.type != beebium::TapeItem::Type::End; item = tape->next()) {
+            if (item.type == beebium::TapeItem::Type::Edge) edges.emplace_back(static_cast<double>(item.time), item.level);
+        }
+        const double length = static_cast<double>(*tape->duration());
+        constexpr double SHORT_HALF = 16'000'000.0 / 13.0 / 4800.0;
+        for (size_t i = 0; i < edges.size(); ++i) {
+            double half = i + 1 < edges.size() ? edges[i + 1].first - edges[i].first : SHORT_HALF;
+            if (half > 1100.0) half = SHORT_HALF;
+            halves.push_back({edges[i].first, half, edges[i].second ? 1.0 : -1.0});
+        }
+
+        const auto samples = static_cast<uint64_t>(std::ceil(length * o.rate / clocks_per_second));
+        uint32_t seed = 12345;
+        auto noise = [&] {
+            seed = seed * 1664525u + 1013904223u;
+            return (static_cast<double>(seed >> 8) / 8388608.0 - 1.0) * o.noise;
+        };
+        std::vector<uint8_t> data;
+        const unsigned bytes_per_sample = o.bits / 8;
+        data.reserve(samples * o.channels * bytes_per_sample);
+        auto put = [&](double v) {
+            v = std::clamp(v, -1.0, 1.0 - 1.0 / 2147483648.0);
+            if (o.is_float) {
+                const float f = static_cast<float>(v);
+                uint8_t b[4];
+                std::memcpy(b, &f, 4);
+                data.insert(data.end(), b, b + 4);
+                return;
+            }
+            switch (o.bits) {
+                case 8: data.push_back(static_cast<uint8_t>(std::lround(v * 127.0) + 128)); break;
+                case 16: {
+                    const auto s = static_cast<int16_t>(std::lround(v * 32767.0));
+                    data.push_back(static_cast<uint8_t>(s));
+                    data.push_back(static_cast<uint8_t>(s >> 8));
+                    break;
+                }
+                case 24: {
+                    const auto s = static_cast<int32_t>(std::lround(v * 8388607.0));
+                    for (int i = 0; i < 3; ++i) data.push_back(static_cast<uint8_t>(s >> (8 * i)));
+                    break;
+                }
+                default: {
+                    const auto s = static_cast<int32_t>(std::llround(v * 2147483647.0));
+                    for (int i = 0; i < 4; ++i) data.push_back(static_cast<uint8_t>(s >> (8 * i)));
+                    break;
+                }
+            }
+        };
+        size_t h = 0;
+        for (uint64_t k = 0; k < samples; ++k) {
+            const double t = static_cast<double>(k) * clocks_per_second / o.rate;
+            while (h + 1 < halves.size() && halves[h + 1].start <= t) ++h;
+            double v = 0.0;
+            if (!halves.empty() && t >= halves[h].start && t < halves[h].start + halves[h].length) {
+                const double u = (t - halves[h].start) / halves[h].length;
+                switch (o.shape) {
+                    case WavOptions::Shape::Sine: v = std::sin(std::numbers::pi * u); break;
+                    case WavOptions::Shape::Square: v = 1.0; break;
+                    case WavOptions::Shape::Shifted90: v = std::cos(std::numbers::pi * u); break;
+                }
+                v *= halves[h].sign;
+            }
+            const double signal = v * o.amplitude;
+            for (unsigned c = 0; c < o.channels; ++c) {
+                put((c == o.signal_channel ? signal : v * o.other_amplitude) + noise());
+            }
+        }
+        return wav_file(data, o);
+    }
+
+    static std::vector<uint8_t> wav_file(const std::vector<uint8_t>& data, const WavOptions& o) {
+        std::vector<uint8_t> out;
+        auto u16 = [&](uint32_t v) { out.push_back(static_cast<uint8_t>(v)); out.push_back(static_cast<uint8_t>(v >> 8)); };
+        auto u32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) out.push_back(static_cast<uint8_t>(v >> (8 * i))); };
+        auto tag = [&](const char* s) { out.insert(out.end(), s, s + 4); };
+        const uint32_t fmt_length = o.extensible ? 40 : 16;
+        tag("RIFF");
+        u32(static_cast<uint32_t>(4 + 8 + fmt_length + 8 + data.size()));
+        tag("WAVE");
+        tag("fmt ");
+        u32(fmt_length);
+        const uint16_t format = o.is_float ? 3 : 1;
+        u16(o.extensible ? 0xFFFE : format);
+        u16(o.channels);
+        u32(o.rate);
+        const unsigned block = o.channels * o.bits / 8;
+        u32(o.rate * block);
+        u16(block);
+        u16(o.bits);
+        if (o.extensible) {
+            u16(22);
+            u16(o.bits);
+            u32(o.channels == 2 ? 3 : 4);
+            u16(format);
+            static const uint8_t GUID_TAIL[14] = {0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80,
+                                                  0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71};
+            out.insert(out.end(), GUID_TAIL, GUID_TAIL + 14);
+        }
+        tag("data");
+        u32(static_cast<uint32_t>(data.size()));
+        out.insert(out.end(), data.begin(), data.end());
         return out;
     }
 

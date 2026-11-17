@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "SampledSource.hpp"
 #include "TapeSignal.hpp"
 
 #include <cstdint>
@@ -23,11 +24,16 @@
 namespace beebium {
 
 // Open a tape image, judging its format by content: a UEF (plain, or gzipped
-// with the gzip magic) or a CSW. Throws std::runtime_error with a sentence
-// naming `name` if it is neither or cannot be read.
-std::unique_ptr<TapeSignal> open_tape_image(std::span<const uint8_t> bytes, const std::string& name);
+// with the gzip magic), a CSW, or a WAV (RIFF/WAVE), which plays through the
+// FrontEnd as a SampledTape. `channel` chooses a stereo WAV's channel; without
+// it the louder is played. Throws TapeImageError with a sentence naming `name`
+// if it is none of these or cannot be read.
+std::unique_ptr<TapeSignal> open_tape_image(std::span<const uint8_t> bytes, const std::string& name,
+                                            std::optional<WavChannel> channel = std::nullopt);
 
-// Read a tape image file and open it as above, naming it by its file name.
-std::unique_ptr<TapeSignal> open_tape_file(const std::filesystem::path& filepath);
+// Open a tape image file as above, naming it by its file name. A WAV is read
+// from the file on demand; any other image is read whole.
+std::unique_ptr<TapeSignal> open_tape_file(const std::filesystem::path& filepath,
+                                           std::optional<WavChannel> channel = std::nullopt);
 
 }  // namespace beebium
