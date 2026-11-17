@@ -1687,7 +1687,7 @@ section sits above the floppy drives, which sit above the hard discs.
     or recording with the motor relay open: the ordinary "Playing, motor off"
     wait) and coloured while tape moves: Play green while playing with the relay
     closed; Play and Record both red while recording with the relay closed; Rewind
-    or Fast forward green while winding, since a wind moves the tape regardless of
+    or Fast forward blue while winding, since a wind moves the tape regardless of
     the relay. A key that is not depressed is never coloured.
   - Every key stays enabled while a tape is in, and pressing a key that is already
     down does nothing (the server's `Play`, `Stop` and `Record` are idempotent). A
