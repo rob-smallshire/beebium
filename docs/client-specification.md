@@ -1616,18 +1616,27 @@ section sits above the floppy drives, which sit above the hard discs.
   LATITUDE, and it shows the tape's `channel` and `sample_rate` where it shows the
   format. A tape is removed through Eject, never by inserting over
   an occupied deck (the server refuses that).
-- The deck keys. Play, Stop, Rewind and Fast forward (the winding transports,
-  `Rewind` and `FastForward`), Back to the beginning (`Seek` to 0), and Eject; a
-  tape counter showing the position in minutes and seconds; and a position slider
-  drawn from `position_seconds` and `duration_seconds` that the user scrubs with.
-  A wind runs at 30 times real speed whether or not the motor relay is closed, and
-  the counter and slider follow it; it ends on Stop, Play, a seek or Eject, or at
-  an end of the tape, where the deck stops. The slider seeks on release, not while
-  it moves; a drag made while the deck plays seeks too, and the deck plays on from
-  the new position. A seek beyond the end lands at the end and stops the deck.
-  When the server reports a duration of 0 (unknown) the client shows the counter
-  without a proportional slider. The counter and the slider are the user's only
-  guide to where anything is on the tape, as on a real deck.
+- The deck keys. Back to the beginning (`Seek` to 0), Rewind, Play, Stop, Fast
+  forward (the winding transports, `Rewind` and `FastForward`), Record and Eject;
+  a tape counter showing the position in minutes and seconds (minutes run past 59,
+  so a C90 reads `90:00`, in fixed-width digits so the counter does not jitter);
+  and a position indicator drawn from `position_seconds` and `duration_seconds`
+  that the user scrubs with. Layout (MANDATORY): Back to the beginning sits at
+  the left edge of the row and Eject at the right edge, each on its own, and the
+  transport keys (Rewind, Play, Stop, Fast forward, Record) are centred as one
+  group between them, so that the two keys that lose the user's place are apart
+  from the ones pressed often. The position indicator is a marker on a plain
+  timeline (an arrow or pointer above or below a bar), not a filled slider: it
+  shows where the head is and colours neither side of the bar, because a tape has
+  no "played" and "unplayed" portion. A wind runs at 30 times real speed whether
+  or not the motor relay is closed, and the counter and indicator follow it; it
+  ends on Stop, Play, a seek or Eject, or at an end of the tape, where the deck
+  stops. The indicator seeks on release, not while it moves; a drag made while
+  the deck plays seeks too, and the deck plays on from the new position. A seek
+  beyond the end lands at the end and stops the deck. When the server reports a
+  duration of 0 (unknown) the client shows the counter without a proportional
+  indicator. The counter and the indicator are the user's only guide to where
+  anything is on the tape, as on a real deck.
 - The Record key. The deck has a red Record key, which sends `Record`.
   Recording is a transport the user selects, as play is: the tape moves only while
   the motor relay is closed, and everything that passes under the head is replaced
@@ -1731,7 +1740,7 @@ Conformance:
   play is separate from insert, and after a plain insert the deck starts stopped;
   the server judges the format and the client never refuses a file itself; the
   transport and the relay are both shown; the deck keys, the tape counter and the
-  scrubbing slider; no block catalogue, waveform or decoded filenames, and no tape
+  scrubbing position indicator; no block catalogue, waveform or decoded filenames, and no tape
   audio at any time; the server's sentence shown verbatim, the kind selecting only the icon
   or recovery control; deck state driven from the status stream; the recording
   policy of 9.2 for tapes; the motor LED rendered only through chapter 10.
@@ -1754,7 +1763,7 @@ type `*LOAD ""` and the relay closes -> the motor LED lights in the indicator ro
 the position advances. Press Play on an empty deck -> a client may disable the keys
 while the deck is empty (both apps do); one that does not shows the server's
 deck-empty sentence persistently. Insert onto an occupied deck -> refused with
-a deck-occupied sentence and an Eject offer. While playing, drag the slider to the
+a deck-occupied sentence and an Eject offer. While playing, drag the position marker to the
 middle and release -> one `Seek`, and the deck plays on from there, with no sound
 from the client. Press Fast forward with the motor off -> the counter runs at 30
 times real speed and the deck stops at the end; press Play during a rewind -> the
