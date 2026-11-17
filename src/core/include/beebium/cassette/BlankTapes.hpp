@@ -16,6 +16,7 @@
 #include "beebium/disc/BlankDiscs.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -34,7 +35,7 @@ struct BlankTapeTemplate {
     std::string filename;       // the template's file name
     std::string kind;           // "tape"
     std::uintmax_t size_bytes;
-    double duration_seconds;
+    double duration_seconds;    // to the millisecond
     std::filesystem::path filepath;
 };
 
@@ -52,7 +53,9 @@ inline std::vector<BlankTapeTemplate> list_blank_tapes(const std::optional<std::
         double duration_seconds = 0.0;
         try {
             const auto tape = open_tape_file(filepath);
-            duration_seconds = static_cast<double>(tape->duration().value_or(0)) / ULA_CLOCK_HZ;
+            // To the millisecond: a C15 is 900 s; the residue is the clock's.
+            duration_seconds = std::round(static_cast<double>(tape->duration().value_or(0)) / ULA_CLOCK_HZ *
+                                          1000.0) / 1000.0;
         } catch (const std::exception&) {
             continue;
         }

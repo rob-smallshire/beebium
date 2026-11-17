@@ -232,6 +232,7 @@ std::unique_ptr<UefTape> UefTape::open(std::span<const uint8_t> bytes, const std
                 break;
             case 0x0100: case 0x0102: case 0x0104: case 0x0110: case 0x0111: case 0x0112: case 0x0113:
             case 0x0114: case 0x0115: case 0x0116: case 0x0117:
+                if (chunk.id == 0x0113) tape->changes_base_ = true;
                 tape->chunks_.push_back(std::move(chunk));
                 break;
             default:

@@ -590,6 +590,25 @@ TEST_CASE("Record on a CSW or an empty deck is refused with a sentence", "[uef][
     CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
 }
 
+TEST_CASE("A UEF that changes its base frequency is read only", "[uef][recording]") {
+    TapeBuilder builder;
+    const float hz = 1250.0f;
+    std::vector<uint8_t> body(4);
+    std::memcpy(body.data(), &hz, 4);
+    builder.carrier(100).raw_chunk(0x0113, body).carrier(100);
+    auto tape = UefTape::open(builder.uef(), "base.uef");
+    CHECK(tape->changes_base());
+    CHECK_FALSE(tape->recordable());
+
+    CassetteDeck deck;
+    deck.insert(std::move(tape), "base.uef");
+    CHECK_FALSE(deck.recordable());
+    CHECK_THROWS_WITH(deck.record(),
+                      "The tape base.uef changes its base frequency (UEF chunk &0113), which Beebium cannot "
+                      "yet write back, so it does not record on it.");
+    CHECK(deck.transport() == CassetteDeck::Transport::Stopped);
+}
+
 // =============================================================================
 // 6. Blank tapes
 // =============================================================================

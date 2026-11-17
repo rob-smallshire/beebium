@@ -232,7 +232,9 @@ The service reads these without stopping the machine.
 ## Recording
 
 A UEF can be recorded on; a CSW is only read, and `record()` on one is refused with a sentence
-naming the tape and its format. Recording is a transport, as on a real deck: the user presses
+naming the tape and its format. A UEF that carries an &0113 change of base frequency is read
+only too, for now: the writer describes every tape at the nominal 1200 Hz base and would lose
+the changes, so `record()` is refused with `READ_ONLY` and a sentence saying so. Recording is a transport, as on a real deck: the user presses
 record, and from then on, while the relay is closed, the tape moves as it does in play and
 every clock that passes under the head replaces what the tape held there with what the Serial
 ULA's tone synthesiser sends, an edge or nothing. RTS high, or RS423 selected, sends nothing, so
@@ -316,7 +318,7 @@ steps, and the new tape is recordable because it is a UEF.
 | `Record()` | Press record; refused with `READ_ONLY` for a tape that cannot be recorded on (a CSW) |
 | `Rewind()`, `FastForward()` | Wind at 30 times real speed, ungated by the relay, until stop, play, seek, eject or an end of the tape |
 | `Seek(position_seconds)` | Moves the tape at once and ends a wind; a negative position is refused, and one beyond the end lands at the end |
-| `GetDeckStatus()` | Presence, the tape and its metadata (name, URL, format, title, origin, target machine, duration, whether it is recordable), transport, position, relay and the ULA part |
+| `GetDeckStatus()` | Presence, the tape and its metadata (name, URL, format, title, origin, target machine, duration to the millisecond, whether it is recordable), transport, position, relay and the ULA part |
 | `ListBlankTapes()`, `CreateTape(label, destination_path, overwrite)` | The blank tapes, and a copy of one into place; see Blank tapes |
 | `SubscribeDeckStatus(min_interval_ms)` | The status at once, then on every change of presence, transport, relay or tape, and while the deck plays or records the position, at most every `min_interval_ms` of emulated time (default 100); while it winds, every thirty times that much tape |
 
@@ -333,7 +335,7 @@ the client gave, and a `CassetteErrorKind`:
 | `DECK_OCCUPIED` | A tape is already in; the sentence names both tapes |
 | `DECK_EMPTY` | Play, stop, record, rewind, fast forward, seek or eject with no tape in |
 | `INVALID_POSITION` | A seek before the start of the tape |
-| `READ_ONLY` | Record on a tape Beebium only reads (a CSW) |
+| `READ_ONLY` | Record on a tape Beebium only reads (a CSW, or a UEF with an &0113 change of base frequency) |
 
 For example: "The deck already holds game.uef; eject it before inserting other.uef."
 

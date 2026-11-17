@@ -21,6 +21,7 @@
 
 #include <grpcpp/grpcpp.h>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -30,6 +31,12 @@
 #include <thread>
 
 namespace beebium::service {
+
+// A tape's length as the service reports it: seconds to the millisecond. The
+// residue below that is the ULA clock's quantisation, not the tape's.
+inline double reported_seconds(TapeTime length) {
+    return std::round(static_cast<double>(length) / ULA_CLOCK_HZ * 1000.0) / 1000.0;
+}
 
 inline beebium::CassetteErrorKind to_wire_error_kind(beebium::TapeImageError::Kind kind) {
     switch (kind) {
@@ -148,12 +155,8 @@ public:
     grpc::Status Record(grpc::ServerContext*, const RecordRequest*, CassetteResponse* response) override {
         std::optional<std::string> refused;
         const grpc::Status status = with_tape(response, [&](CassetteDeck& deck) {
-            if (!deck.recordable()) {
-                refused = "The tape " + deck.name() + " is a " +
-                          (deck.kind() == TapeKind::Csw ? std::string("CSW") : std::string("UEF")) +
-                          " image, and Beebium records only on UEF tapes.";
-                return;
-            }
+            refused = deck.why_not_recordable();
+            if (refused) return;
             deck.record();
         });
         if (refused) fail(response, beebium::CASSETTE_ERROR_KIND_READ_ONLY, *refused);
@@ -318,7 +321,7 @@ private:
                 metadata.set_origin(deck.metadata().origin);
                 metadata.set_target_machine(deck.metadata().target_machine);
                 if (const auto length = deck.duration()) {
-                    metadata.set_duration_seconds(static_cast<double>(*length) / ULA_CLOCK_HZ);
+                    metadata.set_duration_seconds(reported_seconds(*length));
                 }
                 metadata.set_recordable(deck.recordable());
             });

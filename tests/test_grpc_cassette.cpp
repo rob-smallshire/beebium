@@ -330,7 +330,7 @@ TEST_CASE("CassetteService winds at 30 times real speed with the motor off", "[g
     fixture.run_emulated(7'000'000);   // three and a half seconds
     status = fixture.status();
     CHECK(status.transport() == beebium::TAPE_TRANSPORT_STOPPED);
-    CHECK(status.position_seconds() == Catch::Approx(status.tape().duration_seconds()));
+    CHECK(std::abs(status.position_seconds() - status.tape().duration_seconds()) <= 0.0005);
 }
 
 // =============================================================================
@@ -365,7 +365,7 @@ TEST_CASE("CassetteService play moves the tape only with the motor on", "[grpc][
     REQUIRE(fixture.seek(duration + 10.0).success());
     status = fixture.status();
     CHECK(status.transport() == beebium::TAPE_TRANSPORT_STOPPED);
-    CHECK(std::abs(status.position_seconds() - duration) < 1e-6);
+    CHECK(std::abs(status.position_seconds() - duration) <= 0.0005);   // the duration is to the millisecond
 
     REQUIRE(fixture.play().success());
     CHECK(fixture.status().transport() == beebium::TAPE_TRANSPORT_STOPPED);
@@ -507,7 +507,7 @@ TEST_CASE("CassetteService lists the blank tapes and creates one that records", 
         CHECK(listed.tapes(i).label() == labels[i]);
         CHECK(listed.tapes(i).filename() == std::string(labels[i]) + ".uef");
         CHECK(listed.tapes(i).kind() == "tape");
-        CHECK(std::fabs(listed.tapes(i).duration_seconds() - seconds[i]) < 0.001);
+        CHECK(listed.tapes(i).duration_seconds() == seconds[i]);   // to the millisecond
     }
 
     // The extension is added.
@@ -535,6 +535,6 @@ TEST_CASE("CassetteService lists the blank tapes and creates one that records", 
     const auto inserted = fixture.insert((fixture.dirpath() / "mine.uef").string());
     REQUIRE(inserted.success());
     CHECK(inserted.tape().recordable());
-    CHECK(std::fabs(inserted.tape().duration_seconds() - 1800.0) < 0.001);
+    CHECK(inserted.tape().duration_seconds() == 1800.0);
     CHECK(fixture.record().success());
 }

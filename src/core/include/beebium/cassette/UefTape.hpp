@@ -41,7 +41,8 @@ namespace beebium {
 // Refused: &0200 and above (discs, ROMs, machine state). Any other chunk is
 // skipped with one log line.
 //
-// A UEF can be recorded on. The first recording renders the whole tape into an
+// A UEF can be recorded on, unless it carries an &0113 change of base
+// frequency, which the writer cannot yet keep. The first recording renders the whole tape into an
 // EdgeTrack, which from then on is the tape; encode() writes it back through
 // classify_tape_edges() after the file's metadata chunks (those below &0100
 // and &0120, &0130, &0131, unchanged and in their order), gzipped if the file
@@ -57,7 +58,10 @@ public:
     std::optional<TapeTime> duration() const override;
     TapeKind kind() const override { return TapeKind::Uef; }
     const TapeImageMetadata& metadata() const override { return metadata_; }
-    TapeRecorder* recorder() override { return this; }
+    // A tape that changes its base frequency (&0113) is read only: the writer
+    // describes every tape at the nominal 1200 Hz base and would lose them.
+    TapeRecorder* recorder() override { return changes_base_ ? nullptr : this; }
+    bool changes_base() const { return changes_base_; }
 
     // The span recorded on since the tape was opened, if any.
     std::optional<std::pair<TapeTime, TapeTime>> recorded_span() const { return recorded_span_; }
@@ -94,6 +98,7 @@ private:
     TapeImageMetadata metadata_;
     bool makeuef_parity_swap_ = false;
     bool gzipped_ = false;
+    bool changes_base_ = false;              // it carries an &0113 chunk
     std::vector<Chunk> metadata_chunks_;     // written back unchanged, in order
     std::vector<Chunk> chunks_;              // tape chunks, in order
     std::vector<RenderState> chunk_starts_;  // state at the start of each

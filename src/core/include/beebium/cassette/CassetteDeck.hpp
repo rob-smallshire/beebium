@@ -180,10 +180,7 @@ public:
     // sentence if the deck is empty or the tape cannot be recorded on.
     void record() {
         if (!tape_) throw std::runtime_error("There is no tape in the deck.");
-        if (!tape_->recordable()) {
-            throw std::runtime_error("The tape " + name_ + " is a " + kind_text() +
-                                     " image, and Beebium records only on UEF tapes.");
-        }
+        if (const auto why = why_not_recordable()) throw std::runtime_error(*why);
         if (transport_ == Transport::Recording) return;
         end_wind();
         if (position_ >= end_time()) {
@@ -199,6 +196,17 @@ public:
 
     // Whether the tape in the deck can be recorded on.
     bool recordable() const { return tape_ != nullptr && tape_->recorder() != nullptr; }
+
+    // Why the tape in the deck cannot be recorded on, as a sentence, or
+    // nothing when it can (or the deck is empty).
+    std::optional<std::string> why_not_recordable() const {
+        if (!tape_ || recordable()) return std::nullopt;
+        if (tape_->kind() == TapeKind::Csw) {
+            return "The tape " + name_ + " is a CSW image, and Beebium records only on UEF tapes.";
+        }
+        return "The tape " + name_ + " changes its base frequency (UEF chunk &0113), which Beebium "
+               "cannot yet write back, so it does not record on it.";
+    }
 
     // One ULA clock with the relay as the machine has it. Returns true if an
     // edge of the tape falls on this clock.
@@ -289,10 +297,6 @@ public:
     bool in_gap() const { return pending_.type == TapeItem::Type::Gap; }
 
 private:
-    std::string kind_text() const {
-        return tape_->kind() == TapeKind::Csw ? "CSW" : "UEF";
-    }
-
     // One ULA clock of recording: with the relay closed the head erases what
     // the tape held at this clock and writes what edge() delivers.
     void record_clock(bool relay_closed) {

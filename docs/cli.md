@@ -857,10 +857,10 @@ Blank C90 (90 minutes)	Blank C90 (90 minutes).uef	tape	36	5400
 
 **`--format jsonl`**:
 ```
-{"label":"Blank C15 (15 minutes)","filename":"Blank C15 (15 minutes).uef","kind":"tape","size_bytes":36,"duration_seconds":899.9999994375}
+{"label":"Blank C15 (15 minutes)","filename":"Blank C15 (15 minutes).uef","kind":"tape","size_bytes":36,"duration_seconds":900.0}
 ```
 
-The length is the tape's in seconds of the Serial ULA's clock, so the full-precision `jsonl` value can fall a hair short of the whole minutes the label names.
+The length is given to the millisecond: the residue below that is the Serial ULA clock's quantisation, not the tape's.
 
 ### create-tape
 

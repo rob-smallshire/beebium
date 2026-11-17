@@ -431,7 +431,7 @@ only while the deck plays or records and the machine's motor relay (Serial ULA l
 | `EjectTape` | Stop and remove the tape. |
 | `Play` | Start the deck. At the end of the tape it succeeds and leaves the deck stopped at the end. |
 | `Stop` | Stop the deck where it is. |
-| `Record` | Start recording. Like `Play`, the tape moves only while the motor relay is closed; every clock under the head replaces what the tape held with what the Serial ULA's tone synthesiser sends, an edge, or silence when RTS is high or RS423 is selected, so a recording deck erases to silence while the machine is quiet. A relay opening only stops the tape. `Stop`, `Play`, `Seek`, `Rewind`, `FastForward`, `EjectTape` and the end of the tape end the recording, each leaving the deck as it would leave a playing one, except that a `Seek` leaves it stopped; at the end of the tape `Record` succeeds and leaves the deck stopped. Only a UEF is recorded on: on a CSW it is refused with `READ_ONLY` ("The tape Elite.csw is a CSW image, and Beebium records only on UEF tapes."). |
+| `Record` | Start recording. Like `Play`, the tape moves only while the motor relay is closed; every clock under the head replaces what the tape held with what the Serial ULA's tone synthesiser sends, an edge, or silence when RTS is high or RS423 is selected, so a recording deck erases to silence while the machine is quiet. A relay opening only stops the tape. `Stop`, `Play`, `Seek`, `Rewind`, `FastForward`, `EjectTape` and the end of the tape end the recording, each leaving the deck as it would leave a playing one, except that a `Seek` leaves it stopped; at the end of the tape `Record` succeeds and leaves the deck stopped. Only a UEF is recorded on: on a CSW it is refused with `READ_ONLY` ("The tape Elite.csw is a CSW image, and Beebium records only on UEF tapes."), and so, for now, on a UEF carrying an &0113 change of base frequency, which the writer cannot yet keep. |
 | `Rewind`, `FastForward` | Wind the tape backwards or forwards at 30 times real speed, whether or not the motor relay is closed; the Serial ULA receives nothing while it winds. A wind ends a recording. The wind ends on `Stop`, `Play`, `Record`, `Seek` or `EjectTape`, or at an end of the tape, where the deck stops. At the start (or the end) it succeeds and leaves the deck stopped. |
 | `Seek` | Move the tape to `position_seconds`; a seek ends a wind and leaves a playing deck playing. `Seek` to 0 is the instant return to the start. A position beyond the end lands at the end, and the deck stops; a negative position is refused with `INVALID_POSITION`. |
 | `ListBlankTapes` | The blank tape templates the server ships, in file name order, as `BlankTape`s: `label` (the file name without its extension, which `CreateTape` takes), `filename`, `kind` (`"tape"`), `size_bytes` and `duration_seconds`. The templates are found as the blank discs are (see [deployment.md](deployment.md#blank-tape-templates)). |
@@ -466,7 +466,7 @@ client gave, and its `kind` is one of `NO_CASSETTE_INTERFACE`, `CANNOT_OPEN`
 (missing, or no permission), `UNREADABLE`, `UNSUPPORTED_FORMAT` (not a UEF or
 CSW), `INVALID_IMAGE` (recognised but refused: a disc chunk, a version, a
 value out of range), `DECK_OCCUPIED`, `DECK_EMPTY` (eject, play, stop, seek, wind or record
-with no tape), `INVALID_POSITION` and `READ_ONLY` (record on a CSW).
+with no tape), `INVALID_POSITION` and `READ_ONLY` (record on a CSW, or on a UEF with an &0113 chunk).
 `CreateTape` reports its own `CreateTapeErrorKind`, as `CreateDisc` does.
 
 ```bash

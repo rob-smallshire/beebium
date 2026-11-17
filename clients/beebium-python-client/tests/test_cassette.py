@@ -160,7 +160,7 @@ def test_blank_tapes_are_listed_and_one_is_created(bbc, tmp_path: Path):
     tapes = bbc.cassette.list_blank_tapes()
     assert [t.label for t in tapes] == ["Blank C15 (15 minutes)", "Blank C30 (30 minutes)",
                                         "Blank C60 (60 minutes)", "Blank C90 (90 minutes)"]
-    assert [t.duration_seconds for t in tapes] == pytest.approx([900.0, 1800.0, 3600.0, 5400.0], abs=0.001)
+    assert [t.duration_seconds for t in tapes] == [900.0, 1800.0, 3600.0, 5400.0]
     assert all(t.kind == "tape" and t.filename == t.label + ".uef" for t in tapes)
 
     created = bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "side-a")
@@ -178,7 +178,7 @@ def test_blank_tapes_are_listed_and_one_is_created(bbc, tmp_path: Path):
 
     metadata = bbc.cassette.insert(created)
     assert metadata.recordable
-    assert abs(metadata.duration_seconds - 1800.0) < 0.001
+    assert metadata.duration_seconds == 1800.0
 
 
 def test_record_is_a_transport_and_a_csw_is_read_only(bbc, tmp_path: Path):
