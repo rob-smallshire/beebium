@@ -152,7 +152,8 @@
         "label": "Cassette",
         "image_types": [
           "uef",
-          "csw"
+          "csw",
+          "wav"
         ]
       }
     },

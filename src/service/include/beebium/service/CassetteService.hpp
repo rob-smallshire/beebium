@@ -109,10 +109,23 @@ public:
                 return grpc::Status::OK;
             }
 
+            std::optional<WavChannel> channel;
+            if (request->has_channel()) {
+                if (request->channel() == "left") {
+                    channel = WavChannel::Left;
+                } else if (request->channel() == "right") {
+                    channel = WavChannel::Right;
+                } else {
+                    fail(response, beebium::CASSETTE_ERROR_KIND_UNSPECIFIED,
+                         "A WAV's channel is left or right, not " + request->channel() + ".");
+                    return grpc::Status::OK;
+                }
+            }
+
             // Open and parse off the emulation thread; only the swap pauses it.
             std::unique_ptr<TapeSignal> tape;
             try {
-                tape = open_tape_file(filepath);
+                tape = open_tape_file(filepath, channel);
             } catch (const TapeImageError& e) {
                 fail(response, to_wire_error_kind(e.kind()), e.what());
                 return grpc::Status::OK;
@@ -324,6 +337,8 @@ private:
                     metadata.set_duration_seconds(reported_seconds(*length));
                 }
                 metadata.set_recordable(deck.recordable());
+                metadata.set_sample_rate(deck.metadata().sample_rate);
+                metadata.set_channel(deck.metadata().channel);
             });
             tape_metadata_ = std::move(metadata);
             tape_generation_ = generation;

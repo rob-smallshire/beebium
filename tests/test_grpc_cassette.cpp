@@ -493,6 +493,47 @@ TEST_CASE("CassetteService records on a UEF, refuses a CSW and an empty deck", "
 }
 
 // =============================================================================
+// Round 7: a WAV and its channel
+// =============================================================================
+
+TEST_CASE("CassetteService inserts a stereo WAV with its rate and the channel chosen", "[grpc][cassette][wav]") {
+    CassetteFixture fixture;
+    TapeBuilder builder;
+    builder.carrier(2400);
+    beebium::test::WavOptions o;
+    o.channels = 2;
+    o.signal_channel = 1;
+    o.other_amplitude = 0.05;
+    o.shape = beebium::test::WavOptions::Shape::Shifted90;
+    const auto filepath = fixture.write("stereo.wav", builder.wav(o));
+
+    auto inserted = fixture.insert(filepath.string());
+    REQUIRE(inserted.success());
+    CHECK(inserted.tape().format() == "WAV");
+    CHECK(inserted.tape().sample_rate() == 48000);
+    CHECK(inserted.tape().channel() == "right");
+    CHECK_FALSE(inserted.tape().recordable());
+    CHECK(fixture.record().kind() == beebium::CASSETTE_ERROR_KIND_READ_ONLY);
+    REQUIRE(fixture.eject().success());
+
+    grpc::ClientContext context;
+    beebium::InsertTapeRequest request;
+    request.set_url(filepath.string());
+    request.set_channel("left");
+    beebium::InsertTapeResponse response;
+    REQUIRE(fixture.stub().InsertTape(&context, request, &response).ok());
+    REQUIRE(response.success());
+    CHECK(response.tape().channel() == "left");
+    REQUIRE(fixture.eject().success());
+
+    grpc::ClientContext context2;
+    request.set_channel("centre");
+    REQUIRE(fixture.stub().InsertTape(&context2, request, &response).ok());
+    CHECK_FALSE(response.success());
+    CHECK(response.error() == "A WAV's channel is left or right, not centre.");
+}
+
+// =============================================================================
 // 10. Blank tapes
 // =============================================================================
 

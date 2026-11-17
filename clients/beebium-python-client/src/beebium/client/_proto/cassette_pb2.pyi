@@ -143,12 +143,14 @@ class TapeMetadata(_message.Message):
     TARGET_MACHINE_FIELD_NUMBER: _builtins.int
     DURATION_SECONDS_FIELD_NUMBER: _builtins.int
     RECORDABLE_FIELD_NUMBER: _builtins.int
+    SAMPLE_RATE_FIELD_NUMBER: _builtins.int
+    CHANNEL_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """the file's name"""
     url: _builtins.str
     """the source, as given"""
     format: _builtins.str
-    """"UEF" or "CSW" """
+    """"UEF", "CSW" or "WAV" """
     title: _builtins.str
     """the image's own title (UEF &0009), else empty"""
     origin: _builtins.str
@@ -158,7 +160,10 @@ class TapeMetadata(_message.Message):
     duration_seconds: _builtins.float
     """the tape's length; 0 when unknown"""
     recordable: _builtins.bool
-    """whether Record can record on it (a UEF can, a CSW cannot)"""
+    sample_rate: _builtins.int
+    """a WAV's rate in Hz; 0 for UEF and CSW"""
+    channel: _builtins.str
+    """the WAV channel played, "left" or "right"; empty for UEF and CSW          // whether Record can record on it (a UEF can, a CSW cannot)"""
     def __init__(
         self,
         *,
@@ -170,10 +175,12 @@ class TapeMetadata(_message.Message):
         target_machine: _builtins.str = ...,
         duration_seconds: _builtins.float = ...,
         recordable: _builtins.bool = ...,
+        sample_rate: _builtins.int = ...,
+        channel: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["duration_seconds", b"duration_seconds", "format", b"format", "name", b"name", "origin", b"origin", "recordable", b"recordable", "target_machine", b"target_machine", "title", b"title", "url", b"url"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["channel", b"channel", "duration_seconds", b"duration_seconds", "format", b"format", "name", b"name", "origin", b"origin", "recordable", b"recordable", "sample_rate", b"sample_rate", "target_machine", b"target_machine", "title", b"title", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -229,18 +236,24 @@ class InsertTapeRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     URL_FIELD_NUMBER: _builtins.int
+    CHANNEL_FIELD_NUMBER: _builtins.int
     url: _builtins.str
     """a file:// URI or an absolute path"""
+    channel: _builtins.str
+    """a stereo WAV's channel, "left" or "right"; absent, the louder"""
     def __init__(
         self,
         *,
         url: _builtins.str = ...,
+        channel: _builtins.str | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_channel", b"_channel", "channel", b"channel"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["url", b"url"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_channel", b"_channel", "channel", b"channel", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
+    _WhichOneofReturnType__channel: _TypeAlias = _typing.Literal["channel"]  # noqa: Y015
+    _WhichOneofArgType__channel: _TypeAlias = _typing.Literal["_channel", b"_channel"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__channel) -> _WhichOneofReturnType__channel | None: ...
 
 Global___InsertTapeRequest: _TypeAlias = InsertTapeRequest  # noqa: Y015
 

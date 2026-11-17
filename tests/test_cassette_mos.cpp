@@ -442,3 +442,70 @@ TEST_CASE("MOS 1.20 saves at 300 baud after *TAPE3 and the file says so", "[cass
     INFO(fresh.screen());
     CHECK(loaded);
 }
+
+// =============================================================================
+// 7 (round 7). tape_ok as a WAV, through the front end
+// =============================================================================
+
+namespace {
+
+std::optional<std::vector<uint8_t>> program_wav(const beebium::test::WavOptions& wav) {
+    const auto program = tokenised("tape_ok");
+    if (!program) return std::nullopt;
+    TapeBuilder builder;
+    builder.origin("beebium tests").file("TAPEOK", BASIC_LOAD, BASIC_EXEC, *program, {});
+    return builder.wav(wav);
+}
+
+bool loads_from_wav(const beebium::test::WavOptions& wav, const char* name) {
+    const auto tape = program_wav(wav);
+    if (!tape) SKIP("oaknut-basic is not available through uvx, so the test program cannot be tokenised.");
+    TapeBeeb beeb;
+    beeb.insert(*tape, name);
+    beeb.type("*TAPE\rCHAIN\"\"\r");
+    const bool loaded = beeb.run_until_screen("TAPE OK 42", 40.0);
+    if (!loaded) INFO(name << " did not load; the screen reads:\n" << beeb.screen());
+    return loaded;
+}
+
+}  // namespace
+
+// The sines are at 90 degrees, a cosine a half-cycle: the phase a playback
+// head's differentiation gives a recording.
+TEST_CASE("MOS 1.20 loads tape_ok from a WAV of sines", "[cassette][mos][wav]") {
+    if (!roms_present()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    beebium::test::WavOptions wav;
+    wav.amplitude = 0.5;
+    wav.shape = beebium::test::WavOptions::Shape::Shifted90;
+    CHECK(loads_from_wav(wav, "tape_ok.wav"));
+}
+
+TEST_CASE("MOS 1.20 loads tape_ok from a low-level, noisy WAV", "[cassette][mos][wav]") {
+    if (!roms_present()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    beebium::test::WavOptions wav;
+    wav.amplitude = 0.18;
+    wav.noise = 0.02;
+    wav.shape = beebium::test::WavOptions::Shape::Shifted90;
+    CHECK(loads_from_wav(wav, "tape_ok_low.wav"));
+}
+
+TEST_CASE("MOS 1.20 loads tape_ok from a WAV of square waves", "[cassette][mos][wav]") {
+    if (!roms_present()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    beebium::test::WavOptions wav;
+    wav.amplitude = 0.9;
+    wav.shape = beebium::test::WavOptions::Shape::Square;
+    CHECK(loads_from_wav(wav, "tape_ok_square.wav"));
+}
+
+// The model's prediction, unverified on hardware: sines at 0 degrees do not
+// load. The front end moves the low tone by about +65 degrees and the high by
+// about -5, so at each change of tone the first low half-cycle falls under the
+// separator's 350-clock timeout and the first high one over it.
+TEST_CASE("MOS 1.20 does not load tape_ok from a WAV of sines at 0 degrees", "[cassette][mos][wav]") {
+    if (!roms_present()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    beebium::test::WavOptions wav;
+    wav.amplitude = 0.5;
+    wav.shape = beebium::test::WavOptions::Shape::Sine;
+    CHECK_FALSE(loads_from_wav(wav, "tape_ok_0.wav"));
+}
+

@@ -1909,7 +1909,7 @@ TEST_CASE("describe-preset-schema: every model has the cassette deck",
             const auto& cassette = section.at("cassette");
             CHECK(cassette.at("has_cassette") == true);
             CHECK(cassette.at("label") == "Cassette");
-            CHECK(cassette.at("image_types") == nlohmann::json::array({"uef", "csw"}));
+            CHECK(cassette.at("image_types") == nlohmann::json::array({"uef", "csw", "wav"}));
         }
         CHECK(found);
     }

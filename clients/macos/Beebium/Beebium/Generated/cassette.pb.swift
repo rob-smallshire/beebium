@@ -216,7 +216,7 @@ public struct Beebium_TapeMetadata: Sendable {
   /// the source, as given
   public var url: String = String()
 
-  /// "UEF" or "CSW"
+  /// "UEF", "CSW" or "WAV"
   public var format: String = String()
 
   /// the image's own title (UEF &0009), else empty
@@ -231,8 +231,13 @@ public struct Beebium_TapeMetadata: Sendable {
   /// the tape's length; 0 when unknown
   public var durationSeconds: Double = 0
 
-  /// whether Record can record on it (a UEF can, a CSW cannot)
   public var recordable: Bool = false
+
+  /// a WAV's rate in Hz; 0 for UEF and CSW
+  public var sampleRate: UInt32 = 0
+
+  /// the WAV channel played, "left" or "right"; empty for UEF and CSW          // whether Record can record on it (a UEF can, a CSW cannot)
+  public var channel: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -286,9 +291,21 @@ public struct Beebium_InsertTapeRequest: Sendable {
   /// a file:// URI or an absolute path
   public var url: String = String()
 
+  /// a stereo WAV's channel, "left" or "right"; absent, the louder
+  public var channel: String {
+    get {return _channel ?? String()}
+    set {_channel = newValue}
+  }
+  /// Returns true if `channel` has been explicitly set.
+  public var hasChannel: Bool {return self._channel != nil}
+  /// Clears the value of `channel`. Subsequent reads from it will return its default value.
+  public mutating func clearChannel() {self._channel = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _channel: String? = nil
 }
 
 public struct Beebium_InsertTapeResponse: Sendable {
@@ -536,7 +553,7 @@ extension Beebium_CreateTapeErrorKind: SwiftProtobuf._ProtoNameProviding {
 
 extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TapeMetadata"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}url\0\u{1}format\0\u{1}title\0\u{1}origin\0\u{3}target_machine\0\u{3}duration_seconds\0\u{1}recordable\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}url\0\u{1}format\0\u{1}title\0\u{1}origin\0\u{3}target_machine\0\u{3}duration_seconds\0\u{1}recordable\0\u{3}sample_rate\0\u{1}channel\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -552,6 +569,8 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 6: try { try decoder.decodeSingularStringField(value: &self.targetMachine) }()
       case 7: try { try decoder.decodeSingularDoubleField(value: &self.durationSeconds) }()
       case 8: try { try decoder.decodeSingularBoolField(value: &self.recordable) }()
+      case 9: try { try decoder.decodeSingularUInt32Field(value: &self.sampleRate) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self.channel) }()
       default: break
       }
     }
@@ -582,6 +601,12 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if self.recordable != false {
       try visitor.visitSingularBoolField(value: self.recordable, fieldNumber: 8)
     }
+    if self.sampleRate != 0 {
+      try visitor.visitSingularUInt32Field(value: self.sampleRate, fieldNumber: 9)
+    }
+    if !self.channel.isEmpty {
+      try visitor.visitSingularStringField(value: self.channel, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -594,6 +619,8 @@ extension Beebium_TapeMetadata: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.targetMachine != rhs.targetMachine {return false}
     if lhs.durationSeconds != rhs.durationSeconds {return false}
     if lhs.recordable != rhs.recordable {return false}
+    if lhs.sampleRate != rhs.sampleRate {return false}
+    if lhs.channel != rhs.channel {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -665,7 +692,7 @@ extension Beebium_DeckStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 
 extension Beebium_InsertTapeRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".InsertTapeRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}url\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}url\0\u{1}channel\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -674,20 +701,29 @@ extension Beebium_InsertTapeRequest: SwiftProtobuf.Message, SwiftProtobuf._Messa
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.url) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._channel) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.url.isEmpty {
       try visitor.visitSingularStringField(value: self.url, fieldNumber: 1)
     }
+    try { if let v = self._channel {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Beebium_InsertTapeRequest, rhs: Beebium_InsertTapeRequest) -> Bool {
     if lhs.url != rhs.url {return false}
+    if lhs._channel != rhs._channel {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

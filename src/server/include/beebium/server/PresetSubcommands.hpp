@@ -178,7 +178,7 @@ public:
         if constexpr (HasCassette<Memory>) {
             storage["cassette"] = ojson{{"has_cassette", true},
                                         {"label", cassette_label()},
-                                        {"image_types", ojson::array({"uef", "csw"})}};
+                                        {"image_types", ojson::array({"uef", "csw", "wav"})}};
         }
 
         ServerConfig<MachineType> resolver_cfg;
