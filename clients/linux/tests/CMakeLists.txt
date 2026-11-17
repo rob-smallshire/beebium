@@ -40,11 +40,12 @@ function(beebium_linux_add_test name)
     # for it. Not by exit code: Catch2 exits with the number of failed
     # assertions, so a SKIP's exit code 4 is also four failures. The line
     # is matched at the start, after the rule of = that Catch2 draws above
-    # it ('.' is the newline), so a test's own messages, which Catch2
-    # indents, cannot match; and whole, so "1 skipped" is all there is.
+    # it ('.?.' is the line end, LF or CRLF), so a test's own messages,
+    # which Catch2 indents, cannot match; and whole, so "1 skipped" is all
+    # there is. The root suite's line is the same.
     catch_discover_tests(${name}
         PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-                   SKIP_REGULAR_EXPRESSION "=.test cases: 1 [|] 1 skipped.")
+                   SKIP_REGULAR_EXPRESSION "=.?.test cases: 1 [|] 1 skipped.")
 endfunction()
 
 beebium_linux_add_test(test_application_info
