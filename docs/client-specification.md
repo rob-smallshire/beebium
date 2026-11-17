@@ -1610,8 +1610,11 @@ section sits above the floppy drives, which sit above the hard discs.
   refusals are a server on another host and an occupied deck), and the
   recent-images list of 9.2 extended to tapes. The client sends `InsertTape` with
   the file's URL. The server judges the format by content; the client may filter
-  its file dialogue by the `.uef` and `.csw` extensions as a convenience, but never
-  refuses a file itself. A tape is removed through Eject, never by inserting over
+  its file dialogue by the `.uef`, `.csw` and `.wav` extensions as a convenience,
+  but never refuses a file itself. For a stereo WAV the server plays the louder
+  channel unless `InsertTape` names one; whether the client offers that choice is
+  LATITUDE, and it shows the tape's `channel` and `sample_rate` where it shows the
+  format. A tape is removed through Eject, never by inserting over
   an occupied deck (the server refuses that).
 - The deck keys. Play, Stop, Rewind and Fast forward (the winding transports,
   `Rewind` and `FastForward`), Back to the beginning (`Seek` to 0), and Eject; a

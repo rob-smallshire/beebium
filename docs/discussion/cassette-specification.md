@@ -457,7 +457,7 @@ cassette agent, and ends with the full gate from a separate Release worktree.
    recording over the middle of a tape leaves both ends; recording stops at the end; a
    recording through round 3's /DCD and the 5.1 s leader and 0.9 s gaps MOS writes are present
    as carrier. Brought forward so the GUI rounds build against the whole deck.
-5. **Round 7: sampled sources.** WAV, the front end, the corpus tests (every take of Plan B2
+5. **Round 7: sampled sources.** *Done.* WAV, the front end, the corpus tests (every take of Plan B2
    at all three levels loads its first file; a Cascade 50 take loads a named program; the
    partial-rewind take loads after a seek), the DCD-test WAVs.
 6. **Round 8: live audio.** `StreamAudio`, the ring, the timing policy, Python

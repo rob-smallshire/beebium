@@ -5,7 +5,8 @@ The BBC Micro's cassette interface as Beebium builds it. It covers:
 - the Serial ULA's cassette side: the data separator, the high-tone detector and the tone
   synthesiser, all clocked at 16/13 MHz;
 - the MC6850 ACIA that divides the separator's clocks and latches /DCD;
-- the tape sources: UEF and CSW images;
+- the tape sources: UEF and CSW images, and WAV recordings through a model of the machine's
+  analogue input;
 - the deck that plays them, and records on a UEF;
 - the blank tapes the server ships;
 - `CassetteService`, the motor LED, presets and machine directories, and `--tape`.
@@ -34,7 +35,8 @@ The serial side of the same chips, RS423, is in [serial-acia.md](serial-acia.md)
 | The tone synthesiser: 2403.8 Hz for mark, 1201.9 Hz for space, phase-continuous, sampling TxD at each 1024-clock cell boundary | The staircase output levels and the VLSI part's opposite polarity |
 | The ACIA dividing real receive and transmit clocks by 1, 16 or 64, and the /DCD latch | |
 | The Ferranti part (the default) and the VLSI part, including the VLSI's tone inversion on latch bit 3 | Selecting the VLSI part from a preset |
-| UEF (plain or gzipped) and CSW (v1.01 and v2, RLE and Z-RLE) tapes, rendered as edges in ULA clocks | WAV files and live audio (later rounds, below) |
+| UEF (plain or gzipped) and CSW (v1.01 and v2, RLE and Z-RLE) tapes, rendered as edges in ULA clocks | Live audio (round 8) |
+| WAV recordings, squared by a model of the LM324 input stages: the DC block, the Sallen-Key high-pass and low-pass, and a comparator with hysteresis | The clipper's gain and the ULA input's threshold as such; board-to-board variation |
 | One deck per machine: insert, eject, play, stop, rewind, fast forward, seek; the tape moving only while it plays with the relay closed, or while it winds | Motor inertia: the relay starts and stops the tape instantly. Tape audio: the tape reaches only the Serial ULA, and no client plays it |
 | The motor relay as an indicator | |
 | Recording on a UEF, written back to its file; four blank tapes | Recording on a CSW |
@@ -191,6 +193,49 @@ initial polarity flag and the &00 long-pulse escape. Each pulse becomes an edge 
 pulse_length / sample_rate, in ULA clocks, through a rounder that carries the error forward. A
 pulse longer than 100 ms is treated as a gap. A v1 file with a sample rate of 0 is refused.
 
+### Sampled sources: WAV
+
+A `SampledSource` (`cassette/SampledSource.hpp`) is a tape as sound: mono samples in [-1, 1) at
+a rate, pulled in blocks. `WavSource` reads RIFF/WAVE files of 8-bit (unsigned), 16, 24 and
+32-bit integer and 32-bit float samples, at any rate, mono or stereo, plain or
+`WAVE_FORMAT_EXTENSIBLE`. It reads the file on demand through a block cache, so a WAV of any
+length plays without being loaded whole. A stereo file plays the channel the client asks for
+(`InsertTape`'s `channel`, `"left"` or `"right"`), or else the one with the higher RMS over the
+first 10 seconds. ADPCM, mu-law and other encodings, more than two channels, and a data chunk
+that runs past the end of the file are refused with a sentence naming the file.
+
+`SampledTape` (`cassette/SampledTape.hpp`) is the `TapeSignal` over a source: it pulls samples
+through `FrontEnd` (`cassette/FrontEnd.hpp`) until the model flips, and reports each flip as an
+edge. A sample's tape time is its index × (16 MHz / 13) / rate, and an edge falls between the two
+samples that straddle the threshold, by linear interpolation, so edge times are not quantised to
+the sample period. A seek starts the model afresh, at rest. A WAV cannot be recorded on.
+`TapeMetadata` reports its `sample_rate` and the `channel` played.
+
+`FrontEnd` models the machine's LM324 input stages (findings 1.5 and 7.1), at the source's rate:
+
+| Stage | Model | Constant |
+|---|---|---|
+| DC blocking | One-pole high-pass | 20 Hz |
+| Sallen-Key high-pass | Second-order, bilinear transform | 1.29 kHz, Q = 1 / (3 - K), K = 1.27 (Q 0.578) |
+| Sallen-Key low-pass | Second-order, bilinear transform | 4.13 kHz, Q = 1 / (3 - K), K = 1.26 (Q 0.575) |
+| Comparator | Hysteresis on the filtered signal; no normalisation, no automatic gain | ±0.02 of full scale |
+
+The Q is the circuit's own, from its equal components and stage gain. The filters run at an
+internal rate of at least 88.2 kHz, with the input interpolated linearly between samples (a
+symmetric kernel, so no phase): designed at 22.05 kHz, the bilinear transform's warping moved the
+1200 Hz tone by 7 clocks. At 48 kHz the low tone's crossings move by +67° and the high tone's by
+-3°, as the circuit's simulation has it (+65° and -5°). The filters pass 0.51 of the low tone
+and 0.71 of the high, and about -14 dB at 8 kHz; 50 Hz hum at full scale gives no edges. The
+model costs 14.6 ns a sample at 48 kHz on an Apple Silicon Mac, and a 48 kHz WAV playing with
+the motor on adds about 0.1% of real time to the emulation thread's work.
+
+The phase a recording arrives in matters. Through this model a tape recorded as sines at 0°
+does not load, because the low tone's +65° shift against the high tone's -5° moves the
+half-cycles at each change of tone across the Serial ULA's 350-clock timeout; the same tape at
+90°, the phase a playback head's differentiation gives a recording, loads, as do square waves.
+If a WAV made by a tool rather than recorded from a deck will not load, its phase is the first
+thing to check.
+
 ## The deck
 
 `CassetteDeck` (`cassette/CassetteDeck.hpp`) belongs to the hardware policy, beside the disc
@@ -312,7 +357,7 @@ steps, and the new tape is recordable because it is a UEF.
 
 | RPC | Behaviour |
 |---|---|
-| `InsertTape(url)` | Opens a UEF or CSW image the server can reach, given as a `file://` URI or an absolute path and judged by content, and leaves the deck stopped at the start. Returns the tape's metadata. The file is read off the emulation thread; the insertion is made under pause |
+| `InsertTape(url, channel)` | Opens a UEF, CSW or WAV image the server can reach, given as a `file://` URI or an absolute path and judged by content, and leaves the deck stopped at the start. `channel`, `"left"` or `"right"`, chooses a stereo WAV's; without it the louder plays. Returns the tape's metadata. The file is read off the emulation thread; the insertion is made under pause |
 | `EjectTape()` | Stops the deck and removes the tape |
 | `Play()`, `Stop()` | The deck's keys. Play at the end of the tape succeeds and leaves the deck stopped |
 | `Record()` | Press record; refused with `READ_ONLY` for a tape that cannot be recorded on (a CSW) |
@@ -330,7 +375,7 @@ the client gave, and a `CassetteErrorKind`:
 | `NO_CASSETTE_INTERFACE` | The machine has no cassette interface |
 | `CANNOT_OPEN` | The file could not be found, is empty, or could not be opened |
 | `UNREADABLE` | The file could not be read |
-| `UNSUPPORTED_FORMAT` | It is not a UEF or CSW tape image |
+| `UNSUPPORTED_FORMAT` | It is not a UEF, CSW or WAV tape image, or is a WAV of an encoding or channel count Beebium does not play |
 | `INVALID_IMAGE` | It is a UEF or CSW whose contents break the format, or holds a disc, ROM or machine state |
 | `DECK_OCCUPIED` | A tape is already in; the sentence names both tapes |
 | `DECK_EMPTY` | Play, stop, record, rewind, fast forward, seek or eject with no tape in |
@@ -413,6 +458,8 @@ The tests build their tapes when they run; no tape image is typed into the Beeb.
 
 - In C++, `tests/support/tape_builder.hpp` writes UEF and CSW of MOS blocks, with the MOS's
   CRC-16/XMODEM and timings.
+  It also writes WAVs of a tape's signal, each half-cycle as a sine, a square or a sine shifted
+  90°, with noise, a second channel and every sample format.
 - In Python, `clients/beebium-python-client/tests/tape_builder.py` does the same, independently
   of the C++ build.
 - BASIC programs are tokenised from `.bas` sources in `tests/assets/cassette/`.
@@ -423,9 +470,10 @@ The tests build their tapes when they run; no tape image is typed into the Beeb.
 | `tests/test_serial_ula.cpp` | The 16/13 MHz clock and its dividers; 64 RS423 clocks a bit at every rate; the read of &FE10; cassette mode's /DCD, /CTS and silence; the part |
 | `tests/test_serial_ula_cassette.cpp` | The separator in ULA clocks: bursts, timeouts and the data rule. A tape byte arriving only at the matching ACIA divider. The detector: threshold for each part, re-arming by a 0, by motor off and by silence, and surviving latch writes. The VLSI inversion. The synthesiser's tones and silence; TDRE with no sink. The deck's movement, its refusal of a second tape, and Break. Winding: rewind from 60 s reaching 0 in 2 s and fast forward of a 90 s tape reaching its end in 3 s, with the relay open and no edges; stop and play mid-wind; a seek ending a wind |
 | `tests/test_tape_recording.cpp` | The classifier, chunk by chunk (carrier and its split, a 900 s silence, `&0112`, an 8N1 byte, a 300-baud byte, `&0104`, 7E1 as 8N1, `&0102`, metadata first); round trips of a built tape, plain and gzipped, and of a recording with its stretch; recording silence over carrier; recording to the end; a recording through the deck read back to the clock; what ends a recording; write-back on stop, eject, flush and the deck's end, never for an unrecorded tape, and a failed write leaving the file whole; `record()` refused on a CSW and an empty deck; each blank tape's length, silence and recordability |
-| `tests/test_tape_signal.cpp` | Every UEF chunk the reader renders, refuses or skips; gzip; metadata; seek and duration; CSW against the same tape's UEF to within one clock, both versions, polarity, long pulses, and the refusals |
-| `tests/test_cassette_mos.cpp` | With MOS 1.20 as a test vector: `*TAPE` and `CHAIN""` loading and running a BASIC program from UEF, at 300 baud after `*TAPE3`, and from CSW. `Data?` and `Rewind tape` for a bad data CRC; `Block?` for a block out of sequence. The Welcome tape's short leaders. `*CAT` with the tape running only while the relay is on; searching until the deck plays. `SAVE` to a copy of the C15 blank with the deck recording, at 1200 baud and at 300, `CHAIN`ed back in the same machine and a fresh one, and the written file's chunks |
-| `tests/test_grpc_cassette.cpp` | `CassetteService`: status on a fresh machine; insert, refusal of a second tape, and the error kinds; winding at 30 times real speed with the motor off; play gated by the relay; the status stream; a BASIC program loaded through MOS 1.20; `Record` on an empty deck, a CSW and a UEF, the file rewritten on `Stop`; the blank tapes listed, created, refused and recorded on |
+| `tests/test_tape_signal.cpp` | Every UEF chunk the reader renders, refuses or skips; gzip; metadata; seek and duration; CSW against the same tape's UEF to within one clock, both versions, polarity, long pulses, and the refusals. WAV: every sample format, the refusals, the louder channel and a chosen one, reading from the file and seeking, and a UEF rendered as 90° sines playing as the same half-cycle classes |
+| `tests/test_front_end.cpp` | The model's constants; its phase at 1200 and 2400 Hz; 50 Hz and 8 kHz rejection; the comparator at 0.08 and 0.01, a full-scale square, noise alone and under a sine; interpolated edges 256 ± 2 clocks apart at 48 kHz; the same edges within 2 clocks at 22050, 44100, 48000 and 96000 Hz |
+| `tests/test_cassette_mos.cpp` | With MOS 1.20 as a test vector: `*TAPE` and `CHAIN""` loading and running a BASIC program from UEF, at 300 baud after `*TAPE3`, and from CSW. `Data?` and `Rewind tape` for a bad data CRC; `Block?` for a block out of sequence. The Welcome tape's short leaders. `*CAT` with the tape running only while the relay is on; searching until the deck plays. `SAVE` to a copy of the C15 blank with the deck recording, at 1200 baud and at 300, `CHAIN`ed back in the same machine and a fresh one, and the written file's chunks. `tape_ok` as a WAV: 90° sines, sines at 0.18 with noise at 0.02, and square waves load; 0° sines do not (the model's prediction) |
+| `tests/test_grpc_cassette.cpp` | `CassetteService`: status on a fresh machine; a stereo WAV's rate and its louder or chosen channel; insert, refusal of a second tape, and the error kinds; winding at 30 times real speed with the motor off; play gated by the relay; the status stream; a BASIC program loaded through MOS 1.20; `Record` on an empty deck, a CSW and a UEF, the file rewritten on `Stop`; the blank tapes listed, created, refused and recorded on |
 | `tests/test_blank_discs.cpp` | `list-blank-tapes` and `create-tape` over the committed templates, beside the disc subcommands |
 | `tests/test_grpc_indicator.cpp` | The motor LED registered on every model after the lock LEDs, following latch bit 7 |
 | `tests/test_preset_subcommands.cpp` | `resolve-preset` and `describe-preset-schema` for the deck; a preset's tape inserted stopped; `--tape` winning and playing; a bare name found in `tapes/` |
@@ -433,7 +481,8 @@ The tests build their tapes when they run; no tape image is typed into the Beeb.
 | `clients/beebium-python-client/tests/test_saved_machines.py` | A saved machine resuming its tape where it was saved, and a run-time tape not recorded |
 | `clients/beebium-typescript-client/tests/cassette.test.ts`, `cassette-integration.test.ts` | The TypeScript mirror, with mocked stubs and against a server |
 
-`clients/beebium-python-client/tests/test_cassette_corpus.py` loads commercial tapes, each
+`clients/beebium-python-client/tests/test_cassette_corpus.py` loads two collections from the
+directory `BEEBIUM_TAPE_CORPUS_DIRPATH` names. First, commercial tapes as UEF or CSW, each
 chosen because it exercises a particular part of the path:
 
 - the /DCD latch;
@@ -443,9 +492,19 @@ chosen because it exercises a particular part of the path:
 - the ACIA's master reset;
 - writes to the ACIA during a load.
 
-Each tape is identified by its SHA-256 and read from the directory that
-`BEEBIUM_TAPE_CORPUS_DIRPATH` names. No commercial tape is committed, and a test skips when its
-tape is absent.
+Each is identified by its SHA-256. Second, a corpus of recordings supplied for the project, WAV
+files of real tapes played on a deck, named by file, each with a TOML beside it naming the signal
+channel:
+
+- Plan B2, side 1: takes 001, 002, level-normal and level-high reach the game's title screen with
+  no `Data?` or `Block?`; the level-low take is a known failure (below), asserted as one;
+- Cascade 50, side 1, take 1, whose TOML warns of bad patches (`Data?` in GAL and PLA): `CHAIN
+  "LUN"` loads the program that lies past them;
+- Palace of Magic, side 1, the partial take with a play-stop-rewind-play in it: seeked past the
+  rewind, found in the WAV as the longest stretch without tone, the loader loads from the replay
+  and the game's blocks follow.
+
+No commercial tape or recording is committed, and a test skips when its file is absent.
 
 ## Decisions still unverified
 
@@ -461,10 +520,37 @@ corpus:
 5. A read of &FE10 acting as a write of &FE.
 6. The &0114 bit order.
 7. The instantaneous motor, with no inertia.
+8. The front end's constants as a group: the 20 Hz DC block, the 1.29 kHz and 4.13 kHz corners,
+   the stage gains of 1.27 and 1.26 behind their Q, and the hysteresis of 0.02 of full scale.
+9. Whether 0° sines fail to load on a real machine, as the model predicts.
+10. The low-level Plan B2 take. It does not load through the model: 261 `Data?` over 300 s.
+    Its input peaks at 0.18 (RMS 0.054) and its filtered signal at 0.065; the normal take's at
+    0.78 and 0.40. The half-cycles through the front end over the first 120 s, in 32-clock
+    buckets:
+
+    | Take | 192 | 224 | 256 | 288 | 320 | 352 | 416 | 448 | 480 | 512 |
+    |---|---|---|---|---|---|---|---|---|---|---|
+    | low | 4789 | 154476 | 89317 | 17846 | 17812 | 1046 | 10461 | 26250 | 25902 | 21586 |
+    | normal | 29 | 174197 | 74555 | 35887 | 879 | 0 | 10903 | 14733 | 36240 | 22552 |
+
+    The hysteresis does not explain it alone:
+
+    | Hysteresis | `Data?` over 300 s | Half-cycles at 352-383 | 50 Hz test |
+    |---|---|---|---|
+    | 0.02 (the model's) | 261 | 1046 | passes |
+    | 0.015 | 237 | 64 | passes |
+    | 0.01 | 85 | 3 | fails |
+
+    The suspected mechanism: with the hysteresis at a third of the filtered peak, the comparator's
+    crossing delay, asin(h / A), differs between the two tones because the filters pass 0.51 and
+    0.71 of them, which shifts every half-cycle at a change of tone by tens of clocks on a quiet
+    take and by almost nothing on a loud one; that, with the dropouts of a quiet recording, is a
+    plausible account. The real machine's gain-50 clipper has a far smaller hysteresis relative to
+    the signal than the model's. Whether the take loads on a real Beeb is not yet known, and no
+    constant moves on one take.
 
 ## Not yet built
 
-- **Round 7:** WAV files, through a model of the machine's analogue front end.
 - **Round 8:** live audio, streamed to the deck by a client from a host input device.
 - **Later:** recording to CSW, selecting the VLSI part from a preset, and the GUI clients' deck,
   built against chapter 9.0 of the [client specification](client-specification.md).

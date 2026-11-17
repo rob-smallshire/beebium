@@ -246,7 +246,7 @@ Disc controller types for `--fdc`:
 
 | Option | Description |
 |--------|-------------|
-| `--tape <filepath>` | Insert a UEF or CSW tape into the cassette deck and press play |
+| `--tape <filepath>` | Insert a UEF, CSW or WAV tape into the cassette deck and press play (a stereo WAV plays its louder channel) |
 
 Every server accepts `--tape`, on `start` and on the subcommands that take
 machine options. The tape is named as a floppy is: a path relative to the

@@ -26,7 +26,7 @@ All arguments are optional. By default, the server loads the appropriate MOS ROM
 | `--rom <slot>:<filepath>` | Slot 15: bbc-basic_2.rom | Load ROM into sideways slot (0-15) |
 | `--rom-dir <dirpath>` | Auto-detected | ROM directory path |
 | `--port <port>` | 48875 | gRPC server port (use 0 for dynamic allocation) |
-| `--tape <filepath>` | - | Insert a UEF or CSW tape and play it (see [cli.md](cli.md)) |
+| `--tape <filepath>` | - | Insert a UEF, CSW or WAV tape and play it (see [cli.md](cli.md)) |
 | `--wait[=mode]` | - | Delay emulation start (see [cli.md](cli.md)) |
 | `--info` | - | Print machine info as JSON and exit |
 | `--help` | - | Show usage |
@@ -427,7 +427,7 @@ only while the deck plays or records and the machine's motor relay (Serial ULA l
 
 | RPC | Behaviour |
 |-----|-----------|
-| `InsertTape` | Insert the tape at `url`, a `file://` URI or an absolute path on the server's host. Its format, UEF or CSW, is judged by content, not by its name. The deck is left stopped at 0. Refused with `DECK_OCCUPIED`, naming both tapes, when a tape is already in. The response's `tape` describes the tape inserted. |
+| `InsertTape` | Insert the tape at `url`, a `file://` URI or an absolute path on the server's host. Its format, UEF, CSW or WAV, is judged by content, not by its name; a WAV plays through a model of the machine's cassette input (see [cassette.md](cassette.md)). The optional `channel`, `"left"` or `"right"`, chooses a stereo WAV's channel; without it the louder over the first 10 s is played, and any other value is refused. The deck is left stopped at 0. Refused with `DECK_OCCUPIED`, naming both tapes, when a tape is already in. The response's `tape` describes the tape inserted. |
 | `EjectTape` | Stop and remove the tape. |
 | `Play` | Start the deck. At the end of the tape it succeeds and leaves the deck stopped at the end. |
 | `Stop` | Stop the deck where it is. |
@@ -440,10 +440,11 @@ only while the deck plays or records and the machine's motor relay (Serial ULA l
 | `SubscribeDeckStatus` | Server stream of `DeckStatus`: the current status at once, then one on every change of presence, transport, relay or tape, and, while the deck plays or records, the position no more often than `min_interval_ms` (default 100) of emulated time; while it winds, as often as the position moves thirty times that much tape. |
 
 `DeckStatus` gives `has_cassette_interface`, `tape_inserted`, the `tape`
-(`TapeMetadata`: the file's `name`, the `url` as given, `format` `"UEF"` or
-`"CSW"`, the image's own `title`, `origin` and `target_machine` where it
-carries them, `duration_seconds`, 0 when unknown, and `recordable`, whether
-`Record` can record on it: true for a UEF, false for a CSW), the `transport`
+(`TapeMetadata`: the file's `name`, the `url` as given, `format` `"UEF"`,
+`"CSW"` or `"WAV"`, the image's own `title`, `origin` and `target_machine` where
+it carries them, `duration_seconds`, 0 when unknown, `recordable`, whether
+`Record` can record on it: true for a UEF without &0113, false for a CSW or WAV,
+and for a WAV its `sample_rate` and the `channel` played), the `transport`
 (`TAPE_TRANSPORT_STOPPED`, `_PLAYING`, `_RECORDING`, `_REWINDING` or
 `_FAST_FORWARDING`), `position_seconds` in tape time,
 `motor_on` (the relay, whether or not a tape is in) and `ula_part`
