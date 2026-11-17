@@ -120,4 +120,12 @@ blank_disc_count="$(printf '%s\n' "${blank_disc_out}" | tail -n +2 | grep -c .)"
     || fail "list-blank-discs lists no templates -- create-disc needs share/beebium/blank-discs"
 echo "found ${blank_disc_count} blank disc template(s)"
 
+echo "== blank tape templates discovered (share/beebium/blank-tapes) =="
+blank_tape_out="$("${prefix}/bin/beebium-model-b" --format tsv list-blank-tapes)" \
+    || fail "list-blank-tapes failed"
+blank_tape_count="$(printf '%s\n' "${blank_tape_out}" | tail -n +2 | grep -c .)" || true
+[ "${blank_tape_count}" -gt 0 ] \
+    || fail "list-blank-tapes lists no templates -- create-tape needs share/beebium/blank-tapes"
+echo "found ${blank_tape_count} blank tape template(s)"
+
 echo "SMOKE PASS: ${prefix} is runnable on $(uname -m)/$(uname -s)"

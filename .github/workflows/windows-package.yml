@@ -160,7 +160,9 @@ jobs:
           if ($presets.Count -eq 0) { Write-Host "::error::no presets in the ZIP (share\beebium\presets is empty) -- presets drive --preset machine configs"; exit 1 }
           $blank = @(& $exe --format tsv list-blank-discs | Select-Object -Skip 1 | Where-Object { $_ })
           if ($blank.Count -eq 0) { Write-Host "::error::list-blank-discs lists no templates from the ZIP (share\beebium\blank-discs) -- create-disc needs them"; exit 1 }
-          Write-Host "Windows smoke OK: extracted ZIP runs, discovers all extensions, and ships $($presets.Count) preset(s) and $($blank.Count) blank disc template(s)"
+          $tapes = @(& $exe --format tsv list-blank-tapes | Select-Object -Skip 1 | Where-Object { $_ })
+          if ($tapes.Count -eq 0) { Write-Host "::error::list-blank-tapes lists no templates from the ZIP (share\beebium\blank-tapes) -- create-tape needs them"; exit 1 }
+          Write-Host "Windows smoke OK: extracted ZIP runs, discovers all extensions, and ships $($presets.Count) preset(s), $($blank.Count) blank disc template(s) and $($tapes.Count) blank tape template(s)"
 
       # Scoop puts on PATH only the servers the manifest's "bin" array names, so
       # it must name exactly the servers the ZIP ships: one missing leaves a
