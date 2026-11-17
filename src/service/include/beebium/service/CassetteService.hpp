@@ -178,7 +178,7 @@ public:
         return status;
     }
 
-    grpc::Status StreamAudio(grpc::ServerContext*, grpc::ServerReader<AudioInputChunk>* reader,
+    grpc::Status StreamAudio(grpc::ServerContext* context, grpc::ServerReader<AudioInputChunk>* reader,
                              StreamAudioSummary* summary) override {
         auto refuse = [&](beebium::CassetteErrorKind kind, const std::string& sentence) {
             summary->set_error(sentence);
@@ -251,8 +251,15 @@ public:
                 source->push(samples);
             }
 
-            // The stream is over: the live tape goes, unless the deck let it go
-            // already (an eject ends the stream).
+            // The stream is over. A tape that runs out is not one pulled from
+            // the deck: a playing deck plays out what the ring holds, and the
+            // tape goes when it is empty. A stopped deck plays nothing, so the
+            // ring is let go with the tape at once.
+            source->end_stream();
+            while (!source->closed() && !source->empty() &&
+                   deck.published().transport == CassetteDeck::Transport::Playing && !context->IsCancelled()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 if (!source->closed()) {

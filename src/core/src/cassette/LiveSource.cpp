@@ -54,7 +54,8 @@ void LiveSource::push(std::span<const float> samples) {
 float LiveSource::next_sample() {
     consumed_.fetch_add(1, std::memory_order_relaxed);
     uint64_t r = read_.load(std::memory_order_acquire);
-    if (priming_.load(std::memory_order_relaxed)) {
+    const bool ended = ended_.load(std::memory_order_acquire);
+    if (priming_.load(std::memory_order_relaxed) && !ended) {
         if (write_.load(std::memory_order_acquire) - r < prime_) {
             // Silence while the ring primes: counted only after a starve.
             if (starved_) underruns_.fetch_add(1, std::memory_order_relaxed);
@@ -64,6 +65,7 @@ float LiveSource::next_sample() {
     }
     for (;;) {
         if (r >= write_.load(std::memory_order_acquire)) {
+            if (ended) return 0.0f;  // the end of the tape
             // Starved: silence, counted, until the ring has primed again.
             underruns_.fetch_add(1, std::memory_order_relaxed);
             starved_ = true;

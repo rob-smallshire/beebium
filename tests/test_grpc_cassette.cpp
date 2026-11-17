@@ -734,6 +734,38 @@ TEST_CASE("StreamAudio inserts a live tape the deck plays, and closing the strea
     CHECK(wait_for_status(fixture, [](const auto& s) { return !s.tape_inserted(); }));
 }
 
+TEST_CASE("A live stream that ends plays out its ring before the tape goes", "[grpc][cassette][live]") {
+    CassetteFixture fixture;
+    fixture.start_running(true);
+    for (const bool playing : {true, false}) {
+        CAPTURE(playing);
+        AudioStream stream(fixture.stub());
+        REQUIRE(stream.format());
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.tape_inserted(); }));
+        if (playing) REQUIRE(fixture.play().success());
+        uint64_t sent = 0;
+        const auto start = std::chrono::steady_clock::now();
+        for (int i = 0; i < 100; ++i) {  // a second, paced
+            REQUIRE(stream.samples(carrier_chunk(sent)));
+            sent += 480;
+            std::this_thread::sleep_until(start + std::chrono::milliseconds(10 * (i + 1)));
+        }
+        const auto closed = std::chrono::steady_clock::now();
+        REQUIRE(stream.finish().ok());
+        const auto took = std::chrono::duration<double>(std::chrono::steady_clock::now() - closed).count();
+        CHECK(stream.summary.samples_received() == sent);
+        if (playing) {
+            // The quarter-second cushion in the ring is heard before the tape goes.
+            CHECK(took > 0.15);
+            CHECK(took < 0.6);
+            CHECK(stream.summary.silence_samples_inserted() == 0);
+        } else {
+            CHECK(took < 0.1);   // a stopped deck plays nothing: the tape goes at once
+        }
+        CHECK(wait_for_status(fixture, [](const auto& s) { return !s.tape_inserted(); }));
+    }
+}
+
 TEST_CASE("EjectTape ends a live stream from the server", "[grpc][cassette][live]") {
     CassetteFixture fixture;
     fixture.start_running(true);

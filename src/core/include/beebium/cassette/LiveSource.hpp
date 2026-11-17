@@ -80,6 +80,13 @@ public:
     uint64_t underruns() const { return underruns_.load(std::memory_order_relaxed); }
     uint64_t consumed() const { return consumed_.load(std::memory_order_relaxed); }
 
+    // The stream has ended: what the ring holds plays out without priming,
+    // and an empty ring is the end of the tape, not an underrun.
+    void end_stream() { ended_.store(true, std::memory_order_release); }
+    bool ended() const { return ended_.load(std::memory_order_acquire); }
+    // Whether the ring is empty.
+    bool empty() const { return write_.load(std::memory_order_acquire) <= read_.load(std::memory_order_acquire); }
+
     // The deck has let the tape go (an eject): the stream should end.
     void close() { closed_.store(true, std::memory_order_release); }
     bool closed() const { return closed_.load(std::memory_order_acquire); }
@@ -103,6 +110,7 @@ private:
     std::atomic<uint64_t> underruns_{0};
     std::atomic<uint64_t> consumed_{0};
     std::atomic<bool> closed_{false};
+    std::atomic<bool> ended_{false};
     std::atomic<bool> priming_{true};   // written by the consumer only
     bool starved_ = false;              // priming again after an underrun (consumer only)
 };

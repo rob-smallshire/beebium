@@ -117,6 +117,18 @@ TEST_CASE("Live source primes a quarter of a second before it plays, and again a
     CHECK(source->underruns() == 2 * RATE / 10);
 }
 
+TEST_CASE("Live source plays out an ended stream without priming and counts no underrun", "[cassette][live]") {
+    auto source = std::make_shared<LiveSource>(RATE);
+    LiveTape tape(source, "left");
+    tape.next();
+    source->push(tone(2400.0, 0, RATE / 10));   // less than the priming level
+    source->end_stream();
+    const auto edges = consume(tape, RATE / 5);
+    CHECK_FALSE(edges.empty());                  // heard, though it never primed
+    CHECK(source->empty());
+    CHECK(source->underruns() == 0);             // an empty ring is the end of the tape
+}
+
 TEST_CASE("Live source gives silence and counts it when the stream stops", "[cassette][live]") {
     auto source = std::make_shared<LiveSource>(RATE);
     LiveTape tape(source, "left");
