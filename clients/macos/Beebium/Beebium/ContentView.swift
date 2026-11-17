@@ -131,6 +131,7 @@ struct ContentView: View {
     @StateObject private var systemClient = SystemClient()
     @StateObject private var indicatorClient = IndicatorClient()
     @StateObject private var discClient = DiscClient()
+    @StateObject private var cassetteClient = CassetteClient()
     @StateObject private var audioClient = AudioClient()
     @StateObject private var debuggerClient = DebuggerClient()
     @StateObject private var audioMixerState = AudioMixerState()
@@ -214,6 +215,7 @@ struct ContentView: View {
                     liveness: systemClient.liveness,
                     reconnectPhase: reconnectCoordinator.phase
                 ),
+                cassetteClient: cassetteClient,
                 discClient: discClient,
                 indicatorClient: indicatorClient,
                 keyboardMappingManager: keyboardMappingManager,
@@ -574,6 +576,7 @@ struct ContentView: View {
                 FocusDiagnostics.observePublisher(transportsClient, named: "EconetTransportsClient"),
                 FocusDiagnostics.observePublisher(extensionUiClient, named: "ExtensionUiClient"),
                 FocusDiagnostics.observePublisher(discClient, named: "DiscClient"),
+                FocusDiagnostics.observePublisher(cassetteClient, named: "CassetteClient"),
                 FocusDiagnostics.observePublisher(peripheralsClient, named: "PeripheralsClient"),
                 FocusDiagnostics.observePublisher(sidewaysClient, named: "SidewaysClient"),
                 FocusDiagnostics.observePublisher(speedModel, named: "SpeedControlModel"),
@@ -584,6 +587,7 @@ struct ContentView: View {
             clientGroup.register(systemClient)
             clientGroup.register(indicatorClient)
             clientGroup.register(discClient)
+            clientGroup.register(cassetteClient)
             clientGroup.register(audioClient)
             clientGroup.register(debuggerClient)
             clientGroup.register(econetClient)
@@ -685,6 +689,7 @@ struct ContentView: View {
                 indicatorClient.connect(channel: channel)
                 sidewaysClient.connect(channel: channel)
                 discClient.connect(channel: channel)
+                cassetteClient.connect(channel: channel)
                 audioClient.connect(channel: channel)
                 debuggerClient.connect(channel: channel)
                 econetClient.connect(channel: channel)

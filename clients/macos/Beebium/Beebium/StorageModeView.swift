@@ -43,6 +43,7 @@ enum BlankDiscNaming {
 /// IndicatorClient -- the StorageDevice.activityIndicatorName is the
 /// key into that client's published values dictionary.
 struct StorageModeView: View {
+    @ObservedObject var cassetteClient: CassetteClient
     @ObservedObject var discClient: DiscClient
     @ObservedObject var peripheralsClient: PeripheralsClient
     @ObservedObject var indicatorClient: IndicatorClient
@@ -53,9 +54,10 @@ struct StorageModeView: View {
     let isServerLocal: Bool
 
     var body: some View {
-        if !discClient.isLoaded || !peripheralsClient.isLoaded {
+        if !discClient.isLoaded || !peripheralsClient.isLoaded || !cassetteClient.isLoaded {
             loadingView
-        } else if !discClient.hasDiscController && peripheralStorage.isEmpty {
+        } else if !cassetteClient.hasCassetteInterface
+                    && !discClient.hasDiscController && peripheralStorage.isEmpty {
             noStorageView
         } else {
             contentView
@@ -129,6 +131,15 @@ struct StorageModeView: View {
     private var contentView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                // The cassette deck sits above the floppy drives, which sit
+                // above the hard discs (section 9.0).
+                if cassetteClient.hasCassetteInterface {
+                    CassetteDeckView(cassetteClient: cassetteClient,
+                                     isServerLocal: isServerLocal)
+                    if discClient.hasDiscController || !peripheralStorage.isEmpty {
+                        Divider().padding(.horizontal, 12)
+                    }
+                }
                 if discClient.hasDiscController {
                     floppyList
                 }
@@ -747,7 +758,8 @@ private struct DriveRowView: View {
 #if DEBUG
 struct StorageModeView_Previews: PreviewProvider {
     static var previews: some View {
-        StorageModeView(discClient: DiscClient(),
+        StorageModeView(cassetteClient: CassetteClient(),
+                        discClient: DiscClient(),
                         peripheralsClient: PeripheralsClient(),
                         indicatorClient: IndicatorClient(),
                         isServerLocal: true)

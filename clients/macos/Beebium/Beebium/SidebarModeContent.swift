@@ -76,6 +76,7 @@ struct SidebarModeContent: View {
     /// Whether the server is there to back the state the sidebar shows; the
     /// same resolution the emulator-area overlay uses.
     let serverAvailability: ServerAvailability
+    @ObservedObject var cassetteClient: CassetteClient
     @ObservedObject var discClient: DiscClient
     @ObservedObject var indicatorClient: IndicatorClient
     @ObservedObject var keyboardMappingManager: KeyboardMappingManager
@@ -114,7 +115,8 @@ struct SidebarModeContent: View {
     private var modeContent: some View {
         switch mode {
         case .storage:
-            StorageModeView(discClient: discClient,
+            StorageModeView(cassetteClient: cassetteClient,
+                            discClient: discClient,
                             peripheralsClient: peripheralsClient,
                             indicatorClient: indicatorClient,
                             isServerLocal: systemClient.isServerLocal)
@@ -863,6 +865,7 @@ struct SidebarModeContent_Previews: PreviewProvider {
         SidebarModeContent(
             mode: .keyboard,
             serverAvailability: .live,
+            cassetteClient: CassetteClient(),
             discClient: DiscClient(),
             indicatorClient: IndicatorClient(),
             keyboardMappingManager: KeyboardMappingManager(),
