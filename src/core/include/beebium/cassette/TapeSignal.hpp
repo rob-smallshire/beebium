@@ -63,13 +63,14 @@ struct TapeImageMetadata {
     std::string channel;
 };
 
-enum class TapeKind : uint8_t { Uef, Csw, Wav };
+enum class TapeKind : uint8_t { Uef, Csw, Wav, Live };
 
-// The kind as a client sees it: "UEF", "CSW" or "WAV".
+// The kind as a client sees it: "UEF", "CSW", "WAV" or "LIVE".
 inline const char* tape_kind_text(TapeKind kind) {
     switch (kind) {
         case TapeKind::Csw: return "CSW";
         case TapeKind::Wav: return "WAV";
+        case TapeKind::Live: return "LIVE";
         case TapeKind::Uef: break;
     }
     return "UEF";

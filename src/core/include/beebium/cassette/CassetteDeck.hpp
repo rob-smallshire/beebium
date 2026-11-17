@@ -40,6 +40,13 @@ namespace beebium {
 // edges reach nobody: a wound tape is off the head. A wind ends on stop, play,
 // seek, eject, or at either end of the tape, where the deck stops.
 //
+// A live tape (a client's audio input) is not gated by the relay: a deck
+// without a remote lead keeps playing, and the real ULA keeps listening. It is
+// paced by emulated time, a sample a sample period, whether the deck plays or
+// not (stopped, the samples are taken and go nowhere, so its ring does not
+// fill); only a playing deck passes its edges on. It cannot wind, seek or be
+// recorded on, and its position counts the samples taken since it began.
+//
 // Recording is a transport like playing: the tape moves only while the relay
 // is closed, and every clock that passes under the head replaces what the
 // tape held there with what the Serial ULA's tone synthesiser sends, an edge
@@ -94,6 +101,7 @@ public:
                                      "; eject it before inserting another tape.");
         }
         tape_ = std::move(tape);
+        live_ = tape_->kind() == TapeKind::Live;
         name_ = std::move(name);
         url_ = std::move(url);
         filepath_ = std::move(filepath);
@@ -109,6 +117,7 @@ public:
     void eject() {
         end_recording();
         flush();
+        live_ = false;
         tape_.reset();
         name_.clear();
         url_.clear();
@@ -137,7 +146,7 @@ public:
 
     // Wind backwards to the start, where the deck stops.
     void rewind() {
-        if (!tape_) return;
+        if (!tape_ || live_) return;
         end_recording();
         end_wind();
         transport_ = position_ > 0 ? Transport::Rewinding : Transport::Stopped;
@@ -146,7 +155,7 @@ public:
 
     // Wind forwards to the end, where the deck stops.
     void fast_forward() {
-        if (!tape_) return;
+        if (!tape_ || live_) return;
         end_recording();
         end_wind();
         transport_ = position_ < end_time() ? Transport::FastForwarding : Transport::Stopped;
@@ -160,7 +169,7 @@ public:
     // Reposition instantly; a time beyond the end lands at the end and stops.
     // A seek ends a wind; it leaves a playing deck playing.
     void seek(TapeTime time) {
-        if (!tape_) return;
+        if (!tape_ || live_) return;
         end_recording();
         if (winding()) transport_ = Transport::Stopped;
         const auto length = tape_->duration();
@@ -194,6 +203,9 @@ public:
 
     bool recording() const { return transport_ == Transport::Recording; }
 
+    // Whether the deck holds a live tape.
+    bool live() const { return live_; }
+
     // Whether the tape in the deck can be recorded on.
     bool recordable() const { return tape_ != nullptr && tape_->recorder() != nullptr; }
 
@@ -201,6 +213,7 @@ public:
     // nothing when it can (or the deck is empty).
     std::optional<std::string> why_not_recordable() const {
         if (!tape_ || recordable()) return std::nullopt;
+        if (live_) return "The live input " + name_ + " cannot be recorded on.";
         if (tape_->kind() != TapeKind::Uef) {
             return "The tape " + name_ + " is a " + tape_kind_text(tape_->kind()) +
                    " image, and Beebium records only on UEF tapes.";
@@ -217,6 +230,10 @@ public:
             published_relay_.store(relay_closed, std::memory_order_relaxed);
             published_position_.store(position_, std::memory_order_relaxed);
             published_sequence_.fetch_add(1, std::memory_order_release);
+        }
+        if (live_) {
+            const bool edge = advance();
+            return transport_ == Transport::Playing && edge;
         }
         if (transport_ == Transport::Playing) {
             return relay_closed && advance();
@@ -432,6 +449,7 @@ private:
     std::string url_;
     std::filesystem::path filepath_;
     bool configured_ = false;
+    bool live_ = false;           // the tape is a live input
     bool head_writing_ = false;   // the head writes on this clock
     TapeTime head_time_ = 0;      // the tape time under the head on this clock
     Transport transport_ = Transport::Stopped;
