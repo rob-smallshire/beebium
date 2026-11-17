@@ -51,6 +51,13 @@ private:
     QDialogButtonBox* buttons_ = nullptr;
 };
 
+// A ServerMessageDialog over `parent`, opened window-modal without a nested
+// event loop and deleted when closed: a window closed or deleted under it
+// takes the dialog with it, where one run with exec() on the stack would be
+// freed twice. The caller may keep the pointer only as a QPointer.
+ServerMessageDialog* show_server_message(QWidget* parent, const QString& title,
+                                         const QString& sentence, const QString& server_message);
+
 }  // namespace beebium::linux_client
 
 #endif  // BEEBIUM_LINUX_APP_ERROR_PRESENTATION_HPP

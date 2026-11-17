@@ -273,11 +273,9 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                 if (recovery_->recovering()) {
                     return;  // the overlay counts the attempts
                 }
-                ServerMessageDialog dialog(
-                    tr("Could Not Connect"),
-                    connection_failure_sentence(failure, session_->endpoint()),
-                    server_message, this);
-                dialog.exec();
+                show_server_message(this, tr("Could Not Connect"),
+                                    connection_failure_sentence(failure, session_->endpoint()),
+                                    server_message);
             });
     connect(session_, &MachineSession::connected_to_server, this,
             [] { std::fprintf(stderr, "beebium: connected\n"); });
@@ -286,10 +284,8 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
     });
     connect(session_, &MachineSession::run_finished, this, [this](const CallOutcome& outcome) {
         if (!outcome.ok) {
-            ServerMessageDialog dialog(tr("Could Not Run"),
-                                       tr("The machine could not be started."), outcome.message,
-                                       this);
-            dialog.exec();
+            show_server_message(this, tr("Could Not Run"), tr("The machine could not be started."),
+                                outcome.message);
         }
     });
     connect(session_, &MachineSession::liveness_changed, this, [](Liveness liveness) {

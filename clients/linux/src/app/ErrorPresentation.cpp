@@ -77,6 +77,14 @@ ServerMessageDialog::ServerMessageDialog(const QString& title, const QString& se
     resize(520, sizeHint().height());
 }
 
+ServerMessageDialog* show_server_message(QWidget* parent, const QString& title,
+                                         const QString& sentence, const QString& server_message) {
+    auto* dialog = new ServerMessageDialog(title, sentence, server_message, parent);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->open();
+    return dialog;
+}
+
 void ServerMessageDialog::offer_clear(std::function<void()> clear) {
     auto* button = buttons_->addButton(tr("Clear"), QDialogButtonBox::ActionRole);
     button->setAutoDefault(false);

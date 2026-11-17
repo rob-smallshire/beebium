@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include "app/DisplayWidget.hpp"
+#include "app/ErrorPresentation.hpp"
 #include "app/KeyboardInput.hpp"
 #include "app/MachineSession.hpp"
 #include "app/MainWindow.hpp"
@@ -19,6 +20,9 @@
 #include "WaitUntil.hpp"
 
 #include <QAction>
+#include <QApplication>
+#include <QPointer>
+#include <QTimer>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
@@ -235,4 +239,37 @@ TEST_CASE("A server on this host gets every saving command", "[app][window][gati
     CHECK_FALSE(file_action(window, QStringLiteral("Save As..."))->isEnabled());
     window.set_quitting(true);
     window.close();
+}
+
+TEST_CASE("A connection failure's dialog does not hold the event loop, and goes with its window",
+          "[app][window][errors]") {
+    QPointer<MainWindow> window = new MainWindow(QRhiWidget::Api::OpenGL);
+    window->show();
+    // Closed under the dialog, as a quit or a teardown closes it: the
+    // window's deletion takes the dialog with it.
+    QTimer::singleShot(200, [window] { delete window.data(); });
+    Q_EMIT window->session().connection_failed(beebium::linux_client::ConnectionFailure::incompatible,
+                                               QStringLiteral("The server speaks another protocol."));
+    QPointer<beebium::linux_client::ServerMessageDialog> dialog =
+        window ? window->findChild<beebium::linux_client::ServerMessageDialog*>() : nullptr;
+    REQUIRE(dialog);
+    CHECK(dialog->isVisible());
+    CHECK(dialog->testAttribute(Qt::WA_DeleteOnClose));
+    REQUIRE(wait_until([&] { return window.isNull(); }));
+    CHECK(dialog.isNull());
+}
+
+TEST_CASE("A server message opens over its window without blocking, and is deleted on close",
+          "[app][errors]") {
+    QWidget parent;
+    parent.show();
+    QPointer<beebium::linux_client::ServerMessageDialog> dialog =
+        beebium::linux_client::show_server_message(&parent, QStringLiteral("Could Not Run"),
+                                                   QStringLiteral("The machine could not be started."),
+                                                   QStringLiteral("no ROM"));
+    REQUIRE(dialog);
+    CHECK(dialog->isVisible());
+    CHECK(dialog->windowModality() == Qt::WindowModal);
+    dialog->reject();
+    REQUIRE(wait_until([&] { return dialog.isNull(); }));
 }
