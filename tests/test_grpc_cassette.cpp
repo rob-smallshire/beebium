@@ -27,6 +27,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <grpcpp/grpcpp.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -34,6 +35,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <string>
 #include <thread>
@@ -1053,4 +1055,69 @@ TEST_CASE("The status stream reports a signal map becoming ready", "[grpc][casse
     for (int i = 0; i < 20 && !ready && reader->Read(&status); ++i) ready = status.signal_map_ready();
     CHECK(ready);
     context.TryCancel();
+}
+
+// =============================================================================
+// A newly created tape, recorded on
+// =============================================================================
+
+namespace {
+
+std::map<std::string, std::vector<uint8_t>> files_in(const std::filesystem::path& dirpath) {
+    std::map<std::string, std::vector<uint8_t>> files;
+    for (const auto& entry : std::filesystem::directory_iterator(dirpath)) {
+        if (entry.is_regular_file()) files[entry.path().filename().string()] = read_file(entry.path());
+    }
+    return files;
+}
+
+}  // namespace
+
+TEST_CASE("A program SAVEd to a newly created tape lands in the new tape, not its template",
+          "[grpc][cassette][recording][mos]") {
+    CassetteFixture fixture;
+    if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    // The server's templates here are the repository's own blank tapes.
+    const std::filesystem::path templates_dirpath = BEEBIUM_BLANK_TAPES_DIR;
+    const auto templates_before = files_in(templates_dirpath);
+
+    // As a client's New Blank Tape does: create, then insert the path returned.
+    const auto created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "cass");
+    REQUIRE(created.success());
+    const std::filesystem::path tape_filepath = created.path();
+    CHECK(tape_filepath == fixture.dirpath() / "cass.uef");
+    CHECK(read_file(tape_filepath) == templates_before.at("Blank C15 (15 minutes).uef"));
+    REQUIRE(fixture.insert(created.path()).success());
+
+    // A short program that leaves its mark in memory, SAVEd as CASS.
+    fixture.start_running();
+    fixture.run_emulated(4'000'000);
+    fixture.type("10 ?&70=42\r*TAPE\rSAVE \"CASS\"\r");
+    fixture.run_emulated(4'000'000);   // to "RECORD then RETURN"
+    REQUIRE(fixture.record().success());
+    fixture.type("\r");
+    // The SAVE is over when the relay opens again with the tape moved.
+    REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.motor_on(); }, 20'000));
+    REQUIRE(wait_for_status(fixture, [](const auto& s) { return !s.motor_on() && s.position_seconds() > 0.0; },
+                            60'000));
+    REQUIRE(fixture.call<beebium::StopRequest>(&beebium::CassetteService::Stub::Stop).success());
+
+    // The recording is in the new tape: its header block names CASS.
+    const auto recorded = read_file(tape_filepath);
+    const std::string header = std::string("\x2a") + "CASS" + std::string(1, '\0');
+    CHECK(std::search(recorded.begin(), recorded.end(), header.begin(), header.end()) != recorded.end());
+    // Every template is as it was.
+    CHECK(files_in(templates_dirpath) == templates_before);
+
+    // And the program loads back from the new tape and runs.
+    fixture.machine().with_emulation_paused([&] { fixture.machine().write(0x70, 0); });
+    REQUIRE(fixture.seek(0.0).success());
+    REQUIRE(fixture.play().success());
+    fixture.type("NEW\rCHAIN \"CASS\"\r");
+    bool ran = false;
+    for (int second = 0; second < 40 && !ran; ++second) {
+        fixture.run_emulated(2'000'000);
+        fixture.machine().with_emulation_paused([&] { ran = fixture.machine().peek(0x70) == 42; });
+    }
+    CHECK(ran);
 }
