@@ -670,7 +670,9 @@ struct CassetteDeckView: View {
                 .compactMap { UTType(filenameExtension: $0) }
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
+            panel.directoryURL = DialogLocations.shared.startDirectory(for: .insertTape)
             if panel.runModal() == .OK, let url = panel.url {
+                DialogLocations.shared.remember(url, for: .insertTape)
                 insertTape(url: url)
             }
         }
@@ -690,7 +692,9 @@ struct CassetteDeckView: View {
             if let type = UTType(filenameExtension: templateExtension) {
                 panel.allowedContentTypes = [type]
             }
+            panel.directoryURL = DialogLocations.shared.startDirectory(for: .newBlankTape)
             guard panel.runModal() == .OK, let url = panel.url else { return }
+            DialogLocations.shared.remember(url, for: .newBlankTape)
             // Belt and braces: if the returned name still does not carry the
             // template's extension, add it; the server refuses a wrong one.
             let destination = BlankDiscNaming.url(forChosen: url, templateFilename: tape.filename)

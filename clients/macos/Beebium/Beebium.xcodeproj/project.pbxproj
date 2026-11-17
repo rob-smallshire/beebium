@@ -155,6 +155,7 @@
 		79DB2DF04399A3F0579DA079 /* SidewaysClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C793157DDB8EFB24A11C7D63 /* SidewaysClient.swift */; };
 		7A84FB95762B73506ECFE0D2 /* MachineRecents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 835C38065C5B2C427A880E60 /* MachineRecents.swift */; };
 		7BFE0920078B5E1DA49C7AFE /* StorageSchemaSectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49A08A816DC6C9CBA1A9B27B /* StorageSchemaSectionTests.swift */; };
+		7D4DC36C98CF724B4CD1D99A /* DialogLocationsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A181B096B7E4B4AAFC50D54 /* DialogLocationsTests.swift */; };
 		7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */; };
 		7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */; };
 		7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE550723A13DFA9A20EB302 /* IndicatorView.swift */; };
@@ -300,6 +301,7 @@
 		F27E0697D14CBC60E7BB945E /* TextInputField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A03414ECE92D9AA04944FBB /* TextInputField.swift */; };
 		F285735344904A7D3775E42B /* DiscImageDropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */; };
 		F369818B03931A54C795F6D6 /* RecentConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B19F4DD5A21B41C2CF9630 /* RecentConnections.swift */; };
+		F3F550B221EC02EBB29D6CD9 /* DialogLocations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54DAC8B43B8AEC5BAA1D486D /* DialogLocations.swift */; };
 		F44ED1692215ABF5CE928E87 /* indicator.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831E41582E1F4F7358C624E8 /* indicator.pb.swift */; };
 		F4E79C3B365AB2D13A5B5984 /* VideoClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */; };
 		F5336AD96DB468018D7B5AE9 /* ExtensionManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E743CB023485025EA33E39A /* ExtensionManifestTests.swift */; };
@@ -342,6 +344,7 @@
 		0787829BB8681E1354B9C585 /* BeebiumTouchBarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarManager.swift; sourceTree = "<group>"; };
 		08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClient.swift; sourceTree = "<group>"; };
 		0A03414ECE92D9AA04944FBB /* TextInputField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputField.swift; sourceTree = "<group>"; };
+		0A181B096B7E4B4AAFC50D54 /* DialogLocationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DialogLocationsTests.swift; sourceTree = "<group>"; };
 		0A634C79BE6154BBDAA516A5 /* RecentDiscsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentDiscsTests.swift; sourceTree = "<group>"; };
 		0A9849250F602C15283E458A /* StatusBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarView.swift; sourceTree = "<group>"; };
 		0ABF4358E2083C3EFF42FC02 /* SpeedPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedPresentation.swift; sourceTree = "<group>"; };
@@ -416,6 +419,7 @@
 		5244C15F42F4C5B7AA77002F /* SavedMachinesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedMachinesModel.swift; sourceTree = "<group>"; };
 		53D393AA6F8EA8027CA2417C /* KeyboardMappingToggleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMappingToggleTests.swift; sourceTree = "<group>"; };
 		5485C89172467F6E009C0EA5 /* AttachmentChooser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentChooser.swift; sourceTree = "<group>"; };
+		54DAC8B43B8AEC5BAA1D486D /* DialogLocations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DialogLocations.swift; sourceTree = "<group>"; };
 		54F38B119FC4AA35BEF5E396 /* StructuredListItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredListItemTests.swift; sourceTree = "<group>"; };
 		55B1EDE37C44C9225386BC79 /* ExtensionsSchemaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsSchemaSection.swift; sourceTree = "<group>"; };
 		560CD4997F297C12AD3CA81C /* FileCommandsImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileCommandsImportTests.swift; sourceTree = "<group>"; };
@@ -871,6 +875,7 @@
 				E2FF930B029ECBBAE243C4D0 /* ContentView.swift */,
 				8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */,
 				12818B1698A8D15AE8A63653 /* DeepLink.swift */,
+				54DAC8B43B8AEC5BAA1D486D /* DialogLocations.swift */,
 				CF6562062957B62B8C099A42 /* DiscClient.swift */,
 				1B6DCFA44B730E3663D357C1 /* DiscImageDrop.swift */,
 				639EC2DB9EC3CBA7F0E7A8CB /* Disconnectable.swift */,
@@ -1007,6 +1012,7 @@
 				E562A1BF96C01F4E6323AB8F /* CreateTapeErrorKindLabelTests.swift */,
 				F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */,
 				5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */,
+				0A181B096B7E4B4AAFC50D54 /* DialogLocationsTests.swift */,
 				D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */,
 				E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */,
 				814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */,
@@ -1229,6 +1235,7 @@
 				81AE0FC8B3F710AE5BB1F78B /* CreateTapeErrorKindLabelTests.swift in Sources */,
 				7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */,
 				7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */,
+				7D4DC36C98CF724B4CD1D99A /* DialogLocationsTests.swift in Sources */,
 				7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */,
 				01DF7C088640796D6FC529C8 /* DiscFormatListTests.swift in Sources */,
 				F285735344904A7D3775E42B /* DiscImageDropTests.swift in Sources */,
@@ -1340,6 +1347,7 @@
 				5EF39565CAF128FD1974E0BF /* DebugDisplayStyle.swift in Sources */,
 				345AA9A186D7CA962B5D31A1 /* DebuggerClient.swift in Sources */,
 				C22E6469F7B458EED56A7DBC /* DeepLink.swift in Sources */,
+				F3F550B221EC02EBB29D6CD9 /* DialogLocations.swift in Sources */,
 				4D9536D54F0C9291F5ECD326 /* DiscClient.swift in Sources */,
 				0DB84CA71C7998BEE8527F1B /* DiscImageDrop.swift in Sources */,
 				0EDBB215C12201D673213861 /* DiscImageInfo.swift in Sources */,

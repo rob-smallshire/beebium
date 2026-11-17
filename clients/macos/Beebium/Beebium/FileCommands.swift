@@ -167,8 +167,10 @@ struct FileCommands: Commands {
         panel.treatsFilePackagesAsDirectories = false
         panel.title = "Open Machine"
         panel.message = "Choose a saved Beebium machine."
+        panel.directoryURL = DialogLocations.shared.startDirectory(for: .openMachine)
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        DialogLocations.shared.remember(url, for: .openMachine)
         appActions.requestOpenSavedMachine(url)
     }
 
@@ -184,8 +186,10 @@ struct FileCommands: Commands {
         panel.canChooseFiles = true
         panel.title = "Import Presets"
         panel.message = "Select presets to import."
+        panel.directoryURL = DialogLocations.shared.startDirectory(for: .importPresets)
 
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        if let first = panel.urls.first { DialogLocations.shared.remember(first, for: .importPresets) }
         guard let executablePath = presetManager.anyCoreExecutablePath else {
             showImportErrorAlert(message: "No machine core is available to import presets.")
             return

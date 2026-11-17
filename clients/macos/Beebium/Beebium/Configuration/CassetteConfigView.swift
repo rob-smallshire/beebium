@@ -147,7 +147,9 @@ struct CassetteConfigView: View {
             if !types.isEmpty { panel.allowedContentTypes = types }
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
+            panel.directoryURL = DialogLocations.shared.startDirectory(for: .chooseTape)
             if panel.runModal() == .OK, let url = panel.url {
+                DialogLocations.shared.remember(url, for: .chooseTape)
                 accept(url)
             }
         }

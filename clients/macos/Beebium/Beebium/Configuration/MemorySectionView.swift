@@ -300,8 +300,10 @@ struct MemorySectionView: View {
         panel.allowedContentTypes = [UTType(filenameExtension: "rom") ?? .data]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
+        panel.directoryURL = DialogLocations.shared.startDirectory(for: .chooseRom)
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        DialogLocations.shared.remember(url, for: .chooseRom)
         var content = row.content
         if let forcingKind { content.kind = forcingKind }
         // Browsing into an empty socket loads it as a ROM (one less step); a RAM

@@ -585,8 +585,10 @@ private struct DriveRowView: View {
             panel.allowedContentTypes = await PresetManager.shared.discImageContentTypes(kind: "floppy")
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
+            panel.directoryURL = DialogLocations.shared.startDirectory(for: .insertDisc)
 
             if panel.runModal() == .OK, let url = panel.url {
+                DialogLocations.shared.remember(url, for: .insertDisc)
                 insertDisc(url: url)
             }
         }
@@ -607,8 +609,10 @@ private struct DriveRowView: View {
             if let type = UTType(filenameExtension: templateExtension) {
                 panel.allowedContentTypes = [type]
             }
+            panel.directoryURL = DialogLocations.shared.startDirectory(for: .newBlankDisc)
 
             guard panel.runModal() == .OK, let url = panel.url else { return }
+            DialogLocations.shared.remember(url, for: .newBlankDisc)
             // Belt and braces: if the returned name still does not carry the
             // template's extension, add it rather than creating a wrong name.
             let destination = BlankDiscNaming.url(forChosen: url, templateFilename: disc.filename)

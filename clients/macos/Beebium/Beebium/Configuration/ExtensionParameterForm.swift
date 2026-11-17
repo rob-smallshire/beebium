@@ -685,7 +685,9 @@ private struct FilepathParameterControl: View {
             let directory = parameter.type == "dirpath"
             panel.canChooseDirectories = directory
             panel.canChooseFiles = !directory
+            panel.directoryURL = DialogLocations.shared.startDirectory(for: .extensionFileOpen)
             if panel.runModal() == .OK, let url = panel.url {
+                DialogLocations.shared.remember(url, for: .extensionFileOpen)
                 setValue(parameter.key, .string(url.path))
             }
         case .save(let suggestedName):
@@ -696,7 +698,9 @@ private struct FilepathParameterControl: View {
             let panel = NSSavePanel()
             panel.prompt = "Choose"
             if let suggestedName = suggestedName { panel.nameFieldStringValue = suggestedName }
+            panel.directoryURL = DialogLocations.shared.startDirectory(for: .extensionFileSave)
             if panel.runModal() == .OK, let url = panel.url {
+                DialogLocations.shared.remember(url, for: .extensionFileSave)
                 setValue(parameter.key, .string(url.path))
             }
         }
@@ -791,7 +795,9 @@ private struct MapFileParameterControl: View {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
+        panel.directoryURL = DialogLocations.shared.startDirectory(for: .chooseMapping)
         if panel.runModal() == .OK, let url = panel.url {
+            DialogLocations.shared.remember(url, for: .chooseMapping)
             setValue(key, .string(url.path))
         }
     }

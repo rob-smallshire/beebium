@@ -158,8 +158,10 @@ struct FloppyDriveConfigView: View {
             panel.allowedContentTypes = await PresetManager.shared.discImageContentTypes(kind: "floppy")
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
+            panel.directoryURL = DialogLocations.shared.startDirectory(for: .chooseFloppy)
 
             if panel.runModal() == .OK, let url = panel.url {
+                DialogLocations.shared.remember(url, for: .chooseFloppy)
                 validate(url)
             }
         }

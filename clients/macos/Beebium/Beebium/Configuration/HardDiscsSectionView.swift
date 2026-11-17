@@ -247,7 +247,9 @@ private struct HardDiscRowView: View {
                 await PresetManager.shared.discImageContentTypes(kind: "hard-disc")
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
+            panel.directoryURL = DialogLocations.shared.startDirectory(for: .chooseHardDisc)
             guard panel.runModal() == .OK, let url = panel.url else { return }
+            DialogLocations.shared.remember(url, for: .chooseHardDisc)
             setImage(url.path)
         }
     }

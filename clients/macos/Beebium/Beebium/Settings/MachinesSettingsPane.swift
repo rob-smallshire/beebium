@@ -173,8 +173,10 @@ struct MachinesSettingsPane: View {
         }
         panel.title = "Export Preset"
         panel.message = "Choose a location to save the preset file."
+        panel.directoryURL = DialogLocations.shared.startDirectory(for: .exportPreset)
 
         if panel.runModal() == .OK, let url = panel.url {
+            DialogLocations.shared.remember(url, for: .exportPreset)
             Task {
                 _ = await presetManager.exportPreset(preset, to: url.path)
             }

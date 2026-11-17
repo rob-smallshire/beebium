@@ -115,13 +115,16 @@ enum MachineSaving {
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.beebiumMachine]
-        panel.directoryURL = defaults.directoryURL
+        // The start directory follows where the user last saved a machine
+        // (section 3.6); the first-save default supplies only the proposed name.
+        panel.directoryURL = DialogLocations.shared.startDirectory(for: .saveMachine)
         panel.nameFieldStringValue = defaults.nameFieldStringValue
         panel.canCreateDirectories = true
         panel.title = "Save Machine"
         panel.prompt = "Save"
 
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        DialogLocations.shared.remember(url, for: .saveMachine)
         return url
     }
 
