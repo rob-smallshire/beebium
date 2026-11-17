@@ -95,19 +95,20 @@ final class CassetteDeckFormattingTests: XCTestCase {
 
     private func appearance(_ key: CassetteKey,
                             transport: Beebium_TapeTransport = .stopped,
-                            tapeInserted: Bool = true,
                             isLive: Bool = false,
                             recordable: Bool = true) -> CassetteKeyAppearance {
-        CassetteKeys.appearance(of: key, transport: transport, tapeInserted: tapeInserted,
+        CassetteKeys.appearance(of: key, transport: transport,
                                 isLive: isLive, recordable: recordable)
     }
 
-    func testEmptyDeckGreysEveryKeyWithNoneLit() {
-        for key in CassetteKey.allCases {
-            let a = appearance(key, transport: .stopped, tapeInserted: false)
-            XCTAssertEqual(a, CassetteKeyAppearance(enabled: false, depressed: false, red: false),
-                           "empty deck must grey \(key) and light nothing")
-        }
+    func testEmptyDeckShowsNoTransportRow() {
+        // An empty deck omits the transport key row, the counter and the
+        // timeline entirely -- there is no greyed row, so nothing comes alive
+        // when a tape goes in. The row appears only with a tape (file or live).
+        XCTAssertFalse(CassetteDeckLayout.showsTransport(tapeInserted: false),
+                       "an empty deck must not show the transport row")
+        XCTAssertTrue(CassetteDeckLayout.showsTransport(tapeInserted: true),
+                      "a deck with a tape in must show the transport row")
     }
 
     func testStoppedTapeLeavesEveryKeyLiveAndNothingDown() {

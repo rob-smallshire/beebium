@@ -83,27 +83,35 @@ struct CassetteKeyAppearance: Equatable {
     var red: Bool
 }
 
+/// What the deck shows depends on whether a tape (file or live) is in. An empty
+/// deck shows only the ways to fill it -- the browse control and the drop target
+/// -- with no transport key row, counter or timeline, so nothing greyed sits
+/// waiting to come alive when a tape goes in (section 9.0). Pure, so the rule is
+/// tested without a view.
+enum CassetteDeckLayout {
+    /// Whether the transport key row, the counter and the position timeline are
+    /// shown. They appear only with a tape in; an empty deck omits them.
+    static func showsTransport(tapeInserted: Bool) -> Bool { tapeInserted }
+}
+
 /// The deck row latches, like a mechanical deck (section 9.0): the key for the
 /// current transport is drawn depressed and so reads as the status display,
 /// every key stays live while a tape is in, and greying is reserved for what the
-/// deck cannot do. Pure, so the whole matrix is tested without a view.
+/// deck cannot do. The row is shown only with a tape in (see CassetteDeckLayout),
+/// so there is no empty-deck case here. Pure, so the whole matrix is tested
+/// without a view.
 enum CassetteKeys {
-    /// The appearance of `key` for a deck in the given state. An empty deck can
-    /// do nothing, so every key is greyed and none is lit. With a tape in, a key
-    /// is greyed only where the deck cannot act -- a wind, seek or Back to the
-    /// beginning on a live input, or Record on a live input or a non-recordable
-    /// tape -- and is otherwise live and latches when it is the current
-    /// transport. Play is down while Playing and also while Recording, since
-    /// Record implies Play; Stop and Back to the beginning are momentary and
-    /// never latch; Record alone is red, and only while Recording.
+    /// The appearance of `key` for a deck with a tape in. A key is greyed only
+    /// where the deck cannot act -- a wind, seek or Back to the beginning on a
+    /// live input, or Record on a live input or a non-recordable tape -- and is
+    /// otherwise live and latches when it is the current transport. Play is down
+    /// while Playing and also while Recording, since Record implies Play; Stop
+    /// and Back to the beginning are momentary and never latch; Record alone is
+    /// red, and only while Recording.
     static func appearance(of key: CassetteKey,
                            transport: Beebium_TapeTransport,
-                           tapeInserted: Bool,
                            isLive: Bool,
                            recordable: Bool) -> CassetteKeyAppearance {
-        guard tapeInserted else {
-            return CassetteKeyAppearance(enabled: false, depressed: false, red: false)
-        }
         switch key {
         case .rewind:
             return CassetteKeyAppearance(enabled: !isLive,
@@ -178,7 +186,14 @@ struct CassetteDeckView: View {
                 emptyContent
             }
 
-            transportControls
+            // An empty deck shows only the ways to fill it; the transport key
+            // row, counter and timeline appear only once a tape is in, so no
+            // greyed row sits waiting to come alive (section 9.0).
+            if CassetteDeckLayout.showsTransport(tapeInserted: tapeInserted) {
+                transportControls
+            } else {
+                emptyControls
+            }
         }
         .padding(12)
         .background(isDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
@@ -367,16 +382,14 @@ struct CassetteDeckView: View {
 
     // MARK: - Transport controls
 
-    /// The deck row (section 9.0). The two keys that lose the user's place sit
-    /// at the edges, apart from the often-pressed transport group: Back to the
-    /// beginning alone at the left edge (with Browse in its place while the deck
-    /// is empty), Eject alone at the right edge, and Rewind, Play, Stop, Fast
-    /// forward and Record centred as one group between them.
+    /// The deck row with a tape in (section 9.0). The two keys that lose the
+    /// user's place sit at the edges, apart from the often-pressed transport
+    /// group: Back to the beginning alone at the left edge, Eject alone at the
+    /// right edge, and Rewind, Play, Stop, Fast forward and Record centred as one
+    /// group between them. Browse is not here: a tape cannot be inserted over an
+    /// occupied deck, so the only way to fill the deck is reached by ejecting.
     private var transportControls: some View {
         HStack(spacing: 8) {
-            if !tapeInserted {
-                browseButton
-            }
             backToStartButton
             Spacer()
             rewindButton
@@ -386,6 +399,17 @@ struct CassetteDeckView: View {
             recordButton
             Spacer()
             ejectButton
+        }
+    }
+
+    /// The empty deck's one control: the browse menu (Browse, Recent, New Blank
+    /// Tape and the live-input device picker). No transport keys, counter or
+    /// timeline -- an empty deck offers only the ways to fill it, and the whole
+    /// view is also a drop target.
+    private var emptyControls: some View {
+        HStack(spacing: 8) {
+            browseButton
+            Spacer()
         }
     }
 
@@ -568,7 +592,7 @@ struct CassetteDeckView: View {
     private func transportKey(_ symbol: String, help: String, key: CassetteKey,
                               action: @escaping () -> Void) -> some View {
         let appearance = CassetteKeys.appearance(
-            of: key, transport: transport, tapeInserted: tapeInserted,
+            of: key, transport: transport,
             isLive: isLive, recordable: cassetteClient.tape?.recordable ?? false)
         return Button {
             if !appearance.depressed { action() }
