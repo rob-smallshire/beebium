@@ -160,22 +160,21 @@ def test_boot_tape_loads_and_runs_a_basic_program(bbc, tmp_path: Path):
 
 def test_blank_tapes_are_listed_and_one_is_created(bbc, tmp_path: Path):
     tapes = bbc.cassette.list_blank_tapes()
-    assert [t.label for t in tapes] == ["Blank C15 (15 minutes)", "Blank C30 (30 minutes)",
-                                        "Blank C60 (60 minutes)", "Blank C90 (90 minutes)"]
+    assert [t.label for t in tapes] == ["C15", "C30", "C60", "C90"]
     assert [t.duration_seconds for t in tapes] == [900.0, 1800.0, 3600.0, 5400.0]
     assert all(t.kind == "tape" and t.filename == t.label + ".uef" for t in tapes)
 
-    created = bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "side-a")
+    created = bbc.cassette.create_tape("C15", tmp_path / "side-a")
     assert created.resolve() == (tmp_path / "side-a.uef").resolve()
     with pytest.raises(CreateTapeError) as exists:
-        bbc.cassette.create_tape("Blank C15 (15 minutes)", created)
+        bbc.cassette.create_tape("C15", created)
     assert exists.value.kind == CreateTapeErrorKind.DESTINATION_EXISTS
-    assert bbc.cassette.create_tape("Blank C30 (30 minutes)", created, overwrite=True) == created
+    assert bbc.cassette.create_tape("C30", created, overwrite=True) == created
     with pytest.raises(CreateTapeError) as unknown:
-        bbc.cassette.create_tape("Blank C120", tmp_path / "other.uef")
+        bbc.cassette.create_tape("C120", tmp_path / "other.uef")
     assert unknown.value.kind == CreateTapeErrorKind.UNKNOWN_LABEL
     with pytest.raises(CreateTapeError) as wrong:
-        bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "other.csw")
+        bbc.cassette.create_tape("C15", tmp_path / "other.csw")
     assert wrong.value.kind == CreateTapeErrorKind.WRONG_EXTENSION
 
     metadata = bbc.cassette.insert(created)
@@ -193,7 +192,7 @@ def test_record_is_a_transport_and_a_csw_is_read_only(bbc, tmp_path: Path):
     assert "game.csw" in str(read_only.value) and "CSW" in str(read_only.value)
     bbc.cassette.eject()
 
-    bbc.cassette.insert(bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "blank"))
+    bbc.cassette.insert(bbc.cassette.create_tape("C15", tmp_path / "blank"))
     bbc.cassette.record()
     assert bbc.cassette.status().transport == TapeTransport.RECORDING
     bbc.cassette.stop()
@@ -247,7 +246,7 @@ def test_signal_map_of_a_tape_and_of_a_recording(bbc, tmp_path: Path):
 
     # A blank C15 is silent; a SAVE recorded on it is not.
     bbc.expect("BASIC")
-    blank = bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "recorded")
+    blank = bbc.cassette.create_tape("C15", tmp_path / "recorded")
     before = bbc.cassette.status().signal_map_generation
     bbc.cassette.insert(blank)
     signal_map, status = _wait_for_signal_map(bbc, before)
@@ -274,14 +273,14 @@ def test_signal_map_of_a_tape_and_of_a_recording(bbc, tmp_path: Path):
 
 
 def test_a_blank_tape_template_is_never_inserted(bbc, beebium_server_filepath, tmp_path: Path):
-    template = Path(beebium_server_filepath).parent / "blank-tapes" / "Blank C15 (15 minutes).uef"
+    template = Path(beebium_server_filepath).parent / "blank-tapes" / "C15.uef"
     with pytest.raises(CassetteError) as refused:
         bbc.cassette.insert(template)
     assert refused.value.kind == CassetteErrorKind.INVALID_IMAGE
     assert "blank tape templates" in str(refused.value) and "create-tape" in str(refused.value)
     assert bbc.cassette.status().tape is None
 
-    metadata = bbc.cassette.insert(bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "copy"))
+    metadata = bbc.cassette.insert(bbc.cassette.create_tape("C15", tmp_path / "copy"))
     assert metadata.recordable and metadata.record_refusal == ""
 
 

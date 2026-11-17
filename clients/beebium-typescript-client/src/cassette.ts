@@ -102,9 +102,9 @@ export enum CreateTapeErrorKind {
 
 /** A blank tape template the server ships, from which {@link Cassette.createTape} makes a tape. */
 export interface BlankTape {
-    /** The file name without its extension, e.g. "Blank C15 (15 minutes)". */
+    /** The file name without its extension, e.g. "C15". */
     label: string;
-    /** e.g. "Blank C15 (15 minutes).uef". */
+    /** e.g. "C15.uef". */
     filename: string;
     /** "tape". */
     kind: string;

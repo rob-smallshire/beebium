@@ -849,15 +849,15 @@ beebium-model-b list-blank-tapes
 **`--format tsv`** (default for non-TTY):
 ```
 label	filename	kind	size_bytes	duration_seconds
-Blank C15 (15 minutes)	Blank C15 (15 minutes).uef	tape	36	900
-Blank C30 (30 minutes)	Blank C30 (30 minutes).uef	tape	36	1800
-Blank C60 (60 minutes)	Blank C60 (60 minutes).uef	tape	36	3600
-Blank C90 (90 minutes)	Blank C90 (90 minutes).uef	tape	36	5400
+C15	C15.uef	tape	36	900
+C30	C30.uef	tape	36	1800
+C60	C60.uef	tape	36	3600
+C90	C90.uef	tape	36	5400
 ```
 
 **`--format jsonl`**:
 ```
-{"label":"Blank C15 (15 minutes)","filename":"Blank C15 (15 minutes).uef","kind":"tape","size_bytes":36,"duration_seconds":900.0}
+{"label":"C15","filename":"C15.uef","kind":"tape","size_bytes":36,"duration_seconds":900.0}
 ```
 
 The length is given to the millisecond: the residue below that is the Serial ULA clock's quantisation, not the tape's.
@@ -867,8 +867,8 @@ The length is given to the millisecond: the residue below that is the Serial ULA
 Create a blank tape image: copy the template with the given label to the destination, byte for byte, and print the new tape's absolute path. The copy is an ordinary writable UEF. Insert it as any other tape (`--tape <filepath>`, or CassetteService's `InsertTape`) and record on it (CassetteService's `Record`).
 
 ```bash
-beebium-model-b create-tape "Blank C30 (30 minutes)" ~/Tapes/Work.uef
-beebium-model-b create-tape "Blank C90 (90 minutes)" ~/Tapes/Work.uef --overwrite
+beebium-model-b create-tape "C30" ~/Tapes/Work.uef
+beebium-model-b create-tape "C90" ~/Tapes/Work.uef --overwrite
 ```
 
 The new tape always has the template's extension, `.uef`: a destination without an extension gets it (`~/Tapes/Work` becomes `~/Tapes/Work.uef`, and that is the path printed), and one with another extension is refused (`destination must end in .uef: <path>`). The comparison ignores case. An existing destination is refused unless `--overwrite` is given; a directory is always refused. Exit codes are those of `create-disc`: `EX_NOINPUT` (66) for an unknown label, `EX_CANTCREAT` (73) for an existing destination, `EX_IOERR` (74) when the copy cannot be written, `EX_USAGE` (64) for a wrong extension and for missing or extra arguments. CassetteService's `CreateTape(label, destination_path, overwrite)` does the same, with the same error messages, on the server's host.
@@ -1366,7 +1366,7 @@ beebium-model-b start --floppy 0:elite.ssd --auto-boot
 beebium-model-b start --tape elite.uef
 
 # Make a blank tape to SAVE to
-beebium-model-b create-tape "Blank C30 (30 minutes)" ~/Tapes/Work.uef
+beebium-model-b create-tape "C30" ~/Tapes/Work.uef
 
 # Replace BASIC with Forth
 beebium-model-b start --sideways slot=15:type=rom:image=forth.rom

@@ -39,10 +39,10 @@ COMMITTED_DIRPATH = Path(__file__).resolve().parent.parent / "tapes" / "blank"
 
 # Each template: its label (the file name without ".uef") and its length in seconds.
 TEMPLATES = [
-    ("Blank C15 (15 minutes)", 900.0),
-    ("Blank C30 (30 minutes)", 1800.0),
-    ("Blank C60 (60 minutes)", 3600.0),
-    ("Blank C90 (90 minutes)", 5400.0),
+    ("C15", 900.0),
+    ("C30", 1800.0),
+    ("C60", 3600.0),
+    ("C90", 5400.0),
 ]
 
 

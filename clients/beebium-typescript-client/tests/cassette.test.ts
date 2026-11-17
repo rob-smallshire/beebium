@@ -185,17 +185,17 @@ describe("Cassette", () => {
     it("lists blank tapes and creates one, with its error kinds", async () => {
         const stub = createMockStub({
             listBlankTapes: () => ({
-                tapes: [{ label: "Blank C15 (15 minutes)", filename: "Blank C15 (15 minutes).uef", kind: "tape",
+                tapes: [{ label: "C15", filename: "C15.uef", kind: "tape",
                           sizeBytes: 36, durationSeconds: 900 }],
             }),
-            createTape: (req: any) => req.label === "Blank C15 (15 minutes)"
+            createTape: (req: any) => req.label === "C15"
                 ? { success: true, error: "", kind: 0, path: "/tmp/side-a.uef" }
                 : { success: false, error: "no blank tape named 'x'", kind: 1, path: "" },
         });
         const cassette = new Cassette(stub as any);
         const tapes = await cassette.listBlankTapes();
         expect(tapes[0].durationSeconds).toBe(900);
-        expect(await cassette.createTape("Blank C15 (15 minutes)", "/tmp/side-a")).toBe("/tmp/side-a.uef");
+        expect(await cassette.createTape("C15", "/tmp/side-a")).toBe("/tmp/side-a.uef");
         await expect(cassette.createTape("x", "/tmp/y")).rejects.toBeInstanceOf(CreateTapeError);
         await expect(cassette.createTape("x", "/tmp/y")).rejects.toMatchObject({
             kind: CreateTapeErrorKind.UNKNOWN_LABEL,

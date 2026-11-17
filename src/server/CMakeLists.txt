@@ -371,12 +371,16 @@ foreach(server_target ${BEEBIUM_SERVERS_DEPS})
 endforeach()
 
 # Blank tape templates (tapes/blank/, made by scripts/make_blank_tapes.py),
-# copied and installed as the blank discs are, to blank-tapes.
+# copied and installed as the blank discs are, to blank-tapes. The directory is
+# emptied first, so a template renamed or removed in the source does not linger
+# beside the servers in an existing build tree.
 set(BLANK_TAPES_SRC_DIR "${CMAKE_SOURCE_DIR}/tapes/blank")
 file(GLOB BLANK_TAPE_FILEPATHS CONFIGURE_DEPENDS "${BLANK_TAPES_SRC_DIR}/*.uef")
 foreach(server_target ${BEEBIUM_SERVERS_DEPS})
     if(server_target MATCHES "^beebium-model-")
         add_custom_command(TARGET ${server_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf
+                "$<TARGET_FILE_DIR:${server_target}>/blank-tapes"
             COMMAND ${CMAKE_COMMAND} -E make_directory
                 "$<TARGET_FILE_DIR:${server_target}>/blank-tapes"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different

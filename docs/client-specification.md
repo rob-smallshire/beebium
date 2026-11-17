@@ -1857,7 +1857,7 @@ Profile: Core.
 
 Behaviour. The client fetches the server's blank-tape templates once on connect; a
 failure is non-fatal and leaves the feature empty. Each template is offered by its
-server-supplied label (`Blank C30 (30 minutes)`, say); its length,
+server-supplied label (`C30`, say); its length,
 `duration_seconds`, may be shown beside it. Choosing one asks the user for a
 destination (restricted to the template's extension, `.uef`) and creates it, then
 inserts the created tape, stopped at the start, ready for the user to press Record.

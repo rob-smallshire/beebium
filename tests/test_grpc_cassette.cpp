@@ -555,8 +555,7 @@ TEST_CASE("CassetteService lists the blank tapes and creates one that records", 
     CassetteFixture fixture;
     const auto listed = fixture.list_blank_tapes();
     REQUIRE(listed.tapes_size() == 4);
-    const char* labels[] = {"Blank C15 (15 minutes)", "Blank C30 (30 minutes)", "Blank C60 (60 minutes)",
-                            "Blank C90 (90 minutes)"};
+    const char* labels[] = {"C15", "C30", "C60", "C90"};
     const double seconds[] = {900.0, 1800.0, 3600.0, 5400.0};
     for (int i = 0; i < 4; ++i) {
         CHECK(listed.tapes(i).label() == labels[i]);
@@ -566,24 +565,24 @@ TEST_CASE("CassetteService lists the blank tapes and creates one that records", 
     }
 
     // The extension is added.
-    auto created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "mine");
+    auto created = fixture.create_tape("C15", fixture.dirpath() / "mine");
     REQUIRE(created.success());
     CHECK(created.path() == (fixture.dirpath() / "mine.uef").string());
     CHECK(std::filesystem::exists(fixture.dirpath() / "mine.uef"));
 
     // Another extension is refused.
-    created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "mine.csw");
+    created = fixture.create_tape("C15", fixture.dirpath() / "mine.csw");
     CHECK_FALSE(created.success());
     CHECK(created.kind() == beebium::CREATE_TAPE_ERROR_KIND_WRONG_EXTENSION);
 
     // An existing destination is refused, and replaced with overwrite.
-    created = fixture.create_tape("Blank C30 (30 minutes)", fixture.dirpath() / "mine.uef");
+    created = fixture.create_tape("C30", fixture.dirpath() / "mine.uef");
     CHECK_FALSE(created.success());
     CHECK(created.kind() == beebium::CREATE_TAPE_ERROR_KIND_DESTINATION_EXISTS);
-    created = fixture.create_tape("Blank C30 (30 minutes)", fixture.dirpath() / "mine.uef", true);
+    created = fixture.create_tape("C30", fixture.dirpath() / "mine.uef", true);
     CHECK(created.success());
 
-    created = fixture.create_tape("Blank C120", fixture.dirpath() / "other.uef");
+    created = fixture.create_tape("C120", fixture.dirpath() / "other.uef");
     CHECK_FALSE(created.success());
     CHECK(created.kind() == beebium::CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL);
 
@@ -912,7 +911,7 @@ TEST_CASE("Recording through the service is race-free against a client's status 
     CassetteFixture fixture;
     if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
     const auto filepath = fixture.dirpath() / "witness.uef";
-    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef", filepath);
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "C15.uef", filepath);
     fixture.start_running();
     fixture.run_emulated(2'000'000);
     REQUIRE(fixture.insert(filepath.string()).success());
@@ -951,7 +950,7 @@ TEST_CASE("Recording mutated without the pause races (the witness's control)", "
     CassetteFixture fixture;
     if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
     const auto filepath = fixture.dirpath() / "control.uef";
-    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef", filepath);
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "C15.uef", filepath);
     fixture.start_running();
     fixture.run_emulated(2'000'000);
     REQUIRE(fixture.insert(filepath.string()).success());
@@ -1082,11 +1081,11 @@ TEST_CASE("A program SAVEd to a newly created tape lands in the new tape, not it
     const auto templates_before = files_in(templates_dirpath);
 
     // As a client's New Blank Tape does: create, then insert the path returned.
-    const auto created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "cass");
+    const auto created = fixture.create_tape("C15", fixture.dirpath() / "cass");
     REQUIRE(created.success());
     const std::filesystem::path tape_filepath = created.path();
     CHECK(tape_filepath == fixture.dirpath() / "cass.uef");
-    CHECK(read_file(tape_filepath) == templates_before.at("Blank C15 (15 minutes).uef"));
+    CHECK(read_file(tape_filepath) == templates_before.at("C15.uef"));
     REQUIRE(fixture.insert(created.path()).success());
 
     // A short program that leaves its mark in memory, SAVEd as CASS.
@@ -1126,7 +1125,7 @@ TEST_CASE("While a SAVE records, the status stream shows the signal map advancin
           "[grpc][cassette][signal_map][recording][mos]") {
     CassetteFixture fixture;
     if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
-    const auto created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "wake");
+    const auto created = fixture.create_tape("C15", fixture.dirpath() / "wake");
     REQUIRE(created.success());
     REQUIRE(fixture.insert(created.path()).success());
     REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.signal_map_ready(); }, 10'000));
@@ -1187,12 +1186,12 @@ TEST_CASE("While a SAVE records, the status stream shows the signal map advancin
 TEST_CASE("InsertTape refuses one of the server's blank tape templates", "[grpc][cassette][recording]") {
     CassetteFixture fixture;
     const std::filesystem::path templates_dirpath = BEEBIUM_BLANK_TAPES_DIR;
-    const std::string sentence = "The tape Blank C15 (15 minutes).uef is one of the server's blank tape templates, "
+    const std::string sentence = "The tape C15.uef is one of the server's blank tape templates, "
                                  "which are copied, never inserted; make a tape from it with create-tape and "
                                  "insert that.";
     // By its own path, and by a roundabout one to the same file.
-    for (const auto& filepath : {templates_dirpath / "Blank C15 (15 minutes).uef",
-                                 templates_dirpath / ".." / templates_dirpath.filename() / "Blank C15 (15 minutes).uef"}) {
+    for (const auto& filepath : {templates_dirpath / "C15.uef",
+                                 templates_dirpath / ".." / templates_dirpath.filename() / "C15.uef"}) {
         CAPTURE(filepath.string());
         const auto refused = fixture.insert(filepath.string());
         CHECK_FALSE(refused.success());
@@ -1201,7 +1200,7 @@ TEST_CASE("InsertTape refuses one of the server's blank tape templates", "[grpc]
         CHECK_FALSE(fixture.status().tape_inserted());
     }
     // A copy made from it is a tape.
-    const auto created = fixture.create_tape("Blank C15 (15 minutes)", fixture.dirpath() / "copy");
+    const auto created = fixture.create_tape("C15", fixture.dirpath() / "copy");
     REQUIRE(created.success());
     const auto inserted = fixture.insert(created.path());
     CHECK(inserted.success());

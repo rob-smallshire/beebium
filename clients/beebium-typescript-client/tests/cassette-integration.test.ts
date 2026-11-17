@@ -76,8 +76,8 @@ describe("cassette integration", () => {
             const bbc = new Beebium(conn, server, server.provenanceUuid);
             const dirpath = mkdtempSync(join(tmpdir(), "beebium-cassette-"));
             const tapes = await bbc.cassette.listBlankTapes();
-            expect(tapes.map((t) => t.label)).toContain("Blank C15 (15 minutes)");
-            const filepath = await bbc.cassette.createTape("Blank C15 (15 minutes)", join(dirpath, "side-a"));
+            expect(tapes.map((t) => t.label)).toContain("C15");
+            const filepath = await bbc.cassette.createTape("C15", join(dirpath, "side-a"));
             expect(filepath.endsWith("side-a.uef")).toBe(true);
             const tape = await bbc.cassette.insert(filepath);
             expect(tape.recordable).toBe(true);
@@ -116,7 +116,7 @@ describe("cassette integration", () => {
             await bbc.cassette.eject();
 
             // A blank C15 is silent; recording on it maps it again.
-            const blank = await bbc.cassette.createTape("Blank C15 (15 minutes)", join(dirpath, "side-a"));
+            const blank = await bbc.cassette.createTape("C15", join(dirpath, "side-a"));
             before = (await bbc.cassette.status()).signalMapGeneration;
             await bbc.cassette.insert(blank);
             const mapped = await waitForMap(before);

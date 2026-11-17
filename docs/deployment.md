@@ -106,7 +106,7 @@ When installed via `cmake --install`, the tree is relocatable and self-describin
     ├── roms/      (acorn-mos_1_20.rom, ...)
     ├── presets/   (*.beebium-preset)
     ├── blank-discs/   (Acorn DFS 80T SS 200K.ssd, ...)
-    └── blank-tapes/   (Blank C30 (30 minutes).uef, ...)
+    └── blank-tapes/   (C30.uef, ...)
 ```
 
 The server binaries carry an `$ORIGIN`-relative `RPATH` (`@loader_path` on macOS),
@@ -225,8 +225,7 @@ in this order, as the system presets are:
 A user who wants a new, empty tape to record on gets a copy of a shipped
 template, as for a floppy: one empty UEF per length, named so that the file
 name without its extension is the label the user chooses it by
-(`Blank C15 (15 minutes).uef`, `Blank C30 (30 minutes).uef`,
-`Blank C60 (60 minutes).uef`, `Blank C90 (90 minutes).uef`). Each is a UEF
+(`C15.uef`, `C30.uef`, `C60.uef`, `C90.uef`). Each is a UEF
 0.10 holding an origin chunk (&0000, `Beebium`) and one gap chunk (&0116) of
 the tape's length: 900, 1800, 3600 or 5400 seconds of silence, which
 recording replaces. Adding a length is adding a file. `list-blank-tapes` lists

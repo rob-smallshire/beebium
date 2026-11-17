@@ -20,7 +20,7 @@ def test_cassette_recording(launch_bbc, tmp_path):
     bbc.expect("BASIC")
     # readme:begin
     # A blank C15 on the server's host, in the deck.
-    tape = bbc.cassette.create_tape("Blank C15 (15 minutes)", tmp_path / "hello")
+    tape = bbc.cassette.create_tape("C15", tmp_path / "hello")
     bbc.cassette.insert(tape)
 
     bbc.keyboard.type('10 PRINT "HELLO FROM TAPE"\r*TAPE\rSAVE "HELLO"\r')

@@ -186,8 +186,8 @@ message ListBlankTapesResponse {
 
 // A blank tape template.
 message BlankTape {
-    string label = 1;                 // the file name without its extension, e.g. "Blank C15 (15 minutes)"
-    string filename = 2;              // e.g. "Blank C15 (15 minutes).uef"
+    string label = 1;                 // the file name without its extension, e.g. "C15"
+    string filename = 2;              // e.g. "C15.uef"
     string kind = 3;                  // "tape"
     uint64 size_bytes = 4;
     double duration_seconds = 5;

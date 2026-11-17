@@ -606,9 +606,9 @@ class BlankTape(_message.Message):
     SIZE_BYTES_FIELD_NUMBER: _builtins.int
     DURATION_SECONDS_FIELD_NUMBER: _builtins.int
     label: _builtins.str
-    """the file name without its extension, e.g. "Blank C15 (15 minutes)" """
+    """the file name without its extension, e.g. "C15" """
     filename: _builtins.str
-    """e.g. "Blank C15 (15 minutes).uef" """
+    """e.g. "C15.uef" """
     kind: _builtins.str
     """"tape" """
     size_bytes: _builtins.int

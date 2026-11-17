@@ -634,10 +634,10 @@ public struct Beebium_BlankTape: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// the file name without its extension, e.g. "Blank C15 (15 minutes)"
+  /// the file name without its extension, e.g. "C15"
   public var label: String = String()
 
-  /// e.g. "Blank C15 (15 minutes).uef"
+  /// e.g. "C15.uef"
   public var filename: String = String()
 
   /// "tape"

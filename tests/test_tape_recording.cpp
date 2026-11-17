@@ -681,10 +681,10 @@ TEST_CASE("A UEF that changes its base frequency is read only", "[uef][recording
 TEST_CASE("Each blank tape loads, lasts its stated length and can be recorded on", "[uef][recording]") {
     const std::filesystem::path dirpath = BEEBIUM_BLANK_TAPES_DIR;
     const std::pair<const char*, double> expected[] = {
-        {"Blank C15 (15 minutes).uef", 900.0},
-        {"Blank C30 (30 minutes).uef", 1800.0},
-        {"Blank C60 (60 minutes).uef", 3600.0},
-        {"Blank C90 (90 minutes).uef", 5400.0},
+        {"C15.uef", 900.0},
+        {"C30.uef", 1800.0},
+        {"C60.uef", 3600.0},
+        {"C90.uef", 5400.0},
     };
     for (const auto& [filename, seconds] : expected) {
         INFO(filename);

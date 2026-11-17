@@ -354,10 +354,10 @@ TEST_CASE("list-blank-tapes lists the committed tapes as TSV", "[blank-tapes][cl
     REQUIRE(run<ListBlankTapesSubcommand<beebium::ModelB>>({}, OutputFormat::Tsv, output) == ExitCode::OK);
     CHECK(output ==
           "label\tfilename\tkind\tsize_bytes\tduration_seconds\n"
-          "Blank C15 (15 minutes)\tBlank C15 (15 minutes).uef\ttape\t36\t900\n"
-          "Blank C30 (30 minutes)\tBlank C30 (30 minutes).uef\ttape\t36\t1800\n"
-          "Blank C60 (60 minutes)\tBlank C60 (60 minutes).uef\ttape\t36\t3600\n"
-          "Blank C90 (90 minutes)\tBlank C90 (90 minutes).uef\ttape\t36\t5400\n");
+          "C15\tC15.uef\ttape\t36\t900\n"
+          "C30\tC30.uef\ttape\t36\t1800\n"
+          "C60\tC60.uef\ttape\t36\t3600\n"
+          "C90\tC90.uef\ttape\t36\t5400\n");
 }
 
 TEST_CASE("create-tape copies a template, adds .uef and refuses what create-disc refuses",
@@ -369,28 +369,28 @@ TEST_CASE("create-tape copies a template, adds .uef and refuses what create-disc
     ScopedTempDir out{"beebium-blank-tape-out-"};
 
     std::string output;
-    REQUIRE(run<CreateTape>({"Blank C15 (15 minutes)", (out / "side-a").string()}, OutputFormat::Tsv, output) ==
+    REQUIRE(run<CreateTape>({"C15", (out / "side-a").string()}, OutputFormat::Tsv, output) ==
             ExitCode::OK);
     CHECK(output == fs::absolute(out / "side-a.uef").string() + "\n");
-    CHECK(read_bytes(out / "side-a.uef") == read_bytes(fs::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef"));
-    CHECK(run<CreateTape>({"Blank C15 (15 minutes)", (out / "side-a.uef").string()}, OutputFormat::Tsv, output) ==
+    CHECK(read_bytes(out / "side-a.uef") == read_bytes(fs::path(BEEBIUM_BLANK_TAPES_DIR) / "C15.uef"));
+    CHECK(run<CreateTape>({"C15", (out / "side-a.uef").string()}, OutputFormat::Tsv, output) ==
           ExitCode::CANTCREAT);
-    CHECK(run<CreateTape>({"Blank C15 (15 minutes)", (out / "side-a.uef").string(), "--overwrite"},
+    CHECK(run<CreateTape>({"C15", (out / "side-a.uef").string(), "--overwrite"},
                           OutputFormat::Tsv, output) == ExitCode::OK);
-    CHECK(run<CreateTape>({"Blank C15 (15 minutes)", (out / "x.csw").string()}, OutputFormat::Tsv, output) ==
+    CHECK(run<CreateTape>({"C15", (out / "x.csw").string()}, OutputFormat::Tsv, output) ==
           ExitCode::USAGE);
-    CHECK(run<CreateTape>({"Blank C120", (out / "y.uef").string()}, OutputFormat::Tsv, output) ==
+    CHECK(run<CreateTape>({"C120", (out / "y.uef").string()}, OutputFormat::Tsv, output) ==
           ExitCode::NOINPUT);
 }
 
 TEST_CASE("create_blank_tape explains a failure in a sentence", "[blank-tapes]") {
     const fs::path templates_dirpath = BEEBIUM_BLANK_TAPES_DIR;
     ScopedTempDir out{"beebium-blank-tape-out-"};
-    auto unknown = beebium::create_blank_tape(templates_dirpath, "Blank C120", out / "a.uef", false);
-    CHECK(unknown.error == "There is no blank tape called Blank C120.");
-    auto wrong = beebium::create_blank_tape(templates_dirpath, "Blank C15 (15 minutes)", out / "a.csw", false);
+    auto unknown = beebium::create_blank_tape(templates_dirpath, "C120", out / "a.uef", false);
+    CHECK(unknown.error == "There is no blank tape called C120.");
+    auto wrong = beebium::create_blank_tape(templates_dirpath, "C15", out / "a.csw", false);
     CHECK(wrong.error == "A blank tape is a .uef file, so it cannot be created as a.csw.");
-    REQUIRE(beebium::create_blank_tape(templates_dirpath, "Blank C15 (15 minutes)", out / "a.uef", false));
-    auto exists = beebium::create_blank_tape(templates_dirpath, "Blank C15 (15 minutes)", out / "a.uef", false);
+    REQUIRE(beebium::create_blank_tape(templates_dirpath, "C15", out / "a.uef", false));
+    auto exists = beebium::create_blank_tape(templates_dirpath, "C15", out / "a.uef", false);
     CHECK(exists.error == "There is already a file at " + (out / "a.uef").string() + "; choose another name, or replace it.");
 }

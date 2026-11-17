@@ -131,8 +131,8 @@ class BlankTape:
     """A blank tape template the server ships, from which
     :meth:`Cassette.create_tape` makes a tape."""
 
-    label: str  # the file name without its extension, e.g. "Blank C15 (15 minutes)"
-    filename: str  # e.g. "Blank C15 (15 minutes).uef"
+    label: str  # the file name without its extension, e.g. "C15"
+    filename: str  # e.g. "C15.uef"
     kind: str  # "tape"
     size_bytes: int
     duration_seconds: float

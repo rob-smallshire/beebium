@@ -397,9 +397,8 @@ last block's CRC, as a real machine's can. Loading never reads past the CRC, so 
 ## Blank tapes
 
 The server ships four blank tapes in `blank-tapes` beside the blank discs (see
-[deployment.md](deployment.md)): `Blank C15 (15 minutes).uef`, `Blank C30 (30 minutes).uef`,
-`Blank C60 (60 minutes).uef` and `Blank C90 (90 minutes).uef`. Each is a UEF 0.10 holding an
-&0000 origin chunk reading `Beebium` and one &0116 gap of its length (900, 1800, 3600 or
+[deployment.md](deployment.md)): `C15.uef`, `C30.uef`, `C60.uef` and `C90.uef`, labelled by
+the C-number that gives their minutes. Each is a UEF 0.10 holding an &0000 origin chunk reading `Beebium` and one &0116 gap of its length (900, 1800, 3600 or
 5400 s, exact in float32), with no date and no other chunk. They live in `tapes/blank/` and
 `scripts/make_blank_tapes.py` writes them byte-reproducibly from a table; its `--check`, which a
 ctest runs, fails unless the committed files and the set match what it makes.

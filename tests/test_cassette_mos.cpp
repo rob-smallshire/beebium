@@ -419,7 +419,7 @@ TEST_CASE("MOS 1.20 saves to a blank tape and chains it back, here and in a fres
     REQUIRE_ROMS_AND_TOOLS(tape);
     beebium::test::ScopedTempDir dir("beebium_cassette_save_");
     const auto blank_filepath = dir.path() / "saved.uef";
-    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef",
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "C15.uef",
                                blank_filepath);
 
     const auto written = save_and_chain_back(tape->uef, false, blank_filepath);
@@ -439,7 +439,7 @@ TEST_CASE("MOS 1.20 saves at 300 baud after *TAPE3 and the file says so", "[cass
     REQUIRE_ROMS_AND_TOOLS(tape);
     beebium::test::ScopedTempDir dir("beebium_cassette_save_");
     const auto blank_filepath = dir.path() / "saved300.uef";
-    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef",
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "C15.uef",
                                blank_filepath);
 
     const auto written = save_and_chain_back(tape->uef, true, blank_filepath);
@@ -564,7 +564,7 @@ ProgSave save_prog(int k, const std::filesystem::path& blank_filepath) {
 
 std::filesystem::path blank_copy(const beebium::test::ScopedTempDir& dir, const std::string& name) {
     const auto filepath = dir.path() / name;
-    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "Blank C15 (15 minutes).uef", filepath);
+    std::filesystem::copy_file(std::filesystem::path(BEEBIUM_BLANK_TAPES_DIR) / "C15.uef", filepath);
     return filepath;
 }
 
