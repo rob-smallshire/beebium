@@ -356,11 +356,7 @@ TEST_CASE("An empty deck offers Browse where the server is local, and keys only 
     Deck d;
     CHECK(d.row.name_text() == QStringLiteral("Empty - Drop tape image here"));
     CHECK(d.row.browse_button()->isEnabled());
-    for (CassetteKey key : {CassetteKey::rewind, CassetteKey::seek, CassetteKey::play,
-                            CassetteKey::stop, CassetteKey::record, CassetteKey::fast_forward,
-                            CassetteKey::eject}) {
-        CHECK_FALSE(d.row.key(key)->isEnabled());
-    }
+    CHECK_FALSE(d.row.key_row()->isVisibleTo(&d.row));
     CHECK(d.row.state_text().isEmpty());
     CHECK(d.row.counter_text().isEmpty());
     d.local = false;
@@ -543,14 +539,21 @@ TEST_CASE("The keys latch: the current transport's key is down, and only the imp
         const bool live = c.tape == Tape::live;
         const bool recordable = c.tape == Tape::uef;
         const bool recording = c.transport == beebium::TAPE_TRANSPORT_RECORDING;
+        // An empty deck has no keys, counter or timeline, only the ways in.
+        CHECK(d.row.key_row()->isVisibleTo(&d.row) == in);
+        if (!in) {
+            CHECK(d.row.counter_text().isEmpty());
+            CHECK_FALSE(d.row.slider()->isVisibleTo(&d.row));
+            continue;
+        }
         // Enabled for all the deck can do, whatever it is doing.
-        CHECK(d.row.key(CassetteKey::play)->isEnabled() == in);
-        CHECK(d.row.key(CassetteKey::stop)->isEnabled() == in);
-        CHECK(d.row.key(CassetteKey::eject)->isEnabled() == in);
-        CHECK(d.row.key(CassetteKey::rewind)->isEnabled() == (in && !live));
-        CHECK(d.row.key(CassetteKey::fast_forward)->isEnabled() == (in && !live));
-        CHECK(d.row.key(CassetteKey::seek)->isEnabled() == (in && !live));
-        CHECK(d.row.key(CassetteKey::record)->isEnabled() == (in && recordable));
+        CHECK(d.row.key(CassetteKey::play)->isEnabled());
+        CHECK(d.row.key(CassetteKey::stop)->isEnabled());
+        CHECK(d.row.key(CassetteKey::eject)->isEnabled());
+        CHECK(d.row.key(CassetteKey::rewind)->isEnabled() == !live);
+        CHECK(d.row.key(CassetteKey::fast_forward)->isEnabled() == !live);
+        CHECK(d.row.key(CassetteKey::seek)->isEnabled() == !live);
+        CHECK(d.row.key(CassetteKey::record)->isEnabled() == recordable);
         // Down for what it is doing: Record implies Play; Stop is momentary.
         CHECK(d.row.key(CassetteKey::play)->isChecked() ==
               (c.transport == beebium::TAPE_TRANSPORT_PLAYING || recording));
@@ -565,6 +568,21 @@ TEST_CASE("The keys latch: the current transport's key is down, and only the imp
         // Red means recording and nothing else.
         CHECK(drawn_red(d.row.key(CassetteKey::record)) == recording);
     }
+}
+
+TEST_CASE("The keys appear with the tape and go with it", "[cassette][deck][latch]") {
+    Deck d;
+    CHECK_FALSE(d.row.key_row()->isVisibleTo(&d.row));
+    d.row.drop_files({d.tape_file(QStringLiteral("Elite.uef"))});
+    REQUIRE(wait_until([&] { return d.row.key_row()->isVisibleTo(&d.row); }));
+    CHECK(d.row.counter_text() == QStringLiteral("0:00"));
+    CHECK(d.row.slider()->isVisibleTo(&d.row));
+    // Browse gives way while a tape is in, as a floppy drive's does.
+    CHECK_FALSE(d.row.browse_button()->isEnabled());
+    d.row.key(CassetteKey::eject)->click();
+    REQUIRE(wait_until([&] { return !d.row.key_row()->isVisibleTo(&d.row); }));
+    CHECK(d.row.counter_text().isEmpty());
+    CHECK(d.row.browse_button()->isEnabled());
 }
 
 TEST_CASE("A key follows the deck, not the click, and a key already down sends nothing",

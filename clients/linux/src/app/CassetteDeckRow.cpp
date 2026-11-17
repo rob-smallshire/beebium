@@ -272,11 +272,14 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     // The keys (client specification 9.0): Back to the beginning alone at
     // the left edge and Eject alone at the right, the two that lose the
     // user's place, with Rewind, Play, Stop, Fast forward and Record
-    // centred as one group between them.
-    auto* keys = new QHBoxLayout;
+    // centred as one group between them. They appear with the tape: an
+    // empty deck shows only the ways to fill it.
+    key_row_ = new QWidget(this);
+    auto* keys = new QHBoxLayout(key_row_);
+    keys->setContentsMargins(0, 0, 0, 0);
     keys->setSpacing(0);
     const auto add_key = [&](CassetteKey key, const QString& name, const QString& tip, QIcon icon) {
-        auto* button = new QToolButton(this);
+        auto* button = new QToolButton(key_row_);
         button->setObjectName(name);
         button->setText(tip);
         button->setToolTip(tip);
@@ -307,7 +310,7 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     keys->addStretch(1);
     add_key(CassetteKey::eject, QStringLiteral("ejectTape"), tr("Eject tape"),
             themed("media-eject", QStyle::SP_ArrowUp, this));
-    layout->addLayout(keys);
+    layout->addWidget(key_row_);
     for (QToolButton* button : findChildren<QToolButton*>()) {
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
         button->setAutoRaise(true);
@@ -498,6 +501,7 @@ void CassetteDeckRow::present() {
     state_->setVisible(inserted);
     metadata_->setVisible(inserted && !metadata_->whole().isEmpty());
     position_line_->setVisible(inserted);
+    key_row_->setVisible(inserted);
     const double duration = deck.tape.duration_seconds;
     // An unknown length has the counter alone, with no proportional timeline.
     duration_->setVisible(duration > 0.0);

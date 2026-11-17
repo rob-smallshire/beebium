@@ -104,6 +104,8 @@ public:
     QString message_text() const;
     bool motor_shown() const;
     QSlider* slider() const { return slider_; }
+    // The keys, there only while a tape is in.
+    QWidget* key_row() const { return key_row_; }
     QToolButton* key(CassetteKey key) const { return keys_.at(key); }
     QToolButton* browse_button() const { return browse_; }
     QMenu* browse_menu() const { return menu_; }
@@ -154,6 +156,7 @@ private:
     QPushButton* eject_offer_;
     QToolButton* dismiss_;
     QLabel* live_;
+    QWidget* key_row_;
     QToolButton* browse_;
     QMenu* menu_;
     std::map<CassetteKey, QToolButton*> keys_;
