@@ -266,6 +266,8 @@ public:
 
     // Disc controller (WD1770 built-in on Model B+)
     WD1770 disc_controller;
+    // Registered after the lock LEDs and before the drives' (CassetteMotorLed.hpp).
+    CassetteMotorLed cassette_motor_led{indicators};
     DiscDrive disc_drive_0{indicators, "floppy-0-activity-led", "FDD 0", "568nm"};
     DiscDrive disc_drive_1{indicators, "floppy-1-activity-led", "FDD 1", "568nm"};
 
@@ -482,7 +484,7 @@ public:
         econet_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
         serial_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
         serial_socket.ula().set_deck(&cassette_deck);
-        attach_cassette_motor_led(indicators, serial_socket.ula());
+        cassette_motor_led.attach(serial_socket.ula());
         tube_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
     }
 
@@ -503,7 +505,7 @@ public:
         econet_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
         serial_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
         serial_socket.ula().set_deck(&cassette_deck);
-        attach_cassette_motor_led(indicators, serial_socket.ula());
+        cassette_motor_led.attach(serial_socket.ula());
         tube_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
     }
 

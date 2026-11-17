@@ -265,18 +265,22 @@ public:
 
 **Header:** `src/core/include/beebium/cassette/CassetteMotorLed.hpp`
 
-The keyboard's cassette motor LED is lit with the motor relay, which the Serial ULA's control latch drives. `attach_cassette_motor_led()` registers `cassette-motor-led` and listens to the ULA's motor line: the value is 255 while latch bit 7 (&FE10) is set and 0 while it is clear, whether or not a tape is in the deck. Every hardware policy calls it after the lock LEDs are registered.
+The keyboard's cassette motor LED is lit with the motor relay, which the Serial ULA's control latch drives: the value is 255 while latch bit 7 (&FE10) is set and 0 while it is clear, whether or not a tape is in the deck. A `CassetteMotorLed` registers `cassette-motor-led` when it is constructed, and its `attach()` connects it to the ULA's motor line. Every hardware policy declares it as a member after the System VIA peripheral (which registers the lock LEDs) and before the disc drives, and calls `attach()` in its constructor, since the serial socket is declared later. Clients list indicators in registration order, so the status bar shows it between SHIFT LOCK and FDD 0, as the storage sidebar puts the cassette above the floppies.
 
 ```cpp
-inline void attach_cassette_motor_led(Indicators& indicators, SerialUla& ula) {
-    std::unordered_map<std::string, std::string> metadata;
-    metadata.emplace("label", "Cassette motor");
-    metadata.emplace("color", "625nm");
-    metadata.emplace("shape", "domed");
-    const uint16_t id = indicators.register_indicator(
-        "cassette-motor-led", std::make_unique<PassthroughFilter>(), std::move(metadata));
-    ula.set_motor_listener([&indicators, id](bool on) { indicators.set(id, on ? 255 : 0); });
-}
+class CassetteMotorLed {
+public:
+    explicit CassetteMotorLed(Indicators& indicators) : indicators_(indicators) {
+        std::unordered_map<std::string, std::string> metadata;
+        metadata.emplace("label", "CASSETTE MOTOR");
+        metadata.emplace("color", "625nm");
+        metadata.emplace("shape", "domed");
+        id_ = indicators.register_indicator(
+            "cassette-motor-led", std::make_unique<PassthroughFilter>(), std::move(metadata));
+    }
+    void attach(SerialUla& ula);  // light the LED with the motor relay
+    // ...
+};
 ```
 
 The filter is a `PassthroughFilter`, so the MOS's 1 ms motor blips pass through unfiltered; a client applies the same hold-off it gives the drive activity LEDs. See [cassette.md](cassette.md).
@@ -401,27 +405,21 @@ message IndicatorUpdate {
 
 ## Registered Indicators
 
-### Model B
+### Every model
+
+Every hardware policy registers these five, in this order, which is the order ListIndicators gives and clients show:
 
 | Name | Filter | Label | Color | Shape |
 |------|--------|-------|-------|-------|
 | `caps-lock-led` | DutyCycle(10ms) | CAPS LOCK | 470nm (blue) | domed |
 | `shift-lock-led` | DutyCycle(10ms) | SHIFT LOCK | 470nm (blue) | domed |
-| `cassette-motor-led` | Passthrough | Cassette motor | 625nm (red) | domed |
+| `cassette-motor-led` | Passthrough | CASSETTE MOTOR | 625nm (red) | domed |
+| `floppy-0-activity-led` | Passthrough | FDD 0 | 568nm (green) | rectangular |
+| `floppy-1-activity-led` | Passthrough | FDD 1 | 568nm (green) | rectangular |
 
-### Model B+
+Extensions register theirs after these.
 
-| Name | Filter | Label | Color | Shape |
-|------|--------|-------|-------|-------|
-| `caps-lock-led` | DutyCycle(10ms) | CAPS LOCK | 470nm (blue) | domed |
-| `shift-lock-led` | DutyCycle(10ms) | SHIFT LOCK | 470nm (blue) | domed |
-| `floppy-0-activity-led` | Passthrough | Drive 0 | 590nm (amber) | rectangular |
-| `floppy-1-activity-led` | Passthrough | Drive 1 | 590nm (amber) | rectangular |
-| `cassette-motor-led` | Passthrough | Cassette motor | 625nm (red) | domed |
-
-Every model registers `cassette-motor-led`, after the lock LEDs.
-
-**Note:** The 470nm, 590nm and 625nm wavelengths indicate the approximate LED color (blue, amber and red respectively). Frontends can use this metadata for accurate visual rendering.
+**Note:** The 470nm, 568nm and 625nm wavelengths indicate the approximate LED color (blue, green and red respectively). Frontends can use this metadata for accurate visual rendering.
 
 ## Test Coverage
 

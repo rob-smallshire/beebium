@@ -441,9 +441,10 @@ and `create_tape()` / `createTape()`; a failed create raises `CreateTapeError` w
 
 ## The motor LED
 
-`attach_cassette_motor_led` (`cassette/CassetteMotorLed.hpp`) registers the indicator
-`cassette-motor-led` in every hardware policy, after the lock LEDs. Its label is "Cassette
-motor", its color 625 nm (red) and its shape domed. It reads 255 while latch bit 7 is set and
+`CassetteMotorLed` (`cassette/CassetteMotorLed.hpp`) registers the indicator
+`cassette-motor-led` in every hardware policy, after the lock LEDs and before the disc drives,
+so clients list it between SHIFT LOCK and FDD 0, as the storage sidebar puts the cassette above
+the floppies. Its label is "CASSETTE MOTOR", its color 625 nm (red) and its shape domed. It reads 255 while latch bit 7 is set and
 0 while it is clear, whether or not a tape is in. It passes through the indicator queue
 unfiltered, so the MOS's 1 ms blips reach the client. The client applies whatever hold-off it
 applies to the drive LEDs. See [indicators.md](indicators.md).
@@ -522,7 +523,7 @@ The tests build their tapes when they run; no tape image is typed into the Beeb.
 | `tests/test_grpc_cassette.cpp` | `CassetteService`: status on a fresh machine; a stereo WAV's rate and its louder or chosen channel; insert, refusal of a second tape, and the error kinds; winding at 30 times real speed with the motor off; play gated by the relay; the status stream; a BASIC program loaded through MOS 1.20; `Record` on an empty deck, a CSW and a UEF, the file rewritten on `Stop`; the blank tapes listed, created, refused and recorded on. `StreamAudio`: its refusals; a live tape inserted, played, refusing what it cannot do, carrying its fill and counts; a stream that ends playing out its ring when the deck plays and going at once when it is stopped; `EjectTape` ending a stream; MOS 1.20 loading tape_ok streamed in real time to a machine at real speed, with and without the relay blipping during the leader |
 | `tests/test_blank_discs.cpp` | `list-blank-tapes` and `create-tape` over the committed templates, beside the disc subcommands |
 | `tests/test_live_source.cpp` | The ring: a tone paced through it with no runs and its edges 256 clocks apart; priming a late stream, starving and priming again; an ended stream played out without priming; silence counted when a stream stops; a stream 10% fast dropping at the excess rate, the oldest; a producer and consumer on two threads; S16 and F32, mono and either stereo channel, in chunks that split frames, giving the same edges; the deck's rules for a live tape |
-| `tests/test_grpc_indicator.cpp` | The motor LED registered on every model after the lock LEDs, following latch bit 7 |
+| `tests/test_grpc_indicator.cpp` | The motor LED listed on every model between the lock LEDs and the drives, following latch bit 7 |
 | `tests/test_preset_subcommands.cpp` | `resolve-preset` and `describe-preset-schema` for the deck; a preset's tape inserted stopped; `--tape` winning and playing; a bare name found in `tapes/` |
 | `clients/beebium-python-client/tests/test_cassette.py` | `bbc.cassette` round trips and winding, errors with kinds and sentences, the status stream, `boot_tape` running a tokenised BASIC program, blank tapes listed and created, and record as a transport with a CSW read-only; the README's recording snippet SAVEs to a new C15 and CHAINs it back |
 | `clients/beebium-python-client/tests/test_cassette_live.py` | `stream_audio`'s summary; a live tape's refusals; the refusals of a stream; `stream_wav` of tape_ok in real time loading through MOS 1.20 |

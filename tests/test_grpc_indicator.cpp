@@ -16,6 +16,7 @@
 // They create a local server, connect to it, and verify indicator operations work correctly.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_template_test_macros.hpp>
 #include "test_extension_ids.hpp"
 #include <catch2/matchers/catch_matchers.hpp>
 
@@ -1097,35 +1098,36 @@ TEST_CASE("IndicatorService Model B+ with SCSI signals activity on transaction",
 // The cassette motor LED (#208)
 // =============================================================================
 
-namespace {
-
-template <typename MachineType>
-void check_cassette_motor_led_registered() {
-    MachineType machine;
+TEMPLATE_TEST_CASE("Every model lists the cassette motor LED between the lock LEDs and the drives",
+                   "[indicator][cassette]", beebium::ModelB, beebium::ModelBPlus, beebium::ModelBPlus128K,
+                   beebium::ModelBRomRamBoard, beebium::ModelBAtplSidewise, beebium::ModelBWatfordRomRam,
+                   beebium::ModelBIntegraB) {
+    TestType machine;
     auto& indicators = machine.state().memory.indicators;
     const auto names = indicators.names();
-    const auto at = [&](const std::string& name) {
-        return std::find(names.begin(), names.end(), name) - names.begin();
-    };
-    const auto motor = at("cassette-motor-led");
-    REQUIRE(motor < static_cast<std::ptrdiff_t>(names.size()));
-    CHECK(motor > at("caps-lock-led"));
-    CHECK(motor > at("shift-lock-led"));
+    REQUIRE(names.size() >= 5);
+    CHECK(std::vector<std::string>(names.begin(), names.begin() + 5) ==
+          std::vector<std::string>{"caps-lock-led", "shift-lock-led", "cassette-motor-led",
+                                   "floppy-0-activity-led", "floppy-1-activity-led"});
     const auto metadata = indicators.metadata("cassette-motor-led");
-    CHECK(metadata.at("label") == "Cassette motor");
+    CHECK(metadata.at("label") == "CASSETTE MOTOR");
     CHECK(metadata.at("color") == "625nm");
+    CHECK(metadata.at("shape") == "domed");
 }
 
-}  // namespace
-
-TEST_CASE("Every model registers the cassette motor LED after the lock LEDs", "[indicator][cassette]") {
-    check_cassette_motor_led_registered<beebium::ModelB>();
-    check_cassette_motor_led_registered<beebium::ModelBPlus>();
-    check_cassette_motor_led_registered<beebium::ModelBPlus128K>();
-    check_cassette_motor_led_registered<beebium::ModelBRomRamBoard>();
-    check_cassette_motor_led_registered<beebium::ModelBAtplSidewise>();
-    check_cassette_motor_led_registered<beebium::ModelBWatfordRomRam>();
-    check_cassette_motor_led_registered<beebium::ModelBIntegraB>();
+TEST_CASE("ListIndicators lists the cassette motor LED between SHIFT LOCK and FDD 0",
+          "[grpc][indicator][cassette]") {
+    IndicatorTestFixtureModelB fixture;
+    grpc::ClientContext context;
+    beebium::ListIndicatorsRequest request;
+    beebium::ListIndicatorsResponse response;
+    REQUIRE(fixture.stub().ListIndicators(&context, request, &response).ok());
+    REQUIRE(response.indicators_size() >= 5);
+    std::vector<std::string> names;
+    for (int i = 0; i < 5; ++i) names.push_back(response.indicators(i).name());
+    CHECK(names == std::vector<std::string>{"caps-lock-led", "shift-lock-led", "cassette-motor-led",
+                                            "floppy-0-activity-led", "floppy-1-activity-led"});
+    CHECK(proto_map_get(response.indicators(2).metadata(), std::string("label")) == "CASSETTE MOTOR");
 }
 
 TEST_CASE("The cassette motor LED follows Serial ULA latch bit 7", "[grpc][indicator][cassette]") {

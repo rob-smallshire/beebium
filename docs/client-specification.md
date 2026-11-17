@@ -2054,9 +2054,10 @@ hard-codes no indicator identities; it draws whatever is registered. Because the
 lock LEDs track the hardware latch exactly, a change to them doubles as a race-free
 signal for the client to re-read the authoritative lock state (section 7.3).
 
-The keyboard's cassette motor LED (`cassette-motor-led`, label "Cassette motor",
+The keyboard's cassette motor LED (`cassette-motor-led`, label "CASSETTE MOTOR",
 red) follows the machine's motor relay whether or not a tape is in, and is
-registered after the lock LEDs on any model with a cassette interface. The MOS
+registered after the lock LEDs and before the drive LEDs on any model with a
+cassette interface. The MOS
 makes 1 ms motor blips; the server passes them through unfiltered, and the client
 applies to this LED the same hold-off it gives the drive activity LEDs. The cassette
 deck view (9.0) does not duplicate this LED.
