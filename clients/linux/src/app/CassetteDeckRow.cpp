@@ -822,7 +822,7 @@ void CassetteDeckRow::rebuild_menu() {
     menu_->setToolTipsVisible(true);
     recent->setToolTipsVisible(true);
     // The server's templates, each by its own label, which carries its
-    // length ("Blank C30 (30 minutes)").
+    // length ("C30").
     QMenu* blank = menu_->addMenu(tr("New Blank Tape"));
     for (const BlankTapeTemplate& tape : cassette_.blank_tapes()) {
         blank->addAction(tape.label, this, [this, tape] { new_blank_tape(tape); });

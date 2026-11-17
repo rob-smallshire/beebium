@@ -355,7 +355,7 @@ TEST_CASE("The blank tapes are the server's templates; one is made with its exte
     Connected c;
     REQUIRE(wait_until([&] { return c.cassette.blank_tapes().size() == 2; }));
     const BlankTapeTemplate& c15 = c.cassette.blank_tapes().front();
-    CHECK(c15.label == QStringLiteral("Blank C15 (15 minutes)"));
+    CHECK(c15.label == QStringLiteral("C15"));
     CHECK(c15.extension() == QStringLiteral(".uef"));
     CHECK(c15.duration_seconds == 450.0);
     QTemporaryDir dir;
@@ -803,11 +803,11 @@ TEST_CASE("A UEF the server cannot keep a recording of greys Record with the ser
           "[cassette][deck][record]") {
     Deck d;
     d.server.cassette.uef_read_only = true;
-    d.load("file:///usr/share/beebium/blank-tapes/Blank%20C15%20(15%20minutes).uef");
+    d.load("file:///usr/share/beebium/blank-tapes/C15.uef");
     QToolButton* record = d.row.key(CassetteKey::record);
     CHECK_FALSE(record->isEnabled());
     CHECK(record->toolTip() ==
-          QStringLiteral("The tape Blank C15 (15 minutes).uef is in a folder Beebium cannot "
+          QStringLiteral("The tape C15.uef is in a folder Beebium cannot "
                          "write, so a recording on it could not be kept."));
     // Everything else it can do, it does.
     CHECK(d.row.key(CassetteKey::play)->isEnabled());
@@ -817,12 +817,12 @@ TEST_CASE("A UEF the server cannot keep a recording of greys Record with the ser
 TEST_CASE("A tape the server refuses as an image leaves the recent tapes, its sentence shown",
           "[cassette][deck][recent]") {
     Deck d;
-    const QString template_path = d.tape_file(QStringLiteral("Blank C15 (15 minutes).uef"));
+    const QString template_path = d.tape_file(QStringLiteral("C15.uef"));
     const QString kept_path = d.tape_file(QStringLiteral("Mine.uef"));
     d.settings.remember_tape(kept_path);
     d.settings.remember_tape(template_path);
     const std::string sentence =
-        "Blank C15 (15 minutes).uef is a blank tape template, which is never inserted; make a "
+        "C15.uef is a blank tape template, which is never inserted; make a "
         "tape from it with create-tape.";
     d.server.cassette.fail_next_insert = {beebium::CASSETTE_ERROR_KIND_INVALID_IMAGE, sentence};
     // Chosen from the Recent menu, as Rob did.
@@ -982,14 +982,14 @@ TEST_CASE("A taken insert is recent, offered again from the menu with the blank 
     for (QAction* action : blank->menu()->actions()) {
         labels << action->text();
     }
-    CHECK(labels == QStringList{QStringLiteral("Blank C15 (15 minutes)"),
-                                QStringLiteral("Blank C30 (30 minutes)")});
+    CHECK(labels == QStringList{QStringLiteral("C15"),
+                                QStringLiteral("C30")});
 }
 
 TEST_CASE("A blank tape is made, then inserted stopped at the start, then recent",
           "[cassette][deck][blank]") {
     Deck d;
-    d.cassette.create_tape(QStringLiteral("Blank C30 (30 minutes)"), d.dir.filePath(QStringLiteral("Mine")));
+    d.cassette.create_tape(QStringLiteral("C30"), d.dir.filePath(QStringLiteral("Mine")));
     REQUIRE(wait_until([&] { return d.cassette.deck().tape_inserted; }));
     CHECK(d.cassette.deck().tape.name == QStringLiteral("Mine.uef"));
     CHECK(d.cassette.deck().transport == DeckState::Transport::stopped);
@@ -1003,7 +1003,7 @@ TEST_CASE("A blank tape is made, then inserted stopped at the start, then recent
 TEST_CASE("A blank tape the server refuses leads with the kind's sentence, its words beneath",
           "[cassette][deck][blank]") {
     Deck d;
-    d.cassette.create_tape(QStringLiteral("Blank C30 (30 minutes)"), d.dir.filePath(QStringLiteral("Mine.ssd")));
+    d.cassette.create_tape(QStringLiteral("C30"), d.dir.filePath(QStringLiteral("Mine.ssd")));
     REQUIRE(wait_until([&] { return !d.row.message_text().isEmpty(); }));
     CHECK(d.row.message_text() == QStringLiteral("That name must end in .uef for a tape."));
     CHECK(d.row.message().detail == QStringLiteral("a blank tape must end in .uef"));

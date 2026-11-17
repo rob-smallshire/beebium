@@ -946,8 +946,7 @@ public:
                                 beebium::ListBlankTapesResponse* response) override {
         for (int minutes : {15, 30}) {
             auto* tape = response->add_tapes();
-            const std::string label =
-                "Blank C" + std::to_string(minutes) + " (" + std::to_string(minutes) + " minutes)";
+            const std::string label = "C" + std::to_string(minutes);
             tape->set_label(label);
             tape->set_filename(label + ".uef");
             tape->set_kind("tape");
@@ -959,7 +958,7 @@ public:
     grpc::Status CreateTape(grpc::ServerContext*, const beebium::CreateTapeRequest* request,
                             beebium::CreateTapeResponse* response) override {
         const std::string& label = request->label();
-        if (label != "Blank C15 (15 minutes)" && label != "Blank C30 (30 minutes)") {
+        if (label != "C15" && label != "C30") {
             response->set_kind(beebium::CREATE_TAPE_ERROR_KIND_UNKNOWN_LABEL);
             response->set_error("no blank tape is called " + label);
             return grpc::Status::OK;

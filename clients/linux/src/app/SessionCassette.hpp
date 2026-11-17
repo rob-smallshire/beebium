@@ -140,8 +140,8 @@ struct LiveSummary {
 
 // A blank tape template the server ships (9.0.1).
 struct BlankTapeTemplate {
-    QString label;     // "Blank C30 (30 minutes)"
-    QString filename;  // "Blank C30 (30 minutes).uef"
+    QString label;     // "C30"
+    QString filename;  // "C30.uef"
     double duration_seconds = 0.0;
     QString extension() const;  // ".uef"
 };

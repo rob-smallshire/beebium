@@ -85,7 +85,7 @@ TEST_CASE("Each dialog function remembers its own folder, open and save apart", 
 TEST_CASE("A save dialog proposes its name in the folder it starts in", "[dialogs]") {
     World w;
     const QString work = w.folder(QStringLiteral("work"));
-    const QString name = QStringLiteral("Blank C15 (15 minutes).uef");
+    const QString name = QStringLiteral("C15.uef");
     CHECK(w.locations().start_filepath(QStringLiteral("new-blank-tape"), name) ==
           QDir(w.rules.documents_dirpath).filePath(name));
     w.locations().remember_file(QStringLiteral("new-blank-tape"), SAVE, QDir(work).filePath(QStringLiteral("x.uef")));
@@ -134,9 +134,9 @@ TEST_CASE("A file chosen among the server's templates or state is honoured but n
     const QString collection = w.folder(QStringLiteral("collection"));
     w.locations().remember_file(QStringLiteral("insert-tape"), OPEN, w.file(QStringLiteral("collection/Elite.uef")));
     for (const QString& chosen :
-         {w.file(QStringLiteral("server/blank-tapes/Blank C15 (15 minutes).uef")),
+         {w.file(QStringLiteral("server/blank-tapes/C15.uef")),
           w.file(QStringLiteral("share/beebium/blank-discs/Blank 80T.ssd")),
-          w.file(QStringLiteral("beebium/tapes/blank/Blank C15 (15 minutes).uef")),  // a source tree's
+          w.file(QStringLiteral("beebium/tapes/blank/C15.uef")),  // a source tree's
           w.file(QStringLiteral("beebium/discs/blank/Blank 80T.ssd")),
           w.file(QStringLiteral("state/tapes/Mine.uef")),  // the server's per-user tree
           w.file(QStringLiteral("state/machines/x/discs/a.ssd"))}) {
