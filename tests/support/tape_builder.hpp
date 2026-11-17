@@ -91,7 +91,7 @@ struct FileOptions {
     bool short_leader = false;        // 0.62 s before, 0.25 s between (the Welcome tape)
     uint16_t baud = 1200;
     int corrupt_data_crc_block = -1;  // this block's data CRC is wrong
-    std::map<int, uint16_t> renumber; // block index -> block number written
+    std::map<int, uint16_t> renumber{};  // block index -> block number written
 };
 
 struct CswOptions {

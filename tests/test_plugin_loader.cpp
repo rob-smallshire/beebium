@@ -351,8 +351,11 @@ constexpr const char* kClockManifest = R"({
     ]
 })";
 
+// The key is a plain C string: a std::string temporary built from a literal
+// at each call made GCC 13+ suspect (-Wdangling-reference) the returned
+// reference of pointing into it.
 const beebium::ParameterSchema& schema_parameter(const beebium::ExtensionManifest& m,
-                                                 const std::string& key) {
+                                                 const char* key) {
     for (const auto& p : m.parameters) {
         if (p.key == key) return p;
     }
