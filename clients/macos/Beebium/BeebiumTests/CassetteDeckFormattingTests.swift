@@ -95,9 +95,10 @@ final class CassetteDeckFormattingTests: XCTestCase {
 
     private func appearance(_ key: CassetteKey,
                             transport: Beebium_TapeTransport = .stopped,
+                            motorOn: Bool = false,
                             isLive: Bool = false,
                             recordable: Bool = true) -> CassetteKeyAppearance {
-        CassetteKeys.appearance(of: key, transport: transport,
+        CassetteKeys.appearance(of: key, transport: transport, motorOn: motorOn,
                                 isLive: isLive, recordable: recordable)
     }
 
@@ -111,48 +112,65 @@ final class CassetteDeckFormattingTests: XCTestCase {
                       "a deck with a tape in must show the transport row")
     }
 
-    func testStoppedTapeLeavesEveryKeyLiveAndNothingDown() {
-        for key in CassetteKey.allCases {
-            let a = appearance(key, transport: .stopped)
-            XCTAssertTrue(a.enabled, "\(key) must stay live with a recordable tape in")
-            XCTAssertFalse(a.depressed, "nothing is down while Stopped, including \(key)")
-            XCTAssertFalse(a.red, "\(key) must not be red while Stopped")
+    func testStoppedTapeLeavesEveryKeyLiveNothingDownAndUncoloured() {
+        for motorOn in [false, true] {
+            for key in CassetteKey.allCases {
+                let a = appearance(key, transport: .stopped, motorOn: motorOn)
+                XCTAssertTrue(a.enabled, "\(key) must stay live with a recordable tape in")
+                XCTAssertFalse(a.depressed, "nothing is down while Stopped, including \(key)")
+                XCTAssertEqual(a.colour, .none,
+                               "Stopped never colours \(key), motor \(motorOn)")
+            }
         }
     }
 
-    func testPlayingLatchesOnlyPlay() {
-        XCTAssertEqual(appearance(.play, transport: .playing),
-                       CassetteKeyAppearance(enabled: true, depressed: true, red: false))
+    func testPlayingColoursOnlyPlayAndByTheMotorRelay() {
+        // Down but grey while the relay is open (the "Playing, motor off" wait).
+        XCTAssertEqual(appearance(.play, transport: .playing, motorOn: false),
+                       CassetteKeyAppearance(enabled: true, depressed: true, colour: .grey))
+        // Green once the relay closes and the tape moves.
+        XCTAssertEqual(appearance(.play, transport: .playing, motorOn: true),
+                       CassetteKeyAppearance(enabled: true, depressed: true, colour: .green))
         for key in [CassetteKey.stop, .rewind, .fastForward, .backToStart, .record] {
-            XCTAssertFalse(appearance(key, transport: .playing).depressed,
+            XCTAssertFalse(appearance(key, transport: .playing, motorOn: true).depressed,
                            "\(key) must not be down while Playing")
         }
-        // Record stays live and ordinary-coloured while Playing, not red.
-        XCTAssertEqual(appearance(.record, transport: .playing),
-                       CassetteKeyAppearance(enabled: true, depressed: false, red: false))
+        // Record is not down, so it is plain -- never coloured while up.
+        XCTAssertEqual(appearance(.record, transport: .playing, motorOn: true),
+                       CassetteKeyAppearance(enabled: true, depressed: false, colour: .none))
     }
 
-    func testRecordingLatchesRecordAndPlayTogetherWithRecordRed() {
-        XCTAssertEqual(appearance(.record, transport: .recording),
-                       CassetteKeyAppearance(enabled: true, depressed: true, red: true))
-        // Record implies Play, so Play is down too -- but never red.
-        XCTAssertEqual(appearance(.play, transport: .recording),
-                       CassetteKeyAppearance(enabled: true, depressed: true, red: false))
-        XCTAssertFalse(appearance(.stop, transport: .recording).depressed)
+    func testRecordingColoursRecordAndPlayRedByTheMotorRelay() {
+        // Relay closed: Record and Play both down and red (Record implies Play).
+        XCTAssertEqual(appearance(.record, transport: .recording, motorOn: true),
+                       CassetteKeyAppearance(enabled: true, depressed: true, colour: .red))
+        XCTAssertEqual(appearance(.play, transport: .recording, motorOn: true),
+                       CassetteKeyAppearance(enabled: true, depressed: true, colour: .red))
+        // Relay open: both down but grey -- red never appears without the relay.
+        XCTAssertEqual(appearance(.record, transport: .recording, motorOn: false),
+                       CassetteKeyAppearance(enabled: true, depressed: true, colour: .grey))
+        XCTAssertEqual(appearance(.play, transport: .recording, motorOn: false),
+                       CassetteKeyAppearance(enabled: true, depressed: true, colour: .grey))
+        XCTAssertFalse(appearance(.stop, transport: .recording, motorOn: true).depressed)
     }
 
-    func testWindsLatchTheWindInProgress() {
-        XCTAssertTrue(appearance(.rewind, transport: .rewinding).depressed)
-        XCTAssertFalse(appearance(.fastForward, transport: .rewinding).depressed)
-        XCTAssertTrue(appearance(.fastForward, transport: .fastForwarding).depressed)
+    func testWindsAreBlueWhileWindingWhateverTheMotor() {
+        // A wind moves the tape regardless of the relay, so it is blue either way.
+        for motorOn in [false, true] {
+            XCTAssertEqual(appearance(.rewind, transport: .rewinding, motorOn: motorOn),
+                           CassetteKeyAppearance(enabled: true, depressed: true, colour: .blue))
+            XCTAssertEqual(appearance(.fastForward, transport: .fastForwarding, motorOn: motorOn),
+                           CassetteKeyAppearance(enabled: true, depressed: true, colour: .blue))
+        }
+        // The other wind is neither down nor coloured.
+        XCTAssertEqual(appearance(.fastForward, transport: .rewinding),
+                       CassetteKeyAppearance(enabled: true, depressed: false, colour: .none))
         XCTAssertFalse(appearance(.rewind, transport: .fastForwarding).depressed)
-        // A wind is never red.
-        XCTAssertFalse(appearance(.rewind, transport: .rewinding).red)
     }
 
     func testNonRecordableTapeGreysRecordOnly() {
         XCTAssertEqual(appearance(.record, transport: .stopped, recordable: false),
-                       CassetteKeyAppearance(enabled: false, depressed: false, red: false))
+                       CassetteKeyAppearance(enabled: false, depressed: false, colour: .none))
         XCTAssertTrue(appearance(.play, transport: .stopped, recordable: false).enabled)
         XCTAssertTrue(appearance(.stop, transport: .stopped, recordable: false).enabled)
     }

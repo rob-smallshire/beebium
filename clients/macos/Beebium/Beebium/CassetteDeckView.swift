@@ -105,12 +105,25 @@ enum CassetteKey: CaseIterable {
     case rewind, backToStart, play, stop, record, fastForward
 }
 
+/// A transport key's colour. Colour means the tape is moving: a key is coloured
+/// only while down and only while something turns the tape -- the motor relay
+/// closed for Play and Record, a wind for Rewind and Fast forward. A down key
+/// that is waiting (relay open) is grey; a key that is not down is never
+/// coloured.
+enum CassetteKeyColour: Equatable {
+    case none
+    case grey
+    case green
+    case red
+    case blue
+}
+
 /// How a transport key is drawn: whether it accepts a press, whether it is down
-/// (the lit status key), and whether it is red.
+/// (the lit status key), and its colour.
 struct CassetteKeyAppearance: Equatable {
     var enabled: Bool
     var depressed: Bool
-    var red: Bool
+    var colour: CassetteKeyColour
 }
 
 /// What the deck shows depends on whether a tape (file or live) is in. An empty
@@ -136,34 +149,46 @@ enum CassetteKeys {
     /// live input, or Record on a live input or a non-recordable tape -- and is
     /// otherwise live and latches when it is the current transport. Play is down
     /// while Playing and also while Recording, since Record implies Play; Stop
-    /// and Back to the beginning are momentary and never latch; Record alone is
-    /// red, and only while Recording.
+    /// and Back to the beginning are momentary and never latch.
+    ///
+    /// Colour means the tape is moving (section 9.0). A down key that is merely
+    /// waiting is grey. Play and Record turn the tape only with the motor relay
+    /// closed, so they are grey while it is open and coloured once it closes --
+    /// Play green while Playing, red while Recording; Record red. A wind moves
+    /// the tape whatever the relay does, so Rewind and Fast forward are blue
+    /// while winding. A key that is not down is never coloured.
     static func appearance(of key: CassetteKey,
                            transport: Beebium_TapeTransport,
+                           motorOn: Bool,
                            isLive: Bool,
                            recordable: Bool) -> CassetteKeyAppearance {
         switch key {
         case .rewind:
-            return CassetteKeyAppearance(enabled: !isLive,
-                                         depressed: transport == .rewinding, red: false)
+            let winding = transport == .rewinding
+            return CassetteKeyAppearance(enabled: !isLive, depressed: winding,
+                                         colour: winding ? .blue : .none)
         case .fastForward:
-            return CassetteKeyAppearance(enabled: !isLive,
-                                         depressed: transport == .fastForwarding, red: false)
+            let winding = transport == .fastForwarding
+            return CassetteKeyAppearance(enabled: !isLive, depressed: winding,
+                                         colour: winding ? .blue : .none)
         case .backToStart:
-            return CassetteKeyAppearance(enabled: !isLive, depressed: false, red: false)
+            return CassetteKeyAppearance(enabled: !isLive, depressed: false, colour: .none)
         case .play:
-            return CassetteKeyAppearance(
-                enabled: true,
-                depressed: transport == .playing || transport == .recording, red: false)
+            let down = transport == .playing || transport == .recording
+            let colour: CassetteKeyColour
+            if !down { colour = .none }
+            else if !motorOn { colour = .grey }
+            else { colour = transport == .recording ? .red : .green }
+            return CassetteKeyAppearance(enabled: true, depressed: down, colour: colour)
         case .stop:
-            return CassetteKeyAppearance(enabled: true, depressed: false, red: false)
+            return CassetteKeyAppearance(enabled: true, depressed: false, colour: .none)
         case .record:
             // Greyed purely on the server's recordable flag, which is false for
-            // a CSW, a WAV, a live input and a read-only UEF alike; red and down
-            // together only while Recording.
+            // a CSW, a WAV, a live input and a read-only UEF alike. Down while
+            // Recording; red only once the relay closes, grey while it waits.
             let recording = transport == .recording
-            return CassetteKeyAppearance(enabled: recordable,
-                                         depressed: recording, red: recording)
+            let colour: CassetteKeyColour = !recording ? .none : (motorOn ? .red : .grey)
+            return CassetteKeyAppearance(enabled: recordable, depressed: recording, colour: colour)
         }
     }
 
@@ -621,15 +646,16 @@ struct CassetteDeckView: View {
     }
 
     /// One transport key: a borderless glyph that latches. It is drawn depressed
-    /// (a filled rounded background, the ordinary key colour at full strength)
-    /// while it is the lit status key, red only for Record while Recording, and
-    /// dimmed only when the deck cannot do it. Every key stays enabled while a
-    /// tape is in; a press on a key already down does nothing (the server's
-    /// transport is idempotent, so the short-circuit is a local nicety).
+    /// (a filled rounded background) while it is the lit status key, coloured
+    /// only while the tape is moving (green Play, red Record, blue wind) and grey
+    /// while a down key merely waits, and dimmed only when the deck cannot do it.
+    /// Every key stays enabled while a tape is in; a press on a key already down
+    /// does nothing (the server's transport is idempotent, so the short-circuit
+    /// is a local nicety).
     private func transportKey(_ symbol: String, help: String, key: CassetteKey,
                               action: @escaping () -> Void) -> some View {
         let appearance = CassetteKeys.appearance(
-            of: key, transport: transport,
+            of: key, transport: transport, motorOn: cassetteClient.motorOn,
             isLive: isLive, recordable: cassetteClient.tape?.recordable ?? false)
         return Button {
             if !appearance.depressed { action() }
@@ -647,13 +673,19 @@ struct CassetteDeckView: View {
         .help(help)
     }
 
-    /// A transport key's glyph colour: dim when it cannot be pressed, red for
-    /// Record while Recording, and otherwise the ordinary key colour -- at full
-    /// strength while down, a little muted while up.
+    /// A transport key's glyph colour: dim when it cannot be pressed; otherwise
+    /// its motion colour -- green, red or blue while the tape moves, grey while a
+    /// down key waits -- or the ordinary key colour (muted while up) when it
+    /// carries no motion colour.
     private func transportKeyColor(_ appearance: CassetteKeyAppearance) -> Color {
         if !appearance.enabled { return .secondary.opacity(0.3) }
-        if appearance.red { return .red }
-        return .primary.opacity(appearance.depressed ? 1.0 : 0.7)
+        switch appearance.colour {
+        case .green: return .green
+        case .red: return .red
+        case .blue: return .blue
+        case .grey: return .secondary
+        case .none: return .primary.opacity(appearance.depressed ? 1.0 : 0.7)
+        }
     }
 
     // MARK: - Actions
