@@ -1244,3 +1244,170 @@ TEST_CASE("A tape the server cannot record on says why, and Record refuses with 
 #endif
     }
 }
+
+// =============================================================================
+// The append point (round 10)
+// =============================================================================
+
+namespace {
+
+beebium::SeekToAppendPointResponse seek_to_append_point(CassetteFixture& fixture) {
+    grpc::ClientContext context;
+    beebium::SeekToAppendPointRequest request;
+    beebium::SeekToAppendPointResponse response;
+    REQUIRE(fixture.stub().SeekToAppendPoint(&context, request, &response).ok());
+    return response;
+}
+
+// The refusal, and the status saying the same sentence beforehand.
+void check_append_refused(CassetteFixture& fixture, beebium::CassetteErrorKind kind, const std::string& sentence) {
+    CHECK(fixture.status().append_refusal() == sentence);
+    const auto refused = seek_to_append_point(fixture);
+    CHECK_FALSE(refused.success());
+    CHECK(refused.kind() == kind);
+    CHECK(refused.error() == sentence);
+}
+
+// The text on a MODE 7 screen: its memory, &7C00 to &7FFF.
+std::string mode7_text(CassetteFixture& fixture) {
+    std::string text;
+    fixture.machine().with_emulation_paused([&] {
+        for (uint16_t address = 0x7C00; address < 0x8000; ++address) {
+            text.push_back(static_cast<char>(fixture.machine().peek(address) & 0x7F));
+        }
+    });
+    return text;
+}
+
+}  // namespace
+
+TEST_CASE("SeekToAppendPoint seeks past the last recording, or says why not", "[grpc][cassette][append]") {
+    CassetteFixture fixture;
+
+    check_append_refused(fixture, beebium::CASSETTE_ERROR_KIND_DECK_EMPTY, "There is no tape in the deck.");
+
+    {
+        AudioStream stream(fixture.stub());
+        REQUIRE(stream.format());
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.tape_inserted(); }));
+        check_append_refused(fixture, beebium::CASSETTE_ERROR_KIND_LIVE_SOURCE, "A live input has no end to append to.");
+        REQUIRE(stream.finish().ok());
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return !s.tape_inserted(); }));
+    }
+
+    // A long WAV takes a while to map: refused until it is ready.
+    {
+        TapeBuilder slow;
+        slow.gap(600.0).carrier(2400);
+        beebium::test::WavOptions wav;
+        wav.rate = 22050;
+        REQUIRE(fixture.insert(fixture.write("slow.wav", slow.wav(wav)).string()).success());
+        const auto status = fixture.status();
+        if (!status.signal_map_ready()) {
+            check_append_refused(fixture, beebium::CASSETTE_ERROR_KIND_NOT_READY,
+                                 "The tape's signal map is not ready yet; try again in a moment.");
+        }
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.signal_map_ready(); }, 30'000));
+        CHECK(fixture.status().append_refusal().empty());
+        REQUIRE(fixture.call<beebium::EjectTapeRequest>(&beebium::CassetteService::Stub::EjectTape).success());
+    }
+
+    // Recorded to 10.3 s, then ten seconds blank: 13 s, and the deck plays on.
+    {
+        std::vector<uint8_t> data(240);
+        for (size_t i = 0; i < data.size(); ++i) data[i] = static_cast<uint8_t>(i * 37 + 11);
+        TapeBuilder builder;
+        builder.gap(2.0).carrier(7200).bytes_8n1(data).gap(1.0).carrier(720).bytes_8n1(data).gap(10.0);
+        REQUIRE(fixture.insert(fixture.write("appendable.uef", builder.uef()).string()).success());
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.signal_map_ready(); }, 10'000));
+        CHECK(fixture.status().append_refusal().empty());
+        REQUIRE(fixture.play().success());
+        const auto point = seek_to_append_point(fixture);
+        REQUIRE(point.success());
+        CHECK(point.position_seconds() == Catch::Approx(13.0).margin(1e-6));
+        CHECK_FALSE(point.at_end());
+        const auto status = fixture.status();
+        CHECK(status.position_seconds() == Catch::Approx(13.0).margin(1e-3));
+        CHECK(status.transport() == beebium::TAPE_TRANSPORT_PLAYING);
+        REQUIRE(fixture.call<beebium::EjectTapeRequest>(&beebium::CassetteService::Stub::EjectTape).success());
+    }
+
+    // Recorded to its end: no room, stopped at the end.
+    {
+        TapeBuilder full;
+        full.carrier(24000);
+        REQUIRE(fixture.insert(fixture.write("full.uef", full.uef()).string()).success());
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.signal_map_ready(); }, 10'000));
+        REQUIRE(fixture.play().success());
+        const auto point = seek_to_append_point(fixture);
+        REQUIRE(point.success());
+        CHECK(point.at_end());
+        const auto status = fixture.status();
+        CHECK(point.position_seconds() == Catch::Approx(status.tape().duration_seconds()).margin(1e-3));
+        CHECK(status.transport() == beebium::TAPE_TRANSPORT_STOPPED);
+    }
+}
+
+TEST_CASE("Two programs SAVEd one after the other with SeekToAppendPoint both load",
+          "[grpc][cassette][append][mos]") {
+    CassetteFixture fixture;
+    if (!fixture.roms()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
+    const auto created = fixture.create_tape("C15", fixture.dirpath() / "two");
+    REQUIRE(created.success());
+    REQUIRE(fixture.insert(created.path()).success());
+    REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.signal_map_ready(); }, 10'000));
+
+    fixture.start_running();
+    fixture.run_emulated(4'000'000);
+
+    // SAVE a program, and stop when the relay opens again with the tape moved.
+    auto save = [&](const std::string& program, const std::string& name) {
+        fixture.type("NEW\r" + program + "\r*TAPE\rSAVE \"" + name + "\"\r");
+        fixture.run_emulated(4'000'000);   // to "RECORD then RETURN"
+        REQUIRE(fixture.record().success());
+        fixture.type("\r");
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return s.motor_on(); }, 20'000));
+        REQUIRE(wait_for_status(fixture, [](const auto& s) { return !s.motor_on(); }, 60'000));
+        REQUIRE(fixture.call<beebium::StopRequest>(&beebium::CassetteService::Stub::Stop).success());
+    };
+
+    save("10 ?&70=65", "APPEND1");
+    const double end_of_first = fixture.status().position_seconds();
+    const auto point = seek_to_append_point(fixture);
+    REQUIRE(point.success());
+    CHECK_FALSE(point.at_end());
+    // Two to three seconds after the first recording's last edge.
+    CHECK(point.position_seconds() > end_of_first);
+    CHECK(point.position_seconds() < end_of_first + 4.0);
+    save("10 ?&70=66", "APPEND2");
+
+    // Back to the beginning: *CAT lists both.
+    REQUIRE(fixture.seek(0.0).success());
+    REQUIRE(fixture.play().success());
+    fixture.type("CLS\r*CAT\r");
+    bool both = false;
+    for (int second = 0; second < 60 && !both; ++second) {
+        fixture.run_emulated(2'000'000);
+        const auto text = mode7_text(fixture);
+        both = text.find("APPEND1") != std::string::npos && text.find("APPEND2") != std::string::npos;
+    }
+    INFO(mode7_text(fixture));
+    CHECK(both);
+
+    // Escape ends *CAT; CHAIN "APPEND2" from the start finds and runs it.
+    fixture.machine().with_emulation_paused([&] { fixture.machine().state().memory.system_via_peripheral.key_down(7, 0); });
+    fixture.run_emulated(200'000);
+    fixture.machine().with_emulation_paused([&] {
+        fixture.machine().state().memory.system_via_peripheral.key_up(7, 0);
+        fixture.machine().write(0x70, 0);
+    });
+    REQUIRE(fixture.seek(0.0).success());
+    fixture.type("CHAIN \"APPEND2\"\r");
+    bool ran = false;
+    for (int second = 0; second < 60 && !ran; ++second) {
+        fixture.run_emulated(2'000'000);
+        fixture.machine().with_emulation_paused([&] { ran = fixture.machine().peek(0x70) == 66; });
+    }
+    CHECK(ran);
+    REQUIRE(fixture.call<beebium::StopRequest>(&beebium::CassetteService::Stub::Stop).success());
+}

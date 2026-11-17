@@ -60,6 +60,8 @@ class _CassetteErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Cas
     """seek, wind or record on a live tape"""
     CASSETTE_ERROR_KIND_INVALID_FORMAT: _CassetteErrorKind.ValueType  # 11
     """a live stream's or a WAV channel's format refused"""
+    CASSETTE_ERROR_KIND_NOT_READY: _CassetteErrorKind.ValueType  # 12
+    """the tape's signal map is not computed yet (SeekToAppendPoint)"""
 
 class CassetteErrorKind(_CassetteErrorKind, metaclass=_CassetteErrorKindEnumTypeWrapper): ...
 
@@ -86,6 +88,8 @@ CASSETTE_ERROR_KIND_LIVE_SOURCE: CassetteErrorKind.ValueType  # 10
 """seek, wind or record on a live tape"""
 CASSETTE_ERROR_KIND_INVALID_FORMAT: CassetteErrorKind.ValueType  # 11
 """a live stream's or a WAV channel's format refused"""
+CASSETTE_ERROR_KIND_NOT_READY: CassetteErrorKind.ValueType  # 12
+"""the tape's signal map is not computed yet (SeekToAppendPoint)"""
 Global___CassetteErrorKind: _TypeAlias = CassetteErrorKind  # noqa: Y015
 
 class _TapeTransport:
@@ -236,6 +240,7 @@ class DeckStatus(_message.Message):
     LIVE_UNDERRUNS_FIELD_NUMBER: _builtins.int
     SIGNAL_MAP_READY_FIELD_NUMBER: _builtins.int
     SIGNAL_MAP_GENERATION_FIELD_NUMBER: _builtins.int
+    APPEND_REFUSAL_FIELD_NUMBER: _builtins.int
     has_cassette_interface: _builtins.bool
     """false on a model without one"""
     tape_inserted: _builtins.bool
@@ -258,6 +263,10 @@ class DeckStatus(_message.Message):
     and how many have been published, so a client knows when to fetch it.
     """
     signal_map_generation: _builtins.int
+    append_refusal: _builtins.str
+    """Empty when SeekToAppendPoint would be accepted now, else the sentence it
+    would refuse with (no tape, a live input, the map not ready yet).
+    """
     @_builtins.property
     def tape(self) -> Global___TapeMetadata:
         """set when tape_inserted"""
@@ -277,10 +286,11 @@ class DeckStatus(_message.Message):
         live_underruns: _builtins.int = ...,
         signal_map_ready: _builtins.bool = ...,
         signal_map_generation: _builtins.int = ...,
+        append_refusal: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["tape", b"tape"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["has_cassette_interface", b"has_cassette_interface", "live_overruns", b"live_overruns", "live_ring_fill", b"live_ring_fill", "live_underruns", b"live_underruns", "motor_on", b"motor_on", "position_seconds", b"position_seconds", "signal_map_generation", b"signal_map_generation", "signal_map_ready", b"signal_map_ready", "tape", b"tape", "tape_inserted", b"tape_inserted", "transport", b"transport", "ula_part", b"ula_part"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["append_refusal", b"append_refusal", "has_cassette_interface", b"has_cassette_interface", "live_overruns", b"live_overruns", "live_ring_fill", b"live_ring_fill", "live_underruns", b"live_underruns", "motor_on", b"motor_on", "position_seconds", b"position_seconds", "signal_map_generation", b"signal_map_generation", "signal_map_ready", b"signal_map_ready", "tape", b"tape", "tape_inserted", b"tape_inserted", "transport", b"transport", "ula_part", b"ula_part"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -756,6 +766,56 @@ class GetTapeSignalMapRequest(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___GetTapeSignalMapRequest: _TypeAlias = GetTapeSignalMapRequest  # noqa: Y015
+
+@_typing.final
+class SeekToAppendPointRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SeekToAppendPointRequest: _TypeAlias = SeekToAppendPointRequest  # noqa: Y015
+
+@_typing.final
+class SeekToAppendPointResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUCCESS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
+    POSITION_SECONDS_FIELD_NUMBER: _builtins.int
+    AT_END_FIELD_NUMBER: _builtins.int
+    success: _builtins.bool
+    error: _builtins.str
+    """a sentence when !success"""
+    kind: Global___CassetteErrorKind.ValueType
+    """DECK_EMPTY, LIVE_SOURCE, NOT_READY or NO_CASSETTE_INTERFACE"""
+    position_seconds: _builtins.float
+    """where the head now is"""
+    at_end: _builtins.bool
+    """the append point was at or past the end: no room, and the deck stopped"""
+    def __init__(
+        self,
+        *,
+        success: _builtins.bool = ...,
+        error: _builtins.str = ...,
+        kind: Global___CassetteErrorKind.ValueType = ...,
+        position_seconds: _builtins.float = ...,
+        at_end: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["at_end", b"at_end", "error", b"error", "kind", b"kind", "position_seconds", b"position_seconds", "success", b"success"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SeekToAppendPointResponse: _TypeAlias = SeekToAppendPointResponse  # noqa: Y015
 
 @_typing.final
 class TapeSignalMap(_message.Message):

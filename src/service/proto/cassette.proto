@@ -66,6 +66,15 @@ service CassetteService {
     // ends. Until it is ready, and for a live tape, ready is false;
     // DeckStatus.signal_map_generation says when to fetch it again.
     rpc GetTapeSignalMap(GetTapeSignalMapRequest) returns (TapeSignalMap);
+
+    // Seek to the append point: the end of the last second of the signal map
+    // with any signal, plus two seconds, so a new recording follows the last
+    // one with a short gap; the start for a silent tape. As Seek, it ends a
+    // recording or a wind first, and a playing deck plays on; a point at or
+    // past the end stops the deck at the end, and at_end says so. Refused
+    // with DECK_EMPTY, LIVE_SOURCE, or NOT_READY before the map is computed;
+    // DeckStatus.append_refusal carries the sentence it would refuse with.
+    rpc SeekToAppendPoint(SeekToAppendPointRequest) returns (SeekToAppendPointResponse);
 }
 
 enum CassetteErrorKind {
@@ -81,6 +90,7 @@ enum CassetteErrorKind {
     CASSETTE_ERROR_KIND_READ_ONLY = 9;              // record on a tape that cannot be recorded on (a CSW or WAV, or a file the server cannot write)
     CASSETTE_ERROR_KIND_LIVE_SOURCE = 10;           // seek, wind or record on a live tape
     CASSETTE_ERROR_KIND_INVALID_FORMAT = 11;        // a live stream's or a WAV channel's format refused
+    CASSETTE_ERROR_KIND_NOT_READY = 12;             // the tape's signal map is not computed yet (SeekToAppendPoint)
 }
 
 enum TapeTransport {
@@ -122,6 +132,9 @@ message DeckStatus {
     // and how many have been published, so a client knows when to fetch it.
     bool signal_map_ready = 11;
     uint32 signal_map_generation = 12;
+    // Empty when SeekToAppendPoint would be accepted now, else the sentence it
+    // would refuse with (no tape, a live input, the map not ready yet).
+    string append_refusal = 13;
 }
 
 message InsertTapeRequest {
@@ -226,6 +239,16 @@ message SubscribeDeckStatusRequest {
 }
 
 message GetTapeSignalMapRequest {}
+
+message SeekToAppendPointRequest {}
+
+message SeekToAppendPointResponse {
+    bool success = 1;
+    string error = 2;                 // a sentence when !success
+    CassetteErrorKind kind = 3;       // DECK_EMPTY, LIVE_SOURCE, NOT_READY or NO_CASSETTE_INTERFACE
+    double position_seconds = 4;      // where the head now is
+    bool at_end = 5;                  // the append point was at or past the end: no room, and the deck stopped
+}
 
 // One level a second of tape, the fraction of that second within a run of
 // edges (each less than 4 ms after the last), carrier included: 0 silent

@@ -123,6 +123,11 @@ class CassetteServiceStub(object):
                 request_serializer=cassette__pb2.GetTapeSignalMapRequest.SerializeToString,
                 response_deserializer=cassette__pb2.TapeSignalMap.FromString,
                 _registered_method=True)
+        self.SeekToAppendPoint = channel.unary_unary(
+                '/beebium.CassetteService/SeekToAppendPoint',
+                request_serializer=cassette__pb2.SeekToAppendPointRequest.SerializeToString,
+                response_deserializer=cassette__pb2.SeekToAppendPointResponse.FromString,
+                _registered_method=True)
 
 
 class CassetteServiceServicer(object):
@@ -252,6 +257,19 @@ class CassetteServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SeekToAppendPoint(self, request, context):
+        """Seek to the append point: the end of the last second of the signal map
+        with any signal, plus two seconds, so a new recording follows the last
+        one with a short gap; the start for a silent tape. As Seek, it ends a
+        recording or a wind first, and a playing deck plays on; a point at or
+        past the end stops the deck at the end, and at_end says so. Refused
+        with DECK_EMPTY, LIVE_SOURCE, or NOT_READY before the map is computed;
+        DeckStatus.append_refusal carries the sentence it would refuse with.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CassetteServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -324,6 +342,11 @@ def add_CassetteServiceServicer_to_server(servicer, server):
                     servicer.GetTapeSignalMap,
                     request_deserializer=cassette__pb2.GetTapeSignalMapRequest.FromString,
                     response_serializer=cassette__pb2.TapeSignalMap.SerializeToString,
+            ),
+            'SeekToAppendPoint': grpc.unary_unary_rpc_method_handler(
+                    servicer.SeekToAppendPoint,
+                    request_deserializer=cassette__pb2.SeekToAppendPointRequest.FromString,
+                    response_serializer=cassette__pb2.SeekToAppendPointResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -711,6 +734,33 @@ class CassetteService(object):
             '/beebium.CassetteService/GetTapeSignalMap',
             cassette__pb2.GetTapeSignalMapRequest.SerializeToString,
             cassette__pb2.TapeSignalMap.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SeekToAppendPoint(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.CassetteService/SeekToAppendPoint',
+            cassette__pb2.SeekToAppendPointRequest.SerializeToString,
+            cassette__pb2.SeekToAppendPointResponse.FromString,
             options,
             channel_credentials,
             insecure,

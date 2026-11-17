@@ -107,6 +107,15 @@ class CassetteServiceStub:
     ends. Until it is ready, and for a live tape, ready is false;
     DeckStatus.signal_map_generation says when to fetch it again.
     """
+    SeekToAppendPoint: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.SeekToAppendPointRequest, _cassette_pb2.SeekToAppendPointResponse]
+    """Seek to the append point: the end of the last second of the signal map
+    with any signal, plus two seconds, so a new recording follows the last
+    one with a short gap; the start for a silent tape. As Seek, it ends a
+    recording or a wind first, and a playing deck plays on; a point at or
+    past the end stops the deck at the end, and at_end says so. Refused
+    with DECK_EMPTY, LIVE_SOURCE, or NOT_READY before the map is computed;
+    DeckStatus.append_refusal carries the sentence it would refuse with.
+    """
 
 @_typing.type_check_only
 class CassetteServiceAsyncStub(CassetteServiceStub):
@@ -174,6 +183,15 @@ class CassetteServiceAsyncStub(CassetteServiceStub):
     emulation thread when a tape is inserted and again when a recording
     ends. Until it is ready, and for a live tape, ready is false;
     DeckStatus.signal_map_generation says when to fetch it again.
+    """
+    SeekToAppendPoint: _aio.UnaryUnaryMultiCallable[_cassette_pb2.SeekToAppendPointRequest, _cassette_pb2.SeekToAppendPointResponse]  # type: ignore[assignment]
+    """Seek to the append point: the end of the last second of the signal map
+    with any signal, plus two seconds, so a new recording follows the last
+    one with a short gap; the start for a silent tape. As Seek, it ends a
+    recording or a wind first, and a playing deck plays on; a point at or
+    past the end stops the deck at the end, and at_end says so. Refused
+    with DECK_EMPTY, LIVE_SOURCE, or NOT_READY before the map is computed;
+    DeckStatus.append_refusal carries the sentence it would refuse with.
     """
 
 class CassetteServiceServicer(metaclass=_abc_1.ABCMeta):
@@ -323,6 +341,21 @@ class CassetteServiceServicer(metaclass=_abc_1.ABCMeta):
         emulation thread when a tape is inserted and again when a recording
         ends. Until it is ready, and for a live tape, ready is false;
         DeckStatus.signal_map_generation says when to fetch it again.
+        """
+
+    @_abc_1.abstractmethod
+    def SeekToAppendPoint(
+        self,
+        request: _cassette_pb2.SeekToAppendPointRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_cassette_pb2.SeekToAppendPointResponse, _abc.Awaitable[_cassette_pb2.SeekToAppendPointResponse]]:
+        """Seek to the append point: the end of the last second of the signal map
+        with any signal, plus two seconds, so a new recording follows the last
+        one with a short gap; the start for a silent tape. As Seek, it ends a
+        recording or a wind first, and a playing deck plays on; a point at or
+        past the end stops the deck at the end, and at_end says so. Refused
+        with DECK_EMPTY, LIVE_SOURCE, or NOT_READY before the map is computed;
+        DeckStatus.append_refusal carries the sentence it would refuse with.
         """
 
 def add_CassetteServiceServicer_to_server(servicer: CassetteServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

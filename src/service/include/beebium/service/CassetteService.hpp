@@ -360,6 +360,32 @@ public:
         }
     }
 
+    grpc::Status SeekToAppendPoint(grpc::ServerContext*, const SeekToAppendPointRequest*,
+                                   SeekToAppendPointResponse* response) override {
+        if constexpr (!HasCassette<Memory>) {
+            no_interface(response);
+            return grpc::Status::OK;
+        } else {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto& deck = machine_.state().memory.cassette_deck;
+            std::optional<AppendRefusal> refused;
+            std::optional<CassetteDeck::AppendPoint> point;
+            machine_.with_emulation_paused([&] {
+                refused = append_refusal(deck.has_tape(), deck.live(), deck.signal_map().ready);
+                if (!refused) point = deck.seek_to_append_point();
+            });
+            if (!refused && !point) refused = append_refusal(true, false, false);
+            if (refused) {
+                fail(response, refused->kind, refused->sentence);
+                return grpc::Status::OK;
+            }
+            response->set_success(true);
+            response->set_position_seconds(static_cast<double>(point->position) / ULA_CLOCK_HZ);
+            response->set_at_end(point->at_end);
+            return grpc::Status::OK;
+        }
+    }
+
     grpc::Status SubscribeDeckStatus(grpc::ServerContext* context, const SubscribeDeckStatusRequest* request,
                                      grpc::ServerWriter<DeckStatus>* writer) override {
         const uint32_t interval_ms = request->min_interval_ms() > 0 ? request->min_interval_ms() : 100;
@@ -407,6 +433,23 @@ public:
     }
 
 private:
+    // Why SeekToAppendPoint would be refused, in one place for the RPC and
+    // the status.
+    struct AppendRefusal {
+        beebium::CassetteErrorKind kind;
+        std::string sentence;
+    };
+
+    static std::optional<AppendRefusal> append_refusal(bool has_tape, bool live, bool map_ready) {
+        if (!has_tape) return AppendRefusal{beebium::CASSETTE_ERROR_KIND_DECK_EMPTY, "There is no tape in the deck."};
+        if (live) return AppendRefusal{beebium::CASSETTE_ERROR_KIND_LIVE_SOURCE, "A live input has no end to append to."};
+        if (!map_ready) {
+            return AppendRefusal{beebium::CASSETTE_ERROR_KIND_NOT_READY,
+                                 "The tape's signal map is not ready yet; try again in a moment."};
+        }
+        return std::nullopt;
+    }
+
     // Whether `filepath` is a file in the server's own blank tapes directory,
     // compared as canonical paths.
     bool is_blank_tape_template(const std::filesystem::path& filepath) const {
@@ -537,6 +580,10 @@ private:
             status.set_motor_on(published.relay_closed);
             status.set_signal_map_ready(published.has_tape && published.signal_map_ready);
             status.set_signal_map_generation(published.signal_map_generation);
+            const bool live = published.has_tape && tape_metadata_.format() == "LIVE";
+            if (const auto refused = append_refusal(published.has_tape, live, published.signal_map_ready)) {
+                status.set_append_refusal(refused->sentence);
+            }
             status.set_ula_part(machine_.state().memory.serial_socket.ula().part() == SerialUla::Part::VLSI
                                     ? "vlsi" : "ferranti");
             if (live_source_) {

@@ -93,6 +93,11 @@ public protocol Beebium_CassetteServiceClientProtocol: GRPCClient {
     _ request: Beebium_GetTapeSignalMapRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap>
+
+  func seekToAppendPoint(
+    _ request: Beebium_SeekToAppendPointRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_SeekToAppendPointRequest, Beebium_SeekToAppendPointResponse>
 }
 
 extension Beebium_CassetteServiceClientProtocol {
@@ -377,6 +382,30 @@ extension Beebium_CassetteServiceClientProtocol {
       interceptors: self.interceptors?.makeGetTapeSignalMapInterceptors() ?? []
     )
   }
+
+  /// Seek to the append point: the end of the last second of the signal map
+  /// with any signal, plus two seconds, so a new recording follows the last
+  /// one with a short gap; the start for a silent tape. As Seek, it ends a
+  /// recording or a wind first, and a playing deck plays on; a point at or
+  /// past the end stops the deck at the end, and at_end says so. Refused
+  /// with DECK_EMPTY, LIVE_SOURCE, or NOT_READY before the map is computed;
+  /// DeckStatus.append_refusal carries the sentence it would refuse with.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to SeekToAppendPoint.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  public func seekToAppendPoint(
+    _ request: Beebium_SeekToAppendPointRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_SeekToAppendPointRequest, Beebium_SeekToAppendPointResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.seekToAppendPoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSeekToAppendPointInterceptors() ?? []
+    )
+  }
 }
 
 @available(*, deprecated)
@@ -516,6 +545,11 @@ public protocol Beebium_CassetteServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_GetTapeSignalMapRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap>
+
+  func makeSeekToAppendPointCall(
+    _ request: Beebium_SeekToAppendPointRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_SeekToAppendPointRequest, Beebium_SeekToAppendPointResponse>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -691,6 +725,18 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetTapeSignalMapInterceptors() ?? []
+    )
+  }
+
+  public func makeSeekToAppendPointCall(
+    _ request: Beebium_SeekToAppendPointRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_SeekToAppendPointRequest, Beebium_SeekToAppendPointResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.seekToAppendPoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSeekToAppendPointInterceptors() ?? []
     )
   }
 }
@@ -876,6 +922,18 @@ extension Beebium_CassetteServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetTapeSignalMapInterceptors() ?? []
     )
   }
+
+  public func seekToAppendPoint(
+    _ request: Beebium_SeekToAppendPointRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_SeekToAppendPointResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CassetteServiceClientMetadata.Methods.seekToAppendPoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSeekToAppendPointInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -938,6 +996,9 @@ public protocol Beebium_CassetteServiceClientInterceptorFactoryProtocol: Sendabl
 
   /// - Returns: Interceptors to use when invoking 'getTapeSignalMap'.
   func makeGetTapeSignalMapInterceptors() -> [ClientInterceptor<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap>]
+
+  /// - Returns: Interceptors to use when invoking 'seekToAppendPoint'.
+  func makeSeekToAppendPointInterceptors() -> [ClientInterceptor<Beebium_SeekToAppendPointRequest, Beebium_SeekToAppendPointResponse>]
 }
 
 public enum Beebium_CassetteServiceClientMetadata {
@@ -959,6 +1020,7 @@ public enum Beebium_CassetteServiceClientMetadata {
       Beebium_CassetteServiceClientMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceClientMetadata.Methods.subscribeDeckStatus,
       Beebium_CassetteServiceClientMetadata.Methods.getTapeSignalMap,
+      Beebium_CassetteServiceClientMetadata.Methods.seekToAppendPoint,
     ]
   )
 
@@ -1046,6 +1108,12 @@ public enum Beebium_CassetteServiceClientMetadata {
       path: "/beebium.CassetteService/GetTapeSignalMap",
       type: GRPCCallType.unary
     )
+
+    public static let seekToAppendPoint = GRPCMethodDescriptor(
+      name: "SeekToAppendPoint",
+      path: "/beebium.CassetteService/SeekToAppendPoint",
+      type: GRPCCallType.unary
+    )
   }
 }
 
@@ -1121,6 +1189,15 @@ public protocol Beebium_CassetteServiceProvider: CallHandlerProvider {
   /// ends. Until it is ready, and for a live tape, ready is false;
   /// DeckStatus.signal_map_generation says when to fetch it again.
   func getTapeSignalMap(request: Beebium_GetTapeSignalMapRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_TapeSignalMap>
+
+  /// Seek to the append point: the end of the last second of the signal map
+  /// with any signal, plus two seconds, so a new recording follows the last
+  /// one with a short gap; the start for a silent tape. As Seek, it ends a
+  /// recording or a wind first, and a playing deck plays on; a point at or
+  /// past the end stops the deck at the end, and at_end says so. Refused
+  /// with DECK_EMPTY, LIVE_SOURCE, or NOT_READY before the map is computed;
+  /// DeckStatus.append_refusal carries the sentence it would refuse with.
+  func seekToAppendPoint(request: Beebium_SeekToAppendPointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SeekToAppendPointResponse>
 }
 
 extension Beebium_CassetteServiceProvider {
@@ -1261,6 +1338,15 @@ extension Beebium_CassetteServiceProvider {
         userFunction: self.getTapeSignalMap(request:context:)
       )
 
+    case "SeekToAppendPoint":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_SeekToAppendPointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SeekToAppendPointResponse>(),
+        interceptors: self.interceptors?.makeSeekToAppendPointInterceptors() ?? [],
+        userFunction: self.seekToAppendPoint(request:context:)
+      )
+
     default:
       return nil
     }
@@ -1384,6 +1470,18 @@ public protocol Beebium_CassetteServiceAsyncProvider: CallHandlerProvider, Senda
     request: Beebium_GetTapeSignalMapRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_TapeSignalMap
+
+  /// Seek to the append point: the end of the last second of the signal map
+  /// with any signal, plus two seconds, so a new recording follows the last
+  /// one with a short gap; the start for a silent tape. As Seek, it ends a
+  /// recording or a wind first, and a playing deck plays on; a point at or
+  /// past the end stops the deck at the end, and at_end says so. Refused
+  /// with DECK_EMPTY, LIVE_SOURCE, or NOT_READY before the map is computed;
+  /// DeckStatus.append_refusal carries the sentence it would refuse with.
+  func seekToAppendPoint(
+    request: Beebium_SeekToAppendPointRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_SeekToAppendPointResponse
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -1531,6 +1629,15 @@ extension Beebium_CassetteServiceAsyncProvider {
         wrapping: { try await self.getTapeSignalMap(request: $0, context: $1) }
       )
 
+    case "SeekToAppendPoint":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_SeekToAppendPointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SeekToAppendPointResponse>(),
+        interceptors: self.interceptors?.makeSeekToAppendPointInterceptors() ?? [],
+        wrapping: { try await self.seekToAppendPoint(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -1594,6 +1701,10 @@ public protocol Beebium_CassetteServiceServerInterceptorFactoryProtocol: Sendabl
   /// - Returns: Interceptors to use when handling 'getTapeSignalMap'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetTapeSignalMapInterceptors() -> [ServerInterceptor<Beebium_GetTapeSignalMapRequest, Beebium_TapeSignalMap>]
+
+  /// - Returns: Interceptors to use when handling 'seekToAppendPoint'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeSeekToAppendPointInterceptors() -> [ServerInterceptor<Beebium_SeekToAppendPointRequest, Beebium_SeekToAppendPointResponse>]
 }
 
 public enum Beebium_CassetteServiceServerMetadata {
@@ -1615,6 +1726,7 @@ public enum Beebium_CassetteServiceServerMetadata {
       Beebium_CassetteServiceServerMetadata.Methods.getDeckStatus,
       Beebium_CassetteServiceServerMetadata.Methods.subscribeDeckStatus,
       Beebium_CassetteServiceServerMetadata.Methods.getTapeSignalMap,
+      Beebium_CassetteServiceServerMetadata.Methods.seekToAppendPoint,
     ]
   )
 
@@ -1700,6 +1812,12 @@ public enum Beebium_CassetteServiceServerMetadata {
     public static let getTapeSignalMap = GRPCMethodDescriptor(
       name: "GetTapeSignalMap",
       path: "/beebium.CassetteService/GetTapeSignalMap",
+      type: GRPCCallType.unary
+    )
+
+    public static let seekToAppendPoint = GRPCMethodDescriptor(
+      name: "SeekToAppendPoint",
+      path: "/beebium.CassetteService/SeekToAppendPoint",
       type: GRPCCallType.unary
     )
   }
