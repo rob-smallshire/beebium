@@ -352,42 +352,59 @@ add_custom_command(TARGET beebium-model-b POST_BUILD
     COMMENT "Copying host ROMs to build directory"
 )
 
-# Blank disc templates (discs/blank/, made by scripts/make-blank-discs.sh),
-# copied beside each executable for exe-relative discovery from the build
-# tree, as the presets are; installed to share/beebium/blank-discs below.
+# Blank disc and tape templates (discs/blank/, made by
+# scripts/make-blank-discs.sh; tapes/blank/, made by
+# scripts/make_blank_tapes.py), staged beside the executables for exe-relative
+# discovery from the build tree, as the presets are, and installed to
+# share/beebium/blank-discs and share/beebium/blank-tapes below.
+#
+# Staged once, by one target every server depends on, not by a POST_BUILD step
+# per server: the servers share one directory, and under a parallel build one
+# server's rm -rf of blank-tapes would land between another's make_directory
+# and copy. The tape directory is emptied first, so a template renamed or
+# removed in the source does not linger in an existing build tree. The target
+# always runs; it copies a handful of small files, and so it restages after a
+# configuration switch in a multi-config generator too.
 set(BLANK_DISCS_SRC_DIR "${CMAKE_SOURCE_DIR}/discs/blank")
 file(GLOB BLANK_DISC_FILEPATHS CONFIGURE_DEPENDS "${BLANK_DISCS_SRC_DIR}/*")
-foreach(server_target ${BEEBIUM_SERVERS_DEPS})
-    if(server_target MATCHES "^beebium-model-")
-        add_custom_command(TARGET ${server_target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory
-                "$<TARGET_FILE_DIR:${server_target}>/blank-discs"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${BLANK_DISC_FILEPATHS}
-                "$<TARGET_FILE_DIR:${server_target}>/blank-discs/"
-            VERBATIM
-        )
-    endif()
-endforeach()
-
-# Blank tape templates (tapes/blank/, made by scripts/make_blank_tapes.py),
-# copied and installed as the blank discs are, to blank-tapes. The directory is
-# emptied first, so a template renamed or removed in the source does not linger
-# beside the servers in an existing build tree.
 set(BLANK_TAPES_SRC_DIR "${CMAKE_SOURCE_DIR}/tapes/blank")
 file(GLOB BLANK_TAPE_FILEPATHS CONFIGURE_DEPENDS "${BLANK_TAPES_SRC_DIR}/*.uef")
+
+# The servers' one runtime directory, named without $<TARGET_FILE_DIR> (a
+# target named in a generator expression would make this target depend on the
+# servers that depend on it). It holds only while no server sets its own
+# output directory, so check that.
+get_property(beebium_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(beebium_multi_config)
+    set(BEEBIUM_SERVERS_OUTPUT_DIRPATH "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
+else()
+    set(BEEBIUM_SERVERS_OUTPUT_DIRPATH "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+add_custom_target(beebium-blank-templates
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "${BEEBIUM_SERVERS_OUTPUT_DIRPATH}/blank-discs"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${BLANK_DISC_FILEPATHS}
+        "${BEEBIUM_SERVERS_OUTPUT_DIRPATH}/blank-discs/"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${BEEBIUM_SERVERS_OUTPUT_DIRPATH}/blank-tapes"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "${BEEBIUM_SERVERS_OUTPUT_DIRPATH}/blank-tapes"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${BLANK_TAPE_FILEPATHS}
+        "${BEEBIUM_SERVERS_OUTPUT_DIRPATH}/blank-tapes/"
+    COMMENT "Staging the blank disc and tape templates"
+    VERBATIM
+)
 foreach(server_target ${BEEBIUM_SERVERS_DEPS})
     if(server_target MATCHES "^beebium-model-")
-        add_custom_command(TARGET ${server_target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E rm -rf
-                "$<TARGET_FILE_DIR:${server_target}>/blank-tapes"
-            COMMAND ${CMAKE_COMMAND} -E make_directory
-                "$<TARGET_FILE_DIR:${server_target}>/blank-tapes"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${BLANK_TAPE_FILEPATHS}
-                "$<TARGET_FILE_DIR:${server_target}>/blank-tapes/"
-            VERBATIM
-        )
+        get_target_property(server_output_dirpath ${server_target} RUNTIME_OUTPUT_DIRECTORY)
+        if(server_output_dirpath)
+            message(FATAL_ERROR
+                "${server_target} sets RUNTIME_OUTPUT_DIRECTORY (${server_output_dirpath}); "
+                "beebium-blank-templates stages into ${CMAKE_CURRENT_BINARY_DIR} and must follow it.")
+        endif()
+        add_dependencies(${server_target} beebium-blank-templates)
     endif()
 endforeach()
 
