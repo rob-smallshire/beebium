@@ -534,7 +534,7 @@ namespace {
 
 // A program SAVEd as "PROG" to a copy of the C15 blank, with record pressed
 // and RETURN typed at moments set by `k` (a timetable that, before the idle
-// transmitter's restart, doubled the sync byte at k = 19). Returns the beeb,
+// transmitter's restart, doubled the sync byte at k = 8). Returns the beeb,
 // stopped, and the written file's chunks.
 struct ProgSave {
     std::unique_ptr<TapeBeeb> beeb = std::make_unique<TapeBeeb>();
@@ -572,13 +572,15 @@ std::filesystem::path blank_copy(const beebium::test::ScopedTempDir& dir, const 
 
 TEST_CASE("A SAVE whose sync byte the transmitter took at once records its header whole",
           "[cassette][mos][recording]") {
-    // Before an idle transmitter waited a full bit for a written byte, this
-    // timetable had MOS 1.20 send the sync byte twice and lose the name's
-    // first letter: the transmit interrupt came inside the gap the block
-    // writer leaves between sending &2A and placing the next byte.
+    // With the MOS cycling the empty analogue port's channels every 10.6 ms,
+    // this timetable puts the transmit interrupt inside the gap the block
+    // writer leaves between sending &2A and placing the next byte. A
+    // transmitter that took a byte written while idle at its next bit
+    // boundary, not a full bit after the write, sent the sync byte twice here
+    // and lost the name's first letter.
     if (!roms_present()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
     beebium::test::ScopedTempDir dir("beebium_cassette_prog_");
-    const auto save = save_prog(19, blank_copy(dir, "k19.uef"));
+    const auto save = save_prog(8, blank_copy(dir, "k8.uef"));
     REQUIRE(save.block.size() >= 6);
     CHECK(std::vector<uint8_t>(save.block.begin(), save.block.begin() + 6) ==
           std::vector<uint8_t>{0x2A, 'P', 'R', 'O', 'G', 0x00});
