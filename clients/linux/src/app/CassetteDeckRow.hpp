@@ -39,6 +39,7 @@ namespace beebium::linux_client {
 
 class ClientSettings;
 class ElidedLabel;
+class LiveLevelMeter;
 
 // The icon a refused cassette request shows, chosen by the server's kind,
 // never from its text (client specification 9.0): a note for what the user
@@ -112,6 +113,9 @@ public:
     QString message_detail_text() const;
     bool motor_shown() const;
     QSlider* slider() const { return slider_; }
+    // A live tape's level, where a file tape has its timeline.
+    QWidget* level_meter() const;
+    bool level_clip_lit() const;
     // The keys, there only while a tape is in.
     QWidget* key_row() const { return key_row_; }
     QToolButton* key(CassetteKey key) const { return keys_.at(key); }
@@ -164,6 +168,7 @@ private:
     QLabel* counter_;
     QLabel* duration_;
     QSlider* slider_;
+    LiveLevelMeter* level_;
     QWidget* message_line_;
     QLabel* message_icon_;
     QLabel* message_text_;
@@ -182,6 +187,7 @@ private:
     AudioInputs inputs_;
     LiveCapture* capture_ = nullptr;
     std::unique_ptr<LiveChunker> chunker_;
+    std::optional<LiveInputFormat> live_format_;
     QTimer notice_timer_;
     // A live tape's counts, watched once a second while it is in.
     LiveStarveDetector starve_;

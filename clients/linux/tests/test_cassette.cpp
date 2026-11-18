@@ -1588,6 +1588,32 @@ TEST_CASE("A new live stream starts clean", "[cassette][deck][live]") {
     CHECK_FALSE(d.row.message_text().isEmpty());
 }
 
+TEST_CASE("A live tape shows its input's level where a file tape has its timeline",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    REQUIRE(d.row.level_meter());
+    CHECK_FALSE(d.row.level_meter()->isVisibleTo(&d.row));
+    d.row.choose_live_input(d.inputs[1], {});  // 44.1 kHz float mono
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    CHECK(d.row.level_meter()->isVisibleTo(&d.row));
+    CHECK_FALSE(d.row.slider()->isVisibleTo(&d.row));
+    CHECK(d.row.level_meter()->toolTip() ==
+          QStringLiteral("The level of the live input. Turn the source down if the mark at the right "
+                         "lights, up if the bar barely moves."));
+    // Fed from the capture: a chunk at full scale lights the clipping mark.
+    CHECK_FALSE(d.row.level_clip_lit());
+    const float samples[] = {0.25F, -1.0F, 0.5F};
+    d.capture->give(QByteArray(reinterpret_cast<const char*>(samples), sizeof samples));
+    CHECK(d.row.level_clip_lit());
+}
+
+TEST_CASE("A file tape has its timeline and no level meter", "[cassette][deck][live]") {
+    Deck d;
+    d.load();
+    REQUIRE(wait_until([&] { return d.row.slider()->isVisibleTo(&d.row); }));
+    CHECK_FALSE(d.row.level_meter()->isVisibleTo(&d.row));
+}
+
 TEST_CASE("The input's samples go to the stream in whole 10 ms chunks", "[cassette][deck][live]") {
     LiveDeck d;
     d.row.choose_live_input(d.inputs[1], {});  // 44.1 kHz float mono: 441 frames of 4 bytes
