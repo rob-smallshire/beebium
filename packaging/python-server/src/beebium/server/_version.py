@@ -12,4 +12,4 @@
 
 """Single source of truth for the beebium-server version (bumped by bump-my-version)."""
 
-__version__ = "0.19.0"
+__version__ = "0.20.0"
