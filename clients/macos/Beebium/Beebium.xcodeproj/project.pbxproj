@@ -48,6 +48,7 @@
 		15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */; };
 		162D791FD0BE2D5F6E75CB72 /* FloppyDriveConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664E24EC940C75F69FE7E1E4 /* FloppyDriveConfigView.swift */; };
 		16CAAB94F87050BB11380B59 /* KeyboardMappingToggleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53D393AA6F8EA8027CA2417C /* KeyboardMappingToggleTests.swift */; };
+		17235882C914C21F8A259D93 /* AudioEngineOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2032E94043C24124273018D1 /* AudioEngineOutputTests.swift */; };
 		176E5EC016A3939E2194AA3E /* StructuredListItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98013E310ADF8A88A1E47008 /* StructuredListItem.swift */; };
 		18076BDCC5AC917FB887DC99 /* EconetStationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDB10CCDB68756C040A009F0 /* EconetStationPresentationTests.swift */; };
 		18D767C0BA8C5FD94781E368 /* RecentTapes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0716FD3A7949FE14D42A456 /* RecentTapes.swift */; };
@@ -378,6 +379,7 @@
 		1E24C908F696C80EFC7B016E /* SystemPowerMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPowerMonitor.swift; sourceTree = "<group>"; };
 		1E743CB023485025EA33E39A /* ExtensionManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionManifestTests.swift; sourceTree = "<group>"; };
 		1F66DA1B5AF0659B892650E5 /* TransientMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientMessageTests.swift; sourceTree = "<group>"; };
+		2032E94043C24124273018D1 /* AudioEngineOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngineOutputTests.swift; sourceTree = "<group>"; };
 		2073A33AE028AF1DFA0983DC /* keyboard.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = keyboard.grpc.swift; sourceTree = "<group>"; };
 		208639B544792E5992A279DF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		21F63FE0D5862D2315B5AFDC /* BeebiumSvgGlyphRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumSvgGlyphRenderer.swift; sourceTree = "<group>"; };
@@ -1015,6 +1017,7 @@
 			isa = PBXGroup;
 			children = (
 				A43D8022B89FAC0A77DB4521 /* AttachmentChooserTests.swift */,
+				2032E94043C24124273018D1 /* AudioEngineOutputTests.swift */,
 				F3162BA8FF05AE79259EC5AA /* AudioLimiterTests.swift */,
 				D0D01B8A395DCAD93419F4DD /* AudioMixerStateTests.swift */,
 				1576454956E7BA5E1797A53F /* AudioPreRollTests.swift */,
@@ -1243,6 +1246,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F9275E0AE271719BABC7AF84 /* AttachmentChooserTests.swift in Sources */,
+				17235882C914C21F8A259D93 /* AudioEngineOutputTests.swift in Sources */,
 				361BFD07D5C734F4857DAEFF /* AudioLimiterTests.swift in Sources */,
 				9B710F684F62B2B4976E205E /* AudioMixerStateTests.swift in Sources */,
 				418D98871B7DBD60523323D9 /* AudioPreRollTests.swift in Sources */,
