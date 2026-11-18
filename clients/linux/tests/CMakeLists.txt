@@ -275,6 +275,10 @@ beebium_linux_add_test(test_dialog_locations QT
     SOURCES test_dialog_locations.cpp
     LIBRARIES beebium_linux_app)
 
+beebium_linux_add_test(test_live_starve
+    SOURCES test_live_starve.cpp
+    LIBRARIES beebium_linux_app)
+
 beebium_linux_add_test(test_typing QT
     SOURCES test_typing.cpp
     LIBRARIES beebium_linux_app)
