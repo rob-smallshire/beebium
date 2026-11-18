@@ -275,14 +275,15 @@ TEST_CASE("uPD7002 12-bit conversion time follows the measured sawtooth",
     CHECK(before - after > 950);
 }
 
-TEST_CASE("uPD7002 unplugged channel reads 8000 after a 12-bit conversion",
+TEST_CASE("uPD7002 unplugged channel reads CAF0 after a 12-bit conversion",
           "[upd7002]") {
+    CHECK(Upd7002::UNPLUGGED_LEVEL == 0xCAFE);
     Upd7002 adc;
     adc.write(STATUS, CONTROL_12_BIT | 0x02);
     run_clocks(adc, CLOCK_LIMIT);
     REQUIRE(is_complete(adc));
-    CHECK(adc.read(LOW) == 0x00);
-    CHECK(adc.read(HIGH) == 0x80);
+    CHECK(adc.read(LOW) == 0xF0);
+    CHECK(adc.read(HIGH) == 0xCA);
 }
 
 TEST_CASE("uPD7002 writes to offsets 1, 2 and 3 change nothing observable",

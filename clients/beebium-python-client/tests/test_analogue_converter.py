@@ -17,7 +17,7 @@ programs are tokenised with oaknut-basic and put on a disc image with
 oaknut-disc, then CHAINed; nothing is typed in but the CHAIN.
 
 There is no Python-side way to drive the converter's inputs in this round:
-the inputs are undriven and read the centre of the range, &8000. The C++
+the inputs are unplugged and read the unplugged level, &CAFE. The C++
 tests cover set input levels; a later round gives the Python client a real
 input source through the analogue port.
 """
@@ -123,12 +123,12 @@ def _chain_and_read(bbc: Beebium, program: str, number: int) -> list[str]:
     return match.group(1).split()
 
 
-def test_unplugged_channels_read_the_centre_and_no_fire_button(bbc_adc: Beebium) -> None:
-    """ADVAL(1) to ADVAL(4) read &8000, the undriven level, and ADVAL(0)
-    AND 3 reads 0: no fire button. Nothing drives the inputs from Python in
-    this round; the C++ tests cover driven levels."""
+def test_unplugged_channels_read_the_unplugged_level_and_no_fire_button(bbc_adc: Beebium) -> None:
+    """ADVAL(1) to ADVAL(4) read &CAF0, the twelve bits of the unplugged
+    level, and ADVAL(0) AND 3 reads 0: no fire button. Nothing drives the
+    inputs from Python in this round; the C++ tests cover driven levels."""
     fields = _chain_and_read(bbc_adc, "A18", 18)
-    assert fields == ["8000", "8000", "8000", "8000", "0"]
+    assert fields == ["CAF0", "CAF0", "CAF0", "CAF0", "0"]
 
 
 def test_the_status_register_reads_the_chip_cycling_the_channels(bbc_adc: Beebium) -> None:

@@ -113,7 +113,7 @@ TEST_CASE("uPD7002 peek through the machine leaves EOC and CB1 as they were",
     hardware.write(ADC_BASE, 0x08);
     run_adc_clocks(hardware, 20000);
     REQUIRE(hardware.analogue_converter().eoc_level() == 0);
-    CHECK(hardware.peek(ADC_BASE + 1) == 0x80);
+    CHECK(hardware.peek(ADC_BASE + 1) == 0xCA);
     CHECK(hardware.analogue_converter().eoc_level() == 0);
     CHECK((hardware.peek(ADC_BASE) & STATUS_NOT_EOC) == 0);
 }

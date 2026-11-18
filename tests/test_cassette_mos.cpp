@@ -590,7 +590,7 @@ TEST_CASE("A SAVE that ends with a stray FF frame still loads", "[cassette][mos]
     // with an &FF frame after the data CRC, which loading never reads.
     if (!roms_present()) SKIP("The MOS 1.20 and BASIC 2 ROMs are not present.");
     beebium::test::ScopedTempDir dir("beebium_cassette_prog_");
-    auto save = save_prog(3, blank_copy(dir, "k3.uef"));
+    auto save = save_prog(18, blank_copy(dir, "k18.uef"));
     REQUIRE(save.block.size() == 54);
     CHECK(save.block.back() == 0xFF);
     TapeBeeb& beeb = *save.beeb;

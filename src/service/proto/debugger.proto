@@ -819,6 +819,6 @@ message AnalogueConverterState {
     uint32 clocks_remaining = 10;
 
     // The level on each of the four inputs, as a fraction of VREF: 0 is
-    // analogue ground, 65535 is VREF. An undriven input is 32768.
+    // analogue ground, 65535 is VREF. An unplugged input is 51966 (&CAFE).
     repeated uint32 input_levels = 11;
 }

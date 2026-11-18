@@ -46,7 +46,7 @@ struct BEEBIUM_EXT_API AnaloguePortDevice {
     // is read at most once per conversion and never on a tick; inspecting
     // the converter's state (the debugger) also reads it, outside any
     // conversion. A channel the device leaves unconnected returns
-    // UNDRIVEN_LEVEL.
+    // UNPLUGGED_LEVEL.
     virtual uint16_t channel_level(int channel) = 0;
 
     // The levels the device drives on the two button lines, in place as the
@@ -61,8 +61,10 @@ struct BEEBIUM_EXT_API AnaloguePortDevice {
     // transitions.
     virtual uint8_t light_pen_strobe() { return 0; }
 
-    // The level of an input nothing drives: the centre of the range.
-    static constexpr uint16_t UNDRIVEN_LEVEL = 0x8000;
+    // The level of an input nothing drives, the same as the converter's
+    // Upd7002::UNPLUGGED_LEVEL: inside the range real machines read with the
+    // port empty, and not the centre, a centred joystick.
+    static constexpr uint16_t UNPLUGGED_LEVEL = 0xCAFE;
 };
 
 }  // namespace beebium

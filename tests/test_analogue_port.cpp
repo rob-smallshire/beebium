@@ -22,6 +22,7 @@
 
 #include <beebium/Machines.hpp>
 #include <beebium/VideoBinding.hpp>
+#include <beebium/devices/Upd7002.hpp>
 #include <beebium/extension/AnaloguePort.hpp>
 #include <beebium/extension/AnaloguePortDevice.hpp>
 #include <beebium/extension/ExtensionContext.hpp>
@@ -58,8 +59,8 @@ public:
     uint8_t button_lines() override { return buttons; }
     uint8_t light_pen_strobe() override { return strobe; }
 
-    std::array<uint16_t, 4> levels = {UNDRIVEN_LEVEL, UNDRIVEN_LEVEL,
-                                      UNDRIVEN_LEVEL, UNDRIVEN_LEVEL};
+    std::array<uint16_t, 4> levels = {UNPLUGGED_LEVEL, UNPLUGGED_LEVEL,
+                                      UNPLUGGED_LEVEL, UNPLUGGED_LEVEL};
     uint8_t buttons = 0x30;
     uint8_t strobe = 0;
     std::vector<int> sampled_channels;
@@ -157,12 +158,14 @@ TEST_CASE("A conversion samples the device's level for the channel written, once
     }
 }
 
-TEST_CASE("With no device a conversion reads the undriven level", "[analogue_port]") {
+TEST_CASE("With no device a conversion reads the unplugged level", "[analogue_port]") {
+    // The chip's and the device seam's unplugged level are the same value.
+    CHECK(AnaloguePortDevice::UNPLUGGED_LEVEL == Upd7002::UNPLUGGED_LEVEL);
     ModelBHardware hardware;
     hardware.write(ADC_BASE, 0x09);
     run_adc_clocks(hardware, 20000);
-    CHECK(hardware.read(ADC_BASE + 2) == 0x00);
-    CHECK(hardware.read(ADC_BASE + 1) == 0x80);
+    CHECK(hardware.read(ADC_BASE + 2) == 0xF0);
+    CHECK(hardware.read(ADC_BASE + 1) == 0xCA);
 }
 
 TEST_CASE("The device's button lines are System VIA PB4 and PB5", "[analogue_port]") {
@@ -335,6 +338,43 @@ TEST_CASE("Model B MOS 1.20 reports the device's fire buttons through OSBYTE &80
     CHECK(fire_buttons(0x20) == 1);
     CHECK(fire_buttons(0x10) == 2);
     CHECK(fire_buttons(0x00) == 3);
+}
+
+// A period idiom for detecting a joystick: read channel 1 through OSBYTE &80
+// and take a high byte of exactly &80, a centred stick, as a joystick
+// present (the 1987 Dunjunz does this twice, and then reads its keys from
+// the stick). With the port empty the reading must not be centred, so such
+// a program takes the keyboard.
+TEST_CASE("Model B MOS 1.20 with the port empty does not read a centred joystick",
+          "[analogue_port][mos]") {
+    if (!roms_available()) SKIP("ROMs not available");
+    ModelB machine;
+    load_roms(machine);
+    machine.reset();
+    run_ms(machine, 1500);
+    while (!M6502_IsAboutToExecute(&machine.cpu())) {
+        machine.step();
+    }
+
+    // At &0900: LDA #&80 : LDX #1 : JSR OSBYTE : STY &70, twice (&70, &71),
+    // then JMP * (spin).
+    const uint8_t routine[] = {0xA9, 0x80, 0xA2, 0x01, 0x20, 0xF4, 0xFF, 0x84, 0x70,
+                               0xA9, 0x80, 0xA2, 0x01, 0x20, 0xF4, 0xFF, 0x84, 0x71,
+                               0x4C, 0x12, 0x09};
+    for (size_t i = 0; i < sizeof(routine); ++i) {
+        machine.write(static_cast<uint16_t>(0x0900 + i), routine[i]);
+    }
+    machine.write(0x70, 0x80);
+    machine.write(0x71, 0x80);
+    machine.set_pc(0x0900);
+    for (int i = 0; i < 4000 && machine.pc() != 0x0912; ++i) {
+        machine.step_instruction();
+    }
+    REQUIRE(machine.pc() == 0x0912);
+    CHECK(machine.peek(0x70) != 0x80);
+    CHECK(machine.peek(0x71) != 0x80);
+    CHECK(machine.peek(0x70) == (Upd7002::UNPLUGGED_LEVEL >> 8));
+    CHECK(machine.peek(0x71) == (Upd7002::UNPLUGGED_LEVEL >> 8));
 }
 
 TEST_CASE("ExtensionContext hands out the analogue port", "[analogue_port][extension-context]") {

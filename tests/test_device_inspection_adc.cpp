@@ -58,7 +58,7 @@ TEST_CASE("The ADC's power-on state is reported whole (#98)", "[inspection][upd7
     CHECK(state.clocks_remaining() == 0);
     REQUIRE(state.input_levels_size() == 4);
     for (int channel = 0; channel < 4; ++channel) {
-        CHECK(state.input_levels(channel) == 0x8000);
+        CHECK(state.input_levels(channel) == 0xCAFE);
     }
 }
 

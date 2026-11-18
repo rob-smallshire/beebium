@@ -2512,7 +2512,7 @@ class AnalogueConverterState(_message.Message):
     @_builtins.property
     def input_levels(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
         """The level on each of the four inputs, as a fraction of VREF: 0 is
-        analogue ground, 65535 is VREF. An undriven input is 32768.
+        analogue ground, 65535 is VREF. An unplugged input is 51966 (&CAFE).
         """
 
     def __init__(

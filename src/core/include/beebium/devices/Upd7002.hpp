@@ -143,8 +143,11 @@ public:
 
     static constexpr int CHANNEL_COUNT = 4;
 
-    // An input with nothing driving it: the centre of the range.
-    static constexpr uint16_t UNDRIVEN_LEVEL = 0x8000;
+    // An input with nothing driving it. Real machines read a wandering value
+    // in the upper half of the range with the port empty; this is one steady
+    // value inside the measured range, not the centre, which period programs
+    // take for a centred joystick.
+    static constexpr uint16_t UNPLUGGED_LEVEL = 0xCAFE;
 
     Upd7002() { power_on(); }
 
@@ -197,7 +200,7 @@ private:
 
     AnalogueInputSource* input_source_ = nullptr;
     std::array<uint16_t, CHANNEL_COUNT> input_levels_ = {
-        UNDRIVEN_LEVEL, UNDRIVEN_LEVEL, UNDRIVEN_LEVEL, UNDRIVEN_LEVEL};
+        UNPLUGGED_LEVEL, UNPLUGGED_LEVEL, UNPLUGGED_LEVEL, UNPLUGGED_LEVEL};
     uint8_t control_ = 0;           // bits 3 to 0 as last written
     uint8_t shown_control_ = 0;     // bits 3 to 0 of the conversion showing
     uint16_t result_ = 0;           // the result the registers show
