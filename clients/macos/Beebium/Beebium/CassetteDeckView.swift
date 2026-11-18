@@ -556,7 +556,7 @@ struct CassetteDeckView: View {
                 .foregroundColor(isEnabled ? .primary.opacity(0.6) : .secondary.opacity(0.3))
         } primaryAction: {
             // The one-click action is Browse where it is possible; otherwise the
-            // user opens the menu for the Input Device submenu.
+            // user opens the menu for the Input Device entry.
             if canBrowse { browseForTape() }
         }
         .menuStyle(.button)
@@ -567,30 +567,22 @@ struct CassetteDeckView: View {
         // obscuring it. The folder icon and its menu items speak for themselves.
     }
 
-    /// The Input Device submenu: one entry per host audio input device, named as
-    /// the system names it, with no filtering by kind. Shown only when the
-    /// microphone usage string is present (so the app never asks for the
-    /// microphone without it). Choosing one asks for authorisation, then opens
-    /// the live stream; the deck then shows the live tape, stopped, and the user
-    /// presses Play.
+    /// The Input Device entry: choosing it opens an AppKit menu of the host's
+    /// audio input devices, named as the system names them, with no filtering by
+    /// kind. Shown only when the microphone usage string is present (so the app
+    /// never asks for the microphone without it). The device menu is enumerated
+    /// the moment it opens, never while this is built -- enumerating at the
+    /// deck's render asked the system for the microphone at launch, and a
+    /// deferred SwiftUI submenu never populated once open. Choosing a device
+    /// asks for authorisation, then opens the live stream; the deck then shows
+    /// the live tape, stopped, and the user presses Play.
     @ViewBuilder
     private var inputDeviceMenu: some View {
         if liveInputAvailable {
-            Menu("Input Device") {
-                // Enumerate only when the submenu is shown, not while the deck
-                // is built: reading the host's input devices at render asked the
-                // system for the microphone at launch. The list is empty until
-                // this appears, then refreshes (so it is also current).
-                Group {
-                    if inputDevices.devices.isEmpty {
-                        Button("No audio input devices") {}.disabled(true)
-                    } else {
-                        ForEach(inputDevices.devices) { device in
-                            Button(device.name) { startLiveInput(device) }
-                        }
-                    }
+            Button("Input Device") {
+                InputDeviceMenu.present(from: inputDevices) { device in
+                    startLiveInput(device)
                 }
-                .onAppear { inputDevices.refresh() }
             }
         }
     }

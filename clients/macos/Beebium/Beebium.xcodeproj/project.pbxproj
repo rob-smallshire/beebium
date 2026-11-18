@@ -209,6 +209,7 @@
 		AD6E2D93B0B142AE97390BD6 /* SaveClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9223FE588BFE580551E0819 /* SaveClient.swift */; };
 		AE3969E0CE7F7D5F7C57513A /* StorageSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */; };
 		AEFDACA93EC7747DF05C2447 /* DiscoveryClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */; };
+		AF4C0897867551A23674F454 /* InputDeviceMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D43AF29E697AF0F0A75A11 /* InputDeviceMenuTests.swift */; };
 		AFE73F855C924CA7EC10D01C /* URL+DiscImageReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4F92E65FCC0DE10C9A39BF0 /* URL+DiscImageReference.swift */; };
 		B0A2354141FA9EC4227A8007 /* KeyboardSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1667C72B283ACDA76849586 /* KeyboardSectionView.swift */; };
 		B0E52098A904B8D9EB8C8870 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 3C410D45C0D56B52B7405B54 /* Shaders.metal */; };
@@ -291,6 +292,7 @@
 		E89BC098B23BC7953F1F7317 /* WelcomeWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BE9E7191CAFDC8E2EAE7ADA /* WelcomeWindow.swift */; };
 		EB57600D1B017B3105D1F79D /* system.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C4007152A43F9E94FB30A5 /* system.pb.swift */; };
 		EB7386AD783AEBB8DCABC15A /* keyboard.proto in Resources */ = {isa = PBXBuildFile; fileRef = DFB1414298AE8F8261138293 /* keyboard.proto */; };
+		EB86B25E5734BA1CF600C469 /* InputDeviceMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E40B2EA941BA1F408E4F141 /* InputDeviceMenu.swift */; };
 		EC2E615D44586B50D0200B94 /* LiveAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46CCD50D99E84525B9DDA0C /* LiveAudioCapture.swift */; };
 		ECE1E145C8CE64CCADB2A9BD /* SavedMachinesModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23791D4D4E455D1E91ADF78 /* SavedMachinesModelTests.swift */; };
 		EDC8046BDB6D89CB653B9E72 /* SavedMachineOpening.swift in Sources */ = {isa = PBXBuildFile; fileRef = E958A3C4EF29717464C19382 /* SavedMachineOpening.swift */; };
@@ -398,6 +400,7 @@
 		323E6158C9FB3E1626C9E672 /* W3CKeyCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = W3CKeyCode.swift; sourceTree = "<group>"; };
 		3295FC427F5DC583E764C83B /* ExtensionUiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionUiClient.swift; sourceTree = "<group>"; };
 		33D43E265EBE4A74BF8AE260 /* WindowKeyActivator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowKeyActivator.swift; sourceTree = "<group>"; };
+		34D43AF29E697AF0F0A75A11 /* InputDeviceMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputDeviceMenuTests.swift; sourceTree = "<group>"; };
 		38117A6A03CE78C8AC64C4C5 /* VideoClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClientTests.swift; sourceTree = "<group>"; };
 		38156B164E337693549CFB9C /* KeyboardMappingCorpusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMappingCorpusTests.swift; sourceTree = "<group>"; };
 		3A29D15C07C08A765BE48407 /* MachineRecentsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineRecentsTests.swift; sourceTree = "<group>"; };
@@ -500,6 +503,7 @@
 		8C179B6CADA71E65979BE60C /* BeebiumTouchBarEscapeKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarEscapeKey.swift; sourceTree = "<group>"; };
 		8C2AFB016D3C8A8EF789C4A9 /* PresetManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetManager.swift; sourceTree = "<group>"; };
 		8DC4EB31EFDD95098F6DE936 /* sideways.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = sideways.grpc.swift; sourceTree = "<group>"; };
+		8E40B2EA941BA1F408E4F141 /* InputDeviceMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputDeviceMenu.swift; sourceTree = "<group>"; };
 		8E7AB521BE70D41309998243 /* StartupLinksLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupLinksLayoutTests.swift; sourceTree = "<group>"; };
 		8FD185273CF06162D2144F0F /* CassetteClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CassetteClient.swift; sourceTree = "<group>"; };
 		8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebuggerClient.swift; sourceTree = "<group>"; };
@@ -916,6 +920,7 @@
 				F94659E7B330C00F11FC0E65 /* IndicatorClient.swift */,
 				2CE550723A13DFA9A20EB302 /* IndicatorView.swift */,
 				208639B544792E5992A279DF /* Info.plist */,
+				8E40B2EA941BA1F408E4F141 /* InputDeviceMenu.swift */,
 				3A63D58ABA4C03E6D3AE1D51 /* KeyboardClient.swift */,
 				BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */,
 				4D479C8A62437BA18788365E /* KeyboardMappingFile.swift */,
@@ -1045,6 +1050,7 @@
 				560CD4997F297C12AD3CA81C /* FileCommandsImportTests.swift */,
 				AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */,
 				89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */,
+				34D43AF29E697AF0F0A75A11 /* InputDeviceMenuTests.swift */,
 				38156B164E337693549CFB9C /* KeyboardMappingCorpusTests.swift */,
 				7BB655B9391362AB6D1F5101 /* KeyboardMappingFileTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
@@ -1271,6 +1277,7 @@
 				4F2191D03485C8683FE70F49 /* FileCommandsImportTests.swift in Sources */,
 				1FE8AE12703189FD243A6977 /* FileReferenceMenuTests.swift in Sources */,
 				A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */,
+				AF4C0897867551A23674F454 /* InputDeviceMenuTests.swift in Sources */,
 				F0902DD9A2EA9C9A8071A04F /* KeyboardMappingCorpusTests.swift in Sources */,
 				35CCC11B17FEB11EF5844F10 /* KeyboardMappingFileTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
@@ -1406,6 +1413,7 @@
 				4257B00B6F393A93AD85649A /* ImmersiveCoordinator.swift in Sources */,
 				40F2A089FF91784C67231853 /* IndicatorClient.swift in Sources */,
 				7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */,
+				EB86B25E5734BA1CF600C469 /* InputDeviceMenu.swift in Sources */,
 				3922D2EE613A705A5EC066D7 /* JSONValue.swift in Sources */,
 				94C93812FC0975970E7C7230 /* KeyInput.swift in Sources */,
 				987BD71FBAD1D69713DD3995 /* KeyboardClient.swift in Sources */,
