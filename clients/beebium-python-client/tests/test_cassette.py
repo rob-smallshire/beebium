@@ -157,7 +157,13 @@ def test_boot_tape_loads_and_runs_a_basic_program(bbc, tmp_path: Path):
             break
         time.sleep(0.5)
     assert bbc.memory.address.peek[0x70] == 42
-    assert "TAPE OK 42" in bbc.video.screen_text().text
+    # The program sets &70 before its PRINT has drawn the line, so the screen
+    # is polled too, within the same deadline.
+    text = bbc.video.screen_text().text
+    while "TAPE OK 42" not in text and time.monotonic() < deadline:
+        time.sleep(0.1)
+        text = bbc.video.screen_text().text
+    assert "TAPE OK 42" in text
 
 
 def test_blank_tapes_are_listed_and_one_is_created(bbc, tmp_path: Path):
