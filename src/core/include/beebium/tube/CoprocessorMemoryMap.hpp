@@ -130,23 +130,21 @@ public:
 
     // Memory region discovery for debugger.
     std::vector<MemoryRegionDescriptor> get_memory_regions() const {
-        std::vector<MemoryRegionDescriptor> regions;
+        return {
+            // Full 64 KB RAM
+            {REGION_RAM, 0x0000, 0x10000,
+             RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated | RegionFlags::Active},
 
-        // Full 64 KB RAM
-        regions.push_back({REGION_RAM, 0x0000, 0x10000,
-            RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated | RegionFlags::Active});
+            // 4 KB boot ROM at 0xF000-0xFFFF
+            {REGION_ROM, 0xF000, 0x1000,
+             RegionFlags::Readable | RegionFlags::Populated |
+             (rom_enabled_ ? RegionFlags::Active : RegionFlags::None)},
 
-        // 4 KB boot ROM at 0xF000-0xFFFF
-        regions.push_back({REGION_ROM, 0xF000, 0x1000,
-            RegionFlags::Readable | RegionFlags::Populated |
-            (rom_enabled_ ? RegionFlags::Active : RegionFlags::None)});
-
-        // Tube registers at 0xFEF8-0xFEFF (8 bytes, has side effects)
-        regions.push_back({REGION_TUBE, 0xFEF8, 0x0008,
-            RegionFlags::Readable | RegionFlags::Writable | RegionFlags::HasSideEffects |
-            RegionFlags::Populated | RegionFlags::Active});
-
-        return regions;
+            // Tube registers at 0xFEF8-0xFEFF (8 bytes, has side effects)
+            {REGION_TUBE, 0xFEF8, 0x0008,
+             RegionFlags::Readable | RegionFlags::Writable | RegionFlags::HasSideEffects |
+             RegionFlags::Populated | RegionFlags::Active},
+        };
     }
 
     // Read from a named memory region without side effects.

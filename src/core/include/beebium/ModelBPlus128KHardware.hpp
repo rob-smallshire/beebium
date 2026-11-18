@@ -1269,41 +1269,25 @@ public:
 
     // Memory region discovery for debugger
     std::vector<MemoryRegionDescriptor> get_memory_regions() const {
-        std::vector<MemoryRegionDescriptor> regions;
+        std::vector<MemoryRegionDescriptor> regions{
+            // Main RAM (0x0000-0x7FFF)
+            {REGION_MAIN_RAM, 0x0000, 32768,
+             RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated},
 
-        // Main RAM (0x0000-0x7FFF)
-        regions.push_back({
-            REGION_MAIN_RAM,
-            0x0000,  // base_address
-            32768,
-            RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated
-        });
+            // Shadow RAM (B+ specific, 0x3000-0x7FFF)
+            {REGION_SHADOW_RAM, 0x3000, 20480,
+             RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated},
 
-        // Shadow RAM (B+ specific, 0x3000-0x7FFF)
-        regions.push_back({
-            REGION_SHADOW_RAM,
-            0x3000,  // base_address
-            20480,
-            RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated
-        });
+            // ANDY private RAM (B+ specific, 0x8000-0xAFFF)
+            {REGION_ANDY_RAM, 0x8000, 12288,
+             RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated},
 
-        // ANDY private RAM (B+ specific, 0x8000-0xAFFF)
-        regions.push_back({
-            REGION_ANDY_RAM,
-            0x8000,  // base_address
-            12288,
-            RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated
-        });
-
-        // MOS ROM (0xC000-0xFFFF)
-        regions.push_back({
-            REGION_MOS_ROM,
-            0xC000,  // base_address
-            16384,
-            RegionFlags::Readable | RegionFlags::Populated
-        });
+            // MOS ROM (0xC000-0xFFFF)
+            {REGION_MOS_ROM, 0xC000, 16384, RegionFlags::Readable | RegionFlags::Populated},
+        };
 
         // Sideways banks (bank_0 through bank_15, all mapped at 0x8000-0xBFFF)
+        regions.reserve(regions.size() + 16);
         for (uint8_t bank = 0; bank < 16; ++bank) {
             regions.push_back(sideways_bank_region(bank_names_[bank], slot_info(bank),
                                                    bank == sideways.selected_bank()));

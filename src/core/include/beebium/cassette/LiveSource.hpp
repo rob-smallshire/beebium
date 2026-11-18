@@ -16,10 +16,12 @@
 #include "SampledSource.hpp"
 #include "TapeSignal.hpp"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -124,7 +126,9 @@ public:
 
     AudioDecoder(Format format, unsigned channels, unsigned channel)
         : format_(format), channel_(channel),
-          frame_bytes_((format == Format::S16 ? 2u : 4u) * channels) {}
+          frame_bytes_((format == Format::S16 ? 2u : 4u) * channels) {
+        if (channels != 1 && channels != 2) throw std::invalid_argument("A live stream has one or two channels.");
+    }
 
     // Append the samples in `bytes` to `out`.
     void decode(std::span<const uint8_t> bytes, std::vector<float>& out);
@@ -135,7 +139,9 @@ private:
     Format format_;
     unsigned channel_;
     unsigned frame_bytes_;
-    std::vector<uint8_t> partial_;
+    // The start of a split frame; the largest frame is two F32 channels
+    std::array<uint8_t, 8> partial_{};
+    size_t partial_size_ = 0;
 };
 
 // A live tape: a LiveSource squared by the FrontEnd. It is paced by emulated

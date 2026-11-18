@@ -98,18 +98,20 @@ float AudioDecoder::sample_at(const uint8_t* frame) const {
 }
 
 void AudioDecoder::decode(std::span<const uint8_t> bytes, std::vector<float>& out) {
-    if (!partial_.empty()) {
-        const size_t take = std::min<size_t>(frame_bytes_ - partial_.size(), bytes.size());
-        partial_.insert(partial_.end(), bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(take));
+    if (partial_size_ > 0) {
+        const size_t take = std::min<size_t>(frame_bytes_ - partial_size_, bytes.size());
+        std::copy_n(bytes.begin(), take, partial_.begin() + static_cast<std::ptrdiff_t>(partial_size_));
+        partial_size_ += take;
         bytes = bytes.subspan(take);
-        if (partial_.size() < frame_bytes_) return;
+        if (partial_size_ < frame_bytes_) return;
         out.push_back(sample_at(partial_.data()));
-        partial_.clear();
+        partial_size_ = 0;
     }
     const size_t frames = bytes.size() / frame_bytes_;
     out.reserve(out.size() + frames);
     for (size_t i = 0; i < frames; ++i) out.push_back(sample_at(bytes.data() + i * frame_bytes_));
-    partial_.assign(bytes.begin() + static_cast<std::ptrdiff_t>(frames * frame_bytes_), bytes.end());
+    partial_size_ = bytes.size() - frames * frame_bytes_;
+    std::copy_n(bytes.begin() + static_cast<std::ptrdiff_t>(frames * frame_bytes_), partial_size_, partial_.begin());
 }
 
 LiveTape::LiveTape(std::shared_ptr<LiveSource> source, std::string channel)

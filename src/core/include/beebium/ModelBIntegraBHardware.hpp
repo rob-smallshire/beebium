@@ -830,30 +830,21 @@ public:
 
     // Memory region discovery
     std::vector<MemoryRegionDescriptor> get_memory_regions() const {
-        std::vector<MemoryRegionDescriptor> regions;
-
-        regions.push_back({
-            REGION_MAIN_RAM,
-            0x0000,
-            32768,
-            RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated
-        });
-
         RegionFlags shadow_flags = RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated;
         if (shadow_selected()) shadow_flags = shadow_flags | RegionFlags::Active;
-        regions.push_back({REGION_SHADOW_RAM, 0x3000, 0x5000, shadow_flags});
 
         RegionFlags private_flags = RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated;
         if (romsel_ & ROMSEL_PRVEN) private_flags = private_flags | RegionFlags::Active;
-        regions.push_back({REGION_PRIVATE_RAM, 0x8000, 0x3000, private_flags});
 
-        regions.push_back({
-            REGION_MOS_ROM,
-            0xC000,
-            16384,
-            RegionFlags::Readable | RegionFlags::Populated
-        });
+        std::vector<MemoryRegionDescriptor> regions{
+            {REGION_MAIN_RAM, 0x0000, 32768,
+             RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated},
+            {REGION_SHADOW_RAM, 0x3000, 0x5000, shadow_flags},
+            {REGION_PRIVATE_RAM, 0x8000, 0x3000, private_flags},
+            {REGION_MOS_ROM, 0xC000, 16384, RegionFlags::Readable | RegionFlags::Populated},
+        };
 
+        regions.reserve(regions.size() + 16);
         for (uint8_t bank = 0; bank < 16; ++bank) {
             regions.push_back(sideways_bank_region(bank_names_[bank], slot_info(bank),
                                                    bank == sideways.selected_bank()));
