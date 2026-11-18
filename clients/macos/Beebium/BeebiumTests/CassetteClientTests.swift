@@ -49,8 +49,9 @@ final class CassetteClientTests: XCTestCase {
     /// and underrun counts.
     private func liveStatus(ringFill: Double = 0.25,
                             overruns: UInt64 = 4,
-                            underruns: UInt64 = 7) -> Beebium_DeckStatus {
-        var status = self.status(transport: .playing, position: 3, motorOn: true, format: "LIVE")
+                            underruns: UInt64 = 7,
+                            position: Double = 3) -> Beebium_DeckStatus {
+        var status = self.status(transport: .playing, position: position, motorOn: true, format: "LIVE")
         status.tape.name = "Built-in Microphone"
         status.tape.durationSeconds = 0
         status.liveRingFill = ringFill
@@ -201,6 +202,51 @@ final class CassetteClientTests: XCTestCase {
         XCTAssertEqual(client.liveRingFill, 0)
         XCTAssertEqual(client.liveOverruns, 0)
         XCTAssertEqual(client.liveUnderruns, 0)
+    }
+
+    // MARK: - Live starve
+
+    /// The detector is fed once per whole second of the stream (the position
+    /// counts samples consumed, so it advances a second per second). Three
+    /// consecutive growing underrun seconds raise the deck message; two do not.
+    func testSustainedLiveUnderrunRaisesADeckMessage() {
+        let client = CassetteClient()
+        let generation = client.streamGeneration
+        client.handleDeckStatus(liveStatus(underruns: 0, position: 0), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 100, position: 1), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 200, position: 2), generation: generation)
+        XCTAssertNil(client.liveStarve, "two growing seconds must not raise a message")
+        client.handleDeckStatus(liveStatus(underruns: 300, position: 3), generation: generation)
+        XCTAssertEqual(client.liveStarve?.brief, LiveStarveCondition.underrun.marker)
+        XCTAssertTrue(client.liveStarve?.detail.hasPrefix(LiveStarveCondition.underrun.sentence) ?? false)
+    }
+
+    /// Sub-second snapshots within the same whole second are not separate
+    /// observations, so a flood of snapshots in one second cannot raise.
+    func testSubSecondSnapshotsAreNotSeparateStarveSeconds() {
+        let client = CassetteClient()
+        let generation = client.streamGeneration
+        client.handleDeckStatus(liveStatus(underruns: 0, position: 0.0), generation: generation)
+        for step in 1...6 {
+            client.handleDeckStatus(liveStatus(underruns: UInt64(step * 100), position: 0.1 * Double(step)),
+                                    generation: generation)
+        }
+        XCTAssertNil(client.liveStarve, "all within the first second: no growing-second run")
+    }
+
+    /// A file tape clears the live-starve tracking, so a later live stream
+    /// starts clean rather than continuing an old run.
+    func testAFileTapeResetsStarveTracking() {
+        let client = CassetteClient()
+        let generation = client.streamGeneration
+        client.handleDeckStatus(liveStatus(underruns: 0, position: 0), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 100, position: 1), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 200, position: 2), generation: generation)
+        client.handleDeckStatus(status(), generation: generation)   // a file tape
+        // A fresh live stream: only one growing second so far, so no message.
+        client.handleDeckStatus(liveStatus(underruns: 0, position: 0), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 100, position: 1), generation: generation)
+        XCTAssertNil(client.liveStarve)
     }
 
     func testDeckKeyIsRefusedWithoutAConnection() async {

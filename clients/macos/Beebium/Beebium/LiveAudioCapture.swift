@@ -55,6 +55,11 @@ final class LiveAudioCapture: @unchecked Sendable {
     private var chunker: LiveAudioInput.Chunker?
     private var started = false
 
+    /// The sample rate the stream was opened with, known once `start` has read
+    /// the capture format; zero before that. The deck reads it for the
+    /// made-up-silence figure in a starve message.
+    private(set) var streamSampleRate: UInt32 = 0
+
     /// Begin capturing `device` and streaming it as the live tape. `onSummary`
     /// is called once when the stream ends: with the server's summary after a
     /// graceful half-close (`stop`), or a failure on `cancel` or connection
@@ -84,6 +89,7 @@ final class LiveAudioCapture: @unchecked Sendable {
         guard let format = LiveAudioInput.inputFormat(from: tapFormat, deviceName: device.name) else {
             throw CaptureError.unsupportedFormat
         }
+        streamSampleRate = format.sampleRate
         let frameBytes = LiveAudioInput.frameBytes(for: format)
         let framesPerChunk = LiveAudioInput.framesPerChunk(sampleRate: format.sampleRate)
         chunker = LiveAudioInput.Chunker(chunkBytes: framesPerChunk * frameBytes)

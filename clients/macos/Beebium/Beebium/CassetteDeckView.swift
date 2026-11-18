@@ -302,6 +302,22 @@ struct CassetteDeckView: View {
                 cassetteClient.clearLiveError()
             }
         }
+        // A sustained live-input starve or drop is a deck failure, deduplicated
+        // by the client. It takes the same marker and popover an insert failure
+        // does; the client reports each raise once.
+        .onChange(of: cassetteClient.liveStarve) { starve in
+            if let starve {
+                deckError.showFailure(starve.brief, detail: starve.detail)
+                cassetteClient.clearLiveStarve()
+            }
+        }
+        // A deck message is about the tape that was in; when that tape leaves
+        // (an eject, or a live stream ending), clear it, as section 9.0 asks.
+        // The transition fires only for a tape that was present, so an insert
+        // failure -- reported with no tape in -- is left standing.
+        .onChange(of: tapeInserted) { inserted in
+            if !inserted { deckError.clear() }
+        }
         .onDrop(of: [.fileURL], delegate: DiscImageDropDelegate(
             isSlotEmpty: !tapeInserted,
             occupiedReason: "Eject tape first",

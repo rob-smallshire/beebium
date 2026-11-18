@@ -68,6 +68,16 @@ enum CreateTapeError: LocalizedError {
     }
 }
 
+/// A sustained live-input starve or drop, raised for the deck to surface once
+/// as a persistent failure (section 9.0): `brief` is the short inline marker,
+/// `detail` the copyable popover text (the sentence and the counts). The view
+/// shows it through `TransientMessage.showFailure` and clears it, as it does a
+/// live stream error, so a new raise always re-triggers the view.
+struct LiveStarveMessage: Equatable {
+    let brief: String
+    let detail: String
+}
+
 /// Client for the one cassette deck, via gRPC.
 ///
 /// Unlike the floppy drives (which stream discrete events applied
@@ -123,6 +133,26 @@ final class CassetteClient: ObservableObject, Disconnectable {
     @Published private(set) var liveRingFill: Double = 0
     @Published private(set) var liveOverruns: UInt64 = 0
     @Published private(set) var liveUnderruns: UInt64 = 0
+
+    /// A newly raised sustained starve or drop on the live input, for the deck
+    /// to surface once. Nil the rest of the time; the view consumes it (shows
+    /// the failure marker and popover) and clears it. See LiveStarveDetector.
+    @Published private(set) var liveStarve: LiveStarveMessage?
+
+    /// Decides, from the per-second overrun and underrun counts, when a live
+    /// starve has been sustained long enough to tell the user. Reset for each
+    /// stream.
+    private var starveDetector = LiveStarveDetector()
+
+    /// The whole second of the live stream last fed to the starve detector, so
+    /// it is fed once per second (position counts samples consumed, advancing a
+    /// second per second while the Beeb reads the tape). Nil when no live stream
+    /// is running; a second before it marks a restarted stream.
+    private var lastStarveSecond: Int?
+
+    /// The live stream's sample rate, for the made-up-silence figure in a starve
+    /// message. Set when a live capture opens; falls back to 48 kHz if unknown.
+    private var liveSampleRate: UInt32 = 0
 
     /// Whether the loaded tape is a live audio input (its format reads "LIVE"),
     /// rather than a file-backed UEF, CSW or WAV. A live tape has no length, so
@@ -206,6 +236,10 @@ final class CassetteClient: ObservableObject, Disconnectable {
         liveRingFill = 0
         liveOverruns = 0
         liveUnderruns = 0
+        liveStarve = nil
+        starveDetector.reset()
+        lastStarveSecond = nil
+        liveSampleRate = 0
         errorMessage = nil
         liveError = nil
         blankTapes = []
@@ -225,12 +259,16 @@ final class CassetteClient: ObservableObject, Disconnectable {
         guard let client = client else { return .failure(.notConnected) }
         liveCapture?.cancel()
         liveError = nil
+        liveStarve = nil
+        starveDetector.reset()
+        lastStarveSecond = nil
         let capture = LiveAudioCapture()
         do {
             try capture.start(device: device, client: client) { [weak self] result in
                 Task { @MainActor [weak self] in self?.liveInputEnded(result) }
             }
             liveCapture = capture
+            liveSampleRate = capture.streamSampleRate
             return .success(())
         } catch {
             liveCapture = nil
@@ -454,6 +492,56 @@ final class CassetteClient: ObservableObject, Disconnectable {
         isStale = false
         errorMessage = nil
         reconcileSignalMap(status, streamGeneration: generation)
+        updateLiveStarve()
+    }
+
+    // MARK: - Live starve detection
+
+    /// Feed the live input's overrun and underrun counts to the starve detector
+    /// once per whole second of the stream, raising a deck message when a drift
+    /// has been sustained. A non-live tape (or none) resets the detector, so the
+    /// next live stream starts clean; a position that has gone backwards marks a
+    /// restarted stream and re-baselines without raising.
+    private func updateLiveStarve() {
+        guard isLive else {
+            resetStarveTracking()
+            return
+        }
+        let second = Int(positionSeconds.isFinite && positionSeconds > 0 ? positionSeconds : 0)
+        guard let last = lastStarveSecond else {
+            // First second of this stream: the baseline, nothing to compare yet.
+            lastStarveSecond = second
+            _ = starveDetector.observe(overruns: liveOverruns, underruns: liveUnderruns)
+            return
+        }
+        if second < last {
+            // The stream restarted (position counts from zero again): start over.
+            starveDetector.reset()
+            lastStarveSecond = second
+            _ = starveDetector.observe(overruns: liveOverruns, underruns: liveUnderruns)
+            return
+        }
+        guard second > last else { return }   // same second: ignore sub-second snapshots
+        lastStarveSecond = second
+        if let condition = starveDetector.observe(overruns: liveOverruns, underruns: liveUnderruns) {
+            let rate = liveSampleRate == 0 ? 48000 : liveSampleRate
+            liveStarve = LiveStarveMessage(
+                brief: condition.marker,
+                detail: LiveStarveDetail.text(condition: condition, overruns: liveOverruns,
+                                              underruns: liveUnderruns, sampleRate: rate))
+        }
+    }
+
+    private func resetStarveTracking() {
+        guard lastStarveSecond != nil else { return }
+        starveDetector.reset()
+        lastStarveSecond = nil
+    }
+
+    /// Consume a raised starve message once the view has shown it, so the next
+    /// raise (nil -> value) re-triggers the view, as `clearLiveError` does.
+    func clearLiveStarve() {
+        liveStarve = nil
     }
 
     // MARK: - Signal map
