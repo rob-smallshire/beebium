@@ -243,6 +243,9 @@ thing to check.
 
 ### Live input
 
+To feed the live input from another program's audio rather than a real player, see
+[live-input-routing.md](live-input-routing.md).
+
 A client can stream an audio input on its host, a real cassette deck's line-out, to the deck
 as the live tape, through `CassetteService.StreamAudio`. The samples go through the same front
 end as a WAV's.

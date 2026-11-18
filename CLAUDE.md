@@ -246,6 +246,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 - `clock-architecture.md` - Timing model and synchronisation
 - `disc-subsystem.md` - Disc controller and image formats
 - `cassette.md` - The cassette interface as built: the Serial ULA's cassette side, the UEF and CSW tape sources, WAV through the front-end model, live audio input, the deck, the signal map, CassetteService, the motor LED, presets and machine directories, `--tape`, and testing
+- `live-input-routing.md` - Routing another program's audio into the cassette deck's live input: the macOS procedure with BlackHole and a Multi-Output Device (volume sliders, sample rate, pick the device again after a change), the PipeWire monitor route on Linux, and how to measure what the virtual device receives
 - `sound-subsystem.md` - SN76489 and audio pipeline
 - `video-subsystem.md` - Display rendering pipeline
 - `grpc-server.md` - Service API documentation

@@ -478,7 +478,13 @@ cassette agent, and ends with the full gate from a separate Release worktree.
    starve or drop is one deduplicated deck failure message with the copy-and-dismiss affordance
    of client specification 3.4; a client-side peak level meter with a clipping mark takes its
    place; inputs stay unfiltered; Rob adds the macOS usage string, which says why.
-10. **Later**: recording to CSW; the VLSI part's selection in presets; a Master Compact's
+10. **Round 12: the live input's meter and device changes.** *Specified 2026-11-18, in progress.*
+   Rob proved live input end to end through a virtual audio device (`docs/live-input-routing.md`)
+   and found the meter unreadable and a device rate change reported as a starve
+   (`cassette-round12-live-input-meter-and-device-changes-specification.md`): the meter goes to
+   decibels with a peak hold and a sustained-clipping mark; a device format change or
+   disconnection ends the stream with a sentence. Client-only.
+11. **Later**: recording to CSW; the VLSI part's selection in presets; a Master Compact's
    `has_cassette = false` when that variant exists.
 
 ## Decisions to verify on hardware or against the corpus

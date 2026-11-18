@@ -1776,11 +1776,19 @@ section sits above the floppy drives, which sit above the hard discs.
   for samples dropped, with the counts in its detail; an equivalent condition never
   re-raises a showing or a dismissed message until it has cleared for as long and
   recurred, the other condition replaces it, and Eject or the stream ending clears
-  it (MANDATORY; cassette round 11). A live tape shows a peak level meter with a
-  clipping mark, computed by the client from its own capture, since clipping
-  happens at the host's converter; its help says to turn the source down when the
-  mark lights and up when the bar barely moves (MANDATORY; decay rate and drawing
-  LATITUDE). The capture applies no voice processing (MANDATORY): no automatic
+  it (MANDATORY; cassette round 11). A live tape shows a level meter computed by
+  the client from its own capture, since clipping happens at the host's converter:
+  a bar in decibels of full scale from -60 to 0 with a tick at -12 as the target,
+  a peak-hold line that sits at the highest level of the last two seconds and then
+  falls, and a clip mark that is lit red only on sustained clipping (three or more
+  consecutive full-scale samples in the taken channel), holds about two seconds,
+  and is otherwise absent, never dimmed; its help says to keep the held peak near
+  the tick and turn the source down if the mark appears (MANDATORY shape; the
+  rates and drawing LATITUDE; cassette round 12). When the chosen device changes
+  format or is disconnected while a live tape is in, the client ends the stream
+  (the server ejects) and shows a failure saying so and to choose the device again,
+  which outranks a starve raised in the same second (MANDATORY; cassette round 12).
+  The capture applies no voice processing (MANDATORY): no automatic
   gain, noise suppression or echo cancellation; on macOS this means the plain input
   format, not the voice-processing audio unit. Stopping the stream ejects the live
   tape, once the deck has played out what the server's ring holds. The macOS app's
