@@ -165,6 +165,75 @@ final class LiveAudioInputTests: XCTestCase {
         XCTAssertEqual(reassembled.count, 7 + 5 + 11 + 1 + 20)
     }
 
+    // MARK: - Peak / clip metering
+
+    /// Signed 16-bit little-endian interleaved bytes from raw samples, so a
+    /// chunk can carry an exact rail (which the float encoder cannot reach).
+    private func s16(_ samples: [Int16]) -> Data {
+        var data = Data(capacity: samples.count * 2)
+        for sample in samples {
+            withUnsafeBytes(of: UInt16(bitPattern: sample).littleEndian) { data.append(contentsOf: $0) }
+        }
+        return data
+    }
+
+    func testPeakOfAMonoFloatChunk() {
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[0.25, -0.5, 0.1]], sampleFormat: .f32)
+        let peak = LiveAudioInput.peak(ofInterleaved: data, sampleFormat: .f32, channels: 1)
+        XCTAssertEqual(peak.level, 0.5, accuracy: 1e-6)
+        XCTAssertFalse(peak.clipped)
+    }
+
+    func testPeakOfAMonoS16Chunk() {
+        // -16384 / 32768 = 0.5.
+        let peak = LiveAudioInput.peak(ofInterleaved: s16([8192, -16384, 4096]),
+                                       sampleFormat: .s16, channels: 1)
+        XCTAssertEqual(peak.level, 0.5, accuracy: 1e-4)
+        XCTAssertFalse(peak.clipped)
+    }
+
+    func testFloatClipMarkLightsAtFullScale() {
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[0.2, 1.0, 0.3]], sampleFormat: .f32)
+        let peak = LiveAudioInput.peak(ofInterleaved: data, sampleFormat: .f32, channels: 1)
+        XCTAssertTrue(peak.clipped)
+        XCTAssertEqual(peak.level, 1.0, accuracy: 1e-6)
+    }
+
+    func testS16ClipMarkLightsAtEitherRail() {
+        XCTAssertTrue(LiveAudioInput.peak(ofInterleaved: s16([100, 32767]),
+                                          sampleFormat: .s16, channels: 1).clipped,
+                      "the positive rail clips")
+        let negative = LiveAudioInput.peak(ofInterleaved: s16([-32768, 50]),
+                                           sampleFormat: .s16, channels: 1)
+        XCTAssertTrue(negative.clipped, "the negative rail clips")
+        XCTAssertEqual(negative.level, 1.0, accuracy: 1e-6, "the negative rail is full scale")
+    }
+
+    func testStereoFloatTakesOnlyTheLeftChannel() {
+        // Frames (L, R): (0.3, 1.0), (0.2, 1.0). The right channel is at full
+        // scale and must neither set the level nor light the mark.
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[0.3, 0.2], [1.0, 1.0]], sampleFormat: .f32)
+        let peak = LiveAudioInput.peak(ofInterleaved: data, sampleFormat: .f32, channels: 2)
+        XCTAssertEqual(peak.level, 0.3, accuracy: 1e-6, "only the left channel feeds the meter")
+        XCTAssertFalse(peak.clipped, "a full-scale right channel must not light the clip mark")
+    }
+
+    func testStereoS16TakesOnlyTheLeftChannel() {
+        // Frames (L, R): (4096, 32767), (8192, 32767).
+        let peak = LiveAudioInput.peak(ofInterleaved: s16([4096, 32767, 8192, 32767]),
+                                       sampleFormat: .s16, channels: 2)
+        XCTAssertEqual(peak.level, 8192.0 / 32768.0, accuracy: 1e-4)
+        XCTAssertFalse(peak.clipped, "the right channel's full scale is not taken")
+    }
+
+    func testPeakOfAnEmptyChunkIsSilent() {
+        XCTAssertEqual(LiveAudioInput.peak(ofInterleaved: Data(), sampleFormat: .f32, channels: 1),
+                       .silent)
+    }
+
     // MARK: - Usage string gate
 
     func testUsageStringGate() {

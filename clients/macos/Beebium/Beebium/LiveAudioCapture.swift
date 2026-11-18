@@ -64,8 +64,12 @@ final class LiveAudioCapture: @unchecked Sendable {
     /// is called once when the stream ends: with the server's summary after a
     /// graceful half-close (`stop`), or a failure on `cancel` or connection
     /// loss. The owner releases this capture in that callback.
+    /// `onPeak` is called for every captured chunk with its peak level and clip
+    /// flag, on the real-time audio thread; the owner hops it to the main actor
+    /// to drive the level meter.
     func start(device: LiveAudioDevice,
                client: Beebium_CassetteServiceNIOClient,
+               onPeak: @escaping (LiveAudioInput.Peak) -> Void = { _ in },
                onSummary: @escaping (Result<Beebium_StreamAudioSummary, Error>) -> Void) throws {
         let inputNode = engine.inputNode
 
@@ -107,6 +111,10 @@ final class LiveAudioCapture: @unchecked Sendable {
             guard let self, let call = self.call else { return }
             let bytes = LiveAudioInput.samples(from: buffer, channels: channels,
                                                sampleFormat: sampleFormat)
+            // The level meter is read from exactly the bytes streamed, taking
+            // the left channel, so what it shows is what the server receives.
+            onPeak(LiveAudioInput.peak(ofInterleaved: bytes, sampleFormat: sampleFormat,
+                                       channels: channels))
             // The tap is the only writer of the chunker, so this is confined.
             for chunk in self.chunker?.take(bytes) ?? [] {
                 call.sendMessage(.with { $0.samples = chunk }, promise: nil)

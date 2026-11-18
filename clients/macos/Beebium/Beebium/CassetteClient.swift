@@ -154,6 +154,22 @@ final class CassetteClient: ObservableObject, Disconnectable {
     /// message. Set when a live capture opens; falls back to 48 kHz if unknown.
     private var liveSampleRate: UInt32 = 0
 
+    /// The live input's peak level (0 silent .. 1 full scale), decayed for the
+    /// row's level meter, and whether a recent chunk clipped (held briefly so a
+    /// transient clip is seen). Both zero/false for a file tape or none.
+    @Published private(set) var liveLevel: Float = 0
+    @Published private(set) var liveClipping: Bool = false
+
+    /// The peak and clip accumulated since the meter was last published, the
+    /// last publish time (also the decay time base), and when a held clip mark
+    /// lapses. Capture reports a chunk about every 15 ms; the meter is published
+    /// at about 20 Hz so SwiftUI is not invalidated per chunk.
+    private var meterPendingLevel: Float = 0
+    private var meterPendingClip = false
+    private var meterLastPublished: Date?
+    private var meterClipHeldUntil: Date?
+    private static let meterPublishInterval: TimeInterval = 0.05
+
     /// Whether the loaded tape is a live audio input (its format reads "LIVE"),
     /// rather than a file-backed UEF, CSW or WAV. A live tape has no length, so
     /// its Seek, Rewind, Fast forward and Record keys are disabled (the server
@@ -240,6 +256,7 @@ final class CassetteClient: ObservableObject, Disconnectable {
         starveDetector.reset()
         lastStarveSecond = nil
         liveSampleRate = 0
+        resetLiveMeter()
         errorMessage = nil
         liveError = nil
         blankTapes = []
@@ -262,11 +279,17 @@ final class CassetteClient: ObservableObject, Disconnectable {
         liveStarve = nil
         starveDetector.reset()
         lastStarveSecond = nil
+        resetLiveMeter()
         let capture = LiveAudioCapture()
         do {
-            try capture.start(device: device, client: client) { [weak self] result in
-                Task { @MainActor [weak self] in self?.liveInputEnded(result) }
-            }
+            try capture.start(
+                device: device, client: client,
+                onPeak: { [weak self] peak in
+                    Task { @MainActor [weak self] in self?.reportLivePeak(peak) }
+                },
+                onSummary: { [weak self] result in
+                    Task { @MainActor [weak self] in self?.liveInputEnded(result) }
+                })
             liveCapture = capture
             liveSampleRate = capture.streamSampleRate
             return .success(())
@@ -505,6 +528,7 @@ final class CassetteClient: ObservableObject, Disconnectable {
     private func updateLiveStarve() {
         guard isLive else {
             resetStarveTracking()
+            resetLiveMeter()
             return
         }
         let second = Int(positionSeconds.isFinite && positionSeconds > 0 ? positionSeconds : 0)
@@ -542,6 +566,44 @@ final class CassetteClient: ObservableObject, Disconnectable {
     /// raise (nil -> value) re-triggers the view, as `clearLiveError` does.
     func clearLiveStarve() {
         liveStarve = nil
+    }
+
+    // MARK: - Live level meter
+
+    /// Take one captured chunk's peak and clip into the meter, publishing the
+    /// decayed level at about 20 Hz rather than per chunk. The attack is
+    /// instant (the level rises at once to a louder chunk); the release decays
+    /// the standing level toward zero at about 20 dB/s between publishes -- a
+    /// level meter's conventional fast-attack, slow-release. A clip holds the
+    /// mark lit for a second so a transient is seen.
+    func reportLivePeak(_ peak: LiveAudioInput.Peak) {
+        meterPendingLevel = max(meterPendingLevel, peak.level)
+        if peak.clipped { meterPendingClip = true }
+        let now = Date()
+        if let last = meterLastPublished,
+           now.timeIntervalSince(last) < Self.meterPublishInterval {
+            return
+        }
+        if let last = meterLastPublished {
+            let elapsed = Float(now.timeIntervalSince(last))
+            liveLevel = max(liveLevel * pow(10, -elapsed), meterPendingLevel)   // -20 dB/s
+        } else {
+            liveLevel = meterPendingLevel
+        }
+        if meterPendingClip { meterClipHeldUntil = now.addingTimeInterval(1.0) }
+        liveClipping = meterClipHeldUntil.map { $0 > now } ?? false
+        meterLastPublished = now
+        meterPendingLevel = 0
+        meterPendingClip = false
+    }
+
+    private func resetLiveMeter() {
+        meterPendingLevel = 0
+        meterPendingClip = false
+        meterLastPublished = nil
+        meterClipHeldUntil = nil
+        if liveLevel != 0 { liveLevel = 0 }
+        if liveClipping { liveClipping = false }
     }
 
     // MARK: - Signal map

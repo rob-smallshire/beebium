@@ -434,6 +434,15 @@ struct CassetteDeckView: View {
                 }
             )
         }
+
+        // A live tape has no timeline (no length to scrub); in its place sits
+        // the one indicator a user can act on -- the input level and a clip
+        // mark, from the client's own capture tap (section 9.0).
+        if isLive {
+            LiveLevelMeter(level: cassetteClient.liveLevel, clipping: cassetteClient.liveClipping)
+                .help("The level of the live input. Turn the source down if the mark at the "
+                      + "right lights, up if the bar barely moves.")
+        }
     }
 
     private func tapeHelp(_ tape: Beebium_TapeMetadata) -> String {
@@ -973,5 +982,40 @@ private struct TapeTimeline: View {
                 }
             }
         }
+    }
+}
+
+/// The live input's level meter, shown where the timeline sits for a file tape
+/// (a live tape has no length, section 9.0). A short bar fills with the decayed
+/// peak level, and a mark at the right edge lights red while a recent sample
+/// clipped at the host's converter, so the user can set the source level: turn
+/// it down if the mark lights, up if the bar barely moves. The values are
+/// decayed and held in CassetteClient; this only draws them.
+private struct LiveLevelMeter: View {
+    /// The decayed peak, 0 silent .. 1 full scale.
+    let level: Float
+    /// Whether a recent chunk clipped (held briefly so a transient is seen).
+    let clipping: Bool
+
+    private let barHeight: CGFloat = 3
+    private let markWidth: CGFloat = 4
+
+    var body: some View {
+        HStack(spacing: 4) {
+            GeometryReader { geometry in
+                let fraction = CGFloat(min(max(level, 0), 1))
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.3))
+                    Capsule().fill(Color.accentColor)
+                        .frame(width: geometry.size.width * fraction)
+                }
+                .frame(height: barHeight)
+                .frame(maxHeight: .infinity, alignment: .center)
+            }
+            RoundedRectangle(cornerRadius: 1)
+                .fill(clipping ? Color.red : Color.secondary.opacity(0.35))
+                .frame(width: markWidth, height: barHeight + 3)
+        }
+        .frame(height: 16)
     }
 }

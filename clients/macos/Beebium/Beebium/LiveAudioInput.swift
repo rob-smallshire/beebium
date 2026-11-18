@@ -123,6 +123,64 @@ enum LiveAudioInput {
         return data
     }
 
+    // MARK: - Level metering
+
+    /// The peak level of one capture chunk and whether it clipped, for the live
+    /// row's level meter.
+    struct Peak: Equatable {
+        /// The largest absolute sample in the chunk, normalised to full scale
+        /// (0 silent .. 1 full scale).
+        var level: Float
+        /// Whether any sample reached the converter's full scale.
+        var clipped: Bool
+
+        static let silent = Peak(level: 0, clipped: false)
+    }
+
+    /// The peak and clip of a chunk, read from the same little-endian
+    /// interleaved bytes the deck streams (`samples(from:)`), in the stream's
+    /// sample format. Only the left channel of a stereo chunk is read: clipping
+    /// happens at the host's analogue-to-digital converter, which is the line
+    /// the server reads, so a full-scale sample in the unread right channel must
+    /// not light the mark. An S16 sample is normalised by 32768 (so the negative
+    /// rail reads as full scale) and clips at either rail; an F32 sample clips at
+    /// a magnitude of 1 or more. Pure, so it is tested without hardware.
+    static func peak(ofInterleaved data: Data,
+                     sampleFormat: Beebium_AudioSampleFormat,
+                     channels: Int) -> Peak {
+        let channelCount = max(1, channels)
+        var level: Float = 0
+        var clipped = false
+        data.withUnsafeBytes { raw in
+            switch sampleFormat {
+            case .s16:
+                let frameBytes = channelCount * 2
+                var offset = 0
+                while offset + 2 <= raw.count {
+                    let sample = Int16(littleEndian:
+                        raw.loadUnaligned(fromByteOffset: offset, as: Int16.self))
+                    if sample == Int16.max || sample == Int16.min { clipped = true }
+                    // abs(Int16.min) overflows Int16, so widen before taking it.
+                    let magnitude = Float(abs(Int(sample))) / 32768.0
+                    if magnitude > level { level = magnitude }
+                    offset += frameBytes   // the left channel of each frame only
+                }
+            default:  // .f32 (and any future float form)
+                let frameBytes = channelCount * 4
+                var offset = 0
+                while offset + 4 <= raw.count {
+                    let sample = Float(bitPattern: UInt32(littleEndian:
+                        raw.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
+                    let magnitude = abs(sample)
+                    if magnitude >= 1.0 { clipped = true }
+                    if magnitude > level { level = magnitude }
+                    offset += frameBytes
+                }
+            }
+        }
+        return Peak(level: min(level, 1.0), clipped: clipped)
+    }
+
     // MARK: - Re-chunking
 
     /// Re-chunks a stream of sample bytes into frame-aligned chunks of a fixed
