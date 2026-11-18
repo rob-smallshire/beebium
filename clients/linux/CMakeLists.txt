@@ -301,6 +301,7 @@ add_library(beebium_linux_app STATIC
     src/app/KeyboardInput.cpp
     src/app/KeyboardSidebar.cpp
     src/app/LiveInput.cpp
+    src/app/LiveLevel.cpp
     src/app/LiveStarve.cpp
     src/app/LedColour.cpp
     src/app/MachineSession.cpp
