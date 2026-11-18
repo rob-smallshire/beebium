@@ -29,43 +29,72 @@ ChunkLevel chunk_level(const QByteArray& samples, const LiveInputFormat& format)
     const int channel = format.channels > 1 && format.channel == QStringLiteral("right") ? 1 : 0;
     const qsizetype frames = samples.size() / frame_bytes;
     const char* data = samples.constData();
+    int run = 0;
     for (qsizetype i = 0; i < frames; ++i) {
         const char* at = data + i * frame_bytes + channel * sample_bytes;
         float magnitude = 0.0F;
+        bool full = false;
         if (s16) {
             std::int16_t v = 0;
             std::memcpy(&v, at, sizeof v);
-            level.clipped = level.clipped || v == INT16_MIN || v == INT16_MAX;
+            full = v == INT16_MIN || v == INT16_MAX;
             magnitude = static_cast<float>(std::abs(static_cast<int>(v))) / 32768.0F;
         } else {
             float v = 0.0F;
             std::memcpy(&v, at, sizeof v);
             magnitude = std::fabs(v);
-            level.clipped = level.clipped || magnitude >= 1.0F;
+            full = magnitude >= 1.0F;
         }
+        run = full ? run + 1 : 0;
+        level.clip_run = std::max(level.clip_run, run);
         level.peak = std::max(level.peak, std::min(magnitude, 1.0F));
     }
     return level;
 }
 
+double level_db(float peak) {
+    if (peak <= 0.0F) {
+        return METER_FLOOR_DB;
+    }
+    return std::max(METER_FLOOR_DB, 20.0 * std::log10(static_cast<double>(peak)));
+}
+
+double meter_fraction(double db) {
+    return std::clamp((db - METER_FLOOR_DB) / -METER_FLOOR_DB, 0.0, 1.0);
+}
+
 void LevelMeterState::take(const ChunkLevel& level, std::int64_t now_ms) {
-    if (started_) {
-        const double elapsed = static_cast<double>(now_ms - last_ms_) / 1000.0;
-        level_db_ = std::max(FLOOR_DB, level_db_ - DECAY_DB_PER_SECOND * std::max(0.0, elapsed));
+    const double db = level_db(level.peak);
+    if (db >= bar_db(now_ms)) {
+        bar_peak_db_ = db;
+        bar_ms_ = now_ms;
     }
-    started_ = true;
-    last_ms_ = now_ms;
-    if (level.peak > 0.0F) {
-        level_db_ = std::max(level_db_, std::max(FLOOR_DB, 20.0 * std::log10(level.peak)));
+    const double bar = bar_db(now_ms);
+    if (bar >= hold_db(now_ms)) {
+        hold_peak_db_ = bar;
+        hold_ms_ = now_ms;
     }
-    if (level.clipped) {
+    if (level.clipping()) {
         clipped_ = true;
         clip_ms_ = now_ms;
     }
 }
 
+double LevelMeterState::bar_db(std::int64_t now_ms) const {
+    const double elapsed = std::max<double>(0.0, static_cast<double>(now_ms - bar_ms_) / 1000.0);
+    return std::max(METER_FLOOR_DB, bar_peak_db_ - METER_BAR_FALL_DB_PER_S * elapsed);
+}
+
+double LevelMeterState::hold_db(std::int64_t now_ms) const {
+    const double elapsed = static_cast<double>(now_ms - hold_ms_) / 1000.0 - METER_HOLD_SECONDS;
+    if (elapsed <= 0.0) {
+        return hold_peak_db_;
+    }
+    return std::max(METER_FLOOR_DB, hold_peak_db_ - METER_HOLD_FALL_DB_PER_S * elapsed);
+}
+
 bool LevelMeterState::clip_lit(std::int64_t now_ms) const {
-    return clipped_ && now_ms - clip_ms_ < CLIP_HOLD_MS;
+    return clipped_ && static_cast<double>(now_ms - clip_ms_) < CLIP_HOLD_SECONDS * 1000.0;
 }
 
 }  // namespace beebium::linux_client

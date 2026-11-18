@@ -16,6 +16,7 @@
 
 #include "app/CassetteDeckRow.hpp"
 #include "app/ClientSettings.hpp"
+#include "app/LiveLevelMeter.hpp"
 #include "app/SessionCassette.hpp"
 #include "app/SessionDiscs.hpp"
 #include "app/StorageSidebar.hpp"
@@ -41,7 +42,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <initializer_list>
 #include <memory>
 #include <optional>
@@ -1598,13 +1601,74 @@ TEST_CASE("A live tape shows its input's level where a file tape has its timelin
     CHECK(d.row.level_meter()->isVisibleTo(&d.row));
     CHECK_FALSE(d.row.slider()->isVisibleTo(&d.row));
     CHECK(d.row.level_meter()->toolTip() ==
-          QStringLiteral("The level of the live input. Turn the source down if the mark at the right "
-                         "lights, up if the bar barely moves."));
-    // Fed from the capture: a chunk at full scale lights the clipping mark.
+          QStringLiteral("The level of the live input, in decibels. Keep the held peak near the tick; "
+                         "turn the source down if the red mark appears."));
+    // Fed from the capture: a click at full scale is not clipping; a run is.
+    const float click[] = {0.25F, -1.0F, 0.5F};
+    d.capture->give(QByteArray(reinterpret_cast<const char*>(click), sizeof click));
     CHECK_FALSE(d.row.level_clip_lit());
-    const float samples[] = {0.25F, -1.0F, 0.5F};
-    d.capture->give(QByteArray(reinterpret_cast<const char*>(samples), sizeof samples));
+    const float run[] = {0.25F, 1.0F, 1.0F, 1.0F, 0.5F};
+    d.capture->give(QByteArray(reinterpret_cast<const char*>(run), sizeof run));
     CHECK(d.row.level_clip_lit());
+}
+
+namespace {
+
+bool close_to(const QColor& a, const QColor& b) {
+    return std::abs(a.red() - b.red()) <= 8 && std::abs(a.green() - b.green()) <= 8 &&
+           std::abs(a.blue() - b.blue()) <= 8;
+}
+
+bool any_pixel(const QImage& image, const QRect& rect, const std::function<bool(QColor)>& test) {
+    for (int y = rect.top(); y <= rect.bottom(); ++y) {
+        for (int x = rect.left(); x <= rect.right(); ++x) {
+            if (test(image.pixelColor(x, y))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+TEST_CASE("The meter draws its tick and held peak, and its clip mark only while lit",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    d.row.choose_live_input(d.inputs[1], {});  // float mono
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    LiveLevelMeter* meter = d.row.level_meter();
+    // Laid out as the row lays it out, before anything is drawn.
+    d.row.resize(260, d.row.sizeHint().height());
+    d.row.show();
+    REQUIRE(wait_until([&] { return meter->width() > 100; }));
+    const QColor ink = meter->palette().color(QPalette::Active, QPalette::WindowText);
+    const QColor red(0xd7, 0x26, 0x1e);
+    const auto drawn = [&] {
+        QImage image(meter->size(), QImage::Format_ARGB32);
+        image.fill(Qt::transparent);
+        meter->render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+        return image;
+    };
+    // The tick, beneath the bar at the target level.
+    QImage image = drawn();
+    CHECK(close_to(image.pixelColor(meter->tick_rect().topLeft()), ink));
+    CHECK(meter->x_of(METER_TARGET_DB) - meter->x_of(METER_FLOOR_DB) ==
+          std::lround(0.8 * (meter->bar_rect().width() - 1)));
+    // Nothing held yet: nothing above the bar.
+    CHECK_FALSE(any_pixel(image, QRect(0, 0, meter->bar_rect().width(), 1),
+                          [&](QColor c) { return c.alpha() > 0; }));
+    // A chunk at -24 dB holds its peak there, standing above the bar.
+    const float quiet[] = {0.0631F, -0.0631F};
+    d.capture->give(QByteArray(reinterpret_cast<const char*>(quiet), sizeof quiet));
+    image = drawn();
+    CHECK(close_to(image.pixelColor(meter->x_of(-24.0), 0), ink));
+    // The clip mark, unlit, is not drawn at all: not grey, simply absent.
+    CHECK_FALSE(any_pixel(image, meter->clip_rect(), [](QColor c) { return c.alpha() > 0; }));
+    const float clipping[] = {1.0F, 1.0F, 1.0F};
+    d.capture->give(QByteArray(reinterpret_cast<const char*>(clipping), sizeof clipping));
+    image = drawn();
+    CHECK(any_pixel(image, meter->clip_rect(), [&](QColor c) { return c.alpha() > 200 && close_to(c, red); }));
 }
 
 TEST_CASE("A file tape has its timeline and no level meter", "[cassette][deck][live]") {

@@ -114,7 +114,7 @@ public:
     bool motor_shown() const;
     QSlider* slider() const { return slider_; }
     // A live tape's level, where a file tape has its timeline.
-    QWidget* level_meter() const;
+    LiveLevelMeter* level_meter() const { return level_; }
     bool level_clip_lit() const;
     // The keys, there only while a tape is in.
     QWidget* key_row() const { return key_row_; }

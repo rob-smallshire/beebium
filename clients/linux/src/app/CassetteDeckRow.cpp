@@ -16,7 +16,7 @@
 #include "app/DialogLocations.hpp"
 #include "app/ElidedLabel.hpp"
 #include "app/FileReveal.hpp"
-#include "app/LiveLevel.hpp"
+#include "app/LiveLevelMeter.hpp"
 #include "app/SessionDiscs.hpp"
 #include "app/StorageSidebar.hpp"
 
@@ -27,7 +27,6 @@
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QDragEnterEvent>
-#include <QElapsedTimer>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFont>
@@ -224,76 +223,6 @@ private:
 
 }  // namespace
 
-// A live input's peak level, as the client captures it (client
-// specification 9.0, Live input): a short bar, and at its right a mark
-// that lights when the host's converter clipped and stays lit a second.
-class LiveLevelMeter : public QWidget {
-public:
-    explicit LiveLevelMeter(QWidget* parent) : QWidget(parent) {
-        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        clock_.start();
-    }
-    QSize sizeHint() const override { return {120, HEIGHT}; }
-    QSize minimumSizeHint() const override { return {40, HEIGHT}; }
-
-    void take(const ChunkLevel& level) {
-        const qint64 now = clock_.elapsed();
-        state_.take(level, now);
-        // Redrawn some fifteen times a second at most, not for every chunk:
-        // on a Pi each repaint beside the picture copies the window.
-        if ((length(width()) != drawn_length_ || state_.clip_lit(now) != drawn_clip_) &&
-            now - painted_ms_ >= REDRAW_MS) {
-            painted_ms_ = now;
-            update();
-        }
-    }
-    bool clip_lit() const { return state_.clip_lit(clock_.elapsed()); }
-    void reset() {
-        state_.reset();
-        clock_.restart();
-        painted_ms_ = 0;
-        update();
-    }
-
-protected:
-    void paintEvent(QPaintEvent*) override {
-        const qint64 now = clock_.elapsed();
-        const int bar_width = width() - HEIGHT - GAP;
-        drawn_length_ = length(width());
-        drawn_clip_ = state_.clip_lit(now);
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
-        painter.setPen(Qt::NoPen);
-        const QPalette::ColorGroup group = isEnabled() ? QPalette::Active : QPalette::Disabled;
-        const qreal y = (height() - BAR_THICKNESS) / 2.0;
-        painter.setBrush(palette().color(group, QPalette::Mid));
-        painter.drawRoundedRect(QRectF(0, y, bar_width, BAR_THICKNESS), 2.0, 2.0);
-        if (drawn_length_ > 0) {
-            painter.setBrush(palette().color(group, QPalette::Highlight));
-            painter.drawRoundedRect(QRectF(0, y, drawn_length_, BAR_THICKNESS), 2.0, 2.0);
-        }
-        painter.setBrush(drawn_clip_ ? CassetteDeckRow::RECORDING_COLOUR
-                                     : palette().color(group, QPalette::Mid));
-        painter.drawEllipse(QRectF(width() - HEIGHT + 1.0, 1.0, HEIGHT - 2.0, HEIGHT - 2.0));
-    }
-
-private:
-    static constexpr int HEIGHT = 10;
-    static constexpr int GAP = 4;
-    static constexpr qreal BAR_THICKNESS = 5.0;
-    static constexpr qint64 REDRAW_MS = 66;
-
-    int length(int width) const {
-        return static_cast<int>(std::lround(state_.fraction() * (width - HEIGHT - GAP)));
-    }
-
-    LevelMeterState state_;
-    QElapsedTimer clock_;
-    qint64 painted_ms_ = 0;
-    int drawn_length_ = -1;
-    bool drawn_clip_ = false;
-};
-
 const QColor CassetteDeckRow::PLAYING_COLOUR = QColor(0x2e, 0xb8, 0x4d);
 const QColor CassetteDeckRow::RECORDING_COLOUR = QColor(0xd7, 0x26, 0x1e);
 
@@ -370,8 +299,8 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     position->addWidget(slider_);
     level_ = new LiveLevelMeter(position_line_);
     level_->setObjectName(QStringLiteral("liveLevel"));
-    level_->setToolTip(tr("The level of the live input. Turn the source down if the mark at the "
-                          "right lights, up if the bar barely moves."));
+    level_->setToolTip(tr("The level of the live input, in decibels. Keep the held peak near the "
+                          "tick; turn the source down if the red mark appears."));
     level_->hide();
     position->addWidget(level_);
     layout->addWidget(position_line_);
@@ -796,10 +725,6 @@ void CassetteDeckRow::present_position() {
 void CassetteDeckRow::seek_to_slider() {
     clear_message();
     cassette_.seek(static_cast<double>(slider_->sliderPosition()) / SLIDER_SCALE);
-}
-
-QWidget* CassetteDeckRow::level_meter() const {
-    return level_;
 }
 
 bool CassetteDeckRow::level_clip_lit() const {
