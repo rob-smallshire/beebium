@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 import tape_builder
 
-from beebium.client import Beebium, CassetteError, CreateTapeError
+from beebium.client import Beebium, CassetteError, CreateTapeError, ServerInstallation
 from beebium.client.cassette import CassetteErrorKind, CreateTapeErrorKind, TapeTransport
 from beebium.client.exceptions import ServerNotFoundError
 
@@ -274,8 +274,19 @@ def test_signal_map_of_a_tape_and_of_a_recording(bbc, tmp_path: Path):
     assert not any(signal_map.levels[end + 2:])
 
 
-def test_a_blank_tape_template_is_never_inserted(bbc, beebium_server_filepath, tmp_path: Path):
-    template = Path(beebium_server_filepath).parent / "blank-tapes" / "C15.uef"
+def _blank_tape_template_filepath(installation: ServerInstallation, filename: str) -> Path | None:
+    """The template the server reads: beside the executables in a build tree,
+    under share/beebium in an installed one, or None where neither holds it."""
+    candidates = [installation.bin_dirpath / "blank-tapes" / filename]
+    if installation.root_dirpath is not None:
+        candidates.append(installation.root_dirpath / "share" / "beebium" / "blank-tapes" / filename)
+    return next((c for c in candidates if c.is_file()), None)
+
+
+def test_a_blank_tape_template_is_never_inserted(bbc, server_installation: ServerInstallation, tmp_path: Path):
+    template = _blank_tape_template_filepath(server_installation, "C15.uef")
+    if template is None:
+        pytest.skip(f"The server from {server_installation.origin} has no C15 template where the test can find it.")
     with pytest.raises(CassetteError) as refused:
         bbc.cassette.insert(template)
     assert refused.value.kind == CassetteErrorKind.INVALID_IMAGE
