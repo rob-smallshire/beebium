@@ -236,6 +236,50 @@ enum LiveAudioInput {
         }
     }
 
+    // MARK: - Device change
+
+    /// The deck failure a device change earns: the sentence shown inline (with
+    /// the section 3.4 affordance) and the copyable detail naming the device and
+    /// what changed.
+    struct DeviceChangeFailure: Equatable {
+        let brief: String
+        let detail: String
+    }
+
+    /// Decide what a capture-engine configuration change means for an open live
+    /// stream (cassette round 12). `streamed` is the format `StreamAudio` was
+    /// opened with; `current` is the input node's format after the change, or
+    /// nil when the device has gone; `deviceListed` is whether the device id is
+    /// still among the host's inputs.
+    ///
+    /// Returns nil while the device still delivers the streamed format (the
+    /// stream carries on). A rate or channel-count change ends the stream with a
+    /// sentence to choose the device again; a device that has gone (no format,
+    /// no input channel, or no longer listed) ends it saying so. The channel
+    /// count is compared as the stream takes it (at most two), so a device that
+    /// stays stereo is unchanged. Pure, so the rule is tested without an engine.
+    static func deviceChange(streamed: Beebium_AudioInputFormat,
+                             current: AVAudioFormat?,
+                             deviceListed: Bool) -> DeviceChangeFailure? {
+        if let current, current.channelCount > 0, deviceListed {
+            let newRate = Int(current.sampleRate.rounded())
+            let newChannels = min(Int(current.channelCount), 2)
+            let oldRate = Int(streamed.sampleRate)
+            let oldChannels = Int(streamed.channels)
+            if newRate == oldRate && newChannels == oldChannels { return nil }
+            var detail = "\(streamed.deviceName): \(oldRate) Hz, \(oldChannels) channels, "
+                + "now \(newRate) Hz"
+            if newChannels != oldChannels { detail += ", \(newChannels) channels" }
+            return DeviceChangeFailure(
+                brief: "The input device changed while the live tape was playing; "
+                    + "choose it again from Input Device.",
+                detail: detail)
+        }
+        return DeviceChangeFailure(
+            brief: "The input device was disconnected while the live tape was playing.",
+            detail: "\(streamed.deviceName) is no longer available.")
+    }
+
     // MARK: - Run-time gate
 
     /// Whether the running bundle carries a non-empty `NSMicrophoneUsageDescription`.

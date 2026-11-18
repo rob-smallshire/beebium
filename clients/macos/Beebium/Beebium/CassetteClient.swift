@@ -68,12 +68,13 @@ enum CreateTapeError: LocalizedError {
     }
 }
 
-/// A sustained live-input starve or drop, raised for the deck to surface once
-/// as a persistent failure (section 9.0): `brief` is the short inline marker,
-/// `detail` the copyable popover text (the sentence and the counts). The view
-/// shows it through `TransientMessage.showFailure` and clears it, as it does a
-/// live stream error, so a new raise always re-triggers the view.
-struct LiveStarveMessage: Equatable {
+/// A live-input failure raised for the deck to surface once as a persistent
+/// message (section 9.0): `brief` is the sentence (or short marker) shown inline
+/// with the section 3.4 affordance, `detail` the copyable popover text. Used for
+/// a sustained starve or drop and for a device change (cassette round 12). The
+/// view shows it through `TransientMessage.showFailure` and clears it, as it
+/// does a live stream error, so a new raise always re-triggers the view.
+struct LiveDeckFailure: Equatable {
     let brief: String
     let detail: String
 }
@@ -137,12 +138,24 @@ final class CassetteClient: ObservableObject, Disconnectable {
     /// A newly raised sustained starve or drop on the live input, for the deck
     /// to surface once. Nil the rest of the time; the view consumes it (shows
     /// the failure marker and popover) and clears it. See LiveStarveDetector.
-    @Published private(set) var liveStarve: LiveStarveMessage?
+    @Published private(set) var liveStarve: LiveDeckFailure?
+
+    /// A device change that ended the live stream, for the deck to surface once
+    /// (cassette round 12): the chosen input device changed format or was
+    /// disconnected while the live tape was playing, so the capture could not
+    /// continue. Nil the rest of the time; the view consumes it and clears it.
+    /// It outranks a starve raised in the same second (the starve was a symptom).
+    @Published private(set) var liveDeviceChange: LiveDeckFailure?
 
     /// Decides, from the per-second overrun and underrun counts, when a live
     /// starve has been sustained long enough to tell the user. Reset for each
     /// stream.
     private var starveDetector = LiveStarveDetector()
+
+    /// Suppresses the end-of-stream error from a capture we cancelled ourselves
+    /// to end a live tape with a reason already shown (a device change), so the
+    /// generic "Live input ended" does not double the device-change message.
+    private var liveEndSuppressed = false
 
     /// The whole second of the live stream last fed to the starve detector, so
     /// it is fed once per second (position counts samples consumed, advancing a
@@ -259,6 +272,8 @@ final class CassetteClient: ObservableObject, Disconnectable {
         liveOverruns = 0
         liveUnderruns = 0
         liveStarve = nil
+        liveDeviceChange = nil
+        liveEndSuppressed = false
         starveDetector.reset()
         lastStarveSecond = nil
         liveSampleRate = 0
@@ -283,6 +298,8 @@ final class CassetteClient: ObservableObject, Disconnectable {
         liveCapture?.cancel()
         liveError = nil
         liveStarve = nil
+        liveDeviceChange = nil
+        liveEndSuppressed = false
         starveDetector.reset()
         lastStarveSecond = nil
         resetLiveMeter()
@@ -292,6 +309,9 @@ final class CassetteClient: ObservableObject, Disconnectable {
                 device: device, client: client,
                 onPeak: { [weak self] peak in
                     Task { @MainActor [weak self] in self?.reportLivePeak(peak) }
+                },
+                onDeviceChange: { [weak self] failure in
+                    Task { @MainActor [weak self] in self?.liveDeviceChanged(failure) }
                 },
                 onSummary: { [weak self] result in
                     Task { @MainActor [weak self] in self?.liveInputEnded(result) }
@@ -315,11 +335,44 @@ final class CassetteClient: ObservableObject, Disconnectable {
         liveError = nil
     }
 
+    /// End the live stream because the chosen device changed format or went away
+    /// under it (cassette round 12). The capture cannot continue with the format
+    /// the server was given, so cancel it at once (not a graceful half-close:
+    /// there is nothing left worth playing out); the server ejects as for any
+    /// stream end. Reset the starve tracking and withdraw any starve showing for
+    /// this stream, since a device change outranks a same-second starve, then
+    /// raise the device-change failure. The cancel's own end is suppressed so it
+    /// does not double the message.
+    func liveDeviceChanged(_ failure: LiveAudioInput.DeviceChangeFailure) {
+        if liveCapture != nil {
+            liveEndSuppressed = true
+            liveCapture?.cancel()
+            liveCapture = nil
+        }
+        starveDetector.reset()
+        lastStarveSecond = nil
+        liveStarve = nil
+        resetLiveMeter()
+        liveDeviceChange = LiveDeckFailure(brief: failure.brief, detail: failure.detail)
+    }
+
+    /// Consume a raised device-change message once the view has shown it, so the
+    /// next raise re-triggers the view, as `clearLiveStarve` does.
+    func clearLiveDeviceChange() {
+        liveDeviceChange = nil
+    }
+
     /// Release the live capture when its stream ends, and surface a genuine
     /// refusal or failure. A lost connection is left to the status stream's own
     /// staleness, so it is not doubled as a live error.
     private func liveInputEnded(_ result: Result<Beebium_StreamAudioSummary, Error>) {
         liveCapture = nil
+        // We cancelled this stream ourselves to show a device-change reason; the
+        // cancel's own failure is not a separate thing to tell.
+        if liveEndSuppressed {
+            liveEndSuppressed = false
+            return
+        }
         switch result {
         case .success(let summary):
             if !summary.error.isEmpty {
@@ -555,7 +608,7 @@ final class CassetteClient: ObservableObject, Disconnectable {
         lastStarveSecond = second
         if let condition = starveDetector.observe(overruns: liveOverruns, underruns: liveUnderruns) {
             let rate = liveSampleRate == 0 ? 48000 : liveSampleRate
-            liveStarve = LiveStarveMessage(
+            liveStarve = LiveDeckFailure(
                 brief: condition.marker,
                 detail: LiveStarveDetail.text(condition: condition, overruns: liveOverruns,
                                               underruns: liveUnderruns, sampleRate: rate))

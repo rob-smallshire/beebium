@@ -60,6 +60,24 @@ final class LiveAudioCapture: @unchecked Sendable {
     /// made-up-silence figure in a starve message.
     private(set) var streamSampleRate: UInt32 = 0
 
+    /// The format `StreamAudio` was opened with, so a later configuration change
+    /// can be compared against it. Nil before `start`.
+    private(set) var streamedFormat: Beebium_AudioInputFormat?
+
+    /// The chosen device's CoreAudio id, so a configuration change can tell a
+    /// format change (the device is still listed) from a disconnection (it is
+    /// no longer in the host's inputs).
+    private var deviceID: AudioDeviceID = 0
+
+    /// Called on the main actor's behalf (the owner hops) when a configuration
+    /// change ends the stream: the device changed format or was disconnected
+    /// under the open stream (cassette round 12).
+    private var onDeviceChange: ((LiveAudioInput.DeviceChangeFailure) -> Void)?
+
+    /// The observer of the engine's configuration-change notification, removed
+    /// when the stream ends.
+    private var configObserver: NSObjectProtocol?
+
     /// Begin capturing `device` and streaming it as the live tape. `onSummary`
     /// is called once when the stream ends: with the server's summary after a
     /// graceful half-close (`stop`), or a failure on `cancel` or connection
@@ -70,6 +88,7 @@ final class LiveAudioCapture: @unchecked Sendable {
     func start(device: LiveAudioDevice,
                client: Beebium_CassetteServiceNIOClient,
                onPeak: @escaping (LiveAudioInput.Peak) -> Void = { _ in },
+               onDeviceChange: @escaping (LiveAudioInput.DeviceChangeFailure) -> Void = { _ in },
                onSummary: @escaping (Result<Beebium_StreamAudioSummary, Error>) -> Void) throws {
         let inputNode = engine.inputNode
 
@@ -94,6 +113,9 @@ final class LiveAudioCapture: @unchecked Sendable {
             throw CaptureError.unsupportedFormat
         }
         streamSampleRate = format.sampleRate
+        streamedFormat = format
+        deviceID = device.id
+        self.onDeviceChange = onDeviceChange
         let frameBytes = LiveAudioInput.frameBytes(for: format)
         let framesPerChunk = LiveAudioInput.framesPerChunk(sampleRate: format.sampleRate)
         chunker = LiveAudioInput.Chunker(chunkBytes: framesPerChunk * frameBytes)
@@ -130,6 +152,39 @@ final class LiveAudioCapture: @unchecked Sendable {
             throw CaptureError.engineFailed(error.localizedDescription)
         }
         started = true
+
+        // Watch for the chosen device changing format or going away under the
+        // open stream (cassette round 12). The notification can arrive on any
+        // thread; the decision is a pure function and the owner hops the result
+        // to the main actor.
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            self?.handleConfigurationChange()
+        }
+    }
+
+    /// Read the input node's current format after a configuration change and,
+    /// if it no longer matches the streamed format (or the device has gone),
+    /// report the failure so the owner can end the stream.
+    private func handleConfigurationChange() {
+        guard started, let streamed = streamedFormat else { return }
+        let node = engine.inputNode
+        let current = node.outputFormat(forBus: 0)
+        // A format reporting no channels reads as the device having gone.
+        let effective: AVAudioFormat? = current.channelCount > 0 ? current : nil
+        let listed = LiveAudioDevices.inputs().contains { $0.id == deviceID }
+        guard let failure = LiveAudioInput.deviceChange(
+            streamed: streamed, current: effective, deviceListed: listed) else { return }
+        onDeviceChange?(failure)
+    }
+
+    /// Stop watching for configuration changes, if we were.
+    private func removeConfigObserver() {
+        if let configObserver {
+            NotificationCenter.default.removeObserver(configObserver)
+            self.configObserver = nil
+        }
     }
 
     /// Stop capturing and half-close the stream: the server plays out what its
@@ -138,6 +193,7 @@ final class LiveAudioCapture: @unchecked Sendable {
     func stop() {
         guard started else { return }
         started = false
+        removeConfigObserver()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         // The tap has stopped, so draining the remainder is safe here.
@@ -153,6 +209,7 @@ final class LiveAudioCapture: @unchecked Sendable {
     func cancel() {
         guard started else { return }
         started = false
+        removeConfigObserver()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         call?.cancel(promise: nil)
@@ -161,6 +218,7 @@ final class LiveAudioCapture: @unchecked Sendable {
 
     deinit {
         if started {
+            removeConfigObserver()
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
             call?.cancel(promise: nil)

@@ -276,6 +276,58 @@ final class LiveAudioInputTests: XCTestCase {
             LiveAudioInput.peak(ofInterleaved: Data(), sampleFormat: .s16, channels: 1).clipRun, 0)
     }
 
+    // MARK: - Device change (round 12)
+
+    private func streamFormat(rate: UInt32, channels: UInt32, name: String)
+        -> Beebium_AudioInputFormat {
+        var format = Beebium_AudioInputFormat()
+        format.sampleRate = rate
+        format.channels = channels
+        format.deviceName = name
+        return format
+    }
+
+    func testAnUnchangedDeviceKeepsTheStream() {
+        let change = LiveAudioInput.deviceChange(
+            streamed: streamFormat(rate: 48000, channels: 2, name: "BlackHole 2ch"),
+            current: format(.pcmFormatFloat32, 48000, 2), deviceListed: true)
+        XCTAssertNil(change, "the device still delivers the streamed format")
+    }
+
+    func testARateChangeEndsTheStreamWithTheDeviceAndFormats() {
+        let change = LiveAudioInput.deviceChange(
+            streamed: streamFormat(rate: 8000, channels: 2, name: "BlackHole 2ch"),
+            current: format(.pcmFormatFloat32, 48000, 2), deviceListed: true)
+        XCTAssertEqual(change?.brief, "The input device changed while the live tape was playing; "
+                       + "choose it again from Input Device.")
+        XCTAssertEqual(change?.detail, "BlackHole 2ch: 8000 Hz, 2 channels, now 48000 Hz")
+    }
+
+    func testAChannelChangeNamesTheNewChannelCount() {
+        let change = LiveAudioInput.deviceChange(
+            streamed: streamFormat(rate: 48000, channels: 2, name: "USB Audio"),
+            current: format(.pcmFormatFloat32, 48000, 1), deviceListed: true)
+        XCTAssertEqual(change?.detail, "USB Audio: 48000 Hz, 2 channels, now 48000 Hz, 1 channels")
+    }
+
+    func testADeviceNoLongerListedReadsAsDisconnected() {
+        let change = LiveAudioInput.deviceChange(
+            streamed: streamFormat(rate: 48000, channels: 2, name: "USB Audio"),
+            current: format(.pcmFormatFloat32, 48000, 2), deviceListed: false)
+        XCTAssertEqual(change?.brief,
+                       "The input device was disconnected while the live tape was playing.")
+        XCTAssertEqual(change?.detail, "USB Audio is no longer available.")
+    }
+
+    func testNoCurrentFormatReadsAsDisconnected() {
+        let change = LiveAudioInput.deviceChange(
+            streamed: streamFormat(rate: 48000, channels: 2, name: "USB Audio"),
+            current: nil, deviceListed: true)
+        XCTAssertEqual(change?.brief,
+                       "The input device was disconnected while the live tape was playing.")
+        XCTAssertEqual(change?.detail, "USB Audio is no longer available.")
+    }
+
     // MARK: - Usage string gate
 
     func testUsageStringGate() {

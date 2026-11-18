@@ -249,6 +249,47 @@ final class CassetteClientTests: XCTestCase {
         XCTAssertNil(client.liveStarve)
     }
 
+    /// A device change ends the live tape and outranks a starve raised in the
+    /// same second (the starve was a symptom): the starve is withdrawn and the
+    /// device-change failure stands (cassette round 12).
+    func testADeviceChangeOutranksASameSecondStarve() {
+        let client = CassetteClient()
+        let generation = client.streamGeneration
+        client.handleDeckStatus(liveStatus(underruns: 0, position: 0), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 100, position: 1), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 200, position: 2), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 300, position: 3), generation: generation)
+        XCTAssertNotNil(client.liveStarve, "the starve is raised first")
+
+        client.liveDeviceChanged(LiveAudioInput.DeviceChangeFailure(
+            brief: "The input device changed while the live tape was playing; "
+                + "choose it again from Input Device.",
+            detail: "Built-in Microphone: 8000 Hz, 1 channels, now 48000 Hz"))
+        XCTAssertNil(client.liveStarve, "a device change withdraws a same-second starve")
+        XCTAssertEqual(client.liveDeviceChange?.brief, "The input device changed while the live "
+                       + "tape was playing; choose it again from Input Device.")
+    }
+
+    /// A device change resets the starve tracking, so the next device picked
+    /// starts a clean stream rather than continuing the ended one's run.
+    func testADeviceChangeResetsStarveTrackingSoTheNextPickStartsClean() {
+        let client = CassetteClient()
+        let generation = client.streamGeneration
+        client.handleDeckStatus(liveStatus(underruns: 0, position: 0), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 100, position: 1), generation: generation)
+        client.liveDeviceChanged(LiveAudioInput.DeviceChangeFailure(brief: "ended", detail: "gone"))
+        client.clearLiveDeviceChange()
+
+        // The next pick: a fresh live stream. Two growing seconds do not raise;
+        // a clean run of three does.
+        client.handleDeckStatus(liveStatus(underruns: 0, position: 0), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 100, position: 1), generation: generation)
+        client.handleDeckStatus(liveStatus(underruns: 200, position: 2), generation: generation)
+        XCTAssertNil(client.liveStarve, "the next pick starts clean")
+        client.handleDeckStatus(liveStatus(underruns: 300, position: 3), generation: generation)
+        XCTAssertNotNil(client.liveStarve)
+    }
+
     func testDeckKeyIsRefusedWithoutAConnection() async {
         let client = CassetteClient()
         guard case .failure(.notConnected) = await client.play() else {
