@@ -54,6 +54,12 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
         NSHighResolutionCapable: true
+        # XcodeGen regenerates Info.plist from these properties, so the microphone
+        # usage string must live here or `xcodegen generate` drops it. It explains
+        # that the chosen input is played as a live cassette tape, since the
+        # system's own prompt says "microphone" and fires once on the first device
+        # picked (section 9.0).
+        NSMicrophoneUsageDescription: "Beebium plays the audio input you chose as a live cassette tape, so a real tape player or another audio source can be loaded on the emulated BBC Micro."
         NSPrincipalClass: NSApplication
         CFBundleURLTypes:
           - CFBundleURLName: com.beebium.Beebium.connect
