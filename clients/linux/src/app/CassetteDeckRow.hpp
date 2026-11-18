@@ -109,6 +109,7 @@ public:
     QString duration_text() const;  // empty when the length is unknown
     QString live_text() const;      // the ring, for a live tape
     QString message_text() const;
+    QString message_detail_text() const;
     bool motor_shown() const;
     QSlider* slider() const { return slider_; }
     // The keys, there only while a tape is in.
@@ -118,6 +119,8 @@ public:
     QMenu* browse_menu() const { return menu_; }
     QPushButton* eject_offer() const { return eject_offer_; }
     QToolButton* dismiss_button() const { return dismiss_; }
+    // Puts a failure's sentence and detail on the clipboard (3.4).
+    QToolButton* copy_button() const { return copy_; }
     // Why a drag would be refused now, or empty if it would be accepted: by
     // the deck's state and the server's locality only, never by the file.
     QString drop_refusal() const;
@@ -160,6 +163,8 @@ private:
     QWidget* message_line_;
     QLabel* message_icon_;
     QLabel* message_text_;
+    QLabel* message_detail_;
+    QToolButton* copy_;
     QPushButton* eject_offer_;
     QToolButton* dismiss_;
     QLabel* live_;

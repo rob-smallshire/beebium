@@ -313,19 +313,39 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     message_icon_ = new QLabel(message_line_);
     message_icon_->setAlignment(Qt::AlignTop);
     // The server's sentence in full: it wraps rather than ending in an
-    // ellipsis.
+    // ellipsis, and it and its detail beneath, in the secondary colour, can
+    // be selected and copied (3.4).
+    auto* words = new QVBoxLayout;
+    words->setContentsMargins(0, 0, 0, 0);
+    words->setSpacing(0);
     message_text_ = new QLabel(message_line_);
+    message_text_->setObjectName(QStringLiteral("deckMessage"));
     message_text_->setWordWrap(true);
     message_text_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    message_text_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    message_detail_ = new QLabel(message_line_);
+    message_detail_->setObjectName(QStringLiteral("deckMessageDetail"));
+    message_detail_->setWordWrap(true);
+    message_detail_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    message_detail_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    message_detail_->setForegroundRole(QPalette::PlaceholderText);
+    words->addWidget(message_text_);
+    words->addWidget(message_detail_);
     eject_offer_ = new QPushButton(tr("Eject"), message_line_);
     eject_offer_->setToolTip(tr("Eject the tape in the deck"));
     dismiss_ = new QToolButton(message_line_);
     dismiss_->setIcon(themed("window-close", QStyle::SP_TitleBarCloseButton, this));
     dismiss_->setAutoRaise(true);
     dismiss_->setToolTip(tr("Dismiss this message"));
+    copy_ = new QToolButton(message_line_);
+    copy_->setObjectName(QStringLiteral("copyDeckMessage"));
+    copy_->setIcon(themed("edit-copy", QStyle::SP_FileDialogDetailedView, this));
+    copy_->setAutoRaise(true);
+    copy_->setToolTip(tr("Copy this message"));
     message->addWidget(message_icon_, 0, Qt::AlignTop);
-    message->addWidget(message_text_, 1);
+    message->addLayout(words, 1);
     message->addWidget(eject_offer_, 0, Qt::AlignTop);
+    message->addWidget(copy_, 0, Qt::AlignTop);
     message->addWidget(dismiss_, 0, Qt::AlignTop);
     layout->addWidget(message_line_);
     message_line_->hide();
@@ -380,7 +400,7 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     for (QToolButton* button : findChildren<QToolButton*>()) {
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
         button->setAutoRaise(true);
-        if (button != dismiss_) {
+        if (button != dismiss_ && button != copy_) {
             button->setIconSize(QSize(20, 20));
         }
     }
@@ -410,6 +430,13 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     }
     connect(eject_offer_, &QPushButton::clicked, this, [this] { press(CassetteKey::eject); });
     connect(dismiss_, &QToolButton::clicked, this, &CassetteDeckRow::clear_message);
+    connect(copy_, &QToolButton::clicked, this, [this] {
+        QStringList whole{message_.text};
+        if (!message_.detail.isEmpty()) {
+            whole << message_.detail;
+        }
+        QApplication::clipboard()->setText(whole.join(QLatin1Char('\n')));
+    });
     // The timeline seeks when let go, not while it moves; while it is held the
     // counter shows where the tape would go.
     connect(slider_, &QSlider::sliderMoved, this, [this](int value) {
@@ -592,10 +619,12 @@ void CassetteDeckRow::present() {
     const bool messaging = message_.kind != CassetteMessage::Kind::none;
     message_line_->setVisible(messaging);
     message_text_->setText(message_.text);
-    message_text_->setToolTip(message_.detail);
+    message_detail_->setText(message_.detail);
+    message_detail_->setVisible(messaging && !message_.detail.isEmpty());
     eject_offer_->setVisible(message_.kind == CassetteMessage::Kind::failure && message_.offer_eject &&
                              inserted);
     dismiss_->setVisible(message_.kind == CassetteMessage::Kind::failure);
+    copy_->setVisible(message_.kind == CassetteMessage::Kind::failure);
 
     // Browse hands the server a path, so its files want a server sharing
     // this filesystem (3.2); its menu's live inputs do not, so it is
@@ -719,6 +748,10 @@ QString CassetteDeckRow::duration_text() const {
 
 QString CassetteDeckRow::message_text() const {
     return message_line_->isVisibleTo(this) ? message_text_->text() : QString();
+}
+
+QString CassetteDeckRow::message_detail_text() const {
+    return message_detail_->isVisibleTo(this) ? message_detail_->text() : QString();
 }
 
 bool CassetteDeckRow::motor_shown() const {

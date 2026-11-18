@@ -990,6 +990,45 @@ TEST_CASE("A refused request shows the server's sentence in full, its kind choos
     CHECK(d.row.message_text().isEmpty());
 }
 
+TEST_CASE("A deck failure can be selected and copied whole, its detail with it, beside Dismiss",
+          "[cassette][deck][errors]") {
+    Deck d;
+    CassetteMessage failure;
+    failure.kind = CassetteMessage::Kind::failure;
+    failure.text = QStringLiteral("Beebium could not reach the cassette deck.");
+    failure.detail = QStringLiteral("failed to connect to all addresses");
+    d.row.show_failure(failure);
+    CHECK(d.row.message_text() == failure.text);
+    CHECK(d.row.message_detail_text() == failure.detail);
+    for (const char* name : {"deckMessage", "deckMessageDetail"}) {
+        auto* label = d.row.findChild<QLabel*>(QLatin1String(name));
+        REQUIRE(label);
+        CHECK(label->textInteractionFlags().testFlag(Qt::TextSelectableByMouse));
+    }
+    REQUIRE(d.row.copy_button());
+    CHECK(d.row.copy_button()->isVisibleTo(&d.row));
+    CHECK(d.row.dismiss_button()->isVisibleTo(&d.row));
+    QApplication::clipboard()->clear();
+    d.row.copy_button()->click();
+    CHECK(QApplication::clipboard()->text() ==
+          QStringLiteral("Beebium could not reach the cassette deck.\n"
+                         "failed to connect to all addresses"));
+    // Copying leaves it showing; Dismiss takes it away.
+    CHECK(d.row.message_text() == failure.text);
+    d.row.dismiss_button()->click();
+    CHECK(d.row.message_text().isEmpty());
+    // A sentence alone is copied alone.
+    failure.detail.clear();
+    d.row.show_failure(failure);
+    CHECK(d.row.message_detail_text().isEmpty());
+    d.row.copy_button()->click();
+    CHECK(QApplication::clipboard()->text() == failure.text);
+    // A passing notice has nothing to keep.
+    d.row.clear_message();
+    d.row.show_notice(QStringLiteral("Drop one tape at a time."));
+    CHECK_FALSE(d.row.copy_button()->isVisibleTo(&d.row));
+}
+
 TEST_CASE("The icon is the kind's, and an unknown kind still shows its sentence",
           "[cassette][errors]") {
     CHECK(cassette_error_icon(beebium::CASSETTE_ERROR_KIND_DECK_EMPTY) ==
