@@ -234,6 +234,48 @@ final class LiveAudioInputTests: XCTestCase {
                        .silent)
     }
 
+    // MARK: - Clip run (round 12)
+
+    func testClipRunIsTheLongestConsecutiveFullScaleSpanS16() {
+        // Runs of 2 then 3 full-scale samples (either rail counts); the longest
+        // is 3. A single isolated rail sample does not extend a run.
+        let peak = LiveAudioInput.peak(
+            ofInterleaved: s16([32767, 32767, 100, -32768, -32768, -32768, 5, 32767]),
+            sampleFormat: .s16, channels: 1)
+        XCTAssertEqual(peak.clipRun, 3)
+        XCTAssertEqual(peak.level, 1.0, accuracy: 1e-6)
+        XCTAssertTrue(peak.clipped, "a run of full-scale samples reads as clipped")
+    }
+
+    func testClipRunIsTheLongestConsecutiveFullScaleSpanFloat() {
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[0.2, 1.0, 1.0, 1.0, 0.3, 1.0]], sampleFormat: .f32)
+        let peak = LiveAudioInput.peak(ofInterleaved: data, sampleFormat: .f32, channels: 1)
+        XCTAssertEqual(peak.clipRun, 3)
+    }
+
+    func testAnIsolatedFullScaleSampleIsARunOfOne() {
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[0.2, 1.0, 0.3]], sampleFormat: .f32)
+        let peak = LiveAudioInput.peak(ofInterleaved: data, sampleFormat: .f32, channels: 1)
+        XCTAssertEqual(peak.clipRun, 1, "a single-sample click is a run of one, not sustained")
+        XCTAssertTrue(peak.clipped)
+    }
+
+    func testClipRunCountsOnlyTheTakenLeftChannel() {
+        // Stereo frames (L, R): the right channel is at full scale three in a
+        // row, the left never is; the clip run is read from the left only.
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[0.3, 0.2, 0.4], [1.0, 1.0, 1.0]], sampleFormat: .f32)
+        let peak = LiveAudioInput.peak(ofInterleaved: data, sampleFormat: .f32, channels: 2)
+        XCTAssertEqual(peak.clipRun, 0, "a full-scale right channel does not count")
+    }
+
+    func testClipRunOfAnEmptyChunkIsZero() {
+        XCTAssertEqual(
+            LiveAudioInput.peak(ofInterleaved: Data(), sampleFormat: .s16, channels: 1).clipRun, 0)
+    }
+
     // MARK: - Usage string gate
 
     func testUsageStringGate() {

@@ -125,32 +125,41 @@ enum LiveAudioInput {
 
     // MARK: - Level metering
 
-    /// The peak level of one capture chunk and whether it clipped, for the live
-    /// row's level meter.
+    /// The peak level of one capture chunk and its longest run of full-scale
+    /// samples, for the live row's level meter.
     struct Peak: Equatable {
         /// The largest absolute sample in the chunk, normalised to full scale
         /// (0 silent .. 1 full scale).
         var level: Float
-        /// Whether any sample reached the converter's full scale.
-        var clipped: Bool
+        /// The longest run of consecutive full-scale samples in the taken
+        /// channel. The meter lights its clip mark only on a sustained run
+        /// (`LevelMeterState.clipRunSamples` or more), so a single-sample click
+        /// at a splice or the head of a tape is not read as clipping (round 12).
+        var clipRun: Int
+        /// Whether any taken sample reached the converter's full scale (a run of
+        /// at least one). Kept for callers that only ask whether a rail was hit.
+        var clipped: Bool { clipRun > 0 }
 
-        static let silent = Peak(level: 0, clipped: false)
+        static let silent = Peak(level: 0, clipRun: 0)
     }
 
-    /// The peak and clip of a chunk, read from the same little-endian
+    /// The peak and clip run of a chunk, read from the same little-endian
     /// interleaved bytes the deck streams (`samples(from:)`), in the stream's
     /// sample format. Only the left channel of a stereo chunk is read: clipping
     /// happens at the host's analogue-to-digital converter, which is the line
     /// the server reads, so a full-scale sample in the unread right channel must
     /// not light the mark. An S16 sample is normalised by 32768 (so the negative
     /// rail reads as full scale) and clips at either rail; an F32 sample clips at
-    /// a magnitude of 1 or more. Pure, so it is tested without hardware.
+    /// a magnitude of 1 or more. The clip run is the longest span of consecutive
+    /// full-scale samples, so the meter can hold for sustained clipping and
+    /// ignore an isolated click. Pure, so it is tested without hardware.
     static func peak(ofInterleaved data: Data,
                      sampleFormat: Beebium_AudioSampleFormat,
                      channels: Int) -> Peak {
         let channelCount = max(1, channels)
         var level: Float = 0
-        var clipped = false
+        var clipRun = 0
+        var currentRun = 0
         data.withUnsafeBytes { raw in
             switch sampleFormat {
             case .s16:
@@ -159,7 +168,12 @@ enum LiveAudioInput {
                 while offset + 2 <= raw.count {
                     let sample = Int16(littleEndian:
                         raw.loadUnaligned(fromByteOffset: offset, as: Int16.self))
-                    if sample == Int16.max || sample == Int16.min { clipped = true }
+                    if sample == Int16.max || sample == Int16.min {
+                        currentRun += 1
+                        if currentRun > clipRun { clipRun = currentRun }
+                    } else {
+                        currentRun = 0
+                    }
                     // abs(Int16.min) overflows Int16, so widen before taking it.
                     let magnitude = Float(abs(Int(sample))) / 32768.0
                     if magnitude > level { level = magnitude }
@@ -172,13 +186,18 @@ enum LiveAudioInput {
                     let sample = Float(bitPattern: UInt32(littleEndian:
                         raw.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
                     let magnitude = abs(sample)
-                    if magnitude >= 1.0 { clipped = true }
+                    if magnitude >= 1.0 {
+                        currentRun += 1
+                        if currentRun > clipRun { clipRun = currentRun }
+                    } else {
+                        currentRun = 0
+                    }
                     if magnitude > level { level = magnitude }
                     offset += frameBytes
                 }
             }
         }
-        return Peak(level: min(level, 1.0), clipped: clipped)
+        return Peak(level: min(level, 1.0), clipRun: clipRun)
     }
 
     // MARK: - Re-chunking

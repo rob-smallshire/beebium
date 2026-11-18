@@ -439,9 +439,11 @@ struct CassetteDeckView: View {
         // the one indicator a user can act on -- the input level and a clip
         // mark, from the client's own capture tap (section 9.0).
         if isLive {
-            LiveLevelMeter(level: cassetteClient.liveLevel, clipping: cassetteClient.liveClipping)
-                .help("The level of the live input. Turn the source down if the mark at the "
-                      + "right lights, up if the bar barely moves.")
+            LiveLevelMeter(bar: cassetteClient.liveMeterBar,
+                           hold: cassetteClient.liveMeterHold,
+                           clipping: cassetteClient.liveMeterClipping)
+                .help("The level of the live input, in decibels. Keep the held peak near the "
+                      + "tick; turn the source down if the red mark appears.")
         }
     }
 
@@ -985,36 +987,55 @@ private struct TapeTimeline: View {
     }
 }
 
-/// The live input's level meter, shown where the timeline sits for a file tape
-/// (a live tape has no length, section 9.0). A short bar fills with the decayed
-/// peak level, and a mark at the right edge lights red while a recent sample
-/// clipped at the host's converter, so the user can set the source level: turn
-/// it down if the mark lights, up if the bar barely moves. The values are
-/// decayed and held in CassetteClient; this only draws them.
+/// The live input's level meter, in decibels of full scale, shown where the
+/// timeline sits for a file tape (a live tape has no length, section 9.0;
+/// cassette round 12). The bar fills to the decibel level, a tick marks the
+/// target band (-12 dB), a thin peak-hold line sits at the highest recent level
+/// -- the figure the user sets the source by -- and a mark at the right lights
+/// red only while the input is clipping, and is otherwise absent (never dimmed).
+/// The bar, hold and clip state are computed and held in `LevelMeterState` via
+/// CassetteClient; this only draws them.
 private struct LiveLevelMeter: View {
-    /// The decayed peak, 0 silent .. 1 full scale.
-    let level: Float
-    /// Whether a recent chunk clipped (held briefly so a transient is seen).
+    /// The bar's position (0 at the -60 dB floor, 1 at full scale).
+    let bar: Float
+    /// The peak-hold line's position (0 at the floor, 1 at full scale).
+    let hold: Float
+    /// Whether the input is clipping (held briefly so a transient is seen).
     let clipping: Bool
 
-    private let barHeight: CGFloat = 3
+    private let barHeight: CGFloat = 4
     private let markWidth: CGFloat = 4
 
     var body: some View {
         HStack(spacing: 4) {
             GeometryReader { geometry in
-                let fraction = CGFloat(min(max(level, 0), 1))
+                let width = geometry.size.width
+                let fill = width * CGFloat(min(max(bar, 0), 1))
+                let tickX = width * CGFloat(LevelMeterState.targetFraction)
+                let holdX = width * CGFloat(min(max(hold, 0), 1))
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.secondary.opacity(0.3))
+                        .frame(height: barHeight)
                     Capsule().fill(Color.accentColor)
-                        .frame(width: geometry.size.width * fraction)
+                        .frame(width: fill, height: barHeight)
+                    // The target tick, above and below the bar.
+                    Rectangle().fill(Color.secondary)
+                        .frame(width: 1, height: barHeight + 6)
+                        .offset(x: tickX)
+                    // The peak-hold line; drawn only once there is a peak to show.
+                    if hold > 0 {
+                        Rectangle().fill(Color.primary)
+                            .frame(width: 2, height: barHeight + 4)
+                            .offset(x: min(holdX, width - 2))
+                    }
                 }
-                .frame(height: barHeight)
                 .frame(maxHeight: .infinity, alignment: .center)
             }
+            // The clip mark keeps its column so the bar does not reflow, but is
+            // clear (absent) unless lit -- never a grey or dim state (round 12).
             RoundedRectangle(cornerRadius: 1)
-                .fill(clipping ? Color.red : Color.secondary.opacity(0.35))
-                .frame(width: markWidth, height: barHeight + 3)
+                .fill(clipping ? Color.red : Color.clear)
+                .frame(width: markWidth, height: barHeight + 6)
         }
         .frame(height: 16)
     }

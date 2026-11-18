@@ -154,20 +154,26 @@ final class CassetteClient: ObservableObject, Disconnectable {
     /// message. Set when a live capture opens; falls back to 48 kHz if unknown.
     private var liveSampleRate: UInt32 = 0
 
-    /// The live input's peak level (0 silent .. 1 full scale), decayed for the
-    /// row's level meter, and whether a recent chunk clipped (held briefly so a
-    /// transient clip is seen). Both zero/false for a file tape or none.
-    @Published private(set) var liveLevel: Float = 0
-    @Published private(set) var liveClipping: Bool = false
+    /// The live input's level meter, in decibels of full scale (cassette round
+    /// 12): the bar and peak-hold positions as fractions of the bar (0 at the
+    /// floor, 1 at full scale), and whether the clip mark is lit. All zero/false
+    /// for a file tape or none. The view also reads the fixed tick position from
+    /// `LevelMeterState.targetFraction`.
+    @Published private(set) var liveMeterBar: Float = 0
+    @Published private(set) var liveMeterHold: Float = 0
+    @Published private(set) var liveMeterClipping: Bool = false
 
-    /// The peak and clip accumulated since the meter was last published, the
-    /// last publish time (also the decay time base), and when a held clip mark
-    /// lapses. Capture reports a chunk about every 15 ms; the meter is published
-    /// at about 20 Hz so SwiftUI is not invalidated per chunk.
+    /// The decibel bar, peak hold and clip-mark state the meter draws. Fed the
+    /// accumulated peak and clip run at each publish.
+    private var meter = LevelMeterState()
+
+    /// The peak level and longest clip run accumulated since the meter was last
+    /// published, and the last publish time (the decay time base). Capture
+    /// reports a chunk about every 15 ms; the meter is published at about 20 Hz
+    /// so SwiftUI is not invalidated per chunk.
     private var meterPendingLevel: Float = 0
-    private var meterPendingClip = false
+    private var meterPendingClipRun = 0
     private var meterLastPublished: Date?
-    private var meterClipHeldUntil: Date?
     private static let meterPublishInterval: TimeInterval = 0.05
 
     /// Whether the loaded tape is a live audio input (its format reads "LIVE"),
@@ -570,40 +576,38 @@ final class CassetteClient: ObservableObject, Disconnectable {
 
     // MARK: - Live level meter
 
-    /// Take one captured chunk's peak and clip into the meter, publishing the
-    /// decayed level at about 20 Hz rather than per chunk. The attack is
-    /// instant (the level rises at once to a louder chunk); the release decays
-    /// the standing level toward zero at about 20 dB/s between publishes -- a
-    /// level meter's conventional fast-attack, slow-release. A clip holds the
-    /// mark lit for a second so a transient is seen.
+    /// Take one captured chunk's peak and clip run into the meter, publishing the
+    /// decibel bar, peak hold and clip mark at about 20 Hz rather than per chunk.
+    /// The peak and the longest clip run are accumulated between publishes; at
+    /// each publish the meter state is advanced by the elapsed time, so the bar
+    /// falls, the hold line dwells and then falls, and the clip mark holds (all
+    /// in `LevelMeterState`).
     func reportLivePeak(_ peak: LiveAudioInput.Peak) {
         meterPendingLevel = max(meterPendingLevel, peak.level)
-        if peak.clipped { meterPendingClip = true }
+        meterPendingClipRun = max(meterPendingClipRun, peak.clipRun)
         let now = Date()
         if let last = meterLastPublished,
            now.timeIntervalSince(last) < Self.meterPublishInterval {
             return
         }
-        if let last = meterLastPublished {
-            let elapsed = Float(now.timeIntervalSince(last))
-            liveLevel = max(liveLevel * pow(10, -elapsed), meterPendingLevel)   // -20 dB/s
-        } else {
-            liveLevel = meterPendingLevel
-        }
-        if meterPendingClip { meterClipHeldUntil = now.addingTimeInterval(1.0) }
-        liveClipping = meterClipHeldUntil.map { $0 > now } ?? false
+        meter.update(level: meterPendingLevel, clipRun: meterPendingClipRun,
+                     at: now.timeIntervalSinceReferenceDate)
         meterLastPublished = now
+        liveMeterBar = meter.barFraction
+        liveMeterHold = meter.holdFraction
+        liveMeterClipping = meter.clipLit
         meterPendingLevel = 0
-        meterPendingClip = false
+        meterPendingClipRun = 0
     }
 
     private func resetLiveMeter() {
+        meter.reset()
         meterPendingLevel = 0
-        meterPendingClip = false
+        meterPendingClipRun = 0
         meterLastPublished = nil
-        meterClipHeldUntil = nil
-        if liveLevel != 0 { liveLevel = 0 }
-        if liveClipping { liveClipping = false }
+        if liveMeterBar != 0 { liveMeterBar = 0 }
+        if liveMeterHold != 0 { liveMeterHold = 0 }
+        if liveMeterClipping { liveMeterClipping = false }
     }
 
     // MARK: - Signal map

@@ -149,6 +149,7 @@
 		6F03D8A26109C83C198EA067 /* WelcomePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D274273D6C4A71E5872C6F7 /* WelcomePage.swift */; };
 		6F88478F29D88CF51B941521 /* PresetCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C553A829BF023E2C2B374139 /* PresetCatalog.swift */; };
 		7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */; };
+		737C4460D8C599707C5A9573 /* LevelMeterStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFC7394EF4EAF43B7BB1EC8 /* LevelMeterStateTests.swift */; };
 		739F46631A5F30A8209D9623 /* disc.proto in Resources */ = {isa = PBXBuildFile; fileRef = 9141154B5BCF7C71635E62B2 /* disc.proto */; };
 		7519FD97BF5579394E98C4DA /* PeripheralTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4E1CC9ABAFFA92C4A74F5B /* PeripheralTree.swift */; };
 		75BBA7064C85D6CDB3797111 /* StatusBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A9849250F602C15283E458A /* StatusBarView.swift */; };
@@ -159,6 +160,7 @@
 		7D4DC36C98CF724B4CD1D99A /* DialogLocationsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A181B096B7E4B4AAFC50D54 /* DialogLocationsTests.swift */; };
 		7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */; };
 		7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */; };
+		7FF27CB279B1185F27B4321F /* LevelMeterState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BECDAC96022A41694608D54 /* LevelMeterState.swift */; };
 		7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE550723A13DFA9A20EB302 /* IndicatorView.swift */; };
 		8004640AFE1BB64192794280 /* DiscImageInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */; };
 		81AE0FC8B3F710AE5BB1F78B /* CreateTapeErrorKindLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E562A1BF96C01F4E6323AB8F /* CreateTapeErrorKindLabelTests.swift */; };
@@ -453,6 +455,7 @@
 		6A23FCB8A68DBF8835F44F06 /* controller.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = controller.pb.swift; sourceTree = "<group>"; };
 		6AA9C1D32F71A0E3DD2F7D8E /* SpeedControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedControlView.swift; sourceTree = "<group>"; };
 		6BD16E6F3EC60EC8EE3C4C2C /* cassette.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = cassette.pb.swift; sourceTree = "<group>"; };
+		6BECDAC96022A41694608D54 /* LevelMeterState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelMeterState.swift; sourceTree = "<group>"; };
 		6D736DE1C5A930D6A43C94E0 /* SvgPathParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPathParser.swift; sourceTree = "<group>"; };
 		703CD429AFEBF865A5EE1F07 /* MachinePackage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinePackage.swift; sourceTree = "<group>"; };
 		7319BB6A760A9042161B98EB /* MachineManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineManager.swift; sourceTree = "<group>"; };
@@ -563,6 +566,7 @@
 		BA0EF891426E226950452857 /* RecentDiscs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentDiscs.swift; sourceTree = "<group>"; };
 		BA2BF078F2B01129AF2ABBFB /* PresetListing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetListing.swift; sourceTree = "<group>"; };
 		BBBE634AA648CA594D5DBC2D /* OpenMachinePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenMachinePlan.swift; sourceTree = "<group>"; };
+		BBFC7394EF4EAF43B7BB1EC8 /* LevelMeterStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelMeterStateTests.swift; sourceTree = "<group>"; };
 		BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComboBoxRepresentableTests.swift; sourceTree = "<group>"; };
 		BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilterTests.swift; sourceTree = "<group>"; };
 		BED1E4790F731F56410D335E /* ExtensionManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionManifest.swift; sourceTree = "<group>"; };
@@ -914,6 +918,7 @@
 				9E27CCAEA2B3295D30B7E900 /* KeyboardMappingManager.swift */,
 				B98CF59648104556C3677412 /* KeyboardMTKView.swift */,
 				FF6041795434C164F849A27B /* KeyInput.swift */,
+				6BECDAC96022A41694608D54 /* LevelMeterState.swift */,
 				B46CCD50D99E84525B9DDA0C /* LiveAudioCapture.swift */,
 				C0C3E443840C0730FEFCE794 /* LiveAudioDevice.swift */,
 				ABF3E2FCB57443565412E4D6 /* LiveAudioInput.swift */,
@@ -1039,6 +1044,7 @@
 				7BB655B9391362AB6D1F5101 /* KeyboardMappingFileTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
 				53D393AA6F8EA8027CA2417C /* KeyboardMappingToggleTests.swift */,
+				BBFC7394EF4EAF43B7BB1EC8 /* LevelMeterStateTests.swift */,
 				9A5E04E69549C0592476FEBE /* LiveAudioInputTests.swift */,
 				E5A62AF12B5CCCD29932F981 /* LiveStarveDetectorTests.swift */,
 				77B50A78CE4E5CCC31E34AE2 /* LockStateReconcilerTests.swift */,
@@ -1263,6 +1269,7 @@
 				35CCC11B17FEB11EF5844F10 /* KeyboardMappingFileTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
 				16CAAB94F87050BB11380B59 /* KeyboardMappingToggleTests.swift in Sources */,
+				737C4460D8C599707C5A9573 /* LevelMeterStateTests.swift in Sources */,
 				459E43892ABC4B7BD46E2F08 /* LiveAudioInputTests.swift in Sources */,
 				7AECB654A87F6188BDCD3AA6 /* LiveStarveDetectorTests.swift in Sources */,
 				9FD319C4AF922A8D60CB43CA /* LockStateReconcilerTests.swift in Sources */,
@@ -1401,6 +1408,7 @@
 				9F0D659309F36B7DD20F0070 /* KeyboardMappingManager.swift in Sources */,
 				B0A2354141FA9EC4227A8007 /* KeyboardSectionView.swift in Sources */,
 				1F9774ADF4454EEA179ED3EA /* KeyboardSettingsPane.swift in Sources */,
+				7FF27CB279B1185F27B4321F /* LevelMeterState.swift in Sources */,
 				EC2E615D44586B50D0200B94 /* LiveAudioCapture.swift in Sources */,
 				6C6083CD3BD519913DA1A42C /* LiveAudioDevice.swift in Sources */,
 				9E6BD7756D46B5F8B132A645 /* LiveAudioInput.swift in Sources */,
