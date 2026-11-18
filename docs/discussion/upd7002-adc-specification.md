@@ -192,12 +192,20 @@ with `level` a 16-bit unsigned fraction of VREF (`0` = analogue ground, `&FFFF` 
 12-bit code is `level >> 4`. Round 3 moves the source of these levels behind the
 `AnaloguePortDevice` seam; the chip's own interface does not change.
 
-`Decision`: with nothing driving a channel, its level is `&8000`, so an unplugged channel reads
-`&8000` in 12-bit mode. Real machines read a wandering, machine-dependent value somewhere in
-the upper half of the range (survey section 4: about `&7300`, `&9500` to `&99E0`, `&C800` to
-`&CBA0` on three machines), so there is no single right value; the centre is the choice that
-upsets the fewest programs. Trial 4 will add a fourth machine's reading to the record, not
-change this decision unless it reveals something systematic.
+`Decision`: with nothing driving a channel, its level is `&CAFE`, so an unplugged channel reads
+`&CAF0` in 12-bit mode (code `&CAF`, high byte `&CA`). Real machines read a wandering,
+machine-dependent value with the port empty, somewhere in the upper half of the range or near
+it: about `&7300` on a Master and `&9500` to `&99E0` and `&C800` to `&CBA0` on two Model Bs
+(survey section 4), and `&C1F0` to `&CDC0` on a fourth machine, a Master (trial 4). `&CAFE`
+lies inside the measured range, and is one steady value for every variant, not a wandering
+one, so that runs stay deterministic.
+
+The first choice was the centre, `&8000`, as the value that upsets the fewest programs. It was
+abandoned: a centred reading is the "joystick present" idiom of period games, which take a
+high byte of exactly `&80` on a channel to mean a stick plugged in and centred. The 1987
+Dunjunz is the case found: it reads channel 1 twice that way and then answers one player's
+keys from the joystick, so with the centre an empty port left that player's fire key dead. No
+real machine reads a clean `&80xx` with the port empty.
 
 Fire buttons on System VIA PB4 and PB5 stay as they are today (not pressed, both read 1)
 until round 3 gives the port a device.
@@ -252,7 +260,7 @@ All names 7-bit ASCII. One `TEST_CASE` per line below, tagged `[upd7002]`.
     completes within 15 clocks of the measured end times (11138, 10975, 11153, 11281, 11386,
     11560, 11120), and the first code of each tooth from the table completes at `T_k`
     exactly; the step from 1016 to 1024 drops by more than 950 clocks.
-13. Unplugged channel reads `&8000` after a 12-bit conversion.
+13. Unplugged channel reads `&CAF0` after a 12-bit conversion.
 14. Writes to offsets 1, 2 and 3 change nothing observable.
 
 ### Catch2, on a Model B with MOS 1.20 as the test vector (`tests/test_upd7002_model_b.cpp`)
@@ -269,8 +277,8 @@ machine behaviour, not MOS behaviour as such.
     the Advanced User Guide, read through the debugger peek path. This proves the CB1
     interrupt, the handler's register reads and the channel cycling all meet.
 17. Once the boot has settled (from 500 ms), the System VIA sees a negative edge on CB1
-    roughly every 9 to 12 ms while the MOS cycles the channels (about 11.3 ms with all four
-    inputs undriven), measured from `ViaState.ifr` bit 4 or a CB1 edge counter, never faster.
+    roughly every 9 to 12 ms while the MOS cycles the channels (about 10.6 ms with all four
+    inputs unplugged), measured from `ViaState.ifr` bit 4 or a CB1 edge counter, never faster.
 
 ### Python integration (`clients/beebium-python-client/tests`)
 
@@ -278,7 +286,7 @@ BASIC programs go onto an SSD with `uvx oaknut-basic tokenise` and `uvx oaknut-d
 and run with `CHAIN`, never typed in. Use a marker `PRINT` and `basic.wait_for_text` rather
 than `wait_for_prompt` (#270).
 
-18. `ADVAL(1)` to `ADVAL(4)` all read `&8000`, the unplugged value, and `ADVAL(0) AND 3`
+18. `ADVAL(1)` to `ADVAL(4)` all read `&CAF0`, the unplugged value, and `ADVAL(0) AND 3`
     reads 0 (no fire buttons). There is no Python-side input hook in this round; the C++
     tests cover set inputs, and round 4 gives the Python client a real source. Say so in the
     test's docstring.

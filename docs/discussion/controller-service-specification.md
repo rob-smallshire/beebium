@@ -177,7 +177,7 @@ if it needs its own translation unit (agent's call; keep it small).
 - Wiring: `stick1.x` is channel 0, `stick1.y` channel 1, `stick2.x` channel 2, `stick2.y` channel 3;
   `fire1` grounds PB4 (connector PB0), `fire2` grounds PB5 (connector PB1). `light_pen_strobe()` stays 0.
 - Initial values: axes 32768 (stick at rest, centre), buttons not pressed. On a real Beeb a centred
-  stick reads about &8000, so `ADVAL(1)` with nothing touched is the same number as an empty port.
+  stick reads about &8000, so `ADVAL(1)` with nothing touched reads &8000; an empty port reads &CAF0.
 - Storage: four `std::atomic<uint16_t>` and one `std::atomic<uint8_t>` of button bits;
   `channel_level` and `button_lines` are plain loads.
 - `Decision`: not attached by any stock preset. The user adds it in New Machine or with `--joystick`,

@@ -50,7 +50,7 @@ struct AnaloguePortDevice {
     // VREF: 0 is analogue ground, &FFFF is VREF. Called by the converter when
     // it samples at the start of a conversion, so it is read at most once per
     // conversion and never on a tick. A channel the device leaves unconnected
-    // returns UNDRIVEN_LEVEL.
+    // returns UNPLUGGED_LEVEL.
     virtual uint16_t channel_level(int channel) = 0;
 
     // The levels the device drives on the two button lines, in place as the
@@ -64,7 +64,7 @@ struct AnaloguePortDevice {
     // the CRTC's own latch see the transitions.
     virtual uint8_t light_pen_strobe() { return 0; }
 
-    static constexpr uint16_t UNDRIVEN_LEVEL = 0x8000;
+    static constexpr uint16_t UNPLUGGED_LEVEL = 0xCAFE;
 };
 ```
 
@@ -88,7 +88,7 @@ void set_input_source(AnalogueInputSource* source);  // nullptr: the chip's own 
 
 When a source is set, `start_conversion` samples `source->level(channel)` instead of the
 chip's `input_levels_`. `set_input_level` and the stored levels stay for the chip's unit tests
-and for a machine with no device attached, where they keep reading `UNDRIVEN_LEVEL`. The
+and for a machine with no device attached, where they keep reading `UNPLUGGED_LEVEL`. The
 inspection RPC's `input_levels` report what the chip would sample now: the source's levels
 when a source is set.
 

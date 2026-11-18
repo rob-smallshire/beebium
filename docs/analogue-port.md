@@ -28,7 +28,7 @@ trials on real hardware is built by `tools/hardware-trials/adc/`.
 | Conversion time in 1 MHz clocks, as the measured sawtooth in both modes | Per-chip boundary shifts, the overlap band past each boundary, jitter and noise; the lower accuracy of 8-bit mode |
 | EOC as a level on System VIA CB1, with the VIA doing the edge detection | A device driving the button lines as outputs (the Bitstik does) |
 | No reset on Break; power-on state on a power cycle | A light pen device (#210); the strobe is wired, the pen is not |
-| An undriven input reads the centre of the range, &8000 | A wandering, machine-dependent unplugged value |
+| An unplugged input reads one steady level, &CAFE, inside the measured unplugged range | A wandering, machine-dependent unplugged value |
 | The port: one device's channel levels, button lines (PB4, PB5) and light pen strobe (CB2 and the CRTC) | Other devices: the light pen (#210), dataloggers |
 | The joystick: two sticks and two fire buttons, set by a client through `ControllerService` | Reading a host gamepad: that is the client's, as the host keyboard is |
 | The Voltmace Delta 14B/1 adapter: two handsets' sticks in the analogue port, their 3 by 4 keypads in the user port | Ghosting through the keypad's diode-less matrix; three behaviours are modelled but unverified on a real box (below) |
@@ -179,10 +179,19 @@ its own stored levels, set with `set_input_level(channel, level)` (the C++
 unit tests do). `level` is a 16-bit fraction of VREF: 0 is analogue ground,
 &FFFF is VREF. The 12-bit code is `level >> 4`.
 
-With nothing driving a channel its level is &8000. Real machines read a
-wandering, machine-dependent value with nothing plugged in: about &7300 on a
-Master, and about &9500-&99E0 and &C800-&CBA0 on two Model Bs. There is no
-single right value, and the centre upsets the fewest programs.
+With nothing driving a channel its level is `UNPLUGGED_LEVEL`, &CAFE, which
+a program sees as &CAF0 through `ADVAL` (12-bit code &CAF, high byte &CA).
+Real machines read a wandering, machine-dependent value with nothing plugged
+in: &C1F0 to &CDC0 and about &7300 on two Masters, and about &9500-&99E0 and
+&C800-&CBA0 on two Model Bs. &CAFE lies inside that measured range, and it is
+steady, not wandering, so that a run is deterministic.
+
+It is not the centre of the range. A centred reading is how period games
+detect a joystick: a high byte of exactly &80 on a channel means a stick is
+plugged in and centred. The 1987 Dunjunz reads channel 1 that way and, if it
+is centred, reads its fire key from the joystick's buttons; with an empty port
+that read as the centre, the key never fired. Real machines never read a
+clean &80xx with nothing plugged in, and nor does Beebium.
 
 ## The port model
 
@@ -205,7 +214,7 @@ whether one is there. Attaching:
 
 With no device attached nothing observable changes: PB4 and PB5 read 1 (the
 pull-ups), CB2 is left as the VIA has it, the CRTC sees no strobe, and every
-channel reads the undriven &8000.
+channel reads the unplugged &CAFE.
 
 The point is `analogue-port` in the attachment point catalogue, "Analogue
 Port", occupancy 0..1. Machines with the port list it among their own
@@ -226,7 +235,7 @@ void init(beebium::ExtensionContext& ctx) override {
 
 - `channel_level(channel)`: the level on channel 0 to 3 as a fraction of VREF.
   A joystick puts stick 1 on channels 0 (X) and 1 (Y) and stick 2 on 2 and 3,
-  low for right and down. Return `UNDRIVEN_LEVEL` for a channel the device
+  low for right and down. Return `UNPLUGGED_LEVEL` for a channel the device
   does not drive.
 - `button_lines()`: bits 4 and 5 as the VIA reads them, 0 while a button is
   pressed. The default is 0x30, nothing pressed.
@@ -329,9 +338,9 @@ with `--joystick`, as with a printer.
 | `fire2` | button | Stick 2 | grounds PB5 (connector PB1), `ADVAL(0) AND 2` |
 
 The light pen strobe stays 0. Axes start at 32768 and buttons released, so
-an untouched stick reads the same &8000 as an empty port, as a centred
-stick reads about &8000 on a real Beeb. An axis is the channel level itself:
-on the BBC's joysticks a low level is right or down, and turning a host
+an untouched stick reads &8000, as a centred stick reads about &8000 on a
+real Beeb; an empty port reads &CAFE instead. An axis is the channel level
+itself: on the BBC's joysticks a low level is right or down, and turning a host
 stick's direction into that is the client's mapping. A Voltmace Delta
 handset plugged straight into the port is electrically this device with two
 logical keys: keys 9 to 11 and the red buttons are fire 0 (`fire1`, connector
@@ -420,9 +429,9 @@ through the memory map, so peeking the high byte does not reset EOC.
 
 | Suite | What it covers |
 |---|---|
-| `tests/test_upd7002.cpp` | The chip alone: power-on state, the control bits latched at completion, busy and EOC, the previous result's top bits, the result layout in both modes, the high-byte read, peek, restart, both timing tables against the measured times, the undriven value, ignored writes |
-| `tests/test_upd7002_model_b.cpp` | The mirror on all seven Model B family policies, peek through the machine, CB1 under both edges, the reset rules. With MOS 1.20 as a test vector: the first conversion (256 ms after power-on, once the MOS has cleared RAM), the AUG's ADC workspace (&2BA-&2BD) filling with each channel's level, and a CB1 edge every 11.3 ms while the MOS cycles the channels |
-| `tests/test_analogue_port.cpp` | The port: every policy's handle, attach-once, a conversion sampling the device once per conversion, the no-device level, the button lines on PB4 and PB5, the strobe into CB2 and into the CRTC's R16/R17, `ExtensionContext`. With MOS 1.20 as a test vector: the ADC workspace filling from the device, and OSBYTE &80 reporting its fire buttons |
+| `tests/test_upd7002.cpp` | The chip alone: power-on state, the control bits latched at completion, busy and EOC, the previous result's top bits, the result layout in both modes, the high-byte read, peek, restart, both timing tables against the measured times, the unplugged value, ignored writes |
+| `tests/test_upd7002_model_b.cpp` | The mirror on all seven Model B family policies, peek through the machine, CB1 under both edges, the reset rules. With MOS 1.20 as a test vector: the first conversion (256 ms after power-on, once the MOS has cleared RAM), the AUG's ADC workspace (&2BA-&2BD) filling with each channel's level, and a CB1 edge every 9 to 12 ms (10.6 ms with the port empty) while the MOS cycles the channels |
+| `tests/test_analogue_port.cpp` | The port: every policy's handle, attach-once, a conversion sampling the device once per conversion, the no-device level, the button lines on PB4 and PB5, the strobe into CB2 and into the CRTC's R16/R17, `ExtensionContext`. With MOS 1.20 as a test vector: the ADC workspace filling from the device, OSBYTE &80 reporting its fire buttons, and an empty port never reading as a centred joystick (channel 1's high byte not &80, the period joystick-detection idiom) |
 | `tests/test_device_inspection_adc.cpp` | The inspection RPC, including that it leaves EOC alone and reports a device's levels |
 | `tests/test_preset_resolution.cpp`, `tests/test_attachment_points.cpp` | Every Model B family machine offers `analogue-port`; the catalogue entry |
 | `tests/test_joystick.cpp` | The joystick: its manifest and `--joystick`, its controls, initial values, each axis reaching its channel, the fire buttons on PB4 and PB5, refusals, values kept across Break and power-on. With MOS 1.20 as a test vector: `&2BA` and OSBYTE &80 |
@@ -430,7 +439,7 @@ through the memory map, so peeking the high byte does not reset EOC.
 | `tests/test_voltmace_delta_14b.cpp` | The Voltmace adapter: its manifest and `--voltmace-delta-14b`, both ports refusing a second device, its twenty-eight controls, the four axes, every key on both handsets under its strobe, the immediate read-back from a 6502 scan loaded from a disc, KEYPAD's pre-probe, undriven columns, the three unverified behaviours, values kept across Break and power-on. With MOS 1.20 as a test vector, from disc-loaded BASIC: the manual's PROCPB and six-strobe scan, `ADVAL(1)` to `ADVAL(4)`, and `ADVAL(0)` fire after the manual's set-up |
 | `clients/beebium-python-client/tests/test_controller.py` | `bbc.controllers` on a `--joystick` Model B: list, set and get, `ADVAL(1)` and `ADVAL(0) AND 1` from a disc-loaded BASIC program, and a refusal carrying the server's sentence |
 | `clients/beebium-python-client/tests/test_voltmace_delta_14b.py` | `bbc.controllers` on a `--voltmace-delta-14b` Model B: a side key found by the six-strobe scan, and handset 1's X on `ADVAL(1)` |
-| `clients/beebium-python-client/tests/test_analogue_converter.py` | From BBC BASIC, loaded from a tokenised disc: `ADVAL(1)` to `ADVAL(4)` read &8000 with no fire button pressed, and `?&FEC0` reads the chip cycling all four channels in 12-bit mode, never the old open-bus &20 |
+| `clients/beebium-python-client/tests/test_analogue_converter.py` | From BBC BASIC, loaded from a tokenised disc: `ADVAL(1)` to `ADVAL(4)` read &CAF0 with no fire button pressed, and `?&FEC0` reads the chip cycling all four channels in 12-bit mode, never the old open-bus &20 |
 
 `clients/beebium-python-client/tests/test_analogue_port.py` checks the
 point through the client's attachment-point listing.
