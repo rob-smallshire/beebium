@@ -559,18 +559,8 @@ struct CassetteDeckView: View {
         .buttonStyle(.borderless)
         .fixedSize()
         .disabled(!isEnabled)
-        .help(browseHelp)
-    }
-
-    private var browseHelp: String {
-        if isServerLocal {
-            return liveInputAvailable
-                ? "Browse for a tape image, or choose a live input device"
-                : "Browse for a tape image"
-        }
-        return liveInputAvailable
-            ? "Choose a live input device (the server is on another host, so it cannot open a tape image from this one)"
-            : "The server is on another host, so it cannot open a tape image from this one"
+        // No tooltip: SwiftUI shows a Menu's help over the popped-up menu itself,
+        // obscuring it. The folder icon and its menu items speak for themselves.
     }
 
     /// The Input Device submenu: one entry per host audio input device, named as
