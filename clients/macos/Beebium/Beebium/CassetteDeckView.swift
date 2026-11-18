@@ -246,10 +246,6 @@ struct CassetteDeckView: View {
     @State private var isProcessing = false
     @State private var dropRefusal: DiscDropRefusal?
     @StateObject private var deckError = TransientMessage()
-    /// The live-input device list, enumerated lazily on the Input Device
-    /// submenu's appearance so the empty deck's render never touches an audio
-    /// API (and so never asks for the microphone at launch).
-    @StateObject private var inputDevices = LiveInputDeviceList()
     /// Non-nil while the user drags the position timeline: the scrub position
     /// the pointer follows. Nil the rest of the time, when the pointer follows
     /// the deck. A seek happens on release, never while the pointer moves.
@@ -536,32 +532,87 @@ struct CassetteDeckView: View {
         }
     }
 
-    /// The browse control: a native split menu button (`CassetteBrowseButton`)
-    /// so the Input Device picker is a real AppKit submenu -- with its chevron,
-    /// its parent staying open, and its devices enumerated only when it opens.
-    /// Browsing, Recent and New Blank Tape need a shared filesystem; a live input
-    /// device is captured on this host and streamed, so it is offered even when
-    /// the server is on another host. The control is enabled when either source
-    /// is possible; one-click Browse where the server is local, else the click
-    /// opens the menu (New Blank Tape templates and the shipped tape list come
-    /// from the server, nothing hard-coded).
     private var browseButton: some View {
+        // Browsing, Recent and New Blank Tape need a shared filesystem; a live
+        // input device is captured on this host and streamed, so it is offered
+        // even when the server is on another host. The control is enabled when
+        // either source is possible.
         let canBrowse = isServerLocal
         let isEnabled = !tapeInserted && !isProcessing && (canBrowse || liveInputAvailable)
-        return CassetteBrowseButton(
-            isEnabled: isEnabled,
-            canBrowse: canBrowse,
-            liveInputAvailable: liveInputAvailable,
-            recentTapes: recentTapes.tapes,
-            blankTapes: cassetteClient.blankTapes,
-            inputDevices: inputDevices,
-            actions: CassetteBrowseMenu.Actions(
-                browse: { browseForTape() },
-                insertRecent: { url in insertTape(url: url) },
-                clearRecent: { recentTapes.clear() },
-                newBlank: { tape in newBlankTape(tape) },
-                chooseDevice: { device in startLiveInput(device) }))
-            .fixedSize()
+        return Menu {
+            if canBrowse {
+                Button("Browse...") { browseForTape() }
+                recentMenu
+                newBlankTapeMenu
+            }
+            inputDeviceMenu
+        } label: {
+            Image(systemName: "folder")
+                .font(.system(size: 16))
+                .foregroundColor(isEnabled ? .primary.opacity(0.6) : .secondary.opacity(0.3))
+        } primaryAction: {
+            // The one-click action is Browse where it is possible; otherwise the
+            // user opens the menu for the Input Device submenu.
+            if canBrowse { browseForTape() }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.borderless)
+        .fixedSize()
+        .disabled(!isEnabled)
+        // No tooltip: SwiftUI shows a Menu's help over the popped-up menu itself,
+        // obscuring it. The folder icon and its menu items speak for themselves.
+    }
+
+    /// The Input Device submenu: one entry per host audio input device, named as
+    /// the system names it, with no filtering by kind. Shown only when the
+    /// microphone usage string is present (so the app never asks for the
+    /// microphone without it). Choosing one asks for authorisation, then opens
+    /// the live stream; the deck then shows the live tape, stopped, and the user
+    /// presses Play.
+    @ViewBuilder
+    private var inputDeviceMenu: some View {
+        if liveInputAvailable {
+            let devices = LiveAudioDevices.inputs()
+            Menu("Input Device") {
+                ForEach(devices) { device in
+                    Button(device.name) { startLiveInput(device) }
+                }
+            }
+            .disabled(devices.isEmpty)
+        }
+    }
+
+    @ViewBuilder
+    private var recentMenu: some View {
+        let tapes = recentTapes.tapes
+        let labels = RecentTapesManager.menuLabels(for: tapes)
+        Menu("Recent") {
+            ForEach(Array(zip(tapes, labels)), id: \.0.id) { tape, label in
+                Button(label) {
+                    insertTape(url: URL(fileURLWithPath: tape.filepath))
+                }
+                .disabled(!FileManager.default.fileExists(atPath: tape.filepath))
+            }
+            Divider()
+            Button("Clear Recent Tapes") { recentTapes.clear() }
+        }
+        .disabled(tapes.isEmpty)
+    }
+
+    /// The New Blank Tape submenu: one entry per shipped template, labelled by
+    /// the server by its tape length ("C15", "C30", "C60", "C90"). Choosing one
+    /// saves a copy to a path the user picks and inserts it, stopped at the
+    /// start, ready to Record. The labels come from the server (nothing
+    /// hard-coded), so the submenu is disabled when the server offers none.
+    @ViewBuilder
+    private var newBlankTapeMenu: some View {
+        let blanks = cassetteClient.blankTapes
+        Menu("New Blank Tape") {
+            ForEach(blanks, id: \.label) { tape in
+                Button(tape.label) { newBlankTape(tape) }
+            }
+        }
+        .disabled(blanks.isEmpty)
     }
 
     private var rewindButton: some View {
