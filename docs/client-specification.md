@@ -1769,12 +1769,25 @@ section sits above the floppy drives, which sit above the hard discs.
   Rewind, Fast forward and Record disabled (the server refuses them with
   `LIVE_SOURCE`); Play is separate, as ever, and the counter runs while samples
   arrive. The ring's fill and the overrun and underrun counts (`live_ring_fill`,
-  `live_overruns`, `live_underruns`) are shown, as a small meter or two numbers
-  (LATITUDE). The capture applies no voice processing (MANDATORY): no automatic
+  `live_overruns`, `live_underruns`) are not shown: they are not actionable. When
+  one of the counts has grown in each of three consecutive seconds of status, the
+  deck shows one failure message with the 3.4 affordance (persistent, copyable,
+  dismissed by the user), one sentence for samples made up as silence and another
+  for samples dropped, with the counts in its detail; an equivalent condition never
+  re-raises a showing or a dismissed message until it has cleared for as long and
+  recurred, the other condition replaces it, and Eject or the stream ending clears
+  it (MANDATORY; cassette round 11). A live tape shows a peak level meter with a
+  clipping mark, computed by the client from its own capture, since clipping
+  happens at the host's converter; its help says to turn the source down when the
+  mark lights and up when the bar barely moves (MANDATORY; decay rate and drawing
+  LATITUDE). The capture applies no voice processing (MANDATORY): no automatic
   gain, noise suppression or echo cancellation; on macOS this means the plain input
   format, not the voice-processing audio unit. Stopping the stream ejects the live
   tape, once the deck has played out what the server's ring holds. The macOS app's
-  audio-input entitlement and usage string are to be supplied for it (MACOS-ONLY).
+  usage string is supplied by the app's owner and explains that the chosen input is
+  played as a live cassette tape, since the system's own dialog says "microphone"
+  and fires once per app on the first device picked; the client never asks for the
+  microphone without it and asks only when a device is picked (MACOS-ONLY).
 
 States and transitions:
 
