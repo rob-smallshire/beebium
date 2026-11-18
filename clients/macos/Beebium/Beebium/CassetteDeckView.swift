@@ -246,6 +246,10 @@ struct CassetteDeckView: View {
     @State private var isProcessing = false
     @State private var dropRefusal: DiscDropRefusal?
     @StateObject private var deckError = TransientMessage()
+    /// The live-input device list, enumerated lazily on the Input Device
+    /// submenu's appearance so the empty deck's render never touches an audio
+    /// API (and so never asks for the microphone at launch).
+    @StateObject private var inputDevices = LiveInputDeviceList()
     /// Non-nil while the user drags the position timeline: the scrub position
     /// the pointer follows. Nil the rest of the time, when the pointer follows
     /// the deck. A seek happens on release, never while the pointer moves.
@@ -572,13 +576,22 @@ struct CassetteDeckView: View {
     @ViewBuilder
     private var inputDeviceMenu: some View {
         if liveInputAvailable {
-            let devices = LiveAudioDevices.inputs()
             Menu("Input Device") {
-                ForEach(devices) { device in
-                    Button(device.name) { startLiveInput(device) }
+                // Enumerate only when the submenu is shown, not while the deck
+                // is built: reading the host's input devices at render asked the
+                // system for the microphone at launch. The list is empty until
+                // this appears, then refreshes (so it is also current).
+                Group {
+                    if inputDevices.devices.isEmpty {
+                        Button("No audio input devices") {}.disabled(true)
+                    } else {
+                        ForEach(inputDevices.devices) { device in
+                            Button(device.name) { startLiveInput(device) }
+                        }
+                    }
                 }
+                .onAppear { inputDevices.refresh() }
             }
-            .disabled(devices.isEmpty)
         }
     }
 

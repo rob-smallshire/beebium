@@ -73,6 +73,7 @@
 		281A106F8708C92D91CD9240 /* keyboard.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61C3011B028BF1FDAD579A4 /* keyboard.pb.swift */; };
 		283A136A708296FC4885B039 /* RecentDiscs.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0EF891426E226950452857 /* RecentDiscs.swift */; };
 		2883A894AD63C6DEF4FD0046 /* TransientMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EE051165760A831AA7396F /* TransientMessage.swift */; };
+		28CF9B1D1A6D85468561667F /* LiveInputDeviceList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80D075042D9C7F1E00019113 /* LiveInputDeviceList.swift */; };
 		2C52669380DF6E7ABE43DC4C /* CassetteConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2903B68B151EC6C50E61B601 /* CassetteConfigView.swift */; };
 		2CFC414B888BBBC6C1A6F438 /* CassetteConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D133AA0458DD643B20FD55AE /* CassetteConfigTests.swift */; };
 		2DFA99C752F8021C8A4C91AE /* BlankDiscNamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C858E5C4019E78FFD1AD693F /* BlankDiscNamingTests.swift */; };
@@ -127,6 +128,7 @@
 		582166736131C819C1974BDE /* LockSyncPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A452738F56C6C80444FBD7B3 /* LockSyncPolicyTests.swift */; };
 		599A4994E4D87F976E329F34 /* PresetCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F4576C549F6A61800D9C87 /* PresetCatalogTests.swift */; };
 		5A4F6F3B51DDC576BBD3D142 /* BeebiumTouchBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0787829BB8681E1354B9C585 /* BeebiumTouchBarManager.swift */; };
+		5BDDD51880CD2912C1FE3EF7 /* LiveInputDeviceListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59B9F69ABC07A9D50E13458F /* LiveInputDeviceListTests.swift */; };
 		5BFF6217532F7E4126E6A946 /* system.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF33113C39D9E1D2BE649FF6 /* system.grpc.swift */; };
 		5DC1ADB4DD22F28FC90A758C /* StructuredListItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F38B119FC4AA35BEF5E396 /* StructuredListItemTests.swift */; };
 		5EF39565CAF128FD1974E0BF /* DebugDisplayStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5123F0FA32B3711748D351D7 /* DebugDisplayStyle.swift */; };
@@ -432,6 +434,7 @@
 		57967139EC7DEA91FCF67161 /* debugger.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = debugger.pb.swift; sourceTree = "<group>"; };
 		58D505651495B05B9E0A01F5 /* ScreenSelectionGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenSelectionGeometryTests.swift; sourceTree = "<group>"; };
 		58E7A0E6AF52A2C316C7C419 /* BeebiumApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumApp.swift; sourceTree = "<group>"; };
+		59B9F69ABC07A9D50E13458F /* LiveInputDeviceListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveInputDeviceListTests.swift; sourceTree = "<group>"; };
 		5AC8AB6C51EB3EDA7D26CE6F /* AudioMixerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerState.swift; sourceTree = "<group>"; };
 		5B097B8092C02F8851C2C5C9 /* TouchBarGlyphs.svg */ = {isa = PBXFileReference; path = TouchBarGlyphs.svg; sourceTree = "<group>"; };
 		5B2624275BB5D5286D790AF3 /* econet.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet.grpc.swift; sourceTree = "<group>"; };
@@ -476,6 +479,7 @@
 		7E101DD75E1EF0B125CB46B1 /* VideoSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsPane.swift; sourceTree = "<group>"; };
 		7FCCA7AD0844DCC1D120D82F /* ExtensionGroupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionGroupTests.swift; sourceTree = "<group>"; };
 		8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetTests.swift; sourceTree = "<group>"; };
+		80D075042D9C7F1E00019113 /* LiveInputDeviceList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveInputDeviceList.swift; sourceTree = "<group>"; };
 		80EC3C1B36F0B3BFDEEDD1A1 /* DiscImageInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageInfo.swift; sourceTree = "<group>"; };
 		814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageDropTests.swift; sourceTree = "<group>"; };
 		824454E653FC6B753B26BD00 /* CassetteClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CassetteClientTests.swift; sourceTree = "<group>"; };
@@ -922,6 +926,7 @@
 				B46CCD50D99E84525B9DDA0C /* LiveAudioCapture.swift */,
 				C0C3E443840C0730FEFCE794 /* LiveAudioDevice.swift */,
 				ABF3E2FCB57443565412E4D6 /* LiveAudioInput.swift */,
+				80D075042D9C7F1E00019113 /* LiveInputDeviceList.swift */,
 				11DED26600F4D0D1454C9385 /* LiveStarveDetector.swift */,
 				A9DC98B37B62CE999A94A076 /* LockStateReconciler.swift */,
 				931AE2E6A601AA13D780FC6A /* LockSyncPolicy.swift */,
@@ -1046,6 +1051,7 @@
 				53D393AA6F8EA8027CA2417C /* KeyboardMappingToggleTests.swift */,
 				BBFC7394EF4EAF43B7BB1EC8 /* LevelMeterStateTests.swift */,
 				9A5E04E69549C0592476FEBE /* LiveAudioInputTests.swift */,
+				59B9F69ABC07A9D50E13458F /* LiveInputDeviceListTests.swift */,
 				E5A62AF12B5CCCD29932F981 /* LiveStarveDetectorTests.swift */,
 				77B50A78CE4E5CCC31E34AE2 /* LockStateReconcilerTests.swift */,
 				A452738F56C6C80444FBD7B3 /* LockSyncPolicyTests.swift */,
@@ -1271,6 +1277,7 @@
 				16CAAB94F87050BB11380B59 /* KeyboardMappingToggleTests.swift in Sources */,
 				737C4460D8C599707C5A9573 /* LevelMeterStateTests.swift in Sources */,
 				459E43892ABC4B7BD46E2F08 /* LiveAudioInputTests.swift in Sources */,
+				5BDDD51880CD2912C1FE3EF7 /* LiveInputDeviceListTests.swift in Sources */,
 				7AECB654A87F6188BDCD3AA6 /* LiveStarveDetectorTests.swift in Sources */,
 				9FD319C4AF922A8D60CB43CA /* LockStateReconcilerTests.swift in Sources */,
 				582166736131C819C1974BDE /* LockSyncPolicyTests.swift in Sources */,
@@ -1412,6 +1419,7 @@
 				EC2E615D44586B50D0200B94 /* LiveAudioCapture.swift in Sources */,
 				6C6083CD3BD519913DA1A42C /* LiveAudioDevice.swift in Sources */,
 				9E6BD7756D46B5F8B132A645 /* LiveAudioInput.swift in Sources */,
+				28CF9B1D1A6D85468561667F /* LiveInputDeviceList.swift in Sources */,
 				E0EA402750D7DE5028E6BD58 /* LiveStarveDetector.swift in Sources */,
 				674B2003EFDBCA5697E614C0 /* LockStateReconciler.swift in Sources */,
 				F9DCB28FBA6728EEC04A0D6D /* LockSyncPolicy.swift in Sources */,
