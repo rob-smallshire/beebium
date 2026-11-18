@@ -95,10 +95,21 @@ enum CassetteBrowseMenu {
         let item = NSMenuItem(title: "Input Device", action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: "Input Device")
         submenu.autoenablesItems = false
-        // Populated by the delegate on open; empty (so no enumeration) until then.
+        // The delegate fills this on open (menuWillOpen). A static placeholder
+        // keeps the submenu non-empty -- so its arrow stays live before the
+        // first open -- without enumerating any device here.
+        submenu.addItem(placeholderItem())
         submenu.delegate = delegate
         item.submenu = submenu
         return item
+    }
+
+    /// The disabled "no devices" row, used before the submenu first opens and
+    /// when an open finds no input devices.
+    static func placeholderItem() -> NSMenuItem {
+        let empty = NSMenuItem(title: "No audio input devices", action: nil, keyEquivalent: "")
+        empty.isEnabled = false
+        return empty
     }
 }
 
@@ -133,13 +144,26 @@ final class CassetteBrowseCoordinator: NSObject, NSMenuDelegate {
         return menu
     }
 
-    // NSMenuDelegate: the Input Device submenu is about to open. Enumerate the
-    // host's inputs now (never at the deck's render) and rebuild the items.
-    func menuNeedsUpdate(_ menu: NSMenu) {
+    // NSMenuDelegate: the Input Device submenu is about to be SHOWN. This fires
+    // only when the user actually opens the submenu -- unlike menuNeedsUpdate,
+    // which AppKit also calls during menu validation and the key-equivalent
+    // search once the control is in a window, and so would enumerate (and ask
+    // for the microphone) merely because a machine window opened. Enumerate the
+    // host's inputs here and rebuild the items.
+    func menuWillOpen(_ menu: NSMenu) {
         menu.removeAllItems()
         for item in InputDeviceMenu.items(from: inputDevices, choose: actions.chooseDevice) {
             menu.addItem(item)
         }
+    }
+
+    // NSMenuDelegate: answer the key-equivalent search ourselves (there are no
+    // key equivalents in this submenu) so AppKit does not update -- and so does
+    // not enumerate -- the submenu while searching for a shortcut's target.
+    func menuHasKeyEquivalent(_ menu: NSMenu, for event: NSEvent,
+                              target: AutoreleasingUnsafeMutablePointer<AnyObject?>,
+                              action: UnsafeMutablePointer<Selector?>) -> Bool {
+        false
     }
 }
 

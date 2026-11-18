@@ -113,22 +113,51 @@ final class CassetteBrowseMenuTests: XCTestCase {
         guard let submenu = menu.items.first(where: { $0.title == "Input Device" })?.submenu else {
             return XCTFail("the Input Device item must carry a submenu")
         }
-        XCTAssertEqual(enumerations, 0, "the submenu is empty until it opens")
+        XCTAssertEqual(enumerations, 0, "no enumeration until the submenu opens")
         XCTAssertTrue(coordinator === (submenu.delegate as? CassetteBrowseCoordinator),
                       "the submenu is populated by the coordinator on open")
 
-        coordinator.menuNeedsUpdate(submenu)   // the submenu is about to open
+        coordinator.menuWillOpen(submenu)   // the submenu is being shown
         XCTAssertEqual(enumerations, 1)
         XCTAssertEqual(submenu.items.map(\.title), ["Built-in Microphone", "BlackHole 2ch"])
 
-        coordinator.menuNeedsUpdate(submenu)   // opened again
+        coordinator.menuWillOpen(submenu)   // opened again
         XCTAssertEqual(enumerations, 2, "each open enumerates exactly once")
+    }
+
+    /// AppKit validates menus and searches them for key equivalents once the
+    /// control is in a window (not only when a menu opens). That path must not
+    /// enumerate the host's inputs -- doing so asked for the microphone merely
+    /// because a machine window opened. The coordinator does not implement
+    /// menuNeedsUpdate (so validation finds nothing to update) and answers the
+    /// key-equivalent search itself.
+    func testValidationAndKeyEquivalentSearchDoNotEnumerate() {
+        var enumerations = 0
+        let coordinator = coordinator(canBrowse: true, liveInputAvailable: true,
+                                      enumerate: { enumerations += 1; return [] })
+        guard let submenu = coordinator.makeMenu().items
+            .first(where: { $0.title == "Input Device" })?.submenu else {
+            return XCTFail("the Input Device item must carry a submenu")
+        }
+        submenu.update()   // what AppKit does when validating a menu
+        XCTAssertEqual(enumerations, 0, "validation must not ask for the microphone")
+
+        XCTAssertFalse(
+            coordinator.responds(to: #selector(NSMenuDelegate.menuNeedsUpdate(_:))),
+            "menuNeedsUpdate is deliberately absent so validation does not enumerate")
+        XCTAssertTrue(
+            coordinator.responds(to: #selector(
+                NSMenuDelegate.menuHasKeyEquivalent(_:for:target:action:))),
+            "the delegate answers the key-equivalent search so AppKit skips updating the submenu")
     }
 
     func testInputDeviceSubmenuShowsADisabledItemWhenNoDevices() {
         let coordinator = coordinator(canBrowse: false, liveInputAvailable: true, enumerate: { [] })
         let submenu = coordinator.makeMenu().items.first { $0.title == "Input Device" }?.submenu
-        coordinator.menuNeedsUpdate(submenu!)
+        // A static placeholder keeps the submenu non-empty before it opens, so
+        // its arrow stays live; opening with no devices shows the same.
+        XCTAssertEqual(submenu?.items.map(\.title), ["No audio input devices"])
+        coordinator.menuWillOpen(submenu!)
         XCTAssertEqual(submenu?.items.map(\.title), ["No audio input devices"])
         XCTAssertFalse(submenu?.items.first?.isEnabled ?? true)
     }
@@ -139,7 +168,7 @@ final class CassetteBrowseMenuTests: XCTestCase {
         let coordinator = coordinator(canBrowse: false, liveInputAvailable: true,
                                       enumerate: { devices }, choose: { chosen = $0 })
         let submenu = coordinator.makeMenu().items.first { $0.title == "Input Device" }?.submenu
-        coordinator.menuNeedsUpdate(submenu!)
+        coordinator.menuWillOpen(submenu!)
         (submenu?.items.first as? BlockMenuItem)?.invoke()
         XCTAssertEqual(chosen, devices.first)
     }
