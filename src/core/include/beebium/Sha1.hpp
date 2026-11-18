@@ -67,7 +67,7 @@ inline std::array<uint8_t, 20> sha1(std::span<const uint8_t> data) {
 
     // The tail, a 1 bit, zeros, and the length in bits
     std::array<uint8_t, 128> tail{};
-    size_t rest = data.size() - whole;
+    size_t rest = data.size() % 64;
     for (size_t i = 0; i < rest; ++i) tail[i] = data[whole + i];
     tail[rest] = 0x80;
     size_t tail_length = (rest + 1 + 8 <= 64) ? 64 : 128;
