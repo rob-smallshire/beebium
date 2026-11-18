@@ -42,7 +42,7 @@ std::vector<uint8_t> idle_ticks(CentronicsReceiver& rx, int count, uint8_t data 
 
 std::string drain(CentronicsReceiver& rx) {
     std::string out;
-    uint8_t byte;
+    uint8_t byte = 0;
     while (rx.try_dequeue(byte)) {
         out.push_back(static_cast<char>(byte));
     }
