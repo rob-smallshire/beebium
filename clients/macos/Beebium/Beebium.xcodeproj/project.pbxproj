@@ -254,6 +254,7 @@
 		CC184BBA4B126032E36F04DB /* FocusDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9D42AD7DD904E1B5B80617 /* FocusDiagnostics.swift */; };
 		CC3CDA8C1FB5B978B592EADE /* EconetClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115851A5C42EB33AAB063B35 /* EconetClientTests.swift */; };
 		CCF53B2BFF28A41B641DEA7A /* FileReferenceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B74BC34119DE428F9D633CD8 /* FileReferenceView.swift */; };
+		CE9FC575D6B7C4A0994E05DD /* CassetteBrowseMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 948D45B9F13151D04D40A541 /* CassetteBrowseMenuTests.swift */; };
 		CFE3E67E8128083CCC839C89 /* ScsiDiscEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0C6F5673F086F459EA3FDC /* ScsiDiscEditor.swift */; };
 		D0360065AC6EC0990736FA5F /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */; };
 		D36CEEAAE7E54882BCC36508 /* EmulatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D7FC4E0D4B86900F8E309A /* EmulatorView.swift */; };
@@ -305,6 +306,7 @@
 		EFC3EC242060E65DB39D5B9F /* ExtensionParameterForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC9C04EC6C010373F7AF591 /* ExtensionParameterForm.swift */; };
 		F0902DD9A2EA9C9A8071A04F /* KeyboardMappingCorpusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38156B164E337693549CFB9C /* KeyboardMappingCorpusTests.swift */; };
 		F1007C97B24AA67ECDE8C619 /* PresetDiagnosticLocationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA381491DEE3F058B098A69B /* PresetDiagnosticLocationTests.swift */; };
+		F1312AD4048024A54232AA50 /* CassetteBrowseButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4F912985D56C0DBE8A574D9 /* CassetteBrowseButton.swift */; };
 		F1C97066D79A492FB7FD76D1 /* SpeedControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AA9C1D32F71A0E3DD2F7D8E /* SpeedControlView.swift */; };
 		F27E0697D14CBC60E7BB945E /* TextInputField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A03414ECE92D9AA04944FBB /* TextInputField.swift */; };
 		F285735344904A7D3775E42B /* DiscImageDropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */; };
@@ -517,6 +519,7 @@
 		94057CD054785189D20ACE11 /* sideways.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = sideways.pb.swift; sourceTree = "<group>"; };
 		941A103B3E9E8B477D32DF75 /* PasteCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteCoordinator.swift; sourceTree = "<group>"; };
 		9483385D371D21EC9020EC06 /* SidewaysSchemaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysSchemaSection.swift; sourceTree = "<group>"; };
+		948D45B9F13151D04D40A541 /* CassetteBrowseMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CassetteBrowseMenuTests.swift; sourceTree = "<group>"; };
 		94EE5C7867F0B72F92C0F032 /* ResettableControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResettableControls.swift; sourceTree = "<group>"; };
 		94EE9DCF3D01CE98B029C0C3 /* AudioClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioClient.swift; sourceTree = "<group>"; };
 		965A81E6609BBCFAA7FA3997 /* ExtensionEditorForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionEditorForm.swift; sourceTree = "<group>"; };
@@ -559,6 +562,7 @@
 		AF430DED2C73395105133172 /* MachineDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineDocumentTests.swift; sourceTree = "<group>"; };
 		AF6E0FC8FC2E9B1DD5775CD0 /* audio.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = audio.grpc.swift; sourceTree = "<group>"; };
 		B46CCD50D99E84525B9DDA0C /* LiveAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAudioCapture.swift; sourceTree = "<group>"; };
+		B4F912985D56C0DBE8A574D9 /* CassetteBrowseButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CassetteBrowseButton.swift; sourceTree = "<group>"; };
 		B4F92E65FCC0DE10C9A39BF0 /* URL+DiscImageReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+DiscImageReference.swift"; sourceTree = "<group>"; };
 		B570706C1BCFCAE564221FBC /* EventLoopScalingMeasurement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLoopScalingMeasurement.swift; sourceTree = "<group>"; };
 		B5B19F4DD5A21B41C2CF9630 /* RecentConnections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentConnections.swift; sourceTree = "<group>"; };
@@ -883,6 +887,7 @@
 				063CC2272D058D46784E181A /* BBCModifierState.swift */,
 				58E7A0E6AF52A2C316C7C419 /* BeebiumApp.swift */,
 				C511516BDB7D578CF5D63867 /* BiquadFilter.swift */,
+				B4F912985D56C0DBE8A574D9 /* CassetteBrowseButton.swift */,
 				8FD185273CF06162D2144F0F /* CassetteClient.swift */,
 				1874928F7052827852EE6399 /* CassetteDeckView.swift */,
 				02413575D16702BF313D359A /* CassetteErrorKinds.swift */,
@@ -1018,6 +1023,7 @@
 				BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */,
 				C858E5C4019E78FFD1AD693F /* BlankDiscNamingTests.swift */,
 				CC6B04201EE913A2107FB39B /* BuiltInMappingsTests.swift */,
+				948D45B9F13151D04D40A541 /* CassetteBrowseMenuTests.swift */,
 				824454E653FC6B753B26BD00 /* CassetteClientTests.swift */,
 				D133AA0458DD643B20FD55AE /* CassetteConfigTests.swift */,
 				02EB1C9F5D4468D155F3F524 /* CassetteDeckFormattingTests.swift */,
@@ -1245,6 +1251,7 @@
 				9E04292AEA136B391E1E68CE /* BiquadFilterTests.swift in Sources */,
 				2DFA99C752F8021C8A4C91AE /* BlankDiscNamingTests.swift in Sources */,
 				22ECF44772C0159ABFED1800 /* BuiltInMappingsTests.swift in Sources */,
+				CE9FC575D6B7C4A0994E05DD /* CassetteBrowseMenuTests.swift in Sources */,
 				B6C17F5C841FADB054186D30 /* CassetteClientTests.swift in Sources */,
 				2CFC414B888BBBC6C1A6F438 /* CassetteConfigTests.swift in Sources */,
 				3597065A66A9B7456ED48EE9 /* CassetteDeckFormattingTests.swift in Sources */,
@@ -1360,6 +1367,7 @@
 				2E9C2894C04791EF7CCDE424 /* BeebiumTouchBarLEDs.swift in Sources */,
 				5A4F6F3B51DDC576BBD3D142 /* BeebiumTouchBarManager.swift in Sources */,
 				4CF04CE9A5BFD96B5E1E4590 /* BiquadFilter.swift in Sources */,
+				F1312AD4048024A54232AA50 /* CassetteBrowseButton.swift in Sources */,
 				FE945FEF930F268687B1BAA7 /* CassetteClient.swift in Sources */,
 				2C52669380DF6E7ABE43DC4C /* CassetteConfigView.swift in Sources */,
 				FB305C72570B38629349DD7B /* CassetteDeckView.swift in Sources */,

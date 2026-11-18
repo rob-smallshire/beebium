@@ -34,16 +34,14 @@ final class BlockMenuItem: NSMenuItem {
     @objc private func run() { invoke() }
 }
 
-/// The live-input device picker, presented as an AppKit `NSMenu` built fresh
-/// each time it opens (cassette round 12 follow-up).
-///
-/// It is not a SwiftUI submenu: SwiftUI snapshots a `Menu`'s content when the
-/// menu opens, and a later asynchronous refresh never reaches the already-open
-/// menu, so a deferred SwiftUI submenu showed only an empty list. Enumerating in
-/// the SwiftUI body instead ran at the deck's render and asked the system for
-/// the microphone at launch. An AppKit menu built on open resolves both: the
-/// items are enumerated the moment the user opens the picker -- never at the
-/// deck's render -- and the open menu shows them at once.
+/// The items of the live-input device picker, built fresh each time its submenu
+/// opens (cassette round 12 follow-up). The picker is a native AppKit submenu
+/// (see `CassetteBrowseMenu`), whose delegate calls this on open: SwiftUI
+/// snapshots a `Menu`'s content when it opens and cannot populate a submenu
+/// dynamically, and enumerating in a SwiftUI body ran at the deck's render and
+/// asked the system for the microphone at launch. Enumerating here, on open,
+/// means the deck's render touches no audio API and the open submenu shows the
+/// current devices at once.
 enum InputDeviceMenu {
     /// The menu items for the devices `list` reports right now: one per device,
     /// choosing it calls `choose`; or a single disabled item when enumeration
@@ -60,22 +58,6 @@ enum InputDeviceMenu {
         }
         return list.devices.map { device in
             BlockMenuItem(title: device.name) { choose(device) }
-        }
-    }
-
-    /// Build the device menu from `list` and pop it up at the cursor. Deferred to
-    /// the next run-loop tick so the SwiftUI menu that triggered it has dismissed
-    /// first. The presentation is AppKit glue, not unit-tested; `items(from:)`
-    /// carries the logic.
-    @MainActor
-    static func present(from list: LiveInputDeviceList,
-                        choose: @escaping (LiveAudioDevice) -> Void) {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        for item in items(from: list, choose: choose) { menu.addItem(item) }
-        let location = NSEvent.mouseLocation
-        DispatchQueue.main.async {
-            menu.popUp(positioning: nil, at: location, in: nil)
         }
     }
 }
