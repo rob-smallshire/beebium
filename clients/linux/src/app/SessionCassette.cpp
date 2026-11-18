@@ -544,6 +544,14 @@ void SessionCassette::finish_live() {
     }
 }
 
+void SessionCassette::cancel_live() {
+    if (live_) {
+        live_.reset();
+        live_finishing_ = false;
+        Q_EMIT deck_changed();
+    }
+}
+
 void SessionCassette::create_tape(const QString& label, const QString& path) {
     const std::string label_text = label.toStdString();
     const std::string destination = path.toStdString();

@@ -103,10 +103,16 @@ public:
     virtual void stop();
     virtual bool capturing() const;
 
+    // How an input was lost under the capture: it stopped with an error,
+    // as a change of its format surfaces here (PipeWire renegotiates an
+    // open stream by stopping it), or it left the host's list of inputs.
+    enum class Loss { changed, disconnected };
+    Q_ENUM(Loss)
+
 Q_SIGNALS:
     void chunk(const QByteArray& samples);
-    // The input stopped by itself (unplugged, taken away), as a sentence.
-    void failed(const QString& sentence);
+    // The input stopped by itself; the capture has stopped with it.
+    void lost(beebium::linux_client::LiveCapture::Loss loss);
 
 private:
     struct Impl;

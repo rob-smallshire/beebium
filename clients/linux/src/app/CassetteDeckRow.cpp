@@ -566,7 +566,7 @@ void CassetteDeckRow::refresh() {
     const bool inserted = deck().tape_inserted;
     // An eject ends what a failure on the old tape said.
     if (presented_ && presented_->tape_inserted && !inserted &&
-        message_.kind == CassetteMessage::Kind::failure) {
+        message_.kind == CassetteMessage::Kind::failure && !message_.outlives_tape) {
         message_ = {};
     }
     presented_ = still;
@@ -822,7 +822,8 @@ void CassetteDeckRow::press(CassetteKey key) {
 
 void CassetteDeckRow::take_status_second() {
     const DeckState& deck = this->deck();
-    if (!deck.live()) {
+    // This client's own stream only: its counts are this capture's.
+    if (!deck.live() || !cassette_.streaming()) {
         return;
     }
     const auto condition = starve_.feed(deck.live_overruns, deck.live_underruns);
@@ -858,13 +859,37 @@ void CassetteDeckRow::set_capture(LiveCapture* capture) {
             cassette_.push_live(chunk);
         }
     });
-    connect(capture_, &LiveCapture::failed, this, [this](const QString& sentence) {
-        chunker_.reset();
-        cassette_.finish_live();
-        CassetteMessage failure;
-        failure.text = sentence;
-        show_failure(failure);
-    });
+    connect(capture_, &LiveCapture::lost, this, &CassetteDeckRow::input_lost);
+}
+
+void CassetteDeckRow::input_lost(LiveCapture::Loss loss) {
+    // Nothing still held is worth playing out: the stream ends at once, the
+    // server lets the tape go, and the starve this caused is no story.
+    chunker_.reset();
+    cassette_.cancel_live();
+    starve_.reset();
+    CassetteMessage failure;
+    failure.kind = CassetteMessage::Kind::failure;
+    failure.outlives_tape = true;
+    const QString device = live_format_ ? live_format_->device_name : QString();
+    if (loss == LiveCapture::Loss::disconnected) {
+        failure.text = tr("The input device was disconnected while the live tape was playing.");
+        failure.detail = device;
+    } else {
+        failure.text = tr("The input device changed while the live tape was playing; choose it "
+                          "again from Live Input.");
+        if (live_format_) {
+            failure.detail =
+                tr("%1: %2 Hz, %3, %4")
+                    .arg(device)
+                    .arg(live_format_->sample_rate)
+                    .arg(live_format_->channels == 1 ? tr("1 channel")
+                                                     : tr("%1 channels").arg(live_format_->channels))
+                    .arg(live_format_->sample == LiveInputFormat::Sample::s16 ? tr("16-bit")
+                                                                              : tr("32-bit float"));
+        }
+    }
+    show_failure(failure);
 }
 
 void CassetteDeckRow::choose_live_input(const AudioInputDevice& device, const QString& channel) {

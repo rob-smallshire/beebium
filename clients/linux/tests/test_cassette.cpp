@@ -1433,6 +1433,11 @@ public:
     void stop() override { running = false; }
     bool capturing() const override { return running; }
     void give(const QByteArray& samples) { Q_EMIT chunk(samples); }
+    // The input stops under the capture, as the host reports it.
+    void lose(LiveCapture::Loss loss) {
+        running = false;
+        Q_EMIT lost(loss);
+    }
 };
 
 struct LiveDeck : Deck {
@@ -1570,6 +1575,59 @@ TEST_CASE("A live input starved for three seconds says so once, with the silence
     d.row.key(CassetteKey::eject)->click();
     REQUIRE(wait_until([&] { return !d.cassette.deck().tape_inserted; }));
     CHECK(d.row.message_text().isEmpty());
+}
+
+TEST_CASE("A device change under the stream ends it at once and says so, over a starve",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    d.row.choose_live_input(d.inputs[1], {});  // Built-in Microphone, 44.1 kHz float mono
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    // The starve the change causes, two seconds in.
+    status_second(d, 0, 4410);
+    status_second(d, 0, 8820);
+    d.capture->lose(LiveCapture::Loss::changed);
+    const QString changed = QStringLiteral(
+        "The input device changed while the live tape was playing; choose it again from Live Input.");
+    CHECK(d.row.message_text() == changed);
+    CHECK(d.row.message_detail_text() ==
+          QStringLiteral("Built-in Microphone: 44100 Hz, 1 channel, 32-bit float"));
+    // Cancelled, not ended gracefully: nothing left is worth playing out.
+    CHECK_FALSE(d.cassette.streaming());
+    // The starve's third second, the same second, does not take its place.
+    d.server.cassette.set_live_ring(0.0, 0, 13230);
+    d.row.take_status_second();
+    CHECK(d.row.message_text() == changed);
+    // The server lets the tape go, and the message outlives it.
+    REQUIRE(wait_until([&] { return !d.cassette.deck().tape_inserted; }));
+    {
+        std::lock_guard lock(d.server.cassette.calls_mutex);
+        CHECK_FALSE(d.server.cassette.live_closed_by_client);
+    }
+    CHECK(d.row.message_text() == changed);
+    CHECK(d.row.copy_button()->isVisibleTo(&d.row));
+    // The next pick starts clean: no message, and no starve carried over.
+    d.row.choose_live_input(d.inputs[1], {});
+    CHECK(d.row.message_text().isEmpty());
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    status_second(d, 0, 100);
+    status_second(d, 0, 200);
+    CHECK(d.row.message_text().isEmpty());
+    status_second(d, 0, 300);
+    CHECK_FALSE(d.row.message_text().isEmpty());
+}
+
+TEST_CASE("A device disconnected under the stream ends it and names the device",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    d.row.choose_live_input(d.inputs[0], QStringLiteral("right"));
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    d.capture->lose(LiveCapture::Loss::disconnected);
+    CHECK(d.row.message_text() ==
+          QStringLiteral("The input device was disconnected while the live tape was playing."));
+    CHECK(d.row.message_detail_text() == QStringLiteral("USB Audio CODEC Analog Stereo"));
+    CHECK_FALSE(d.cassette.streaming());
+    REQUIRE(wait_until([&] { return !d.cassette.deck().tape_inserted; }));
+    CHECK_FALSE(d.row.message_text().isEmpty());
 }
 
 TEST_CASE("A new live stream starts clean", "[cassette][deck][live]") {

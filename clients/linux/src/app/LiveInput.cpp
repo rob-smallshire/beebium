@@ -164,6 +164,8 @@ std::vector<AudioInputDevice> audio_input_devices() {
 struct LiveCapture::Impl {
     std::unique_ptr<QAudioSource> source;
     QIODevice* io = nullptr;
+    // Where a device leaving the host is heard of.
+    std::unique_ptr<QMediaDevices> devices;
 };
 
 LiveCapture::LiveCapture(QObject* parent) : QObject(parent), impl_(std::make_unique<Impl>()) {}
@@ -203,14 +205,26 @@ bool LiveCapture::start(const AudioInputDevice& device, const LiveInputFormat& f
             }
         }
     });
+    // Stopped with an error (an IOError when the device's format changes
+    // or it goes): gone, if the host no longer lists it, else changed.
     connect(impl_->source.get(), &QAudioSource::stateChanged, this,
-            [this, name = device.name](QAudio::State state) {
+            [this, id = device.id](QAudio::State state) {
                 if (state == QAudio::StoppedState && impl_->source &&
                     impl_->source->error() != QAudio::NoError) {
                     stop();
-                    Q_EMIT failed(tr("The audio input %1 stopped.").arg(name));
+                    Q_EMIT lost(find_input(id).isNull() ? Loss::disconnected : Loss::changed);
                 }
             });
+    if (!impl_->devices) {
+        impl_->devices = std::make_unique<QMediaDevices>();
+    }
+    impl_->devices->disconnect(this);
+    connect(impl_->devices.get(), &QMediaDevices::audioInputsChanged, this, [this, id = device.id] {
+        if (impl_->source && find_input(id).isNull()) {
+            stop();
+            Q_EMIT lost(Loss::disconnected);
+        }
+    });
     return true;
 }
 

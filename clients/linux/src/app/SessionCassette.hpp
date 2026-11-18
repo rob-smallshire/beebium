@@ -184,6 +184,9 @@ public:
     void start_live(const LiveInputFormat& format);
     void push_live(const QByteArray& samples);
     void finish_live();
+    // The stream ended at once, nothing more played out: the input it
+    // came from is gone. The server lets the live tape go.
+    void cancel_live();
     // A stream of this session's is open, finishing or not.
     bool streaming() const { return live_ != nullptr; }
     bool live_finishing() const { return live_finishing_; }

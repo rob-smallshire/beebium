@@ -62,6 +62,8 @@ struct CassetteMessage {
     QString detail;  // the tooltip: the server's fragment or gRPC's words
     QStyle::StandardPixmap icon = QStyle::SP_MessageBoxWarning;
     bool offer_eject = false;  // a deck-occupied refusal's recovery
+    // Kept when the tape leaves: what it tells is why the tape left.
+    bool outlives_tape = false;
 };
 
 // The cassette deck, above the floppy drives (client specification 9.0):
@@ -97,6 +99,8 @@ public:
     void set_capture(LiveCapture* capture);
     // Start a live input as the tape, as the menu's entry does.
     void choose_live_input(const AudioInputDevice& device, const QString& channel);
+    // The input went from under the stream: changed, or disconnected.
+    void input_lost(LiveCapture::Loss loss);
 
     void show_failure(const CassetteMessage& message);
     void show_notice(const QString& text);
