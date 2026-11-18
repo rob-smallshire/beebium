@@ -270,15 +270,6 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     layout->addWidget(name_);
     layout->addWidget(state_);
     layout->addWidget(metadata_);
-    // A live tape's ring: how full, and what it dropped and made up.
-    live_ = new QLabel(this);
-    live_->setObjectName(QStringLiteral("liveRing"));
-    live_->setEnabled(false);
-    live_->setToolTip(tr("The server's buffer for the live input: how full it is, the samples it "
-                         "dropped when full (overruns) and the silence it played when empty "
-                         "(underruns)"));
-    live_->hide();
-    layout->addWidget(live_);
 
     // The counter, the tape's length beside it when known, and beneath them
     // the timeline the user scrubs with: the only guide to where anything
@@ -539,6 +530,8 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
         }
         show_failure(failure);
     });
+    starve_timer_.setInterval(1000);
+    connect(&starve_timer_, &QTimer::timeout, this, &CassetteDeckRow::take_status_second);
     notice_timer_.setSingleShot(true);
     notice_timer_.setInterval(NOTICE_MS);
     connect(&notice_timer_, &QTimer::timeout, this, [this] {
@@ -672,7 +665,13 @@ void CassetteDeckRow::present() {
                        : live                                ? live_reason
                        : !deck.tape.recordable ? tr("Beebium cannot record on this tape")
                                                : tr("Record"));
-    live_->setVisible(live);
+    // A live tape's counts are watched from its start, afresh for each.
+    if (live && !starve_timer_.isActive()) {
+        starve_.reset();
+        starve_timer_.start();
+    } else if (!live && starve_timer_.isActive()) {
+        starve_timer_.stop();
+    }
     latch_keys();
 }
 
@@ -712,12 +711,6 @@ void CassetteDeckRow::present_position() {
     counter_->setText(tape_counter_text(position));
     if (deck().tape.duration_seconds > 0.0) {
         slider_->setValue(static_cast<int>(std::lround(position * SLIDER_SCALE)));
-    }
-    if (deck().live()) {
-        live_->setText(tr("Ring %1% - %2 overruns - %3 underruns")
-                           .arg(qRound(deck().live_ring_fill * 100.0))
-                           .arg(deck().live_overruns)
-                           .arg(deck().live_underruns));
     }
 }
 
@@ -760,6 +753,7 @@ bool CassetteDeckRow::motor_shown() const {
 
 void CassetteDeckRow::show_failure(const CassetteMessage& message) {
     notice_timer_.stop();
+    starve_shown_ = LiveStarveDetector::Condition::none;
     message_ = message;
     message_.kind = CassetteMessage::Kind::failure;
     message_icon_->setPixmap(style()->standardIcon(message_.icon).pixmap(14, 14));
@@ -782,6 +776,7 @@ void CassetteDeckRow::show_notice(const QString& text) {
 
 void CassetteDeckRow::clear_message() {
     notice_timer_.stop();
+    starve_shown_ = LiveStarveDetector::Condition::none;
     if (message_.kind == CassetteMessage::Kind::none) {
         return;
     }
@@ -813,8 +808,24 @@ void CassetteDeckRow::press(CassetteKey key) {
     cassette_.press(key);
 }
 
-QString CassetteDeckRow::live_text() const {
-    return live_->isVisibleTo(this) ? live_->text() : QString();
+void CassetteDeckRow::take_status_second() {
+    const DeckState& deck = this->deck();
+    if (!deck.live()) {
+        return;
+    }
+    const auto condition = starve_.feed(deck.live_overruns, deck.live_underruns);
+    // One message at a time, and never the same condition over itself.
+    if (condition == LiveStarveDetector::Condition::none ||
+        (message_.kind == CassetteMessage::Kind::failure && starve_shown_ == condition)) {
+        return;
+    }
+    CassetteMessage failure;
+    failure.kind = CassetteMessage::Kind::failure;
+    failure.text = live_starve_sentence(condition);
+    failure.detail = live_starve_detail(condition, deck.live_overruns, deck.live_underruns,
+                                        static_cast<int>(deck.tape.sample_rate));
+    show_failure(failure);
+    starve_shown_ = condition;
 }
 
 void CassetteDeckRow::set_capture(LiveCapture* capture) {

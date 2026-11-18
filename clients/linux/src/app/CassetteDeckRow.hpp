@@ -14,6 +14,7 @@
 #define BEEBIUM_LINUX_APP_CASSETTE_DECK_ROW_HPP
 
 #include "app/LiveInput.hpp"
+#include "app/LiveStarve.hpp"
 #include "app/SessionCassette.hpp"
 
 #include <QColor>
@@ -107,7 +108,6 @@ public:
     QString metadata_text() const;
     QString counter_text() const;
     QString duration_text() const;  // empty when the length is unknown
-    QString live_text() const;      // the ring, for a live tape
     QString message_text() const;
     QString message_detail_text() const;
     bool motor_shown() const;
@@ -125,6 +125,10 @@ public:
     // the deck's state and the server's locality only, never by the file.
     QString drop_refusal() const;
     void drop_files(const QStringList& paths);
+    // A second of a live tape's status, as the row's timer takes it once a
+    // second: a sustained starve or drop raises its failure (9.0, Live
+    // input). Public for tests.
+    void take_status_second();
     // The loaded tape's menu: Copy Path, and Open Containing Folder where
     // the path is this host's. The caller owns it; none for an empty deck.
     QMenu* make_path_menu();
@@ -167,7 +171,6 @@ private:
     QToolButton* copy_;
     QPushButton* eject_offer_;
     QToolButton* dismiss_;
-    QLabel* live_;
     QWidget* key_row_;
     QToolButton* browse_;
     QMenu* menu_;
@@ -180,6 +183,11 @@ private:
     LiveCapture* capture_ = nullptr;
     std::unique_ptr<LiveChunker> chunker_;
     QTimer notice_timer_;
+    // A live tape's counts, watched once a second while it is in.
+    LiveStarveDetector starve_;
+    QTimer starve_timer_;
+    // The condition the showing failure tells, if it tells one.
+    LiveStarveDetector::Condition starve_shown_ = LiveStarveDetector::Condition::none;
     CassetteMessage message_;
     // The deck as last presented, its position aside.
     std::optional<DeckState> presented_;

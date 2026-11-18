@@ -1484,7 +1484,7 @@ TEST_CASE("With no audio inputs the menu says so", "[cassette][deck][live]") {
     CHECK_FALSE(none->isEnabled());
 }
 
-TEST_CASE("A live tape plays and stops, but cannot be wound, sought or recorded on; its ring shows",
+TEST_CASE("A live tape plays and stops, but cannot be wound, sought or recorded on; no ring shows",
           "[cassette][deck][live]") {
     LiveDeck d;
     d.row.choose_live_input(d.inputs[1], {});
@@ -1501,12 +1501,91 @@ TEST_CASE("A live tape plays and stops, but cannot be wound, sought or recorded 
     }
     CHECK(d.row.key(CassetteKey::record)->toolTip() ==
           QStringLiteral("A live input plays as it comes, so it cannot be wound, sought or recorded on"));
-    CHECK(d.row.live_text() == QStringLiteral("Ring 0% - 0 overruns - 0 underruns"));
+    // The ring's fill and counts are the server's to report, not the deck's
+    // to show: they are not actionable.
+    CHECK_FALSE(d.row.findChild<QLabel*>(QStringLiteral("liveRing")));
     d.server.cassette.set_live_ring(0.42, 3, 7);
-    REQUIRE(wait_until(
-        [&] { return d.row.live_text() == QStringLiteral("Ring 42% - 3 overruns - 7 underruns"); }));
+    REQUIRE(wait_until([&] { return d.cassette.deck().live_underruns == 7; }));
+    for (const QLabel* label : d.row.findChildren<QLabel*>()) {
+        if (label->isVisibleTo(&d.row)) {
+            CHECK_FALSE(label->text().contains(QStringLiteral("42")));
+        }
+    }
     d.row.key(CassetteKey::play)->click();
     REQUIRE(wait_until([&] { return d.row.state_text() == QStringLiteral("Playing, motor off"); }));
+}
+
+namespace {
+
+// A second of the server's status, with these counts since the stream
+// began, as the deck takes it.
+void status_second(LiveDeck& d, std::uint64_t overruns, std::uint64_t underruns) {
+    d.server.cassette.set_live_ring(0.5, overruns, underruns);
+    REQUIRE(wait_until([&] {
+        return d.cassette.deck().live_overruns == overruns &&
+               d.cassette.deck().live_underruns == underruns;
+    }));
+    d.row.take_status_second();
+}
+
+}  // namespace
+
+TEST_CASE("A live input starved for three seconds says so once, with the silence made up",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    d.row.choose_live_input(d.inputs[1], {});  // 44.1 kHz
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    const QString starved = QStringLiteral(
+        "The live input is not keeping up with the Beeb; some of the tape is being made up as silence.");
+    status_second(d, 0, 4410);
+    status_second(d, 0, 8820);
+    CHECK(d.row.message_text().isEmpty());
+    status_second(d, 0, 35280);
+    CHECK(d.row.message_text() == starved);
+    CHECK(d.row.message_detail_text() == QStringLiteral("Made up 0.8 s of silence since the stream began."));
+    CHECK(d.row.message().kind == CassetteMessage::Kind::failure);
+    CHECK(d.row.copy_button()->isVisibleTo(&d.row));
+    CHECK(d.row.dismiss_button()->isVisibleTo(&d.row));
+    // Going on, it is not stated again: the counts stand as they were.
+    status_second(d, 0, 44100);
+    status_second(d, 0, 88200);
+    CHECK(d.row.message_detail_text() == QStringLiteral("Made up 0.8 s of silence since the stream began."));
+    // Dismissed, it stays away while the starving goes on.
+    d.row.dismiss_button()->click();
+    for (std::uint64_t n = 3; n < 8; ++n) {
+        status_second(d, 0, 88200 * n);
+    }
+    CHECK(d.row.message_text().isEmpty());
+    // The other condition is told, in its own sentence.
+    status_second(d, 100, 88200 * 8);
+    status_second(d, 1204, 88200 * 9);
+    status_second(d, 2048, 88200 * 10);
+    CHECK(d.row.message_text() ==
+          QStringLiteral("The live input is arriving faster than the Beeb can take it; some of the tape "
+                         "is being dropped."));
+    // The tape's end takes it away, as any failure on the tape.
+    d.row.key(CassetteKey::eject)->click();
+    REQUIRE(wait_until([&] { return !d.cassette.deck().tape_inserted; }));
+    CHECK(d.row.message_text().isEmpty());
+}
+
+TEST_CASE("A new live stream starts clean", "[cassette][deck][live]") {
+    LiveDeck d;
+    d.row.choose_live_input(d.inputs[1], {});
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    status_second(d, 0, 100);
+    status_second(d, 0, 200);
+    d.row.key(CassetteKey::eject)->click();
+    REQUIRE(wait_until([&] { return !d.cassette.deck().tape_inserted && !d.cassette.streaming(); }));
+    d.row.choose_live_input(d.inputs[1], {});
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    // Two seconds of the old stream's growth do not count towards this one's.
+    status_second(d, 0, 50);
+    CHECK(d.row.message_text().isEmpty());
+    status_second(d, 0, 60);
+    CHECK(d.row.message_text().isEmpty());
+    status_second(d, 0, 70);
+    CHECK_FALSE(d.row.message_text().isEmpty());
 }
 
 TEST_CASE("The input's samples go to the stream in whole 10 ms chunks", "[cassette][deck][live]") {
