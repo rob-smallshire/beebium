@@ -363,29 +363,6 @@ struct CassetteDeckView: View {
                 .foregroundColor(.secondary)
 
             counterAndTimeline
-            liveMeter
-        }
-    }
-
-    /// For a live tape: the server's ring fill as a thin bar, and the overrun
-    /// and underrun counts beside it (section 9.0's LATITUDE: a small meter and
-    /// two numbers). An empty ring is the ordinary priming state, not a fault;
-    /// overruns and underruns grow only when the host and emulated clocks drift
-    /// apart faster than the ring absorbs.
-    @ViewBuilder
-    private var liveMeter: some View {
-        if isLive {
-            VStack(alignment: .leading, spacing: 2) {
-                ProgressView(value: min(max(cassetteClient.liveRingFill, 0), 1))
-                    .progressViewStyle(.linear)
-                    .controlSize(.small)
-                Text("Buffer \(Int((min(max(cassetteClient.liveRingFill, 0), 1) * 100).rounded()))%"
-                     + "  -  over \(cassetteClient.liveOverruns), under \(cassetteClient.liveUnderruns)")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .help("The live input buffer's fill, and the samples dropped (overrun) "
-                          + "and made up as silence (underrun)")
-            }
         }
     }
 
