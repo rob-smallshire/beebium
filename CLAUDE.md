@@ -278,6 +278,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 - `debugger-capabilities.md` - Debugging features roadmap
 - `raspberry-pi-linux-client-discussion.md` and `linux-client-architecture.md` - The Linux / Raspberry Pi client: the three-contract approach (server capabilities, client specification, platform presentation) and the Qt 6 / Vulkan architecture note (non-normative)
 - `memory-interface-design.md` - Python debugger API
+- `master-128-research.md` - The BBC Master 128 against the B and B+ (65SC12, ACCCON and the shadow rule, the SHEILA map, the 1770 latch, the MC146818 on the System VIA, the keypad, the internal and external Tube, cartridges, the modem connector), how B2, B-Em, BeebEm and beebjit model it, what Beebium adds, decisions, and what to measure on a real Master (#189)
 
 ### Reference Material (`docs/manuals_text/`)
 
