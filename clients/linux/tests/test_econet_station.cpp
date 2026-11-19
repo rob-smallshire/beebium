@@ -29,12 +29,12 @@ TEST_CASE("A station reads and writes as a number, auto, or auto in a range", "[
     CHECK(automatic.mode == EconetStation::Mode::automatic);
     CHECK(automatic.low == 1);
     CHECK(automatic.high == 253);
-    CHECK(automatic.to_json() == ordered_json("auto"));
+    CHECK(automatic.to_json().dump() == R"("auto")");
     const auto range = EconetStation::from_json("auto:10-20", schema);
     CHECK(range.mode == EconetStation::Mode::range);
     CHECK(range.low == 10);
     CHECK(range.high == 20);
-    CHECK(range.to_json() == ordered_json("auto:10-20"));
+    CHECK(range.to_json().dump() == R"("auto:10-20")");
 }
 
 TEST_CASE("A typed station is held within the schema's bounds", "[preset][econet]") {
