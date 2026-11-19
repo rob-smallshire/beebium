@@ -257,8 +257,19 @@ at 2 MHz or 1 MHz as the access demands.
   cartridges and memory-mapped I/O cartridges are not guaranteed to work at the same time".
   OSBYTE &6B, meant to select the bus, is broken in MOS 3.20, so software pokes IFJ directly.
   No emulator models cartridges as more than ROM banks, except B2's ADJI joystick cartridge in
-  its internal FRED/JIM scope. Beebium's sideways-slots design already reserves
-  `runtime_configurable = true` for them.
+  its internal FRED/JIM scope. In Beebium a cartridge is an extension that provides the slot's
+  two banks (the first round's built-in ROM cartridge: two 16K sockets, one image answering on
+  both banks when a single chip is fitted). Acorn's own Master ROM Cartridge (Centre for
+  Computing History item 33659) has two sockets each taking a 27128 or a 27513. The 27513 is a
+  64K EPROM organised as four 16K pages behind its own page latch: a write to any address in
+  the chip sets the page from the low two bits of the data, and the Master cartridge wires the
+  EPROM's write-enable through for that (schematic: mdfs.net/Info/Comp/BBC/Circuits/Master/
+  eprom.gif; stardot thread 13799). The MOS has no support for paged EPROMs and its 16-ROM
+  limit is in the API, so no commercial software used it, and a stardot warning applies to any
+  emulation of it: ROMs and the MOS write to sideways banks to test for RAM, which would switch
+  the page. A paged cartridge is therefore a later, writable provider that turns writes into a
+  page change; the Morley Master AA board (32 images, a second manual level of paging) is a
+  further example of the same shape.
 - **The modem connector (PL12).** A 20-way 0.1 inch ZIF socket housing at the west edge beside
   SK2, fitted on some boards as a socket, on some as header pins, on some not at all (Acorn
   changed it in 1989). It is not the 1 MHz bus: it sits on the internal BD bus with its own
