@@ -93,7 +93,7 @@ public:
 
     void refresh();
 
-    // Where the Live Input menu's devices come from, and what captures one:
+    // Where the Input Device menu's devices come from, and what captures one:
     // the host's, unless a test says otherwise. The row owns the capture.
     void set_audio_inputs(AudioInputs inputs) { inputs_ = std::move(inputs); }
     void set_capture(LiveCapture* capture);

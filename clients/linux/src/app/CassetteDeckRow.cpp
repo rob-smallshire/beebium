@@ -879,7 +879,7 @@ void CassetteDeckRow::input_lost(LiveCapture::Loss loss) {
         failure.detail = device;
     } else {
         failure.text = tr("The input device changed while the live tape was playing; choose it "
-                          "again from Live Input.");
+                          "again from Input Device.");
         if (live_format_) {
             const auto described = [this](const LiveInputFormat& format) {
                 return tr("%1 Hz, %2, %3")
@@ -998,7 +998,7 @@ void CassetteDeckRow::rebuild_menu() {
     menu_->addSeparator();
     // The host's audio inputs by the platform's own names, every kind: a
     // line-in and a microphone are not told apart on every platform.
-    QMenu* inputs = menu_->addMenu(tr("Live Input"));
+    QMenu* inputs = menu_->addMenu(tr("Input Device"));
     inputs->setToolTipsVisible(true);
     const std::vector<AudioInputDevice> devices = inputs_ ? inputs_() : std::vector<AudioInputDevice>{};
     for (const AudioInputDevice& device : devices) {

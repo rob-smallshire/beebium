@@ -444,7 +444,7 @@ TEST_CASE("An empty deck offers Browse where the server is local, and keys only 
     CHECK_FALSE(action_named(d.row.browse_menu(), QStringLiteral("Browse..."))->isEnabled());
     CHECK_FALSE(action_named(d.row.browse_menu(), QStringLiteral("Recent"))->isEnabled());
     CHECK_FALSE(action_named(d.row.browse_menu(), QStringLiteral("New Blank Tape"))->isEnabled());
-    CHECK(action_named(d.row.browse_menu(), QStringLiteral("Live Input"))->isEnabled());
+    CHECK(action_named(d.row.browse_menu(), QStringLiteral("Input Device"))->isEnabled());
     d.row.browse_button()->click();
     CHECK(d.row.message_text() == QStringLiteral("The server is on another host, so it cannot open files here"));
 }
@@ -1454,11 +1454,11 @@ struct LiveDeck : Deck {
 
 }  // namespace
 
-TEST_CASE("The Live Input menu lists the host's inputs by name; a stereo one offers either channel",
+TEST_CASE("The Input Device menu lists the host's inputs by name; a stereo one offers either channel",
           "[cassette][deck][live]") {
     LiveDeck d;
     Q_EMIT d.row.browse_menu()->aboutToShow();
-    QAction* live = action_named(d.row.browse_menu(), QStringLiteral("Live Input"));
+    QAction* live = action_named(d.row.browse_menu(), QStringLiteral("Input Device"));
     REQUIRE(live);
     REQUIRE(live->menu());
     QAction* stereo = action_named(live->menu(), QStringLiteral("USB Audio CODEC Analog Stereo"));
@@ -1485,7 +1485,7 @@ TEST_CASE("With no audio inputs the menu says so", "[cassette][deck][live]") {
     LiveDeck d;
     d.inputs.clear();
     Q_EMIT d.row.browse_menu()->aboutToShow();
-    QAction* live = action_named(d.row.browse_menu(), QStringLiteral("Live Input"));
+    QAction* live = action_named(d.row.browse_menu(), QStringLiteral("Input Device"));
     REQUIRE(live);
     QAction* none = action_named(live->menu(), QStringLiteral("No audio inputs"));
     REQUIRE(none);
@@ -1593,7 +1593,7 @@ TEST_CASE("A device change under the stream ends it at once and says so, over a 
     d.inputs[1].name = QStringLiteral("Built-in Microphone");
     d.capture->lose(LiveCapture::Loss::changed);
     const QString changed = QStringLiteral(
-        "The input device changed while the live tape was playing; choose it again from Live Input.");
+        "The input device changed while the live tape was playing; choose it again from Input Device.");
     CHECK(d.row.message_text() == changed);
     // The format it had, and the one it now has.
     CHECK(d.row.message_detail_text() ==
