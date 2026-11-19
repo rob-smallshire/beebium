@@ -32,6 +32,11 @@ for viewing. What it shows:
 - Power: +5V on A1/B1, 0V on A22/B22 (A20 unconnected), one decoupling
   capacitor.
 
+The 27513's own datasheet is `docs/datasheets/Intel_27513.pdf`, with a
+transcript beside it (`Intel_27513.md`): a 64K EPROM as four 16K pages, the
+page chosen by a write cycle whose data bits select it, and a page latch that
+clears to page 0 at power-up.
+
 For Beebium: the built-in `rom-cartridge` extension's two parameters are
 these two sockets, the lower answering on the slot's even bank and the upper
 on the odd one; a paged 27513 cartridge would be a later provider that turns
