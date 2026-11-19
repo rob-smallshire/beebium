@@ -1152,25 +1152,45 @@ TEST_CASE("The cassette motor LED follows Serial ULA latch bit 7", "[grpc][indic
             }
         }
     });
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    auto& memory = fixture.machine().state().memory;
-    auto value_now = [&] {
-        for (int i = 0; i < 100; ++i) {
-            const auto values = memory.indicators.values();
-            const auto it = values.find("cassette-motor-led");
-            if (it != values.end()) return static_cast<int>(it->second);
+    // Each step waits for its condition against a generous deadline: the
+    // consumer thread publishes and the stream handler samples on their own
+    // wall-clock periods, which a loaded host stretches.
+    constexpr auto DEADLINE = std::chrono::seconds(30);
+    auto eventually = [&](auto condition) {
+        const auto start = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() - start < DEADLINE) {
+            if (condition()) return true;
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
-        return -1;
+        return condition();
     };
 
+    auto& memory = fixture.machine().state().memory;
+    auto published = [&] {
+        const auto values = memory.indicators.values();
+        const auto it = values.find("cassette-motor-led");
+        return it != values.end() ? static_cast<int>(it->second) : -1;
+    };
+    auto streamed = [&](auto predicate) {
+        std::lock_guard<std::mutex> lock(seen_mutex);
+        return predicate(seen);
+    };
+
+    // The stream sends its first update, all the named values, once a value
+    // changes after it starts, so it reports 255 whenever it starts while the
+    // motor is on.
     fixture.machine().with_emulation_paused([&] { memory.write(0xFE10, 0xFE); });
-    std::this_thread::sleep_for(std::chrono::milliseconds(80));
-    CHECK(value_now() == 255);
+    CHECK(eventually([&] { return published() == 255; }));
+    CHECK(eventually([&] {
+        return streamed([](const std::vector<int>& s) { return std::find(s.begin(), s.end(), 255) != s.end(); });
+    }));
+
     fixture.machine().with_emulation_paused([&] { memory.write(0xFE10, 0x7E); });
-    std::this_thread::sleep_for(std::chrono::milliseconds(80));
-    CHECK(value_now() == 0);
+    CHECK(eventually([&] { return published() == 0; }));
+    CHECK(eventually([&] {
+        return streamed([](const std::vector<int>& s) { return !s.empty() && s.back() == 0; });
+    }));
 
     context.TryCancel();
     reader_thread.join();
