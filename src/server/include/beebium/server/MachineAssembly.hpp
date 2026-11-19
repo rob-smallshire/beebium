@@ -1366,6 +1366,10 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         beebium::HasAnaloguePort<Memory> ? &machine.state().memory.analogue_port() : nullptr,
         &am->controller_registry,
         internal_tube_socket_of(machine));
+    if constexpr (requires { machine.state().memory.cartridge_rear; }) {
+        am->extension_context->set_cartridge_slots(&machine.state().memory.cartridge_rear,
+                                                   &machine.state().memory.cartridge_front);
+    }
     extension_registry.resolve_and_init(*am->extension_context);
 
     // A saved machine's extensions take back what their batteries kept,

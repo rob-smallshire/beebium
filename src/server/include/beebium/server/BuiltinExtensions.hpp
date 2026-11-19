@@ -29,6 +29,7 @@
 #include "FilePrinterExtension.hpp"
 #include "JobFilePrinterExtension.hpp"
 #include "JoystickExtension.hpp"
+#include "RomCartridgeExtension.hpp"
 #include "VoltmaceDelta14bExtension.hpp"
 #include "HostSerialExtension.hpp"
 #include "beebium/extension/Extension.hpp"
@@ -295,6 +296,35 @@ inline std::vector<Entry> make_entries() {
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new JoystickExtension()); }});
+    }
+
+    // ROM cartridge.
+    //
+    // Built-in for the same reason as the joystick. One or two 16K ROMs in a
+    // Master 128 cartridge slot; see docs/sideways-slots.md.
+    {
+        ExtensionManifest m;
+        m.name = "rom-cartridge";
+        m.display_name = "ROM cartridge";
+        m.description =
+            "A cartridge of one or two 16K ROMs, in one of the Master's cartridge slots.";
+        m.cli_name = "rom-cartridge";
+        m.extension_kind = "peripheral";
+        m.attaches_to_one_of = {"cartridge-rear", "cartridge-front"};
+        ParameterSchema low{"low", "filepath",
+                            "The ROM on the slot's lower bank, or on both banks for a 16K "
+                            "cartridge", -1, true, false, ""};
+        low.label = "Lower ROM";
+        low.access = "read";
+        ParameterSchema high{"high", "filepath",
+                             "The ROM on the slot's upper bank, for a 32K cartridge", -1, false,
+                             false, ""};
+        high.label = "Upper ROM";
+        high.access = "read";
+        m.parameters = {low, high};
+        result.push_back({std::move(m),
+                          [] { return std::unique_ptr<Extension>(
+                              new RomCartridgeExtension()); }});
     }
 
     // Voltmace Delta 14B/1 adapter.

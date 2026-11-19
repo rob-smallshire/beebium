@@ -64,6 +64,13 @@ inline const std::vector<AttachmentPoint>& attachment_point_catalogue() {
         {"internal-tube", "Internal Coprocessor",
          "The Master's internal Tube connector, which takes a second processor board "
          "such as the Master Turbo's 65C102.", 0, 1},
+        {"cartridge-rear", "Rear Cartridge Slot",
+         "The Master's rear cartridge slot, ROMs 0 and 1.", 0, 1},
+        {"cartridge-front", "Front Cartridge Slot",
+         "The Master's front cartridge slot, ROMs 2 and 3.", 0, 1},
+        {"modem-connector", "Modem Connector",
+         "The Master's internal modem connector, for boards such as a modem or an internal "
+         "SCSI interface.", 0, 1},
         {"scsi", "SCSI Bus",
          "The SCSI bus of a host adapter, which holds up to seven hard discs.", 0, 7},
     };

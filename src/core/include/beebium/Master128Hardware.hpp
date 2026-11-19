@@ -46,6 +46,7 @@
 #include "devices/Sn76489.hpp"
 #include "devices/Upd7002.hpp"
 #include "extension/AnaloguePort.hpp"
+#include "extension/CartridgeSlot.hpp"
 #include "ClockBinding.hpp"
 #include "devices/VideoUla.hpp"
 #include "disc/Acorn1770DiscController.hpp"
@@ -57,6 +58,7 @@
 #include "tube/TubeSocket.hpp"
 #include "indicators/Indicators.hpp"
 #include <array>
+#include <cctype>
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
@@ -94,7 +96,9 @@ struct DefaultSidewaysRom {
 // &FEA0, the Tube at &FEE0. &FE2C-&FE2F (undecoded, as B-Em has it;
 // unmeasured, research section 5 item 3), the modem connector (&FE80-&FE9F)
 // and &FEC0-&FEDF read as the stale data bus until something is decoded
-// there.
+// there. The modem connector (PL12, the attachment point "modem-connector")
+// is selected by nMODEM at &FE80-&FE9F, at 1 MHz; it carries A0-A3 only, so
+// its 32 bytes are 16 registers mirrored once. Nothing is fitted to it yet.
 //
 // Two Tubes (section 1.6): the external Tube (PL6, the attachment point
 // "tube") and the internal one (SK1/SK2, "internal-tube"). There is one
@@ -138,6 +142,9 @@ public:
         {14, "acornsoft-view_b3_0.rom"},
         {15, "acorn-terminal_1_20_mos_3_20.rom"},
     }};
+
+    // The modem connector (PL12) is an attachment point of this machine.
+    static constexpr bool HAS_MODEM_CONNECTOR = true;
 
     // Launch option for the clock: --rtc clock=<host|emulated>[:time=...|:offset=...].
     static constexpr std::string_view BOARD_RTC_OPTION = "rtc";
@@ -335,6 +342,69 @@ public:
         void write(uint16_t offset, uint8_t value) { hw.selected_tube().write(offset, value); }
     };
 
+    // A cartridge slot: two sideways banks, chosen between by ROMSEL bit 0
+    // (ROMQA), which the cartridge fitted to it provides (CartridgeSlot.hpp).
+    class MasterCartridgeSlot final : public CartridgeSlot {
+    public:
+        MasterCartridgeSlot(Master128Hardware& hw, uint8_t first_bank)
+            : hw_(hw), first_bank_(first_bank) {}
+        uint8_t first_bank() const override { return first_bank_; }
+        void fit(SidewaysBankProvider& cartridge) override {
+            hw_.sideways.attach_provider(first_bank_, &cartridge, 0);
+            hw_.sideways.attach_provider(static_cast<uint8_t>(first_bank_ + 1), &cartridge, 1);
+            fitted_ = true;
+        }
+        void remove() override {
+            hw_.sideways.attach_provider(first_bank_, nullptr);
+            hw_.sideways.attach_provider(static_cast<uint8_t>(first_bank_ + 1), nullptr);
+            fitted_ = false;
+        }
+        bool fitted() const { return fitted_; }
+
+    private:
+        Master128Hardware& hw_;
+        uint8_t first_bank_;
+        bool fitted_ = false;
+    };
+
+    MasterCartridgeSlot cartridge_rear{*this, 0};
+    MasterCartridgeSlot cartridge_front{*this, 2};
+
+    // The slot that answers on `bank`, or nullptr for a bank outside 0-3.
+    CartridgeSlot* cartridge_slot_for_bank(uint8_t bank) {
+        if (bank < 2) return &cartridge_rear;
+        if (bank < 4) return &cartridge_front;
+        return nullptr;
+    }
+
+    // Why SidewaysService may not change `bank` at run time, or nullopt:
+    // banks 0-3 are the cartridge slots', which a cartridge fills.
+    std::optional<std::string> slot_change_refusal(uint8_t bank) const {
+        if (bank >= 4) return std::nullopt;
+        const bool rear = bank < 2;
+        return "Bank " + std::to_string(bank) + " is the " +
+               std::string(rear ? "rear" : "front") +
+               " cartridge slot's; fit a cartridge there with --rom-cartridge at=" +
+               std::string(rear ? "cartridge-rear" : "cartridge-front") +
+               " when the machine starts, not while it runs.";
+    }
+
+    // FRED and JIM (&FC00-&FDFF): the external 1 MHz bus while ACCCON IFJ is
+    // clear; while it is set, the cartridge bus at 2 MHz, which has nothing
+    // decoding FRED or JIM yet, so a read is the stale data bus and the
+    // external bus is not reached.
+    struct FredJimRegion {
+        Master128Hardware& hw;
+        uint8_t read(uint16_t offset) {
+            if (hw.acccon_ & ACCCON_IFJ) return hw.stale_bus_;
+            return hw.one_mhz_bus_.read(offset);
+        }
+        void write(uint16_t offset, uint8_t value) {
+            if (hw.acccon_ & ACCCON_IFJ) return;
+            hw.one_mhz_bus_.write(offset, value);
+        }
+    };
+
     // ROMSEL (&FE30-&FE33). Bits 4-6 read back as written: no hardware
     // measurement of ROMSEL readback exists (research section 5 item 2).
     struct RomselRegister {
@@ -361,6 +431,7 @@ public:
     EconetIntoffRegion econet_intoff_region_{econet_socket, stale_bus_};
     EconetIntonRegion econet_inton_region_{econet_socket, stale_bus_};
     SelectedTubeRegion selected_tube_region_{*this};
+    FredJimRegion fred_jim_region_{*this};
     SelectedTubeIrq selected_tube_irq_{*this};
     RomselRegister romsel_register{*this};
     AccconRegister acccon_register{*this};
@@ -370,7 +441,7 @@ public:
 
     using MemoryMapType = decltype(
         MemoryMap{
-            make_region<0xFC00, 0xFDFF>(std::declval<OneMHzBusPort&>()),
+            make_region<0xFC00, 0xFDFF>(std::declval<FredJimRegion&>()),
             make_region<0xFE00, 0xFE07, Mirror<0x07>>(std::declval<Crtc6845&>()),
             make_region<0xFE08, 0xFE0F, Mirror<0x01>>(std::declval<SerialAciaRegion&>()),
             make_region<0xFE10, 0xFE17, Mirror<0x07>>(std::declval<SerialUlaRegion&>()),
@@ -385,7 +456,7 @@ public:
             make_region<0xFE3C, 0xFE3F>(std::declval<EconetIntonRegion&>()),
             make_region<0xFE40, 0xFE5F, Mirror<0x0F>>(std::declval<Via6522&>()),
             make_region<0xFE60, 0xFE7F, Mirror<0x0F>>(std::declval<Via6522&>()),
-            make_region<0xFE80, 0xFE9F>(std::declval<StaleBusRegion&>()),
+            make_region<0xFE80, 0xFE9F, Mirror<0x0F>>(std::declval<StaleBusRegion&>()),
             make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(std::declval<EconetAdlcRegion&>()),
             make_region<0xFEC0, 0xFEDF>(std::declval<StaleBusRegion&>()),
             make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(std::declval<SelectedTubeRegion&>()),
@@ -751,14 +822,88 @@ public:
 
     SlotInfo slot_info(uint8_t slot) const { return sideways.slot_info(slot); }
 
-    using MotherboardLinks = EmptyMotherboardLinks;
+    // Links LK18 and LK19 (research section 1.6, ROM sockets): West, as
+    // shipped, gives sideways RAM in banks 4/5 (LK18) and 6/7 (LK19); East
+    // gives the IC41 (4/5) and IC37 (6/7) sockets instead, each taking a 32K
+    // ROM whose low half is the even bank and high half the odd one. The
+    // Service Manual and Advanced Reference Manual swap the two sockets; the
+    // Reference Manual, the Hardware Specification and the board agree on
+    // IC41 = 4/5.
+    struct MotherboardLinks {
+        static constexpr bool has_slot_links = true;
+
+        enum class Position { West, East };
+        Position lk18 = Position::West;
+        Position lk19 = Position::West;
+
+        std::optional<std::string> parse(std::string_view key, std::string_view value) {
+            auto lower = [](std::string_view sv) {
+                std::string out;
+                for (char c : sv) out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+                return out;
+            };
+            const std::string k = lower(key);
+            const std::string v = lower(value);
+            Position* link = k == "lk18" ? &lk18 : k == "lk19" ? &lk19 : nullptr;
+            if (!link) {
+                return "Unknown motherboard link '" + std::string(key) +
+                       "' on the BBC Master 128 (expected: lk18, lk19)";
+            }
+            if (v == "west") { *link = Position::West; return std::nullopt; }
+            if (v == "east") { *link = Position::East; return std::nullopt; }
+            return "Invalid value for motherboard link " + std::string(key) + ": '" +
+                   std::string(value) + "' (expected: west, east)";
+        }
+
+        std::vector<MotherboardLinkInfo> describe() const {
+            auto name = [](Position p) { return p == Position::West ? "west" : "east"; };
+            return {
+                {"LK18", name(lk18),
+                 "Banks 4/5: West = sideways RAM (default), East = a 32K ROM in IC41"},
+                {"LK19", name(lk19),
+                 "Banks 6/7: West = sideways RAM (default), East = a 32K ROM in IC37"},
+            };
+        }
+
+        static std::vector<std::string> help_lines() {
+            return {
+                "lk18=west|east  banks 4/5 (west=sideways RAM, east=IC41 32K ROM; default: west)",
+                "lk19=west|east  banks 6/7 (west=sideways RAM, east=IC37 32K ROM; default: west)",
+            };
+        }
+
+        // Whether `slot` is a ROM socket's half under these links.
+        bool rom_socket(int slot) const {
+            if (slot == 4 || slot == 5) return lk18 == Position::East;
+            if (slot == 6 || slot == 7) return lk19 == Position::East;
+            return false;
+        }
+    };
+
+    // Make the links so: banks whose link is East become the empty halves of
+    // their ROM socket, for --sideways to fill. Called once at start-up,
+    // before ROMs are loaded.
+    void apply_motherboard_links(const MotherboardLinks& links) {
+        links_ = links;
+        for (uint8_t slot = FIRST_SIDEWAYS_RAM_SLOT; slot <= LAST_SIDEWAYS_RAM_SLOT; ++slot) {
+            if (links.rom_socket(slot)) {
+                sideways.configure_slot_as_empty(slot);
+            } else {
+                sideways.configure_slot_as_ram(slot);
+            }
+        }
+    }
+
+    const MotherboardLinks& motherboard_links() const { return links_; }
 
     // The sixteen sideways banks (research section 1.6, ROM sockets):
-    // - 0-3: the cartridge slots, rear (0, 1) and front (2, 3); ROM or empty;
-    // - 4-7: sideways RAM;
+    // - 0-3: the cartridge slots, rear (0, 1) and front (2, 3), empty unless a
+//   cartridge (an extension at cartridge-rear or cartridge-front) fills them;
+    // - 4-7: sideways RAM, or with LK18/LK19 East the halves of IC41/IC37;
     // - 8: the IC27 socket, ROM or empty;
     // - 9-15: the MOS ROM's sideways parts, locked inside the chip.
-    static SlotTopology slot_topology(MotherboardLinks /*links*/ = {}) {
+    static SlotTopology slot_topology() { return slot_topology(MotherboardLinks{}); }
+    static SlotTopology slot_topology(MotherboardLinks links) {
         SlotTopology topo;
         topo.has_aliasing = false;
         for (int slot = 0; slot < 16; ++slot) {
@@ -768,8 +913,16 @@ public:
             spec.runtime_configurable = false;
             spec.supports_write_protect = false;
             if (slot < FIRST_SIDEWAYS_RAM_SLOT) {
+                // Filled by a cartridge fitted to the slot (an extension at
+                // cartridge-rear or cartridge-front), not by --sideways.
                 spec.label = std::string(slot < 2 ? "Rear cartridge" : "Front cartridge") +
                              " (bank " + std::to_string(slot) + ")";
+                spec.supports_rom = false;
+                spec.supports_ram = false;
+                spec.supports_empty = true;
+            } else if (slot <= LAST_SIDEWAYS_RAM_SLOT && links.rom_socket(slot)) {
+                spec.label = std::string(slot < 6 ? "IC41" : "IC37") + " (bank " +
+                             std::to_string(slot) + ")";
                 spec.supports_rom = true;
                 spec.supports_ram = false;
                 spec.supports_empty = true;
@@ -874,6 +1027,7 @@ private:
     bool vdu_latch_ = false;           // see note_opcode_fetch()
     bool last_access_shadow_ = false;  // where the last access went (shadow_access)
     uint8_t stale_bus_ = 0;            // see stale_bus()
+    MotherboardLinks links_{};
 
     static constexpr std::string_view bank_names_[16] = {
         "bank_0", "bank_1", "bank_2", "bank_3",
@@ -971,7 +1125,7 @@ private:
     MemoryMapType make_memory_map() {
         // Order matters: first match wins. I/O regions overlay the MOS ROM.
         return MemoryMap{
-            make_region<0xFC00, 0xFDFF>(one_mhz_bus_),
+            make_region<0xFC00, 0xFDFF>(fred_jim_region_),
             make_region<0xFE00, 0xFE07, Mirror<0x07>>(crtc),
             make_region<0xFE08, 0xFE0F, Mirror<0x01>>(serial_acia_region_),
             make_region<0xFE10, 0xFE17, Mirror<0x07>>(serial_ula_region_),
@@ -986,7 +1140,7 @@ private:
             make_region<0xFE3C, 0xFE3F>(econet_inton_region_),
             make_region<0xFE40, 0xFE5F, Mirror<0x0F>>(system_via),
             make_region<0xFE60, 0xFE7F, Mirror<0x0F>>(user_via),
-            make_region<0xFE80, 0xFE9F>(stale_bus_region_),
+            make_region<0xFE80, 0xFE9F, Mirror<0x0F>>(stale_bus_region_),  // nMODEM: PL12, unfitted
             make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(econet_adlc_region_),
             make_region<0xFEC0, 0xFEDF>(stale_bus_region_),
             make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(selected_tube_region_),

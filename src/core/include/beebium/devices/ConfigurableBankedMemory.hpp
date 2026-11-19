@@ -13,6 +13,7 @@
 #pragma once
 
 #include "ConfigurableSlot.hpp"
+#include "SidewaysBankProvider.hpp"
 #include <array>
 #include <cstdint>
 
@@ -34,6 +35,19 @@ class ConfigurableBankedMemory {
     std::array<ConfigurableSlot, 16> slots_;
     uint8_t selected_bank_ = 0;
 
+    // A bank handed to a provider (a cartridge), and which of the provider's
+    // banks it is. While a bank has one, the provider answers for it and the
+    // slot's own contents are not used.
+    struct Provided {
+        SidewaysBankProvider* provider = nullptr;
+        uint8_t bank = 0;
+    };
+    std::array<Provided, 16> provided_{};
+
+    const Provided* provided(uint8_t bank) const {
+        return (bank < num_banks && provided_[bank].provider) ? &provided_[bank] : nullptr;
+    }
+
 public:
     static constexpr size_t num_banks = 16;
     static constexpr size_t bank_size = 16384;
@@ -43,12 +57,26 @@ public:
 
     // MemoryMappedDevice interface
     uint8_t read(uint16_t offset) const {
+        if (const auto* p = provided(selected_bank_)) return p->provider->read_bank(p->bank, offset);
         return slots_[selected_bank_].read(offset);
     }
 
     void write(uint16_t offset, uint8_t value) {
+        if (const auto* p = provided(selected_bank_)) {
+            p->provider->write_bank(p->bank, offset, value);
+            return;
+        }
         slots_[selected_bank_].write(offset, value);
     }
+
+    // Hand `bank` to `provider` as its bank `provider_bank` (nullptr takes it
+    // back: the slot's own contents answer again).
+    void attach_provider(uint8_t bank, SidewaysBankProvider* provider, uint8_t provider_bank = 0) {
+        if (bank < num_banks) provided_[bank] = {provider, provider_bank};
+    }
+
+    // Whether a provider answers for `bank`.
+    bool has_provider(uint8_t bank) const { return provided(bank) != nullptr; }
 
     // Bank selection (via ROMSEL)
     uint8_t selected_bank() const { return selected_bank_; }
@@ -90,6 +118,7 @@ public:
 
     // Check if a bank is populated
     bool is_bank_populated(uint8_t bank) const {
+        if (const auto* p = provided(bank)) return p->provider->bank_info(p->bank).populated;
         if (bank < num_banks) {
             return slots_[bank].is_populated();
         }
@@ -98,6 +127,7 @@ public:
 
     // Get slot type
     SlotType bank_type(uint8_t bank) const {
+        if (const auto* p = provided(bank)) return p->provider->bank_info(p->bank).type;
         if (bank < num_banks) {
             return slots_[bank].type();
         }
@@ -106,6 +136,7 @@ public:
 
     // Direct bank access for debugger - side-effect free read
     uint8_t peek_bank(uint8_t bank, uint16_t offset) const {
+        if (const auto* p = provided(bank)) return p->provider->peek_bank(p->bank, offset);
         if (bank < num_banks) {
             return slots_[bank].read(offset);
         }
@@ -114,6 +145,7 @@ public:
 
     // Direct bank access - normal read
     uint8_t read_bank(uint8_t bank, uint16_t offset) {
+        if (const auto* p = provided(bank)) return p->provider->read_bank(p->bank, offset);
         if (bank < num_banks) {
             return slots_[bank].read(offset);
         }
@@ -122,6 +154,10 @@ public:
 
     // Direct bank access - write
     void write_bank(uint8_t bank, uint16_t offset, uint8_t value) {
+        if (const auto* p = provided(bank)) {
+            p->provider->write_bank(p->bank, offset, value);
+            return;
+        }
         if (bank < num_banks) {
             slots_[bank].write(offset, value);
         }
@@ -214,6 +250,7 @@ public:
 
     // Uniform per-slot query (see SlotInfo in ConfigurableSlot.hpp).
     SlotInfo slot_info(uint8_t slot) const {
+        if (const auto* p = provided(slot)) return p->provider->bank_info(p->bank);
         if (slot >= num_banks) return {};
         const auto& s = slots_[slot];
         return {s.type(), s.is_populated(), std::string(s.image_name()),

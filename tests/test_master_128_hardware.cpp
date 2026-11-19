@@ -19,6 +19,8 @@
 #include <beebium/Machines.hpp>
 #include <beebium/econet/TestBackend.hpp>
 #include <beebium/tube/TubeHostBackend.hpp>
+#include <beebium/extension/OneMHzBusDevice.hpp>
+#include <beebium/devices/SidewaysBankProvider.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
@@ -123,7 +125,7 @@ TEST_CASE("Master 128 identity", "[master128][hardware]") {
     CHECK(HW::DEFAULT_SIDEWAYS_ROMS.size() == 6);
 }
 
-TEST_CASE("Master 128 sideways topology: cartridges, RAM 4-7, IC27, the MOS ROM's banks",
+TEST_CASE("Master 128 sideways topology: cartridge banks, RAM 4-7, IC27, the MOS ROM's banks",
           "[master128][hardware][sideways]") {
     const auto topo = HW::slot_topology();
     REQUIRE(topo.sockets.size() == 16);
@@ -138,6 +140,11 @@ TEST_CASE("Master 128 sideways topology: cartridges, RAM 4-7, IC27, the MOS ROM'
             CHECK(s.supports_rom);
             CHECK_FALSE(s.supports_ram);
             CHECK_FALSE(s.supports_empty);
+        } else if (slot < 4) {
+            // A cartridge slot's: a cartridge fills it, not --sideways.
+            CHECK_FALSE(s.supports_rom);
+            CHECK_FALSE(s.supports_ram);
+            CHECK(s.supports_empty);
         } else {
             CHECK(s.supports_rom);
             CHECK(s.supports_empty);
@@ -493,4 +500,124 @@ TEST_CASE("Master 128 an empty Tube reads as the stale bus on either side",
     CHECK(hw->read(0xFEE0) == 0x20);
     hw->write(0xFE34, HW::ACCCON_ITU);
     CHECK(hw->read(0xFEE0) == 0x20);
+}
+
+namespace {
+
+// A FRED device on the external 1 MHz bus: answers &FC40 with &5E and
+// remembers what was written.
+struct FredDevice final : OneMHzBusDevice {
+    uint8_t written = 0;
+    int writes = 0;
+    uint8_t read(uint16_t) override { return 0x5E; }
+    void write(uint16_t, uint8_t value) override { written = value; ++writes; }
+};
+
+// A cartridge that answers each of its two banks with its own byte, and
+// takes writes on bank 1 only (as if half RAM).
+struct TwoByteCartridge final : SidewaysBankProvider {
+    uint8_t bank1 = 0xB1;
+    uint8_t read_bank(uint8_t bank, uint16_t) override { return bank ? bank1 : 0xB0; }
+    uint8_t peek_bank(uint8_t bank, uint16_t) const override { return bank ? bank1 : 0xB0; }
+    void write_bank(uint8_t bank, uint16_t, uint8_t value) override {
+        if (bank) bank1 = value;
+    }
+    SlotInfo bank_info(uint8_t bank) const override {
+        return {bank ? SlotType::Ram : SlotType::Rom, true, bank ? "upper" : "lower", false};
+    }
+};
+
+}  // namespace
+
+TEST_CASE("Master 128 IFJ sends FRED and JIM to the empty cartridge bus",
+          "[master128][hardware][ifj]") {
+    auto hw = std::make_unique<HW>();
+    hw->main_ram.write(0x7C00, 0x20);
+    hw->note_video_fetch(VideoFetch{0x2000, 0});
+    FredDevice device;
+    hw->one_mhz_bus().claim_addresses(0x40, 0x47, device);
+
+    CHECK(hw->read(0xFC40) == 0x5E);  // IFJ clear: the external 1 MHz bus
+    hw->write(0xFC40, 0x12);
+    CHECK(device.writes == 1);
+
+    hw->write(0xFE34, HW::ACCCON_IFJ);
+    CHECK(hw->read(0xFC40) == 0x20);  // the cartridge bus: nothing there
+    CHECK(hw->read(0xFD00) == 0x20);
+    hw->write(0xFC40, 0x34);
+    CHECK(device.writes == 1);        // the external bus is not reached
+}
+
+TEST_CASE("Master 128 modem connector: &FE80-&FE9F, 16 registers mirrored, unfitted",
+          "[master128][hardware][modem]") {
+    auto hw = std::make_unique<HW>();
+    hw->main_ram.write(0x7C00, 0x20);
+    hw->note_video_fetch(VideoFetch{0x2000, 0});
+    CHECK(hw->read(0xFE80) == 0x20);
+    CHECK(hw->read(0xFE90) == 0x20);
+    CHECK(hw->read(0xFE9F) == 0x20);
+    CHECK(hw->is_1mhz_access(0xFE80));
+    CHECK(hw->is_1mhz_access(0xFE9F));
+}
+
+TEST_CASE("Master 128 LK18 and LK19 East give 32K ROM sockets for banks 4-7",
+          "[master128][hardware][links]") {
+    HW::MotherboardLinks links;
+    CHECK_FALSE(links.parse("LK18", "east"));
+    CHECK(links.parse("lk20", "east"));
+    CHECK(links.parse("lk19", "north"));
+    const auto topo = HW::slot_topology(links);
+    for (int slot : {4, 5}) {
+        const auto* spec = topo.find_socket_for_slot(slot);
+        REQUIRE(spec);
+        CHECK(spec->supports_rom);
+        CHECK_FALSE(spec->supports_ram);
+        CHECK(spec->label.find("IC41") != std::string::npos);
+    }
+    CHECK(topo.find_socket_for_slot(6)->supports_ram);  // LK19 still West
+
+    auto hw = std::make_unique<HW>();
+    hw->apply_motherboard_links(links);
+    CHECK(hw->sideways.bank_type(4) == SlotType::Empty);
+    CHECK(hw->sideways.bank_type(5) == SlotType::Empty);
+    CHECK(hw->sideways.bank_type(6) == SlotType::Ram);
+    std::vector<uint8_t> rom(0x4000, 0x44);
+    hw->load_sideways_rom(4, rom.data(), rom.size(), "low.rom");
+    hw->write(0xFE30, 4);
+    CHECK(hw->read(0x8000) == 0x44);
+    const auto described = links.describe();
+    REQUIRE(described.size() == 2);
+    CHECK(described[0].value == "east");
+    CHECK(described[1].value == "west");
+}
+
+TEST_CASE("Master 128 a cartridge provides its slot's two banks, chosen by ROMQA",
+          "[master128][hardware][cartridge]") {
+    auto hw = std::make_unique<HW>();
+    hw->main_ram.write(0x7C00, 0x20);
+    hw->note_video_fetch(VideoFetch{0x2000, 0});
+    TwoByteCartridge cartridge;
+    hw->cartridge_front.fit(cartridge);
+
+    hw->write(0xFE30, 2);
+    CHECK(hw->read(0x8000) == 0xB0);
+    hw->write(0xFE30, 3);             // ROMQA set: the odd bank
+    CHECK(hw->read(0xBFFF) == 0xB1);
+    hw->write(0x8000, 0x77);          // the provider takes the write
+    CHECK(cartridge.bank1 == 0x77);
+    CHECK(hw->sideways.peek_bank(3, 0) == 0x77);
+    CHECK(hw->slot_info(2).image_name == "lower");
+    CHECK(hw->slot_info(3).type == SlotType::Ram);
+    CHECK(hw->sideways.bank_type(0) == SlotType::Empty);  // the rear slot is empty
+    hw->write(0xFE30, 0);
+    CHECK(hw->read(0x8000) == 0x20);
+
+    hw->cartridge_front.remove();
+    hw->write(0xFE30, 2);
+    CHECK(hw->read(0x8000) == 0x20);  // out: empty, the stale bus
+
+    // SidewaysService may not change a cartridge bank at run time.
+    REQUIRE(hw->slot_change_refusal(1));
+    CHECK(hw->slot_change_refusal(1)->find("rear cartridge slot") != std::string::npos);
+    CHECK_FALSE(hw->slot_change_refusal(4));
 }

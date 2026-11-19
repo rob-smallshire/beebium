@@ -23,6 +23,7 @@
 #include "SerialPort.hpp"
 #include "UserPort.hpp"
 #include "../tube/TubeSocket.hpp"
+#include "CartridgeSlot.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -71,6 +72,13 @@ public:
     // ExtensionRegistry around each init(). It chooses which Tube
     // get<TubeSocket>() is: the internal one for "internal-tube".
     void set_placement(std::string placement) { placement_ = std::move(placement); }
+
+    // The machine's cartridge slots (the Master's), which get<CartridgeSlot>()
+    // chooses between by placement: cartridge-rear or cartridge-front.
+    void set_cartridge_slots(CartridgeSlot* rear, CartridgeSlot* front) {
+        cartridge_rear_ = rear;
+        cartridge_front_ = front;
+    }
     const std::string& placement() const { return placement_; }
 
     // Type-safe port handle access. get<ControllerRegistry>() is the
@@ -126,6 +134,13 @@ public:
                     "ExtensionContext: analogue-port not available on this machine");
             }
             return *analogue_port_;
+        } else if constexpr (std::is_same_v<T, CartridgeSlot>) {
+            CartridgeSlot* slot = cartridge_slot_for_placement();
+            if (!slot) {
+                throw std::runtime_error(
+                    "ExtensionContext: no cartridge slot '" + placement_ + "' on this machine");
+            }
+            return *slot;
         } else if constexpr (std::is_same_v<T, ControllerRegistry>) {
             if (!controller_registry_) {
                 throw std::runtime_error(
@@ -154,6 +169,8 @@ public:
             return audio_source_port_ != nullptr;
         } else if constexpr (std::is_same_v<T, AnaloguePort>) {
             return analogue_port_ != nullptr;
+        } else if constexpr (std::is_same_v<T, CartridgeSlot>) {
+            return cartridge_slot_for_placement() != nullptr;
         } else if constexpr (std::is_same_v<T, ControllerRegistry>) {
             return controller_registry_ != nullptr;
         } else {
@@ -206,7 +223,15 @@ private:
     AnaloguePort* analogue_port_;
     ControllerRegistry* controller_registry_;
     TubeSocket* internal_tube_socket_ = nullptr;
+    CartridgeSlot* cartridge_rear_ = nullptr;
+    CartridgeSlot* cartridge_front_ = nullptr;
     std::string placement_;
+
+    CartridgeSlot* cartridge_slot_for_placement() const {
+        if (placement_ == "cartridge-rear") return cartridge_rear_;
+        if (placement_ == "cartridge-front") return cartridge_front_;
+        return nullptr;
+    }
     std::unordered_map<std::string, PeripheralExtension*> providers_;
 };
 

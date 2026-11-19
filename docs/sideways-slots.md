@@ -99,10 +99,23 @@ capability:
 | Model B with ROM/RAM board | `true` (fantasy hot-swap test bed) |
 | Model B with ATPL Sidewise | `false` (real-hardware-faithful) |
 | Model B with Integra-B | `false` (real-hardware-faithful) |
+| Master 128 | `false`; its cartridge banks are an extension's (below) |
 
-Future Master 128 cartridge slots will be `runtime_configurable=true`
-to model cartridge insertion/removal during a session - the closest
-real-hardware analogue to runtime reconfiguration.
+The Master 128's cartridge slots are not runtime-configurable sockets. They
+are extension attachment points, `cartridge-rear` (banks 0 and 1) and
+`cartridge-front` (banks 2 and 3), and a cartridge is an extension instance
+placed at one of them (`at`). The cartridge provides the slot's two banks: it
+fits itself to the slot as a `SidewaysBankProvider`
+(`devices/SidewaysBankProvider.hpp`, `extension/CartridgeSlot.hpp`), and from
+then on the sideways memory, the debugger and `SidewaysService` ask it for
+those banks' contents, which it holds itself; ROMSEL bit 0 (ROMQA) chooses
+between the two. `SidewaysService` reports the banks with the cartridge's
+image names, read only: `ConfigureSlot` on them is refused with a sentence
+saying how to fit a cartridge. A cartridge is changed with the machine
+relaunched, as Acorn told owners to change one with the power off. The
+built-in `rom-cartridge` (one or two 16K ROMs) is the simplest provider; a RAM
+cartridge would be a provider taking writes, and a cartridge decoding FRED and
+JIM on the cartridge bus would add its bus handlers to the same extension.
 
 ### Motherboard links
 
@@ -434,7 +447,9 @@ that was confusion with the Model B's links of the same number.
 
 ### Master 128
 
-Cartridge slots map into sideways space and were swapped during a
-session in practice. When Master 128 support lands, the cartridge
-sockets will use `runtime_configurable=true` to model cartridge
-insertion/removal through `ConfigureSlot`.
+Banks 0-3 are the two cartridge slots, which cartridge extensions provide
+(see `runtime_configurable` above); banks 4-7 sideways RAM; bank 8 the IC27
+ROM socket; banks 9-15 the MOS ROM's sideways parts, locked. Links LK18 and
+LK19 (`--motherboard-link lk18=east`, `lk19=east`) turn banks 4/5 and 6/7
+from sideways RAM (West, as shipped) into the halves of a 32K ROM in IC41 and
+IC37, filled with `--sideways`.

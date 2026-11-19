@@ -28,8 +28,9 @@ from pathlib import Path
 import pytest
 
 from beebium.client import Beebium
-from beebium.client.exceptions import ServerNotFoundError
+from beebium.client.exceptions import BeebiumError, ServerNotFoundError
 from beebium.client.installation import ServerInstallation
+from beebium.client.sideways import SlotType
 
 VARIANT = "master-128"
 PRESET = "master-128"
@@ -247,3 +248,53 @@ def test_a_model_b_has_no_internal_tube(executable_filepath: Path) -> None:
                             capture_output=True, text=True, timeout=60)
     assert result.returncode != 0
     assert "internal-tube" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Cartridges, IFJ, LK18/LK19 (step 6)
+# ---------------------------------------------------------------------------
+
+REPO_ROMS_DIRPATH = Path(__file__).parents[3] / "roms"
+
+
+def test_a_rom_cartridge_shows_its_banks_read_only(launch_bbc) -> None:
+    """A 16K ROM cartridge in the rear slot answers on banks 0 and 1, which
+    SidewaysService shows with the cartridge's image and will not change."""
+    rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
+    bbc = launch_bbc(preset=PRESET, variant=VARIANT,
+                     extra_args=["--rom-cartridge", f"low={rom}"])
+    _booted(bbc)
+    status = bbc.sideways.get_slot_status()
+    for bank in (0, 1):
+        socket = status.find_socket_for_slot(bank)
+        assert socket is not None
+        assert socket.type == SlotType.ROM
+        assert socket.populated
+        assert socket.image_filepath == str(rom)
+    assert not status.find_socket_for_slot(2).populated  # the front slot is empty
+    with pytest.raises(BeebiumError, match="rear cartridge slot"):
+        bbc.sideways.configure_slot(0, SlotType.EMPTY)
+    # The MOS sees the cartridge's ROM: *ROMS lists it in bank 1.
+    screen = _command(bbc, "*ROMS", "ROM 1")
+    assert re.search(r"ROM\s+1\s+BASIC", screen), screen
+
+
+def test_a_cartridge_in_the_front_slot(launch_bbc) -> None:
+    rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
+    bbc = launch_bbc(preset=PRESET, variant=VARIANT,
+                     extra_args=["--rom-cartridge", f"low={rom}:at=cartridge-front"])
+    _booted(bbc)
+    status = bbc.sideways.get_slot_status()
+    assert status.find_socket_for_slot(2).populated
+    assert not status.find_socket_for_slot(0).populated
+
+
+def test_lk18_east_takes_a_rom_in_banks_4_and_5(launch_bbc) -> None:
+    rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
+    bbc = launch_bbc(preset=PRESET, variant=VARIANT,
+                     extra_args=["--motherboard-link", "lk18=east",
+                                 "--sideways", f"slot=4:type=rom:image={rom}"])
+    _booted(bbc)
+    status = bbc.sideways.get_slot_status()
+    assert status.find_socket_for_slot(4).type == SlotType.ROM
+    assert status.find_socket_for_slot(6).type == SlotType.RAM

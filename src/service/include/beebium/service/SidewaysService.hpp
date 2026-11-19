@@ -308,6 +308,16 @@ public:
             }
             uint8_t slot = static_cast<uint8_t>(slot_num);
 
+            // A bank the machine says may not change at run time, with its
+            // reason (the Master's cartridge banks, which a cartridge fills).
+            if constexpr (requires(const Memory& m) { m.slot_change_refusal(uint8_t{}); }) {
+                if (auto refusal = machine_.state().memory.slot_change_refusal(slot)) {
+                    response->set_success(false);
+                    response->set_error(*refusal);
+                    return grpc::Status::OK;
+                }
+            }
+
             // Reject runtime configuration of sockets the topology marks as
             // not runtime_configurable. On real hardware (Model B, Model B+,
             // Master 128 internal sockets) this is a power-off chip-swap

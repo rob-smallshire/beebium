@@ -509,6 +509,11 @@ std::vector<std::string> machine_attachment_points() {
     if constexpr (beebium::HasAnaloguePort<Memory>) points.push_back("analogue-port");
     if constexpr (beebium::HasTubeSocket<Memory>) points.push_back("tube");
     if constexpr (requires(Memory& m) { m.internal_tube_socket; }) points.push_back("internal-tube");
+    if constexpr (requires(Memory& m) { m.cartridge_rear; m.cartridge_front; }) {
+        points.push_back("cartridge-rear");
+        points.push_back("cartridge-front");
+    }
+    if constexpr (requires { Memory::HAS_MODEM_CONNECTOR; }) points.push_back("modem-connector");
     if constexpr (beebium::HasSerialPort<Memory>) points.push_back("serial-port");
     return points;
 }
