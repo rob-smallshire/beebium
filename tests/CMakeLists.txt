@@ -2596,3 +2596,17 @@ if(MSVC)
         endif()
     endforeach()
 endif()
+
+# BBC Master 128: the paging rules, and the clock on the System VIA
+add_executable(test_master_128_hardware test_master_128_hardware.cpp)
+target_link_libraries(test_master_128_hardware PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_master_128_hardware)
+
+add_executable(test_master_128_clock test_master_128_clock.cpp)
+target_link_libraries(test_master_128_clock PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_master_128_clock)
+
+add_executable(test_master_128_boot test_master_128_boot.cpp)
+target_link_libraries(test_master_128_boot PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_master_128_boot PRIVATE BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}")
+catch_discover_tests(test_master_128_boot)

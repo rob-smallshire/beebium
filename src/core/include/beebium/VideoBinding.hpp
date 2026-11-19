@@ -62,6 +62,13 @@ struct VideoBinding {
             }
         }();
 
+        // A machine whose unmapped reads return the byte the video system last
+        // fetched (the Master's stale data bus) is told of every fetch,
+        // whether or not the picture is rendered.
+        if constexpr (requires { hardware.note_video_fetch(output); }) {
+            hardware.note_video_fetch(output);
+        }
+
         // Always update VSYNC for system VIA timing (CA1 line)
         hardware.system_via_peripheral.set_vsync(output.vsync != 0);
 

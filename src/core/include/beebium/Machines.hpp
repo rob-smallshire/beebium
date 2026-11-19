@@ -22,6 +22,7 @@
 #include "ModelBAtplSidewiseHardware.hpp"
 #include "ModelBWatfordRomRamHardware.hpp"
 #include "ModelBIntegraBHardware.hpp"
+#include "Master128Hardware.hpp"
 
 namespace beebium {
 
@@ -63,6 +64,11 @@ using ModelBPlus = Machine<Nmos6502, ModelBPlusHardware>;
 // BBC Model B+ 128K: as Model B+ 64K plus four 16 KiB banks of integral
 // sideways RAM (AN 030 W/X/Y/Z; W=slot 12, X=slot 13, Y/Z opposite IC71).
 using ModelBPlus128K = Machine<Nmos6502, ModelBPlus128KHardware>;
+
+// BBC Master 128: 65SC12 (the CMOS 6502 without the Rockwell bit
+// instructions) + Master 128 hardware (LYNNE, HAZEL, ANDY, sideways RAM
+// banks 4-7, the MOS 3.20 ROM's banks 9-15, the clock and CMOS RAM).
+using Master128 = Machine<Cmos65C02, Master128Hardware>;
 
 } // namespace beebium
 

@@ -34,6 +34,25 @@ concept HasOpcodeFetchLatch = requires(T& m, uint16_t addr, uint8_t val) {
 };
 
 
+// A memory policy with its own map of the 1 MHz devices, as the Master's I/O
+// controller has: it says which accesses wait for the 1 MHz clock.
+template<typename T>
+concept HasOneMhzMap = requires(const T& m, uint16_t addr) {
+    { m.is_1mhz_access(addr) } -> std::same_as<bool>;
+};
+
+// Whether an access to `addr` waits for the 1 MHz clock: by the policy's own
+// map where it has one, else by the Model B's (BusStretching.hpp).
+template<typename MemoryPolicy>
+bool is_1mhz_access_for(const MemoryPolicy& memory, uint16_t addr) {
+    if constexpr (HasOneMhzMap<MemoryPolicy>) {
+        return memory.is_1mhz_access(addr);
+    } else {
+        (void)memory;
+        return is_1mhz_access(addr);
+    }
+}
+
 // Instruction callback for PC histogram
 using CpuInstructionCallback = std::function<void(uint16_t pc)>;
 
@@ -165,7 +184,7 @@ private:
         //
         // We model this by ticking VIAs for the stretch amount BEFORE
         // completing the memory read/write.
-        if (is_1mhz_access(addr)) {
+        if (is_1mhz_access_for(memory, addr)) {
             stretch_count_ = stretch_cycles(current_cycle_);
             needs_stretch_ = true;
 

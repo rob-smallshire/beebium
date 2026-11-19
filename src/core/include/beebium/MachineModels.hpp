@@ -39,10 +39,11 @@ inline constexpr MachineModel kModelBAtplSidewise{"model-b-atpl-sidewise",
 inline constexpr MachineModel kModelBWatfordRomRam{"model-b-watford-rom-ram",
                                                    "BBC Model B with Watford ROM/RAM board"};
 inline constexpr MachineModel kModelBIntegraB{"model-b-integra-b", "BBC Model B with Integra-B"};
+inline constexpr MachineModel kMaster128{"master-128", "BBC Master 128"};
 
 inline constexpr std::array kAll{kModelB,          kModelBPlus,          kModelBPlus128K,
                                  kModelBRomRam,    kModelBAtplSidewise,  kModelBWatfordRomRam,
-                                 kModelBIntegraB};
+                                 kModelBIntegraB,  kMaster128};
 
 // The model with `id`, or nullptr when there is none.
 constexpr const MachineModel* find(std::string_view id) {
