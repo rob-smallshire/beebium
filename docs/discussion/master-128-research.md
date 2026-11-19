@@ -87,9 +87,12 @@ The B+'s rule is different (its VDU-code window also covers &A000-&AFFF while AN
 in), and the Integra-B's different again, so the Master gets its own policy.
 
 The 128K MOS ROM: the first 16K is the MOS at &C000-&FFFF, the other seven 16K parts are banks
-9 to 15. Beebium has no manifest beyond DFS ROMs and no MOS 3.20 image in `roms/`; images exist
-on this machine in the b-em and beebjit trees (MOS 3.20 and 3.50), which is Rob's call to
-supply.
+9 to 15. Both MOS 3.20 and MOS 3.50 are in `roms/`, split into their eight banks and named by
+the convention (`docs/deployment.md` tabulates them with bank numbers and versions). The Terminal
+ROM in bank 15 carries MOS overflow code and strings and so exists in a per-MOS form; the other
+six sideways ROMs differ in version between the two releases. The 3.20 MOS half is the mdfs.net
+image with Acorn's credits in the bytes under the I/O region, where B-Em's copy has &FF. Each
+MOS is to be a distinct preset. Beebium has no manifest beyond DFS ROMs.
 
 ### 1.2 SHEILA differences
 
@@ -362,7 +365,7 @@ New or changed, by component:
 | Tube | internal and external scopes selected by ITU; a second attachment id, or one socket with an internal/external position; host IRQ gated by the selection | `TubeSocket`, attachment points |
 | 1 MHz bus and cartridges | FRED/JIM routed by IFJ between the external port and the cartridge bus; cartridge slots as runtime-configurable sideways pairs that also own FRED/JIM pages and see IRQ, NMI and the audio mixer; the modem connector as a third attachment point decoding nMODEM at &FE80-&FE9F on the internal 1 MHz bus | `OneMHzBusPort`, `SlotTopology`, attachment points |
 | Sideways topology | banks 9-15 ROM from the MOS image, locked; 4-7 RAM, or 32K ROM pairs at IC37/IC41 via LK18/LK19; 8 socket IC27; 0-3 cartridges | B+ 128K W/X/Y/Z, motherboard links |
-| ROMs | load a 128K MOS 3.20 image and split it; a manifest entry by SHA-1; ship no image until Rob supplies one | DFS manifest pattern |
+| ROMs | MOS 3.20 and 3.50 as eight 16K files each in `roms/`, one preset per MOS; the MOS half as the policy's default MOS ROM and banks 9-15 as locked default sideways images; a manifest entry by SHA-1 if wanted | DFS manifest pattern |
 | Debugger | the reserved names `accd`, `acce`, `accx`, `accy`, `accitu`, `accifj`, `acctst`, `accirr`, `shadow_access`, `bank`, `romsel` | `docs/discussion/paging-qualified-breakpoints.md` |
 | Identity | OSBYTE 0 = 3 comes from the MOS; `describe-preset-schema` and `machine.json` need the model | model list |
 | Packaging | server target, CI artifact lists and smokes, Scoop, the Python server package's variant list (which today names only four of seven), the Python client's `VARIANTS`, CLAUDE.md | existing lists |
@@ -376,8 +379,8 @@ New or changed, by component:
    nMODEM) but with no fittings until the Turbo board, a cartridge or an internal SCSI board is
    wanted. The internal SCSI at &FE80 is the natural first modem-connector fitting, since the
    SCSI extension exists.
-2. **ROM provision.** MOS 3.20 is not in `roms/`; Rob supplies the image, and whether 3.50 is a
-   second preset.
+2. **ROM provision.** Decided: MOS 3.20 and 3.50 are both in `roms/` as per-bank files, and
+   each is a distinct Master preset.
 3. **CMOS seed.** MOS 3.20's own R-reset state is all zeros and boots to "This is not a
    language", so Beebium should seed a working configuration: Acorn's Welcome Guide settings
    with FILE 9 or 13, or MOS 3.50's table. The persistence unit follows the Integra-B's, and

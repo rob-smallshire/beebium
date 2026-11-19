@@ -27,12 +27,35 @@ ROMs use the format `<supplier>-<product>_<version>.rom`:
 | `acorn-dnfs_1_00.rom` | Acorn DFS 1.00 + NFS 3.40 (8271) | 16 KB |
 | `acorn-dnfs_1_20.rom` | Acorn DFS 1.20 + NFS 3.60 (8271) | 16 KB |
 | `acorn-dnfs_3_02.rom` | Acorn DFS 1.22 + NFS 3.62 (8271) | 16 KB |
+| `acorn-mos_3_20.rom` | MOS 3.20 for BBC Master 128 (the MOS half of the 128K ROM) | 16 KB |
+| `acorn-dfs_2_24.rom` | DFS 2.24, Master MOS 3.20 bank 9 | 16 KB |
+| `acornsoft-viewsheet_b1_0.rom` | ViewSheet B1.0, Master MOS 3.20 bank 10 | 16 KB |
+| `acorn-edit_1_00.rom` | Edit 1.00, Master MOS 3.20 bank 11 | 16 KB |
+| `bbc-basic_4.rom` | BBC BASIC IV, Master MOS 3.20 bank 12 | 16 KB |
+| `acorn-adfs_1_50.rom` | ADFS 1.50, Master MOS 3.20 bank 13 | 16 KB |
+| `acornsoft-view_b3_0.rom` | View B3.0, Master MOS 3.20 bank 14 | 16 KB |
+| `acorn-terminal_1_20_mos_3_20.rom` | Terminal 1.20 with MOS 3.20's overflow code, bank 15 | 16 KB |
+| `acorn-mos_3_50.rom` | MOS 3.50 for BBC Master 128 (the MOS half of the 128K ROM) | 16 KB |
+| `acorn-dfs_2_45.rom` | DFS 2.45, Master MOS 3.50 bank 9 | 16 KB |
+| `acornsoft-viewsheet_b1_01.rom` | ViewSheet B1.01, Master MOS 3.50 bank 10 | 16 KB |
+| `acorn-edit_1_50r.rom` | Edit 1.50r, Master MOS 3.50 bank 11 | 16 KB |
+| `bbc-basic_4r32.rom` | BBC BASIC IV r32, Master MOS 3.50 bank 12 | 16 KB |
+| `acorn-adfs_2_03.rom` | ADFS 2.03, Master MOS 3.50 bank 13 | 16 KB |
+| `acornsoft-view_b3_3.rom` | View B3.3, Master MOS 3.50 bank 14 | 16 KB |
+| `acorn-terminal_1_20_mos_3_50.rom` | Terminal 1.20 with MOS 3.50's overflow code, bank 15 | 16 KB |
 
 The combined DFS and NFS ROMs ("DNFS") are named by their DFS component
 version. `acorn-dnfs_3_02.rom` is the exception: it is the DFS 1.22 release,
 and keeps its older name for compatibility with existing presets and docs.
 The 0.9x and 1.xx DFS releases need an Intel 8271 disc controller
 (`--fdc acorn-8271`); DFS 2.26 needs the WD1770 (`--fdc acorn-1770`).
+
+The Master 128's 128K MOS ROM is kept as its eight 16K banks: the MOS itself and
+the seven sideways ROMs the MOS image holds in banks 9 to 15. The two Terminal
+ROMs share a version number but are not interchangeable, because bank 15 also
+holds code and messages belonging to the MOS it shipped with; their names carry
+the MOS release. Versions are the ROMs' own header strings (ViewSheet and View
+are Acornsoft, hence the `B` prefix).
 
 ### Default ROMs per Machine
 
