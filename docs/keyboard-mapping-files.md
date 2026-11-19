@@ -215,6 +215,33 @@ and the key its users have.
 not, it names the namespace of the entry's native identifier. A 3.4 entry
 may carry `when` as well, though it rarely needs to.
 
+### 3.6 Keys the connected machine does not have
+
+An entry applies only where the connected machine has the BBC key it names:
+a key the machine's catalogue (KeyboardService's `GetAllKeyMappings`) does
+not list makes the entry not apply, exactly as a `when` that does not hold.
+It is not for this machine; resolution (section 4) continues as if the entry
+were absent, the keyboard view does not show it, and a client keeps it
+untouched when it writes the file. It is not declined.
+
+This is how one mapping file serves every model. The Master 128 has a
+numeric keypad whose keys (`Keypad 0` to `Keypad Return`, 3.3) a Model B
+does not have. Logical maps the host's numeric keypad to them:
+
+```json
+{ "code": "Numpad7", "bbc": { "key": "Keypad 7" } }
+```
+
+On a Master the entry wins rule 1 of section 4 for Numpad7. On a Model B it
+does not apply, so Numpad7 falls through to character mapping and types 7,
+as it did before the entry existed. Without this rule the entry would match
+rule 1 and resolve to nothing, and a Model B user's keypad would go dead.
+
+An entry naming a key no machine has (a misspelling) behaves the same way on
+every machine: it never applies. A client may tell the user about an entry
+that applies nowhere it has seen, as latitude; it must not report it as
+declined, since the next machine may have the key.
+
 ## 4. Resolution
 
 Given a host key event with its physical `code` and the host modifiers held
@@ -227,7 +254,8 @@ own press already carries it). Clients derive the set from their held-key
 tracking, not from the event's modifier flags.
 
 1. **Physical entries for this `code`** (and this platform's 3.4 entries for
-   this native key), among the entries that apply here (3.5), considering
+   this native key), among the entries that apply here (3.5, and 3.6 for the
+   connected machine), considering
    only entries whose `with` set is a subset of the held modifiers (an entry
    needing Shift does not match without Shift):
    - an entry whose `with` set equals the held modifiers exactly;
@@ -295,15 +323,17 @@ labels for built-in mappings as well as user ones (client specification 7.4, #23
 ## 6. Conformance
 
 - A client reads any version 2 file, applies the entries it can, preserves
-  what it cannot (3.4, 3.5, unknown fields) when writing, and reports, not
-  silently drops, entries it declined (3.2). An entry whose `when` does not
-  hold is not declined; it is simply not for this client.
+  what it cannot (3.4, 3.5, 3.6, unknown fields) when writing, and reports,
+  not silently drops, entries it declined (3.2). An entry whose `when` does
+  not hold, or whose BBC key the connected machine lacks, is not declined; it
+  is simply not for this client or this machine.
 - A client writes version 2 only. It never writes a native code for a key
   that has a `code` value.
 - A shared corpus under `tests/assets/keyboard-mappings/` (the built-ins and
   a file exercising every rule above, 3.5 included, with the expected
-  resolution for a list of host events, each list stating the platform and
-  the attached keyboard classes it is resolved under) is the conformance
+  resolution for a list of host events, each list stating the platform, the
+  attached keyboard classes and the connected machine's key catalogue it is
+  resolved under) is the conformance
   test: every client's tests load it and must resolve identically. The Linux client's `KeyboardInput` tests and
   the macOS `KeyboardMapping` tests both run it.
 
