@@ -236,6 +236,9 @@ public:
 
     void set_side(uint8_t side) { selected_side_ = side & 1; }
     void set_drive(uint8_t drive) { selected_drive_ = drive & 1; }
+    // A select line with no drive on it (the Master's DS2): the controller
+    // sees no drive until another is selected.
+    void select_no_drive() { selected_drive_ = NO_DRIVE; }
     void set_density(Density density) { density_ = density; }
 
     // Convenience: set_density from bool (true = MFM, false = FM).
@@ -1238,7 +1241,9 @@ private:
     bool intrq_ = false;
 
     // Drive connections
-    std::array<DiscDrive*, 2> drives_{nullptr, nullptr};
+    // Drives 0 and 1, and NO_DRIVE's empty position.
+    static constexpr uint8_t NO_DRIVE = 2;
+    std::array<DiscDrive*, 3> drives_{nullptr, nullptr, nullptr};
 
     // External control
     uint8_t selected_side_ = 0;

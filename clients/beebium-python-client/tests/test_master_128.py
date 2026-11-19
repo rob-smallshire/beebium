@@ -138,3 +138,51 @@ def _find(node, key: str):
         if found is not None:
             return found
     return None
+
+
+# ---------------------------------------------------------------------------
+# The 1770 (step 3 of docs/plans/master-128-round-1.md)
+# ---------------------------------------------------------------------------
+
+
+def _command(bbc: Beebium, line: str, then_containing: str, seconds: float = 20.0) -> str:
+    bbc.keyboard.type("CLS\r")
+    assert bbc.run_until_or_timeout(lambda: _at_prompt(bbc, ">"), 10.0), _screen(bbc)
+    bbc.keyboard.type(line + "\r")
+    assert bbc.run_until_or_timeout(
+        lambda: _at_prompt(bbc, then_containing) and _screen(bbc).strip() != ">", seconds), \
+        _screen(bbc)
+    return _screen(bbc)
+
+
+def test_adfs_catalogues_a_floppy(launch_bbc, tmp_path: Path) -> None:
+    bbc = launch_bbc(preset=PRESET, variant=VARIANT)
+    _booted(bbc)
+    disc = bbc.disc.create_disc("Acorn ADFS S 160K", tmp_path / "blank.ads")
+    bbc.disc.drive(0).insert(disc)
+    _command(bbc, "*MOUNT 0", ">")
+    screen = _command(bbc, "*CAT", "Drive:0")
+    assert re.search(r"Dir\.\s*\$", screen), screen
+
+
+def test_dfs_catalogues_saves_and_loads(launch_bbc, tmp_path: Path) -> None:
+    bbc = launch_bbc(preset=PRESET, variant=VARIANT)
+    _booted(bbc)
+    disc = bbc.disc.create_disc("Acorn DFS 80T SS 200K", tmp_path / "blank.ssd")
+    bbc.disc.drive(0).insert(disc)
+    _command(bbc, "*DISC", ">")
+    _command(bbc, '10 PRINT "MASTER DISC"', ">")
+    _command(bbc, 'SAVE "PROG"', ">")
+    screen = _command(bbc, "*CAT", "PROG")
+    assert re.search(r"Drive\s*:?\s*0", screen), screen
+    _command(bbc, "NEW", ">")
+    _command(bbc, 'LOAD "PROG"', ">")
+    screen = _command(bbc, "LIST", "MASTER DISC")
+    assert '10 PRINT "MASTER DISC"' in screen, screen
+
+
+def test_the_fdc_name_placeholder_names_the_1770(launch_bbc) -> None:
+    bbc = launch_bbc(preset=PRESET, variant=VARIANT)
+    preview = bbc.system.preview_machine_description("Master {fdc-controller}")
+    assert preview.description == "Master WD1770"
+    assert preview.report.inapplicable_keys == ()

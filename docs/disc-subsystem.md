@@ -416,7 +416,24 @@ The Acorn 1770 upgrade board wraps a WD1770 FDC with Acorn's control register la
 | 0x06 | WD1770 Sector | WD1770 Sector |
 | 0x07 | WD1770 Data | WD1770 Data |
 
-Control register bits match the Model B+ layout (see above).
+Control register bits match the Model B+ layout (see above). That is one of
+the controller's two latch layouts (`Acorn1770DiscController::LatchLayout`):
+
+| Bit | AcornBoard (Model B board, B+) | Master (Master 128) |
+|-----|--------------------------------|---------------------|
+| 0 | Drive 0 select | DS0, drive 0 select |
+| 1 | Drive 1 select | DS1, drive 1 select |
+| 2 | Side | RES, reset (active low) |
+| 3 | Density (1 = single) | DS2, a third drive select (no drive fitted) |
+| 4 | Motor (ignored) | SEL, side |
+| 5 | Reset (active low) | DDEN, density (1 = single) |
+| 6 | NMI enable (tracked) | - |
+
+The Master 128 has its 1770 on the motherboard, with no socket and no 8271:
+the latch is at 0xFE24-0xFE27, write only (a read returns the stale data bus,
+the byte the video system last fetched), the registers at 0xFE28-0xFE2B, and
+0xFE2C-0xFE2F is undecoded. `Master128Hardware` maps them itself through
+`write_latch`, `read_register` and `write_register`.
 
 ### Intel8271DiscController
 

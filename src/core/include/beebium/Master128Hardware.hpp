@@ -48,6 +48,8 @@
 #include "extension/AnaloguePort.hpp"
 #include "ClockBinding.hpp"
 #include "devices/VideoUla.hpp"
+#include "disc/Acorn1770DiscController.hpp"
+#include "disc/DiscDrive.hpp"
 #include "econet/EconetSocket.hpp"
 #include "cassette/CassetteDeck.hpp"
 #include "cassette/CassetteMotorLed.hpp"
@@ -86,10 +88,12 @@ struct DefaultSidewaysRom {
 //   ACCCON &FE34-&FE37  IRR TST IFJ ITU Y X E D (bit 7 to bit 0)
 //
 // SHEILA (section 1.2): the ADC at &FE18, the Video ULA at &FE20-&FE23 only,
-// ROMSEL and ACCCON, the VIAs, the ADLC at &FEA0, the Tube at &FEE0. The
-// 1770 (&FE24-&FE2B), INTOFF/INTON (&FE38/&FE3C), the modem connector
-// (&FE80-&FE9F) and &FEC0-&FEDF read as the stale data bus until something
-// is decoded there.
+// the 1770's drive control latch at &FE24-&FE27 (write only: a read is the
+// stale data bus) and its registers at &FE28-&FE2B, ROMSEL and ACCCON, the
+// VIAs, the ADLC at &FEA0, the Tube at &FEE0. &FE2C-&FE2F (undecoded, as
+// B-Em has it; unmeasured, research section 5 item 3), INTOFF/INTON
+// (&FE38/&FE3C), the modem connector (&FE80-&FE9F) and &FEC0-&FEDF read as
+// the stale data bus until something is decoded there.
 //
 // The clock (section 1.4): an MC146818 on the System VIA (see
 // MasterSystemViaPeripheral), its CMOS kept by its battery as the unit
@@ -218,6 +222,12 @@ public:
     // Registered after the lock LEDs and before the drives' (CassetteMotorLed.hpp).
     CassetteMotorLed cassette_motor_led{indicators};
 
+    // The 1770 on the motherboard, with the Master's latch layout, and its
+    // two drives. DS2, the latch's third select, has no drive.
+    Acorn1770DiscController disc_controller{Acorn1770DiscController::LatchLayout::Master};
+    DiscDrive disc_drive_0{indicators, "floppy-0-activity-led", "FDD 0", "568nm"};
+    DiscDrive disc_drive_1{indicators, "floppy-1-activity-led", "FDD 1", "568nm"};
+
     EconetSocket econet_socket;
     SerialSocket serial_socket;
 
@@ -259,6 +269,28 @@ public:
         void write(uint16_t, uint8_t) {}
     };
 
+    // The 1770's drive control latch (&FE24-&FE27): write only, so a read
+    // returns the stale data bus.
+    struct DiscLatchRegion {
+        Acorn1770DiscController& controller;
+        const uint8_t& stale;
+        uint8_t read(uint16_t) const { return stale; }
+        uint8_t peek(uint16_t) const { return stale; }
+        void write(uint16_t, uint8_t value) { controller.write_latch(value); }
+    };
+
+    // The WD1770's four registers (&FE28-&FE2B).
+    struct DiscRegisterRegion {
+        Acorn1770DiscController& controller;
+        uint8_t read(uint16_t offset) { return controller.read_register(static_cast<uint8_t>(offset)); }
+        uint8_t peek(uint16_t offset) const {
+            return controller.peek_register(static_cast<uint8_t>(offset));
+        }
+        void write(uint16_t offset, uint8_t value) {
+            controller.write_register(static_cast<uint8_t>(offset), value);
+        }
+    };
+
     // ROMSEL (&FE30-&FE33). Bits 4-6 read back as written: no hardware
     // measurement of ROMSEL readback exists (research section 5 item 2).
     struct RomselRegister {
@@ -280,6 +312,8 @@ public:
     SerialUlaRegion serial_ula_region_{serial_socket};
     EconetAdlcRegion econet_adlc_region_{econet_socket};
     StaleBusRegion stale_bus_region_{stale_bus_};
+    DiscLatchRegion disc_latch_region_{disc_controller, stale_bus_};
+    DiscRegisterRegion disc_register_region_{disc_controller};
     RomselRegister romsel_register{*this};
     AccconRegister acccon_register{*this};
 
@@ -294,7 +328,9 @@ public:
             make_region<0xFE10, 0xFE17, Mirror<0x07>>(std::declval<SerialUlaRegion&>()),
             make_region<0xFE18, 0xFE1F, Mirror<0x03>>(std::declval<Upd7002&>()),
             make_region<0xFE20, 0xFE23, Mirror<0x01>>(std::declval<VideoUla&>()),
-            make_region<0xFE24, 0xFE2F>(std::declval<StaleBusRegion&>()),
+            make_region<0xFE24, 0xFE27>(std::declval<DiscLatchRegion&>()),
+            make_region<0xFE28, 0xFE2B, Mirror<0x03>>(std::declval<DiscRegisterRegion&>()),
+            make_region<0xFE2C, 0xFE2F>(std::declval<StaleBusRegion&>()),
             make_region<0xFE30, 0xFE33, Mirror<0x03>>(std::declval<RomselRegister&>()),
             make_region<0xFE34, 0xFE37, Mirror<0x03>>(std::declval<AccconRegister&>()),
             make_region<0xFE38, 0xFE3F>(std::declval<StaleBusRegion&>()),
@@ -327,6 +363,8 @@ public:
         serial_socket.ula().set_deck(&cassette_deck);
         cassette_motor_led.attach(serial_socket.ula());
         tube_socket.set_last_bus_value_ptr(&stale_bus_);
+        disc_controller.attach_drive(0, &disc_drive_0);
+        disc_controller.attach_drive(1, &disc_drive_1);
         fit_sideways();
     }
 
@@ -516,6 +554,7 @@ public:
         sound_chip.reset();
         addressable_latch.reset();
         reset_paging();
+        disc_controller.reset(ResetCause::PowerOn);
         one_mhz_bus_.reset(ResetCause::PowerOn);
         econet_socket.reset();
         serial_socket.reset();
@@ -532,6 +571,7 @@ public:
         sound_chip.reset();
         addressable_latch.reset();
         reset_paging();
+        disc_controller.reset(ResetCause::Break);
         one_mhz_bus_.reset(ResetCause::Break);
         econet_socket.reset();
         serial_socket.reset();
@@ -572,12 +612,19 @@ public:
         return (acccon_ & ACCCON_IRR) ? static_cast<uint8_t>(devices | IRR_IRQ_BIT) : devices;
     }
 
-    // No disc controller yet: ticks the 1 MHz bus and the ADC.
+    // The 1770's NMI, then a 1 MHz tick of the 1770, the 1 MHz bus and the
+    // ADC. The NMI is sampled before the tick, so that a DRQ the CPU has just
+    // cleared makes an edge (see ModelBPlusHardware::poll_nmi).
     uint8_t poll_nmi() {
+        const uint8_t nmi = disc_controller.nmi_pending() ? 0x01 : 0x00;
+        disc_controller.tick();
         one_mhz_bus_.tick();
         make_clock_binding(analogue_converter_).tick_falling();
-        return 0;
+        return nmi;
     }
+
+    void set_spin_up_delay_enabled(bool enabled) { disc_controller.set_spin_up_delay_enabled(enabled); }
+    bool spin_up_delay_enabled() const { return disc_controller.spin_up_delay_enabled(); }
 
     // =========================================================================
     // Ports
@@ -855,7 +902,9 @@ private:
             make_region<0xFE10, 0xFE17, Mirror<0x07>>(serial_ula_region_),
             make_region<0xFE18, 0xFE1F, Mirror<0x03>>(analogue_converter_),
             make_region<0xFE20, 0xFE23, Mirror<0x01>>(video_ula),
-            make_region<0xFE24, 0xFE2F>(stale_bus_region_),
+            make_region<0xFE24, 0xFE27>(disc_latch_region_),
+            make_region<0xFE28, 0xFE2B, Mirror<0x03>>(disc_register_region_),
+            make_region<0xFE2C, 0xFE2F>(stale_bus_region_),
             make_region<0xFE30, 0xFE33, Mirror<0x03>>(romsel_register),
             make_region<0xFE34, 0xFE37, Mirror<0x03>>(acccon_register),
             make_region<0xFE38, 0xFE3F>(stale_bus_region_),

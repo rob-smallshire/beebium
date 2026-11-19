@@ -373,3 +373,20 @@ TEST_CASE("Master 128 Break clears ROMSEL and ACCCON", "[master128][hardware][re
     CHECK(hw->romsel() == 0);
     CHECK(hw->acccon() == 0);
 }
+
+TEST_CASE("Master 128 1770: the latch at &FE24 and the registers at &FE28",
+          "[master128][hardware][disc]") {
+    auto hw = std::make_unique<HW>();
+    hw->main_ram.write(0x7C00, 0x20);
+    hw->note_video_fetch(VideoFetch{0x2000, 0});
+    hw->write(0xFE24, 0x04 | 0x01);  // RES high, drive 0
+    CHECK(hw->disc_drive_0.selected());
+    CHECK(hw->disc_controller.control() == 0x05);
+    CHECK(hw->read(0xFE24) == 0x20);  // write only: the stale bus
+    CHECK(hw->read(0xFE27) == 0x20);
+    hw->write(0xFE29, 0x12);          // track register
+    CHECK(hw->read(0xFE29) == 0x12);
+    CHECK(hw->read(0xFE2A) == 0x01);  // sector register
+    CHECK(hw->read(0xFE2C) == 0x20);  // undecoded
+    CHECK(hw->read(0xFE2F) == 0x20);
+}

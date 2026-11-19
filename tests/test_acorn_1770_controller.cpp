@@ -236,3 +236,63 @@ TEST_CASE("Acorn1770DiscController reset", "[disc][acorn1770]") {
         CHECK(controller.read(0x06) == 0x01);  // Sector reset to 1
     }
 }
+
+// ---------------------------------------------------------------------------
+// The Master 128's latch layout (research section 1.3): DS0 bit 0, DS1 bit 1,
+// RES bit 2, DS2 bit 3, SEL (side) bit 4, DDEN bit 5.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Acorn1770DiscController Master latch selects drives 0 and 1, and DS2 none",
+          "[disc][acorn1770][master128]") {
+    Acorn1770DiscController controller(Acorn1770DiscController::LatchLayout::Master);
+    DiscDrive drive0;
+    DiscDrive drive1;
+    controller.attach_drive(0, &drive0);
+    controller.attach_drive(1, &drive1);
+    CHECK(controller.latch_layout() == Acorn1770DiscController::LatchLayout::Master);
+
+    controller.write_latch(0x04 | 0x01);  // RES high, DS0
+    CHECK(drive0.selected());
+    CHECK_FALSE(drive1.selected());
+    CHECK(controller.wd1770().selected_drive() == 0);
+
+    controller.write_latch(0x04 | 0x02);  // DS1
+    CHECK_FALSE(drive0.selected());
+    CHECK(drive1.selected());
+    CHECK(controller.wd1770().selected_drive() == 1);
+
+    controller.write_latch(0x04 | 0x08);  // DS2: a select with no drive
+    CHECK_FALSE(drive0.selected());
+    CHECK_FALSE(drive1.selected());
+    CHECK(controller.wd1770().selected_drive() == 2);
+}
+
+TEST_CASE("Acorn1770DiscController Master latch side and density",
+          "[disc][acorn1770][master128]") {
+    Acorn1770DiscController controller(Acorn1770DiscController::LatchLayout::Master);
+    DiscDrive drive0;
+    controller.attach_drive(0, &drive0);
+
+    controller.write_latch(0x04 | 0x01);  // DDEN 0: double density, side 0
+    CHECK(controller.wd1770().is_double_density());
+    CHECK(controller.wd1770().selected_side() == 0);
+
+    controller.write_latch(0x04 | 0x01 | 0x10 | 0x20);  // SEL side 1, DDEN 1: single
+    CHECK_FALSE(controller.wd1770().is_double_density());
+    CHECK(controller.wd1770().selected_side() == 1);
+}
+
+TEST_CASE("Acorn1770DiscController Master latch resets the 1770 as RES falls",
+          "[disc][acorn1770][master128]") {
+    Acorn1770DiscController controller(Acorn1770DiscController::LatchLayout::Master);
+    controller.write_latch(0x04);              // RES high
+    controller.write_register(1, 0x27);        // track register
+    REQUIRE(controller.read_register(1) == 0x27);
+    controller.write_latch(0x04 | 0x01);       // RES still high: nothing
+    CHECK(controller.read_register(1) == 0x27);
+    controller.write_latch(0x00);              // RES falls: reset
+    CHECK(controller.read_register(1) == 0x00);
+    // The registers are addressed directly and mirror every four.
+    CHECK(controller.peek_register(2) == 0x01);  // sector register
+    CHECK(controller.peek_register(6) == 0x01);
+}

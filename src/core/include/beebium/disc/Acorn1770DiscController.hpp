@@ -22,13 +22,13 @@
 
 namespace beebium {
 
-// Acorn 1770 DFS disc controller for BBC Model B
+// Acorn's 1770 disc interface: a WD1770 and Acorn's drive control latch.
 //
-// This implements the Acorn 1770 DFS upgrade board which was a common
-// aftermarket addition for the BBC Model B. The same layout is used
-// in the built-in disc controller on the Model B+.
+// The latch has two layouts (LatchLayout):
 //
-// Address mapping (within socket region 0xFE80-0xFE9F):
+// - AcornBoard: the Acorn 1770 DFS upgrade board for the Model B, whose
+//   layout the Model B+'s built-in interface shares. In the socket region
+//   0xFE80-0xFE9F:
 //
 //   Offset 0x00-0x03: Control register (write-only, reads as 0xFF)
 //     Bit 0: Drive 0 select (active high)
@@ -48,14 +48,27 @@ namespace beebium {
 //
 //   Offset 0x08-0x1F: Returns 0xFF (open bus)
 //
-// Note on NMI enable (bit 6): On real hardware, this bit gates the combined
-// DRQ/INTRQ signal before it reaches the CPU's NMI line. Following B2's
-// approach, we track but don't actually gate the NMI - DFS relies on this
-// behavior and timing is critical for sector transfers.
+// - Master: the Master 128's, on the motherboard (research section 1.3).
+//   The machine maps the latch at &FE24-&FE27 and the registers at
+//   &FE28-&FE2B itself (write_latch, read_register, write_register):
+//     Bit 0: DS0, drive 0 select
+//     Bit 1: DS1, drive 1 select
+//     Bit 2: RES, reset (active low, falling edge triggers reset)
+//     Bit 3: DS2, a third drive select (no drive is fitted to it)
+//     Bit 4: SEL, side select
+//     Bit 5: DDEN, density (0=double/MFM, 1=single/FM)
+//
+// Note on NMI enable (AcornBoard bit 6): On real hardware, this bit gates the
+// combined DRQ/INTRQ signal before it reaches the CPU's NMI line. Following
+// B2's approach, we track but don't actually gate the NMI - DFS relies on
+// this behavior and timing is critical for sector transfers.
 //
 class Acorn1770DiscController : public DiscControllerInterface {
 public:
-    Acorn1770DiscController() = default;
+    enum class LatchLayout { AcornBoard, Master };
+
+    explicit Acorn1770DiscController(LatchLayout layout = LatchLayout::AcornBoard)
+        : layout_(layout) {}
     ~Acorn1770DiscController() override = default;
 
     // Non-copyable, non-movable (contains WD1770 which is non-copyable)
@@ -204,6 +217,15 @@ public:
     // Get current control register value
     uint8_t control() const { return control_; }
 
+    LatchLayout latch_layout() const { return layout_; }
+
+    // The latch and the WD1770's registers addressed directly, for a machine
+    // that maps them itself (the Master).
+    void write_latch(uint8_t value) { write_control(value); }
+    uint8_t read_register(uint8_t reg) { return wd1770_.read(reg & 0x03); }
+    uint8_t peek_register(uint8_t reg) const { return wd1770_.peek(reg & 0x03); }
+    void write_register(uint8_t reg, uint8_t value) { wd1770_.write(reg & 0x03, value); }
+
     // Check if NMI is enabled (bit 6 of control register)
     bool nmi_enabled() const { return nmi_enabled_; }
 
@@ -213,6 +235,10 @@ public:
 
 private:
     void write_control(uint8_t value) {
+        if (layout_ == LatchLayout::Master) {
+            write_master_latch(value);
+            return;
+        }
         uint8_t old_control = control_;
         control_ = value;
 
@@ -253,6 +279,40 @@ private:
         nmi_enabled_ = (value & 0x40) != 0;
     }
 
+    // The Master's latch.
+    void write_master_latch(uint8_t value) {
+        const uint8_t old_control = control_;
+        control_ = value;
+
+        // DS0, DS1 and DS2: one select line each. DS2 has no drive on it.
+        if (value & 0x01) {
+            wd1770_.set_drive(0);
+        } else if (value & 0x02) {
+            wd1770_.set_drive(1);
+        } else if (value & 0x08) {
+            wd1770_.select_no_drive();
+        }
+        if (drives_[0]) drives_[0]->set_selected((value & 0x01) != 0);
+        if (drives_[1]) drives_[1]->set_selected((value & 0x02) != 0);
+
+        // SEL: side
+        const uint8_t side = (value & 0x10) ? 1 : 0;
+        wd1770_.set_side(side);
+        if (drives_[0]) drives_[0]->set_side(side);
+        if (drives_[1]) drives_[1]->set_side(side);
+
+        // DDEN: 0 = double density (MFM), 1 = single (FM)
+        wd1770_.set_density((value & 0x20) == 0);
+
+        // RES: active low, reset on the falling edge
+        const bool reset_active = (value & 0x04) == 0;
+        const bool was_reset_active = (old_control & 0x04) == 0;
+        if (reset_active && !was_reset_active) {
+            wd1770_.reset();
+        }
+    }
+
+    LatchLayout layout_;
     WD1770 wd1770_;
     std::array<DiscDrive*, 2> drives_ = {nullptr, nullptr};
     uint8_t control_ = 0;
