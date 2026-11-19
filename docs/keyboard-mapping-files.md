@@ -225,11 +225,11 @@ were absent, the keyboard view does not show it, and a client keeps it
 untouched when it writes the file. It is not declined.
 
 This is how one mapping file serves every model. The Master 128 has a
-numeric keypad whose keys (`Keypad 0` to `Keypad Return`, 3.3) a Model B
+numeric keypad whose keys (`Keypad0` to `KeypadReturn`, 3.3) a Model B
 does not have. Logical maps the host's numeric keypad to them:
 
 ```json
-{ "code": "Numpad7", "bbc": { "key": "Keypad 7" } }
+{ "code": "Numpad7", "bbc": { "key": "Keypad7" } }
 ```
 
 On a Master the entry wins rule 1 of section 4 for Numpad7. On a Model B it
