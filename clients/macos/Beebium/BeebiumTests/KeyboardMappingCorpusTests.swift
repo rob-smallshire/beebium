@@ -27,10 +27,39 @@ import AppKit
 final class KeyboardMappingCorpusTests: XCTestCase {
 
     private struct Corpus {
+        /// The top-level catalogue slice: a machine, a Model B, with no `catalogue`
+        /// named on the case.
         let cache: BBCKeyCache
+        /// A cache per named catalogue slice (e.g. "master-128"): the top-level
+        /// rows plus that slice's `adds`. A case names one with `catalogue`.
+        let catalogues: [String: BBCKeyCache]
         let inlineMappings: [String: [String: Any]]
         let directoryURL: URL
         let cases: [[String: Any]]
+
+        /// The cache a case resolves under: the named catalogue slice when it
+        /// carries `catalogue`, else the top-level slice (a Model B's).
+        func cache(forCase test: [String: Any]) throws -> BBCKeyCache {
+            guard let name = test["catalogue"] as? String else { return cache }
+            return try XCTUnwrap(catalogues[name], "unknown catalogue \(name)")
+        }
+    }
+
+    /// A BBC key cache from an array of catalogue rows (the corpus's shape).
+    private func makeCache(fromRows rows: [[String: Any]]) -> BBCKeyCache {
+        var response = Beebium_AllKeyMappingsResponse()
+        for row in rows {
+            var entry = Beebium_KeyMappingEntry()
+            entry.found = true
+            entry.character = row["character"] as? String ?? ""
+            entry.ikNumber = UInt32(row["ik"] as? Int ?? 0)
+            entry.needsShift = row["needsShift"] as? Bool ?? false
+            entry.name = row["name"] as? String ?? ""
+            response.mappings.append(entry)
+        }
+        let cache = BBCKeyCache()
+        cache.load(from: response)
+        return cache
     }
 
     private func loadCorpus() throws -> Corpus {
@@ -42,24 +71,24 @@ final class KeyboardMappingCorpusTests: XCTestCase {
         let json = try XCTUnwrap(
             try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
-        // Build the BBC key cache from the catalogue slice the corpus carries.
-        let catalogue = try XCTUnwrap(
+        // The top-level catalogue slice -- the machine a case with no `catalogue`
+        // resolves under (a Model B's keys).
+        let baseRows = try XCTUnwrap(
             (json["catalogue"] as? [String: Any])?["entries"] as? [[String: Any]])
-        var response = Beebium_AllKeyMappingsResponse()
-        for row in catalogue {
-            var entry = Beebium_KeyMappingEntry()
-            entry.found = true
-            entry.character = row["character"] as? String ?? ""
-            entry.ikNumber = UInt32(row["ik"] as? Int ?? 0)
-            entry.needsShift = row["needsShift"] as? Bool ?? false
-            entry.name = row["name"] as? String ?? ""
-            response.mappings.append(entry)
+
+        // Each named catalogue slice (e.g. "master-128") is the top-level slice
+        // plus the rows in its `adds` (the Master 128's keypad). A case names one
+        // with `catalogue`; 3.6 then makes an entry for a key in the slice apply
+        // where a plain Model B's does not.
+        var catalogues: [String: BBCKeyCache] = [:]
+        for (name, slice) in (json["catalogues"] as? [String: [String: Any]] ?? [:]) {
+            let adds = slice["adds"] as? [[String: Any]] ?? []
+            catalogues[name] = makeCache(fromRows: baseRows + adds)
         }
-        let cache = BBCKeyCache()
-        cache.load(from: response)
 
         return Corpus(
-            cache: cache,
+            cache: makeCache(fromRows: baseRows),
+            catalogues: catalogues,
             inlineMappings: json["mappings"] as? [String: [String: Any]] ?? [:],
             directoryURL: directoryURL,
             cases: json["cases"] as? [[String: Any]] ?? [])
@@ -103,7 +132,12 @@ final class KeyboardMappingCorpusTests: XCTestCase {
                 continue
             }
 
-            let resolved = mapping.resolve(input, cache: corpus.cache)
+            // The machine the case resolves under: its named catalogue slice, or
+            // the top-level slice (a Model B). This is how one Logical mapping
+            // serves both -- Numpad7 falls through to "7" on a Model B and resolves
+            // to Keypad7 on a Master (3.6).
+            let cache = try corpus.cache(forCase: test)
+            let resolved = mapping.resolve(input, cache: cache)
             ran += 1
 
             if expect["break"] as? Bool == true {
@@ -114,6 +148,9 @@ final class KeyboardMappingCorpusTests: XCTestCase {
                 guard let resolved = resolved else {
                     XCTFail("\(name): expected a BBC key, got nothing")
                     continue
+                }
+                if let key = expect["key"] as? String {
+                    XCTAssertEqual(resolved.bbcKeyName, key, "\(name): BBC key")
                 }
                 if let ik = expect["ik"] as? Int {
                     XCTAssertEqual(Int(resolved.ikNumber), ik, "\(name): internal key number")
