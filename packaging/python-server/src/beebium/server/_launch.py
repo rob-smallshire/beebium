@@ -55,3 +55,19 @@ def model_b_plus_128k() -> None:
 
 def model_b_romram() -> None:
     _exec("model-b-romram")
+
+
+def model_b_atpl_sidewise() -> None:
+    _exec("model-b-atpl-sidewise")
+
+
+def model_b_watford_rom_ram() -> None:
+    _exec("model-b-watford-rom-ram")
+
+
+def model_b_integra_b() -> None:
+    _exec("model-b-integra-b")
+
+
+def master_128() -> None:
+    _exec("master-128")

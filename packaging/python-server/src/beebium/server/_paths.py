@@ -37,7 +37,8 @@ __all__ = [
 
 # The machine variants, as the suffix of the binary name (beebium-<variant>).
 # "model-b" is the default everywhere, matching the client.
-_VARIANTS = ("model-b", "model-b-plus", "model-b-plus-128k", "model-b-romram")
+_VARIANTS = ("model-b", "model-b-plus", "model-b-plus-128k", "model-b-romram",
+             "model-b-atpl-sidewise", "model-b-watford-rom-ram", "model-b-integra-b", "master-128")
 
 
 def variants() -> tuple[str, ...]:

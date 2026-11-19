@@ -260,9 +260,10 @@ REPO_ROMS_DIRPATH = Path(__file__).parents[3] / "roms"
 def test_a_rom_cartridge_shows_its_banks_read_only(launch_bbc) -> None:
     """A 16K ROM cartridge in the rear slot answers on banks 0 and 1, which
     SidewaysService shows with the cartridge's image and will not change."""
+    # A bare ROM name is found on the ROM search path, as --sideways finds one.
     rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
     bbc = launch_bbc(preset=PRESET, variant=VARIANT,
-                     extra_args=["--rom-cartridge", f"low={rom}"])
+                     extra_args=["--rom-cartridge", "low=bbc-basic_2.rom"])
     _booted(bbc)
     status = bbc.sideways.get_slot_status()
     for bank in (0, 1):
@@ -270,7 +271,7 @@ def test_a_rom_cartridge_shows_its_banks_read_only(launch_bbc) -> None:
         assert socket is not None
         assert socket.type == SlotType.ROM
         assert socket.populated
-        assert socket.image_filepath == str(rom)
+        assert Path(socket.image_filepath).name == rom.name
     assert not status.find_socket_for_slot(2).populated  # the front slot is empty
     with pytest.raises(BeebiumError, match="rear cartridge slot"):
         bbc.sideways.configure_slot(0, SlotType.EMPTY)
@@ -298,3 +299,24 @@ def test_lk18_east_takes_a_rom_in_banks_4_and_5(launch_bbc) -> None:
     status = bbc.sideways.get_slot_status()
     assert status.find_socket_for_slot(4).type == SlotType.ROM
     assert status.find_socket_for_slot(6).type == SlotType.RAM
+
+
+# ---------------------------------------------------------------------------
+# Presets (step 8)
+# ---------------------------------------------------------------------------
+
+
+def test_the_mos_3_50_preset_boots_to_basic_on_adfs(launch_bbc) -> None:
+    bbc = launch_bbc(preset="master-128-mos-3-50", variant=VARIANT)
+    _booted(bbc)
+    screen = _screen(bbc)
+    assert "ACORN MOS" in screen, screen
+    assert "Acorn ADFS" in screen, screen
+
+
+def test_the_master_lists_its_presets(executable_filepath: Path) -> None:
+    result = subprocess.run([str(executable_filepath), "--format", "tsv", "list-presets"],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    ids = {line.split("\t")[0] for line in result.stdout.splitlines()[1:]}
+    assert {"master-128", "master-128-mos-3-50", "master-128-65c102-copro"} <= ids

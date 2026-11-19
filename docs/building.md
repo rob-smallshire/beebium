@@ -61,6 +61,7 @@ Server executables are in `build/src/server/`:
 | `beebium-model-b-atpl-sidewise` | Model B with the ATPL Sidewise board |
 | `beebium-model-b-watford-rom-ram` | Model B with the Watford Electronics ROM/RAM board |
 | `beebium-model-b-integra-b` | Model B with the Computech Integra-B board |
+| `beebium-master-128` | BBC Master 128 |
 
 A Tube coprocessor is a plugin in `build/src/server/extensions/`, attached to
 any of them at launch: `--tube-65c02` (the 3 MHz 6502 Second Processor) or

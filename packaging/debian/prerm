@@ -1,13 +1,13 @@
 #!/bin/sh
 #
 # Remove the /usr/bin symlinks created by postinst: one per installed
-# /opt/beebium/bin/beebium-model-* server (still present when prerm runs), and
+# /opt/beebium/bin/beebium-model-* or beebium-master-* server (still present when prerm runs), and
 # only where /usr/bin holds our symlink, never a file something else put there.
 set -e
 
 case "$1" in
     remove|upgrade|deconfigure)
-        for server_filepath in /opt/beebium/bin/beebium-model-*; do
+        for server_filepath in /opt/beebium/bin/beebium-model-* /opt/beebium/bin/beebium-master-*; do
             [ -f "$server_filepath" ] || continue
             link_filepath="/usr/bin/$(basename "$server_filepath")"
             if [ -L "$link_filepath" ] && [ "$(readlink "$link_filepath")" = "$server_filepath" ]; then

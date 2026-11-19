@@ -93,6 +93,23 @@ if(NOT "${out}${err}" MATCHES "Listening on port")
                         "failed:\n${out}\n${err}")
 endif()
 
-# --- 4. clean up ------------------------------------------------------------
+# --- 4. the Master 128: its MOS ROM set and its preset from the share tree ---
+set(master "${prefix}/bin/beebium-master-128${EXE_SUFFIX}")
+if(NOT EXISTS "${master}")
+    message(FATAL_ERROR "installed server binary missing: ${master}")
+endif()
+execute_process(
+    COMMAND "${master}" start --preset master-128 --port 0
+    TIMEOUT 20
+    RESULT_VARIABLE rc
+    OUTPUT_VARIABLE out
+    ERROR_VARIABLE err
+)
+if(NOT "${out}${err}" MATCHES "Listening on port")
+    message(FATAL_ERROR "installed beebium-master-128 did not reach 'Listening on port' "
+                        "(result=${rc}):\n${out}\n${err}")
+endif()
+
+# --- 5. clean up ------------------------------------------------------------
 file(REMOVE_RECURSE "${stage}")
 message(STATUS "install smoke test passed")

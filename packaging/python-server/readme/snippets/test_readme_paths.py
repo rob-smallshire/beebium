@@ -20,7 +20,7 @@ def test_paths_api():
     # Where the bundled server binary lives (ensured executable), and its kin.
     executable = beebium.server.executable_filepath()        # the model-b binary
     print(executable)
-    print(beebium.server.variants())                         # the four variants
+    print(beebium.server.variants())                         # the eight variants
     print(beebium.server.rom_dirpath())                      # the bundled ROMs
     print(beebium.server.preset_dirpath())                   # the bundled presets
     print(beebium.server.__version__)

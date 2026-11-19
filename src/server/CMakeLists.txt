@@ -462,6 +462,16 @@ add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
     DESCRIPTION "128K Model B+, sideways RAM")
 add_system_preset(beebium-master-128 "master-128" "Master 128" "1986-01"
     DESCRIPTION "BBC Master 128, MOS 3.20, Welcome Guide configuration")
+add_system_preset(beebium-master-128 "master-128-mos-3-50" "Master 128 (MOS 3.50)" "1989"
+    DESCRIPTION "BBC Master 128 with the MOS 3.50 ROM set"
+    --mos acorn-mos_3_50.rom
+    --sideways slot=9:type=rom:image=acorn-dfs_2_45.rom
+    --sideways slot=10:type=rom:image=acornsoft-viewsheet_b1_01.rom
+    --sideways slot=11:type=rom:image=acorn-edit_1_50r.rom
+    --sideways slot=12:type=rom:image=bbc-basic_4r32.rom
+    --sideways slot=13:type=rom:image=acorn-adfs_2_03.rom
+    --sideways slot=14:type=rom:image=acornsoft-view_b3_3.rom
+    --sideways slot=15:type=rom:image=acorn-terminal_1_20_mos_3_50.rom)
 
 # Econet presets, so users can try networking out of the box: model-b-disc
 # plus a network filing system (ANFS 4.18) and a station number, one per

@@ -35,7 +35,7 @@ class BeebiumServer < Formula
     system "cmake", "--build", "build", "--target", "beebium-servers"
 
     # Install the whole relocatable tree under libexec: one server binary per
-    # machine variant (libexec/bin/beebium-model-*), the extension ABI dylibs
+    # machine variant (libexec/bin/beebium-model-*, beebium-master-*), the extension ABI dylibs
     # (libexec/lib), the dlopened plugins (libexec/bin/extensions/<name>) and
     # the ROMs and presets (libexec/share/beebium). The binaries
     # resolve all of these relative to their own on-disk location, so the tree
@@ -47,7 +47,7 @@ class BeebiumServer < Formula
     # presets) is relative to the binary's real on-disk location,
     # resolved through this symlink, so they all find the libexec tree. The
     # test block exercises each lookup through the symlink.
-    bin.install_symlink (libexec/"bin").glob("beebium-model-*")
+    bin.install_symlink (libexec/"bin").glob("beebium-{model,master}-*")
   end
 
   test do
@@ -70,9 +70,10 @@ class BeebiumServer < Formula
 
     # Every machine variant is on PATH and resolves its plugins out of the keg
     # through its own symlink.
-    servers = bin.glob("beebium-model-*")
+    servers = bin.glob("beebium-{model,master}-*")
     refute_empty servers
     assert_includes servers.map { |s| s.basename.to_s }, "beebium-model-b"
+    assert_includes servers.map { |s| s.basename.to_s }, "beebium-master-128"
     servers.each do |server|
       assert_predicate server, :symlink?
       assert_match (libexec/"bin/extensions").to_s,

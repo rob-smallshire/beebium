@@ -38,6 +38,10 @@ beebium-model-b = "beebium.server._launch:model_b"
 beebium-model-b-plus = "beebium.server._launch:model_b_plus"
 beebium-model-b-plus-128k = "beebium.server._launch:model_b_plus_128k"
 beebium-model-b-romram = "beebium.server._launch:model_b_romram"
+beebium-model-b-atpl-sidewise = "beebium.server._launch:model_b_atpl_sidewise"
+beebium-model-b-watford-rom-ram = "beebium.server._launch:model_b_watford_rom_ram"
+beebium-model-b-integra-b = "beebium.server._launch:model_b_integra_b"
+beebium-master-128 = "beebium.server._launch:master_128"
 
 [dependency-groups]
 # Just the test runner, for the server-free packaging tests. Kept out of the

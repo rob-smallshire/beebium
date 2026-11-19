@@ -106,6 +106,26 @@ if ! grep -q "Listening on port" "${boot_log}"; then
 fi
 grep "Listening on port" "${boot_log}"
 
+echo "== Master 128 boot (its MOS ROM set and preset from the share fallback) =="
+master="${prefix}/bin/beebium-master-128"
+[ -x "${master}" ] || fail "server binary missing or not executable: ${master}"
+master_log="$(mktemp)"
+"${master}" start --preset master-128 --port 0 >"${master_log}" 2>&1 &
+pid=$!
+for _ in $(seq 1 40); do
+    grep -q "Listening on port" "${master_log}" && break
+    kill -0 "${pid}" 2>/dev/null || break
+    sleep 0.5
+done
+kill "${pid}" 2>/dev/null || true
+wait "${pid}" 2>/dev/null || true
+if ! grep -q "Listening on port" "${master_log}"; then
+    echo "---- server output ----" >&2
+    cat "${master_log}" >&2
+    fail "beebium-master-128 did not reach 'Listening on port'"
+fi
+grep "Listening on port" "${master_log}"
+
 echo "== presets shipped (share/beebium/presets non-empty) =="
 preset_count="$(find "${prefix}/share/beebium/presets" -maxdepth 1 -name '*.beebium-preset' 2>/dev/null | wc -l | tr -d ' ')"
 [ "${preset_count}" -gt 0 ] \

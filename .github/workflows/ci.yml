@@ -174,6 +174,7 @@ jobs:
             build/src/server/beebium-model-b-atpl-sidewise
             build/src/server/beebium-model-b-watford-rom-ram
             build/src/server/beebium-model-b-integra-b
+            build/src/server/beebium-master-128
             build/src/server/presets/
             build/src/server/blank-discs/
             build/src/server/blank-tapes/
@@ -333,6 +334,7 @@ jobs:
             build/src/server/beebium-model-b-atpl-sidewise
             build/src/server/beebium-model-b-watford-rom-ram
             build/src/server/beebium-model-b-integra-b
+            build/src/server/beebium-master-128
             build/src/server/presets/
             build/src/server/blank-discs/
             build/src/server/blank-tapes/
@@ -497,6 +499,7 @@ jobs:
             build/src/server/beebium-model-b-atpl-sidewise
             build/src/server/beebium-model-b-watford-rom-ram
             build/src/server/beebium-model-b-integra-b
+            build/src/server/beebium-master-128
             build/src/server/presets/
             build/src/server/blank-discs/
             build/src/server/blank-tapes/
@@ -609,6 +612,7 @@ jobs:
             build/src/server/beebium-model-b-atpl-sidewise
             build/src/server/beebium-model-b-watford-rom-ram
             build/src/server/beebium-model-b-integra-b
+            build/src/server/beebium-master-128
             build/src/server/presets/
             build/src/server/blank-discs/
             build/src/server/blank-tapes/

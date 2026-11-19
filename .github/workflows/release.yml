@@ -192,15 +192,17 @@ jobs:
             diff <(echo "${expected}") <(echo "${actual}") || true
             exit 1
           fi
-          # Each wheel carries all four binaries; the Windows wheel names them
+          # Each wheel carries all eight binaries; the Windows wheel names them
           # with a .exe suffix, so accept either form per variant.
           for whl in *.whl; do
-            for variant in model-b model-b-plus model-b-plus-128k model-b-romram; do
+            for variant in model-b model-b-plus model-b-plus-128k model-b-romram \
+                           model-b-atpl-sidewise model-b-watford-rom-ram model-b-integra-b \
+                           master-128; do
               unzip -l "${whl}" | grep -qE "beebium/server/_bundle/bin/beebium-${variant}(\.exe)?\$" \
                 || { echo "::error::${whl} is missing beebium-${variant}"; exit 1; }
             done
           done
-          echo "Server wheels verified: correct tags and all four binaries."
+          echo "Server wheels verified: correct tags and all eight binaries."
 
       - uses: actions/upload-artifact@v7
         with:

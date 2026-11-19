@@ -179,7 +179,7 @@ keg_bin_dirpath="$(brew --prefix beebium/formula-test/beebium-server)/bin"
 bash "${repo_dirpath}/scripts/check-extension-libraries.sh" \
     "$(brew --prefix beebium/formula-test/beebium-server)/libexec"
 server_count=0
-for server_filepath in "${keg_bin_dirpath}"/beebium-model-*; do
+for server_filepath in "${keg_bin_dirpath}"/beebium-model-* "${keg_bin_dirpath}"/beebium-master-*; do
   [ -L "${server_filepath}" ] || {
     echo "NOT A SYMLINK: ${server_filepath}" >&2
     exit 1
@@ -193,7 +193,7 @@ for server_filepath in "${keg_bin_dirpath}"/beebium-model-*; do
   server_count=$((server_count + 1))
 done
 [ "${server_count}" -gt 0 ] || {
-  echo "NO beebium-model-* symlinks in ${keg_bin_dirpath}" >&2
+  echo "NO beebium-model-* or beebium-master-* symlinks in ${keg_bin_dirpath}" >&2
   exit 1
 }
 echo "${server_count} servers exposed in ${keg_bin_dirpath}"

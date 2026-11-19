@@ -16,7 +16,8 @@
     "bin\\beebium-model-b-romram.exe",
     "bin\\beebium-model-b-atpl-sidewise.exe",
     "bin\\beebium-model-b-watford-rom-ram.exe",
-    "bin\\beebium-model-b-integra-b.exe"
+    "bin\\beebium-model-b-integra-b.exe",
+    "bin\\beebium-master-128.exe"
   ],
   "checkver": "github",
   "autoupdate": {

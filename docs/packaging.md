@@ -377,7 +377,7 @@ Server and client version numbers need not match across the wire.
 ### Keg layout
 
 The formula installs the whole relocatable tree under `libexec` and symlinks
-every server (`libexec/bin/beebium-model-*`, one per machine variant) into
+every server (`libexec/bin/beebium-model-*` and `beebium-master-*`, one per machine variant) into
 `bin`, so only the servers land on the user's `PATH` (not `bin/extensions/`):
 
 ```
@@ -555,7 +555,7 @@ ship-unsigned-first decision is still open.
 formats differ only in *where* they place it (see
 [Package formats](#package-formats)). The **`.deb`** installs it under
 `/opt/beebium` with a `/usr/bin` symlink onto every server it ships (each
-`/opt/beebium/bin/beebium-model-*`) so they are on `PATH`:
+`/opt/beebium/bin/beebium-model-*` and `beebium-master-*`) so they are on `PATH`:
 
 ```
 /opt/beebium/
@@ -589,7 +589,7 @@ and [Windows](#windows) sections.)
   `libstdc++6 (>= 14)`. Those versions follow the symbols the binaries use, so
   they can sit below the build image's own (glibc 2.41); the supported floor is
   still trixie. The maintainer scripts create and remove the `/usr/bin` symlinks,
-  one per installed `/opt/beebium/bin/beebium-model-*`; the smoke-deb job asserts
+  one per installed `/opt/beebium/bin/beebium-model-*` or `beebium-master-*`; the smoke-deb job asserts
   every server is linked after install and none is left after removal
   (`scripts/check-server-path-links.sh`).
 - **`.rpm`** (`beebium-server-<version>-1.<arch>.rpm`, arch `x86_64` /

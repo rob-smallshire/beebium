@@ -14,7 +14,7 @@
 wheel in a fresh venv (build_wheel.py + a matching-platform runner). They import
 nothing that executes a server binary -- their job is to prove the wheel is laid
 out and registered correctly: the package resolves from site-packages, the paths
-API points into the bundled tree, the four binaries are present (and executable
+API points into the bundled tree, the eight binaries are present (and executable
 on POSIX), the console scripts are registered, and py.typed ships.
 """
 
@@ -28,7 +28,8 @@ import pytest
 
 import beebium.server
 
-VARIANTS = ("model-b", "model-b-plus", "model-b-plus-128k", "model-b-romram")
+VARIANTS = ("model-b", "model-b-plus", "model-b-plus-128k", "model-b-romram",
+            "model-b-atpl-sidewise", "model-b-watford-rom-ram", "model-b-integra-b", "master-128")
 
 
 def test_package_imports_from_site_packages_not_source_tree():
@@ -105,12 +106,16 @@ def test_executable_filepath_rejects_unknown_variant():
 
 
 def test_console_scripts_registered():
-    """`pip install beebium-server` puts the four servers on PATH."""
+    """`pip install beebium-server` puts the eight servers on PATH."""
     scripts = {ep.name: ep.value for ep in importlib.metadata.entry_points(group="console_scripts")}
     assert scripts.get("beebium-model-b") == "beebium.server._launch:model_b"
     assert scripts.get("beebium-model-b-plus") == "beebium.server._launch:model_b_plus"
     assert scripts.get("beebium-model-b-plus-128k") == "beebium.server._launch:model_b_plus_128k"
     assert scripts.get("beebium-model-b-romram") == "beebium.server._launch:model_b_romram"
+    assert scripts.get("beebium-model-b-atpl-sidewise") == "beebium.server._launch:model_b_atpl_sidewise"
+    assert scripts.get("beebium-model-b-watford-rom-ram") == "beebium.server._launch:model_b_watford_rom_ram"
+    assert scripts.get("beebium-model-b-integra-b") == "beebium.server._launch:model_b_integra_b"
+    assert scripts.get("beebium-master-128") == "beebium.server._launch:master_128"
 
 
 def test_py_typed_marker_is_shipped():

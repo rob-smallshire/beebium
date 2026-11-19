@@ -24,7 +24,7 @@ PyPI -- no system package manager, no compiler, no ROM files to locate by hand:
 pip install beebium-server
 ```
 
-Installing it also puts the four server binaries on `PATH`
+Installing it also puts the eight server binaries on `PATH`
 (`beebium-model-b` and its variants), so the package is useful on its own.
 
 ### Relationship to `beebium`
@@ -78,7 +78,8 @@ Each starts a headless server that listens for gRPC clients:
 
 ```sh
 # Run a BBC Model B server. Variants: beebium-model-b, beebium-model-b-plus,
-# beebium-model-b-plus-128k, beebium-model-b-romram.
+# beebium-model-b-plus-128k, beebium-model-b-romram, beebium-model-b-atpl-sidewise,
+# beebium-model-b-watford-rom-ram, beebium-model-b-integra-b, beebium-master-128.
 beebium-model-b --port 48875
 # Initializing BBC Model B...
 # Listening on port 48875
@@ -100,7 +101,7 @@ import beebium.server
 # Where the bundled server binary lives (ensured executable), and its kin.
 executable = beebium.server.executable_filepath()        # the model-b binary
 print(executable)
-print(beebium.server.variants())                         # the four variants
+print(beebium.server.variants())                         # the eight variants
 print(beebium.server.rom_dirpath())                      # the bundled ROMs
 print(beebium.server.preset_dirpath())                   # the bundled presets
 print(beebium.server.__version__)

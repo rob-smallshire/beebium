@@ -171,8 +171,8 @@ jobs:
         run: |
           $manifest = Get-Content packaging\scoop\beebium-server.json -Raw | ConvertFrom-Json
           $shimmed = @($manifest.bin | Sort-Object)
-          $shipped = @(Get-ChildItem extracted\bin\beebium-model-*.exe | ForEach-Object { "bin\$($_.Name)" } | Sort-Object)
-          if ($shipped.Count -eq 0) { Write-Host "::error::no bin\beebium-model-*.exe in the ZIP"; exit 1 }
+          $shipped = @(Get-ChildItem extracted\bin\beebium-model-*.exe, extracted\bin\beebium-master-*.exe | ForEach-Object { "bin\$($_.Name)" } | Sort-Object)
+          if ($shipped.Count -eq 0) { Write-Host "::error::no bin\beebium-model-*.exe or beebium-master-*.exe in the ZIP"; exit 1 }
           $diff = @(Compare-Object -ReferenceObject $shipped -DifferenceObject $shimmed)
           if ($diff.Count -ne 0) {
             foreach ($d in $diff) {

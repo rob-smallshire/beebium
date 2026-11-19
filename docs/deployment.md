@@ -68,6 +68,7 @@ are Acornsoft, hence the `B` prefix).
 | Model B with Integra-B | `beebium-model-b-integra-b` | `acorn-mos_1_20.rom` | slot 3: `bbc-basic_2.rom`; slot 15: `computech-ibos_1_26.rom` |
 | BBC Model B+ 64K | `beebium-model-b-plus` | `acorn-mos_2_0.rom` | slot 15: `bbc-basic_2.rom`; slot 11: `acorn-dfs_2_26.rom` |
 | BBC Model B+ 128K | `beebium-model-b-plus-128k` | `acorn-mos_2_0.rom` | slot 15: `bbc-basic_2.rom`; slot 11: `acorn-dfs_2_26.rom` |
+| BBC Master 128 | `beebium-master-128` | `acorn-mos_3_20.rom` | the MOS 3.20 ROM's banks: slot 9: `acorn-dfs_2_24.rom`; 10: `acornsoft-viewsheet_b1_0.rom`; 11: `acorn-edit_1_00.rom`; 12: `bbc-basic_4.rom`; 13: `acorn-adfs_1_50.rom`; 14: `acornsoft-view_b3_0.rom`; 15: `acorn-terminal_1_20_mos_3_20.rom` |
 
 The language slot holds the default language (BASIC from the factory). Use
 `--language-rom <filepath>` to put another language ROM in that slot, or

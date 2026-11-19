@@ -29,7 +29,7 @@ The emulator aims for cycle-accurate behaviour where it matters (6502, VIA timer
 ### Process Model
 
 ```
-beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, ...)
+beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, beebium-master-128, ...)
     |
     +-- gRPC Services (VideoService, AudioService, KeyboardService, etc.)
     |
@@ -41,7 +41,7 @@ beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, ...)
 
 ### Core Design
 
-- **Headless emulator servers**: Each machine variant is a separate executable (`beebium-model-b`, `beebium-model-b-plus`, `beebium-model-b-plus-128k`, `beebium-model-b-romram`, `beebium-model-b-atpl-sidewise`, `beebium-model-b-watford-rom-ram`, `beebium-model-b-integra-b`)
+- **Headless emulator servers**: Each machine variant is a separate executable (`beebium-model-b`, `beebium-model-b-plus`, `beebium-model-b-plus-128k`, `beebium-model-b-romram`, `beebium-model-b-atpl-sidewise`, `beebium-model-b-watford-rom-ram`, `beebium-model-b-integra-b`, `beebium-master-128`)
 - **gRPC for control**: All interaction via well-defined protocol buffers
 - **Lock-free video/audio**: `OutputQueue` using moodycamel::ReaderWriterQueue for pixel streaming
 - **Policy-based machines**: `Machine<Hardware>` template with one hardware policy per variant (`ModelBHardware`, `ModelBPlusHardware`, `ModelBIntegraBHardware`, ...; see Hardware Policies below)
@@ -190,6 +190,7 @@ ctest --output-on-failure
 - `beebium-model-b-atpl-sidewise`: Model B with the ATPL Sidewise ROM/RAM board
 - `beebium-model-b-watford-rom-ram`: Model B with the Watford Electronics ROM/RAM board
 - `beebium-model-b-integra-b`: Model B with the Computech Integra-B board (IBOS)
+- `beebium-master-128`: BBC Master 128 (MOS 3.20; preset `master-128-mos-3-50` for MOS 3.50)
 - `beebium-servers`: All server executables
 
 ## Key Components
@@ -216,6 +217,7 @@ class Machine {
 - `ModelBAtplSidewiseHardware`: Model B with the ATPL Sidewise board (slot 15 RAM-or-ROM, write-protect)
 - `ModelBWatfordRomRamHardware`: Model B with the Watford Electronics ROM/RAM board
 - `ModelBIntegraBHardware`: Model B with the Computech Integra-B board (shadow/private RAM, real-time clock)
+- `Master128Hardware`: BBC Master 128 (LYNNE, HAZEL, ANDY, readable ROMSEL and ACCCON, the MC146818 on the System VIA, the keypad, the 1770 at &FE24, two Tubes, cartridge slots), on the `Cmos65C02` CPU policy
 
 ### VIA Implementation (`Via6522.hpp`)
 
@@ -322,7 +324,7 @@ Complete transcripts of BBC Micro documentation:
 ### Fully Implemented
 
 - 6502 CPU (NMOS/CMOS, cycle-accurate)
-- Seven machine variants (Model B, B+, B+ 128K, and Model B with the notional ROM/RAM, ATPL Sidewise, Watford ROM/RAM and Integra-B boards)
+- Eight machine variants (Model B, B+, B+ 128K, Model B with the notional ROM/RAM, ATPL Sidewise, Watford ROM/RAM and Integra-B boards, and the Master 128)
 - 6522 VIA (System and User) with full timer and interrupt support
 - 6845 CRTC with display timing
 - Video ULA with all display modes (0-7)
