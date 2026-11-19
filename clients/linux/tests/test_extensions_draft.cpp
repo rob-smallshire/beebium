@@ -73,7 +73,8 @@ TEST_CASE("The model's own points are listed, but for those excluded", "[preset]
     for (const auto& p : extensions.model_points({"tube"})) {
         ids.push_back(p.id);
     }
-    CHECK(ids == std::vector<std::string>{"1mhz-bus", "user-port", "printer-port", "serial-port"});
+    CHECK(ids == std::vector<std::string>{"1mhz-bus", "user-port", "printer-port", "analogue-port",
+                                          "serial-port"});
 }
 
 TEST_CASE("Instances take the ids the server assigns", "[preset][extensions]") {
@@ -114,7 +115,7 @@ TEST_CASE("A full point offers nothing to add; its instance can change", "[prese
     extensions.remove(extensions.attached(point(extensions, "user-port")).at(0));
     CHECK(*draft.get("/extensions") == ordered_json::parse(R"([{"name": "tcp-printer"}])"));
     CHECK(names(extensions.addable(point(extensions, "user-port"))) ==
-          std::vector<std::string>{"acorn-rtc"});
+          std::vector<std::string>{"acorn-rtc", "voltmace-delta-14b"});
 }
 
 TEST_CASE("What can be added is in display-name order", "[preset][extensions]") {

@@ -187,7 +187,13 @@ TEST_CASE("A tape dropped on the Cassette row is written as a browsed one is",
 
 TEST_CASE("A model whose schema has no cassette has no Cassette row",
           "[configuration][storage][cassette]") {
-    ConfigurationFixture f(model_b_with_disc());
+    ConfigurationFixture f(model_b_with_disc(), [](ConfigurationFixture& fixture) {
+        auto schema = ordered_json::parse(fixture.schema_text);
+        for (auto& section : schema["sections"]) {
+            section.erase("cassette");
+        }
+        fixture.schema_text = schema.dump();
+    });
     auto* storage = f.section<StorageSection>();
     CHECK_FALSE(storage->cassette_row()->isVisibleTo(storage));
 }
