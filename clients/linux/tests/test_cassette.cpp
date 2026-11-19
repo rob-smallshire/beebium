@@ -1545,6 +1545,7 @@ TEST_CASE("A live input starved for three seconds says so once, with the silence
     REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
     const QString starved = QStringLiteral(
         "The live input is not keeping up with the Beeb; some of the tape is being made up as silence.");
+    status_second(d, 0, 0);
     status_second(d, 0, 4410);
     status_second(d, 0, 8820);
     CHECK(d.row.message_text().isEmpty());
@@ -1583,6 +1584,7 @@ TEST_CASE("A device change under the stream ends it at once and says so, over a 
     d.row.choose_live_input(d.inputs[1], {});  // Built-in Microphone, 44.1 kHz float mono
     REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
     // The starve the change causes, two seconds in.
+    status_second(d, 0, 0);
     status_second(d, 0, 4410);
     status_second(d, 0, 8820);
     d.capture->lose(LiveCapture::Loss::changed);
@@ -1609,6 +1611,7 @@ TEST_CASE("A device change under the stream ends it at once and says so, over a 
     d.row.choose_live_input(d.inputs[1], {});
     CHECK(d.row.message_text().isEmpty());
     REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    status_second(d, 0, 0);
     status_second(d, 0, 100);
     status_second(d, 0, 200);
     CHECK(d.row.message_text().isEmpty());
@@ -1634,18 +1637,21 @@ TEST_CASE("A new live stream starts clean", "[cassette][deck][live]") {
     LiveDeck d;
     d.row.choose_live_input(d.inputs[1], {});
     REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    status_second(d, 0, 0);
     status_second(d, 0, 100);
     status_second(d, 0, 200);
     d.row.key(CassetteKey::eject)->click();
     REQUIRE(wait_until([&] { return !d.cassette.deck().tape_inserted && !d.cassette.streaming(); }));
     d.row.choose_live_input(d.inputs[1], {});
     REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
-    // Two seconds of the old stream's growth do not count towards this one's.
+    // Two seconds of the old stream's growth do not count towards this one's,
+    // and its first second, counts and all, is only the baseline.
     status_second(d, 0, 50);
-    CHECK(d.row.message_text().isEmpty());
     status_second(d, 0, 60);
     CHECK(d.row.message_text().isEmpty());
     status_second(d, 0, 70);
+    CHECK(d.row.message_text().isEmpty());
+    status_second(d, 0, 80);
     CHECK_FALSE(d.row.message_text().isEmpty());
 }
 

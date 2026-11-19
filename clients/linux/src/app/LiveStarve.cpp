@@ -17,6 +17,11 @@
 namespace beebium::linux_client {
 
 bool LiveStarveDetector::Count::observe(std::uint64_t count) {
+    if (!seen) {
+        seen = true;
+        last = count;
+        return false;
+    }
     if (count > last) {
         ++growing;
         still = 0;

@@ -42,6 +42,9 @@ public:
 
 private:
     struct Count {
+        // The first observation is only the baseline: a stream's first
+        // status may already carry counts, which are not a second's growth.
+        bool seen = false;
         std::uint64_t last = 0;
         int growing = 0;  // consecutive seconds it grew
         int still = 0;    // consecutive seconds it did not

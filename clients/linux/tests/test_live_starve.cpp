@@ -53,27 +53,39 @@ TEST_CASE("Three consecutive seconds of growth are the condition", "[live][starv
     CHECK(run(d, {{0, 0}, {0, 10}, {0, 20}, {0, 30}}) ==
           std::vector<Condition>{NONE, NONE, NONE, UNDER});
     LiveStarveDetector o;
-    CHECK(run(o, {{5, 0}, {9, 0}, {12, 0}}) == std::vector<Condition>{NONE, NONE, OVER});
+    CHECK(run(o, {{0, 0}, {5, 0}, {9, 0}, {12, 0}}) ==
+          std::vector<Condition>{NONE, NONE, NONE, OVER});
+}
+
+TEST_CASE("The first second is only the baseline, whatever its counts", "[live][starve]") {
+    // A stream whose first status already carries counts has not yet been
+    // seen to grow: that takes three more seconds.
+    LiveStarveDetector d;
+    CHECK(run(d, {{5, 400}, {9, 800}, {12, 1200}}) == std::vector<Condition>(3, NONE));
+    CHECK(d.feed(16, 1200) == OVER);
+    LiveStarveDetector u;
+    CHECK(run(u, {{0, 400}, {0, 800}, {0, 1200}, {0, 1600}}) ==
+          std::vector<Condition>{NONE, NONE, NONE, UNDER});
 }
 
 TEST_CASE("Two seconds of growth are not, nor growth with a quiet second between",
           "[live][starve]") {
     LiveStarveDetector d;
     // A late chunk or two while the ring primes.
-    CHECK(run(d, {{0, 10}, {0, 20}, {0, 20}, {0, 30}, {0, 40}, {0, 40}}) ==
-          std::vector<Condition>(6, NONE));
+    CHECK(run(d, {{0, 0}, {0, 10}, {0, 20}, {0, 20}, {0, 30}, {0, 40}, {0, 40}}) ==
+          std::vector<Condition>(7, NONE));
 }
 
 TEST_CASE("A raised condition says nothing more while it goes on", "[live][starve]") {
     LiveStarveDetector d;
-    CHECK(run(d, {{0, 10}, {0, 20}, {0, 30}}).back() == UNDER);
+    CHECK(run(d, {{0, 0}, {0, 10}, {0, 20}, {0, 30}}).back() == UNDER);
     CHECK(run(d, {{0, 40}, {0, 50}, {0, 60}, {0, 70}, {0, 80}}) == std::vector<Condition>(5, NONE));
 }
 
 TEST_CASE("A raised condition is raised again only once it has cleared for three seconds and recurs",
           "[live][starve]") {
     LiveStarveDetector d;
-    CHECK(run(d, {{0, 10}, {0, 20}, {0, 30}}).back() == UNDER);
+    CHECK(run(d, {{0, 0}, {0, 10}, {0, 20}, {0, 30}}).back() == UNDER);
     // Two quiet seconds are not a clearing.
     CHECK(run(d, {{0, 30}, {0, 30}, {0, 40}, {0, 50}, {0, 60}}) == std::vector<Condition>(5, NONE));
     // Three are; then three more of growth raise it again.
@@ -83,7 +95,7 @@ TEST_CASE("A raised condition is raised again only once it has cleared for three
 
 TEST_CASE("The other condition replaces the one raised", "[live][starve]") {
     LiveStarveDetector d;
-    CHECK(run(d, {{0, 10}, {0, 20}, {0, 30}}).back() == UNDER);
+    CHECK(run(d, {{0, 0}, {0, 10}, {0, 20}, {0, 30}}).back() == UNDER);
     CHECK(run(d, {{4, 40}, {8, 50}, {12, 60}}) == std::vector<Condition>{NONE, NONE, OVER});
     // And the first, still growing, does not take its place back.
     CHECK(run(d, {{16, 70}, {16, 80}, {16, 90}, {16, 100}}) == std::vector<Condition>(4, NONE));
@@ -91,10 +103,11 @@ TEST_CASE("The other condition replaces the one raised", "[live][starve]") {
 
 TEST_CASE("A new stream starts clean", "[live][starve]") {
     LiveStarveDetector d;
-    CHECK(run(d, {{0, 10}, {0, 20}, {0, 30}}).back() == UNDER);
+    CHECK(run(d, {{0, 0}, {0, 10}, {0, 20}, {0, 30}}).back() == UNDER);
     d.reset();
     // Its counts start again from nothing, and the condition may be told.
-    CHECK(run(d, {{0, 5}, {0, 6}, {0, 7}}) == std::vector<Condition>{NONE, NONE, UNDER});
+    CHECK(run(d, {{0, 0}, {0, 5}, {0, 6}, {0, 7}}) ==
+          std::vector<Condition>{NONE, NONE, NONE, UNDER});
 }
 
 TEST_CASE("Each condition is told in its own sentence", "[live][starve]") {
