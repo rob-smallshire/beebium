@@ -1295,6 +1295,16 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
                               << inst.name << "': " << e.what() << "\n";
                     return {nullptr, ExitCode::CONFIG};
                 }
+            } else if (p.resource == "rom") {
+                // A ROM, found as --sideways finds one: a bare name on the ROM
+                // search path, else a path.
+                try {
+                    it->second = RomPaths::find_rom(it->second, container).string();
+                } catch (const std::exception& e) {
+                    std::cerr << "Error: " << inst.name << " " << p.key << ": " << e.what()
+                              << "\n";
+                    return {nullptr, ExitCode::CONFIG};
+                }
             } else if (!p.bundled.empty() && is_bare_reference(it->second)) {
                 // The manifest decides which names may be given; the search
                 // decides where the file comes from.

@@ -220,8 +220,9 @@ Parameter schema fields:
   its `default`. A name this server does not know leaves the `default`
 - `excludes` -- keys that may not be given together with this one (declaring
   it on either side is enough; a default or an empty value does not count)
-- `media` and `bundled` -- for a `filepath`, what it names; a parameter gives
-  at most one of them (a manifest giving both is refused when loaded):
+- `media`, `bundled` and `resource` -- for a `filepath`, what it names; a
+  parameter gives at most one of them (a manifest giving two is refused when
+  loaded):
   - `media` (`hard-disc`, as the extension's storage names its media): a
     **medium**, searched for by bare name (in the launch's container -- beside
     or inside the preset -- then the per-user `discs/`) and copied into the
@@ -229,6 +230,12 @@ Parameter schema fields:
   - `bundled` (`rom`): a **ROM** this extension ships, searched for by bare
     name ending in its own `roms/` directory, which also limits the names that
     may be given, and read in place.
+  - `resource` (`rom`): a **ROM** of the machine's, found as `--mos` and
+    `--sideways` images are: a bare name on the ROM search path (the
+    preset's container, the ROM directory, the per-user `roms/`), else a
+    path. The extension receives the resolved path. `rom-cartridge`'s `low`
+    and `high` are the first, so a preset can name `bbc-basic_2.rom` and get
+    the shipped ROM.
 - `access` -- for a `filepath` or `dirpath`, which way the data goes:
   `"read"` (the default) when the extension reads what the path names,
   `"write"` when it creates or replaces it (file-printer's `path`). A
@@ -627,9 +634,11 @@ Most extensions should be plugins (next section). A built-in is for one the
 server must recognise with no plugin directory at all; today those are `aun`,
 `host-serial`, `file-printer`, `job-file-printer`, `joystick` (two
 joysticks on the analogue port, a controller a client sets through
-`ControllerService`) and `voltmace-delta-14b` (Voltmace's two-handset
+`ControllerService`), `voltmace-delta-14b` (Voltmace's two-handset
 adapter, attached to `analogue-port` and `user-port` together; both in
-`docs/analogue-port.md`), whose rationale
+`docs/analogue-port.md`) and `rom-cartridge` (a Master 128 ROM cartridge,
+two 16K ROM sockets placed at `cartridge-rear` or `cartridge-front`; see
+`docs/sideways-slots.md`), whose rationale
 `BuiltinExtensions.hpp` records. A
 built-in has no `manifest.json`: it is one entry in the table in
 `src/server/include/beebium/server/BuiltinExtensions.hpp`, a manifest built in

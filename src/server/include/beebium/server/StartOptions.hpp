@@ -627,7 +627,7 @@ inline OptionParse parse_machine_option(
         for (const auto& p : manifest->parameters) {
             auto it = parse_result.config.find(p.key);
             if (!is_path_type(p.type) || it == parse_result.config.end()) continue;
-            it->second = p.bundled.empty() && p.media.empty()
+            it->second = p.bundled.empty() && p.media.empty() && p.resource.empty()
                              ? anchor_reference(it->second, container.dirpath())
                              : reference(it->second);
         }

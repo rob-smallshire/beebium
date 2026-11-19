@@ -305,6 +305,7 @@ inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSche
         {"excludes", p.excludes},
         {"bundled", p.bundled},
         {"media", p.media},
+        {"resource", p.resource},
         {"access", is_path_type(p.type) ? nlohmann::ordered_json(p.access)
                                         : nlohmann::ordered_json(nullptr)},
         {"unique", p.unique},
@@ -529,6 +530,9 @@ public:
                         }
                         if (!p.bundled.empty()) {
                             std::cout << " (or a bundled " << p.bundled << ")";
+                        }
+                        if (p.resource == "rom") {
+                            std::cout << " (a ROM on the ROM search path, or a path)";
                         }
                         if (p.unique) std::cout << " (unique on its attachment)";
                         if (!p.provider_of.empty()) {

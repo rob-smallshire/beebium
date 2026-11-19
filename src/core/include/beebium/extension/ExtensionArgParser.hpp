@@ -99,6 +99,10 @@ struct ParameterSchema {
                                 // e.g. "hard-disc"), searched for by bare
                                 // name and copied into the machine's
                                 // directory. Never with `bundled`.
+    std::string resource;       // non-empty (a filepath only): a bare-name value is a
+                                // resource of this kind found on its search path
+                                // before it is taken as a path: "rom", the ROM
+                                // search path --mos and --sideways images use
     std::string access = "read";  // a filepath or dirpath only: "read" when
                                   // the extension reads what the path names,
                                   // "write" when it creates or replaces it, so

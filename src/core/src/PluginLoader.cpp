@@ -237,6 +237,17 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
             param.unique = p.value("unique", false);
             param.bundled = p.value("bundled", "");
             param.media = p.value("media", "");
+            param.resource = p.value("resource", "");
+            if (!param.resource.empty() && param.resource != "rom") {
+                throw std::runtime_error("Manifest " + manifest_filepath.string() +
+                                         ": parameter '" + param.key +
+                                         "' resource must be \"rom\"");
+            }
+            if (!param.resource.empty() && (!param.bundled.empty() || !param.media.empty())) {
+                throw std::runtime_error("Manifest " + manifest_filepath.string() +
+                                         ": parameter '" + param.key +
+                                         "' cannot be a resource and bundled or media");
+            }
             if (!param.bundled.empty() && !param.media.empty()) {
                 throw std::runtime_error("Manifest " + manifest_filepath.string() +
                                          ": parameter '" + param.key +

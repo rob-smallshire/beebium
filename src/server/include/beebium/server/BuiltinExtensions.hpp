@@ -307,20 +307,23 @@ inline std::vector<Entry> make_entries() {
         m.name = "rom-cartridge";
         m.display_name = "ROM cartridge";
         m.description =
-            "A cartridge of one or two 16K ROMs, in one of the Master's cartridge slots.";
+            "A ROM cartridge with two 16K ROM sockets, in one of the Master's cartridge slots.";
         m.cli_name = "rom-cartridge";
         m.extension_kind = "peripheral";
         m.attaches_to_one_of = {"cartridge-rear", "cartridge-front"};
         ParameterSchema low{"low", "filepath",
-                            "The ROM on the slot's lower bank, or on both banks for a 16K "
-                            "cartridge", -1, true, false, ""};
-        low.label = "Lower ROM";
+                            "The ROM in the socket on the slot's even bank (ROM 0 or 2), a ROM "
+                            "name or a path; with no high ROM it answers on both banks", -1,
+                            true, false, ""};
+        low.label = "Even-bank socket";
         low.access = "read";
+        low.resource = "rom";
         ParameterSchema high{"high", "filepath",
-                             "The ROM on the slot's upper bank, for a 32K cartridge", -1, false,
-                             false, ""};
-        high.label = "Upper ROM";
+                             "The ROM in the socket on the slot's odd bank (ROM 1 or 3), a ROM "
+                             "name or a path", -1, false, false, ""};
+        high.label = "Odd-bank socket";
         high.access = "read";
+        high.resource = "rom";
         m.parameters = {low, high};
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(

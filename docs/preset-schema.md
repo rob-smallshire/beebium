@@ -450,12 +450,22 @@ the second with `unit` `music-3000`:
 All models accept the machine settings, the sideways bank, Econet, the
 floppy drives and the cassette. What differs:
 
-| | Model B and board variants | Model B+ family |
-|-|---------------------------|-----------------|
-| `storage.fdc_socket` | Yes: socketed controller | Ignored: built-in WD1770 |
-| Default DFS ROM | No | Yes |
-| Sideways slots and types | Per board (see `describe-preset-schema`) | Per model |
-| Attachment points | `1mhz-bus`, `user-port`, `printer-port`, `analogue-port`, `tube`, `serial-port` | The same |
+| | Model B and board variants | Model B+ family | Master 128 |
+|-|---------------------------|-----------------|------------|
+| `startup` (keyboard links) | Yes | Yes | No: its start-up options are in CMOS; a preset's `startup` stops the launch |
+| `storage.fdc_socket` | Yes: socketed controller | Ignored: built-in WD1770 | Ignored: built-in WD1770 |
+| Default DFS ROM | No | Yes | DFS 2.24 and ADFS 1.50 among the MOS ROM's banks 9-15 |
+| Sideways slots and types | Per board (see `describe-preset-schema`) | Per model | Banks 4-7 RAM (LK18/LK19 East: ROM), 8 a ROM socket, 9-15 the MOS ROM's; 0-3 a cartridge's only |
+| Attachment points | `1mhz-bus`, `user-port`, `printer-port`, `analogue-port`, `tube`, `serial-port` | The same | The same, and `internal-tube`, `cartridge-rear`, `cartridge-front`, `modem-connector` |
+
+The built-in `rom-cartridge` extension (`low`, `high`: the ROMs in the
+cartridge's two 16K sockets, on the slot's even and odd banks; each a name on
+the ROM search path or a path) is a Master 128 cartridge, placed at
+`cartridge-rear` or `cartridge-front`:
+
+```json
+"extensions": [ { "name": "rom-cartridge", "config": { "at": "cartridge-front", "low": "bbc-basic_2.rom" } } ]
+```
 
 `describe-preset-schema` is the authoritative per-model answer, since it is
 generated from the model's own definition.

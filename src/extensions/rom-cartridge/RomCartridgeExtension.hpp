@@ -31,15 +31,23 @@ class CartridgeSlot;
 // in one of the Master 128's cartridge slots, the one its placement names
 // (cartridge-rear, banks 0 and 1, or cartridge-front, banks 2 and 3).
 //
+// Acorn's Master ROM Cartridge (docs/master-128/README.md) is a pair of
+// 16K ROM sockets behind a 74HCT139: ROMQA 0 selects IC2, the slot's even
+// bank (ROM 0 or 2), and ROMQA 1 selects IC1, its odd bank. `low` is the ROM
+// in the even bank's socket and `high` the one in the odd bank's. On that
+// board a single fitted chip answers on its own bank only; Beebium lets a
+// `low` given alone answer on both banks, a convenience for 16K cartridges
+// wired that way.
+//
 // A cartridge provides its slot's sideways banks (CartridgeSlot.hpp): this
 // one is a SidewaysBankProvider holding its ROM images, fitted to the slot
-// in init(). `low` is the ROM on the slot's even bank (ROMQA 0) and `high`,
-// if given, the one on its odd bank; a 16K cartridge gives `low` alone,
-// which answers on both. Writes go nowhere. It decodes nothing on the
-// cartridge bus's FRED and JIM. A RAM cartridge, or one with I/O, would
-// follow the same shape with a writable provider or bus handlers beside.
+// in init(). Writes go nowhere. It decodes nothing on the cartridge bus's
+// FRED and JIM. A RAM cartridge, a 27513 that takes its page from a write,
+// or a cartridge with I/O follows the same shape with a writable provider or
+// bus handlers beside.
 //
-// CLI: --rom-cartridge low=<rom>[:high=<rom>][:at=cartridge-rear|cartridge-front]
+// CLI: --rom-cartridge low=<rom>[:high=<rom>][:at=cartridge-rear|cartridge-front],
+// each ROM a name on the ROM search path or a path.
 class RomCartridgeExtension : public PeripheralExtension, public SidewaysBankProvider {
 public:
     // PeripheralExtension
