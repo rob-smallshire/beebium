@@ -39,6 +39,7 @@
 #include "PixelBatch.hpp"
 #include "devices/ConfigurableBankedMemory.hpp"
 #include "devices/Crtc6845.hpp"
+#include "devices/Mc146818BatteryUnit.hpp"
 #include "devices/Mc146818Rtc.hpp"
 #include "devices/Ram.hpp"
 #include "devices/Rom.hpp"
@@ -1034,56 +1035,13 @@ private:
         ModelBIntegraBHardware& board_;
     };
 
-    // The clock a battery keeps running: its battery-backed registers and
-    // CMOS RAM, then how far it is set from host time (seconds, little-endian
-    // two's complement, 8 bytes).
-    class ClockUnit final : public BatteryBackedUnit {
-    public:
-        explicit ClockUnit(ModelBIntegraBHardware& board) : board_(board) {}
-        ClockUnit(const ClockUnit&) = delete;
-        ClockUnit& operator=(const ClockUnit&) = delete;
-
-        std::string_view name() const override { return "integra-b-rtc"; }
-        std::uint32_t layout_version() const override { return 1; }
-        std::string hardware_descriptor() const override { return "Integra-B: CDP6818"; }
-        void seed() override {
-            integra_b_battery_seed::apply_to_clock(board_.rtc, board_.seed_with_tube_coprocessor_);
-            board_.rtc.set_clock_offset(std::chrono::seconds(0));
-            restored_ = false;
-        }
-        std::vector<uint8_t> serialise() const override {
-            const auto image = board_.rtc.battery_image();
-            std::vector<uint8_t> contents(image.begin(), image.end());
-            auto offset = static_cast<std::uint64_t>(board_.rtc.clock_offset().count());
-            for (int i = 0; i < 8; ++i) {
-                contents.push_back(static_cast<uint8_t>(offset >> (8 * i)));
-            }
-            return contents;
-        }
-        bool restore(std::span<const uint8_t> contents) override {
-            Mc146818Rtc::BatteryImage image{};
-            if (contents.size() != image.size() + 8) return false;
-            std::copy_n(contents.begin(), image.size(), image.begin());
-            std::uint64_t offset = 0;
-            for (int i = 0; i < 8; ++i) {
-                offset |= static_cast<std::uint64_t>(contents[image.size() + i]) << (8 * i);
-            }
-            board_.rtc.load_battery_image(image);
-            board_.rtc.set_clock_offset(std::chrono::seconds(static_cast<std::int64_t>(offset)));
-            restored_ = true;
-            return true;
-        }
-
-        // Whether the clock holds what a saved machine kept, rather than the seed.
-        bool restored() const { return restored_; }
-
-    private:
-        ModelBIntegraBHardware& board_;
-        bool restored_ = false;
-    };
-
     BoardRamUnit board_ram_unit_{*this};
-    ClockUnit clock_unit_{*this};
+    // The board's clock, kept by its battery. Its seed is the board's,
+    // set up with a Tube coprocessor when one is attached.
+    Mc146818BatteryUnit clock_unit_{
+        rtc, "integra-b-rtc", "Integra-B: CDP6818", [this](Mc146818Rtc& clock) {
+            integra_b_battery_seed::apply_to_clock(clock, seed_with_tube_coprocessor_);
+        }};
 
     // See seed_with_tube_coprocessor().
     bool seed_with_tube_coprocessor_ = false;

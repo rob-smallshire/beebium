@@ -422,6 +422,10 @@ add_executable(test_mc146818_rtc test_mc146818_rtc.cpp)
 target_link_libraries(test_mc146818_rtc PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_mc146818_rtc)
 
+add_executable(test_mc146818_battery_unit test_mc146818_battery_unit.cpp)
+target_link_libraries(test_mc146818_battery_unit PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_mc146818_battery_unit)
+
 # IBM disc format tests (FM/MFM encoding, CRC)
 add_executable(test_ibm_disc_format test_ibm_disc_format.cpp)
 target_link_libraries(test_ibm_disc_format PRIVATE beebium_core Catch2::Catch2WithMain)
