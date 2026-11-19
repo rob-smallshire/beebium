@@ -18,8 +18,10 @@
 
 namespace beebium::linux_client {
 
-ChunkLevel chunk_level(const QByteArray& samples, const LiveInputFormat& format) {
+ChunkLevel chunk_level(const QByteArray& samples, const LiveInputFormat& format,
+                       int carried_run) {
     ChunkLevel level;
+    level.end_run = carried_run;
     const int frame_bytes = format.bytes_per_frame();
     if (frame_bytes <= 0) {
         return level;
@@ -29,7 +31,7 @@ ChunkLevel chunk_level(const QByteArray& samples, const LiveInputFormat& format)
     const int channel = format.channels > 1 && format.channel == QStringLiteral("right") ? 1 : 0;
     const qsizetype frames = samples.size() / frame_bytes;
     const char* data = samples.constData();
-    int run = 0;
+    int run = carried_run;
     for (qsizetype i = 0; i < frames; ++i) {
         const char* at = data + i * frame_bytes + channel * sample_bytes;
         float magnitude = 0.0F;
@@ -49,6 +51,7 @@ ChunkLevel chunk_level(const QByteArray& samples, const LiveInputFormat& format)
         level.clip_run = std::max(level.clip_run, run);
         level.peak = std::max(level.peak, std::min(magnitude, 1.0F));
     }
+    level.end_run = run;
     return level;
 }
 

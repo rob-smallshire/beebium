@@ -192,6 +192,8 @@ private:
     LiveCapture* capture_ = nullptr;
     std::unique_ptr<LiveChunker> chunker_;
     std::optional<LiveInputFormat> live_format_;
+    // The run of full-scale samples still going at the last chunk's end.
+    int clip_carry_ = 0;
     QTimer notice_timer_;
     // A live tape's counts, watched once a second while it is in.
     LiveStarveDetector starve_;

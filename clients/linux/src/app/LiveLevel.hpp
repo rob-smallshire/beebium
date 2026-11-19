@@ -38,13 +38,17 @@ constexpr double CLIP_HOLD_SECONDS = 2.0;
 // channel the deck takes, as a fraction of full scale, and the longest run
 // of consecutive samples there at full scale, where the host's converter
 // clips (16-bit -32768 or 32767, float a magnitude of 1.0 or more). Of two
-// channels, the left, or the right when the stream takes the right.
+// channels, the left, or the right when the stream takes the right. A run
+// straddles the chunks it spans: `carried_run` is the previous chunk's
+// end_run, the run still going at its end.
 struct ChunkLevel {
     float peak = 0.0F;
     int clip_run = 0;
+    int end_run = 0;
     bool clipping() const { return clip_run >= CLIP_RUN_SAMPLES; }
 };
-ChunkLevel chunk_level(const QByteArray& samples, const LiveInputFormat& format);
+ChunkLevel chunk_level(const QByteArray& samples, const LiveInputFormat& format,
+                       int carried_run = 0);
 
 // A peak as decibels of full scale, at the floor for silence and anything
 // beneath it.

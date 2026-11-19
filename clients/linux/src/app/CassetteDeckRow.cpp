@@ -853,7 +853,9 @@ void CassetteDeckRow::set_capture(LiveCapture* capture) {
             return;
         }
         if (live_format_) {
-            level_->take(chunk_level(samples, *live_format_));
+            const ChunkLevel level = chunk_level(samples, *live_format_, clip_carry_);
+            clip_carry_ = level.end_run;
+            level_->take(level);
         }
         for (const QByteArray& chunk : chunker_->feed(samples)) {
             cassette_.push_live(chunk);
@@ -912,6 +914,7 @@ void CassetteDeckRow::choose_live_input(const AudioInputDevice& device, const QS
     chunker_ = std::make_unique<LiveChunker>(*format);
     live_format_ = *format;
     level_->reset();
+    clip_carry_ = 0;
     cassette_.start_live(*format);
 }
 

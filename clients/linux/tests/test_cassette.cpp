@@ -1671,6 +1671,13 @@ TEST_CASE("A live tape shows its input's level where a file tape has its timelin
     const float click[] = {0.25F, -1.0F, 0.5F};
     d.capture->give(QByteArray(reinterpret_cast<const char*>(click), sizeof click));
     CHECK_FALSE(d.row.level_clip_lit());
+    // A run cut short by a new stream is not carried into it.
+    const float tail[] = {0.25F, 1.0F, 1.0F};
+    d.capture->give(QByteArray(reinterpret_cast<const char*>(tail), sizeof tail));
+    d.row.choose_live_input(d.inputs[1], {});
+    const float head[] = {1.0F, 0.5F};
+    d.capture->give(QByteArray(reinterpret_cast<const char*>(head), sizeof head));
+    CHECK_FALSE(d.row.level_clip_lit());
     const float run[] = {0.25F, 1.0F, 1.0F, 1.0F, 0.5F};
     d.capture->give(QByteArray(reinterpret_cast<const char*>(run), sizeof run));
     CHECK(d.row.level_clip_lit());
@@ -1729,8 +1736,13 @@ TEST_CASE("The meter draws its tick and held peak, and its clip mark only while 
     CHECK(close_to(image.pixelColor(meter->x_of(-24.0), 0), ink));
     // The clip mark, unlit, is not drawn at all: not grey, simply absent.
     CHECK_FALSE(any_pixel(image, meter->clip_rect(), [](QColor c) { return c.alpha() > 0; }));
-    const float clipping[] = {1.0F, 1.0F, 1.0F};
-    d.capture->give(QByteArray(reinterpret_cast<const char*>(clipping), sizeof clipping));
+    // Sustained clipping that straddles two capture chunks.
+    const float clipping_tail[] = {0.5F, 1.0F, 1.0F};
+    const float clipping_head[] = {1.0F, 0.5F};
+    d.capture->give(QByteArray(reinterpret_cast<const char*>(clipping_tail), sizeof clipping_tail));
+    CHECK_FALSE(d.row.level_clip_lit());
+    d.capture->give(QByteArray(reinterpret_cast<const char*>(clipping_head), sizeof clipping_head));
+    CHECK(d.row.level_clip_lit());
     image = drawn();
     CHECK(any_pixel(image, meter->clip_rect(), [&](QColor c) { return c.alpha() > 200 && close_to(c, red); }));
 }

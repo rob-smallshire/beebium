@@ -83,6 +83,35 @@ TEST_CASE("Clipping is a run of three full-scale samples, not a single click", "
     CHECK(chunk_level(bytes<float>({1.0F, 1.0F, 0.5F, 1.0F}), format(F32, 1)).clip_run == 2);
 }
 
+TEST_CASE("A run of full-scale samples carries across the chunks it straddles", "[live][level]") {
+    // Two at the end of one chunk and one at the head of the next are three.
+    const ChunkLevel first = chunk_level(bytes<std::int16_t>({0, 32767, 32767}), format(S16, 1));
+    CHECK(first.clip_run == 2);
+    CHECK(first.end_run == 2);
+    CHECK_FALSE(first.clipping());
+    const ChunkLevel second =
+        chunk_level(bytes<std::int16_t>({32767, 0, 0}), format(S16, 1), first.end_run);
+    CHECK(second.clip_run == 3);
+    CHECK(second.clipping());
+    CHECK(second.end_run == 0);
+    // A run that fills a whole chunk carries on into the next.
+    const ChunkLevel whole = chunk_level(bytes<float>({1.0F, -1.0F}), format(F32, 1), 1);
+    CHECK(whole.clip_run == 3);
+    CHECK(whole.end_run == 3);
+    // A run broken at the head of the next chunk is not carried; it was
+    // counted in the chunk it ended in.
+    const ChunkLevel broken =
+        chunk_level(bytes<std::int16_t>({0, 32767, 0}), format(S16, 1), 2);
+    CHECK(broken.clip_run == 1);
+    CHECK(broken.end_run == 0);
+    // Of two channels, the run is the taken channel's.
+    const ChunkLevel right = chunk_level(bytes<float>({0.0F, 1.0F, 0.0F, 1.0F}),
+                                         format(F32, 2, QStringLiteral("right")), 1);
+    CHECK(right.clip_run == 3);
+    // An empty chunk leaves the run as it was.
+    CHECK(chunk_level(QByteArray(), format(S16, 1), 2).end_run == 2);
+}
+
 TEST_CASE("A stereo chunk is measured on the channel the deck takes; the other counts for nothing",
           "[live][level]") {
     // Frames of (left, right).
