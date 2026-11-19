@@ -98,7 +98,7 @@ void print_usage(const char* program_name) {
               << "  --port <port>            gRPC port (default: " << DEFAULT_GRPC_PORT << ")\n"
               << "  --floppy <drive>:<filepath|url>\n"
               << "                           Load disc image into floppy drive (0 or 1)\n"
-              << "  --tape <filepath>        Insert a UEF or CSW tape image into the cassette\n"
+              << "  --tape <filepath>        Insert a UEF, CSW or WAV tape image into the cassette\n"
               << "                           deck and press play\n";
     if constexpr (requires { Memory::BOARD_RTC_OPTION; }) {
         std::cerr << "  --" << Memory::BOARD_RTC_OPTION

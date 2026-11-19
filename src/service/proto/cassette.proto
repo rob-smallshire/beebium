@@ -10,7 +10,7 @@ package beebium;
 // ULA latch bit 7) is closed. Every unsuccessful response carries a sentence
 // naming the tape by the name the client gave, and a kind.
 service CassetteService {
-    // Insert a UEF or CSW tape image the server can reach. The format is
+    // Insert a UEF, CSW or WAV tape image the server can reach. The format is
     // judged by content. Fails if a tape is already in.
     rpc InsertTape(InsertTapeRequest) returns (InsertTapeResponse);
 
@@ -34,7 +34,9 @@ service CassetteService {
     // what passes under the head is replaced by what the Serial ULA sends, an
     // edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
     // tape end it, and the tape is then written back to its file. Refused with
-    // READ_ONLY for a tape Beebium only reads (a CSW).
+    // READ_ONLY for a tape Beebium cannot record on: a CSW or WAV, a UEF that
+    // changes its base frequency (chunk &0113), a UEF held only in memory, and a
+    // UEF whose file or folder the server cannot write.
     rpc Record(RecordRequest) returns (CassetteResponse);
 
     // The blank tape templates the server ships, and a copy of one into place
@@ -82,12 +84,12 @@ enum CassetteErrorKind {
     CASSETTE_ERROR_KIND_NO_CASSETTE_INTERFACE = 1;  // the model has no cassette interface
     CASSETTE_ERROR_KIND_CANNOT_OPEN = 2;            // missing, or no permission
     CASSETTE_ERROR_KIND_UNREADABLE = 3;             // opened, but could not be read to the end
-    CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT = 4;     // not a UEF or CSW
+    CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT = 4;     // not a UEF, CSW or WAV
     CASSETTE_ERROR_KIND_INVALID_IMAGE = 5;          // recognised, but refused (a disc chunk, a version, a value out of range, a blank tape template)
     CASSETTE_ERROR_KIND_DECK_OCCUPIED = 6;          // insert with a tape in
     CASSETTE_ERROR_KIND_DECK_EMPTY = 7;             // eject, play, stop, seek, wind, record or a signal map with no tape
     CASSETTE_ERROR_KIND_INVALID_POSITION = 8;       // a seek to a negative position
-    CASSETTE_ERROR_KIND_READ_ONLY = 9;              // record on a tape that cannot be recorded on (a CSW or WAV, or a file the server cannot write)
+    CASSETTE_ERROR_KIND_READ_ONLY = 9;              // record on a tape that cannot be recorded on (a CSW or WAV, a UEF with chunk &0113 or held only in memory, or one whose file or folder the server cannot write)
     CASSETTE_ERROR_KIND_LIVE_SOURCE = 10;           // seek, wind or record on a live tape
     CASSETTE_ERROR_KIND_INVALID_FORMAT = 11;        // a live stream's or a WAV channel's format refused
     CASSETTE_ERROR_KIND_NOT_READY = 12;             // the tape's signal map is not computed yet (SeekToAppendPoint)
@@ -223,7 +225,7 @@ message CreateTapeRequest {
 
 message CreateTapeResponse {
     bool success = 1;
-    string error = 2;                 // a lower-case message if !success
+    string error = 2;                 // a sentence if !success
     CreateTapeErrorKind kind = 3;
     string path = 4;                  // the absolute path of the new tape, if success
 }

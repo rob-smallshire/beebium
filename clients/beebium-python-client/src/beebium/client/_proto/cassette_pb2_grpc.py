@@ -141,7 +141,7 @@ class CassetteServiceServicer(object):
     """
 
     def InsertTape(self, request, context):
-        """Insert a UEF or CSW tape image the server can reach. The format is
+        """Insert a UEF, CSW or WAV tape image the server can reach. The format is
         judged by content. Fails if a tape is already in.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -196,7 +196,9 @@ class CassetteServiceServicer(object):
         what passes under the head is replaced by what the Serial ULA sends, an
         edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
         tape end it, and the tape is then written back to its file. Refused with
-        READ_ONLY for a tape Beebium only reads (a CSW).
+        READ_ONLY for a tape Beebium cannot record on: a CSW or WAV, a UEF that
+        changes its base frequency (chunk &0113), a UEF held only in memory, and a
+        UEF whose file or folder the server cannot write.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

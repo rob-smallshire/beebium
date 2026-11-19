@@ -45,7 +45,7 @@ class _CassetteErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Cas
     CASSETTE_ERROR_KIND_UNREADABLE: _CassetteErrorKind.ValueType  # 3
     """opened, but could not be read to the end"""
     CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT: _CassetteErrorKind.ValueType  # 4
-    """not a UEF or CSW"""
+    """not a UEF, CSW or WAV"""
     CASSETTE_ERROR_KIND_INVALID_IMAGE: _CassetteErrorKind.ValueType  # 5
     """recognised, but refused (a disc chunk, a version, a value out of range, a blank tape template)"""
     CASSETTE_ERROR_KIND_DECK_OCCUPIED: _CassetteErrorKind.ValueType  # 6
@@ -55,7 +55,7 @@ class _CassetteErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Cas
     CASSETTE_ERROR_KIND_INVALID_POSITION: _CassetteErrorKind.ValueType  # 8
     """a seek to a negative position"""
     CASSETTE_ERROR_KIND_READ_ONLY: _CassetteErrorKind.ValueType  # 9
-    """record on a tape that cannot be recorded on (a CSW or WAV, or a file the server cannot write)"""
+    """record on a tape that cannot be recorded on (a CSW or WAV, a UEF with chunk &0113 or held only in memory, or one whose file or folder the server cannot write)"""
     CASSETTE_ERROR_KIND_LIVE_SOURCE: _CassetteErrorKind.ValueType  # 10
     """seek, wind or record on a live tape"""
     CASSETTE_ERROR_KIND_INVALID_FORMAT: _CassetteErrorKind.ValueType  # 11
@@ -73,7 +73,7 @@ CASSETTE_ERROR_KIND_CANNOT_OPEN: CassetteErrorKind.ValueType  # 2
 CASSETTE_ERROR_KIND_UNREADABLE: CassetteErrorKind.ValueType  # 3
 """opened, but could not be read to the end"""
 CASSETTE_ERROR_KIND_UNSUPPORTED_FORMAT: CassetteErrorKind.ValueType  # 4
-"""not a UEF or CSW"""
+"""not a UEF, CSW or WAV"""
 CASSETTE_ERROR_KIND_INVALID_IMAGE: CassetteErrorKind.ValueType  # 5
 """recognised, but refused (a disc chunk, a version, a value out of range, a blank tape template)"""
 CASSETTE_ERROR_KIND_DECK_OCCUPIED: CassetteErrorKind.ValueType  # 6
@@ -83,7 +83,7 @@ CASSETTE_ERROR_KIND_DECK_EMPTY: CassetteErrorKind.ValueType  # 7
 CASSETTE_ERROR_KIND_INVALID_POSITION: CassetteErrorKind.ValueType  # 8
 """a seek to a negative position"""
 CASSETTE_ERROR_KIND_READ_ONLY: CassetteErrorKind.ValueType  # 9
-"""record on a tape that cannot be recorded on (a CSW or WAV, or a file the server cannot write)"""
+"""record on a tape that cannot be recorded on (a CSW or WAV, a UEF with chunk &0113 or held only in memory, or one whose file or folder the server cannot write)"""
 CASSETTE_ERROR_KIND_LIVE_SOURCE: CassetteErrorKind.ValueType  # 10
 """seek, wind or record on a live tape"""
 CASSETTE_ERROR_KIND_INVALID_FORMAT: CassetteErrorKind.ValueType  # 11
@@ -678,7 +678,7 @@ class CreateTapeResponse(_message.Message):
     PATH_FIELD_NUMBER: _builtins.int
     success: _builtins.bool
     error: _builtins.str
-    """a lower-case message if !success"""
+    """a sentence if !success"""
     kind: Global___CreateTapeErrorKind.ValueType
     path: _builtins.str
     """the absolute path of the new tape, if success"""

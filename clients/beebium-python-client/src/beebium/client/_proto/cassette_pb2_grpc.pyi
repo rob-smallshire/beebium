@@ -53,7 +53,7 @@ class CassetteServiceStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> CassetteServiceAsyncStub: ...
     InsertTape: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.InsertTapeRequest, _cassette_pb2.InsertTapeResponse]
-    """Insert a UEF or CSW tape image the server can reach. The format is
+    """Insert a UEF, CSW or WAV tape image the server can reach. The format is
     judged by content. Fails if a tape is already in.
     """
     EjectTape: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.EjectTapeRequest, _cassette_pb2.CassetteResponse]
@@ -76,7 +76,9 @@ class CassetteServiceStub:
     what passes under the head is replaced by what the Serial ULA sends, an
     edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
     tape end it, and the tape is then written back to its file. Refused with
-    READ_ONLY for a tape Beebium only reads (a CSW).
+    READ_ONLY for a tape Beebium cannot record on: a CSW or WAV, a UEF that
+    changes its base frequency (chunk &0113), a UEF held only in memory, and a
+    UEF whose file or folder the server cannot write.
     """
     ListBlankTapes: _grpc.UnaryUnaryMultiCallable[_cassette_pb2.ListBlankTapesRequest, _cassette_pb2.ListBlankTapesResponse]
     """The blank tape templates the server ships, and a copy of one into place
@@ -130,7 +132,7 @@ class CassetteServiceAsyncStub(CassetteServiceStub):
 
     def __init__(self, channel: _aio.Channel) -> None: ...
     InsertTape: _aio.UnaryUnaryMultiCallable[_cassette_pb2.InsertTapeRequest, _cassette_pb2.InsertTapeResponse]  # type: ignore[assignment]
-    """Insert a UEF or CSW tape image the server can reach. The format is
+    """Insert a UEF, CSW or WAV tape image the server can reach. The format is
     judged by content. Fails if a tape is already in.
     """
     EjectTape: _aio.UnaryUnaryMultiCallable[_cassette_pb2.EjectTapeRequest, _cassette_pb2.CassetteResponse]  # type: ignore[assignment]
@@ -153,7 +155,9 @@ class CassetteServiceAsyncStub(CassetteServiceStub):
     what passes under the head is replaced by what the Serial ULA sends, an
     edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
     tape end it, and the tape is then written back to its file. Refused with
-    READ_ONLY for a tape Beebium only reads (a CSW).
+    READ_ONLY for a tape Beebium cannot record on: a CSW or WAV, a UEF that
+    changes its base frequency (chunk &0113), a UEF held only in memory, and a
+    UEF whose file or folder the server cannot write.
     """
     ListBlankTapes: _aio.UnaryUnaryMultiCallable[_cassette_pb2.ListBlankTapesRequest, _cassette_pb2.ListBlankTapesResponse]  # type: ignore[assignment]
     """The blank tape templates the server ships, and a copy of one into place
@@ -210,7 +214,7 @@ class CassetteServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _cassette_pb2.InsertTapeRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_cassette_pb2.InsertTapeResponse, _abc.Awaitable[_cassette_pb2.InsertTapeResponse]]:
-        """Insert a UEF or CSW tape image the server can reach. The format is
+        """Insert a UEF, CSW or WAV tape image the server can reach. The format is
         judged by content. Fails if a tape is already in.
         """
 
@@ -275,7 +279,9 @@ class CassetteServiceServicer(metaclass=_abc_1.ABCMeta):
         what passes under the head is replaced by what the Serial ULA sends, an
         edge or silence. Stop, Play, Seek, a wind, EjectTape and the end of the
         tape end it, and the tape is then written back to its file. Refused with
-        READ_ONLY for a tape Beebium only reads (a CSW).
+        READ_ONLY for a tape Beebium cannot record on: a CSW or WAV, a UEF that
+        changes its base frequency (chunk &0113), a UEF held only in memory, and a
+        UEF whose file or folder the server cannot write.
         """
 
     @_abc_1.abstractmethod
