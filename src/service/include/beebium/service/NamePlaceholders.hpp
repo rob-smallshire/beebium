@@ -198,10 +198,11 @@ public:
             // An empty socket is not applicable.
             std::string chip = memory.disc_socket.fdc_chip();
             return {chip, !chip.empty()};
-        } else {
-            static_assert(requires { memory.disc_controller.name(); },
-                          "a machine has a disc controller socket or a built-in controller");
+        } else if constexpr (requires { memory.disc_controller.name(); }) {
             return {std::string(memory.disc_controller.name()), true};
+        } else {
+            // A machine with no disc controller at all: not applicable.
+            return {"", false};
         }
     }
 

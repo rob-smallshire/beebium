@@ -297,6 +297,7 @@ add_beebium_server(beebium-model-b-romram main_model_b_romram.cpp)
 add_beebium_server(beebium-model-b-atpl-sidewise main_model_b_atpl_sidewise.cpp)
 add_beebium_server(beebium-model-b-watford-rom-ram main_model_b_watford_rom_ram.cpp)
 add_beebium_server(beebium-model-b-integra-b main_model_b_integra_b.cpp)
+add_beebium_server(beebium-master-128 main_master_128.cpp)
 
 # System presets are generated below (after the ROM copy) via add_system_preset,
 # which runs the create-preset subcommand as a POST_BUILD step.
@@ -314,6 +315,7 @@ set(BEEBIUM_SERVERS_DEPS
     beebium-model-b-atpl-sidewise
     beebium-model-b-watford-rom-ram
     beebium-model-b-integra-b
+    beebium-master-128
 )
 if(BEEBIUM_BUILD_SERVICE)
     list(APPEND BEEBIUM_SERVERS_DEPS
@@ -457,6 +459,8 @@ add_system_preset(beebium-model-b-plus "model-b-plus" "Model B+ 64K" "1985-06"
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
     "Model B+ 128K" "1985-06"
     DESCRIPTION "128K Model B+, sideways RAM")
+add_system_preset(beebium-master-128 "master-128" "Master 128" "1986-01"
+    DESCRIPTION "BBC Master 128, MOS 3.20, Welcome Guide configuration")
 
 # Econet presets, so users can try networking out of the box: model-b-disc
 # plus a network filing system (ANFS 4.18) and a station number, one per
@@ -643,6 +647,7 @@ install(TARGETS
         beebium-model-b-atpl-sidewise
         beebium-model-b-watford-rom-ram
         beebium-model-b-integra-b
+        beebium-master-128
     RUNTIME DESTINATION bin
 )
 install(DIRECTORY ${BEEBIUM_ROM_DIR}/

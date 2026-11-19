@@ -881,6 +881,17 @@ void apply_rom_defaults(ServerConfig<MachineType>& config) {
         }
     }
 
+    // Load the machine's other built-in sideways ROMs (the Master's MOS ROM
+    // banks 9 to 15) into each slot not overridden.
+    if constexpr (requires { Memory::DEFAULT_SIDEWAYS_ROMS; }) {
+        for (const auto& rom : Memory::DEFAULT_SIDEWAYS_ROMS) {
+            if (!skip_default_for_slot(rom.slot)
+                && config.machine.rom_slots.find(rom.slot) == config.machine.rom_slots.end()) {
+                config.machine.rom_slots[rom.slot] = std::string(rom.image_filename);
+            }
+        }
+    }
+
     // Load the expansion board's own ROM (e.g. the Integra-B's IBOS) if the
     // machine has one and its slot is not overridden.
     if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
