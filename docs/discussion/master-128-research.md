@@ -143,8 +143,9 @@ sequence (MOS 3.20 source, with interrupts disabled around it): with CE and DS l
 the register number on port A, raise CE, drop AS (the address latches on the falling edge);
 then for a read set R/W, make port A input, raise DS and read; for a write clear R/W, raise DS
 and write; then drop DS and CE. B-Em latches the address on any port B write with bit 7 set
-(level), B2 and BeebEm on the falling edge; the chip's datasheet says the falling edge of AS
-latches, which Beebium's `Mc146818Rtc` already models through `write_address`. On every reset,
+(level), B2 and BeebEm on the falling edge; the datasheet (`docs/datasheets/MC146818.pdf`,
+Motorola 1988, reprinted by Freescale) says the falling edge of AS latches AD0-AD5, which
+Beebium's `Mc146818Rtc` already models through `write_address`. On every reset,
 soft or hard, MOS 3.20 writes register A = &20 (oscillator on, periodic interrupt off) and
 register B = &02 (BCD, 24-hour, no interrupts), and reads the time only for OSWORD &0E and
 `*TIME`; its own TIME counter is VIA-driven. CMOS byte 0, the station number, is write-protected
@@ -159,6 +160,25 @@ printer; 16 loud, Tube internal/external, no-scroll, boot, serial format; 17 ANF
 joystick; 19-29 reserved; 30-45 one byte per ROM 0-15; 46-49 user. The clock's IRQ reaches the
 CPU only through link LK4, unmade as shipped, so the alarm and periodic interrupts are not
 observable on a stock machine; the update-in-progress bit is.
+
+What else the datasheet fixes, and the Master's wiring makes observable. The latch takes six
+address bits, so register numbers above 63 wrap. CE is not latched: it must be low from before
+AS falls until DS ends, which is why Acorn's phantom-access warning exists and why the MOS raises
+CE before dropping AS; PB6 therefore gates the strobes rather than the data. The level of DS at
+the falling edge of AS selects the bus protocol (MOTEL): the MOS holds DS low, so the chip runs
+in Motorola mode, drives the bus while DS is high on a read and latches the data on the falling
+edge of DS on a write. Reading register C returns the flags and clears them all, IRQF included;
+registers C and D, UIP in A and bit 7 of the seconds byte are read-only. The RESET pin clears
+PIE, AIE, UIE and SQWE and the four flags and nothing else (the time, the RAM, SET, DM, 24/12,
+DSE and the divider and rate bits survive); on the Master the pin is on the system reset, so
+every Break does this, which the MOS's A = &20, B = &02 rewrite then hides. VRT in register D
+is set by reading D and cleared only by the power-sense pin going low. The time base is a
+32.768 kHz crystal (X1 on sheet 2), so the update cycle is 1984 us with UIP set 244 us before it;
+the ten time and alarm bytes read undefined during the cycle. An alarm byte of &C0-&FF is a
+"don't care". Daylight saving (DSE) follows the US rule of the day, the last Sundays of April
+and October. The existing `Mc146818Rtc` implements the six-bit latch, the clear-on-read of C,
+the read-only bits, the RESET pin as `reset()`, the 1984/244 us UIP window and the alarm codes;
+it stores DSE without acting on it and reports VRT always set.
 
 Every emulator surveyed simplifies the clock to host time plus an offset with no UIP, alarm or
 periodic interrupt. Beebium's `Mc146818Rtc` (from the Integra-B) has `tick`, `irq_pending`,
@@ -391,8 +411,11 @@ assembler test:
 3. What an unmapped SHEILA address, the 1770 latch, and &FE2C-&FE2F read, in Mode 7 and Mode 0.
 4. The 1770 latch's bit 3 (DS2) and bit 2 (RES) behaviour, and whether the 1770 registers are
    1 MHz (the Reference Manual) or 2 MHz (the emulators).
-5. The clock: whether the address latches on the falling edge of AS or at level; UIP timing;
-   whether LK4 is made on this machine.
+5. The clock: the datasheet settles the address latch (the falling edge of AS) and the UIP
+   window (244 us before a 1984 us update cycle), so what remains is what the board does with
+   the chip: whether the power-sense pin is held high so VRT reads 1 (and whether MOS 3.20 ever
+   reads register D), whether Break reaches the chip's RESET pin (the diagram shows RST there),
+   and whether LK4 is made on this machine.
 6. The ADC's decode width at &FE18 (8 bytes? through &FE20?), and the Video ULA's at &FE20.
 7. 65SC12 timing through dp111's 65C12 suite at 1 MHz and 2 MHz, as the oracle for the
    Beebium build, and the extra IRQ entry cycle.
@@ -404,7 +427,8 @@ assembler test:
 ## 6. Sources
 
 Local: the B2, B-Em, BeebEm (Windows and Mac) and beebjit trees; `docs/manuals_text/
-BBC_Master-New-Advanced-User-Guide`; the Master 128 main PCB circuit diagram, Acorn drawing
+BBC_Master-New-Advanced-User-Guide`; the MC146818 datasheet (Motorola 1988, Freescale reprint)
+as `docs/datasheets/MC146818.pdf`; the Master 128 main PCB circuit diagram, Acorn drawing
 0143,000/C as redrawn for stardot in April 2024 (two sheets plus the keyboard matrix), kept
 as `docs/manuals/BBC Master 128 Circuit Diagram APR2024.pdf` beside the other manuals (not
 committed, as none of them is); Beebium's own `docs/sideways-slots.md`,
