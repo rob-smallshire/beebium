@@ -160,9 +160,10 @@ are one-of attachment points (the `at` placement of step 5): a cartridge is an e
 instance that provides the slot's sideways banks (Rob's framing: cartridge extensions provide
 sideways slots, so the port is a provider of two banks for reads and, later, writes, and a
 FRED/JIM cartridge adds bus handlers on the same instance), and the first fitting is a built-in
-ROM cartridge with a required low image and an
-optional high one (absent, the 16K image answers on both banks); its port fills the slot's two
-banks, which SidewaysService reports read-only with the images' names. Insertion and removal
+ROM cartridge with two 16K sockets, the even-bank and odd-bank images, each optional but at
+least one given; a socket left empty leaves its bank empty, exactly as a one-chip cartridge
+does on Acorn's board (Rob: be honest to the real cartridge); its port fills the slot's banks,
+which SidewaysService reports read-only with the images' names. Insertion and removal
 at run time wait for hot plugging in the framework; a swap is a relaunch, as Acorn told owners
 to power off before changing a cartridge. This is the shape a FRED/JIM cartridge needs, so the
 slot and the bus device stay one thing. `docs/sideways-slots.md`'s reservation of
@@ -173,7 +174,8 @@ attachment point is declared, decoding nMODEM at &FE80-&FE9F at 1 MHz on the int
 (A0-A3, so the 32 bytes are 16 registers mirrored once), with no fitting; a read with nothing
 fitted is the stale bus.
 
-Tests: a ROM cartridge placed at each slot appears at its banks, a 16K one on both, is read-only
+Tests: a ROM cartridge placed at each slot appears at its banks, a one-chip one on its own bank
+with the other bank empty, is read-only
 to the CPU and to SidewaysService (SetSlot refused with a sentence), and the Memory view names
 its images; a cartridge at a point a Model B lacks is refused; IFJ routing
 (an extension on the external bus is unreachable while IFJ is set); the modem select's range

@@ -258,8 +258,8 @@ at 2 MHz or 1 MHz as the access demands.
   OSBYTE &6B, meant to select the bus, is broken in MOS 3.20, so software pokes IFJ directly.
   No emulator models cartridges as more than ROM banks, except B2's ADJI joystick cartridge in
   its internal FRED/JIM scope. In Beebium a cartridge is an extension that provides the slot's
-  two banks (the first round's built-in ROM cartridge: two 16K sockets, one image answering on
-  both banks when a single chip is fitted). Acorn's own Master ROM Cartridge (Centre for
+  two banks (the first round's built-in ROM cartridge: two 16K sockets; a single chip answers on
+  its own bank and leaves the other empty, as on the board). Acorn's own Master ROM Cartridge (Centre for
   Computing History item 33659) has two sockets each taking a 27128 or a 27513. The 27513 is a
   64K EPROM organised as four 16K pages behind its own page latch: a write to any address in
   the chip sets the page from the low two bits of the data, and the Master cartridge wires the
