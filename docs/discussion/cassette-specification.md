@@ -464,28 +464,31 @@ cassette agent, and ends with the full gate from a separate Release worktree.
    partial-rewind take loads after a seek), the DCD-test WAVs.
 6. **Round 8: live audio.** *Done.* `StreamAudio`, the ring, the timing policy, Python
    `stream_audio` fed from a WAV (which makes the WAV corpus the live test vector too).
-7. **Round 9: signal map.** *Server done; the GUI round follows.* One level per second of tape,
+7. **Round 9: signal map.** *Done, server and both GUI clients.* One level per second of tape,
    silent or not, computed from the `TapeSignal` the deck would play on a worker the deck owns
    (`cassette-round9-signal-map-specification.md`), `GetTapeSignalMap` and the status fields,
    Python `signal_map()` and TypeScript `signalMap()`; the GUI clients then colour the position
    bar grey and blue by it.
-8. **Round 10: the append point.** *Server done; the GUI round follows.* `SeekToAppendPoint` takes the tape to two
+8. **Round 10: the append point.** *Done, server and both GUI clients.* `SeekToAppendPoint` takes the tape to two
    seconds past the last second of signal in round 9's map (`cassette-round10-append-point-specification.md`);
    the GUI clients add a To the end of the recordings key beside Back to the beginning.
-9. **Round 11: live input in the GUI clients.** *Specified 2026-11-18; scheduled for the release
-   Rob chooses.* Rob's review of round 8's GUI before it is unhidden
+9. **Round 11: live input in the GUI clients.** *Done; shipped in 0.20.0 (2026-11-18).* Rob's
+   review of round 8's GUI before it is unhidden
    (`cassette-round11-live-input-gui-specification.md`): the buffer meter goes; a sustained
    starve or drop is one deduplicated deck failure message with the copy-and-dismiss affordance
    of client specification 3.4; a client-side peak level meter with a clipping mark takes its
    place; inputs stay unfiltered; Rob adds the macOS usage string, which says why.
-10. **Round 12: the live input's meter and device changes.** *Specified 2026-11-18, in progress.*
+10. **Round 12: the live input's meter and device changes.** *Done; shipped in 0.20.1
+   (2026-11-19). In the same release the macOS app's sound output moved to an output-only audio
+   unit, so a machine window never asks for the microphone; only picking an input device does.*
    Rob proved live input end to end through a virtual audio device (`docs/live-input-routing.md`)
    and found the meter unreadable and a device rate change reported as a starve
    (`cassette-round12-live-input-meter-and-device-changes-specification.md`): the meter goes to
    decibels with a peak hold and a sustained-clipping mark; a device format change or
    disconnection ends the stream with a sentence. Client-only.
-11. **Later**: recording to CSW; the VLSI part's selection in presets; a Master Compact's
-   `has_cassette = false` when that variant exists.
+11. **Later**: recording to CSW; the VLSI part's selection in presets; write-back of a UEF with
+   &0113; a Master Compact's `has_cassette = false` when that variant exists. The as-built record
+   is `docs/cassette.md`; where this document and it differ, the as-built document is current.
 
 ## Decisions to verify on hardware or against the corpus
 

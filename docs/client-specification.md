@@ -1739,7 +1739,8 @@ section sits above the floppy drives, which sit above the hard discs.
   real one is; what is on the tape is the machine's business.
 - Errors. Every refused cassette request returns a sentence naming the tape, and a
   `CassetteErrorKind` (no cassette interface, cannot open, unreadable, unsupported
-  format, invalid image, deck occupied, deck empty, invalid position, read only). The client
+  format, invalid image, deck occupied, deck empty, invalid position, read only, live
+  source, invalid format, not ready). The client
   shows the server's sentence verbatim and in full, in the register of 3.4: it is
   already a sentence, so the client puts no frame around it. The kind selects only
   the icon or the recovery control (an Eject offer on deck occupied, say); the
@@ -1760,15 +1761,21 @@ section sits above the floppy drives, which sit above the hard discs.
 - Saved machines. A saved machine records the position of its configured tape on
   Save, and reopens with that tape at that position, stopped (5.3). A tape inserted
   at run time is not recorded on Save, as a floppy inserted at run time is not.
-- Live input. A picker lists the audio input devices the host reports, with the
-  names the platform gives them and no filtering by kind (a line-in and a
-  microphone are not distinguishable on every platform). Choosing one opens
-  `StreamAudio` with the device's native rate, sample format and channels (the
-  channel to take, for a stereo device) and its name, and the deck shows the live
-  tape, stopped, format `LIVE`. The deck's keys behave as for any tape, with Seek,
+- Live input. A picker named Input Device, in the empty deck's insert menu, lists the
+  audio input devices the host reports, with the names the platform gives them and no
+  filtering by kind (a line-in and a microphone are not distinguishable on every
+  platform); with none it says so in a disabled entry. The live input is captured on
+  the client's host and streamed, so it is offered whether or not the server shares the
+  filesystem (3.2). Choosing a device opens `StreamAudio` with the device's rate and
+  channel count, a sample format the deck accepts (S16 or F32; a client may always
+  capture as float), the channel to take from a stereo device (the left unless the
+  client offers the choice: LATITUDE) and the device's name, and the deck shows the
+  live tape, stopped, format `LIVE`. The deck's keys behave as for any tape, with Seek,
   Rewind, Fast forward and Record disabled (the server refuses them with
   `LIVE_SOURCE`); Play is separate, as ever, and the counter runs while samples
-  arrive. The ring's fill and the overrun and underrun counts (`live_ring_fill`,
+  arrive. Eject ends the stream, with help saying so; the live tape leaves the deck
+  once the server has played out its ring, and a client may disable Eject meanwhile.
+  The ring's fill and the overrun and underrun counts (`live_ring_fill`,
   `live_overruns`, `live_underruns`) are not shown: they are not actionable. When
   one of the counts has grown in each of three consecutive seconds of status, the
   deck shows one failure message with the 3.4 affordance (persistent, copyable,
@@ -1776,7 +1783,12 @@ section sits above the floppy drives, which sit above the hard discs.
   for samples dropped, with the counts in its detail; an equivalent condition never
   re-raises a showing or a dismissed message until it has cleared for as long and
   recurred, the other condition replaces it, and Eject or the stream ending clears
-  it (MANDATORY; cassette round 11). A live tape shows a level meter computed by
+  it (MANDATORY; cassette round 11). The sentences are the clients' own, since the
+  server reports counts, and they are fixed (MANDATORY): "The live input is not keeping
+  up with the Beeb; some of the tape is being made up as silence." and "The live input
+  is arriving faster than the Beeb can take it; some of the tape is being dropped.",
+  each with a detail giving the seconds made up or the samples dropped since the
+  stream began. A live tape shows a level meter computed by
   the client from its own capture, since clipping happens at the host's converter:
   a bar in decibels of full scale from -60 to 0 with a tick at -12 as the target,
   a peak-hold line that sits at the highest level of the last two seconds and then
@@ -1784,18 +1796,27 @@ section sits above the floppy drives, which sit above the hard discs.
   consecutive full-scale samples in the taken channel), holds about two seconds,
   and is otherwise absent, never dimmed; its help says to keep the held peak near
   the tick and turn the source down if the mark appears (MANDATORY shape; the
-  rates and drawing LATITUDE; cassette round 12). When the chosen device changes
-  format or is disconnected while a live tape is in, the client ends the stream
-  (the server ejects) and shows a failure saying so and to choose the device again,
-  which outranks a starve raised in the same second (MANDATORY; cassette round 12).
-  The capture applies no voice processing (MANDATORY): no automatic
+  rates and drawing LATITUDE; cassette round 12). The meter is fed from the taken
+  channel and updates as capture chunks arrive. When the chosen device changes rate or
+  channel count, or is disconnected, while a live tape is in, the client cancels the
+  stream (the server ejects) and shows a failure saying so, which outranks a starve
+  raised in the same second and stays shown after the eject until dismissed
+  (MANDATORY; cassette round 12). The sentences are fixed (MANDATORY): "The input
+  device changed while the live tape was playing; choose it again from Input Device."
+  with a detail naming the device and the format it had and now has, and "The input
+  device was disconnected while the live tape was playing." with the device's name in
+  its detail. The capture applies no voice processing (MANDATORY): no automatic
   gain, noise suppression or echo cancellation; on macOS this means the plain input
   format, not the voice-processing audio unit. Stopping the stream ejects the live
   tape, once the deck has played out what the server's ring holds. The macOS app's
-  usage string is supplied by the app's owner and explains that the chosen input is
-  played as a live cassette tape, since the system's own dialog says "microphone"
-  and fires once per app on the first device picked; the client never asks for the
-  microphone without it and asks only when a device is picked (MACOS-ONLY).
+  usage string (`NSMicrophoneUsageDescription`) is supplied by the app's owner and
+  explains that the chosen input is played as a live cassette tape, since the system's
+  own dialog says "microphone" and fires once per app on the first device picked; the
+  client never asks for the microphone without it, offers the picker only when it is
+  present, and asks only when a device is picked, never at launch or when a machine
+  window opens, so its sound output must never realise an input (MACOS-ONLY). When
+  the user refuses, the deck shows a failure saying permission is needed and where to
+  grant it (MACOS-ONLY).
 
 States and transitions:
 
@@ -1804,7 +1825,9 @@ States and transitions:
 | empty | InsertTape succeeds | stopped at 0 |
 | stopped, rewinding or fast-forwarding | Play | playing, from where the tape is |
 | stopped, playing, rewinding or fast-forwarding, with a UEF | Record | recording, from where the tape is (at the end: stays stopped) |
-| any with a CSW | Record | refused (`READ_ONLY`), transport unchanged |
+| any with a CSW or WAV, or a UEF that is not recordable | Record | refused (`READ_ONLY`), transport unchanged |
+| any with a live tape | Record, Rewind, FastForward or Seek | refused (`LIVE_SOURCE`), transport unchanged |
+| any with a live tape | the stream ends (device change, disconnection or Eject) | a playing deck plays out the server's ring, then empty; a stopped deck is empty at once |
 | recording | Play | playing, from where the tape is; the recording is written back |
 | stopped, playing or recording | Rewind | rewinding (at the start: stays stopped) |
 | stopped, playing or recording | FastForward | fast-forwarding (at the end: stays stopped) |
@@ -1820,8 +1843,9 @@ status at once and then on every change of presence, transport, relay or tape, a
 the position while the deck plays, records or winds; it is never polled.
 
 Rests on: `cassette.proto CassetteService.InsertTape`, `EjectTape`, `Play`, `Record`, `Stop`,
-`Rewind`, `FastForward`, `Seek`, `GetDeckStatus`, `SubscribeDeckStatus`, `GetTapeSignalMap`; CLI `describe-preset-schema` and
-`resolve-preset` for the configurator row.
+`Rewind`, `FastForward`, `Seek`, `SeekToAppendPoint`, `GetDeckStatus`, `SubscribeDeckStatus`,
+`GetTapeSignalMap`, `StreamAudio`; CLI `describe-preset-schema` and `resolve-preset` for the
+configurator row.
 
 Conformance:
 
@@ -1842,10 +1866,12 @@ Conformance:
   pressing it again stops); its red marking's exact form; one recents list shared with discs or a separate list for tapes; an
   insert-and-play gesture; the deck keys' glyphs and layout; the position format;
   the status stream's minimum interval; filtering the file dialogue by extension.
-- MACOS-ONLY: the open panel, the drop delegate, the audio-input entitlement.
+- MACOS-ONLY: the open panel, the drop delegate, the microphone usage string (the app
+  is not sandboxed, so no entitlement is involved).
 
 Gating: browse, drag and drop and insert-by-picked-path are gated on the server
-sharing the filesystem (section 3.2), as for a floppy.
+sharing the filesystem (section 3.2), as for a floppy. The live input is not: it is
+captured on the client's host and streamed.
 
 Scenarios: insert a UEF -> the deck shows the tape, stopped at 0; press Play -> the
 transport reads playing and, with the motor off, the deck reads "Playing, motor off";

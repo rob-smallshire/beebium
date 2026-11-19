@@ -46,15 +46,25 @@ driver: whatever is played to its output appears at its input. `BlackHole 2ch` i
 ### Reminders
 
 - **Pick the device again after any change.** The stream is opened at the device's rate and
-  channels at the moment it is picked. Changing BlackHole's rate, or the Multi-Output Device,
-  while a live tape is in the deck ends what the capture can deliver; the deck reports it. Eject
-  and choose the device again.
+  channels at the moment it is picked. Changing BlackHole's rate or channel count, or the
+  Multi-Output Device, while a live tape is in the deck ends the stream: the client cancels it,
+  the server ejects the live tape, and the deck says "The input device changed while the live
+  tape was playing; choose it again from Input Device." There is nothing to eject; choose the
+  device again. Unplugging the device gives "The input device was disconnected while the live
+  tape was playing."
+- **Feed it at real speed.** A live load has no resampling or clock recovery. If the deck says
+  the input is not keeping up with the Beeb, or arriving faster than the Beeb can take it, for
+  three seconds running, the host is starving or flooding the stream: a player running slow or
+  fast, or a machine too loaded to run the emulation at real speed.
 - **Audio-routing utilities** that insert themselves as the system output (per-application
   volume tools and the like) sit between the player and BlackHole and apply their own gain.
   Either quit them or route the player through them to BlackHole explicitly.
 - **The corpus recordings carry their signal on the left channel**, which is the channel the
-  deck takes from a stereo device by default. A stereo file whose signal is on the right needs a
-  player that can swap channels, or a mono mix.
+  macOS app always takes from a stereo device, and meters. A stereo file whose signal is on the
+  right needs a player that can swap channels, or a mono mix; the Linux app offers either
+  channel from its menu instead.
+- **The server may be on another machine.** The live input is captured on the client's host
+  and streamed, so it is offered whether or not the server shares the client's filesystem.
 - **Measuring what BlackHole receives**, when the meter and the ear disagree, from a shell with
   ffmpeg installed:
 
@@ -63,13 +73,16 @@ driver: whatever is played to its output appears at its input. `BlackHole 2ch` i
   ffmpeg -i capture.wav -af astats=measure_perchannel=Peak_level -f null -
   ```
 
-  A file that peaks at -2 dBFS should arrive within a decibel or two of that.
+  A file that peaks at -2 dBFS should arrive within a decibel or two of that. The first
+  capture makes macOS ask whether the terminal may use the microphone, for the same reason
+  Beebium is asked.
 
 ## Linux: a PipeWire or PulseAudio monitor
 
 On a PipeWire or PulseAudio desktop every output device has a *monitor* source that carries
 what is being played to it, so no extra driver is needed: in the client's Input Device menu
-choose "Monitor of <the output device>", then play the recording with any player to that
+(which the Linux app labels Live Input in 0.20.1) choose "Monitor of <the output device>", then
+play the recording with any player to that
 output. `pavucontrol` (or the desktop's sound settings) shows the monitor sources and lets the
 player be moved between outputs. A null sink (`pactl load-module module-null-sink
 sink_name=tape`) gives a silent route: play to `tape`, capture `Monitor of tape`. This is the
