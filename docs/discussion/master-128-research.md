@@ -383,10 +383,12 @@ Taken with Rob on 2026-11-19; the plan for the first round follows from them.
 2. **ROM provision.** MOS 3.20 and 3.50 are both in `roms/` as per-bank files, each a distinct
    Master preset; **MOS 3.20 is the default** when a user picks the Master 128, 3.50 a bundled
    alternative.
-3. **CMOS seed.** Acorn's as-shipped configuration from the Master Welcome Guide (LANG 12,
-   FILE 13, MODE 7, TV 0 1, FDRIVE 1, CAPS, NOTUBE, LOUD, SCROLL, NOBOOT, DELAY 32, REPEAT 8,
-   the serial defaults, every ROM insert bit set), not MOS 3.50's table and not an all-zero
-   image. The persistence unit is `Mc146818BatteryUnit` with a Master name and seed; R held at
+3. **CMOS seed.** The configuration Acorn's Welcome Guide tells a new owner to enter (section
+   6 sources: 8bs artcmos, stardot 7582): BAUD 4, NOBOOT, CAPS, DATA 4, DELAY 50, NODIR, INTUBE,
+   FDRIVE 3, HARD, IGNORE 10, LANG 12, MODE 7, TUBE, LOUD, PRINT 1, REPEAT 10, SCROLL, TV 0,1,
+   with FILE 13 (ADFS, bank 13) in place of the guide's misprinted FILE 15, every ROM insert bit
+   set and station 0; not MOS 3.50's table and not an all-zero image. If HARD makes ADFS wait
+   for a Winchester that is not there at boot, FLOPPY replaces it and the plan says so. The persistence unit is `Mc146818BatteryUnit` with a Master name and seed; R held at
    power-on zeroes bytes 1-49 and sets 6-7 to &FF exactly as the MOS does, because that is the
    MOS running, not the emulator.
 4. **Clock time source.** Host civil time plus a saved offset, as the Integra-B and the user-port
