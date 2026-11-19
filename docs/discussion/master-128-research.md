@@ -371,34 +371,39 @@ New or changed, by component:
 | Packaging | server target, CI artifact lists and smokes, Scoop, the Python server package's variant list (which today names only four of seven), the Python client's `VARIANTS`, CLAUDE.md | existing lists |
 | Tests | 65SC12 dp111 timing build; ACCCON rule table tests; RTC through the VIA against the manual's sequence; keypad; 1770 latch; CMOS persistence round trip; MOS 3.20 boot to `BASIC` with `*CONFIGURE` and `*STATUS`; the Stratagem game's Master build | existing harnesses |
 
-## 4. Decisions to take
+## 4. Decisions
 
-1. **Scope of the first variant.** Basic Master 128 with MOS 3.20; the external Tube and 1 MHz
-   bus as today; the internal Tube, the cartridge slots and the modem connector modelled as
-   attachment points from the start (cheap once the policy routes by ITU and IFJ and decodes
-   nMODEM) but with no fittings until the Turbo board, a cartridge or an internal SCSI board is
-   wanted. The internal SCSI at &FE80 is the natural first modem-connector fitting, since the
-   SCSI extension exists.
-2. **ROM provision.** Decided: MOS 3.20 and 3.50 are both in `roms/` as per-bank files, and
-   each is a distinct Master preset.
-3. **CMOS seed.** MOS 3.20's own R-reset state is all zeros and boots to "This is not a
-   language", so Beebium should seed a working configuration: Acorn's Welcome Guide settings
-   with FILE 9 or 13, or MOS 3.50's table. The persistence unit follows the Integra-B's, and
-   R held at power-on must zero it as the MOS does.
-4. **Clock time source.** Host time at power-on, then emulated time (B2) versus host time plus
-   offset (B-Em, BeebEm); `Mc146818Rtc` supports both.
-5. **Stale data bus.** Model it (B2 does; beebjit has it as a TODO): unmapped SHEILA reads
-   return the last video fetch, &20 in Mode 7. It is observable: ANFS 4.25's ADLC probe at
-   &FEA0 misreads &20 as a chip, and sideways RAM detection by read-invert-write is fooled by
-   emulators that return a fixed value for empty banks.
+Taken with Rob on 2026-11-19; the plan for the first round follows from them.
+
+1. **Scope of the first variant.** Basic Master 128; the external Tube and 1 MHz bus as today;
+   the internal Tube, the two cartridge slots and the modem connector modelled as attachment
+   points from the start (the policy routes by ITU and IFJ and decodes nMODEM) with no fittings
+   in the first round beyond cartridge ROM pairs. The internal SCSI at &FE80 is the natural first
+   modem-connector fitting later, since the SCSI extension exists.
+2. **ROM provision.** MOS 3.20 and 3.50 are both in `roms/` as per-bank files, each a distinct
+   Master preset; **MOS 3.20 is the default** when a user picks the Master 128, 3.50 a bundled
+   alternative.
+3. **CMOS seed.** Acorn's as-shipped configuration from the Master Welcome Guide (LANG 12,
+   FILE 13, MODE 7, TV 0 1, FDRIVE 1, CAPS, NOTUBE, LOUD, SCROLL, NOBOOT, DELAY 32, REPEAT 8,
+   the serial defaults, every ROM insert bit set), not MOS 3.50's table and not an all-zero
+   image. The persistence unit is `Mc146818BatteryUnit` with a Master name and seed; R held at
+   power-on zeroes bytes 1-49 and sets 6-7 to &FF exactly as the MOS does, because that is the
+   MOS running, not the emulator.
+4. **Clock time source.** Host civil time plus a saved offset, as the Integra-B and the user-port
+   clock do; the existing command-line clock option selects emulated time for tests.
+5. **Stale data bus.** Model it in the first round: unmapped SHEILA addresses and empty sideways
+   banks read as the last byte the video system fetched (&20 in Mode 7), as B2 does. ANFS 4.25's
+   ADLC probe and read-invert-write sideways RAM detection depend on it.
 5a. **Wait states versus clock stretching.** The B stretches the CPU clock; the Master holds
-   RDY with Phi2 constant. The cycle cost is the same, so Beebium's `BusStretching` can stand
-   with the Master's address map, but peripherals clocked from Phi2 (the Econet module) and
-   the Tube see a steady 2 MHz, which the Tube contract must respect.
-6. **Cartridges.** Whether the first release ships them as plain runtime-configurable ROM pairs,
-   deferring the FRED/JIM side.
-7. **Debugger vocabulary.** Confirm the reserved names with the downstream project (#189's
-   comments) before the policy publishes them.
+   RDY with Phi2 constant. The cycle cost is the same, so Beebium's `BusStretching` stands with
+   the Master's address map, but peripherals clocked from Phi2 (the Econet module) and the
+   Tube see a steady 2 MHz, which the Tube contract must respect.
+6. **Cartridges.** In the first round a cartridge is a runtime-configurable pair of 16K ROM
+   images in the slot's two banks. The IFJ routing of FRED/JIM to the cartridge bus and the IRQ,
+   NMI and audio lines wait for a cartridge that needs them.
+7. **Debugger vocabulary.** The reserved names `accd`, `acce`, `accx`, `accy`, `accitu`,
+   `accifj`, `acctst`, `accirr` (with `bank`, `romsel`, `shadow_access`) are adopted; the final
+   list is posted on #189 so the downstream project can object before the release.
 
 ## 5. Facts to verify on a real Master
 
