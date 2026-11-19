@@ -182,6 +182,120 @@
       "bbc": {
         "key": "Ctrl"
       }
+    },
+    {
+      "code": "Numpad0",
+      "bbc": {
+        "key": "Keypad0"
+      }
+    },
+    {
+      "code": "Numpad1",
+      "bbc": {
+        "key": "Keypad1"
+      }
+    },
+    {
+      "code": "Numpad2",
+      "bbc": {
+        "key": "Keypad2"
+      }
+    },
+    {
+      "code": "Numpad3",
+      "bbc": {
+        "key": "Keypad3"
+      }
+    },
+    {
+      "code": "Numpad4",
+      "bbc": {
+        "key": "Keypad4"
+      }
+    },
+    {
+      "code": "Numpad5",
+      "bbc": {
+        "key": "Keypad5"
+      }
+    },
+    {
+      "code": "Numpad6",
+      "bbc": {
+        "key": "Keypad6"
+      }
+    },
+    {
+      "code": "Numpad7",
+      "bbc": {
+        "key": "Keypad7"
+      }
+    },
+    {
+      "code": "Numpad8",
+      "bbc": {
+        "key": "Keypad8"
+      }
+    },
+    {
+      "code": "Numpad9",
+      "bbc": {
+        "key": "Keypad9"
+      }
+    },
+    {
+      "code": "NumpadAdd",
+      "bbc": {
+        "key": "KeypadPlus"
+      }
+    },
+    {
+      "code": "NumpadSubtract",
+      "bbc": {
+        "key": "KeypadMinus"
+      }
+    },
+    {
+      "code": "NumpadMultiply",
+      "bbc": {
+        "key": "KeypadMultiply"
+      }
+    },
+    {
+      "code": "NumpadDivide",
+      "bbc": {
+        "key": "KeypadDivide"
+      }
+    },
+    {
+      "code": "NumpadDecimal",
+      "bbc": {
+        "key": "KeypadPeriod"
+      }
+    },
+    {
+      "code": "NumpadComma",
+      "bbc": {
+        "key": "KeypadComma"
+      }
+    },
+    {
+      "code": "NumpadHash",
+      "bbc": {
+        "key": "KeypadHash"
+      }
+    },
+    {
+      "code": "NumpadEnter",
+      "bbc": {
+        "key": "KeypadReturn"
+      }
+    },
+    {
+      "code": "NumpadBackspace",
+      "bbc": {
+        "key": "KeypadDelete"
+      }
     }
   ]
 }
