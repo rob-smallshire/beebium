@@ -881,17 +881,39 @@ void CassetteDeckRow::input_lost(LiveCapture::Loss loss) {
         failure.text = tr("The input device changed while the live tape was playing; choose it "
                           "again from Live Input.");
         if (live_format_) {
-            failure.detail =
-                tr("%1: %2 Hz, %3, %4")
-                    .arg(device)
-                    .arg(live_format_->sample_rate)
-                    .arg(live_format_->channels == 1 ? tr("1 channel")
-                                                     : tr("%1 channels").arg(live_format_->channels))
-                    .arg(live_format_->sample == LiveInputFormat::Sample::s16 ? tr("16-bit")
-                                                                              : tr("32-bit float"));
+            const auto described = [this](const LiveInputFormat& format) {
+                return tr("%1 Hz, %2, %3")
+                    .arg(format.sample_rate)
+                    .arg(format.channels == 1 ? tr("1 channel")
+                                              : tr("%1 channels").arg(format.channels))
+                    .arg(format.sample == LiveInputFormat::Sample::s16 ? tr("16-bit")
+                                                                       : tr("32-bit float"));
+            };
+            failure.detail = tr("%1: %2").arg(device, described(*live_format_));
+            // And the format the host now gives, where it lists the device
+            // in one the deck could take, and it differs.
+            if (const auto now = current_format(live_device_id_, live_format_->channel);
+                now && (now->sample_rate != live_format_->sample_rate ||
+                        now->channels != live_format_->channels ||
+                        now->sample != live_format_->sample)) {
+                failure.detail = tr("%1, now %2").arg(failure.detail, described(*now));
+            }
         }
     }
     show_failure(failure);
+}
+
+std::optional<LiveInputFormat> CassetteDeckRow::current_format(const QByteArray& id,
+                                                               const QString& channel) const {
+    if (!inputs_) {
+        return std::nullopt;
+    }
+    for (const AudioInputDevice& device : inputs_()) {
+        if (device.id == id) {
+            return live_input_format(device, channel);
+        }
+    }
+    return std::nullopt;
 }
 
 void CassetteDeckRow::choose_live_input(const AudioInputDevice& device, const QString& channel) {
@@ -913,6 +935,7 @@ void CassetteDeckRow::choose_live_input(const AudioInputDevice& device, const QS
     }
     chunker_ = std::make_unique<LiveChunker>(*format);
     live_format_ = *format;
+    live_device_id_ = device.id;
     level_->reset();
     clip_carry_ = 0;
     cassette_.start_live(*format);

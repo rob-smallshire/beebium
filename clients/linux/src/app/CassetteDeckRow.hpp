@@ -158,6 +158,8 @@ private:
     void seek_to_slider();
     void browse();
     void rebuild_menu();
+    // The stream's format for the device the host lists by this id, now.
+    std::optional<LiveInputFormat> current_format(const QByteArray& id, const QString& channel) const;
     void new_blank_tape(const BlankTapeTemplate& blank);
     void set_highlighted(bool highlighted);
 
@@ -192,6 +194,7 @@ private:
     LiveCapture* capture_ = nullptr;
     std::unique_ptr<LiveChunker> chunker_;
     std::optional<LiveInputFormat> live_format_;
+    QByteArray live_device_id_;
     // The run of full-scale samples still going at the last chunk's end.
     int clip_carry_ = 0;
     QTimer notice_timer_;

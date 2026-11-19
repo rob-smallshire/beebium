@@ -1587,12 +1587,18 @@ TEST_CASE("A device change under the stream ends it at once and says so, over a 
     status_second(d, 0, 0);
     status_second(d, 0, 4410);
     status_second(d, 0, 8820);
+    // The host now gives the microphone in another format.
+    d.inputs[1] = input(48000, 2, AudioInputDevice::Sample::int16);
+    d.inputs[1].id = "mic";
+    d.inputs[1].name = QStringLiteral("Built-in Microphone");
     d.capture->lose(LiveCapture::Loss::changed);
     const QString changed = QStringLiteral(
         "The input device changed while the live tape was playing; choose it again from Live Input.");
     CHECK(d.row.message_text() == changed);
+    // The format it had, and the one it now has.
     CHECK(d.row.message_detail_text() ==
-          QStringLiteral("Built-in Microphone: 44100 Hz, 1 channel, 32-bit float"));
+          QStringLiteral("Built-in Microphone: 44100 Hz, 1 channel, 32-bit float, "
+                         "now 48000 Hz, 2 channels, 16-bit"));
     // Cancelled, not ended gracefully: nothing left is worth playing out.
     CHECK_FALSE(d.cassette.streaming());
     // The starve's third second, the same second, does not take its place.
@@ -1617,6 +1623,26 @@ TEST_CASE("A device change under the stream ends it at once and says so, over a 
     CHECK(d.row.message_text().isEmpty());
     status_second(d, 0, 300);
     CHECK_FALSE(d.row.message_text().isEmpty());
+}
+
+TEST_CASE("A device change the host lists no new format for names only the format it had",
+          "[cassette][deck][live]") {
+    LiveDeck d;
+    d.row.choose_live_input(d.inputs[1], {});
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    // Stopped with an error, but listed as it was: no new format to tell.
+    d.capture->lose(LiveCapture::Loss::changed);
+    CHECK(d.row.message_detail_text() ==
+          QStringLiteral("Built-in Microphone: 44100 Hz, 1 channel, 32-bit float"));
+    // Nor when it gives nothing the deck takes.
+    d.row.choose_live_input(d.inputs[1], {});
+    REQUIRE(wait_until([&] { return d.cassette.deck().live(); }));
+    d.inputs[1] = input(48000, 1, AudioInputDevice::Sample::unknown);
+    d.inputs[1].id = "mic";
+    d.inputs[1].name = QStringLiteral("Built-in Microphone");
+    d.capture->lose(LiveCapture::Loss::changed);
+    CHECK(d.row.message_detail_text() ==
+          QStringLiteral("Built-in Microphone: 44100 Hz, 1 channel, 32-bit float"));
 }
 
 TEST_CASE("A device disconnected under the stream ends it and names the device",
