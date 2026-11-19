@@ -45,6 +45,28 @@ from beebium.client.screen import read_mode7_screen, screen_contains
 
 PASS_FAIL_ZP = 0x7A  # the suite's running failure count
 
+# An error line: the instruction's name, then its timing error as two hex
+# digits from column 37.
+ERROR_LINE = re.compile(r"^(?P<name>\S.*?)\s+(?P<error>[0-9A-F]{2})\s*$")
+CLI_PROBE_HEADING = "Testing CLI ( warning may fail )"
+
+
+def _error_lines(rows: list[str]) -> list[tuple[str, str]]:
+    """The (preceding line, error line) pairs the suite printed for mistimed
+    instructions, from its first checking heading onwards."""
+    lines = [row.rstrip() for row in rows]
+    start = next(
+        (i for i, line in enumerate(lines) if line.startswith("Checking documented")),
+        len(lines),
+    )
+    errors = []
+    for i in range(start, len(lines)):
+        if lines[i].startswith("Number of failures"):
+            break
+        if ERROR_LINE.match(lines[i]):
+            errors.append((lines[i - 1], lines[i]))
+    return errors
+
 CASES = [
     pytest.param("6502timing.ssd", id="6502timing"),
     pytest.param("6502timing1M.ssd", id="6502timing1M"),
@@ -124,20 +146,39 @@ class TestDp111Timing:
 
         text = "\n".join(rows)
         match = re.search(r"Number of failures\s*:\s*0x([0-9A-Fa-f]{2})", text)
-        if match is None or match.group(1).upper() != "00" or failure_zp != 0:
+        errors = _error_lines(rows)
+        # The CLI probe runs with interrupts enabled, and the suite masks only
+        # the User VIA, so a System VIA interrupt such as vsync can land in its
+        # timed window, as on real hardware; the suite labels the line advisory.
+        # Only that line is tolerated, and only after its own heading.
+        strict_errors = [
+            line
+            for previous, line in errors
+            if not (
+                previous.strip() == CLI_PROBE_HEADING
+                and ERROR_LINE.match(line).group("name") == "CLI"
+            )
+        ]
+        tolerated = len(errors) - len(strict_errors)
+        if match is None or strict_errors or int(match.group(1), 16) != tolerated:
             print(f"\nScreen ({disc_filename} reported timing failures):")
             for i, row in enumerate(rows):
                 print(f"Row {i:2d}: [{row}]")
         assert match is not None, (
             f"{disc_filename}: could not read the failure count off the screen"
         )
-        # The screen tally is authoritative (each failing instruction prints its
-        # own line and increments this count); zero means no error lines at all.
-        assert match.group(1).upper() == "00", (
-            f"{disc_filename}: suite reported 0x{match.group(1)} timing failures "
-            "(each is a mistimed 6502 instruction; see the screen dump)"
+        # Each failing instruction prints its own line and increments the count,
+        # so with no error lines but the advisory CLI one, the count is that one
+        # or zero.
+        assert strict_errors == [], (
+            f"{disc_filename}: the suite reported mistimed instructions: "
+            f"{strict_errors} (see the screen dump)"
         )
-        assert failure_zp == 0, (
-            f"{disc_filename}: &7A = {failure_zp:#04x}, expected 0 (the suite's "
-            "own failure tally)"
+        assert int(match.group(1), 16) == tolerated, (
+            f"{disc_filename}: suite reported 0x{match.group(1)} timing failures "
+            f"but printed {tolerated} advisory CLI line(s) and no others"
+        )
+        assert failure_zp == tolerated, (
+            f"{disc_filename}: &7A = {failure_zp:#04x}, expected {tolerated} (the "
+            "suite's own failure tally)"
         )
