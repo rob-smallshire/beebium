@@ -431,6 +431,12 @@ Taken with Rob on 2026-11-19; the plan for the first round follows from them.
 
 ## 5. Facts to verify on a real Master
 
+The first round (#189; the machine as built is `docs/master-128.md`) coded each of these as
+the assumption the item states, with a comment naming it, so a measurement changes one place.
+It measured none of them on a real Master. It ran the 65C12 timing suite on the emulated
+Master (item 7, below), and it settled the CMOS encodings of section 1.4 and decision 3
+against MOS 3.20's own `*STATUS` on the emulated machine, not on hardware.
+
 Rob's Master is available (the November ADC trials ran on it). Each of these is a short BASIC or
 assembler test:
 
