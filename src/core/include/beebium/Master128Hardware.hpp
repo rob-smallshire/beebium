@@ -96,6 +96,12 @@ struct DefaultSidewaysRom {
 // and &FEC0-&FEDF read as the stale data bus until something is decoded
 // there.
 //
+// Two Tubes (section 1.6): the external Tube (PL6, the attachment point
+// "tube") and the internal one (SK1/SK2, "internal-tube"). There is one
+// register block at &FEE0-&FEFF: ACCCON ITU steers it, and the host-side Tube
+// IRQ, to the internal Tube while set and the external one while clear. A
+// coprocessor on the other one is not disabled: it runs on, unreached.
+//
 // Econet's station number is CMOS byte 0, not a register: the filing system
 // reads it there as it starts, so --station sets that byte and the socket
 // takes its number from it at every reset.
@@ -186,10 +192,16 @@ public:
     Via6522 system_via;
     Via6522 user_via;
 
+    // The host-side IRQ of the Tube ITU selects.
+    struct SelectedTubeIrq {
+        const Master128Hardware& hw;
+        bool irq_pending() const { return hw.selected_tube().irq_pending(); }
+    };
+
     using IrqAggregatorType = IrqAggregator<
         IrqBinding<Via6522, 0>,        // System VIA -> bit 0
         IrqBinding<Via6522, 1>,        // User VIA -> bit 1
-        IrqBinding<TubeSocket, 2>,     // Tube HIRQ -> bit 2
+        IrqBinding<SelectedTubeIrq, 2>,  // the Tube ITU selects: HIRQ -> bit 2
         IrqBinding<OneMHzBusPort, 3>,  // 1 MHz bus devices -> bit 3
         IrqBinding<SerialSocket, 4>    // Serial ACIA (MC6850) -> bit 4
     >;
@@ -241,8 +253,9 @@ public:
 
     SerialPort serial_port_{serial_socket};
 
-    // The external Tube.
+    // The external Tube (PL6) and the internal one (SK1/SK2).
     TubeSocket tube_socket;
+    TubeSocket internal_tube_socket;
 
     struct EconetAdlcRegion {
         EconetSocket& econet_socket;
@@ -314,6 +327,14 @@ public:
         void write(uint16_t, uint8_t) { econet_socket.on_inton(); }
     };
 
+    // &FEE0-&FEFF: the registers of the Tube ITU selects.
+    struct SelectedTubeRegion {
+        Master128Hardware& hw;
+        uint8_t read(uint16_t offset) { return hw.selected_tube().read(offset); }
+        uint8_t peek(uint16_t offset) const { return hw.selected_tube().peek(offset); }
+        void write(uint16_t offset, uint8_t value) { hw.selected_tube().write(offset, value); }
+    };
+
     // ROMSEL (&FE30-&FE33). Bits 4-6 read back as written: no hardware
     // measurement of ROMSEL readback exists (research section 5 item 2).
     struct RomselRegister {
@@ -339,6 +360,8 @@ public:
     DiscRegisterRegion disc_register_region_{disc_controller};
     EconetIntoffRegion econet_intoff_region_{econet_socket, stale_bus_};
     EconetIntonRegion econet_inton_region_{econet_socket, stale_bus_};
+    SelectedTubeRegion selected_tube_region_{*this};
+    SelectedTubeIrq selected_tube_irq_{*this};
     RomselRegister romsel_register{*this};
     AccconRegister acccon_register{*this};
 
@@ -365,7 +388,7 @@ public:
             make_region<0xFE80, 0xFE9F>(std::declval<StaleBusRegion&>()),
             make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(std::declval<EconetAdlcRegion&>()),
             make_region<0xFEC0, 0xFEDF>(std::declval<StaleBusRegion&>()),
-            make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(std::declval<TubeSocket&>()),
+            make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(std::declval<SelectedTubeRegion&>()),
             make_region<0x0000, 0x7FFF>(std::declval<Ram<32768>&>()),
             make_region<0x8000, 0xBFFF>(std::declval<SidewaysType&>()),
             make_region<0xC000, 0xFFFF>(std::declval<Rom<16384>&>())
@@ -389,6 +412,7 @@ public:
         serial_socket.ula().set_deck(&cassette_deck);
         cassette_motor_led.attach(serial_socket.ula());
         tube_socket.set_last_bus_value_ptr(&stale_bus_);
+        internal_tube_socket.set_last_bus_value_ptr(&stale_bus_);
         disc_controller.attach_drive(0, &disc_drive_0);
         disc_controller.attach_drive(1, &disc_drive_1);
         fit_sideways();
@@ -515,7 +539,7 @@ public:
         }
         if (addr >= 0xFE40 && addr <= 0xFE5F) return system_via.peek(addr & 0x0F);
         if (addr >= 0xFE60 && addr <= 0xFE7F) return user_via.peek(addr & 0x0F);
-        if (addr >= 0xFEE0 && addr <= 0xFEFF) return tube_socket.peek(addr & 0x07);
+        if (addr >= 0xFEE0 && addr <= 0xFEFF) return selected_tube().peek(addr & 0x07);
         return memory_map_.peek(addr);
     }
 
@@ -586,6 +610,7 @@ public:
         adopt_cmos_station();
         serial_socket.reset();
         tube_socket.reset();
+        internal_tube_socket.reset();
     }
 
     // Break: the System VIA is preserved, so the MOS sees a warm reset. The
@@ -604,6 +629,7 @@ public:
         adopt_cmos_station();
         serial_socket.reset();
         tube_socket.reset();
+        internal_tube_socket.reset();
     }
 
     // Econet's station number: CMOS byte 0. Setting it here is the Master's
@@ -685,6 +711,14 @@ public:
     uint8_t acccon() const { return acccon_; }
     bool andy_paged() const { return (romsel_ & ROMSEL_ANDY) != 0; }
     bool x() const { return (acccon_ & ACCCON_X) != 0; }
+
+    // The Tube ACCCON ITU selects: the internal one while set.
+    TubeSocket& selected_tube() {
+        return (acccon_ & ACCCON_ITU) ? internal_tube_socket : tube_socket;
+    }
+    const TubeSocket& selected_tube() const {
+        return (acccon_ & ACCCON_ITU) ? internal_tube_socket : tube_socket;
+    }
 
     // =========================================================================
     // ROMs and sideways slots
@@ -928,7 +962,7 @@ private:
         return beebium::make_irq_aggregator(
             make_irq_binding<0>(system_via),
             make_irq_binding<1>(user_via),
-            make_irq_binding<2>(tube_socket),
+            make_irq_binding<2>(selected_tube_irq_),
             make_irq_binding<3>(one_mhz_bus_),
             make_irq_binding<4>(serial_socket)
         );
@@ -955,7 +989,7 @@ private:
             make_region<0xFE80, 0xFE9F>(stale_bus_region_),
             make_region<0xFEA0, 0xFEBF, Mirror<0x03>>(econet_adlc_region_),
             make_region<0xFEC0, 0xFEDF>(stale_bus_region_),
-            make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(tube_socket),
+            make_region<0xFEE0, 0xFEFF, Mirror<0x07>>(selected_tube_region_),
             make_region<0x0000, 0x7FFF>(main_ram),
             make_region<0x8000, 0xBFFF>(sideways),
             make_region<0xC000, 0xFFFF>(mos_rom)

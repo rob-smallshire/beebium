@@ -43,12 +43,32 @@ concept HasTubeSocket = requires(T& hw) {
     { hw.tube_socket } -> std::same_as<TubeSocket&>;
 };
 
+// The Tube a coprocessor is fitted to: the machine's second Tube (the
+// Master's internal one) when that has one fitted, else the Tube. Beebium
+// serves one coprocessor at a time, so at most one of them is fitted.
+template<typename T>
+    requires HasTubeSocket<T>
+TubeSocket& fitted_tube_socket(T& hw) {
+    if constexpr (requires { hw.internal_tube_socket; }) {
+        if (hw.internal_tube_socket.enabled()) return hw.internal_tube_socket;
+    }
+    return hw.tube_socket;
+}
+template<typename T>
+    requires HasTubeSocket<T>
+const TubeSocket& fitted_tube_socket(const T& hw) {
+    if constexpr (requires { hw.internal_tube_socket; }) {
+        if (hw.internal_tube_socket.enabled()) return hw.internal_tube_socket;
+    }
+    return hw.tube_socket;
+}
+
 // Helper to check if Tube hardware is fitted at runtime.
 // Returns true only if the hardware has a TubeSocket AND it is enabled.
 template<typename T>
 bool tube_present(const T& hw) {
     if constexpr (HasTubeSocket<T>) {
-        return hw.tube_socket.enabled();
+        return fitted_tube_socket(hw).enabled();
     } else {
         return false;
     }

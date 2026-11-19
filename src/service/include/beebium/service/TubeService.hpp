@@ -49,7 +49,7 @@ public:
             response->set_has_tube_socket(false);
         } else {
             response->set_has_tube_socket(true);
-            response->set_enabled(machine_.state().memory.tube_socket.enabled());
+            response->set_enabled(fitted_tube_socket(machine_.state().memory).enabled());
             if (coprocessor_) {
                 response->set_coprocessor_connected(true);
                 response->set_coprocessor_cpu(coprocessor_->cpu_name());

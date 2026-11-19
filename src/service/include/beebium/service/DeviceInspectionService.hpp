@@ -16,6 +16,7 @@
 #include "debugger.grpc.pb.h"
 #include <beebium/devices/Mc146818Rtc.hpp>
 #include <beebium/devices/Upd7002.hpp>
+#include <beebium/tube/TubeConcepts.hpp>
 #include <beebium/tube/TubeSocket.hpp>
 #include <beebium/tube/TubeInspection.hpp>
 #include <grpcpp/grpcpp.h>
@@ -479,7 +480,7 @@ public:
         // written on that thread on every Tube access, so an unsynchronised
         // read tears both the ring's index math and its bytes.
         machine_.with_emulation_paused([&] {
-            auto& tube = machine_.memory().tube_socket;
+            auto& tube = fitted_tube_socket(machine_.memory());
 
             if (!tube.enabled()) {
                 response->set_enabled(false);
@@ -511,7 +512,7 @@ public:
         // The trace mask is read on the emulation thread for every Tube access,
         // so apply it with that thread paused, like the other inspection writes.
         machine_.with_emulation_paused([&] {
-            auto& tube = machine_.memory().tube_socket;
+            auto& tube = fitted_tube_socket(machine_.memory());
             if (!tube.enabled()) {
                 response->set_enabled(false);
                 return;

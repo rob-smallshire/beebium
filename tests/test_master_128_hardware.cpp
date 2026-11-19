@@ -18,6 +18,7 @@
 
 #include <beebium/Machines.hpp>
 #include <beebium/econet/TestBackend.hpp>
+#include <beebium/tube/TubeHostBackend.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
@@ -434,4 +435,62 @@ TEST_CASE("Master 128 Econet takes its station number from CMOS byte 0 at reset"
     hw->soft_reset();
     CHECK(hw->econet_socket.station_id() == 57);
     CHECK(hw->econet_socket.station_in_force() == std::optional<uint8_t>{57});
+}
+
+namespace {
+
+// A Tube backend that answers every register with its own byte and holds HIRQ
+// as told.
+struct FixedTube final : TubeHostBackend {
+    uint8_t value;
+    bool irq = false;
+    uint8_t last_written = 0;
+    explicit FixedTube(uint8_t v) : value(v) {}
+    uint8_t host_read(uint8_t) override { return value; }
+    uint8_t host_peek(uint8_t) const override { return value; }
+    void host_write(uint8_t, uint8_t v) override { last_written = v; }
+    bool hirq() const override { return irq; }
+    void reset() override {}
+};
+
+}  // namespace
+
+TEST_CASE("Master 128 ITU steers &FEE0 and the Tube IRQ to one of two Tubes",
+          "[master128][hardware][tube]") {
+    auto hw = std::make_unique<HW>();
+    FixedTube external(0xE1);
+    FixedTube internal(0x11);
+    hw->tube_socket.install_backend(&external);
+    hw->internal_tube_socket.install_backend(&internal);
+
+    CHECK(hw->read(0xFEE0) == 0xE1);  // ITU clear: the external Tube
+    hw->write(0xFEE1, 0x5A);
+    CHECK(external.last_written == 0x5A);
+    CHECK(internal.last_written == 0x00);
+    internal.irq = true;
+    CHECK(hw->poll_irq() == 0);       // the internal Tube's IRQ is not reached
+
+    hw->write(0xFE34, HW::ACCCON_ITU);
+    CHECK(hw->read(0xFEE0) == 0x11);  // ITU set: the internal Tube
+    CHECK(hw->peek(0xFEE7) == 0x11);
+    hw->write(0xFEE1, 0xA5);
+    CHECK(internal.last_written == 0xA5);
+    CHECK(external.last_written == 0x5A);
+    CHECK(hw->poll_irq() != 0);
+    external.irq = true;
+    internal.irq = false;
+    CHECK(hw->poll_irq() == 0);
+
+    hw->tube_socket.install_backend(nullptr);
+    hw->internal_tube_socket.install_backend(nullptr);
+}
+
+TEST_CASE("Master 128 an empty Tube reads as the stale bus on either side",
+          "[master128][hardware][tube][stale_bus]") {
+    auto hw = std::make_unique<HW>();
+    hw->main_ram.write(0x7C00, 0x20);
+    hw->note_video_fetch(VideoFetch{0x2000, 0});
+    CHECK(hw->read(0xFEE0) == 0x20);
+    hw->write(0xFE34, HW::ACCCON_ITU);
+    CHECK(hw->read(0xFEE0) == 0x20);
 }

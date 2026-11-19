@@ -242,6 +242,18 @@ public:
         return in_reset_;
     }
 
+    // Each of the machine's Tube sockets: the Tube, and a second one where
+    // the machine has it (the Master's internal Tube). Both run in host time
+    // whichever the host can reach, so a coprocessor on the other one runs on
+    // unreached.
+    template <typename F>
+    void for_each_tube_socket(F&& f) {
+        f(state_.memory.tube_socket);
+        if constexpr (requires { state_.memory.internal_tube_socket; }) {
+            f(state_.memory.internal_tube_socket);
+        }
+    }
+
     // Execute one CPU cycle, its count in the sequence number and its pixel
     // batches published at once.
     void step() {
@@ -262,7 +274,7 @@ private:
         // (Step 3), and exactly before any host register access; between those
         // points the coprocessor lags by fewer than that bound, which the skew
         // contract permits.
-        state_.memory.tube_socket.host_cycle(state_.cycle_count);
+        for_each_tube_socket([&](auto& socket) { socket.host_cycle(state_.cycle_count); });
 
         // Clock devices on an expansion board (e.g. the Integra-B real-time
         // clock) on every cycle, including stretch cycles.
@@ -537,7 +549,7 @@ public:
         // watchpoint hit). Sync the coprocessor to the host so a stopped
         // machine presents both processors at the same time to the debugger
         // and to GetTubeState.
-        state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
+        for_each_tube_socket([&](auto& socket) { socket.run_coprocessor_until(state_.cycle_count); });
     }
 
     // True while an instruction is part-way through its cycles: neither about
@@ -577,7 +589,7 @@ public:
     // within a cycle of each other. (CpuDebugTarget provides a no-op
     // finish_step(); only the host has a coprocessor to sync.)
     void finish_step() {
-        state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
+        for_each_tube_socket([&](auto& socket) { socket.run_coprocessor_until(state_.cycle_count); });
     }
 
     // State access
@@ -639,7 +651,7 @@ public:
         if (!in_run_.load(std::memory_order_acquire) &&
             !emulation_busy_.load(std::memory_order_acquire) &&
             quiesce_depth_ == 0) {
-            state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
+            for_each_tube_socket([&](auto& socket) { socket.run_coprocessor_until(state_.cycle_count); });
         }
         ++sequence_;
     }
