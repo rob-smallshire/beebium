@@ -83,6 +83,7 @@
 		31418FC1CA8FF8BFFCE0724D /* SavedMachinesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5244C15F42F4C5B7AA77002F /* SavedMachinesModel.swift */; };
 		316C036A4CF391595A4DD8CC /* PresetManagerDraftLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */; };
 		317D8650FFD239EF03206DA7 /* EconetTransportsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */; };
+		337630ECDC0499E22645A786 /* KeyboardMappingMachineKeysTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB68693462134CA5276223DF /* KeyboardMappingMachineKeysTests.swift */; };
 		345AA9A186D7CA962B5D31A1 /* DebuggerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */; };
 		3597065A66A9B7456ED48EE9 /* CassetteDeckFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EB1C9F5D4468D155F3F524 /* CassetteDeckFormattingTests.swift */; };
 		35CCC11B17FEB11EF5844F10 /* KeyboardMappingFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB655B9391362AB6D1F5101 /* KeyboardMappingFileTests.swift */; };
@@ -617,6 +618,7 @@
 		D9A09D17A7B4D22F6D9D50BD /* SvgPathParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPathParserTests.swift; sourceTree = "<group>"; };
 		D9CCCBCF0B283324A8439699 /* controller.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = controller.grpc.swift; sourceTree = "<group>"; };
 		DA0CF5589888F672F43B52FD /* aun.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aun.pb.swift; sourceTree = "<group>"; };
+		DB68693462134CA5276223DF /* KeyboardMappingMachineKeysTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMappingMachineKeysTests.swift; sourceTree = "<group>"; };
 		DBE3C453D296DD3F81E0B829 /* ReconnectCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectCoordinator.swift; sourceTree = "<group>"; };
 		DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetManagerDraftLaunchTests.swift; sourceTree = "<group>"; };
 		DE9D42AD7DD904E1B5B80617 /* FocusDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusDiagnostics.swift; sourceTree = "<group>"; };
@@ -1045,6 +1047,7 @@
 				89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */,
 				38156B164E337693549CFB9C /* KeyboardMappingCorpusTests.swift */,
 				7BB655B9391362AB6D1F5101 /* KeyboardMappingFileTests.swift */,
+				DB68693462134CA5276223DF /* KeyboardMappingMachineKeysTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
 				53D393AA6F8EA8027CA2417C /* KeyboardMappingToggleTests.swift */,
 				BBFC7394EF4EAF43B7BB1EC8 /* LevelMeterStateTests.swift */,
@@ -1271,6 +1274,7 @@
 				A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */,
 				F0902DD9A2EA9C9A8071A04F /* KeyboardMappingCorpusTests.swift in Sources */,
 				35CCC11B17FEB11EF5844F10 /* KeyboardMappingFileTests.swift in Sources */,
+				337630ECDC0499E22645A786 /* KeyboardMappingMachineKeysTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
 				16CAAB94F87050BB11380B59 /* KeyboardMappingToggleTests.swift in Sources */,
 				737C4460D8C599707C5A9573 /* LevelMeterStateTests.swift in Sources */,

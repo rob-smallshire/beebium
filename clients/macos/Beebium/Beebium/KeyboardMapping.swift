@@ -139,6 +139,17 @@ final class KeyboardMapping: Identifiable {
     ) -> KeyResolution {
         // 1. Try physical keyCode mapping first
         if let candidates = keyMappings[input.keyCode] {
+            // An entry whose BBC key the connected machine does not have does
+            // not apply here (docs/keyboard-mapping-files.md section 3.6): it is
+            // skipped as if absent, exactly as a `when` that does not hold. So a
+            // Logical entry mapping the host keypad to the Master's Keypad keys
+            // simply is not there on a Model B, and the host keypad falls through
+            // to character mapping and types its digits -- while a sibling entry
+            // for the same code that the machine does have can still win.
+            let applicable = candidates.filter {
+                cache.machineHasKey(named: $0.bbcKeyName)
+            }
+
             // Filter input modifiers to relevant ones (exclude Caps Lock)
             let relevantModifiers = input.modifiers.intersection([
                 .shift, .control, .option, .command, .function
@@ -149,7 +160,7 @@ final class KeyboardMapping: Identifiable {
             var supersetMatch: BBCKeyRef?
             var noRequirementMatch: BBCKeyRef?
 
-            for candidate in candidates {
+            for candidate in applicable {
                 let required = candidate.requireModifiers
 
                 if required.isEmpty {

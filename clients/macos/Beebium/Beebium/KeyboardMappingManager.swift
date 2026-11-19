@@ -70,9 +70,13 @@ final class KeyboardMappingManager: ObservableObject {
         return activeMapping?.disableableKeys[keyName] ?? false
     }
 
-    /// Get sorted list of disableable keys in the active mapping
+    /// Get sorted list of disableable keys in the active mapping. A key the
+    /// connected machine does not have is omitted (docs/keyboard-mapping-files.md
+    /// section 3.6): its entry does not apply here, so the keyboard view does not
+    /// offer it as a key to switch off.
     var disableableKeyNames: [String] {
-        return (activeMapping?.disableableKeys.keys.sorted()) ?? []
+        guard let keys = activeMapping?.disableableKeys.keys else { return [] }
+        return keys.filter { bbcKeyCache.machineHasKey(named: $0) }.sorted()
     }
 
     /// Host key label for the Break key in the active mapping (e.g. "⌥F12"), or nil if unmapped
@@ -131,6 +135,12 @@ final class KeyboardMappingManager: ObservableObject {
                   let action = bbcSpec.action else {
                 continue
             }
+
+            // An entry whose BBC key the connected machine does not have does
+            // not apply here (docs/keyboard-mapping-files.md section 3.6), so the
+            // keyboard view's reference table omits it; the next machine may have
+            // the key, and the entry is kept in the file untouched.
+            guard bbcKeyCache.machineHasKey(named: bbcSpec.key) else { continue }
 
             entries.append(MappingReferenceEntry(
                 keyCode: macOSSpec.keyCode,

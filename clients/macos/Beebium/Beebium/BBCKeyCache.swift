@@ -90,6 +90,18 @@ final class BBCKeyCache {
         return byName[name.lowercased()]
     }
 
+    /// Whether the connected machine has a BBC key by this name, for section 3.6
+    /// applicability (docs/keyboard-mapping-files.md): an entry whose key the
+    /// machine lacks does not apply, so the resolver skips it and the keyboard
+    /// view omits it. Break is not a matrix key and counts as present on every
+    /// machine. Until the catalogue is loaded the machine is unknown, so every
+    /// key counts as present rather than every entry vanishing.
+    func machineHasKey(named name: String) -> Bool {
+        guard isLoaded else { return true }
+        if name == "Break" { return true }
+        return lookup(name: name) != nil
+    }
+
     /// Get all character mappings (for debugging/diagnostics)
     var allCharacters: [Character: Entry] {
         return byCharacter
