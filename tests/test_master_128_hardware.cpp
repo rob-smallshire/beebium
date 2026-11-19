@@ -17,10 +17,12 @@
 // The facts are docs/discussion/master-128-research.md, section 1.
 
 #include <beebium/Machines.hpp>
+#include <beebium/econet/TestBackend.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -389,4 +391,47 @@ TEST_CASE("Master 128 1770: the latch at &FE24 and the registers at &FE28",
     CHECK(hw->read(0xFE2A) == 0x01);  // sector register
     CHECK(hw->read(0xFE2C) == 0x20);  // undecoded
     CHECK(hw->read(0xFE2F) == 0x20);
+}
+
+TEST_CASE("Master 128 ADC at &FE18, nothing at &FEC0", "[master128][hardware][adc]") {
+    auto hw = std::make_unique<HW>();
+    hw->main_ram.write(0x7C00, 0x20);
+    hw->note_video_fetch(VideoFetch{0x2000, 0});
+    REQUIRE((hw->read(0xFE18) & 0x40) != 0);   // not busy
+    hw->write(0xFE18, 0x02);  // channel 2, 8-bit: a conversion starts
+    CHECK((hw->read(0xFE18) & 0x40) == 0);     // busy
+    CHECK((hw->read(0xFE1C) & 0x40) == 0);     // mirrored every four
+    CHECK(hw->read(0xFEC0) == 0x20);           // the B's address: the stale bus
+}
+
+TEST_CASE("Master 128 Econet INTOFF at &FE38 and INTON at &FE3C",
+          "[master128][hardware][econet]") {
+    auto hw = std::make_unique<HW>();
+    hw->main_ram.write(0x7C00, 0x20);
+    hw->note_video_fetch(VideoFetch{0x2000, 0});
+    hw->write(0xFE3C, 0x00);
+    CHECK(hw->econet_socket.nmi_enable_ff());
+    CHECK(hw->read(0xFE38) == 0x20);  // a read is INTOFF, and not readable
+    CHECK_FALSE(hw->econet_socket.nmi_enable_ff());
+    CHECK(hw->read(0xFE3F) == 0x20);  // a read is INTON too
+    CHECK(hw->econet_socket.nmi_enable_ff());
+    hw->write(0xFE3B, 0x00);
+    CHECK_FALSE(hw->econet_socket.nmi_enable_ff());
+    // The Video ULA no longer fires INTON.
+    hw->write(0xFE20, 0x9C);
+    CHECK_FALSE(hw->econet_socket.nmi_enable_ff());
+}
+
+TEST_CASE("Master 128 Econet takes its station number from CMOS byte 0 at reset",
+          "[master128][hardware][econet][cmos]") {
+    auto hw = std::make_unique<HW>();
+    hw->econet_socket.enable(42, std::make_unique<TestBackend>());
+    hw->set_cmos_station(42);
+    CHECK(hw->cmos_station() == 42);
+    CHECK(hw->rtc.peek_register(0x0E) == 42);
+    // The guest configures another number; the socket takes it at Break.
+    hw->set_cmos_station(57);
+    hw->soft_reset();
+    CHECK(hw->econet_socket.station_id() == 57);
+    CHECK(hw->econet_socket.station_in_force() == std::optional<uint8_t>{57});
 }

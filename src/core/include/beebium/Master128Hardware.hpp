@@ -89,11 +89,16 @@ struct DefaultSidewaysRom {
 //
 // SHEILA (section 1.2): the ADC at &FE18, the Video ULA at &FE20-&FE23 only,
 // the 1770's drive control latch at &FE24-&FE27 (write only: a read is the
-// stale data bus) and its registers at &FE28-&FE2B, ROMSEL and ACCCON, the
-// VIAs, the ADLC at &FEA0, the Tube at &FEE0. &FE2C-&FE2F (undecoded, as
-// B-Em has it; unmeasured, research section 5 item 3), INTOFF/INTON
-// (&FE38/&FE3C), the modem connector (&FE80-&FE9F) and &FEC0-&FEDF read as
-// the stale data bus until something is decoded there.
+// stale data bus) and its registers at &FE28-&FE2B, ROMSEL and ACCCON,
+// Econet's INTOFF at &FE38 and INTON at &FE3C, the VIAs, the ADLC at
+// &FEA0, the Tube at &FEE0. &FE2C-&FE2F (undecoded, as B-Em has it;
+// unmeasured, research section 5 item 3), the modem connector (&FE80-&FE9F)
+// and &FEC0-&FEDF read as the stale data bus until something is decoded
+// there.
+//
+// Econet's station number is CMOS byte 0, not a register: the filing system
+// reads it there as it starts, so --station sets that byte and the socket
+// takes its number from it at every reset.
 //
 // The clock (section 1.4): an MC146818 on the System VIA (see
 // MasterSystemViaPeripheral), its CMOS kept by its battery as the unit
@@ -291,6 +296,24 @@ public:
         }
     };
 
+    // Econet's NMI mask in the I/O controller: any access to &FE38-&FE3B is
+    // INTOFF, to &FE3C-&FE3F INTON. Neither is readable; a read is the stale
+    // data bus.
+    struct EconetIntoffRegion {
+        EconetSocket& econet_socket;
+        const uint8_t& stale;
+        uint8_t read(uint16_t) { econet_socket.on_intoff(); return stale; }
+        uint8_t peek(uint16_t) const { return stale; }
+        void write(uint16_t, uint8_t) { econet_socket.on_intoff(); }
+    };
+    struct EconetIntonRegion {
+        EconetSocket& econet_socket;
+        const uint8_t& stale;
+        uint8_t read(uint16_t) { econet_socket.on_inton(); return stale; }
+        uint8_t peek(uint16_t) const { return stale; }
+        void write(uint16_t, uint8_t) { econet_socket.on_inton(); }
+    };
+
     // ROMSEL (&FE30-&FE33). Bits 4-6 read back as written: no hardware
     // measurement of ROMSEL readback exists (research section 5 item 2).
     struct RomselRegister {
@@ -314,6 +337,8 @@ public:
     StaleBusRegion stale_bus_region_{stale_bus_};
     DiscLatchRegion disc_latch_region_{disc_controller, stale_bus_};
     DiscRegisterRegion disc_register_region_{disc_controller};
+    EconetIntoffRegion econet_intoff_region_{econet_socket, stale_bus_};
+    EconetIntonRegion econet_inton_region_{econet_socket, stale_bus_};
     RomselRegister romsel_register{*this};
     AccconRegister acccon_register{*this};
 
@@ -333,7 +358,8 @@ public:
             make_region<0xFE2C, 0xFE2F>(std::declval<StaleBusRegion&>()),
             make_region<0xFE30, 0xFE33, Mirror<0x03>>(std::declval<RomselRegister&>()),
             make_region<0xFE34, 0xFE37, Mirror<0x03>>(std::declval<AccconRegister&>()),
-            make_region<0xFE38, 0xFE3F>(std::declval<StaleBusRegion&>()),
+            make_region<0xFE38, 0xFE3B>(std::declval<EconetIntoffRegion&>()),
+            make_region<0xFE3C, 0xFE3F>(std::declval<EconetIntonRegion&>()),
             make_region<0xFE40, 0xFE5F, Mirror<0x0F>>(std::declval<Via6522&>()),
             make_region<0xFE60, 0xFE7F, Mirror<0x0F>>(std::declval<Via6522&>()),
             make_region<0xFE80, 0xFE9F>(std::declval<StaleBusRegion&>()),
@@ -557,6 +583,7 @@ public:
         disc_controller.reset(ResetCause::PowerOn);
         one_mhz_bus_.reset(ResetCause::PowerOn);
         econet_socket.reset();
+        adopt_cmos_station();
         serial_socket.reset();
         tube_socket.reset();
     }
@@ -574,8 +601,18 @@ public:
         disc_controller.reset(ResetCause::Break);
         one_mhz_bus_.reset(ResetCause::Break);
         econet_socket.reset();
+        adopt_cmos_station();
         serial_socket.reset();
         tube_socket.reset();
+    }
+
+    // Econet's station number: CMOS byte 0. Setting it here is the Master's
+    // --station; the socket takes it at the next reset.
+    void set_cmos_station(uint8_t station) {
+        rtc.poke_ram(Mc146818Rtc::FIRST_RAM_REGISTER + master_128_cmos_seed::CMOS_STATION, station);
+    }
+    uint8_t cmos_station() const {
+        return rtc.peek_register(Mc146818Rtc::FIRST_RAM_REGISTER + master_128_cmos_seed::CMOS_STATION);
     }
 
     // The clock, by one 2 MHz cycle (Machine calls this every cycle,
@@ -854,6 +891,10 @@ private:
         sideways.select_bank(value & ROMSEL_BANK_MASK);
     }
 
+    // The filing system takes its station number from CMOS byte 0 as the
+    // machine restarts.
+    void adopt_cmos_station() { econet_socket.adopt_station(cmos_station()); }
+
     void reset_paging() {
         romsel_ = 0;
         acccon_ = 0;
@@ -907,7 +948,8 @@ private:
             make_region<0xFE2C, 0xFE2F>(stale_bus_region_),
             make_region<0xFE30, 0xFE33, Mirror<0x03>>(romsel_register),
             make_region<0xFE34, 0xFE37, Mirror<0x03>>(acccon_register),
-            make_region<0xFE38, 0xFE3F>(stale_bus_region_),
+            make_region<0xFE38, 0xFE3B>(econet_intoff_region_),
+            make_region<0xFE3C, 0xFE3F>(econet_inton_region_),
             make_region<0xFE40, 0xFE5F, Mirror<0x0F>>(system_via),
             make_region<0xFE60, 0xFE7F, Mirror<0x0F>>(user_via),
             make_region<0xFE80, 0xFE9F>(stale_bus_region_),

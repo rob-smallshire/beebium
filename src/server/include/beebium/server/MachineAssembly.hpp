@@ -338,6 +338,11 @@ std::optional<int> install_econet(MachineType& machine,
     if constexpr (HasEconetSocket<Memory>) {
         if (resolved_station >= 1) {
             auto station = static_cast<uint8_t>(resolved_station);
+            // A machine whose station number is in CMOS (the Master's byte 0)
+            // takes --station there, so the guest's *CONFIGURE agrees with it.
+            if constexpr (requires(Memory& m) { m.set_cmos_station(station); }) {
+                machine.state().memory.set_cmos_station(station);
+            }
             // Appended to the "Econet station N" lines so the log shows when a
             // number was chosen automatically rather than given.
             const char* auto_note = auto_assigned ? " (auto-assigned)" : "";

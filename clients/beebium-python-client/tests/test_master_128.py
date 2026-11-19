@@ -186,3 +186,20 @@ def test_the_fdc_name_placeholder_names_the_1770(launch_bbc) -> None:
     preview = bbc.system.preview_machine_description("Master {fdc-controller}")
     assert preview.description == "Master WD1770"
     assert preview.report.inapplicable_keys == ()
+
+
+# ---------------------------------------------------------------------------
+# The small moves (step 4)
+# ---------------------------------------------------------------------------
+
+
+def test_station_is_cmos_byte_0(launch_bbc) -> None:
+    """--station 42 is the Master's CMOS byte 0, which the guest reads with
+    OSBYTE &A1, and the station number Econet reports."""
+    bbc = launch_bbc(preset=PRESET, variant=VARIANT, extra_args=["--station", "42"])
+    _booted(bbc)
+    status = bbc.econet.status
+    assert status.station_id == 42
+    assert status.station_in_force == 42
+    _command(bbc, 'A%=&A1:X%=0:PRINT "S=";(USR(&FFF4) AND &FF0000) DIV &10000', "S=")
+    assert re.search(r"S=\s*42", _screen(bbc)), _screen(bbc)

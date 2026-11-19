@@ -274,6 +274,29 @@ public:
         nmi_enable_ff_ = true;
     }
 
+    // --- INTOFF and the station number, where they are not at &FE18 ---
+
+    // Clears the NMI enable flip-flop: the Master's INTOFF at &FE38, which
+    // has no station register behind it.
+    void on_intoff() {
+        nmi_enable_ff_ = false;
+    }
+
+    // The guest has taken its station number from somewhere other than the
+    // &FE18 links: the Master's filing system reads CMOS byte 0 as it starts.
+    // Like the first &FE18 read after a reset, it puts that number in force,
+    // and makes it the socket's number if it differs.
+    void adopt_station(uint8_t station) {
+        if (!enabled_) return;
+        if (station != station_id_) set_station_id(station);
+        station_read_pending_ = false;
+        const auto before = station_in_force();
+        read_station_.store(station, std::memory_order_relaxed);
+        if (station_in_force() != before) {
+            bump_status_sequence();
+        }
+    }
+
     // --- NMI output ---
 
     // Returns true when NMI should be asserted to the CPU.

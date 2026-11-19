@@ -149,6 +149,14 @@ public:
 
     void write_data(uint8_t value) { write_register(address_, value); }
 
+    // Set a CMOS RAM byte (registers 14-63) from outside the bus, without
+    // moving the address the CPU latched: the board's own configuration
+    // (the Master's --station in CMOS byte 0). Other registers are left alone.
+    void poke_ram(uint8_t reg, uint8_t value) {
+        reg &= REGISTER_COUNT - 1;
+        if (reg >= FIRST_RAM_REGISTER) registers_[reg] = value;
+    }
+
     // Read a register without side effects (register C is not cleared).
     uint8_t peek_register(uint8_t reg) const {
         reg &= REGISTER_COUNT - 1;

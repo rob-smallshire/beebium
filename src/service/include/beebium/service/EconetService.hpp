@@ -339,6 +339,16 @@ public:
             }
 
             econet.set_station_id(static_cast<uint8_t>(station));
+            // Where the station number is in CMOS (the Master's byte 0), the
+            // new number goes there too, or the next reset would take the
+            // old one back.
+            if constexpr (requires(typename MachineType::Memory& m) {
+                              m.set_cmos_station(uint8_t{});
+                          }) {
+                machine_.with_emulation_paused([&] {
+                    machine_.state().memory.set_cmos_station(static_cast<uint8_t>(station));
+                });
+            }
             response->set_success(true);
             return grpc::Status::OK;
         }
