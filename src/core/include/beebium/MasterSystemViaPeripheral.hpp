@@ -21,8 +21,9 @@
 
 namespace beebium {
 
-// The Master 128's System VIA: the Model B's keyboard, sound and latch, with
-// the MC146818 clock in the speech chip's place.
+// The Master 128's System VIA: the Model B's sound and latch, its keyboard
+// widened to 13 columns for the keypad and without start-up links, and the
+// MC146818 clock in the speech chip's place.
 //
 // - Port A is the clock's multiplexed address and data bus, shared with the
 //   keyboard and the sound chip.
@@ -46,7 +47,7 @@ public:
     static constexpr uint8_t LATCH_DS = AddressableLatch::SPEECH_WRITE;
 
     MasterSystemViaPeripheral(AddressableLatch& latch, Indicators& indicators, Mc146818Rtc& rtc)
-        : SystemViaPeripheral(latch, indicators), rtc_(rtc) {}
+        : SystemViaPeripheral(latch, indicators, KeyboardMatrix::MASTER_128_LAYOUT), rtc_(rtc) {}
 
     uint8_t update_port_a(uint8_t output, uint8_t ddr) override {
         const uint8_t keyboard = SystemViaPeripheral::update_port_a(output, ddr);

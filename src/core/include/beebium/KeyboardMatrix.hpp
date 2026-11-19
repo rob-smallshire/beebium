@@ -17,10 +17,14 @@
 
 namespace beebium {
 
-// BBC Micro keyboard matrix (10 columns x 10 rows)
+// BBC Micro keyboard matrix (10 columns x 10 rows on the Model B)
 //
-// The BBC keyboard is a matrix of 10 columns and 10 rows. Each key
-// position corresponds to a (row, column) pair.
+// The BBC keyboard is a matrix of columns and rows. Each key position
+// corresponds to a (row, column) pair. The Model B and B+ have 10 columns;
+// the Master 128 has 13, its keypad in columns 10-12, and no start-up links
+// (its boot options are in CMOS). The column decoder takes four bits, so a
+// matrix has at most 16 columns; a column the machine does not have reads as
+// no key pressed.
 //
 // Key positions:
 // - Columns 0-9: Physical keyboard columns
@@ -50,12 +54,35 @@ namespace beebium {
 //
 class KeyboardMatrix {
 public:
+    // The Model B's matrix.
     static constexpr uint8_t NUM_COLUMNS = 10;
     static constexpr uint8_t NUM_ROWS = 10;
+    static constexpr uint8_t MAX_COLUMNS = 16;
+
+    // A machine's keyboard: how many columns it has, and whether row 0,
+    // columns 2-9 are the start-up links.
+    struct Layout {
+        uint8_t columns = NUM_COLUMNS;
+        bool links = true;
+    };
+
+    // The Master 128's: 13 columns, no links.
+    static constexpr Layout MASTER_128_LAYOUT{13, false};
+
+    KeyboardMatrix() = default;
+    explicit KeyboardMatrix(Layout layout)
+        : column_count_(layout.columns <= MAX_COLUMNS ? layout.columns : MAX_COLUMNS),
+          has_links_(layout.links) {}
+
+    // The number of columns this keyboard has.
+    uint8_t column_count() const { return column_count_; }
+
+    // Whether this keyboard has start-up links in row 0, columns 2-9.
+    bool has_links() const { return has_links_; }
 
     // Set a key as pressed (thread-safe)
     void key_down(uint8_t row, uint8_t column) {
-        if (row < NUM_ROWS && column < NUM_COLUMNS) {
+        if (row < NUM_ROWS && column < column_count_) {
             // Atomic fetch_or sets the bit without racing with other operations
             columns_[column].fetch_or(static_cast<uint16_t>(1 << row),
                                       std::memory_order_release);
@@ -64,7 +91,7 @@ public:
 
     // Set a key as released (thread-safe)
     void key_up(uint8_t row, uint8_t column) {
-        if (row < NUM_ROWS && column < NUM_COLUMNS) {
+        if (row < NUM_ROWS && column < column_count_) {
             // Atomic fetch_and clears the bit without racing
             columns_[column].fetch_and(static_cast<uint16_t>(~(1 << row)),
                                        std::memory_order_release);
@@ -73,7 +100,7 @@ public:
 
     // Check if a specific key is pressed (thread-safe)
     bool is_key_pressed(uint8_t row, uint8_t column) const {
-        if (row < NUM_ROWS && column < NUM_COLUMNS) {
+        if (row < NUM_ROWS && column < column_count_) {
             return (columns_[column].load(std::memory_order_acquire) & (1 << row)) != 0;
         }
         return false;
@@ -81,7 +108,7 @@ public:
 
     // Read a column's state (bitmask of pressed rows) (thread-safe)
     uint16_t read_column(uint8_t column) const {
-        if (column < NUM_COLUMNS) {
+        if (column < column_count_) {
             return columns_[column].load(std::memory_order_acquire);
         }
         return 0;
@@ -91,7 +118,7 @@ public:
     uint16_t get_row_state(uint8_t row) const {
         if (row >= NUM_ROWS) return 0;
         uint16_t state = 0;
-        for (uint8_t col = 0; col < NUM_COLUMNS; ++col) {
+        for (uint8_t col = 0; col < column_count_; ++col) {
             if (columns_[col].load(std::memory_order_acquire) & (1 << row)) {
                 state |= (1 << col);
             }
@@ -101,7 +128,7 @@ public:
 
     // Check if any key in a column is pressed (optionally excluding row 0) (thread-safe)
     bool any_key_in_column(uint8_t column, bool exclude_row_0 = false) const {
-        if (column >= NUM_COLUMNS) return false;
+        if (column >= column_count_) return false;
         uint16_t mask = exclude_row_0 ? 0x3FE : 0x3FF;  // Rows 1-9 or 0-9
         return (columns_[column].load(std::memory_order_acquire) & mask) != 0;
     }
@@ -165,7 +192,7 @@ public:
     // Column must be 2-9 (links 1-8). Returns false for invalid columns.
     // Note: link made = bit CLEAR in startup options (active-low).
     bool is_link_made(uint8_t column) const {
-        if (column < 2 || column > 9) return false;
+        if (!has_links_ || column < 2 || column > 9) return false;
         uint8_t bit = 9 - column;  // Column 9 = bit 0, column 2 = bit 7
         return (startup_options_.load(std::memory_order_acquire) & (1 << bit)) == 0;
     }
@@ -174,11 +201,23 @@ private:
     // Each element is a bitmask of rows pressed in that column
     // Bit N set means row N is pressed in this column
     // Using std::atomic for thread-safe access from gRPC and emulator threads
-    std::atomic<uint16_t> columns_[NUM_COLUMNS] = {};
+    std::atomic<uint16_t> columns_[MAX_COLUMNS] = {};
+    uint8_t column_count_ = NUM_COLUMNS;
+    bool has_links_ = true;
 
     // Startup options byte (keyboard links)
     // Default 0xFF = all links broken = Mode 7, normal SHIFT-BREAK
     std::atomic<uint8_t> startup_options_{0xFF};
+};
+
+// A machine policy whose keyboard has start-up links the server can set
+// (--links, --screen-mode, --auto-boot, the preset's startup key). The
+// Master's has none: its boot options are in CMOS.
+template <typename Memory>
+concept HasStartupLinks = requires(Memory& m, uint8_t value) {
+    m.set_startup_options(value);
+    m.set_screen_mode(value);
+    m.set_auto_boot(bool{});
 };
 
 } // namespace beebium

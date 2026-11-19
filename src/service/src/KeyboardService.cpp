@@ -45,7 +45,7 @@ grpc::Status KeyboardServiceImpl::KeyDown(
     uint32_t row = (ik_number >> 4) & 0x0F;
     uint32_t column = ik_number & 0x0F;
 
-    if (row >= 10 || column >= 10) {
+    if (row >= 10 || column >= keyboard_.keyboard().column_count()) {
         response->set_accepted(false);
         return grpc::Status::OK;
     }
@@ -67,7 +67,7 @@ grpc::Status KeyboardServiceImpl::KeyUp(
     uint32_t row = (ik_number >> 4) & 0x0F;
     uint32_t column = ik_number & 0x0F;
 
-    if (row >= 10 || column >= 10) {
+    if (row >= 10 || column >= keyboard_.keyboard().column_count()) {
         response->set_accepted(false);
         return grpc::Status::OK;
     }
@@ -97,12 +97,25 @@ grpc::Status KeyboardServiceImpl::GetState(
 // Keyboard Links (raw byte access)
 // =============================================================================
 
+namespace {
+
+// The start-up links RPCs on a machine whose keyboard has none (the Master,
+// whose boot options are in CMOS).
+grpc::Status no_links_status() {
+    return {grpc::StatusCode::FAILED_PRECONDITION,
+            "This machine's keyboard has no start-up links; its start-up options are "
+            "configured in CMOS with *CONFIGURE."};
+}
+
+}  // namespace
+
 grpc::Status KeyboardServiceImpl::SetLinks(
     grpc::ServerContext* /*context*/,
     const SetLinksRequest* request,
     SetLinksResponse* response) {
 
     std::lock_guard<std::mutex> lock(mutex_);
+    if (!keyboard_.keyboard().has_links()) return no_links_status();
 
     uint32_t value = request->value();
     if (value > 255) {
@@ -122,6 +135,7 @@ grpc::Status KeyboardServiceImpl::GetLinks(
     LinksState* response) {
 
     std::lock_guard<std::mutex> lock(mutex_);
+    if (!keyboard_.keyboard().has_links()) return no_links_status();
 
     response->set_value(keyboard_.keyboard().startup_options());
     return grpc::Status::OK;
@@ -137,6 +151,7 @@ grpc::Status KeyboardServiceImpl::SetStartupScreenMode(
     SetStartupScreenModeResponse* response) {
 
     std::lock_guard<std::mutex> lock(mutex_);
+    if (!keyboard_.keyboard().has_links()) return no_links_status();
 
     uint32_t mode = request->mode();
     if (mode > 7) {
@@ -156,6 +171,7 @@ grpc::Status KeyboardServiceImpl::GetStartupScreenMode(
     StartupScreenModeState* response) {
 
     std::lock_guard<std::mutex> lock(mutex_);
+    if (!keyboard_.keyboard().has_links()) return no_links_status();
 
     response->set_mode(keyboard_.keyboard().screen_mode());
     return grpc::Status::OK;
@@ -167,6 +183,7 @@ grpc::Status KeyboardServiceImpl::SetStartupAutoBoot(
     SetStartupAutoBootResponse* response) {
 
     std::lock_guard<std::mutex> lock(mutex_);
+    if (!keyboard_.keyboard().has_links()) return no_links_status();
 
     keyboard_.keyboard().set_auto_boot(request->enabled());
     response->set_success(true);
@@ -179,6 +196,7 @@ grpc::Status KeyboardServiceImpl::GetStartupAutoBoot(
     StartupAutoBootState* response) {
 
     std::lock_guard<std::mutex> lock(mutex_);
+    if (!keyboard_.keyboard().has_links()) return no_links_status();
 
     response->set_enabled(keyboard_.keyboard().auto_boot());
     return grpc::Status::OK;
@@ -380,6 +398,9 @@ grpc::Status KeyboardServiceImpl::GetAllKeyMappings(
     AllKeyMappingsResponse* response) {
 
     for (const auto& mapping : get_all_mappings()) {
+        // Only the keys this machine's keyboard has (the keypad is the
+        // Master's).
+        if (mapping.column() >= keyboard_.keyboard().column_count()) continue;
         auto* entry = response->add_mappings();
 
         // Convert codepoint to UTF-8 string

@@ -24,7 +24,8 @@ namespace beebium {
 // Internal key number format: (row << 4) | column
 // Example: 'V' at row 6, column 3 = 0x63
 //
-// BBC Keyboard Matrix Layout (10 columns x 8 rows of regular keys):
+// BBC Keyboard Matrix Layout (10 columns x 8 rows of regular keys; the
+// Master 128's keypad adds columns 10-12):
 //   Row 0: SHIFT(0), CTRL(1), [links 2-9]
 //   Row 1: Q(0), 3(1), 4(2), 5(3), f4(4), 8(5), f7(6), -(7), ^/~(8), LEFT(9)
 //   Row 2: f0(0), W(1), E(2), T(3), 7/'(4), I(5), 9(6), 0(7), £/_(8), DOWN(9)
@@ -73,6 +74,31 @@ static constexpr std::array kMappingTable = {
     KeyMapping{0, 0x16, false, "f7"},
     KeyMapping{0, 0x76, false, "f8"},
     KeyMapping{0, 0x77, false, "f9"},
+
+    // The Master 128's keypad, in columns 10-12 (Master Reference Manual,
+    // the internal key numbers; research section 1.5). Named only: the
+    // characters they type come from the main keyboard's keys, so typing a
+    // digit never presses the keypad. A machine whose keyboard has fewer
+    // columns does not have them (KeyboardMatrix::column_count).
+    KeyMapping{0, 0x6A, false, "Keypad0"},
+    KeyMapping{0, 0x6B, false, "Keypad1"},
+    KeyMapping{0, 0x7C, false, "Keypad2"},
+    KeyMapping{0, 0x6C, false, "Keypad3"},
+    KeyMapping{0, 0x7A, false, "Keypad4"},
+    KeyMapping{0, 0x7B, false, "Keypad5"},
+    KeyMapping{0, 0x1A, false, "Keypad6"},
+    KeyMapping{0, 0x1B, false, "Keypad7"},
+    KeyMapping{0, 0x2A, false, "Keypad8"},
+    KeyMapping{0, 0x2B, false, "Keypad9"},
+    KeyMapping{0, 0x3A, false, "KeypadPlus"},
+    KeyMapping{0, 0x3B, false, "KeypadMinus"},
+    KeyMapping{0, 0x4A, false, "KeypadDivide"},
+    KeyMapping{0, 0x5A, false, "KeypadHash"},
+    KeyMapping{0, 0x5B, false, "KeypadMultiply"},
+    KeyMapping{0, 0x5C, false, "KeypadComma"},
+    KeyMapping{0, 0x4C, false, "KeypadPeriod"},
+    KeyMapping{0, 0x3C, false, "KeypadReturn"},
+    KeyMapping{0, 0x4B, false, "KeypadDelete"},
 
     // =========================================================================
     // Character keys (codepoint maps to character, name is the character)

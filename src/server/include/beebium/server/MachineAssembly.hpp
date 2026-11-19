@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "beebium/KeyboardMatrix.hpp"
 #include "beebium/server/StartOptions.hpp"
 #include "beebium/server/SidewaysValidation.hpp"
 #include "beebium/server/CoprocessorDebuggerAdapter.hpp"
@@ -600,7 +601,13 @@ std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<Mac
 // Must be called before machine.reset().
 template<typename MachineType>
 void apply_startup_options(MachineType& machine, const ServerConfig<MachineType>& config) {
-    if (config.machine.raw_links >= 0) {
+    // A keyboard without links (the Master's) has none to set; validation
+    // has already refused options for them.
+    if constexpr (!HasStartupLinks<typename MachineType::Memory>) {
+        (void)machine;
+        (void)config;
+        return;
+    } else if (config.machine.raw_links >= 0) {
         // Raw byte overrides everything
         machine.state().memory.set_startup_options(static_cast<uint8_t>(config.machine.raw_links));
         std::cout << "Startup links: 0x" << std::hex << config.machine.raw_links << std::dec << "\n";

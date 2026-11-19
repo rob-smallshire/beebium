@@ -21,6 +21,7 @@
 // no service or machine-running code, so it is unit-tested on its own
 // (test_preset_resolution).
 
+#include "beebium/KeyboardMatrix.hpp"
 #include "beebium/MachineModels.hpp"
 #include "beebium/server/DiscPaths.hpp"
 #include "beebium/server/PresetLoader.hpp"
@@ -718,6 +719,14 @@ std::vector<Diagnostic> fold_in_preset(ServerConfig<MachineType>& config) {
 // The startup links: --links excludes the semantic options.
 template<typename MachineType>
 std::optional<std::string> validate_startup_links(const ServerConfig<MachineType>& config) {
+    if constexpr (!HasStartupLinks<typename MachineType::Memory>) {
+        if (config.machine.raw_links >= 0 || config.machine.screen_mode_set
+            || config.machine.auto_boot_set) {
+            return "This machine's keyboard has no start-up links, so --links, --screen-mode "
+                   "and --auto-boot do not apply; its start-up options are configured in CMOS "
+                   "with *CONFIGURE.";
+        }
+    }
     if (config.machine.raw_links >= 0 && (config.machine.screen_mode_set || config.machine.auto_boot_set)) {
         return "--links cannot be combined with --screen-mode or --auto-boot";
     }
@@ -1029,7 +1038,9 @@ std::optional<nlohmann::ordered_json> preset_document(const MachineDescription& 
                 break;
             case PresetKey::Startup:
                 // One form or the other. Every fills in the machine's own
-                // (mode 7, SHIFT-BREAK boots) where the config sets none.
+                // (mode 7, SHIFT-BREAK boots) where the config sets none. A
+                // machine without links has no startup key.
+                if constexpr (!HasStartupLinks<Memory>) break;
                 if (machine.raw_links >= 0) {
                     doc[key] = {{"links", machine.raw_links}};
                 } else if (every) {

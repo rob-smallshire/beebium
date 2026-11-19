@@ -593,18 +593,6 @@ public:
     uint8_t light_pen_strobe() { return system_via_peripheral.light_pen_strobe(); }
     SerialPort& serial_port() { return serial_port_; }
 
-    // The keyboard's start-up links, which the Master does not have; kept
-    // for the server's start-up options until the keyboard round removes
-    // them.
-    void set_startup_options(uint8_t options) {
-        system_via_peripheral.keyboard().set_startup_options(options);
-    }
-    uint8_t startup_options() const { return system_via_peripheral.keyboard().startup_options(); }
-    void set_screen_mode(uint8_t mode) { system_via_peripheral.keyboard().set_screen_mode(mode); }
-    uint8_t screen_mode() const { return system_via_peripheral.keyboard().screen_mode(); }
-    void set_auto_boot(bool enabled) { system_via_peripheral.keyboard().set_auto_boot(enabled); }
-    bool auto_boot() const { return system_via_peripheral.keyboard().auto_boot(); }
-
     // =========================================================================
     // Paging state
     // =========================================================================

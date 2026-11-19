@@ -20,6 +20,7 @@ C++ (tests/test_master_128_*.cpp).
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -97,3 +98,43 @@ def test_configure_survives_save_and_relaunch(executable_filepath: Path,
         _booted(bbc)
         _type(bbc, PRINT_MODE, "MODE=")
         assert re.search(r"MODE=\s*0", _screen(bbc)), _screen(bbc)
+
+
+def test_keyboard_links_do_not_apply(executable_filepath: Path) -> None:
+    """The Master's keyboard has no start-up links: its boot options are in
+    CMOS, so the server refuses the options that set links."""
+    result = subprocess.run([str(executable_filepath), "start", "--auto-boot"],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode != 0
+    assert "no start-up links" in result.stderr
+
+
+def test_preset_schema_has_no_startup_links_and_names_the_mos_roms(
+        executable_filepath: Path) -> None:
+    result = subprocess.run([str(executable_filepath), "describe-preset-schema"],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    schema = json.loads(result.stdout)
+    assert "startup" not in [section["type"] for section in schema["sections"]]
+    default_roms = {rom["slot"]: rom["image"]
+                    for rom in _find(schema, "default_roms")}
+    assert default_roms[12] == "bbc-basic_4.rom"
+    assert default_roms[9] == "acorn-dfs_2_24.rom"
+    assert default_roms[15] == "acorn-terminal_1_20_mos_3_20.rom"
+
+
+def _find(node, key: str):
+    """The first value under `key` anywhere in a JSON document."""
+    if isinstance(node, dict):
+        if key in node:
+            return node[key]
+        children = node.values()
+    elif isinstance(node, list):
+        children = node
+    else:
+        return None
+    for child in children:
+        found = _find(child, key)
+        if found is not None:
+            return found
+    return None

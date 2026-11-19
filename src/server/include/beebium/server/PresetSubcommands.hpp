@@ -17,6 +17,7 @@
 #pragma once
 
 #include "beebium/server/ExtensionSubcommands.hpp"
+#include "beebium/KeyboardMatrix.hpp"
 #include "beebium/MachineModels.hpp"
 #include "beebium/server/PresetWriter.hpp"
 #include "beebium/server/RomPaths.hpp"
@@ -198,7 +199,7 @@ public:
             {"description", "Emulation speed as a positive multiple of real time, or "
                             "\"unlimited\" to run flat out"}};
 
-        section_for[PresetKey::Startup] = ojson{
+        if constexpr (HasStartupLinks<Memory>) section_for[PresetKey::Startup] = ojson{
             {"type", "startup"},
             {"screen_mode", ojson{{"min", 0}, {"max", 7}, {"default", 7}}},
             {"auto_boot", ojson{{"default", false}}},
@@ -284,6 +285,16 @@ public:
                     {"image", Memory::DEFAULT_BOARD_ROM},
                     {"role", "board"}
                 });
+            }
+            // The ROMs built into the machine (the Master's MOS ROM banks).
+            if constexpr (requires { Memory::DEFAULT_SIDEWAYS_ROMS; }) {
+                for (const auto& rom : Memory::DEFAULT_SIDEWAYS_ROMS) {
+                    default_roms.push_back(ojson{
+                        {"slot", rom.slot},
+                        {"image", rom.image_filename},
+                        {"role", "board"}
+                    });
+                }
             }
             sideways["default_roms"] = default_roms;
 

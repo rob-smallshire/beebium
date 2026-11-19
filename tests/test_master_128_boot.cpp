@@ -33,6 +33,7 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace beebium;
@@ -133,6 +134,33 @@ TEST_CASE("Master 128 MOS 3.20 boots to BASIC in Mode 7", "[master128][boot][rom
     CHECK(text.find("BASIC") != std::string::npos);
     CHECK(text.find(">") != std::string::npos);
     CHECK(m.machine->memory().video_ula.teletext_mode());
+}
+
+TEST_CASE("Master 128 keypad keys type at the BASIC prompt", "[master128][boot][rom][keypad]") {
+    if (!roms_present()) SKIP("Master 128 MOS 3.20 ROMs not present");
+    Master m;
+    m.seconds(3.0);
+    auto& via = m.machine->memory().system_via_peripheral;
+    // PRINT 7*3 with the digits and operator on the keypad.
+    m.type("PRINT ", 0.2);
+    for (const auto& [row, column] : {std::pair<uint8_t, uint8_t>{1, 11},    // Keypad7
+                                     std::pair<uint8_t, uint8_t>{5, 11},    // KeypadMultiply
+                                     std::pair<uint8_t, uint8_t>{6, 12}}) { // Keypad3
+        via.key_down(row, column);
+        m.seconds(0.1);
+        via.key_up(row, column);
+        m.seconds(0.1);
+    }
+    via.key_down(3, 12);  // KeypadReturn
+    m.seconds(0.1);
+    via.key_up(3, 12);
+    m.seconds(0.5);
+    const auto lines = screen_lines(m.screen());
+    INFO(m.screen());
+    CHECK(std::find(lines.begin(), lines.end(), ">PRINT 7*3") != lines.end());
+    CHECK(std::find_if(lines.begin(), lines.end(), [](const std::string& line) {
+              return line.find("21") != std::string::npos && line.find("PRINT") == std::string::npos;
+          }) != lines.end());
 }
 
 TEST_CASE("Master 128 *STATUS shows the Welcome Guide configuration",

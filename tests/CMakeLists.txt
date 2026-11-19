@@ -1793,6 +1793,13 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_grpc_keyboard)
 
+    add_executable(test_grpc_keyboard_master_128 test_grpc_keyboard_master_128.cpp)
+    target_link_libraries(test_grpc_keyboard_master_128 PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_grpc_keyboard_master_128)
+
     # Debugger service tests
     add_executable(test_grpc_debugger test_grpc_debugger.cpp)
     target_link_libraries(test_grpc_debugger PRIVATE
@@ -2610,3 +2617,7 @@ add_executable(test_master_128_boot test_master_128_boot.cpp)
 target_link_libraries(test_master_128_boot PRIVATE beebium_core Catch2::Catch2WithMain)
 target_compile_definitions(test_master_128_boot PRIVATE BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}")
 catch_discover_tests(test_master_128_boot)
+
+add_executable(test_keyboard_matrix_layout test_keyboard_matrix_layout.cpp)
+target_link_libraries(test_keyboard_matrix_layout PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_keyboard_matrix_layout)

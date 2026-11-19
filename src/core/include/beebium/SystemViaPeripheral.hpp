@@ -69,6 +69,15 @@ public:
         register_indicators();
     }
 
+    // Constructor with indicators, using an internal keyboard of `layout`
+    SystemViaPeripheral(AddressableLatch& latch, Indicators& indicators,
+                        KeyboardMatrix::Layout layout)
+        : latch_(latch), keyboard_(internal_keyboard_), internal_keyboard_(layout),
+          indicators_(&indicators), type_ahead_(std::make_unique<TypeAheadQueue>(keyboard_))
+    {
+        register_indicators();
+    }
+
     // Legacy constructor for backward compatibility (no indicators, uses internal keyboard)
     explicit SystemViaPeripheral(AddressableLatch& latch)
         : latch_(latch), keyboard_(internal_keyboard_),
@@ -115,7 +124,7 @@ public:
 
         bool pressed = false;
 
-        if (row == 0 && column >= 2 && column <= 9) {
+        if (keyboard_.has_links() && row == 0 && column >= 2 && column <= 9) {
             // Row 0, columns 2-9 are startup links (DIP switches)
             // Read from the startup options byte instead of key matrix
             pressed = keyboard_.is_link_made(column);
