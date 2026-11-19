@@ -251,6 +251,9 @@ MainWindow::MainWindow(QRhiWidget::Api graphics_api, SystemPowerMonitor* power,
                                     [sender](const std::vector<WireEvent>& events) {
                                         sender->send(events);
                                     });
+        // The keyboard view shows only the keys this machine has (3.6).
+        keyboard_mode_->set_key_table(session_->key_table());
+        keyboard_mode_->set_key_switches(display_->keyboard().switchable_keys());
         display_->keyboard_changed();
         display_->setFocus();
     });

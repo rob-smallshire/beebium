@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_LINUX_APP_MAPPING_CATALOGUE_HPP
 #define BEEBIUM_LINUX_APP_MAPPING_CATALOGUE_HPP
 
+#include "keyboard/BbcKeyTable.hpp"
 #include "keyboard/MappingFile.hpp"
 
 #include <QString>
@@ -77,12 +78,15 @@ std::vector<MappingChoice> mapping_choices(const QString& user_dirpath);
 QString host_key_label(const MappingEntry& entry);
 
 // The rows of a mapping's reference table (#234): every entry carrying an
-// action label, built-ins included, as host key and action, in file order.
+// action label, built-ins included, as host key and action, in file order;
+// none for a key the connected machine does not have (keyboard mapping
+// files 3.6).
 struct ReferenceRow {
     QString host_key;
     QString action;
 };
-std::vector<ReferenceRow> mapping_reference(const MappingFile& mapping);
+std::vector<ReferenceRow> mapping_reference(const MappingFile& mapping,
+                                           const BbcKeyTable& table = BbcKeyTable());
 
 }  // namespace beebium::linux_client
 

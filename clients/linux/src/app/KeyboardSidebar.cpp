@@ -124,6 +124,12 @@ void KeyboardSidebar::set_active(const QString& id) {
     rebuild();
 }
 
+void KeyboardSidebar::set_key_table(BbcKeyTable table) {
+    key_table_ = std::move(table);
+    show_reference();
+    apportion();
+}
+
 void KeyboardSidebar::set_key_switches(const std::vector<std::pair<std::string, bool>>& keys) {
     for (auto& [name, box] : key_boxes_) {
         box->hide();
@@ -256,7 +262,7 @@ void KeyboardSidebar::show_reference() {
     std::vector<ReferenceRow> rows;
     for (const MappingChoice& choice : choices_) {
         if (choice.id == active_id_ && choice.mapping) {
-            rows = mapping_reference(*choice.mapping);
+            rows = mapping_reference(*choice.mapping, key_table_);
         }
     }
     for (const ReferenceRow& row : rows) {

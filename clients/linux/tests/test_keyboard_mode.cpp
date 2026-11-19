@@ -152,6 +152,38 @@ TEST_CASE("The labelled keys leave out entries that do not apply on Linux", "[ke
                               QStringLiteral("Alt+F11 = Shift Lock")});
 }
 
+TEST_CASE("The labelled keys leave out keys the connected machine does not have",
+          "[keyboard][mode][machine]") {
+    auto parsed = parse_mapping_file(R"({"version": 2, "id": "x", "name": "n", "keys": [
+        {"code": "Numpad7", "bbc": {"key": "Keypad7", "action": "Fire"}},
+        {"code": "F10", "bbc": {"key": "f0", "action": "f0"}}
+    ]})");
+    REQUIRE(std::holds_alternative<MappingFile>(parsed));
+    const MappingFile& mapping = std::get<MappingFile>(parsed);
+    const auto rows_of = [&](const BbcKeyTable& table) {
+        QStringList rows;
+        for (const auto& row : mapping_reference(mapping, table)) {
+            rows << row.host_key + QStringLiteral(" = ") + row.action;
+        }
+        return rows;
+    };
+    CHECK(rows_of(beebium::linux_client::testing::sample_key_table()) == QStringList{QStringLiteral("F10 = f0")});
+    // Before any machine is connected, all that applies here is shown.
+    CHECK(rows_of(BbcKeyTable()).size() == 2);
+
+    // The mode follows the machine it is told of.
+    QTemporaryDir directory;
+    write(directory.filePath(QStringLiteral("keypad.json")),
+          R"({"version": 2, "id": "keypad", "name": "Keypad", "keys": [
+              {"code": "Numpad7", "bbc": {"key": "Keypad7", "action": "Fire"}},
+              {"code": "F10", "bbc": {"key": "f0", "action": "f0"}}]})");
+    KeyboardSidebar sidebar(directory.path());
+    sidebar.set_active(QStringLiteral("keypad"));
+    CHECK(reference_rows(sidebar).size() == 2);
+    sidebar.set_key_table(beebium::linux_client::testing::sample_key_table());
+    CHECK(reference_rows(sidebar) == QStringList{QStringLiteral("F10 = f0")});
+}
+
 TEST_CASE("The labelled keys carry no prose, not even for a key most keyboards lack",
           "[keyboard][mode]") {
     QTemporaryDir directory;

@@ -15,6 +15,7 @@
 #include "app/HostKeyboards.hpp"
 
 #include "app/KeyboardInput.hpp"
+#include "keyboard/KeyResolver.hpp"
 
 #include <QDir>
 #include <QFile>
@@ -191,10 +192,11 @@ QString host_key_label(const MappingEntry& entry) {
     return parts.join(QLatin1Char('+'));
 }
 
-std::vector<ReferenceRow> mapping_reference(const MappingFile& mapping) {
+std::vector<ReferenceRow> mapping_reference(const MappingFile& mapping, const BbcKeyTable& table) {
     std::vector<ReferenceRow> rows;
     for (const MappingEntry& entry : mapping.keys) {
-        if (!entry.applies || !entry.action || entry.action->empty()) {
+        if (!entry.applies || !entry.action || entry.action->empty() ||
+            !machine_has_key(table, entry)) {
             continue;
         }
         const QString host = host_key_label(entry);

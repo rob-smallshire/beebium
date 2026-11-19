@@ -56,10 +56,16 @@ std::optional<ResolvedKey> resolve_entry(const MappingEntry& entry, const BbcKey
 
 }  // namespace
 
-std::vector<std::pair<std::string, bool>> switchable_keys(const MappingFile& mapping) {
+bool machine_has_key(const BbcKeyTable& table, const MappingEntry& entry) {
+    return table.empty() || entry.bbc_key == "Break" || table.ik_by_name(entry.bbc_key).has_value();
+}
+
+std::vector<std::pair<std::string, bool>> switchable_keys(const MappingFile& mapping,
+                                                          const BbcKeyTable& table) {
     std::map<std::string, bool> keys;
     for (const auto& entry : mapping.keys) {
-        if (entry.applies && entry.disabled && !keys.count(entry.bbc_key)) {
+        if (entry.applies && entry.disabled && machine_has_key(table, entry) &&
+            !keys.count(entry.bbc_key)) {
             keys.emplace(entry.bbc_key, *entry.disabled);
         }
     }
@@ -72,7 +78,7 @@ std::optional<ResolvedKey> resolve_key(const MappingFile& mapping, const BbcKeyT
     const MappingEntry* subset = nullptr;
     const MappingEntry* unqualified = nullptr;
     for (const auto& entry : mapping.keys) {
-        if (!entry.applies || !applies_to(entry, key)) {
+        if (!entry.applies || !applies_to(entry, key) || !machine_has_key(table, entry)) {
             continue;
         }
         if ((entry.with & ~key.modifiers) != 0) {

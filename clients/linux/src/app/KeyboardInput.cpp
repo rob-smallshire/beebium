@@ -95,7 +95,7 @@ void KeyboardInput::set_mapping(MappingFile mapping) {
 }
 
 std::vector<std::pair<std::string, bool>> KeyboardInput::switchable_keys() const {
-    auto keys = linux_client::switchable_keys(mapping_);
+    auto keys = linux_client::switchable_keys(mapping_, table_);
     for (auto& [name, off] : keys) {
         const auto found = switches_.find(name);
         if (found != switches_.end()) {
@@ -179,9 +179,11 @@ namespace {
 
 constexpr HostModifiers NOT_THE_MACHINES = MODIFIER_ALT | MODIFIER_META;
 
-bool bound_with_alt_or_meta(const MappingFile& mapping, const std::string& code) {
+bool bound_with_alt_or_meta(const MappingFile& mapping, const BbcKeyTable& table,
+                            const std::string& code) {
     return std::any_of(mapping.keys.begin(), mapping.keys.end(), [&](const MappingEntry& e) {
-        return e.applies && e.code && *e.code == code && (e.with & NOT_THE_MACHINES);
+        return e.applies && e.code && *e.code == code && (e.with & NOT_THE_MACHINES) &&
+               machine_has_key(table, e);
     });
 }
 
@@ -214,7 +216,7 @@ bool KeyboardInput::window_chord(const QKeyEvent& event) const {
         return false;
     }
     const HostModifiers held = host_key->modifiers | alt_or_meta_of(event);
-    return (held & NOT_THE_MACHINES) && !bound_with_alt_or_meta(mapping_, host_key->code);
+    return (held & NOT_THE_MACHINES) && !bound_with_alt_or_meta(mapping_, table_, host_key->code);
 }
 
 bool KeyboardInput::takes(const QKeyEvent& event) const {

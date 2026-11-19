@@ -50,6 +50,9 @@ public:
     // The keys the active mapping lets the user switch off, by BBC key
     // name, and whether each is off: a "Disable <key>" box each.
     void set_key_switches(const std::vector<std::pair<std::string, bool>>& keys);
+    // The connected machine's catalogue: the labelled keys leave out the
+    // keys it does not have.
+    void set_key_table(BbcKeyTable table);
     QCheckBox* key_switch(const QString& key) const;
     // Read the user's files again.
     void rescan();
@@ -81,6 +84,7 @@ private:
     QString user_dirpath_;
     std::vector<MappingChoice> choices_;
     QString active_id_;
+    BbcKeyTable key_table_;
     QWidget* views_;
     QListWidget* list_;
     QFrame* divider_;

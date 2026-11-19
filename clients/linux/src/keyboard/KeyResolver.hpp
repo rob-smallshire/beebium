@@ -50,10 +50,19 @@ enum class KeyRole {
 // true for off. A key not named here is as the file says.
 using KeySwitches = std::map<std::string, bool>;
 
+// Whether the connected machine has the BBC key an entry names
+// (docs/keyboard-mapping-files.md 3.6): its catalogue lists the key, or the
+// key is Break, which every machine has and no catalogue lists. An entry
+// for a key the machine lacks does not apply, as one whose `when` does not
+// hold: it is not for this machine, and not declined. With no machine
+// connected (an empty catalogue) nothing is judged against one.
+bool machine_has_key(const BbcKeyTable& table, const MappingEntry& entry);
+
 // The keys a mapping lets the user switch off (its entries with
-// `disabled`), by BBC key name in name order, each with the state it
-// starts in: true for off.
-std::vector<std::pair<std::string, bool>> switchable_keys(const MappingFile& mapping);
+// `disabled`, on the connected machine), by BBC key name in name order,
+// each with the state it starts in: true for off.
+std::vector<std::pair<std::string, bool>> switchable_keys(const MappingFile& mapping,
+                                                          const BbcKeyTable& table = BbcKeyTable());
 
 struct ResolvedKey {
     KeyRole role = KeyRole::matrix;
@@ -66,14 +75,14 @@ struct ResolvedKey {
 // Resolve per docs/keyboard-mapping-files.md section 4 (client
 // specification 7.4):
 //  1. physical entries for this key (its code, or this platform's entry for
-//     its native key) whose `with` is a subset of the held modifiers: one
+//     its native key), among those that apply here and name a key the
+//     machine has (3.6), whose `with` is a subset of the held modifiers: one
 //     equal to them; else the first, in file order, that is a proper subset;
 //     else the first with no `with`. If that entry is switched off, by the
 //     user's switches or else by the file, it resolves as switched off,
 //     without falling through;
 //  2. if the mapping allows, the character, through the server's catalogue;
 //  3. nothing.
-// An entry naming a key the catalogue does not know resolves to nothing.
 std::optional<ResolvedKey> resolve_key(const MappingFile& mapping, const BbcKeyTable& table,
                                        const HostKey& key, const KeySwitches& switches = {});
 
