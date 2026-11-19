@@ -385,10 +385,17 @@ Taken with Rob on 2026-11-19; the plan for the first round follows from them.
    alternative.
 3. **CMOS seed.** The configuration Acorn's Welcome Guide tells a new owner to enter (section
    6 sources: 8bs artcmos, stardot 7582): BAUD 4, NOBOOT, CAPS, DATA 4, DELAY 50, NODIR, INTUBE,
-   FDRIVE 3, HARD, IGNORE 10, LANG 12, MODE 7, TUBE, LOUD, PRINT 1, REPEAT 10, SCROLL, TV 0,1,
-   with FILE 13 (ADFS, bank 13) in place of the guide's misprinted FILE 15, every ROM insert bit
-   set and station 0; not MOS 3.50's table and not an all-zero image. If HARD makes ADFS wait
-   for a Winchester that is not there at boot, FLOPPY replaces it and the plan says so. The persistence unit is `Mc146818BatteryUnit` with a Master name and seed; R held at
+   FDRIVE 3, IGNORE 10, LANG 12, MODE 7, TUBE, LOUD, PRINT 1, REPEAT 10, SCROLL, TV 0,1, every
+   ROM insert bit set and station 0; not MOS 3.50's table and not an all-zero image. Two
+   departures from the guide's list, both because the seed describes a floppy-only machine with
+   nothing on the Tube: FLOPPY rather than HARD (no Winchester is fitted, and ADFS asked for a
+   hard disc that is not there waits on it), and the guide's FILE 15 kept as written rather than
+   "corrected" to 13: bank 15 holds no filing system, so the MOS falls back to the
+   highest-priority one, which is ADFS, and that is what the guide relied on (stardot thread
+   "Updated Master MOS versions", page 4, on B2's defaults for its patched MOS 3.20: the aim
+   stated there, "a bootable, usable system", is this seed's aim too; its NOTUBE preference is
+   not followed because a Beebium preset that fits a coprocessor should find it without a
+   `*CONFIGURE`, and with nothing fitted the probe reads the stale bus and moves on). The persistence unit is `Mc146818BatteryUnit` with a Master name and seed; R held at
    power-on zeroes bytes 1-49 and sets 6-7 to &FF exactly as the MOS does, because that is the
    MOS running, not the emulator.
 4. **Clock time source.** Host civil time plus a saved offset, as the Integra-B and the user-port
@@ -461,5 +468,6 @@ ROM, CMOS, cycle stretching, with its own caveats); Wikipedia (BBC Master). star
 9403 (PL12 and the AIV SCSI), 11369 (user ports on PL12), 16335 (unmapped reads return &20),
 16510 (two coprocessors and ITU), 28080 (Tube ULA, 65SC12 Phi2), 17243 (New AUG errata),
 26017 (OSBYTE &6B broken), 30245 (cartridge port), 15729 (Planet Nubium), 10748 (IRQ entry),
-7582 and 24936 (CMOS settings and R reset), 25129 and 26791 (RDY wait states). Emulator
+7582 and 24936 (CMOS settings and R reset), 25129 and 26791 (RDY wait states), the "Updated
+Master MOS versions" thread page 4 (p483391 on, B2's CMOS defaults for a patched MOS 3.20). Emulator
 sources read online: jsbeeb 6502.js and MAME bbcm.cpp, beside the local four.

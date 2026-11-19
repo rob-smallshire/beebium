@@ -83,8 +83,8 @@ MOS reads LANG and FILE from CMOS before it can show a prompt.
 - Clock: `Mc146818Rtc` ticked from the policy, host time plus offset, `reset()` on Break (the
   chip's RESET pin is on the system reset per the circuit diagram). Battery unit:
   `Mc146818BatteryUnit` named `master-128-cmos` with the Welcome Guide seed (section 4 item 3,
-  encoded per the CMOS byte map in section 1.4; the station byte 0 from `--station` when given,
-  else 0). R held at power-on is the MOS's own code zeroing CMOS through the VIA: nothing to
+  with FLOPPY and the guide's FILE 15, encoded per the CMOS byte map in section 1.4; the
+  station byte 0 from `--station` when given, else 0). R held at power-on is the MOS's own code zeroing CMOS through the VIA: nothing to
   write, one test to prove it.
 - The one-cycle-longer IRQ entry of the Master is a CPU-library question; leave it, note it.
 - Server: `Machines.hpp` alias, `MachineModels.hpp` entry, `main_master_128.cpp`,
