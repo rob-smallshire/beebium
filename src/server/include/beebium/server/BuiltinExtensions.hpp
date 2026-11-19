@@ -300,8 +300,9 @@ inline std::vector<Entry> make_entries() {
 
     // ROM cartridge.
     //
-    // Built-in for the same reason as the joystick. One or two 16K ROMs in a
-    // Master 128 cartridge slot; see docs/sideways-slots.md.
+    // Built-in for the same reason as the joystick. A ROM in either or both of
+    // a cartridge's two 16K sockets, in a Master 128 cartridge slot; see
+    // docs/sideways-slots.md.
     {
         ExtensionManifest m;
         m.name = "rom-cartridge";
@@ -313,14 +314,15 @@ inline std::vector<Entry> make_entries() {
         m.attaches_to_one_of = {"cartridge-rear", "cartridge-front"};
         ParameterSchema low{"low", "filepath",
                             "The ROM in the socket on the slot's even bank (ROM 0 or 2), a ROM "
-                            "name or a path; with no high ROM it answers on both banks", -1,
-                            true, false, ""};
+                            "name or a path; with none the bank is empty", -1, false, false,
+                            ""};
         low.label = "Even-bank socket";
         low.access = "read";
         low.resource = "rom";
         ParameterSchema high{"high", "filepath",
                              "The ROM in the socket on the slot's odd bank (ROM 1 or 3), a ROM "
-                             "name or a path", -1, false, false, ""};
+                             "name or a path; with none the bank is empty", -1, false, false,
+                             ""};
         high.label = "Odd-bank socket";
         high.access = "read";
         high.resource = "rom";

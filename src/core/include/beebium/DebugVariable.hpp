@@ -54,7 +54,8 @@ inline std::vector<DebugVariable> romsel_variables(std::function<uint64_t()> rom
         {"bank", "The sideways bank selected: ROMSEL (&FE30) bits 0-3 as last written.",
          std::move(bank)},
         {"romsel", "The ROMSEL latch (&FE30) as last written, in the bits the hardware keeps; "
-                   "it is write-only, so mem[] cannot read it.",
+                   "write-only on the Model B and B+, so mem[] cannot read it there (the "
+                   "Master 128 reads it back).",
          std::move(romsel)},
     };
 }

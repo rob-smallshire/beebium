@@ -306,10 +306,10 @@ provides the slot's sideways banks:
 on one is refused with a sentence saying how to fit a cartridge at launch.
 
 The built-in `rom-cartridge` is the simplest cartridge: `low` and `high` are the ROMs in its
-two 16K sockets, on the slot's even and odd banks. Each is a ROM name on the ROM search path
-or a path (the parameter's `resource: "rom"`). Acorn's Master ROM Cartridge
-(`docs/master-128/README.md`) answers with a single chip on its own bank only; Beebium lets
-`low` given alone answer on both banks, a convenience for 16K cartridges wired that way. A
+two 16K sockets, on the slot's even and odd banks, as on Acorn's Master ROM Cartridge
+(`docs/master-128/README.md`). Each is a ROM name on the ROM search path or a path (the
+parameter's `resource: "rom"`), and at least one is given. A socket with nothing in it
+leaves its bank empty: the stale bus, and no image in `SidewaysService`. A
 RAM cartridge, a 27513 taking its page from a write, or a cartridge with FRED/JIM I/O follows
 the same shape with a writable provider or bus handlers beside.
 
@@ -356,6 +356,8 @@ them.
 |---|---|
 | `tests/test_master_128_hardware.cpp` | each paging rule: ROMSEL and ACCCON readback, ANDY, HAZEL, X, E at &BFFF, &C000, &DFFF and &E000 and across an opcode fetch, the X=1 E=0 corner, Y with E, D below &3000, TST, IRR; the stale bus; the 1 MHz map with IFJ; Break; the ADC; INTOFF/INTON and the CMOS station; the 1770's latch and registers; ITU steering; IFJ routing; the modem mirror; LK18/LK19; a cartridge provider |
 | `tests/test_master_128_clock.cpp` | the clock through the System VIA: a CMOS byte written and read, CE gating, the DS-edge write, the clock driving port A only while a read's DS is high, RESET on Break, the seed's bytes, the unit |
+| `tests/test_mc146818_battery_unit.cpp` (shared with the Integra-B) | the battery-backed unit: the 64-byte image and 8-byte offset layout, layout version 1, a negative offset, wrong sizes refused |
+| `tests/test_mc146818_rtc.cpp` (shared with the Integra-B) | the chip: the six-bit address decode, register C cleared on read, register D's VRT, the RESET pin clearing PIE, AIE, UIE, SQWE and the flags and nothing else, the UIP window |
 | `tests/test_master_128_boot.cpp` | MOS 3.20 from the real ROMs: Mode 7 BASIC on ADFS, every `*STATUS` line, `*TIME`, `*CONFIGURE MODE` across Ctrl-Break, R at power-on, the keypad typing |
 | `tests/test_master_128_dp111_timing.cpp` | dp111's 65C12 timing suite (1 MHz build): 0 failures |
 | `tests/test_keyboard_matrix_layout.cpp`, `tests/test_grpc_keyboard_master_128.cpp` | the 13-column layout, the keypad in the catalogue, `KeyboardService` on each keyboard |

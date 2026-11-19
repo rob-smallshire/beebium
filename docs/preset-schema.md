@@ -459,9 +459,10 @@ floppy drives and the cassette. What differs:
 | Attachment points | `1mhz-bus`, `user-port`, `printer-port`, `analogue-port`, `tube`, `serial-port` | The same | The same, and `internal-tube`, `cartridge-rear`, `cartridge-front`, `modem-connector` |
 
 The built-in `rom-cartridge` extension (`low`, `high`: the ROMs in the
-cartridge's two 16K sockets, on the slot's even and odd banks; each a name on
-the ROM search path or a path) is a Master 128 cartridge, placed at
-`cartridge-rear` or `cartridge-front`:
+cartridge's two 16K sockets, on the slot's even and odd banks, at least one of
+them; each a name on the ROM search path or a path; a socket left empty leaves
+its bank empty) is a Master 128 cartridge, placed at `cartridge-rear` or
+`cartridge-front`:
 
 ```json
 "extensions": [ { "name": "rom-cartridge", "config": { "at": "cartridge-front", "low": "bbc-basic_2.rom" } } ]

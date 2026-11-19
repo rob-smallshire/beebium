@@ -258,36 +258,48 @@ REPO_ROMS_DIRPATH = Path(__file__).parents[3] / "roms"
 
 
 def test_a_rom_cartridge_shows_its_banks_read_only(launch_bbc) -> None:
-    """A 16K ROM cartridge in the rear slot answers on banks 0 and 1, which
-    SidewaysService shows with the cartridge's image and will not change."""
+    """A cartridge with a ROM in its even-bank socket only, in the rear slot:
+    bank 0 answers with it and bank 1 is empty, as on Acorn's cartridge.
+    SidewaysService shows the banks and will not change them."""
     # A bare ROM name is found on the ROM search path, as --sideways finds one.
     rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
     bbc = launch_bbc(preset=PRESET, variant=VARIANT,
                      extra_args=["--rom-cartridge", "low=bbc-basic_2.rom"])
     _booted(bbc)
     status = bbc.sideways.get_slot_status()
-    for bank in (0, 1):
-        socket = status.find_socket_for_slot(bank)
-        assert socket is not None
-        assert socket.type == SlotType.ROM
-        assert socket.populated
-        assert Path(socket.image_filepath).name == rom.name
+    socket = status.find_socket_for_slot(0)
+    assert socket is not None
+    assert socket.type == SlotType.ROM
+    assert socket.populated
+    assert Path(socket.image_filepath).name == rom.name
+    empty = status.find_socket_for_slot(1)
+    assert not empty.populated
+    assert empty.image_filepath == ""
     assert not status.find_socket_for_slot(2).populated  # the front slot is empty
     with pytest.raises(BeebiumError, match="rear cartridge slot"):
         bbc.sideways.configure_slot(0, SlotType.EMPTY)
-    # The MOS sees the cartridge's ROM: *ROMS lists it in bank 1.
-    screen = _command(bbc, "*ROMS", "ROM 1")
-    assert re.search(r"ROM\s+1\s+BASIC", screen), screen
+    # The MOS sees the cartridge's ROM once, in bank 0.
+    screen = _command(bbc, "*ROMS", "ROM 0")
+    assert re.search(r"ROM\s+0\s+BASIC", screen), screen
+    assert not re.search(r"ROM\s+1\s+BASIC", screen), screen
 
 
-def test_a_cartridge_in_the_front_slot(launch_bbc) -> None:
+def test_a_cartridge_with_its_odd_socket_only_in_the_front_slot(launch_bbc) -> None:
     rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
     bbc = launch_bbc(preset=PRESET, variant=VARIANT,
-                     extra_args=["--rom-cartridge", f"low={rom}:at=cartridge-front"])
+                     extra_args=["--rom-cartridge", f"high={rom}:at=cartridge-front"])
     _booted(bbc)
     status = bbc.sideways.get_slot_status()
-    assert status.find_socket_for_slot(2).populated
+    assert status.find_socket_for_slot(3).populated
+    assert not status.find_socket_for_slot(2).populated
     assert not status.find_socket_for_slot(0).populated
+
+
+def test_a_cartridge_needs_a_rom_in_a_socket(executable_filepath: Path) -> None:
+    result = subprocess.run([str(executable_filepath), "start", "--rom-cartridge", "at=cartridge-rear"],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode != 0
+    assert "at least one of its sockets" in result.stderr
 
 
 def test_lk18_east_takes_a_rom_in_banks_4_and_5(launch_bbc) -> None:
