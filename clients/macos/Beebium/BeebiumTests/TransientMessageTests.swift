@@ -70,4 +70,62 @@ final class TransientMessageTests: XCTestCase {
         XCTAssertNil(message.failure)
         XCTAssertEqual(message.noticeText, "Eject disc first")
     }
+
+    func testTapeChangeClearsAnOrdinaryFailure() {
+        // An ordinary failure is about the tape that was in; a tape change clears
+        // it, as the deck has always done.
+        let message = TransientMessage(lifetime: lifetime)
+        message.showFailure("Live input ended", detail: "The server went away.")
+        message.clearForTapeChange()
+        XCTAssertNil(message.kind, "a plain failure should clear when the tape changes")
+    }
+
+    func testTapeChangeClearsANotice() {
+        let message = TransientMessage(lifetime: lifetime)
+        message.show("Eject disc first")
+        message.clearForTapeChange()
+        XCTAssertNil(message.kind, "a notice should clear when the tape changes")
+    }
+
+    func testADeviceChangeFailureOutlivesTheEject() {
+        // Round 12: the input device changing ejects the live tape a moment after
+        // the failure is shown. The reason to choose the device again must survive
+        // that eject, or it is wiped before the user can read it -- the bug.
+        let message = TransientMessage(lifetime: lifetime)
+        message.showFailure(
+            "The input device changed while the live tape was playing; choose it again from Input Device.",
+            detail: "Built-in Microphone: 48000 Hz, 2 channels, now 44100 Hz",
+            outlivesTape: true)
+        message.clearForTapeChange()
+        let failure = try? XCTUnwrap(message.failure,
+                                     "a device-change failure must survive the eject it triggers")
+        XCTAssertEqual(failure?.brief,
+                       "The input device changed while the live tape was playing; "
+                       + "choose it again from Input Device.")
+    }
+
+    func testTheUserCanStillDismissAnOutlivingFailure() {
+        // Outliving the tape change does not make it permanent: the user's own
+        // dismiss (clear) still removes it.
+        let message = TransientMessage(lifetime: lifetime)
+        message.showFailure("The input device was disconnected while the live tape was playing.",
+                            detail: "Built-in Microphone is no longer available.",
+                            outlivesTape: true)
+        message.clear()
+        XCTAssertNil(message.kind, "the user's dismiss clears even a tape-outliving failure")
+    }
+
+    func testANewOrdinaryOutcomeStopsOutlivingTheTape() {
+        // Once a device-change failure is replaced by an ordinary outcome, that
+        // new message is ordinary again and a tape change clears it.
+        let message = TransientMessage(lifetime: lifetime)
+        message.showFailure("The input device was disconnected while the live tape was playing.",
+                            detail: "Built-in Microphone is no longer available.",
+                            outlivesTape: true)
+        XCTAssertTrue(message.outlivesTape)
+        message.showFailure("Insert failed", detail: "Cannot open tape image: /x")
+        XCTAssertFalse(message.outlivesTape, "a plain failure does not outlive the tape")
+        message.clearForTapeChange()
+        XCTAssertNil(message.kind)
+    }
 }

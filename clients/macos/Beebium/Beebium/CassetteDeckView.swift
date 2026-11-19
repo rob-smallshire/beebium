@@ -315,18 +315,22 @@ struct CassetteDeckView: View {
         // tape with a sentence to choose it again (cassette round 12). It
         // outranks a starve: the client withdraws any starve raised for the
         // stream when it raises this, so this showFailure is the one that stands.
+        // It outlives the tape: the device change ejects the live tape a moment
+        // later, and the reason to choose the device again must survive that
+        // eject until the user acts on it (section 9.0).
         .onChange(of: cassetteClient.liveDeviceChange) { change in
             if let change {
-                deckError.showFailure(change.brief, detail: change.detail)
+                deckError.showFailure(change.brief, detail: change.detail, outlivesTape: true)
                 cassetteClient.clearLiveDeviceChange()
             }
         }
         // A deck message is about the tape that was in; when that tape leaves
-        // (an eject, or a live stream ending), clear it, as section 9.0 asks.
+        // (an eject, or a live stream ending), clear it, as section 9.0 asks --
+        // unless it was marked to outlive the tape (a device-change failure).
         // The transition fires only for a tape that was present, so an insert
         // failure -- reported with no tape in -- is left standing.
         .onChange(of: tapeInserted) { inserted in
-            if !inserted { deckError.clear() }
+            if !inserted { deckError.clearForTapeChange() }
         }
         .onDrop(of: [.fileURL], delegate: DiscImageDropDelegate(
             isSlotEmpty: !tapeInserted,
