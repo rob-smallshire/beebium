@@ -75,9 +75,11 @@ public:
 
     // --- PeripheralExtension interface ---
 
+    // A coprocessor attaches to one Tube, the one its placement names (the
+    // manifest's attaches_to_one_of: the Tube, or the Master's internal
+    // Tube); ExtensionContext gives init() that Tube's socket.
     std::span<const std::string_view> attaches_to() const override {
-        static constexpr std::string_view deps[] = {"tube"};
-        return deps;
+        return {};
     }
 
     std::span<const std::string_view> provides() const override {

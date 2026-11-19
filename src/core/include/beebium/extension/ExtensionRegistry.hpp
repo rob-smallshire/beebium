@@ -68,7 +68,8 @@ public:
                             return false;
                         }
                     }
-                    return true;
+                    const auto placed = ext->placement();
+                    return placed.empty() || available.contains(placed);
                 });
 
             if (it == pending.end()) {
@@ -85,7 +86,11 @@ public:
             auto* ext = *it;
             pending.erase(it);
 
+            // An extension placed at one of several points (a coprocessor on
+            // the internal Tube) is given that point's port.
+            ctx.set_placement(ext->placement());
             ext->init(ctx);
+            ctx.set_placement({});
             init_order_.push_back(ext);
 
             for (auto provided : ext->provides()) {

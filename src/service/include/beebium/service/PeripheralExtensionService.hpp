@@ -93,8 +93,17 @@ public:
                 }
             }
 
-            for (auto point : ext->attaches_to()) {
-                info->add_attaches_to(std::string(point));
+            // Where this instance is: its manifest's points for its placement
+            // where it has alternatives (a coprocessor on the internal Tube),
+            // else the points the extension attaches to.
+            std::vector<std::string> points;
+            if (!ext->manifest().attaches_to_one_of.empty()) {
+                points = ext->manifest().points_for(ext->placement());
+            } else {
+                for (auto point : ext->attaches_to()) points.emplace_back(point);
+            }
+            for (const auto& point : points) {
+                info->add_attaches_to(point);
                 auto* attachment = info->add_attachments();
                 attachment->set_point(std::string(point));
                 attachment->set_provider_id(provider_id(extensions, i, point));

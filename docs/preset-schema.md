@@ -329,8 +329,10 @@ or for a repeatable (`is_list`) parameter an array. An item of a list
 parameter that declares `fields` (the AUN transport's `map` and `subnet`) may
 be an object of those fields, `{"station": 254, "host": "10.0.0.5", "port":
 32768}`, or its string form, `"254@10.0.0.5@32768"`, given by the parameter's
-`item_format`; the extension receives the string form either way. `id` and
-`label` are framework keys every extension accepts. `id` names the instance; one not
+`item_format`; the extension receives the string form either way. `id`,
+`label` and `at` are framework keys every extension accepts. `at` places an
+instance of an extension that attaches to one of several points (its
+manifest's `attaches_to_one_of`; see [Attachment](#attachment)). `id` names the instance; one not
 given an `id` takes its extension's name, or `name-1`, `name-2`, ... when
 that is taken (never an `id` given explicitly), so the same preset always
 names its instances the same way, and `resolve-preset` writes the ids out.
@@ -358,8 +360,24 @@ the form the preset gave it. A `filepath` or `dirpath` parameter is resolved as 
 
 An extension attaches to the points named in its manifest's `attaches_to`: a
 connector of the machine (`1mhz-bus`, `user-port`, `printer-port`,
-`analogue-port`, `tube`, `serial-port`), or
+`analogue-port`, `tube`, `serial-port`, and on the Master 128 `internal-tube`), or
 a point another extension provides (a SCSI host adapter provides `scsi`).
+An extension whose manifest has `attaches_to_one_of` attaches, besides, to
+exactly one of those points: the one its instance's `at` names, or the first
+when it names none. A coprocessor's alternatives are `tube` and
+`internal-tube`, so on a Master 128
+
+```json
+"extensions": [ { "name": "acorn-65c102-coprocessor", "config": { "at": "internal-tube" } } ]
+```
+
+fits the 65C102 on the internal Tube (the command line's
+`--tube-65c102 at=internal-tube`), and without `at` it goes on the external
+Tube, as on every other model. `at` naming a point that is not among the
+alternatives stops the launch with `CONFIG` (78), at `/extensions/<index>/config/at`;
+naming one the machine does not have (`internal-tube` on a Model B) stops it as
+any missing point does. Beebium serves one coprocessor at a time, so a Master
+128 refuses a coprocessor on each Tube.
 Before anything is loaded, the launch works out where each instance would
 attach (`check_attachments`, the same rules the extension registry applies
 when it builds the machine) and stops with `CONFIG` (78) if:

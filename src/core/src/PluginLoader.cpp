@@ -186,6 +186,15 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
         }
     }
 
+    // Parse attaches_to_one_of (points of which an instance attaches to one).
+    if (j.contains("attaches_to_one_of") && j["attaches_to_one_of"].is_array()) {
+        for (const auto& a : j["attaches_to_one_of"]) {
+            if (a.is_string()) {
+                manifest.attaches_to_one_of.push_back(a.get<std::string>());
+            }
+        }
+    }
+
     // Parse attaches_to list (extension points this extension attaches to; an
     // extension may attach to several, e.g. an adapter spanning two ports).
     if (j.contains("attaches_to") && j["attaches_to"].is_array()) {

@@ -537,6 +537,14 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
         THUMBNAIL_DELAY 6
         --machine-description "Model B+ 128K, {coprocessor-cpu} Copro ({coprocessor-clock})"
         --tube-65c02)
+    # The Master Turbo in all but name: the 65C102 on the internal Tube.
+    add_plugin_preset(beebium-master-128 beebium_ext_acorn_65c102_plugin
+        "master-128-65c102-copro"
+        "Master 128, internal 65C102 Copro (4 MHz)" "1986"
+        DESCRIPTION "Master 128, MOS 3.20, 65C102 copro (4 MHz) on the internal Tube"
+        THUMBNAIL_DELAY 6
+        --machine-description "Master 128, internal {coprocessor-cpu} Copro ({coprocessor-clock})"
+        --tube-65c102 at=internal-tube)
     add_plugin_preset(beebium-model-b-integra-b beebium_ext_acorn_65c02_plugin
         "model-b-integra-b-disc-65c02-copro"
         "Model B with Integra-B (Disc), 65C02 Copro (3 MHz)" "1988"

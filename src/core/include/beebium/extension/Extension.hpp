@@ -127,6 +127,14 @@ public:
     const std::map<std::string, std::vector<std::string>>& list_config() const { return list_config_; }
 
     // Instance ID (from config["id"] or empty if not yet assigned).
+    // Where this instance attaches among its manifest's attaches_to_one_of:
+    // its `at`, or the first alternative when it names none; empty for an
+    // extension with no alternatives.
+    std::string placement() const {
+        const auto at = config_value("at");
+        return manifest_.placement(at ? *at : std::string_view{}).value_or(std::string{});
+    }
+
     std::string_view id() const {
         auto it = config_.find("id");
         return (it != config_.end()) ? std::string_view(it->second) : std::string_view{};

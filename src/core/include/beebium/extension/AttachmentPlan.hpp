@@ -47,6 +47,9 @@ struct AttachmentProblem {
 // when the machine is built, and report what would stop it. This mirrors
 // ExtensionRegistry and ExtensionContext:
 //
+//  - An instance's `at` must name one of its manifest's attaches_to_one_of,
+//    and it attaches to that point (the first when it names none) as well as
+//    to every point of attaches_to.
 //  - Every point an extension attaches_to must exist: one of the machine's own
 //    (machine_points) or one an instance here provides.
 //  - Instances that provide something load first, keeping their order; with
@@ -106,7 +109,13 @@ inline std::vector<AttachmentProblem> check_attachments(
     for (auto i : order) {
         const auto* m = manifest_of(requests[i].name);
         if (!m) continue;
-        for (const auto& point : m->attaches_to) {
+        const auto at_it = requests[i].config.find("at");
+        const std::string at = at_it != requests[i].config.end() ? at_it->second : std::string();
+        if (auto error = m->placement_error(at)) {
+            problems.push_back({i, "at", *error});
+            continue;
+        }
+        for (const auto& point : m->points_for(at)) {
             const std::string point_name(attachment_point_display_name(point));
             const bool on_machine = std::find(machine_points.begin(), machine_points.end(),
                                               point) != machine_points.end();

@@ -160,6 +160,20 @@ Fields:
   `["serial-port"]`); a *list*, because one extension may attach to several
   points at once (e.g. an adapter spanning the analogue port and the user port).
   Must match the extension's own `attaches_to()` (a build-time test enforces it).
+- `attaches_to_one_of` -- points of which an instance attaches to exactly one,
+  beside every point of `attaches_to`: a coprocessor goes on the Tube or the
+  Master 128's internal Tube (`["tube", "internal-tube"]`). The instance names
+  its point with the framework key `at`; one that names none is placed at the
+  first alternative, so a configuration that predates the alternatives keeps
+  its meaning. `at` must be one of the alternatives. The extension's code does
+  not list these points in `attaches_to()`: `ExtensionContext` hands `init()`
+  the port of the point the instance is placed at (`get<TubeSocket>()` is the
+  internal Tube for `internal-tube`). The extension catalogue
+  (`describe-extension --json`, `describe-preset-schema`) gives `attaches_to`
+  as the points an instance with no `at` attaches to (with the first
+  alternative), and `attaches_to_one_of` as the alternatives; a configuration
+  UI lists the extension under each alternative and records the one chosen as
+  `at`.
 - `provides` -- new extension points this extension creates for others to attach
   to (e.g. the SCSI adapter's `["scsi"]`); omit if none.
 - `parameters` -- schema for CLI/preset/gRPC configuration (see below)

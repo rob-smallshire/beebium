@@ -328,7 +328,7 @@ public:
             for (const auto& [id, providers] : points) {
                 ojson attaching = ojson::array();
                 for (const auto& e : extension_entries) {
-                    const auto& at = e.manifest->attaches_to;
+                    const auto at = e.manifest->all_points();
                     if (std::find(at.begin(), at.end(), id) != at.end()) {
                         attaching.push_back(e.manifest->name);
                     }
@@ -349,7 +349,7 @@ public:
             }
             ojson catalogue = ojson::array();
             for (const auto& e : extension_entries) {
-                const auto& at = e.manifest->attaches_to;
+                const auto at = e.manifest->all_points();
                 const bool attachable =
                     std::any_of(at.begin(), at.end(), [&](const std::string& point) {
                         return std::any_of(points.begin(), points.end(),

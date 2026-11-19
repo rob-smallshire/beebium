@@ -54,10 +54,10 @@ class MyCoprocessorExtension : public CoprocessorExtension {
 public:
     explicit MyCoprocessorExtension(BoardTiming timing) : timing_(timing) {}
 
-    std::span<const std::string_view> attaches_to() const override {
-        static constexpr std::string_view deps[] = {"tube"};
-        return deps;
-    }
+    // A coprocessor attaches to one Tube, named by its placement: the
+    // manifest says "attaches_to_one_of": ["tube", "internal-tube"], and
+    // ctx.get<TubeSocket>() below is the Tube the instance is placed at.
+    std::span<const std::string_view> attaches_to() const override { return {}; }
     std::span<const std::string_view> provides() const override { return {}; }
 
     void init(ExtensionContext& ctx) override {

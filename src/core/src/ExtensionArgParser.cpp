@@ -56,7 +56,7 @@ std::string format_positional_keys(const std::vector<ParameterSchema>& schema) {
 }
 
 bool is_framework_key(std::string_view key) {
-    return key == "id" || key == "label";
+    return key == "id" || key == "label" || key == "at";
 }
 
 bool validate_type(std::string_view type, std::string_view value) {

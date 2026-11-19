@@ -75,7 +75,58 @@ struct BEEBIUM_EXT_API ExtensionManifest {
     std::vector<ParameterGroup> groups{};      // parameters that are alternatives to one another
     std::vector<std::string> provides{};       // extension points this extension creates (e.g. ["scsi"])
     std::vector<std::string> attaches_to{};    // extension points this extension attaches to (e.g. ["serial-port"]); may be several
+    // Extension points of which an instance attaches to exactly one, named by
+    // the instance's `at` (the first when it names none): a coprocessor on
+    // the Tube or the Master's internal Tube. Beside attaches_to, which an
+    // instance attaches to all of.
+    std::vector<std::string> attaches_to_one_of{};
     std::vector<RomImage> roms{};              // firmware images shipped in the plugin's roms/ directory (plugins only)
+
+    // The points an instance placed `at` attaches to: attaches_to, and the
+    // one of attaches_to_one_of that `at` names (the first when `at` is
+    // empty). A placement that is not an alternative adds nothing
+    // (placement_error says why).
+    std::vector<std::string> points_for(std::string_view at) const {
+        std::vector<std::string> points = attaches_to;
+        if (const auto placed = placement(at)) points.push_back(*placed);
+        return points;
+    }
+
+    // Where an instance placed `at` sits among attaches_to_one_of: `at`, or
+    // the first alternative when `at` is empty; nullopt when there are no
+    // alternatives or `at` is not one of them.
+    std::optional<std::string> placement(std::string_view at) const {
+        if (attaches_to_one_of.empty()) return std::nullopt;
+        if (at.empty()) return attaches_to_one_of.front();
+        for (const auto& point : attaches_to_one_of) {
+            if (point == at) return point;
+        }
+        return std::nullopt;
+    }
+
+    // Why `at` cannot place an instance of this extension, or nullopt when it
+    // can (or is empty).
+    std::optional<std::string> placement_error(std::string_view at) const {
+        if (at.empty() || placement(at)) return std::nullopt;
+        if (attaches_to_one_of.empty()) {
+            return "at '" + std::string(at) + "': " + name +
+                   " attaches to one place only, so it takes no at";
+        }
+        std::string choices;
+        for (const auto& point : attaches_to_one_of) {
+            choices += (choices.empty() ? "" : ", ") + point;
+        }
+        return "at '" + std::string(at) + "' is not where " + name + " attaches (one of: " +
+               choices + ")";
+    }
+
+    // Every point an instance of this extension can attach to, placed
+    // anywhere: attaches_to and all of attaches_to_one_of.
+    std::vector<std::string> all_points() const {
+        std::vector<std::string> points = attaches_to;
+        points.insert(points.end(), attaches_to_one_of.begin(), attaches_to_one_of.end());
+        return points;
+    }
 
     // Effective CLI name: cli_name if set, otherwise name
     std::string_view effective_cli_name() const {

@@ -3,8 +3,9 @@
     "display_name": "Acorn 65C102 Co-processor",
     "description": "An Acorn 65C102 Co-processor: a 4 MHz 65C102 with 64K of its own memory, connected through the Tube.",
     "library": "acorn-65c102-coprocessor",
-    "attaches_to": [
-        "tube"
+    "attaches_to_one_of": [
+        "tube",
+        "internal-tube"
     ],
     "cli": "tube-65c102",
     "roms": [

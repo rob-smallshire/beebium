@@ -181,7 +181,7 @@ public:
         std::vector<const typename std::decay_t<decltype(all_entries)>::value_type*> entries;
         for (const auto& e : all_entries) {
             if (!attaches_to_filter.empty()) {
-                const auto& a = e.manifest->attaches_to;
+                const auto a = e.manifest->all_points();
                 if (std::find(a.begin(), a.end(), attaches_to_filter) == a.end()) {
                     continue;
                 }
@@ -203,6 +203,11 @@ public:
                                   << extension_listing::join_comma(e->manifest->attaches_to)
                                   << "\n";
                     }
+                    if (!e->manifest->attaches_to_one_of.empty()) {
+                        std::cout << "      attaches to one of (at=): "
+                                  << extension_listing::join_comma(e->manifest->attaches_to_one_of)
+                                  << "\n";
+                    }
                     if (!e->manifest->description.empty()) {
                         std::cout << "      " << e->manifest->description << "\n";
                     }
@@ -219,7 +224,7 @@ public:
                               << e->manifest->name << "\t"
                               << e->manifest->extension_kind << "\t"
                               << e->source_label << "\t"
-                              << extension_listing::join_comma(e->manifest->attaches_to) << "\t"
+                              << extension_listing::join_comma(e->manifest->points_for({})) << "\t"
                               << e->manifest->description << "\n";
                 }
                 break;
@@ -235,7 +240,9 @@ public:
                               << "\",\"source\":\""
                               << extension_listing::json_escape(e->source_label)
                               << "\",\"attaches_to\":"
-                              << extension_listing::json_string_array(e->manifest->attaches_to)
+                              << extension_listing::json_string_array(e->manifest->points_for({}))
+                              << ",\"attaches_to_one_of\":"
+                              << extension_listing::json_string_array(e->manifest->attaches_to_one_of)
                               << ",\"description\":\""
                               << extension_listing::json_escape(e->manifest->description)
                               << "\"}\n";
@@ -335,7 +342,11 @@ inline nlohmann::ordered_json extension_manifest_json(const beebium::ExtensionMa
         {"cli_name", std::string(m.effective_cli_name())},
         {"kind", m.extension_kind},
         {"source", source},
-        {"attaches_to", m.attaches_to},
+        // Where an instance that names no `at` attaches: attaches_to and the
+        // first of attaches_to_one_of. The alternatives, of which `at` names
+        // one, are attaches_to_one_of.
+        {"attaches_to", m.points_for({})},
+        {"attaches_to_one_of", m.attaches_to_one_of},
         {"provides", m.provides},
         {"parameters", parameters},
         {"groups", groups},
@@ -472,6 +483,13 @@ public:
                 if (!manifest->attaches_to.empty()) {
                     std::cout << "  attaches to:";
                     for (const auto& a : manifest->attaches_to) {
+                        std::cout << " " << a << " (" << attachment_point_display_name(a) << ")";
+                    }
+                    std::cout << "\n";
+                }
+                if (!manifest->attaches_to_one_of.empty()) {
+                    std::cout << "  attaches to one of (at=, default the first):";
+                    for (const auto& a : manifest->attaches_to_one_of) {
                         std::cout << " " << a << " (" << attachment_point_display_name(a) << ")";
                     }
                     std::cout << "\n";

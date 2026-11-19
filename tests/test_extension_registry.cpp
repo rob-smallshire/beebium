@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include <beebium/extension/ExtensionRegistry.hpp>
+#include <beebium/tube/TubeSocket.hpp>
 #include <beebium/indicators/Indicators.hpp>
 #include <beebium/indicators/IndicatorFilter.hpp>
 #include <TestScratchRam.hpp>
@@ -243,4 +244,22 @@ TEST_CASE("ExtensionContext with indicators returns the registry",
         {{"label", "Test"}});
     REQUIRE(id == 0);
     REQUIRE(ctx.indicators().get("test-extension-led") == 0);
+}
+
+TEST_CASE("ExtensionContext gives an extension placed at internal-tube the internal Tube",
+          "[extension][registry][placement]") {
+    beebium::TubeSocket external;
+    beebium::TubeSocket internal;
+    beebium::ExtensionContext ctx(nullptr, nullptr, &external, nullptr, nullptr, nullptr, nullptr,
+                                  nullptr, nullptr, &internal);
+    CHECK(&ctx.get<beebium::TubeSocket>() == &external);
+    ctx.set_placement("internal-tube");
+    CHECK(&ctx.get<beebium::TubeSocket>() == &internal);
+    ctx.set_placement("tube");
+    CHECK(&ctx.get<beebium::TubeSocket>() == &external);
+
+    beebium::ExtensionContext model_b(nullptr, nullptr, &external);
+    model_b.set_placement("internal-tube");
+    CHECK_FALSE(model_b.has<beebium::TubeSocket>());
+    CHECK_THROWS(model_b.get<beebium::TubeSocket>());
 }

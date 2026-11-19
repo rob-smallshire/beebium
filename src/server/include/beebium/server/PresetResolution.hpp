@@ -508,6 +508,7 @@ std::vector<std::string> machine_attachment_points() {
     if constexpr (beebium::HasPrinterPort<Memory>) points.push_back("printer-port");
     if constexpr (beebium::HasAnaloguePort<Memory>) points.push_back("analogue-port");
     if constexpr (beebium::HasTubeSocket<Memory>) points.push_back("tube");
+    if constexpr (requires(Memory& m) { m.internal_tube_socket; }) points.push_back("internal-tube");
     if constexpr (beebium::HasSerialPort<Memory>) points.push_back("serial-port");
     return points;
 }
@@ -1163,8 +1164,11 @@ std::optional<nlohmann::ordered_json> preset_document(const MachineDescription& 
                     auto ext_config = document_config_json(manifest, inst, keys);
                     if (!ext_config.empty() || every) entry["config"] = std::move(ext_config);
                     if (every) {
+                        const auto at = inst.config.find("at");
                         entry["attaches_to"] =
-                            manifest ? manifest->attaches_to : std::vector<std::string>{};
+                            manifest ? manifest->points_for(at != inst.config.end() ? at->second
+                                                                                    : std::string())
+                                     : std::vector<std::string>{};
                     }
                     extensions.push_back(std::move(entry));
                 }

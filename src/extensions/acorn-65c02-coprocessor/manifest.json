@@ -3,8 +3,9 @@
     "display_name": "Acorn 65C02 Co-processor",
     "description": "An Acorn 6502 Second Processor: a 3 MHz 65C02 with 64K of its own memory, connected through the Tube.",
     "library": "acorn-65c02-coprocessor",
-    "attaches_to": [
-        "tube"
+    "attaches_to_one_of": [
+        "tube",
+        "internal-tube"
     ],
     "cli": "tube-65c02",
     "roms": [

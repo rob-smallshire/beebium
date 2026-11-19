@@ -203,3 +203,47 @@ def test_station_is_cmos_byte_0(launch_bbc) -> None:
     assert status.station_in_force == 42
     _command(bbc, 'A%=&A1:X%=0:PRINT "S=";(USR(&FFF4) AND &FF0000) DIV &10000', "S=")
     assert re.search(r"S=\s*42", _screen(bbc)), _screen(bbc)
+
+
+# ---------------------------------------------------------------------------
+# The two Tubes (step 5)
+# ---------------------------------------------------------------------------
+
+BANNER_65C102 = "Acorn TUBE 65C102 Co-Processor"
+
+
+def test_a_coprocessor_on_the_internal_tube_boots(launch_bbc) -> None:
+    """The master-128-65c102-copro preset: a Master Turbo in all but name."""
+    bbc = launch_bbc(preset="master-128-65c102-copro", variant=VARIANT, startup_timeout=30.0)
+    _booted(bbc)
+    assert BANNER_65C102 in _screen(bbc), _screen(bbc)
+    assert bbc.tube.status.enabled
+
+
+def test_mos_finds_an_external_coprocessor_with_intube_configured(launch_bbc) -> None:
+    """The cross-probe: the seed says INTUBE, the coprocessor is on the
+    external Tube, and MOS 3.20 still finds it by toggling ITU."""
+    bbc = launch_bbc(preset=PRESET, variant=VARIANT, extra_args=["--tube-65c102"],
+                     startup_timeout=30.0)
+    _booted(bbc)
+    assert BANNER_65C102 in _screen(bbc), _screen(bbc)
+    assert bbc.tube.status.enabled
+
+
+def test_two_coprocessors_are_refused(executable_filepath: Path) -> None:
+    result = subprocess.run(
+        [str(executable_filepath), "start", "--tube-65c102", "--tube-65c02", "at=internal-tube"],
+        capture_output=True, text=True, timeout=60)
+    assert result.returncode != 0
+    assert "serves one coprocessor at a time" in result.stderr
+
+
+def test_a_model_b_has_no_internal_tube(executable_filepath: Path) -> None:
+    model_b = executable_filepath.with_name(
+        executable_filepath.name.replace("master-128", "model-b"))
+    if not model_b.exists():
+        pytest.skip("beebium-model-b not built")
+    result = subprocess.run([str(model_b), "start", "--tube-65c102", "at=internal-tube"],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode != 0
+    assert "internal-tube" in result.stderr

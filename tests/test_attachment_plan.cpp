@@ -148,3 +148,70 @@ TEST_CASE("check_attachments: an unknown extension is left to the name check",
           "[extension][attachment-plan]") {
     CHECK(check_attachments({{"no-such", {}}}, known(), kMachinePoints).empty());
 }
+
+// ---------------------------------------------------------------------------
+// A placement among alternatives: attaches_to_one_of and an instance's `at`
+// (a coprocessor on the Tube or the Master's internal Tube).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+ExtensionManifest coprocessor_manifest() {
+    ExtensionManifest coprocessor;
+    coprocessor.name = "coprocessor";
+    coprocessor.attaches_to_one_of = {"tube", "internal-tube"};
+    return coprocessor;
+}
+
+}  // namespace
+
+TEST_CASE("A one-of manifest places an instance at its at, else the first alternative",
+          "[extension][attachment-plan][placement]") {
+    const auto m = coprocessor_manifest();
+    CHECK(m.placement("") == std::optional<std::string>{"tube"});
+    CHECK(m.placement("internal-tube") == std::optional<std::string>{"internal-tube"});
+    CHECK_FALSE(m.placement("serial-port"));
+    CHECK(m.points_for("") == std::vector<std::string>{"tube"});
+    CHECK(m.points_for("internal-tube") == std::vector<std::string>{"internal-tube"});
+    CHECK(m.all_points() == std::vector<std::string>{"tube", "internal-tube"});
+    CHECK_FALSE(m.placement_error(""));
+    CHECK_FALSE(m.placement_error("internal-tube"));
+    REQUIRE(m.placement_error("serial-port"));
+    CHECK_THAT(*m.placement_error("serial-port"), ContainsSubstring("tube, internal-tube"));
+
+    ExtensionManifest plain;
+    plain.name = "serial-thing";
+    plain.attaches_to = {"serial-port"};
+    CHECK_FALSE(plain.placement(""));
+    CHECK(plain.points_for("") == std::vector<std::string>{"serial-port"});
+    REQUIRE(plain.placement_error("tube"));
+    CHECK_THAT(*plain.placement_error("tube"), ContainsSubstring("takes no at"));
+}
+
+TEST_CASE("check_attachments: a one-of instance attaches to its placement only",
+          "[extension][attachment-plan][placement]") {
+    const auto coprocessor = coprocessor_manifest();
+    const std::vector<const ExtensionManifest*> with{&coprocessor};
+    const std::vector<std::string> master{"tube", "internal-tube"};
+    const std::vector<std::string> model_b{"tube"};
+
+    CHECK(check_attachments({{"coprocessor", {}}}, with, master).empty());
+    CHECK(check_attachments({{"coprocessor", {{"at", "internal-tube"}}}}, with, master).empty());
+    CHECK(check_attachments({{"coprocessor", {}}}, with, model_b).empty());
+
+    // A Model B has no internal Tube.
+    auto problems = check_attachments({{"coprocessor", {{"at", "internal-tube"}}}}, with, model_b);
+    REQUIRE(problems.size() == 1);
+    CHECK_THAT(problems[0].message, ContainsSubstring("does not have"));
+
+    // An at that is not an alternative.
+    problems = check_attachments({{"coprocessor", {{"at", "user-port"}}}}, with, master);
+    REQUIRE(problems.size() == 1);
+    CHECK(problems[0].key == "at");
+
+    // One on each Tube is within each Tube's occupancy; two on one is not.
+    CHECK(check_attachments({{"coprocessor", {}}, {"coprocessor", {{"at", "internal-tube"}}}},
+                            with, master).empty());
+    CHECK(check_attachments({{"coprocessor", {}}, {"coprocessor", {{"at", "tube"}}}}, with, master)
+              .size() == 1);
+}

@@ -61,6 +61,9 @@ inline const std::vector<AttachmentPoint>& attachment_point_catalogue() {
          "The 1 MHz bus, the expansion connector for add-ons such as a SCSI host adapter.", 0, std::nullopt},
         {"tube", "Coprocessor",
          "The Tube connector, which takes a second processor.", 0, 1},
+        {"internal-tube", "Internal Coprocessor",
+         "The Master's internal Tube connector, which takes a second processor board "
+         "such as the Master Turbo's 65C102.", 0, 1},
         {"scsi", "SCSI Bus",
          "The SCSI bus of a host adapter, which holds up to seven hard discs.", 0, 7},
     };

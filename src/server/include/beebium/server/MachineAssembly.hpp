@@ -83,6 +83,17 @@
 
 namespace beebium::server {
 
+// The machine's second Tube socket (the Master's internal Tube), or nullptr.
+template<typename MachineType>
+beebium::TubeSocket* internal_tube_socket_of(MachineType& machine) {
+    if constexpr (requires { machine.state().memory.internal_tube_socket; }) {
+        return &machine.state().memory.internal_tube_socket;
+    } else {
+        (void)machine;
+        return nullptr;
+    }
+}
+
 // Load MOS ROM and sideways ROMs into machine memory.
 // Applies defaults to config where not specified.
 // Throws on file I/O errors.
@@ -1353,7 +1364,8 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         beebium::HasPrinterPort<Memory> ? &machine.state().memory.printer_port() : nullptr,
         beebium::HasAudioSourcePort<Memory> ? &machine.state().memory.audio_source_port() : nullptr,
         beebium::HasAnaloguePort<Memory> ? &machine.state().memory.analogue_port() : nullptr,
-        &am->controller_registry);
+        &am->controller_registry,
+        internal_tube_socket_of(machine));
     extension_registry.resolve_and_init(*am->extension_context);
 
     // A saved machine's extensions take back what their batteries kept,
@@ -1403,8 +1415,14 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     for (auto* ext : extension_registry.extensions()) {
         if (auto* cop = dynamic_cast<beebium::CoprocessorExtension*>(ext)) {
             if (am->coprocessor) {
-                std::cerr << "Error: more than one coprocessor attached to the "
-                             "Tube; the Tube has a single socket.\n";
+                if constexpr (requires(Memory& m) { m.internal_tube_socket; }) {
+                    std::cerr << "Error: This machine has two Tubes, but Beebium serves one "
+                                 "coprocessor at a time; fit it on the Tube or the internal "
+                                 "Tube, not both.\n";
+                } else {
+                    std::cerr << "Error: more than one coprocessor attached to the "
+                                 "Tube; the Tube has a single socket.\n";
+                }
                 return {nullptr, 1};
             }
             am->coprocessor = cop;

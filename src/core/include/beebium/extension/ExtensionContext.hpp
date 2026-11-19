@@ -53,7 +53,8 @@ public:
                              PrinterPort* printer_port = nullptr,
                              AudioSourcePort* audio_source_port = nullptr,
                              AnaloguePort* analogue_port = nullptr,
-                             ControllerRegistry* controller_registry = nullptr)
+                             ControllerRegistry* controller_registry = nullptr,
+                             TubeSocket* internal_tube_socket = nullptr)
         : one_mhz_bus_port_(one_mhz_bus_port)
         , user_port_(user_port)
         , tube_socket_(tube_socket)
@@ -62,7 +63,15 @@ public:
         , printer_port_(printer_port)
         , audio_source_port_(audio_source_port)
         , analogue_port_(analogue_port)
-        , controller_registry_(controller_registry) {}
+        , controller_registry_(controller_registry)
+        , internal_tube_socket_(internal_tube_socket) {}
+
+    // The point the extension being initialised is placed at, among its
+    // manifest's attaches_to_one_of (empty for none): set by
+    // ExtensionRegistry around each init(). It chooses which Tube
+    // get<TubeSocket>() is: the internal one for "internal-tube".
+    void set_placement(std::string placement) { placement_ = std::move(placement); }
+    const std::string& placement() const { return placement_; }
 
     // Type-safe port handle access. get<ControllerRegistry>() is the
     // machine's registry of controllers, which a Controller adds itself to.
@@ -81,6 +90,13 @@ public:
             }
             return *user_port_;
         } else if constexpr (std::is_same_v<T, TubeSocket>) {
+            if (placement_ == "internal-tube") {
+                if (!internal_tube_socket_) {
+                    throw std::runtime_error(
+                        "ExtensionContext: internal Tube not available on this machine");
+                }
+                return *internal_tube_socket_;
+            }
             if (!tube_socket_) {
                 throw std::runtime_error(
                     "ExtensionContext: tube connector not available on this machine");
@@ -129,7 +145,7 @@ public:
         } else if constexpr (std::is_same_v<T, UserPort>) {
             return user_port_ != nullptr;
         } else if constexpr (std::is_same_v<T, TubeSocket>) {
-            return tube_socket_ != nullptr;
+            return (placement_ == "internal-tube" ? internal_tube_socket_ : tube_socket_) != nullptr;
         } else if constexpr (std::is_same_v<T, SerialPort>) {
             return serial_port_ != nullptr;
         } else if constexpr (std::is_same_v<T, PrinterPort>) {
@@ -189,6 +205,8 @@ private:
     AudioSourcePort* audio_source_port_;
     AnaloguePort* analogue_port_;
     ControllerRegistry* controller_registry_;
+    TubeSocket* internal_tube_socket_ = nullptr;
+    std::string placement_;
     std::unordered_map<std::string, PeripheralExtension*> providers_;
 };
 
