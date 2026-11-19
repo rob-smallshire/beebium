@@ -143,7 +143,7 @@ enum LiveAudioInput {
         static let silent = Peak(level: 0, clipRun: 0)
     }
 
-    /// The peak and clip run of a chunk, read from the same little-endian
+    /// The peak and clip run of a single chunk, read from the same little-endian
     /// interleaved bytes the deck streams (`samples(from:)`), in the stream's
     /// sample format. Only the left channel of a stereo chunk is read: clipping
     /// happens at the host's analogue-to-digital converter, which is the line
@@ -153,13 +153,34 @@ enum LiveAudioInput {
     /// a magnitude of 1 or more. The clip run is the longest span of consecutive
     /// full-scale samples, so the meter can hold for sustained clipping and
     /// ignore an isolated click. Pure, so it is tested without hardware.
+    ///
+    /// This reads the chunk on its own, with no run carried in. Successive
+    /// capture chunks must be read through `ClipRunMeter`, which carries the open
+    /// run across the boundary so a clip straddling two chunks is counted as one
+    /// run rather than two short ones.
     static func peak(ofInterleaved data: Data,
                      sampleFormat: Beebium_AudioSampleFormat,
                      channels: Int) -> Peak {
+        let scanned = scan(ofInterleaved: data, sampleFormat: sampleFormat,
+                           channels: channels, carryRun: 0)
+        return Peak(level: scanned.level, clipRun: scanned.clipRun)
+    }
+
+    /// The peak level, the longest clip run, and the full-scale run still open at
+    /// the end of the chunk, reading the taken (left) channel. `carryRun` is the
+    /// length of a full-scale run still open at the end of the previous chunk, so
+    /// a run spanning the boundary is one run: the first sample of this chunk
+    /// extends it. `openRun` carries it on to the chunk after. The clip run is
+    /// the longest span that includes at least one sample of this chunk, so a run
+    /// wholly in the previous chunk is not re-reported here.
+    private static func scan(ofInterleaved data: Data,
+                             sampleFormat: Beebium_AudioSampleFormat,
+                             channels: Int,
+                             carryRun: Int) -> (level: Float, clipRun: Int, openRun: Int) {
         let channelCount = max(1, channels)
         var level: Float = 0
         var clipRun = 0
-        var currentRun = 0
+        var currentRun = max(0, carryRun)
         data.withUnsafeBytes { raw in
             switch sampleFormat {
             case .s16:
@@ -197,7 +218,30 @@ enum LiveAudioInput {
                 }
             }
         }
-        return Peak(level: min(level, 1.0), clipRun: clipRun)
+        return (level: min(level, 1.0), clipRun: clipRun, openRun: currentRun)
+    }
+
+    /// Reads successive capture chunks as one continuous signal for the level
+    /// meter, carrying the open full-scale run across each chunk boundary. The
+    /// capture feeds every chunk, in order, through one instance; a clip that
+    /// straddles a boundary is then one run, so sustained clipping is not lost by
+    /// the three-sample rule just because it fell across a chunk edge (round 12).
+    /// A fresh capture starts a fresh meter, so there is no reset.
+    struct ClipRunMeter {
+        /// The full-scale run still open at the end of the last chunk read (0
+        /// when the last taken sample was not full scale).
+        private(set) var carryRun = 0
+
+        /// The peak of the next chunk, its clip run joined to any run carried
+        /// from the previous chunk; advances the carry for the chunk after.
+        mutating func peak(ofInterleaved data: Data,
+                           sampleFormat: Beebium_AudioSampleFormat,
+                           channels: Int) -> Peak {
+            let scanned = LiveAudioInput.scan(ofInterleaved: data, sampleFormat: sampleFormat,
+                                              channels: channels, carryRun: carryRun)
+            carryRun = scanned.openRun
+            return Peak(level: scanned.level, clipRun: scanned.clipRun)
+        }
     }
 
     // MARK: - Re-chunking

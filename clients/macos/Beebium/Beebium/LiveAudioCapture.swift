@@ -53,6 +53,10 @@ final class LiveAudioCapture: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private var call: ClientStreamingCall<Beebium_AudioInputChunk, Beebium_StreamAudioSummary>?
     private var chunker: LiveAudioInput.Chunker?
+    /// Reads each captured chunk's peak and clip run, carrying the open
+    /// full-scale run across chunk boundaries so a straddling clip is one run.
+    /// Written only by the capture tap, so it is confined like `chunker`.
+    private var clipRunMeter = LiveAudioInput.ClipRunMeter()
     private var started = false
 
     /// The sample rate the stream was opened with, known once `start` has read
@@ -134,9 +138,11 @@ final class LiveAudioCapture: @unchecked Sendable {
             let bytes = LiveAudioInput.samples(from: buffer, channels: channels,
                                                sampleFormat: sampleFormat)
             // The level meter is read from exactly the bytes streamed, taking
-            // the left channel, so what it shows is what the server receives.
-            onPeak(LiveAudioInput.peak(ofInterleaved: bytes, sampleFormat: sampleFormat,
-                                       channels: channels))
+            // the left channel, so what it shows is what the server receives. The
+            // meter carries the open clip run across chunks, so a clip straddling
+            // a chunk boundary counts as one run. The tap is the only writer.
+            onPeak(self.clipRunMeter.peak(ofInterleaved: bytes, sampleFormat: sampleFormat,
+                                          channels: channels))
             // The tap is the only writer of the chunker, so this is confined.
             for chunk in self.chunker?.take(bytes) ?? [] {
                 call.sendMessage(.with { $0.samples = chunk }, promise: nil)

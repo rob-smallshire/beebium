@@ -276,6 +276,53 @@ final class LiveAudioInputTests: XCTestCase {
             LiveAudioInput.peak(ofInterleaved: Data(), sampleFormat: .s16, channels: 1).clipRun, 0)
     }
 
+    // MARK: - Clip run across chunk boundaries (round 12)
+
+    func testAClipStraddlingTwoChunksIsOneRun() {
+        // Two full-scale samples end the first chunk and two more open the second.
+        // Read a chunk at a time, that is two runs of 2 -- short of the three-sample
+        // rule. Carried across the boundary by the meter, it is one run of 4, so
+        // sustained clipping that falls on a chunk edge is not lost.
+        var meter = LiveAudioInput.ClipRunMeter()
+        let first = meter.peak(ofInterleaved: s16([100, 32767, 32767]),
+                               sampleFormat: .s16, channels: 1)
+        XCTAssertEqual(first.clipRun, 2, "the first chunk sees only its own two full-scale samples")
+        let second = meter.peak(ofInterleaved: s16([32767, 32767, 50]),
+                                sampleFormat: .s16, channels: 1)
+        XCTAssertEqual(second.clipRun, 4, "the run continuing from the previous chunk joins into one")
+    }
+
+    func testTheCarriedRunEndsWhenTheSignalDropsBelowFullScale() {
+        // A full-scale sample ends the first chunk, but the second opens below
+        // full scale, so the carried run closes at one and the second chunk's own
+        // isolated full-scale sample is a run of one.
+        var meter = LiveAudioInput.ClipRunMeter()
+        _ = meter.peak(ofInterleaved: s16([200, 32767]), sampleFormat: .s16, channels: 1)
+        let second = meter.peak(ofInterleaved: s16([10, 20, 32767, 30]),
+                                sampleFormat: .s16, channels: 1)
+        XCTAssertEqual(second.clipRun, 1, "a broken run does not carry across the gap")
+    }
+
+    func testAFullScaleRunSpanningThreeChunksKeepsGrowing() {
+        // A run that fills three chunks end to end is one continuous run, counted
+        // across all three, so a long sustained clip reads as sustained however
+        // the capture happens to chunk it.
+        var meter = LiveAudioInput.ClipRunMeter()
+        let data = LiveAudioInput.interleavedLittleEndian(
+            channels: [[1.0, 1.0]], sampleFormat: .f32)
+        XCTAssertEqual(meter.peak(ofInterleaved: data, sampleFormat: .f32, channels: 1).clipRun, 2)
+        XCTAssertEqual(meter.peak(ofInterleaved: data, sampleFormat: .f32, channels: 1).clipRun, 4)
+        XCTAssertEqual(meter.peak(ofInterleaved: data, sampleFormat: .f32, channels: 1).clipRun, 6)
+    }
+
+    func testTheStatelessPeakReadsEachChunkOnItsOwn() {
+        // The stateless convenience carries nothing: a trailing full-scale pair is
+        // a run of two, independent of any neighbouring chunk.
+        let peak = LiveAudioInput.peak(ofInterleaved: s16([100, 32767, 32767]),
+                                       sampleFormat: .s16, channels: 1)
+        XCTAssertEqual(peak.clipRun, 2)
+    }
+
     // MARK: - Device change (round 12)
 
     private func streamFormat(rate: UInt32, channels: UInt32, name: String)
