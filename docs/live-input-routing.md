@@ -81,7 +81,7 @@ driver: whatever is played to its output appears at its input. `BlackHole 2ch` i
 
 On a PipeWire or PulseAudio desktop every output device has a *monitor* source that carries
 what is being played to it, so no extra driver is needed: in the client's Input Device menu
-(which the Linux app labels Live Input in 0.20.1) choose "Monitor of <the output device>", then
+(labelled Live Input in the Linux app of 0.20.1 and earlier) choose "Monitor of <the output device>", then
 play the recording with any player to that
 output. `pavucontrol` (or the desktop's sound settings) shows the monitor sources and lets the
 player be moved between outputs. A null sink (`pactl load-module module-null-sink
