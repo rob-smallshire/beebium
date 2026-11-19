@@ -972,11 +972,37 @@ public:
         return regions;
     }
 
+    // The values a debugger condition can name on this machine (DebugVariable):
+    // ROMSEL and its bank, ANDY, ACCCON's bits by their hardware names, and
+    // whether the access a watchpoint judges went to LYNNE.
     std::vector<DebugVariable> debug_variables() const {
         auto variables = romsel_variables([this] { return uint64_t{romsel_}; });
-        variables.push_back(
-            {"shadow_access", "1 if the access went to LYNNE, 0 if to main RAM.",
-             [this] { return uint64_t{last_access_shadow_}; }, /*watchpoint_only=*/true});
+        auto acccon_bit = [this](uint8_t mask) {
+            return [this, mask] { return uint64_t{(acccon_ & mask) != 0}; };
+        };
+        variables.insert(variables.end(), {
+            {"acccon", "The ACCCON register (&FE34) as last written: IRR TST IFJ ITU Y X E D.",
+             [this] { return uint64_t{acccon_}; }},
+            {"andy", "1 while ROMSEL bit 7 pages ANDY's RAM in at &8000-&8FFF.",
+             [this] { return uint64_t{andy_paged()}; }},
+            {"accd", "ACCCON bit 0 (D): the display shows LYNNE.", acccon_bit(ACCCON_D)},
+            {"acce", "ACCCON bit 1 (E): an instruction fetched from &C000-&DFFF reaches LYNNE "
+                     "at &3000-&7FFF.",
+             acccon_bit(ACCCON_E)},
+            {"accx", "ACCCON bit 2 (X): every access to &3000-&7FFF reaches LYNNE.",
+             acccon_bit(ACCCON_X)},
+            {"accy", "ACCCON bit 3 (Y): HAZEL is paged in at &C000-&DFFF.", acccon_bit(ACCCON_Y)},
+            {"accitu", "ACCCON bit 4 (ITU): &FEE0 reaches the internal Tube.",
+             acccon_bit(ACCCON_ITU)},
+            {"accifj", "ACCCON bit 5 (IFJ): FRED and JIM are the cartridge bus's.",
+             acccon_bit(ACCCON_IFJ)},
+            {"acctst", "ACCCON bit 6 (TST): reads of &FC00-&FFFF return the MOS ROM.",
+             acccon_bit(ACCCON_TST)},
+            {"accirr", "ACCCON bit 7 (IRR): the IRQ line is held low.", acccon_bit(ACCCON_IRR)},
+            {"shadow_access", "1 if the access went to LYNNE, 0 if to main RAM: decided by "
+                              "X, and by E for an instruction fetched from &C000-&DFFF.",
+             [this] { return uint64_t{last_access_shadow_}; }, /*watchpoint_only=*/true},
+        });
         return variables;
     }
 

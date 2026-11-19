@@ -143,15 +143,16 @@ columns just after vsync, as a watchpoint over its column buffer:
 write && shadow_access && addr >= 0x5800 && addr < 0x5A80 && crtc_row > 4
 ```
 
-### Names reserved for the Master 128 (#189)
+### The Master 128's names (#189)
 
-So that conditions stay portable when the Master lands, its ACCCON bits take
-the register's own bit names with the `acc` prefix, 0 or 1 each: `accd`,
-`acce`, `accx`, `accy`, `accitu`, `accifj`, `acctst`, `accirr`. The raw
-`acccon` latch is present as on the B+. `shadow_access` covers the Master
-with its own rule (LYNNE via E and Y, the &C000-&DFFF code window). These
-are not implemented until #189; a condition using them on another machine
-is rejected like any unknown name.
+The Master's ACCCON bits take the register's own bit names with the `acc`
+prefix, 0 or 1 each: `accd`, `acce`, `accx`, `accy`, `accitu`, `accifj`,
+`acctst`, `accirr`. The raw `acccon` register is present as on the B+, and
+`andy` is ROMSEL bit 7 (ANDY at &8000-&8FFF). `shadow_access` covers the
+Master with its own rule: LYNNE by X for any access, and by E for an
+instruction fetched from &C000-&DFFF (Y leaves E alone; see
+`Master128Hardware::Y_SUPPRESSES_E`). A condition using them on another
+machine is rejected like any unknown name.
 
 ### ROMSEL bit 7
 

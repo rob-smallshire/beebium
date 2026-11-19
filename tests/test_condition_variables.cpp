@@ -105,7 +105,7 @@ struct Rig {
 }  // namespace
 
 #define ALL_MODELS ModelB, ModelBRomRamBoard, ModelBAtplSidewise, ModelBWatfordRomRam, \
-                   ModelBIntegraB, ModelBPlus, ModelBPlus128K
+                   ModelBIntegraB, ModelBPlus, ModelBPlus128K, Master128
 
 TEMPLATE_TEST_CASE("bank reads the ROMSEL latch, not the MOS's copy of it",
                    "[debugger][conditions]", ALL_MODELS) {
@@ -163,7 +163,7 @@ TEMPLATE_TEST_CASE("GetCpuDescriptor lists exactly the names conditions accept",
     }
     const bool has_shadow_ram = [&] {
         for (const auto& region : rig.machine.memory().get_memory_regions())
-            if (region.name == "shadow_ram") return true;
+            if (region.name == "shadow_ram" || region.name == "lynne") return true;  // LYNNE: the Master's
         return false;
     }();
     CHECK(has_shadow_access == has_shadow_ram);
@@ -241,6 +241,65 @@ TEMPLATE_TEST_CASE("On a B+, shadow_access is set by VDU code writing the shadow
     REQUIRE(rig.breakpoint(0x0404, 0, "").ok());
     CHECK(rig.run_from(0x0400) == 0x0404);  // from RAM: main RAM, no hit
     CHECK(rig.run_from(0xD000) == 0xD003);  // from VDU code: shadow RAM
+}
+
+TEST_CASE("On a Master 128, each ACCCON bit and ANDY has its name",
+          "[debugger][conditions][master128]") {
+    Rig<Master128> rig;
+    rig.plant(0x0400, {
+        0xA9, 0x14, 0x8D, 0x34, 0xFE,  // LDA #&14  STA &FE34   ITU and X
+        NOP,                           // &0405
+        0xA9, 0x81, 0x8D, 0x30, 0xFE,  // LDA #&81  STA &FE30   ANDY, bank 1
+        NOP,                           // &040B
+        0x4C, 0x0C, 0x04,
+    });
+    REQUIRE(rig.breakpoint(0x0400, 0x0410, "accx && accitu && !accifj").ok());
+    CHECK(rig.run_from(0x0400) == 0x0405);
+    auto values = rig.variables();
+    CHECK(values["accx"] == 1);
+    CHECK(values["accitu"] == 1);
+    CHECK(values["acccon"] == 0x14);
+    for (const char* name : {"accd", "acce", "accy", "accifj", "acctst", "accirr", "andy"}) {
+        INFO(name);
+        CHECK(values[name] == 0);
+    }
+
+    Rig<Master128> paged;
+    paged.plant(0x0400, {0xA9, 0x81, 0x8D, 0x30, 0xFE, NOP, 0x4C, 0x06, 0x04});
+    REQUIRE(paged.breakpoint(0x0400, 0x0410, "andy && bank == 1").ok());
+    CHECK(paged.run_from(0x0400) == 0x0405);
+    values = paged.variables();
+    CHECK(values["andy"] == 1);
+    CHECK(values["romsel"] == 0x81);
+}
+
+TEST_CASE("On a Master 128, shadow_access is set by E for code in &C000-&DFFF and by X for any",
+          "[debugger][conditions][master128]") {
+    // STA &3000 in the MOS at &D000, and the same from RAM.
+    Rig<Master128> rig({{0xD000, 0x8D}, {0xD001, 0x00}, {0xD002, 0x30}});
+    rig.plant(0x0400, {0x8D, 0x00, 0x30, NOP, 0x4C, 0x04, 0x04});
+    REQUIRE(rig.watchpoint(0x3000, 0x3001, "write && shadow_access").ok());
+    REQUIRE(rig.breakpoint(0x0404, 0, "").ok());
+
+    rig.machine.write(0xFE34, Master128Hardware::ACCCON_E);
+    CHECK(rig.run_from(0x0400) == 0x0404);  // from RAM: main RAM, no hit
+    CHECK(rig.run_from(0xD000) == 0xD003);  // from the VDU code: LYNNE
+
+    rig.machine.write(0xFE34, Master128Hardware::ACCCON_X);
+    CHECK(rig.run_from(0x0400) == 0x0403);  // X: LYNNE from anywhere
+}
+
+TEST_CASE("On a Master 128 the debugger reads memory as the code at a PC would",
+          "[debugger][conditions][master128]") {
+    STATIC_REQUIRE(HostHasPcAwareMemory<Master128Hardware>);
+    Master128 machine;
+    machine.memory().write(0xFE34, Master128Hardware::ACCCON_E);
+    machine.memory().lynne.write(0x0000, 0x55);
+    machine.memory().main_ram.write(0x3000, 0xAA);
+    CHECK(machine.memory().read_with_pc(0x3000, 0xC100) == 0x55);
+    CHECK(machine.memory().read_with_pc(0x3000, 0x0400) == 0xAA);
+    machine.memory().write_with_pc(0x3000, 0x66, 0xDFFF);
+    CHECK(machine.memory().lynne.read(0x0000) == 0x66);
 }
 
 TEST_CASE("On an Integra-B, shadow_access follows SHEN and MEMSEL, and each bit has its name",
