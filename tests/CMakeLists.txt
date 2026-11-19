@@ -2626,3 +2626,11 @@ catch_discover_tests(test_master_128_boot)
 add_executable(test_keyboard_matrix_layout test_keyboard_matrix_layout.cpp)
 target_link_libraries(test_keyboard_matrix_layout PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_keyboard_matrix_layout)
+
+add_executable(test_master_128_dp111_timing test_master_128_dp111_timing.cpp)
+target_link_libraries(test_master_128_dp111_timing PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_master_128_dp111_timing PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+)
+catch_discover_tests(test_master_128_dp111_timing)

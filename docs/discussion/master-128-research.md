@@ -450,7 +450,14 @@ assembler test:
    and whether LK4 is made on this machine.
 6. The ADC's decode width at &FE18 (8 bytes? through &FE20?), and the Video ULA's at &FE20.
 7. 65SC12 timing through dp111's 65C12 suite at 1 MHz and 2 MHz, as the oracle for the
-   Beebium build, and the extra IRQ entry cycle.
+   Beebium build, and the extra IRQ entry cycle. First results (2026-11-19): the suite's
+   65C12 1 MHz build (`tests/assets/discs/65C12timing1M.ssd`, version 0.24, from the
+   commit Beebium pins for the Model B builds) runs on the Beebium Master 128 with MOS
+   3.20 and DFS 2.24 and reports `Number of failures : 0x00` after checking the documented
+   and NOP instructions, in 7.86 million cycles from power-on;
+   `tests/test_master_128_dp111_timing.cpp` holds it. The suite's CLI check is only a
+   warning, and it does not time IRQ entry, so the extra IRQ entry cycle is still to be
+   measured, and the 2 MHz build and a real Master's run are still to be done.
 8. Keypad matrix positions against the manual's numbers.
 9. The display quirk with D set and screen addresses below &3000.
 10. TST's effect, which Acorn forbids and no one has measured.

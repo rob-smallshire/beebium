@@ -125,3 +125,20 @@ test_dp111_timing.py and the C++ &FCD0-trap test test_dp111_timing_fcd0.cpp use
 them as regression guards for the core, the VIA timer and the 1 MHz stretch --
 not as reproductions of a known defect. Not checked by the suite, per its
 README: BRK and the jam (HALT) instructions.
+
+## 65C12timing1M.ssd
+
+The same suite's 65C12 build, for the Master 128: the CMOS instruction set
+without the Rockwell bit instructions, with the timed absolute addresses at
+&FCFE as in `6502timing1M.ssd`. From the same pinned commit
+`2cb005d7c04eee011c43e0954d9243dcfc4f5ffb` (GPL-3.0, version 0.24), where
+`6502timing1M.ssd` is byte-identical to the copy above.
+
+- `65C12timing1M.ssd` -- 11008 bytes, SHA-256
+  `bc018c2a203aceee9b1d82617481a16d372cc06d9eb7491d883148d87c4d647b`.
+
+`$.6502tim` loads and runs at &2000, as on the Model B discs; `!Boot` runs it
+(boot option 3). On a Master configured for ADFS it is run with `*DISC` then
+`*RUN 6502tim`. It writes its failure count to &FCD0 like the others.
+`test_master_128_dp111_timing.cpp` runs it on the Master 128 and traps that
+write.
