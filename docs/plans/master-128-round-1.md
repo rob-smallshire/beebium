@@ -156,17 +156,23 @@ attach there unchanged, at 1 MHz while IFJ is clear. A second port, the cartridg
 declared but takes no FRED/JIM fittings in this round; IFJ set routes &FC00-&FDFF to it at
 2 MHz, so with nothing on it reads return the stale bus and the external bus is not reached.
 The cartridge slots `cartridge-rear` (banks 0 and 1) and `cartridge-front` (banks 2 and 3)
-are runtime-configurable pairs of 16K ROM images in `SlotTopology` terms
-(`docs/sideways-slots.md`, the reserved `runtime_configurable = true`): a cartridge is one
-fitting with one or two images; ROMQA (ROMSEL bit 0) selects the half. The IC41 and IC37
+are one-of attachment points (the `at` placement of step 5): a cartridge is an extension
+instance, and the first fitting is a built-in ROM cartridge with a required low image and an
+optional high one (absent, the 16K image answers on both banks); its port fills the slot's two
+banks, which SidewaysService reports read-only with the images' names. Insertion and removal
+at run time wait for hot plugging in the framework; a swap is a relaunch, as Acorn told owners
+to power off before changing a cartridge. This is the shape a FRED/JIM cartridge needs, so the
+slot and the bus device stay one thing. `docs/sideways-slots.md`'s reservation of
+`runtime_configurable = true` for cartridges is superseded and is amended with the commit. The IC41 and IC37
 sockets with LK18 and LK19 (32K ROM pairs replacing sideways RAM banks 4/5 and 6/7) are
 motherboard links in the existing links mechanism, West by default. The `modem-connector`
 attachment point is declared, decoding nMODEM at &FE80-&FE9F at 1 MHz on the internal bus
 (A0-A3, so the 32 bytes are 16 registers mirrored once), with no fitting; a read with nothing
 fitted is the stale bus.
 
-Tests: slot-topology validation for the cartridge pairs (a ROM image in a cartridge appears at
-its bank, is not writable, and is removable at run time through SidewaysService); IFJ routing
+Tests: a ROM cartridge placed at each slot appears at its banks, a 16K one on both, is read-only
+to the CPU and to SidewaysService (SetSlot refused with a sentence), and the Memory view names
+its images; a cartridge at a point a Model B lacks is refused; IFJ routing
 (an extension on the external bus is unreachable while IFJ is set); the modem select's range
 on an unfitted machine.
 
