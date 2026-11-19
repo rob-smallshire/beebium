@@ -196,7 +196,7 @@ BOOT/NOBOOT, DATA, 17 the ANFS options, 19 COUNTRY, 30-45 one byte per ROM.
 MOS 3.20 has exactly one power-on key test: R held through power-on zeroes CMOS bytes 1-49,
 sets bytes 6 and 7 to &FF (every ROM inserted), prints "CMOS RAM reset / Press break to
 continue" and waits. Its "defaults" are therefore all zero: LANG 0, FILE 0, MODE 0, NOTUBE,
-EXTUBE, QUIET, NOBOOT, which is why a reset 3.20 machine comes up in MODE 0 saying "This is not
+INTUBE (byte 16 bit 2 set means EXTUBE), QUIET, NOBOOT, which is why a reset 3.20 machine comes up in MODE 0 saying "This is not
 a language" until FILE and LANG are configured. MOS 3.50 writes a sensible table instead
 (FILE 13 ADFS, LANG 12 BASIC, MODE 7, TV 255,1, FDRIVE 3, CAPS, HARD, DELAY 32, REPEAT 8,
 IGNORE 10, TUBE, and so on). The emulators each seed their own: B2 language 12, filing system
@@ -389,13 +389,17 @@ Taken with Rob on 2026-11-19; the plan for the first round follows from them.
    ROM insert bit set and station 0; not MOS 3.50's table and not an all-zero image. Two
    departures from the guide's list, both because the seed describes a floppy-only machine with
    nothing on the Tube: FLOPPY rather than HARD (no Winchester is fitted, and ADFS asked for a
-   hard disc that is not there waits on it), and the guide's FILE 15 kept as written rather than
-   "corrected" to 13: bank 15 holds no filing system, so the MOS falls back to the
-   highest-priority one, which is ADFS, and that is what the guide relied on (stardot thread
-   "Updated Master MOS versions", page 4, on B2's defaults for its patched MOS 3.20: the aim
-   stated there, "a bootable, usable system", is this seed's aim too; its NOTUBE preference is
-   not followed because a Beebium preset that fits a coprocessor should find it without a
-   `*CONFIGURE`, and with nothing fitted the probe reads the stale bus and moves on). The persistence unit is `Mc146818BatteryUnit` with a Master name and seed; R held at
+   hard disc that is not there waits on it), and FILE 13 (ADFS) in place of the guide's FILE 15.
+   The stardot thread "Updated Master MOS versions" (page 4, on B2's defaults for its patched
+   MOS 3.20) holds that FILE 15, a bank with no filing system, makes the MOS fall back to the
+   highest-priority filing system; tried on the emulated MOS 3.20 with the real ROM set, it does
+   not: the machine comes up on the tape filing system (OSARGS 0 returns 1), while FILE 13
+   gives ADFS with no 1770 fitted. That thread's aim, "a bootable, usable system", is this
+   seed's aim too; its NOTUBE preference is not followed because a Beebium preset that fits a
+   coprocessor should find it without a `*CONFIGURE`, and with nothing fitted the probe reads
+   the stale bus and moves on. Encodings confirmed by `*STATUS` on the emulated MOS 3.20:
+   BAUD n is stored as n-1 in byte 15 bits 2-4; byte 11 bit 7 set is FLOPPY; byte 16 bit 2 set
+   is EXTUBE, so INTUBE is the bit clear. The persistence unit is `Mc146818BatteryUnit` with a Master name and seed; R held at
    power-on zeroes bytes 1-49 and sets 6-7 to &FF exactly as the MOS does, because that is the
    MOS running, not the emulator.
 4. **Clock time source.** Host civil time plus a saved offset, as the Integra-B and the user-port
