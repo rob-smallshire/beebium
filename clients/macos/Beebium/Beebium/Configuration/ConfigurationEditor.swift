@@ -245,7 +245,7 @@ struct ConfigurationEditor: View {
                     schema: extensionsSchema,
                     diagnostics: diagnostics,
                     serialPorts: serialPorts,
-                    excludedPointIds: [ProcessorSectionView.tubePointId]))
+                    excludedPointIds: Set(ProcessorSectionView.tubePointIds(in: extensionsSchema))))
             }
             return AnyView(EmptyView())
         case .network:

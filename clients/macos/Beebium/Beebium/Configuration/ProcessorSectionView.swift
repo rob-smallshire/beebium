@@ -25,24 +25,48 @@ struct ProcessorSectionView: View {
     /// releases a focused field before it acts.
     @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
-    /// The attachment point coprocessors plug into. "tube" is the fixed BBC
-    /// second-processor bus; the Processor section owns it (Peripherals excludes
-    /// it) and presents it as a single-occupancy picker via AttachmentPointGroup.
+    /// The fixed BBC second-processor bus. The Processor section owns the Tube
+    /// buses (Peripherals excludes them) and presents each as a single-occupancy
+    /// picker via AttachmentPointGroup.
     static let tubePointId = "tube"
 
-    private var tubePoint: AttachmentPoint? {
-        extensionsSchema.attachmentPoints.first { $0.id == Self.tubePointId }
+    /// The Tube buses a coprocessor can sit on: the fixed `tube` bus plus every
+    /// alternative its coprocessors list (the Master 128's `internal-tube`), so
+    /// the internal Tube is reachable here and not adrift in Peripherals. Derived
+    /// from the schema (the coprocessors' `attaches_to_one_of`), not hard-coded,
+    /// so a model that adds another Tube bus needs no change here. In catalogue
+    /// order; `tube` first.
+    static func tubePointIds(in schema: ExtensionsSchemaSection) -> [String] {
+        guard let tube = schema.attachmentPoints.first(where: { $0.id == tubePointId }) else {
+            return []
+        }
+        var ids = [tubePointId]
+        for name in tube.extensions {
+            for alternative in schema.alternatives(forExtension: name) where !ids.contains(alternative) {
+                ids.append(alternative)
+            }
+        }
+        return ids
+    }
+
+    /// The model-built Tube points to show, in catalogue order.
+    private var tubePoints: [AttachmentPoint] {
+        let ids = Set(Self.tubePointIds(in: extensionsSchema))
+        return extensionsSchema.attachmentPoints.filter { ids.contains($0.id) && $0.providedBy == nil }
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if let tubePoint = tubePoint {
-                    // The Tube attachment-point node heads this itself (its name
-                    // and description), so no separate "Coprocessor" label.
-                    AttachmentPointGroup(
-                        draft: $draft, schema: extensionsSchema, point: tubePoint,
-                        diagnostics: diagnostics, serialPorts: serialPorts)
+                if !tubePoints.isEmpty {
+                    // Each Tube attachment-point node heads itself (its name and
+                    // description), so no separate "Coprocessor" label. On the
+                    // Master 128 both the external and the internal Tube appear.
+                    ForEach(tubePoints) { tubePoint in
+                        AttachmentPointGroup(
+                            draft: $draft, schema: extensionsSchema, point: tubePoint,
+                            diagnostics: diagnostics, serialPorts: serialPorts)
+                    }
                     Divider()
                 }
                 speedControl

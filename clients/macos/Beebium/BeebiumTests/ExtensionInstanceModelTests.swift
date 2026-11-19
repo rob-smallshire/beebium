@@ -216,4 +216,129 @@ final class ExtensionInstanceModelTests: XCTestCase {
         XCTAssertNil(added.config)
         XCTAssertEqual(m.instances(onPoint: "scsi", under: sole, in: draft).map(\.index), [1])
     }
+
+    // MARK: - Alternative attachment points (attaches_to_one_of)
+
+    /// A Master-128-like model: two coprocessors, each attaching to one of the
+    /// two Tube points. The catalogue carries attaches_to ["tube"] (the first
+    /// alternative, where a no-`at` instance lands) and attaches_to_one_of
+    /// ["tube", "internal-tube"]; both points list both coprocessors, as the
+    /// server's attachment_points[].extensions counts all alternatives.
+    private func tubeModel() throws -> ExtensionInstanceModel {
+        let coprocessors = ["acorn-65c02-coprocessor", "acorn-65c102-coprocessor"]
+        let json: [String: Any] = [
+            "type": "extensions",
+            "attachment_points": [
+                ["id": "tube", "extensions": coprocessors,
+                 "display_name": "Tube", "min_occupancy": 0, "max_occupancy": 1],
+                ["id": "internal-tube", "extensions": coprocessors,
+                 "display_name": "Internal Tube", "min_occupancy": 0, "max_occupancy": 1],
+            ],
+            "catalogue": coprocessors.map { name in
+                ["name": name, "display_name": name,
+                 "attaches_to": ["tube"],
+                 "attaches_to_one_of": ["tube", "internal-tube"]]
+            },
+        ]
+        let data = try JSONSerialization.data(withJSONObject: json)
+        let schema = try JSONDecoder().decode(ExtensionsSchemaSection.self, from: data)
+        return ExtensionInstanceModel(schema: schema)
+    }
+
+    func testAlternativesDecodeFromTheCatalogue() throws {
+        let m = try tubeModel()
+        XCTAssertEqual(m.schema.alternatives(forExtension: "acorn-65c102-coprocessor"),
+                       ["tube", "internal-tube"])
+        XCTAssertTrue(m.schema.alternatives(forExtension: "acorn-rtc").isEmpty)
+    }
+
+    func testANoAtInstanceSitsOnTheFirstAlternativeOnly() throws {
+        let m = try tubeModel()
+        // No `at`: the server places it on the first alternative (the external
+        // Tube). It must show under that point and NOT under the internal Tube.
+        let draft = MachineDraft(model: "master-128",
+                                 extensions: [Ext(name: "acorn-65c102-coprocessor")])
+        XCTAssertEqual(m.instances(onPoint: "tube", in: draft).map(\.index), [0])
+        XCTAssertTrue(m.instances(onPoint: "internal-tube", in: draft).isEmpty)
+    }
+
+    func testAnAtInstanceSitsOnThatAlternativeOnly() throws {
+        let m = try tubeModel()
+        let draft = MachineDraft(model: "master-128", extensions: [
+            Ext(name: "acorn-65c102-coprocessor", config: ["at": .string("internal-tube")]),
+        ])
+        XCTAssertEqual(m.instances(onPoint: "internal-tube", in: draft).map(\.index), [0])
+        XCTAssertTrue(m.instances(onPoint: "tube", in: draft).isEmpty)
+    }
+
+    func testAnInvalidAtFallsBackToTheFirstAlternative() throws {
+        let m = try tubeModel()
+        // An `at` naming no alternative is read as the default (the first), so the
+        // instance is still shown somewhere rather than vanishing; the server
+        // diagnoses the bad value separately.
+        let draft = MachineDraft(model: "master-128", extensions: [
+            Ext(name: "acorn-65c102-coprocessor", config: ["at": .string("nonsense")]),
+        ])
+        XCTAssertEqual(m.instances(onPoint: "tube", in: draft).map(\.index), [0])
+        XCTAssertTrue(m.instances(onPoint: "internal-tube", in: draft).isEmpty)
+    }
+
+    func testCoprocessorIsAddableUnderEachAlternative() throws {
+        let m = try tubeModel()
+        let draft = MachineDraft(model: "master-128")
+        XCTAssertEqual(m.addableExtensions(onPoint: "tube", in: draft).sorted(),
+                       ["acorn-65c02-coprocessor", "acorn-65c102-coprocessor"])
+        XCTAssertEqual(m.addableExtensions(onPoint: "internal-tube", in: draft).sorted(),
+                       ["acorn-65c02-coprocessor", "acorn-65c102-coprocessor"])
+    }
+
+    func testAddingOnTheFirstAlternativeWritesNoAt() throws {
+        let m = try tubeModel()
+        // The external Tube is the default, so no `at` is written -- a preset that
+        // predates the alternatives stays byte-for-byte unchanged.
+        let draft = m.draft(adding: "acorn-65c02-coprocessor", onPoint: "tube",
+                            to: MachineDraft(model: "master-128"))
+        let added = try XCTUnwrap(draft.extensions?.last)
+        XCTAssertEqual(added.name, "acorn-65c02-coprocessor")
+        XCTAssertNil(added.config, "the default alternative records no at")
+    }
+
+    func testAddingOnANonDefaultAlternativeRecordsAt() throws {
+        let m = try tubeModel()
+        let draft = m.draft(adding: "acorn-65c102-coprocessor", onPoint: "internal-tube",
+                            to: MachineDraft(model: "master-128"))
+        let added = try XCTUnwrap(draft.extensions?.last)
+        XCTAssertEqual(added.config, ["at": .string("internal-tube")])
+        // And it then groups under the internal Tube, where it was added.
+        XCTAssertEqual(m.instances(onPoint: "internal-tube", in: draft).map(\.index), [0])
+    }
+
+    func testOccupancyIsCountedPerAlternative() throws {
+        let m = try tubeModel()
+        // A coprocessor on the external Tube fills that point but leaves the
+        // internal Tube empty and still open.
+        let draft = m.draft(adding: "acorn-65c02-coprocessor", onPoint: "tube",
+                            to: MachineDraft(model: "master-128"))
+        XCTAssertEqual(m.occupancy(onPoint: "tube", in: draft).count, 1)
+        XCTAssertEqual(m.occupancy(onPoint: "internal-tube", in: draft).count, 0)
+        XCTAssertTrue(m.addableExtensions(onPoint: "tube", in: draft).isEmpty, "the full point takes no more")
+        XCTAssertFalse(m.addableExtensions(onPoint: "internal-tube", in: draft).isEmpty)
+    }
+
+    func testChangingOneTubeLeavesTheOther() throws {
+        let m = try tubeModel()
+        var draft = MachineDraft(model: "master-128", extensions: [
+            Ext(name: "acorn-65c02-coprocessor"),                                   // external Tube (no at)
+            Ext(name: "acorn-65c102-coprocessor", config: ["at": .string("internal-tube")]),
+        ])
+        // Change the external Tube's coprocessor; the internal Tube's must stay.
+        draft = m.draft(settingSoleInstance: "acorn-65c102-coprocessor", onPoint: "tube", in: draft)
+        let onExternal = m.instances(onPoint: "tube", in: draft)
+        let onInternal = m.instances(onPoint: "internal-tube", in: draft)
+        XCTAssertEqual(onExternal.map(\.name), ["acorn-65c102-coprocessor"])
+        XCTAssertEqual(onInternal.map(\.name), ["acorn-65c102-coprocessor"])
+        // The internal Tube's instance still carries its at; the external one does not.
+        XCTAssertEqual(draft.extensions?[onInternal[0].index].config, ["at": .string("internal-tube")])
+        XCTAssertNil(draft.extensions?[onExternal[0].index].config)
+    }
 }

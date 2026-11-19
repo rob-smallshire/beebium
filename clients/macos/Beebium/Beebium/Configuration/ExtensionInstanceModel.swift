@@ -88,7 +88,8 @@ struct ExtensionInstanceModel {
               point.providedBy != nil else { return [] }
         let hosted = Set(point.extensions)
         let all = (draft.extensions ?? []).enumerated().compactMap { index, ext in
-            hosted.contains(ext.name) ? Instance(index: index, name: ext.name) : nil
+            hosted.contains(ext.name) && occupies(pointId, name: ext.name, at: index, in: draft)
+                ? Instance(index: index, name: ext.name) : nil
         }
         let providers = providers(ofPoint: pointId, in: draft)
         let providerIds = Set(providers.map { effectiveId(ofInstanceAt: $0.index, in: draft) })
@@ -112,6 +113,34 @@ struct ExtensionInstanceModel {
         return effectiveId(ofInstanceAt: last.index, in: draft)
     }
 
+    // MARK: - Alternative attachment points (attaches_to_one_of)
+
+    /// The point an instance occupies among its extension's alternatives
+    /// (`attaches_to_one_of`): its config `at` when that names an alternative,
+    /// else the first alternative -- the server's default for an instance with no
+    /// `at`. "" when the extension has no alternatives, so this never narrows an
+    /// ordinary extension. See docs/peripheral-extension-framework.md section 3.6.
+    func attachment(ofInstanceAt index: Int, name: String, in draft: MachineDraft) -> String {
+        let alternatives = schema.alternatives(forExtension: name)
+        guard !alternatives.isEmpty else { return "" }
+        let at = configString("at", ofInstanceAt: index, in: draft)
+        return alternatives.contains(at) ? at : (alternatives.first ?? "")
+    }
+
+    /// Whether an instance of `name` at `index` sits on `pointId`. For a point
+    /// that is one of the extension's alternatives the instance sits there only
+    /// when that is the alternative it occupies (its `at`, or the first by
+    /// default), so a coprocessor listed under both Tube points appears under
+    /// just the one it is attached to. A point that is not an alternative is
+    /// ordinary membership, so an extension attaching to several points at once
+    /// (an adapter spanning two ports) is unaffected.
+    private func occupies(_ pointId: String, name: String, at index: Int,
+                          in draft: MachineDraft) -> Bool {
+        let alternatives = schema.alternatives(forExtension: name)
+        guard alternatives.contains(pointId) else { return true }
+        return attachment(ofInstanceAt: index, name: name, in: draft) == pointId
+    }
+
     // MARK: - Instances on a point
 
     /// The draft instances attached to `pointId`, in draft order. On a provided
@@ -124,7 +153,8 @@ struct ExtensionInstanceModel {
         guard let point = schema.attachmentPoints.first(where: { $0.id == pointId }) else { return [] }
         let hosted = Set(point.extensions)
         let all = (draft.extensions ?? []).enumerated().compactMap { index, ext in
-            hosted.contains(ext.name) ? Instance(index: index, name: ext.name) : nil
+            hosted.contains(ext.name) && occupies(pointId, name: ext.name, at: index, in: draft)
+                ? Instance(index: index, name: ext.name) : nil
         }
         guard let provider = provider else { return all }
         let providers = providers(ofPoint: pointId, in: draft)
@@ -198,6 +228,15 @@ struct ExtensionInstanceModel {
         if extensions.contains(where: { $0.name == name }) {
             config["id"] = .string(uniqueId(forName: name, in: extensions))
         }
+        // When the point is one of the extension's alternatives, record which one
+        // as `at` -- but only for a non-default alternative. The first alternative
+        // is the server's default for an instance with no `at`, so leaving `at`
+        // off there keeps a configuration that predates the alternatives (a
+        // coprocessor on the external Tube) byte-for-byte unchanged.
+        let alternatives = schema.alternatives(forExtension: name)
+        if alternatives.contains(pointId), pointId != alternatives.first {
+            config["at"] = .string(pointId)
+        }
         if let provider = provider,
            providers(ofPoint: pointId, in: result).count > 1,
            let key = providerParameter(forExtension: name, point: pointId) {
@@ -228,9 +267,22 @@ struct ExtensionInstanceModel {
         guard let point = schema.attachmentPoints.first(where: { $0.id == pointId }) else { return draft }
         let hosted = Set(point.extensions)
         var result = draft
-        var extensions = (result.extensions ?? []).filter { !hosted.contains($0.name) }
+        // Remove only the instance that occupies THIS point. On an alternative
+        // point (a Tube), the coprocessor on the other Tube is left in place, so
+        // changing one does not drop the other.
+        var extensions: [MachineDraft.Extension] = []
+        for (index, ext) in (result.extensions ?? []).enumerated()
+        where !(hosted.contains(ext.name)
+                && occupies(pointId, name: ext.name, at: index, in: result)) {
+            extensions.append(ext)
+        }
         if let name = name, !name.isEmpty {
-            extensions.append(MachineDraft.Extension(name: name))
+            var instance = MachineDraft.Extension(name: name)
+            let alternatives = schema.alternatives(forExtension: name)
+            if alternatives.contains(pointId), pointId != alternatives.first {
+                instance.config = ["at": .string(pointId)]
+            }
+            extensions.append(instance)
         }
         result.extensions = extensions
         return result

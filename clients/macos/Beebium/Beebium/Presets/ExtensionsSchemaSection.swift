@@ -62,6 +62,13 @@ struct ExtensionsSchemaSection: Codable {
         entry(forExtension: name)?.description ?? ""
     }
 
+    /// The alternative attachment points of an extension (its manifest's
+    /// `attaches_to_one_of`), of which an instance takes exactly one. Empty when
+    /// it has no alternatives, so an extension without them behaves as before.
+    func alternatives(forExtension name: String) -> [String] {
+        entry(forExtension: name)?.attachesToOneOf ?? []
+    }
+
     /// The parameter manifest for an extension, built from the catalogue (ordered
     /// by declared position). Empty when the catalogue has no entry.
     func manifest(forExtension name: String) -> ExtensionManifest {
@@ -87,6 +94,11 @@ struct ExtensionCatalogueEntry: Codable, Identifiable {
     /// "peripheral", "econet-transport", ...
     var kind: String = ""
     var attachesTo: [String] = []
+    /// The alternative attachment points of which an instance takes exactly one,
+    /// its `at` naming the chosen one (the first when it names none). A
+    /// coprocessor's are `["tube", "internal-tube"]`. Empty when the extension
+    /// has no alternatives. See docs/peripheral-extension-framework.md.
+    var attachesToOneOf: [String] = []
     var provides: [String] = []
     var parameters: [ExtensionParameter] = []
     /// The ROMs this extension ships, offered as the bundled choices for a
@@ -101,6 +113,7 @@ struct ExtensionCatalogueEntry: Codable, Identifiable {
         case name, description, kind, parameters, roms, groups
         case displayName = "display_name"
         case attachesTo = "attaches_to"
+        case attachesToOneOf = "attaches_to_one_of"
         case provides
     }
 
@@ -115,6 +128,7 @@ struct ExtensionCatalogueEntry: Codable, Identifiable {
         description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
         kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? ""
         attachesTo = try c.decodeIfPresent([String].self, forKey: .attachesTo) ?? []
+        attachesToOneOf = try c.decodeIfPresent([String].self, forKey: .attachesToOneOf) ?? []
         provides = try c.decodeIfPresent([String].self, forKey: .provides) ?? []
         parameters = try c.decodeIfPresent([ExtensionParameter].self, forKey: .parameters) ?? []
         roms = try c.decodeIfPresent([CatalogueRom].self, forKey: .roms) ?? []
