@@ -422,8 +422,11 @@ Taken with Rob on 2026-11-19; the plan for the first round follows from them.
    RDY with Phi2 constant. The cycle cost is the same, so Beebium's `BusStretching` stands with
    the Master's address map, but peripherals clocked from Phi2 (the Econet module) and the
    Tube see a steady 2 MHz, which the Tube contract must respect.
-6. **Cartridges.** In the first round a cartridge is a runtime-configurable pair of 16K ROM
-   images in the slot's two banks. The IFJ routing of FRED/JIM to the cartridge bus and the IRQ,
+6. **Cartridges.** A cartridge is an extension that provides the slot's two sideways banks
+   (Rob: "cartridge extensions provide sideways slots"), placed at `cartridge-rear` or
+   `cartridge-front` with the `at` placement; the first round's fitting is a built-in ROM
+   cartridge with two 16K sockets, fitted at launch and changed by a relaunch, its banks
+   read-only to SidewaysService. The IFJ routing of FRED/JIM to the cartridge bus and the IRQ,
    NMI and audio lines wait for a cartridge that needs them.
 7. **Debugger vocabulary.** The reserved names `accd`, `acce`, `accx`, `accy`, `accitu`,
    `accifj`, `acctst`, `accirr` (with `bank`, `romsel`, `shadow_access`) are adopted; the final
