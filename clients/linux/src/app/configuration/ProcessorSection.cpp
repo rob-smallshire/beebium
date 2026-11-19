@@ -31,7 +31,8 @@ using nlohmann::ordered_json;
 
 namespace {
 
-const char* TUBE = "tube";
+// The model's Tube points, in the order they are shown.
+const std::vector<std::string> TUBES{"tube", "internal-tube"};
 const double MULTIPLIERS[] = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0};
 
 }  // namespace
@@ -75,30 +76,43 @@ ProcessorSection::ProcessorSection(NewMachineDialog& dialog) : dialog_(dialog) {
     });
 }
 
-void ProcessorSection::reload() {
-    if (tube_) {
-        tube_->hide();
-        tube_->deleteLater();
-        tube_ = nullptr;
+AttachmentPointGroup* ProcessorSection::tube(const std::string& point) const {
+    for (AttachmentPointGroup* group : tubes_) {
+        if (group->point().id == point) {
+            return group;
+        }
     }
+    return nullptr;
+}
+
+void ProcessorSection::reload() {
+    for (AttachmentPointGroup* group : tubes_) {
+        group->hide();
+        group->deleteLater();
+    }
+    tubes_.clear();
     const auto& schema = dialog_.schema();
     if (schema) {
         extensions_ = std::make_unique<ExtensionsDraft>(dialog_.draft(), *schema);
-        for (const auto& point : schema->attachment_points()) {
-            if (point.id == TUBE && !point.provided_by) {
-                tube_ = new AttachmentPointGroup(dialog_, *extensions_, point, std::nullopt, this);
-                connect(tube_, &AttachmentPointGroup::restructured, this, [this] {
+        for (const std::string& id : TUBES) {
+            for (const auto& point : schema->attachment_points()) {
+                if (point.id != id || point.provided_by) {
+                    continue;
+                }
+                auto* group = new AttachmentPointGroup(dialog_, *extensions_, point, std::nullopt, this);
+                connect(group, &AttachmentPointGroup::restructured, this, [this] {
                     QTimer::singleShot(0, this, [this] {
                         reload();
                         Q_EMIT edited();
                     });
                 });
-                connect(tube_, &AttachmentPointGroup::edited, this, &ConfigurationSection::edited);
-                tube_layout_->addWidget(tube_);
+                connect(group, &AttachmentPointGroup::edited, this, &ConfigurationSection::edited);
+                tube_layout_->addWidget(group);
+                tubes_.push_back(group);
             }
         }
     }
-    tube_rule_->setVisible(tube_ != nullptr);
+    tube_rule_->setVisible(!tubes_.empty());
     show_speed();
     set_diagnostics(diagnostics_);
 }
@@ -127,7 +141,12 @@ void ProcessorSection::show_speed() {
 }
 
 bool ProcessorSection::changed() const {
-    const auto tube = point_extensions(dialog_.schema(), TUBE);
+    std::vector<std::string> tube;
+    for (const std::string& id : TUBES) {
+        for (const std::string& name : point_extensions(dialog_.schema(), id)) {
+            tube.push_back(name);
+        }
+    }
     return dialog_.draft().changed("/speed") ||
            dialog_.draft().changed_where("/extensions",
                                          [&](const ordered_json& entry) { return names_one_of(entry, tube); });
@@ -135,8 +154,8 @@ bool ProcessorSection::changed() const {
 
 void ProcessorSection::set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) {
     diagnostics_ = diagnostics;
-    if (tube_) {
-        tube_->set_diagnostics(diagnostics);
+    for (AttachmentPointGroup* group : tubes_) {
+        group->set_diagnostics(diagnostics);
     }
     diagnostic_->show_for(diagnostics, "/speed");
 }

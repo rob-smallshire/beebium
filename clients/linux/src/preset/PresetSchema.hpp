@@ -86,7 +86,13 @@ struct SchemaExtension {
     std::string display_name;
     std::string description;
     std::string kind;
+    // The points an instance naming no `at` attaches to, the first
+    // alternative among them.
     std::vector<std::string> attaches_to;
+    // Points of which an instance attaches to exactly one, beside the rest
+    // of attaches_to: the one its framework key `at` names, else the first
+    // (docs/preset-schema.md, Attachment).
+    std::vector<std::string> attaches_to_one_of;
     std::vector<std::string> provides;
     std::vector<SchemaParameter> parameters;
     std::vector<SchemaParameterGroup> groups;

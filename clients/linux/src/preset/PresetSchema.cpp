@@ -101,6 +101,7 @@ SchemaExtension extension_of(const ordered_json& e) {
     out.description = text(e, "description");
     out.kind = text(e, "kind");
     out.attaches_to = strings(e, "attaches_to");
+    out.attaches_to_one_of = strings(e, "attaches_to_one_of");
     out.provides = strings(e, "provides");
     if (const auto ps = e.find("parameters"); ps != e.end() && ps->is_array()) {
         for (const auto& p : *ps) {

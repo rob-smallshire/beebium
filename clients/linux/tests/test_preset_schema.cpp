@@ -90,6 +90,13 @@ TEST_CASE("The catalogue gives each extension's parameters, typed", "[preset][sc
     REQUIRE(disc);
     CHECK(disc->display_name == "SCSI Hard Disc");
     CHECK(disc->attaches_to == std::vector<std::string>{"scsi"});
+    CHECK(disc->attaches_to_one_of.empty());
+    // A coprocessor goes on one Tube or the other: on the Tube when it
+    // names none.
+    const auto coprocessor = schema.extension("acorn-65c102-coprocessor");
+    REQUIRE(coprocessor);
+    CHECK(coprocessor->attaches_to == std::vector<std::string>{"tube"});
+    CHECK(coprocessor->attaches_to_one_of == std::vector<std::string>{"tube", "internal-tube"});
     REQUIRE(disc->parameters.size() >= 2);
     CHECK(disc->parameters[0].key == "scsi-id");
     CHECK(disc->parameters[0].type == "integer");

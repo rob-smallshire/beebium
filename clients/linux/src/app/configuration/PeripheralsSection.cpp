@@ -26,7 +26,8 @@ namespace beebium::linux_client {
 
 namespace {
 
-const std::vector<std::string> PROCESSOR_POINTS{"tube"};
+// The Tubes, whose coprocessors the Processor section holds.
+const std::vector<std::string> PROCESSOR_POINTS{"tube", "internal-tube"};
 
 }  // namespace
 
@@ -114,7 +115,12 @@ void PeripheralsSection::set_diagnostics(const std::vector<PresetDiagnostic>& di
 }
 
 bool PeripheralsSection::changed() const {
-    const auto tube = point_extensions(dialog_.schema(), PROCESSOR_POINTS.front());
+    std::vector<std::string> tube;
+    for (const std::string& id : PROCESSOR_POINTS) {
+        for (const std::string& name : point_extensions(dialog_.schema(), id)) {
+            tube.push_back(name);
+        }
+    }
     return dialog_.draft().changed_where(
         "/extensions", [&](const nlohmann::ordered_json& entry) { return !names_one_of(entry, tube); });
 }

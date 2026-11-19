@@ -30,14 +30,21 @@ using nlohmann::ordered_json;
 
 namespace {
 
-PresetSchema model_b_schema() {
-    std::ifstream file(std::filesystem::path(BEEBIUM_LINUX_FIXTURES_DIRPATH) /
-                       "describe-preset-schema-model-b.json");
+PresetSchema schema_of(const char* filename) {
+    std::ifstream file(std::filesystem::path(BEEBIUM_LINUX_FIXTURES_DIRPATH) / filename);
     std::stringstream text;
     text << file.rdbuf();
     auto schema = PresetSchema::parse(text.str());
     REQUIRE(schema);
     return *schema;
+}
+
+PresetSchema model_b_schema() {
+    return schema_of("describe-preset-schema-model-b.json");
+}
+
+PresetSchema master_128_schema() {
+    return schema_of("describe-preset-schema-master-128.json");
 }
 
 MachineDraft with_extensions(const char* extensions) {
@@ -180,4 +187,90 @@ TEST_CASE("With no adapter at all, a disc is unattached", "[preset][extensions]"
     MachineDraft draft = with_extensions(R"([{"name": "scsi-hard-disc", "config": {"scsi-id": 0}}])");
     const ExtensionsDraft extensions(draft, model_b_schema());
     REQUIRE(extensions.unattached().size() == 1);
+}
+
+TEST_CASE("A coprocessor is offered on either Tube of a Master 128", "[preset][extensions][at]") {
+    MachineDraft draft = with_extensions("[]");
+    const ExtensionsDraft extensions(draft, master_128_schema());
+    const std::vector<std::string> coprocessors{"acorn-65c02-coprocessor",
+                                                "acorn-65c102-coprocessor"};
+    auto offered = names(extensions.addable(point(extensions, "tube")));
+    std::sort(offered.begin(), offered.end());
+    CHECK(offered == coprocessors);
+    offered = names(extensions.addable(point(extensions, "internal-tube")));
+    std::sort(offered.begin(), offered.end());
+    CHECK(offered == coprocessors);
+}
+
+TEST_CASE("A coprocessor fitted from the internal Tube is placed there with at", "[preset][extensions][at]") {
+    MachineDraft draft = with_extensions("[]");
+    ExtensionsDraft extensions(draft, master_128_schema());
+    const auto internal = point(extensions, "internal-tube");
+    const auto external = point(extensions, "tube");
+    extensions.add("acorn-65c102-coprocessor", internal);
+    CHECK(*draft.get("/extensions") == ordered_json::parse(
+              R"([{"name": "acorn-65c102-coprocessor", "config": {"at": "internal-tube"}}])"));
+    CHECK(extensions.attached(internal).size() == 1);
+    CHECK(extensions.attached(external).empty());
+    // The internal Tube is full; the external one still offers.
+    CHECK(extensions.addable(internal).empty());
+    CHECK_FALSE(extensions.addable(external).empty());
+    CHECK(extensions.unattached().empty());
+
+    // From the external Tube, the first of its alternatives, it needs no at.
+    MachineDraft plain = with_extensions("[]");
+    ExtensionsDraft on_tube(plain, master_128_schema());
+    on_tube.add("acorn-65c02-coprocessor", point(on_tube, "tube"));
+    CHECK(*plain.get("/extensions") ==
+          ordered_json::parse(R"([{"name": "acorn-65c02-coprocessor"}])"));
+}
+
+TEST_CASE("A coprocessor naming no at sits on the first of its Tubes, as the server places it",
+          "[preset][extensions][at]") {
+    MachineDraft draft = with_extensions(R"([{"name": "acorn-65c02-coprocessor"}])");
+    const ExtensionsDraft extensions(draft, master_128_schema());
+    CHECK(extensions.attached(point(extensions, "tube")).size() == 1);
+    CHECK(extensions.attached(point(extensions, "internal-tube")).empty());
+    // And on a Model B, as it always has.
+    MachineDraft model_b = with_extensions(R"([{"name": "acorn-65c02-coprocessor"}])");
+    const ExtensionsDraft on_b(model_b, model_b_schema());
+    CHECK(on_b.attached(point(on_b, "tube")).size() == 1);
+}
+
+TEST_CASE("A coprocessor changed for another stays on its Tube", "[preset][extensions][at]") {
+    MachineDraft draft = with_extensions(
+        R"([{"name": "acorn-65c02-coprocessor", "config": {"at": "internal-tube", "id": "cp"}}])");
+    ExtensionsDraft extensions(draft, master_128_schema());
+    const auto internal = point(extensions, "internal-tube");
+    const auto instance = extensions.attached(internal).at(0);
+    CHECK(names(extensions.alternatives(internal, instance)) ==
+          std::vector<std::string>{"acorn-65c102-coprocessor"});
+    extensions.change(instance, "acorn-65c102-coprocessor");
+    CHECK(*draft.get("/extensions") == ordered_json::parse(
+              R"([{"name": "acorn-65c102-coprocessor", "config": {"at": "internal-tube"}}])"));
+    CHECK(extensions.attached(internal).size() == 1);
+}
+
+TEST_CASE("A cartridge goes in either Master 128 slot, each holding one", "[preset][extensions][at]") {
+    MachineDraft draft = with_extensions("[]");
+    ExtensionsDraft extensions(draft, master_128_schema());
+    const auto rear = point(extensions, "cartridge-rear");
+    const auto front = point(extensions, "cartridge-front");
+    CHECK(names(extensions.addable(rear)) == std::vector<std::string>{"rom-cartridge"});
+    CHECK(names(extensions.addable(front)) == std::vector<std::string>{"rom-cartridge"});
+    extensions.add("rom-cartridge", front);
+    extensions.add("rom-cartridge", rear);
+    CHECK(*draft.get("/extensions") == ordered_json::parse(R"([
+        {"name": "rom-cartridge", "config": {"at": "cartridge-front"}},
+        {"name": "rom-cartridge", "config": {"id": "rom-cartridge-1"}}])"));
+    // Occupancy is the point's own: one in each, and each full.
+    CHECK(extensions.attached(rear).size() == 1);
+    CHECK(extensions.attached(front).size() == 1);
+    CHECK(extensions.attached(front).at(0).id == "rom-cartridge");
+    CHECK(extensions.addable(rear).empty());
+    CHECK(extensions.addable(front).empty());
+    // A point nothing fits is not offered.
+    for (const auto& p : extensions.model_points()) {
+        CHECK(p.id != "modem-connector");
+    }
 }

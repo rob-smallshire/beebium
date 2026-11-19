@@ -131,6 +131,31 @@ std::optional<std::string> ExtensionsDraft::provider_parameter(const std::string
     return std::nullopt;
 }
 
+namespace {
+
+// The alternative an instance's `at` names, if it is a string.
+std::string at_of(const ordered_json& config) {
+    if (config.is_object() && config.contains("at") && config["at"].is_string()) {
+        return config["at"].get<std::string>();
+    }
+    return {};
+}
+
+// Whether an instance of the extension, with this config, attaches to the
+// point, as the server places it: an alternative only where its `at`
+// names it, or the first where it names none.
+bool attaches_at(const SchemaExtension& extension, const ordered_json& config,
+                 const std::string& point) {
+    const auto& alternatives = extension.attaches_to_one_of;
+    if (contains(alternatives, point)) {
+        const std::string at = at_of(config);
+        return point == (at.empty() ? alternatives.front() : at);
+    }
+    return contains(extension.attaches_to, point);
+}
+
+}  // namespace
+
 std::vector<ExtensionInstance> ExtensionsDraft::attached(const SchemaAttachmentPoint& point,
                                                          const ExtensionInstance* provider) const {
     const ordered_json all = entries();
@@ -138,7 +163,9 @@ std::vector<ExtensionInstance> ExtensionsDraft::attached(const SchemaAttachmentP
     std::vector<ExtensionInstance> out;
     for (auto& instance : instances()) {
         const auto extension = schema_.extension(instance.name);
-        if (!extension || !contains(extension->attaches_to, point.id)) {
+        if (!extension ||
+            !attaches_at(*extension, all[instance.index].value("config", ordered_json::object()),
+                         point.id)) {
             continue;
         }
         if (provider) {
@@ -256,6 +283,13 @@ void ExtensionsDraft::add(const std::string& name, const SchemaAttachmentPoint& 
     if (!id.empty()) {
         entry["config"]["id"] = id;
     }
+    // Fitted from one of its alternatives but the first, it is placed
+    // there; at the first it needs no `at`, as the server places it.
+    if (const auto extension = schema_.extension(name);
+        extension && contains(extension->attaches_to_one_of, point.id) &&
+        point.id != extension->attaches_to_one_of.front()) {
+        entry["config"]["at"] = point.id;
+    }
     // Beneath one of several providers, it names the one.
     if (provider && providers_of(point.id).size() > 1) {
         if (const auto key = provider_parameter(name, point.id)) {
@@ -278,8 +312,15 @@ void ExtensionsDraft::remove(const ExtensionInstance& instance) {
 void ExtensionsDraft::change(const ExtensionInstance& instance, const std::string& name) {
     ordered_json all = entries();
     if (instance.index < all.size()) {
+        // Changed for another at the same point: placed where the old was.
+        ordered_json entry{{"name", name}};
+        const std::string at = at_of(all[instance.index].value("config", ordered_json::object()));
+        if (const auto extension = schema_.extension(name);
+            !at.empty() && extension && contains(extension->attaches_to_one_of, at)) {
+            entry["config"]["at"] = at;
+        }
         all.erase(all.begin() + static_cast<std::ptrdiff_t>(instance.index));
-        all.push_back(ordered_json{{"name", name}});
+        all.push_back(std::move(entry));
         draft_.set(EXTENSIONS, all);
     }
 }

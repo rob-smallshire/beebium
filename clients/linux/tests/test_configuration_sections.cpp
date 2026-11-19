@@ -644,6 +644,52 @@ TEST_CASE("Processor holds the Tube's coprocessor and the speed", "[configuratio
     REQUIRE(wait_until([&] { return processor->tube()->card("acorn-65c102-coprocessor"); }));
 }
 
+namespace {
+
+std::string master_128_schema_text() {
+    std::ifstream file(std::filesystem::path(BEEBIUM_LINUX_FIXTURES_DIRPATH) /
+                       "describe-preset-schema-master-128.json");
+    std::stringstream text;
+    text << file.rdbuf();
+    return text.str();
+}
+
+ordered_json master_128_with_extensions(const char* extensions) {
+    auto document = model_b_with_extensions(extensions);
+    document["model"] = "master-128";
+    return document;
+}
+
+}  // namespace
+
+TEST_CASE("A Master 128's Processor holds a coprocessor on either Tube, placed with at",
+          "[configuration][processor][at]") {
+    ConfigurationFixture f(
+        master_128_with_extensions(
+            R"([{"name": "acorn-65c02-coprocessor", "config": {"at": "internal-tube"}}])"),
+        [](ConfigurationFixture& fixture) { fixture.schema_text = master_128_schema_text(); });
+    auto* processor = f.section<ProcessorSection>();
+    REQUIRE(processor->tube());
+    REQUIRE(processor->tube("internal-tube"));
+    // Placed by its at: on the internal Tube, not the external one.
+    CHECK(processor->tube("internal-tube")->card("acorn-65c02-coprocessor"));
+    CHECK_FALSE(processor->tube()->card("acorn-65c02-coprocessor"));
+    // Neither Tube is a peripheral.
+    auto* peripherals = f.section<PeripheralsSection>();
+    CHECK_FALSE(peripherals->group("tube"));
+    CHECK_FALSE(peripherals->group("internal-tube"));
+    // Changed for the other, it stays on its Tube.
+    f.pick = "acorn-65c102-coprocessor";
+    processor->tube("internal-tube")->change_button("acorn-65c02-coprocessor")->click();
+    CHECK(*f.dialog->draft().get("/extensions") == ordered_json::parse(
+              R"([{"name": "acorn-65c102-coprocessor", "config": {"at": "internal-tube"}}])"));
+    REQUIRE(wait_until([&] {
+        return processor->tube("internal-tube") &&
+               processor->tube("internal-tube")->card("acorn-65c102-coprocessor");
+    }));
+    CHECK(f.section_names().contains(QStringLiteral("Processor \u2022")));
+}
+
 TEST_CASE("Speed writes a multiplier or unlimited, and keeps a preset's own", "[configuration][processor]") {
     auto document = model_b_with_disc();
     document["speed"] = 3.0;
