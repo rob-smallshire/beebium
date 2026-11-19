@@ -157,7 +157,10 @@ declared but takes no FRED/JIM fittings in this round; IFJ set routes &FC00-&FDF
 2 MHz, so with nothing on it reads return the stale bus and the external bus is not reached.
 The cartridge slots `cartridge-rear` (banks 0 and 1) and `cartridge-front` (banks 2 and 3)
 are one-of attachment points (the `at` placement of step 5): a cartridge is an extension
-instance, and the first fitting is a built-in ROM cartridge with a required low image and an
+instance that provides the slot's sideways banks (Rob's framing: cartridge extensions provide
+sideways slots, so the port is a provider of two banks for reads and, later, writes, and a
+FRED/JIM cartridge adds bus handlers on the same instance), and the first fitting is a built-in
+ROM cartridge with a required low image and an
 optional high one (absent, the 16K image answers on both banks); its port fills the slot's two
 banks, which SidewaysService reports read-only with the images' names. Insertion and removal
 at run time wait for hot plugging in the framework; a swap is a relaunch, as Acorn told owners
