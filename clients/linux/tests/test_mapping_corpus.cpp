@@ -21,6 +21,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <map>
+#include <string>
 
 using namespace beebium::linux_client;
 using namespace beebium::linux_client::testing;
@@ -40,19 +42,56 @@ HostModifiers modifiers_from(const Json& names) {
     return held;
 }
 
+std::vector<BbcKeyEntry> rows_of(const Json& rows) {
+    std::vector<BbcKeyEntry> entries;
+    for (const auto& row : rows) {
+        entries.push_back({row["character"].get<std::string>(),
+                           static_cast<std::uint8_t>(row["ik"].get<int>()),
+                           row["needsShift"].get<bool>(), row["name"].get<std::string>()});
+    }
+    return entries;
+}
+
+// The machines' catalogues a case may be resolved under: the top-level
+// slice, a Model B's, under the empty name, and each of `catalogues` by its
+// name, that slice with its `adds` rows as well (3.6).
+std::map<std::string, BbcKeyTable> catalogues_of(const Json& corpus) {
+    const std::vector<BbcKeyEntry> base = rows_of(corpus["catalogue"]["entries"]);
+    std::map<std::string, BbcKeyTable> tables{{"", BbcKeyTable(base)}};
+    const Json catalogues = corpus.value("catalogues", Json::object());
+    for (const auto& [name, slice] : catalogues.items()) {
+        std::vector<BbcKeyEntry> entries = base;
+        for (const BbcKeyEntry& row : rows_of(slice.value("adds", Json::array()))) {
+            entries.push_back(row);
+        }
+        tables.emplace(name, BbcKeyTable(entries));
+    }
+    return tables;
+}
+
 }  // namespace
+
+TEST_CASE("A corpus case names the machine's catalogue it is resolved under, a Model B's by default",
+          "[keyboard][corpus]") {
+    const Json corpus = Json::parse(R"({
+        "catalogue": {"entries": [{"character": "7", "ik": 36, "needsShift": false, "name": "7"}]},
+        "catalogues": {"master-128": {"adds": [
+            {"character": "", "ik": 27, "needsShift": false, "name": "Keypad7"}]}}})");
+    const auto tables = catalogues_of(corpus);
+    REQUIRE(tables.size() == 2);
+    CHECK(tables.at("").ik_by_name("7") == std::optional<std::uint8_t>(36));
+    CHECK_FALSE(tables.at("").ik_by_name("Keypad7"));
+    CHECK(tables.at("master-128").ik_by_name("7") == std::optional<std::uint8_t>(36));
+    CHECK(tables.at("master-128").ik_by_name("Keypad7") == std::optional<std::uint8_t>(27));
+    // A corpus of one machine only.
+    CHECK(catalogues_of(Json::parse(R"({"catalogue": {"entries": []}})")).size() == 1);
+}
 
 TEST_CASE("Every portable and Linux case in the corpus resolves as expected",
           "[keyboard][corpus]") {
     const Json corpus = Json::parse(corpus_text("rules.json"));
 
-    std::vector<BbcKeyEntry> entries;
-    for (const auto& row : corpus["catalogue"]["entries"]) {
-        entries.push_back({row["character"].get<std::string>(),
-                           static_cast<std::uint8_t>(row["ik"].get<int>()),
-                           row["needsShift"].get<bool>(), row["name"].get<std::string>()});
-    }
-    const BbcKeyTable table(entries);
+    const std::map<std::string, BbcKeyTable> tables = catalogues_of(corpus);
 
     // A case's mapping, read with the keyboard classes the case states
     // attached (3.5), a standard keyboard when it states none.
@@ -92,7 +131,9 @@ TEST_CASE("Every portable and Linux case in the corpus resolves as expected",
         if (event.contains("native")) {
             key.evdev = event["native"]["scancode"].get<std::uint32_t>();
         }
-        const auto resolved = resolve_key(mapping, table, key);
+        const auto table = tables.find(item.value("catalogue", ""));
+        REQUIRE(table != tables.end());
+        const auto resolved = resolve_key(mapping, table->second, key);
 
         const Json& expect = item["expect"];
         if (expect.value("ignored", false)) {
