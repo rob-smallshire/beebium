@@ -237,6 +237,10 @@ does not apply, so Numpad7 falls through to character mapping and types 7,
 as it did before the entry existed. Without this rule the entry would match
 rule 1 and resolve to nothing, and a Model B user's keypad would go dead.
 
+Break is not a matrix key and appears in no catalogue; an entry for it
+applies on every machine. While a client has no catalogue yet (no machine
+connected), every entry applies, so the keyboard view never blanks.
+
 An entry naming a key no machine has (a misspelling) behaves the same way on
 every machine: it never applies. A client may tell the user about an entry
 that applies nowhere it has seen, as latitude; it must not report it as
