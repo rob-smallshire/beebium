@@ -947,8 +947,12 @@ running machine's Memory sidebar shows it (section 11), and the memory map's
 order, OS over sideways. It does not belong with the processor, even though a
 coprocessor's firmware is chosen alongside that coprocessor. It presents
 the MOS the machine will boot with -- the resolved preset's value, which is the
-model's own default when the preset sets none -- as a title where the ROM
-resolves (e.g. "MOS 3.50") and otherwise the image's name. The user chooses
+model's own default when the preset sets none -- as its title and its file name
+together, the title first (e.g. "Acorn MOS 3.50" over "acorn-mos_3_50.rom"); when
+the server does not recognise the image the file name stands alone. The title is
+the server's: `describe-rom` names a MOS image from the OS ROM manifest (by the
+image's hash, since an OS ROM has no header to parse), the same source as the
+running machine's `GetOsRom`, and the client never guesses it. The user chooses
 another ROM by browsing for a ROM image file, or returns to the preset's MOS with
 Use Default; the chosen value is carried into the draft as the `mos_image_uri`
 preset key (the equivalent of `--mos`), written into the preset and so into the
@@ -966,7 +970,9 @@ MOS); the `mos_image_uri` preset key; `describe-rom` for the MOS's title.
 
 Conformance:
 
-- MANDATORY: present the MOS field with the resolved/default value; let the user
+- MANDATORY: present the MOS field with the resolved/default value as the
+  server's title and the file name together, the file name alone when the server
+  has no title; let the user
   browse for a ROM image and use the default; carry the choice into the draft,
   the written preset and the launch.
 - LATITUDE: the field's presentation and where the title is shown; whether a
