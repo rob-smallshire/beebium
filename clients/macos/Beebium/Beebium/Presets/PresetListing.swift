@@ -37,6 +37,10 @@ struct PresetListing: Decodable, Equatable {
     let releaseDate: String?
     let filepath: String
     let thumbnail: Bool
+    /// The server's facet index for this preset (Model, Coprocessor, Disc
+    /// controller, Network, Storage, Peripherals values), used to search the
+    /// catalogue. Optional so a row from an older server still decodes.
+    let facets: PresetFacetValues?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -48,5 +52,6 @@ struct PresetListing: Decodable, Equatable {
         case releaseDate = "release_date"
         case filepath
         case thumbnail
+        case facets
     }
 }

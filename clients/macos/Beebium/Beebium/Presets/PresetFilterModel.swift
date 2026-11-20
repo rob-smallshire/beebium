@@ -12,352 +12,55 @@
 
 import Foundation
 
-/// A filter facet: one popup over the preset catalogue, backed by a tag group.
-/// Each popup is single-selection and defaults to "Any"; selections AND across
-/// popups. The facet keeps `PresetTagger`'s vocabulary and only presents it.
-enum PresetFacet: String, CaseIterable, Identifiable, Sendable {
-    // The spec's six facets in order: four exclusive (Model, Coprocessor, Disc
-    // controller, Network), then two set facets (Storage, Peripherals). "Model",
-    // not "Machine", so it is not confused with the machine instances in the
-    // Welcome window.
-    case model, coprocessor, discController, network, storage, peripherals
-
-    var id: String { rawValue }
-
-    /// Whether every preset has exactly one value (exclusive) or a preset may
-    /// carry several or none (set). Both are single-selection popups; the kind
-    /// documents intent and maps to the server's `describe-facets` kind later.
-    enum Kind { case exclusive, set }
-
-    var kind: Kind {
-        switch self {
-        case .storage, .peripherals: return .set
-        default:                     return .exclusive
-        }
-    }
-
-    /// The tag group this facet filters on (one-to-one, same names).
-    var group: PresetTagGroup {
-        switch self {
-        case .model:          return .model
-        case .coprocessor:    return .coprocessor
-        case .discController: return .discController
-        case .network:        return .network
-        case .storage:        return .storage
-        case .peripherals:    return .peripherals
-        }
-    }
-
-    /// The popup's label.
-    var label: String {
-        switch self {
-        case .model:          return "Model"
-        case .coprocessor:    return "Coprocessor"
-        case .discController: return "Disc controller"
-        case .network:        return "Network"
-        case .storage:        return "Storage"
-        case .peripherals:    return "Peripherals"
-        }
-    }
-
-    /// Whether a "None" choice is offered. Every preset has a model, so Model has
-    /// no None; the rest can lack their value(s).
-    var offersNone: Bool { self != .model }
-
-    /// Whether a preset (its values in this facet's group) counts as "None". For
-    /// most facets that is the absence of any value; for Disc controller, where
-    /// every preset carries one, "None" is the "No disc" value.
-    func isNone(_ values: Set<String>) -> Bool {
-        switch self {
-        case .discController: return !values.contains("8271") && !values.contains("1770")
-        default:              return values.isEmpty
-        }
-    }
-
-    /// The concrete (non-None) values to offer, from the values present in the
-    /// group. Disc controller hides "No disc" here because it is the None choice.
-    func concreteValues(from values: Set<String>) -> [String] {
-        switch self {
-        case .discController: return values.subtracting(["No disc"]).sorted()
-        default:              return values.sorted()
-        }
-    }
-}
-
-/// A single popup's current choice.
-enum FacetChoice: Hashable {
-    case any
-    case none
-    case value(String)
-}
-
-/// Spike state behind the preset catalogue's filter popups and search field:
-/// which tags each preset carries, each popup's choice, and the search text. It
-/// reads each preset file once (the system presets are `.beebium-preset` ZIP
-/// bundles) to derive its tags via `PresetTagger`, then filters the catalogue.
-/// No persistence -- the state lives only as long as the window.
-///
-/// Popup semantics: each facet is single-selection, defaulting to Any; the
-/// choices AND across facets. A choice's count is faceted -- how many presets it
-/// would give under the other popups' selections and the search -- so an item
-/// that can give nothing reads zero and is disabled (Any is always enabled).
+/// Searches the preset catalogue (client-specification.md 5.1). The Presets page
+/// shows one search field and nothing else: the query matches a preset on its
+/// name, its description and every value of its facets (the server's index --
+/// model, coprocessor, disc controller, network, storage values, peripherals
+/// values), case-insensitively, each space-separated word having to match
+/// somewhere. So "master copro", "b+ music" or "aun 1770" each narrow to the
+/// presets a person means. The client derives nothing from preset content; it
+/// indexes the rows the server already classified.
 @MainActor
 final class PresetFilterModel: ObservableObject {
     @Published var searchText: String = ""
-    @Published private(set) var selection: [PresetFacet: FacetChoice] = [:]
 
-    /// Tags per preset id, built by `index`. Published so the catalogue re-renders
-    /// once indexing (which reads the bundles off the main actor) completes and
-    /// the popups can be built from the real tags.
-    @Published private var tagsById: [String: Set<PresetTag>] = [:]
-    /// Lower-cased "name description" per preset id, for substring search.
-    private var searchTextById: [String: String] = [:]
+    /// Per preset, the lower-cased blob searched: its name, description and every
+    /// facet value joined. Published so the catalogue re-renders once indexed.
+    @Published private var blobById: [String: String] = [:]
 
-    /// One selectable choice in a popup, with its faceted count.
-    struct Option: Identifiable {
-        let choice: FacetChoice
-        let label: String
-        let count: Int
-        let isEnabled: Bool
-        var id: FacetChoice { choice }
-    }
-
-    /// One popup: its facet, current choice, and options (Any first).
-    struct Popup: Identifiable {
-        let facet: PresetFacet
-        let choice: FacetChoice
-        let options: [Option]
-        var id: PresetFacet { facet }
-    }
-
-    /// Whether any popup is off Any (the Reset affordance shows then).
-    var isFiltering: Bool { selection.values.contains { $0 != .any } }
-
-    // MARK: - Indexing
-
-    /// The parts of a preset the indexer needs, pulled out as plain values so the
-    /// file reads can run off the main actor.
-    private struct Entry: Sendable {
-        let id: String
-        let filepath: String
-        let model: String?
-        let builtinFdcDevice: String?
-        let search: String
-    }
-
-    /// Derive and cache every preset's tags and searchable text. The system
-    /// presets are `.beebium-preset` ZIP bundles, so the preset JSON is extracted
-    /// from the bundle (off the main actor); this is fine for a local spike, and
-    /// the server will supply the tags later. The machine family comes from the
-    /// row's model, so it survives even when the bundle cannot be read. The
-    /// Storage tag needs each model's built-in disc controller, which the model's
-    /// storage schema reports (`builtin.fdc.device`); fetch it once per model.
-    /// Re-indexing the same list is cheap and idempotent.
-    func index(_ presets: [MachinePreset]) async {
-        let builtinFdc = await builtinFdcDevices(for: presets)
-        let entries = presets.map { preset in
-            Entry(id: preset.presetId, filepath: preset.presetFilepath, model: preset.modelId,
-                  builtinFdcDevice: builtinFdc[preset.coreExecutablePath],
-                  search: "\(preset.name) \(preset.modelDescription ?? "")".lowercased())
+    /// Build the search blob for each preset from the row (its name, description
+    /// and facet values). Cheap and idempotent; no files, no subprocesses.
+    func index(_ presets: [MachinePreset]) {
+        var blobs: [String: String] = [:]
+        for preset in presets {
+            blobs[preset.presetId] = Self.blob(for: preset)
         }
-        let derived = await Task.detached { () -> [(String, Set<PresetTag>, String)] in
-            entries.map { entry in
-                let object = Self.presetObject(atFilepath: entry.filepath)
-                let tags = Set(PresetTagger.tags(model: entry.model, preset: object ?? [:],
-                                                 builtinFdcDevice: entry.builtinFdcDevice))
-                return (entry.id, tags, entry.search)
-            }
-        }.value
-
-        var tags: [String: Set<PresetTag>] = [:]
-        var search: [String: String] = [:]
-        for (id, presetTags, searchText) in derived {
-            tags[id] = presetTags
-            search[id] = searchText
-        }
-        tagsById = tags
-        searchTextById = search
-        // Drop any selection the catalogue no longer offers.
-        for facet in PresetFacet.allCases {
-            if case .value(let v) = selection[facet],
-               !allValues(for: facet, in: Array(tags.keys)).contains(v) {
-                selection[facet] = .any
-            }
-        }
+        blobById = blobs
     }
 
-    /// Each model's built-in disc controller device (the storage schema's
-    /// `builtin.fdc.device`, e.g. "WD1770" for the Master and B+ family), keyed by
-    /// the model's executable path. One `describe-preset-schema` per distinct
-    /// model; the client fetches the same schema for the configurator.
-    private func builtinFdcDevices(for presets: [MachinePreset]) async -> [String: String] {
-        let coreCLI = CoreCLI()
-        var devices: [String: String] = [:]
-        for path in Set(presets.map(\.coreExecutablePath)) {
-            if let section: StorageSchemaSection = await coreCLI.schemaSection(
-                "storage", executablePath: path),
-               let device = section.builtin?.fdc?.device {
-                devices[path] = device
-            }
-        }
-        return devices
-    }
-
-    /// The tags derived for a preset id (empty if unknown). For tests.
-    func tags(forPresetId id: String) -> Set<PresetTag> { tagsById[id] ?? [] }
-
-    /// Seed tags directly, bypassing the file read. For tests only.
-    func loadTagsForTesting(_ tags: [String: [PresetTag]], search: [String: String] = [:]) {
-        tagsById = tags.mapValues(Set.init)
-        searchTextById = search
-    }
-
-    // MARK: - Selection
-
-    func select(_ facet: PresetFacet, _ choice: FacetChoice) {
-        selection[facet] = choice
-    }
-
-    func choice(for facet: PresetFacet) -> FacetChoice { selection[facet] ?? .any }
-
-    /// Reset every popup to Any (the search field clears itself).
-    func reset() {
-        selection.removeAll()
-    }
-
-    // MARK: - Filtering
-
+    /// The presets matching the current query. Empty query -> all presets, in
+    /// their given order.
     func filtered(_ presets: [MachinePreset]) -> [MachinePreset] {
-        presets.filter { matchesSearch($0.presetId) && matchesSelection($0.presetId) }
-    }
-
-    /// The popups to show, in facet order. A facet with fewer than two non-Any
-    /// options across the whole catalogue (nothing to choose) is omitted, so the
-    /// row stays stable as selections change.
-    func popups(for presets: [MachinePreset]) -> [Popup] {
-        let ids = presets.map(\.presetId)
-        return PresetFacet.allCases.compactMap { facet in
-            let choices = offeredChoices(for: facet, in: ids)
-            guard choices.count >= 2 else { return nil }   // only "Any": nothing to pick
-            let current = choice(for: facet)
-            let options = ([FacetChoice.any] + choices).map { choice -> Option in
-                let count = count(for: facet, choice: choice, in: presets)
-                let enabled = choice == .any || count > 0 || choice == current
-                return Option(choice: choice, label: label(for: choice, facet: facet, count: count),
-                              count: count, isEnabled: enabled)
-            }
-            return Popup(facet: facet, choice: current, options: options)
+        let words = Self.queryWords(searchText)
+        guard !words.isEmpty else { return presets }
+        return presets.filter { preset in
+            let blob = blobById[preset.presetId] ?? Self.blob(for: preset)
+            return words.allSatisfy { blob.contains($0) }
         }
     }
 
-    /// The short label for a facet's current choice, for the popup's button.
-    func selectionLabel(for facet: PresetFacet) -> String {
-        switch choice(for: facet) {
-        case .any:           return "Any"
-        case .none:          return "None"
-        case .value(let v):  return v
-        }
+    /// The lower-cased searchable text for a preset: its name, description and
+    /// every facet value.
+    static func blob(for preset: MachinePreset) -> String {
+        var parts = [preset.name]
+        if let description = preset.modelDescription { parts.append(description) }
+        for values in preset.facets.values { parts.append(contentsOf: values) }
+        return parts.joined(separator: " ").lowercased()
     }
 
-    // MARK: - Options and counts
-
-    /// The non-Any choices a facet offers across the whole catalogue, value
-    /// choices first then None (when the facet offers it and some preset is None).
-    private func offeredChoices(for facet: PresetFacet, in ids: [String]) -> [FacetChoice] {
-        var choices = allValues(for: facet, in: ids).sorted().map { FacetChoice.value($0) }
-        if facet.offersNone, ids.contains(where: { facet.isNone(groupValues($0, facet.group)) }) {
-            choices.append(.none)
-        }
-        return choices
-    }
-
-    /// The concrete values present for a facet across the given presets.
-    private func allValues(for facet: PresetFacet, in ids: [String]) -> Set<String> {
-        var values = Set<String>()
-        for id in ids { values.formUnion(facet.concreteValues(from: groupValues(id, facet.group))) }
-        return values
-    }
-
-    private func label(for choice: FacetChoice, facet: PresetFacet, count: Int) -> String {
-        switch choice {
-        case .any:          return "Any"
-        case .none:         return "None (\(count))"
-        case .value(let v): return "\(v) (\(count))"
-        }
-    }
-
-    /// How many presets a choice would give: those it matches that also pass the
-    /// search and the other facets' selections (this facet is excluded, since
-    /// choosing within it replaces its current choice).
-    private func count(for facet: PresetFacet, choice: FacetChoice, in presets: [MachinePreset]) -> Int {
-        presets.filter { preset in
-            matchesSearch(preset.presetId)
-                && matchesSelection(preset.presetId, ignoring: facet)
-                && matchesFacet(preset.presetId, facet: facet, choice: choice)
-        }.count
-    }
-
-    // MARK: - Predicates
-
-    private func groupValues(_ id: String, _ group: PresetTagGroup) -> Set<String> {
-        Set((tagsById[id] ?? []).filter { $0.group == group }.map(\.value))
-    }
-
-    private func matchesSearch(_ id: String) -> Bool {
-        let needle = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else { return true }
-        return (searchTextById[id] ?? "").contains(needle)
-    }
-
-    /// Whether a preset satisfies every facet's selection (AND), optionally
-    /// ignoring one facet (for counting within that facet).
-    private func matchesSelection(_ id: String, ignoring ignored: PresetFacet? = nil) -> Bool {
-        for facet in PresetFacet.allCases where facet != ignored {
-            if !matchesFacet(id, facet: facet, choice: choice(for: facet)) { return false }
-        }
-        return true
-    }
-
-    private func matchesFacet(_ id: String, facet: PresetFacet, choice: FacetChoice) -> Bool {
-        let values = groupValues(id, facet.group)
-        switch choice {
-        case .any:          return true
-        case .none:         return facet.isNone(values)
-        case .value(let v): return values.contains(v)
-        }
-    }
-
-    // MARK: - Bundle reading
-
-    /// The preset's JSON object: `preset.json` from the `.beebium-preset` ZIP
-    /// bundle, or the file read directly when it is plain JSON. nil when neither
-    /// works, in which case only the row's model-derived tags remain. `nonisolated`
-    /// so the indexer can read bundles off the main actor.
-    nonisolated static func presetObject(atFilepath filepath: String) -> [String: Any]? {
-        if let data = unzipEntry(named: "preset.json", from: filepath),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            return object
-        }
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: filepath)),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            return object
-        }
-        return nil
-    }
-
-    /// Extract one entry's bytes from a ZIP with `/usr/bin/unzip -p`. The entries
-    /// (a preset.json) are tiny, so reading to end before waiting cannot deadlock.
-    nonisolated private static func unzipEntry(named entry: String, from filepath: String) -> Data? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        process.arguments = ["-p", filepath, entry]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0, !data.isEmpty else { return nil }
-        return data
+    /// The query split into lower-cased words on whitespace. Punctuation is kept,
+    /// so "b+" stays "b+" and matches "B+" literally rather than widening to "b".
+    static func queryWords(_ query: String) -> [String] {
+        query.lowercased().split(whereSeparator: { $0.isWhitespace }).map(String.init)
     }
 }

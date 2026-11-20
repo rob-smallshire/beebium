@@ -13,142 +13,95 @@
 import XCTest
 @testable import Beebium
 
-/// The preset filter's popup logic: single-selection facets that AND together,
-/// faceted counts, the None choice (absence, or "No disc" for the exclusive Disc
-/// controller facet), set facets where choosing a value means "has", and the rule
-/// that a facet with nothing to choose is hidden. Tags are seeded directly, so no
-/// files are read.
+/// The preset catalogue search: a query matches a preset on its name, its
+/// description and every facet value, case-insensitively, with each
+/// space-separated word having to match somewhere (AND). "b+" is literal.
 @MainActor
 final class PresetFilterModelTests: XCTestCase {
 
-    private func t(_ group: PresetTagGroup, _ value: String) -> PresetTag {
-        PresetTag(group: group, value: value)
+    private func preset(_ id: String, name: String, description: String? = nil,
+                        facets: [String: [String]] = [:]) -> MachinePreset {
+        MachinePreset(id: UUID(), presetId: id, name: name, coreExecutablePath: "",
+                      presetFilepath: "", facets: facets, source: .systemPreset,
+                      machineDescription: nil, modelName: "", modelDescription: description,
+                      releaseDate: nil, hasThumbnail: false)
     }
 
-    private func preset(_ id: String) -> MachinePreset {
-        MachinePreset(id: UUID(), presetId: id, name: id, coreExecutablePath: "",
-                      presetFilepath: "", source: .systemPreset, machineDescription: nil,
-                      modelName: "", modelDescription: nil, releaseDate: nil, hasThumbnail: false)
-    }
-
-    /// A small catalogue exercising both facet kinds:
-    /// - p1: Model B, 1770, Floppy.
-    /// - p2: Model B, no disc, no storage.
-    /// - p3: Master 128, 65C102, 1770, Floppy.
-    /// - p4: Model B+, 65C02, AUN, 1770, Floppy + Hard disc, Music 5000.
+    /// A small catalogue mirroring real rows (name + description + facets).
     private func seeded() -> (PresetFilterModel, [MachinePreset]) {
+        let presets = [
+            preset("master", name: "Master 128", description: "BBC Master 128, MOS 3.20",
+                   facets: ["model": ["Master 128"], "coprocessor": ["None"],
+                            "disc_controller": ["1770"], "storage": ["Floppy", "Cassette"]]),
+            preset("master-copro", name: "Master 128, internal 65C102 Copro (4 MHz)",
+                   description: "Master 128, 65C102 copro",
+                   facets: ["model": ["Master 128"], "coprocessor": ["65C102"],
+                            "disc_controller": ["1770"], "storage": ["Floppy", "Cassette"]]),
+            preset("bplus-music", name: "B+ 128K, Music 5000", description: "128K Model B+, Music 5000",
+                   facets: ["model": ["Model B+"], "peripherals": ["Music 5000"],
+                            "disc_controller": ["1770"], "storage": ["Floppy", "Cassette"]]),
+            preset("aun-80", name: "Station 80 (AUN, Model B)", description: "Econet over AUN, ANFS + DFS",
+                   facets: ["model": ["Model B"], "network": ["AUN"],
+                            "disc_controller": ["1770"], "storage": ["Floppy", "Cassette"]]),
+            // A preset whose 8271 is only in the facets, not the name/description,
+            // so a match on it proves facet values are searched.
+            preset("plain", name: "My Machine", description: "a custom build",
+                   facets: ["model": ["Model B"], "disc_controller": ["8271"],
+                            "storage": ["Floppy", "Cassette"]]),
+        ]
         let model = PresetFilterModel()
-        model.loadTagsForTesting([
-            "p1": [t(.model, "Model B"), t(.discController, "1770"), t(.storage, "Floppy")],
-            "p2": [t(.model, "Model B"), t(.discController, "No disc")],
-            "p3": [t(.model, "Master 128"), t(.coprocessor, "65C102"),
-                   t(.discController, "1770"), t(.storage, "Floppy")],
-            "p4": [t(.model, "Model B+"), t(.coprocessor, "65C02"), t(.network, "AUN"),
-                   t(.discController, "1770"), t(.storage, "Floppy"), t(.storage, "Hard disc"),
-                   t(.peripherals, "Music 5000")],
-        ])
-        return (model, ["p1", "p2", "p3", "p4"].map(preset))
+        model.index(presets)
+        return (model, presets)
     }
 
-    private func popup(_ model: PresetFilterModel, _ presets: [MachinePreset],
-                       _ facet: PresetFacet) -> PresetFilterModel.Popup? {
-        model.popups(for: presets).first { $0.facet == facet }
+    private func results(_ model: PresetFilterModel, _ presets: [MachinePreset],
+                         _ query: String) -> [String] {
+        model.searchText = query
+        return model.filtered(presets).map(\.presetId)
     }
 
-    private func count(_ popup: PresetFilterModel.Popup?, _ choice: FacetChoice) -> Int? {
-        popup?.options.first { $0.choice == choice }?.count
-    }
-
-    func testModelPopupOffersItsValuesWithCounts() {
+    func testEmptyQueryReturnsEverythingInOrder() {
         let (model, presets) = seeded()
-        let modelFacet = popup(model, presets, .model)
-        XCTAssertEqual(count(modelFacet, .value("Model B")), 2)
-        XCTAssertEqual(count(modelFacet, .value("Model B+")), 1)
-        XCTAssertEqual(count(modelFacet, .value("Master 128")), 1)
-        // Model has no None (every preset has one).
-        XCTAssertNil(count(modelFacet, .none))
+        XCTAssertEqual(results(model, presets, ""), presets.map(\.presetId))
+        XCTAssertEqual(results(model, presets, "   "), presets.map(\.presetId))
     }
 
-    func testDiscControllerNoneIsTheNoDiscValue() {
+    func testMultiWordQueryAndsAcrossWords() {
         let (model, presets) = seeded()
-        let disc = popup(model, presets, .discController)
-        XCTAssertEqual(count(disc, .value("1770")), 3)   // p1, p3, p4
-        XCTAssertNil(count(disc, .value("No disc")))     // shown as None, not a value
-        XCTAssertEqual(count(disc, .none), 1)            // p2
+        // "master" matches both Masters; "65c102" only the copro one -> their AND.
+        XCTAssertEqual(results(model, presets, "65c102 master"), ["master-copro"])
     }
 
-    func testCoprocessorNoneCountsPresetsWithoutOne() {
+    func testCaseInsensitive() {
         let (model, presets) = seeded()
-        let copro = popup(model, presets, .coprocessor)
-        XCTAssertEqual(count(copro, .value("65C02")), 1)
-        XCTAssertEqual(count(copro, .value("65C102")), 1)
-        XCTAssertEqual(count(copro, .none), 2)           // p1, p2
+        XCTAssertEqual(Set(results(model, presets, "MASTER")), ["master", "master-copro"])
+        XCTAssertEqual(results(model, presets, "aun 1770"), ["aun-80"])
     }
 
-    func testStorageIsASetFacetWhereValueMeansHas() {
+    func testBPlusIsMatchedLiterally() {
         let (model, presets) = seeded()
-        let storage = popup(model, presets, .storage)
-        XCTAssertEqual(count(storage, .value("Floppy")), 3)     // p1, p3, p4
-        XCTAssertEqual(count(storage, .value("Hard disc")), 1)  // p4
-        XCTAssertEqual(count(storage, .none), 1)                // p2 has no storage
-        // Choosing Hard disc keeps only the preset that has it.
-        model.select(.storage, .value("Hard disc"))
-        XCTAssertEqual(model.filtered(presets).map(\.presetId), ["p4"])
+        // "b+" must not be tokenised to "b" (which would match everything); it
+        // matches the B+ preset's name literally.
+        XCTAssertEqual(results(model, presets, "b+"), ["bplus-music"])
+        XCTAssertEqual(results(model, presets, "b+ music"), ["bplus-music"])
     }
 
-    func testFacetWithNothingToChooseIsHidden() {
-        // A catalogue where every preset has the one same model and no other
-        // facet: only Model has (one) value, so no popup can be built.
-        let model = PresetFilterModel()
-        model.loadTagsForTesting([
-            "a": [t(.model, "Model B")],
-            "b": [t(.model, "Model B")],
-        ])
-        let presets = ["a", "b"].map(preset)
-        // Model has a single value (no None) -> fewer than two choices -> hidden.
-        XCTAssertNil(popup(model, presets, .model))
-        // The other facets have no values at all -> also hidden.
-        XCTAssertNil(popup(model, presets, .storage))
-        XCTAssertNil(popup(model, presets, .network))
-    }
-
-    func testSelectionsAndTogether() {
+    func testSearchesFacetValuesNotJustNameAndDescription() {
         let (model, presets) = seeded()
-        model.select(.model, .value("Model B"))
-        XCTAssertEqual(Set(model.filtered(presets).map(\.presetId)), ["p1", "p2"])
-        model.select(.discController, .value("1770"))
-        XCTAssertEqual(model.filtered(presets).map(\.presetId), ["p1"])
+        // "8271" appears only in the plain preset's facets, nowhere in its text.
+        XCTAssertEqual(results(model, presets, "8271"), ["plain"])
+        // "floppy" is a facet value on several and in none of the names.
+        XCTAssertEqual(Set(results(model, presets, "floppy")),
+                       ["master", "master-copro", "bplus-music", "aun-80", "plain"])
     }
 
-    func testNoneChoiceFiltersAbsence() {
+    func testNoMatchIsEmpty() {
         let (model, presets) = seeded()
-        model.select(.coprocessor, .none)
-        XCTAssertEqual(Set(model.filtered(presets).map(\.presetId)), ["p1", "p2"])
-        model.select(.coprocessor, .any)
-        model.select(.storage, .none)
-        XCTAssertEqual(model.filtered(presets).map(\.presetId), ["p2"])   // only p2 has no storage
+        XCTAssertEqual(results(model, presets, "nonesuch"), [])
     }
 
-    func testCountsAreFacetedAgainstOtherSelections() {
-        let (model, presets) = seeded()
-        model.select(.model, .value("Model B"))
-        // Under Model = Model B, the Disc controller popup counts only p1/p2.
-        let disc = popup(model, presets, .discController)
-        XCTAssertEqual(count(disc, .value("1770")), 1)   // p1
-        XCTAssertEqual(count(disc, .none), 1)            // p2
-        // A choice that can give nothing is disabled (65C102 is Master-only).
-        let copro = popup(model, presets, .coprocessor)
-        let c102 = copro?.options.first { $0.choice == .value("65C102") }
-        XCTAssertEqual(c102?.count, 0)
-        XCTAssertEqual(c102?.isEnabled, false)
-    }
-
-    func testResetClearsEverySelection() {
-        let (model, presets) = seeded()
-        model.select(.model, .value("Master 128"))
-        XCTAssertTrue(model.isFiltering)
-        model.reset()
-        XCTAssertFalse(model.isFiltering)
-        XCTAssertEqual(model.filtered(presets).count, 4)
+    func testQueryWordsKeepPunctuation() {
+        XCTAssertEqual(PresetFilterModel.queryWords(" B+  Music "), ["b+", "music"])
+        XCTAssertEqual(PresetFilterModel.queryWords(""), [])
     }
 }

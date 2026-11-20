@@ -136,14 +136,14 @@ struct WelcomeWindowContent: View {
             let allPresets = presetManager.systemPresets + presetManager.userPresets
             let visible = filter.filtered(allPresets)
 
-            // Spike: filter popups + search above the catalogue.
-            PresetFilterBar(model: filter, popups: filter.popups(for: allPresets))
-                .padding(.horizontal, 24)
-                .padding(.bottom, 4)
+            // One search field above the catalogue (no facet controls).
+            SearchField(text: $filter.searchText, placeholder: "Search presets")
+                .frame(maxWidth: 260)
+                .padding(.bottom, 8)
 
             ScrollView {
                 if visible.isEmpty {
-                    Text("No presets match the current filters.")
+                    Text("No presets match your search.")
                         .font(.callout)
                         .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity)
@@ -166,7 +166,7 @@ struct WelcomeWindowContent: View {
             .frame(minHeight: 100, idealHeight: gridHeight, maxHeight: gridHeight)
             .onPreferenceChange(GridHeightKey.self) { gridHeight = $0 }
             .task(id: allPresets.map(\.presetId).joined(separator: "|")) {
-                await filter.index(allPresets)
+                filter.index(allPresets)
             }
 
             // Error display
