@@ -106,6 +106,27 @@ Two accessors cover the 16-bit address space. `peek` reads without side
 effects and is safe on hardware registers; `bus` is a CPU-visible read or
 write, which is what you want to poke RAM or kick a device.
 
+The difference matters on any chip whose registers react to being read. The
+6850 ACIA at &FE08 is the clearest case: reading its receive data register
+at &FE09 tells the chip the character has been taken. It clears RDRF in the
+status register, drops the receive interrupt, clears the /DCD latch and
+resolves a pending overrun into the OVRN bit. A `bus` read there from the
+debugger hands the byte to you instead of the MOS, and the serial or cassette
+interrupt the MOS was about to service is gone. A `peek` returns the same
+byte and leaves all of that as it was. The System VIA is the same: reading
+port A at &FE41 clears the CA1 and CA2 interrupt flags, which on the BBC are
+vertical sync and the keyboard.
+
+```python
+>>> bbc.memory.address.peek[0xFE08]        # ACIA status, nothing changes
+>>> bbc.memory.address.peek[0xFE09]        # the waiting character, still waiting
+>>> bbc.memory.address.bus[0xFE09]         # take it: RDRF and the IRQ clear
+```
+
+Neither accessor takes a clock cycle. A debugger access goes to the chips
+directly, not through the CPU, so no time passes, the CPU's registers are
+untouched and nothing else on the board notices.
+
 ```python
 >>> bbc.memory.address.peek[0:16].hex(" ")
 '02 0e 02 0e 00 7c 00 7c 00 00 00 00 07 41 52 57'
