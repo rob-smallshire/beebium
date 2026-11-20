@@ -346,13 +346,16 @@ file(MAKE_DIRECTORY ${ROM_OUTPUT_DIR})
 # Every bundled ROM, as an installed bundle ships them all, so a dev-tree or
 # BEEBIUM_SERVERS_DIRPATH launch finds any ROM a preset or --sideways names.
 # (Tube coprocessor ROMs are not here: they ship inside each coprocessor
-# plugin's roms/ directory and load via the extension.)
+# plugin's roms/ directory and load via the extension.) Staged by one target
+# every server depends on, like the blank templates below, so building any
+# one server alone (beebium-master-128, say) stages the ROMs it boots.
 file(GLOB BUNDLED_ROM_FILEPATHS CONFIGURE_DEPENDS "${BEEBIUM_ROM_DIR}/*.rom")
-add_custom_command(TARGET beebium-model-b POST_BUILD
+add_custom_target(beebium-bundled-roms
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${BUNDLED_ROM_FILEPATHS}
         "${ROM_OUTPUT_DIR}/"
-    COMMENT "Copying host ROMs to build directory"
+    COMMENT "Staging the bundled ROMs"
+    VERBATIM
 )
 
 # Blank disc and tape templates (discs/blank/, made by
@@ -400,14 +403,14 @@ add_custom_target(beebium-blank-templates
     VERBATIM
 )
 foreach(server_target ${BEEBIUM_SERVERS_DEPS})
-    if(server_target MATCHES "^beebium-model-")
+    if(server_target MATCHES "^beebium-(model|master)-")
         get_target_property(server_output_dirpath ${server_target} RUNTIME_OUTPUT_DIRECTORY)
         if(server_output_dirpath)
             message(FATAL_ERROR
                 "${server_target} sets RUNTIME_OUTPUT_DIRECTORY (${server_output_dirpath}); "
                 "beebium-blank-templates stages into ${CMAKE_CURRENT_BINARY_DIR} and must follow it.")
         endif()
-        add_dependencies(${server_target} beebium-blank-templates)
+        add_dependencies(${server_target} beebium-blank-templates beebium-bundled-roms)
     endif()
 endforeach()
 
