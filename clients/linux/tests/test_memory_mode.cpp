@@ -125,7 +125,8 @@ TEST_CASE("One row per socket, highest priority first: number, name, status",
         odd->set_image_name("/roms/mystery.bin");
         fixture.add_socket(status, {0, 4, 8, 12}, beebium::SIDEWAYS_SLOT_TYPE_EMPTY, "IC52");
     });
-    MemorySidebar memory(fixture.sideways);
+    // The server is on this host.
+    MemorySidebar memory(fixture.sideways, [] { return true; });
     memory.resize(Sidebar::WIDTH, 500);
     memory.show();
     REQUIRE(wait_until([&] { return memory.row_count() == 4; }));
@@ -144,6 +145,12 @@ TEST_CASE("One row per socket, highest priority first: number, name, status",
     CHECK(row(0)->toolTip() == QStringLiteral("IC101\nSlots 3, 7, 11, 15  (priority 15)\n"
                                               "Language\n/roms/bbc-basic_2.rom"));
     CHECK(row(3)->toolTip() == QStringLiteral("IC52\nSlots 0, 4, 8, 12  (priority 12)"));
+    // A server elsewhere: its paths are not this host's, so not shown.
+    MemorySidebar remote(fixture.sideways, [] { return false; });
+    REQUIRE(remote.row_count() == 4);
+    CHECK(remote.row(0)->toolTip() == QStringLiteral("IC101\nSlots 3, 7, 11, 15  (priority 15)\n"
+                                                     "Language"));
+    CHECK(remote.row(2)->toolTip() == QStringLiteral("IC88\nSlots 1, 5, 9, 13  (priority 13)"));
     // No socket label or slot list in the row itself: data in the tooltip.
     CHECK_FALSE(visible_texts(memory).contains(QStringLiteral("IC101")));
 }

@@ -129,7 +129,9 @@ QString kind_name(const std::string& kind) {
     return name;
 }
 
-QString tooltip(const SidewaysSocket& socket) {
+// The image's path only where the server shares this host's filesystem
+// (3.2, 11): elsewhere it names a file on another machine.
+QString tooltip(const SidewaysSocket& socket, bool shares) {
     QStringList lines;
     if (!socket.label.empty()) {
         lines << QString::fromStdString(socket.label);
@@ -148,7 +150,7 @@ QString tooltip(const SidewaysSocket& socket) {
         }
         lines << kinds.join(QStringLiteral(" / "));
     }
-    if (!socket.image_filepath.empty()) {
+    if (shares && !socket.image_filepath.empty()) {
         lines << QString::fromStdString(socket.image_filepath);
     }
     return lines.join(QLatin1Char('\n'));
@@ -185,9 +187,10 @@ MemoryRow::MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, Sh
         }
     }
     protected_ = write_group_ && write_group_->write_protected;
+    const bool shares_filesystem = shares_ && shares_();
     if (role == Role::socket) {
-        setToolTip(tooltip(socket_));
-    } else if (shares_ && shares_()) {
+        setToolTip(tooltip(socket_, shares_filesystem));
+    } else if (shares_filesystem) {
         setToolTip(QString::fromStdString(socket_.image_filepath));
     }
 
