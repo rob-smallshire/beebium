@@ -3858,17 +3858,18 @@ std::filesystem::path shipped_preset(const std::string& id) {
 }
 
 // A Master preset with banks 9-15 written as resolve-preset wrote them for
-// MOS 3.20, marked, and the given MOS and extra slots.
-std::string marked_master_preset(const std::string& mos, const std::string& extra_slots = "") {
-    std::string slots;
+// MOS 3.20, marked, and the given MOS. Built as JSON, so a Windows path's
+// backslashes are escaped.
+std::string marked_master_preset(const std::string& mos) {
+    nlohmann::json slots = nlohmann::json::array();
     for (const auto& [slot, image] : MOS_3_20_BANKS) {
-        slots += R"({"slot": )" + std::to_string(slot) + R"(, "type": "rom", "image_uri": ")" +
-                 image + R"(", "source": "mos"},)";
+        slots.push_back({{"slot", slot}, {"type", "rom"}, {"image_uri", image}, {"source", "mos"}});
     }
-    slots += extra_slots;
-    if (!slots.empty() && slots.back() == ',') slots.pop_back();
-    return R"({"model": "master-128", "name": "Marked", "mos_image_uri": ")" + mos +
-           R"(", "sideways_bank": {"slots": [)" + slots + "]}}";
+    const nlohmann::json preset = {{"model", "master-128"},
+                                   {"name", "Marked"},
+                                   {"mos_image_uri", mos},
+                                   {"sideways_bank", {{"slots", slots}}}};
+    return preset.dump();
 }
 
 }  // namespace
