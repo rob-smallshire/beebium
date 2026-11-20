@@ -941,8 +941,11 @@ same UUID; to a taken name -> refused, title unchanged.
 
 Profile: Core.
 
-Behaviour. The configurator's machine (Processor) section offers the MOS
-(operating-system) ROM as a single field, after the emulation speed. It presents
+Behaviour. The configurator's Memory section offers the MOS (operating-system)
+ROM as a single field, at the top, above the sideways banks: the same place the
+running machine's Memory sidebar shows it (section 11), and the memory map's
+order, OS over sideways. It does not belong with the processor, even though a
+coprocessor's firmware is chosen alongside that coprocessor. It presents
 the MOS the machine will boot with -- the resolved preset's value, which is the
 model's own default when the preset sets none -- as a title where the ROM
 resolves (e.g. "MOS 3.50") and otherwise the image's name. The user chooses
@@ -967,7 +970,8 @@ Conformance:
   browse for a ROM image and use the default; carry the choice into the draft,
   the written preset and the launch.
 - LATITUDE: the field's presentation and where the title is shown; whether a
-  by-name ROM picker (#297) is offered beyond Browse.
+  by-name ROM picker (#297) is offered beyond Browse. Its home in the Memory
+  section, above the sideways banks, is not latitude.
 
 Scenario: on the Master, set the MOS to acorn-mos_3_50.rom and launch -> the
 machine boots MOS 3.50 (its *HELP reports OS 3.50), with banks 9-15 re-derived to
