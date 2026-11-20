@@ -56,7 +56,7 @@ pip install 'beebium[discovery]'
 >>> bbc.memory
 <Memory master-128 regions: main_ram, lynne, hazel, andy, mos_rom, bank_0, bank_1, ..., bank_15>
 >>> bbc.memory.region("hazel")
-<Region 'hazel' &C000-&DFFF>
+<Region 'hazel' 0xC000-0xDFFF>
 ```
 
 Every object the client hands back prints as one line like these, so a bare
