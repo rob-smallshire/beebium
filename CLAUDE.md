@@ -272,6 +272,7 @@ Two controllers for the Model B's FDC socket, chosen with `--fdc`:
 - `master-128.md` - The BBC Master 128 as built: the memory and the ROMSEL/ACCCON paging rules (X, E's SYNC rule, Y, D, TST, IRR, ITU, IFJ), the SHEILA and 1 MHz maps and the stale data bus, the MC146818 on the System VIA with the Welcome Guide CMOS seed and the master-128-cmos unit, the keypad, the 1770's Master latch, the two Tubes and placement with `at`, FRED/JIM by IFJ, the cartridge slots whose cartridges provide their banks, the modem connector, LK18/LK19, the presets, the debugger names, the tests, and what is unverified (#189)
 - `sideways-slots.md` - Sideways ROM/RAM topology, validation rules, motherboard links
 - `deployment.md` - Installed layout and runtime ROM/preset discovery
+- `python-debugger-repl.md` - Driving a running server from a Python REPL as a command-line debugger: connect, stop and run, registers and disassembly, peek/bus and named-region memory access, stepping, conditional breakpoints and watchpoints with the machine's condition names, run-for-cycles and run_to, with a transcript from a Master 128 session
 - `preset-schema.md` - The preset file format: every key, path resolution, which models accept what, CLI-over-preset precedence, resolve-preset and describe-preset-schema
 - `packaging.md` - Server distribution: the self-contained static `.deb`/`.tar.gz` bundles, platforms, CI, status
 - `versioning-and-compatibility.md` - Monorepo versioning (bump-my-version) and the protocol fingerprint compatibility handshake
