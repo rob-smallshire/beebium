@@ -19,13 +19,21 @@ Each test gets a fresh BBC Micro instance via the ``bbc`` fixture.
 
 from __future__ import annotations
 
+import time
+
 import grpc
 import pytest
 
 from beebium.client import Beebium
 from beebium.client._proto import debugger_pb2
 from beebium.client.cpu import Registers, StatusRegister
-from beebium.client.debugger import Breakpoint, ExecutionStateEvent, Watchpoint
+from beebium.client.debugger import (
+    Breakpoint,
+    ExecutionState,
+    ExecutionStateEvent,
+    ExecutionWaitTimeout,
+    Watchpoint,
+)
 from beebium.client.exceptions import DebuggerError, InvalidConditionError
 
 
@@ -476,6 +484,53 @@ class TestEventStream:
         state = bbc.debugger.run_to(0x0405)
         assert not state.is_running
         assert bbc.cpu.a == 0x42
+
+
+def wait_until_stopped(bbc: Beebium, *, within: float = 10.0) -> ExecutionState:
+    """Poll until the machine has stopped, as a person at a REPL would see it."""
+    deadline = time.monotonic() + within
+    while time.monotonic() < deadline:
+        state = bbc.debugger.get_state()
+        if not state.is_running:
+            return state
+        time.sleep(0.01)
+    raise AssertionError(f"machine still running after {within}s")
+
+
+class TestWaitForStopSince:
+    """wait_for_stop(since=...) at the pace of someone typing at a REPL."""
+
+    def test_returns_a_stop_that_happened_before_it_subscribed(self, bbc):
+        # LDA #$42; NOP; NOP
+        plant_and_run_from(bbc, bytes([0xA9, 0x42, 0xEA, 0xEA]))
+        bbc.debugger.add_breakpoint(0x0402)
+        before = bbc.debugger.get_state()
+        bbc.debugger.run()
+        stopped = wait_until_stopped(bbc)
+
+        event = bbc.debugger.wait_for_stop(since=before.sequence, timeout=5.0)
+
+        assert not event.state.is_running
+        assert event.state.sequence == stopped.sequence
+        assert event.state.sequence > before.sequence
+        assert bbc.cpu.pc == 0x0402
+
+    def test_waits_for_a_stop_still_to_come(self, bbc):
+        plant_and_run_from(bbc, COUNTING_LOOP)
+        bbc.debugger.add_breakpoint(0x0402, condition="X == 0x80")
+        before = bbc.debugger.get_state()
+        bbc.debugger.run()
+
+        event = bbc.debugger.wait_for_stop(since=before.sequence, timeout=10.0)
+
+        assert not event.state.is_running
+        assert event.state.sequence > before.sequence
+        assert bbc.cpu.x == 0x80
+
+    def test_a_stop_no_newer_than_since_is_not_counted(self, stopped_bbc):
+        current = stopped_bbc.debugger.get_state()
+        with pytest.raises(ExecutionWaitTimeout):
+            stopped_bbc.debugger.wait_for_stop(since=current.sequence, timeout=1.0)
 
 
 # ============================================================================

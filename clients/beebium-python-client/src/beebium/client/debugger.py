@@ -947,17 +947,36 @@ class Debugger:
                 ) from None
             raise
 
-    def wait_for_stop(self, *, timeout: float = DEFAULT_TIMEOUT) -> ExecutionStateEvent:
+    def wait_for_stop(
+        self, *, timeout: float = DEFAULT_TIMEOUT, since: int | None = None
+    ) -> ExecutionStateEvent:
         """Wait for the machine to stop executing.
 
         Subscribes to the execution state stream and waits for a stopped
-        event with a higher sequence number than the initial snapshot.
-        This handles the case where the server coalesces running+stopped
-        events when a breakpoint fires immediately.
+        event with a higher sequence number than the stream's initial
+        snapshot. This handles the case where the server coalesces
+        running+stopped events when a breakpoint fires immediately.
 
-        To *resume and then* wait for the next stop, use
+        With ``since``, the wait counts stops from that execution-state
+        sequence number instead (``ExecutionState.sequence``, as
+        :meth:`get_state` and :meth:`stop` return it): a machine already
+        stopped with a newer sequence returns at once, from the stream's
+        initial snapshot. That is the form for a REPL, where by the time a
+        person has typed the wait the machine may long since have stopped::
+
+            before = bbc.debugger.get_state()
+            bbc.debugger.run()
+            bbc.basic.type_and_enter('PRINT "Hello"')
+            bbc.debugger.wait_for_stop(since=before.sequence)
+
+        Read ``before`` while the machine is stopped, before ``run()``: every
+        run and every stop after it has a higher sequence number, so the
+        wait cannot miss the stop it is for, however late it starts.
+
+        In a script, to *resume and then* wait for the next stop, use
         :meth:`run_and_wait_for_stop`: pairing ``ensure_running()`` with this
-        method races a breakpoint that fires before this call subscribes.
+        method without ``since`` races a breakpoint that fires before this
+        call subscribes.
 
         Requires: any run state.
         Leaves the machine: STOPPED.
@@ -966,6 +985,9 @@ class Debugger:
 
         Args:
             timeout: Wall-clock deadline in seconds for the entire wait.
+            since: The execution-state sequence number to count stops from.
+                None (the default) counts from the stream's initial snapshot,
+                so only a stop after this call subscribes is returned.
 
         Returns:
             The event that caused the machine to stop.
@@ -974,14 +996,16 @@ class Debugger:
             DebuggerError: If the timeout expires or the stream ends without
                 a stop event.
         """
-        initial_sequence = None
-        for event in self.watch_execution_state(timeout=timeout):
-            if initial_sequence is None:
-                initial_sequence = event.state.sequence
-                continue
-            if event.state.is_running:
-                continue
-            if event.state.sequence > initial_sequence:
+        stream = self.watch_execution_state(timeout=timeout)
+        initial = next(stream, None)
+        if initial is None:
+            raise DebuggerError("Execution state stream ended without a stop event")
+        if since is None:
+            since = initial.state.sequence
+        elif not initial.state.is_running and initial.state.sequence > since:
+            return initial
+        for event in stream:
+            if not event.state.is_running and event.state.sequence > since:
                 return event
         raise DebuggerError("Execution state stream ended without a stop event")
 
