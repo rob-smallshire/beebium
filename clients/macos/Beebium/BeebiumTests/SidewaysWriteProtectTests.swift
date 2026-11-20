@@ -63,7 +63,7 @@ final class SidewaysProtectionTests: XCTestCase {
         // Given by a path, there is no ROM name; show the file's name, never the
         // whole server path (that is tooltip-only and local-server-gated).
         let osRom = SidewaysClient.OsRom(
-            imageUri: "/Users/someone/custom/myos.rom",
+            imageUri: "/Users/me/custom/myos.rom",
             romName: "", sizeBytes: 16384, title: "myos")
         XCTAssertEqual(osRom.subtitle, "myos.rom")
     }
