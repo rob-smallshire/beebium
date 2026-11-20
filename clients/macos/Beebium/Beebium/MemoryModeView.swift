@@ -55,37 +55,34 @@ struct MemoryModeView: View {
 
     // MARK: - OS section
 
-    /// The fitted OS ROM: one read-only row, the title over the ROM name (or the
-    /// image's file name when it was given by a path). Same typography as a
-    /// sideways row. The server-side path is shown only when the server shares
-    /// this filesystem, like every other path in this sidebar.
+    /// The fitted OS ROM: one read-only row laid out exactly like a sideways
+    /// socket row (shared `memoryRow`, so the two cannot drift) -- the MOS title
+    /// in the title column, a blank slot column, the "ROM" signifier, and the
+    /// sockets' Copy Path / reveal actions under the same local-filesystem
+    /// gating. No slot number and no bare ROM name: the sockets manage without
+    /// one and so does the OS. The server-side path is a tooltip on the row (and
+    /// never on its action button) only when the server shares this filesystem,
+    /// like every other path here.
     @ViewBuilder
     private func osSection(_ osRom: SidewaysClient.OsRom) -> some View {
         sectionHeader("OS")
-        VStack(alignment: .leading, spacing: 1) {
-            Text(osRom.title.isEmpty ? osRom.subtitle : osRom.title)
-                .font(.subheadline)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .foregroundColor(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            // The ROM name, or the image's file name when it came by path, so
-            // the identity beneath the friendly title is always visible.
-            if !osRom.title.isEmpty {
-                Text(osRom.subtitle)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .help(osRomTooltip(osRom))
-        .contentShape(Rectangle())
+        memoryRow(osRowContent(osRom))
         Divider().padding(.leading, 16)
+    }
+
+    /// The OS row's display fields. The slot column is blank (the OS has no slot
+    /// number) and the status is always "ROM" (kept for symmetry with the
+    /// sockets). The title is the manifest title, falling back to the ROM/file
+    /// name only when the server reported no title -- never shown as a second line.
+    func osRowContent(_ osRom: SidewaysClient.OsRom) -> RowContent {
+        RowContent(
+            slot: "",
+            title: osRom.title.isEmpty ? osRom.subtitle : osRom.title,
+            status: "ROM",
+            imageName: osRom.imageUri,
+            writeGroup: nil,
+            hideGroup: nil,
+            tooltip: osRomTooltip(osRom))
     }
 
     private func osRomTooltip(_ osRom: SidewaysClient.OsRom) -> String {
@@ -127,17 +124,59 @@ struct MemoryModeView: View {
     }
 
     private func row(socket: SidewaysClient.Socket) -> some View {
+        memoryRow(rowContent(for: socket))
+    }
+
+    /// A socket's display fields: its priority as the slot column, the ROM title
+    /// (or filename, or blank), the ROM/RAM/- status, the source path for Copy
+    /// Path / reveal, and the covering protection groups that make the menu live.
+    func rowContent(for socket: SidewaysClient.Socket) -> RowContent {
+        // Write-protect is meaningful only for a RAM slot covered by a group -- a
+        // ROM (or empty) slot is inherently write-protected. Toggling moves every
+        // RAM slot in the group together. Hide (read-protect) is meaningful for a
+        // ROM too (S1's use case is hiding a hung ROM), so it is not gated on type.
+        let writeGroup = socket.kind == .ram
+            ? sidewaysClient.group(forSocket: socket, kind: .writeProtect)
+            : nil
+        let hideGroup = sidewaysClient.group(forSocket: socket, kind: .hide)
+        return RowContent(
+            slot: "\(socket.priority)",
+            title: displayName(for: socket),
+            status: statusText(for: socket),
+            imageName: socket.imageName,
+            writeGroup: writeGroup,
+            hideGroup: hideGroup,
+            tooltip: tooltip(for: socket))
+    }
+
+    /// The display fields shared by the OS row and the sideways socket rows, so
+    /// the two are one view and cannot drift. A memory row shows one title line
+    /// and never a name beneath it.
+    struct RowContent {
+        var slot: String
+        var title: String
+        var status: String
+        var imageName: String
+        var writeGroup: SidewaysClient.ProtectionGroup?
+        var hideGroup: SidewaysClient.ProtectionGroup?
+        var tooltip: String
+    }
+
+    /// One memory row -- slot column, title, write-protect padlock column,
+    /// status, actions menu -- rendered the same whether the content came from a
+    /// socket or from the OS row.
+    private func memoryRow(_ content: RowContent) -> some View {
         HStack(spacing: 8) {
-            // Priority (highest slot the socket answers). Tight monospaced
-            // column so it lines up across rows.
-            Text("\(socket.priority)")
+            // Slot column (a socket's priority; blank for the OS row). Tight
+            // monospaced column so it lines up across rows.
+            Text(content.slot)
                 .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
                 .frame(width: 18, alignment: .trailing)
 
             // ROM title (with version when known), else filename, else blank
             // for empty slots - the "-" status column already signals empty.
-            Text(displayName(for: socket))
+            Text(content.title)
                 .font(.subheadline)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -146,18 +185,10 @@ struct MemoryModeView: View {
 
             // Write-protect padlock in a fixed-width leading column, so the
             // status column stays aligned whether or not a row has the control.
-            // Shown only for a RAM slot covered by a write-protect group -- a ROM
-            // (or empty) slot is inherently write-protected, so the control is
-            // meaningless there. Toggling moves every RAM slot in that group
-            // together; slots without the control get an equal-width spacer.
-            let writeGroup = socket.kind == .ram
-                ? sidewaysClient.group(forSocket: socket, kind: .writeProtect)
-                : nil
-            // Hide (read-protect) is meaningful for a ROM too (S1's use case is
-            // hiding a hung ROM), so it is not gated on type.
-            let hideGroup = sidewaysClient.group(forSocket: socket, kind: .hide)
+            // Shown only for a RAM slot covered by a write-protect group; other
+            // rows (and the OS row) get an equal-width spacer.
             Group {
-                if let writeGroup {
+                if let writeGroup = content.writeGroup {
                     writeProtectPadlock(group: writeGroup)
                 } else {
                     Color.clear
@@ -166,32 +197,33 @@ struct MemoryModeView: View {
             .frame(width: 16)
 
             // ROM/RAM/- status, mirroring the running device.
-            Text(statusText(for: socket))
+            Text(content.status)
                 .font(.caption.monospaced())
                 .foregroundColor(.secondary)
                 .frame(width: 32, alignment: .trailing)
 
-            // Always render the menu so populated and empty rows have
-            // the exact same trailing column width; hide and disable
-            // it on rows with nothing to act on. Trying to substitute
-            // a bare Image as a placeholder dances the status column
-            // because the Menu's internal padding doesn't match a
-            // plain Image. A row covered by a protection group is always
-            // actionable (the menu carries Write-Protect / Hide) even when
-            // it has no image for Copy Path / Reveal.
-            let actionable = !socket.imageName.isEmpty || writeGroup != nil || hideGroup != nil
-            actionsMenu(for: socket, writeGroup: writeGroup, hideGroup: hideGroup)
+            // Always render the menu so populated and empty rows have the exact
+            // same trailing column width; hide and disable it on rows with
+            // nothing to act on. Trying to substitute a bare Image as a
+            // placeholder dances the status column because the Menu's internal
+            // padding doesn't match a plain Image. A row covered by a protection
+            // group is always actionable (the menu carries Write-Protect / Hide)
+            // even with no image for Copy Path / reveal.
+            let actionable = !content.imageName.isEmpty
+                || content.writeGroup != nil || content.hideGroup != nil
+            actionsMenu(imageName: content.imageName,
+                        writeGroup: content.writeGroup, hideGroup: content.hideGroup)
                 .opacity(actionable ? 1 : 0)
                 .allowsHitTesting(actionable)
                 .accessibilityHidden(!actionable)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
-        // Whole-row tooltip: socket label (e.g. "IC68 (slot 11)", "SRAM W",
-        // "IC71"), slot numbers, and source filepath when known. Keeps the
-        // sidebar visually compact while making the underlying topology
-        // discoverable on hover.
-        .help(tooltip(for: socket))
+        // Whole-row tooltip (welcome here, unlike on the actions button): the
+        // socket label (e.g. "IC68 (slot 11)", "SRAM W", "IC71") and slots, or
+        // the OS title and server path -- keeping the sidebar compact while
+        // making the detail discoverable on hover.
+        .help(content.tooltip)
         .contentShape(Rectangle())
     }
 
@@ -267,7 +299,7 @@ struct MemoryModeView: View {
 
     // MARK: - Actions menu (Write-Protect / Hide + read-only Copy Path / Reveal)
 
-    private func actionsMenu(for socket: SidewaysClient.Socket,
+    private func actionsMenu(imageName: String,
                              writeGroup: SidewaysClient.ProtectionGroup?,
                              hideGroup: SidewaysClient.ProtectionGroup?) -> some View {
         Menu {
@@ -292,9 +324,9 @@ struct MemoryModeView: View {
 
             Button("Copy Path") {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(socket.imageName, forType: .string)
+                NSPasteboard.general.setString(imageName, forType: .string)
             }
-            .disabled(socket.imageName.isEmpty)
+            .disabled(imageName.isEmpty)
 
             // Both conditions matter, and the file check alone is not
             // enough. It asks whether the path exists on *this* host while
@@ -302,10 +334,10 @@ struct MemoryModeView: View {
             // with a similar install layout it can succeed and reveal a
             // different file that merely shares a path -- worse than not
             // offering the command at all.
-            if isServerLocal && isExistingFile(socket.imageName) {
+            if isServerLocal && isExistingFile(imageName) {
                 Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting(
-                        [URL(fileURLWithPath: socket.imageName)])
+                        [URL(fileURLWithPath: imageName)])
                 }
             }
         } label: {
@@ -320,7 +352,8 @@ struct MemoryModeView: View {
         // redundant.
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Slot actions")
+        // No tooltip on the menu button: it would appear as the menu opens and
+        // confuse itself with the whole-row tooltip. Row tooltips stay.
     }
 
     private func isExistingFile(_ path: String) -> Bool {

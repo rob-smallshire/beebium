@@ -83,9 +83,10 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         /// else the image file's name without its extension.
         let title: String
 
-        /// The identity shown beneath the title: the bare ROM name when the
-        /// server found it on its search path, else the resolved image's file
-        /// name (an image given by an absolute path has no ROM name).
+        /// The ROM's bare identity: its name when the server found it on the ROM
+        /// search path, else the resolved image's file name (an image given by an
+        /// absolute path has no ROM name). The OS row shows the title column, so
+        /// this is only a fallback when the server reported no manifest title.
         var subtitle: String {
             if !romName.isEmpty { return romName }
             return URL(fileURLWithPath: imageUri).lastPathComponent

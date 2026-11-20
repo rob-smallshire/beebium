@@ -49,13 +49,13 @@ final class SidewaysProtectionTests: XCTestCase {
             .rejected("Could not change protection for socket-14."))
     }
 
-    // MARK: - OS ROM subtitle (the identity shown beneath the title)
+    // MARK: - OS ROM bare identity (the title's fallback, and the tooltip line)
 
     func testOsRomSubtitleIsTheBareNameWhenFoundOnTheSearchPath() {
         let osRom = SidewaysClient.OsRom(
             imageUri: "/opt/beebium/roms/acorn-mos_3_20.rom",
             romName: "acorn-mos_3_20", sizeBytes: 16384, title: "Acorn MOS 3.20")
-        // A search-path ROM shows its bare name, not the server's absolute path.
+        // A search-path ROM's bare identity is its name, not the absolute path.
         XCTAssertEqual(osRom.subtitle, "acorn-mos_3_20")
     }
 
@@ -66,6 +66,40 @@ final class SidewaysProtectionTests: XCTestCase {
             imageUri: "/Users/me/custom/myos.rom",
             romName: "", sizeBytes: 16384, title: "myos")
         XCTAssertEqual(osRom.subtitle, "myos.rom")
+    }
+
+    // MARK: - OS row shaped like a socket row
+
+    /// The OS row reuses the socket row, so its content carries the same fields.
+    /// It shows the "ROM" signifier, no slot number, and the title alone -- the
+    /// bare ROM name is no longer a line of its own.
+    func testOsRowShowsTheRomSignifierAndNoNameLine() {
+        let view = MemoryModeView(sidewaysClient: SidewaysClient(), isServerLocal: true)
+        let content = view.osRowContent(SidewaysClient.OsRom(
+            imageUri: "/opt/beebium/roms/acorn-mos_3_20.rom",
+            romName: "acorn-mos_3_20", sizeBytes: 16384, title: "Acorn MOS 3.20"))
+
+        XCTAssertEqual(content.status, "ROM")          // the signifier, always ROM
+        XCTAssertEqual(content.slot, "")               // no slot number
+        // The title column holds the manifest title only; the bare name
+        // ("acorn-mos_3_20") is not appended and has no line of its own.
+        XCTAssertEqual(content.title, "Acorn MOS 3.20")
+        // No protection controls on the OS row -- it is purely informational.
+        XCTAssertNil(content.writeGroup)
+        XCTAssertNil(content.hideGroup)
+        // The image path rides along for Copy Path / reveal.
+        XCTAssertEqual(content.imageName, "/opt/beebium/roms/acorn-mos_3_20.rom")
+    }
+
+    func testOsRowTitleFallsBackToTheBareNameWhenTheServerGaveNoTitle() {
+        let view = MemoryModeView(sidewaysClient: SidewaysClient(), isServerLocal: false)
+        // No manifest title: the title column falls back to the bare name, but
+        // there is still only one line -- never a title plus a name beneath it.
+        let content = view.osRowContent(SidewaysClient.OsRom(
+            imageUri: "/Users/me/custom/myos.rom",
+            romName: "", sizeBytes: 16384, title: ""))
+        XCTAssertEqual(content.title, "myos.rom")
+        XCTAssertEqual(content.status, "ROM")
     }
 
     // MARK: - Which group covers a socket
