@@ -626,10 +626,15 @@ omitted. A preset marked as having no thumbnail is shown with a placeholder and
 never triggers a thumbnail fetch.
 
 Filtering the catalogue (Core). Above the catalogue the client offers one search
-field and nothing else. The search matches a preset on its name, its description
-and every value of its facets, case-insensitively, each space-separated word of
-the query having to match somewhere, so that "master copro", "b+ music" or "aun
-1770" each narrow the list to the presets a person means. The facets are the
+field and nothing else. The search matches a preset on its name, its description,
+every value of its facets and every entry of its `keywords`, case-insensitively,
+each space-separated word of the query having to match somewhere, so that "master
+copro", "b+ music", "aun 1770" or "6502 copro" each narrow the list to the presets
+a person means. The keywords are the server's too: the family names and
+synonyms a value is known by but does not spell ("6502" for a 65C02 or 65C102
+coprocessor, "BBC" and "Micro" for every model), declared alongside the facet
+sources (the model table, the controller registry, an extension's manifest) and
+gathered per row. The facets are the
 server's index for this: every `list-presets --json` row carries a `facets`
 object, and `describe-facets` publishes the facet list with each facet's key,
 label and kind. An exclusive facet gives every preset exactly one value (Model,
@@ -661,8 +666,9 @@ Conformance:
 - MANDATORY: the catalogue comes from `list-presets`, thumbnails from
   `show-preset`, model names from `describe-preset-schema`; a preset whose
   executable is absent is omitted; a no-thumbnail preset is never fetched.
-- MANDATORY: one search field over name, description and the rows' `facets`
-  values, every query word matching somewhere; no per-facet filter controls.
+- MANDATORY: one search field over name, description, the rows' `facets`
+  values and `keywords`, every query word matching somewhere; no per-facet filter
+  controls.
 - LATITUDE: the picker or card presentation, grouping, thumbnail caching;
   whether facet values appear on a card; persistence of the search.
 - MACOS-ONLY: the welcome window and its presets page (the entry-point rule
