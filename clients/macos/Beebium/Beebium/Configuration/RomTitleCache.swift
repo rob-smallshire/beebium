@@ -52,11 +52,16 @@ final class RomTitleCache: ObservableObject {
     /// version) when known, otherwise the image's filename. For a bare
     /// search-path name the filename is the name itself.
     func displayText(forImage image: String) -> String {
-        if let info = byImage[image], !info.title.isEmpty {
-            if !info.version.isEmpty { return "\(info.title) \(info.version)" }
-            return info.title
-        }
-        return URL(fileURLWithPath: image).lastPathComponent
+        title(forImage: image) ?? URL(fileURLWithPath: image).lastPathComponent
+    }
+
+    /// The resolved title (with version) for a ROM image, or nil when the server
+    /// does not recognise it. The configurator's MOS field shows this over the
+    /// file name, and the file name alone when it is nil.
+    func title(forImage image: String) -> String? {
+        guard let info = byImage[image], !info.title.isEmpty else { return nil }
+        if !info.version.isEmpty { return "\(info.title) \(info.version)" }
+        return info.title
     }
 
     /// The resolved ROM kinds for a socket's image (language/service/romfs),

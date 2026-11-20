@@ -14,7 +14,7 @@ import XCTest
 @testable import Beebium
 
 /// Decoding the `mos_image_uri` describe-preset-schema section into the model's
-/// default MOS ROM that the Processor section's MOS field presents.
+/// default MOS ROM that the Memory section's MOS field presents.
 final class MosSchemaSectionTests: XCTestCase {
 
     private func decode(_ json: String) throws -> MosSchemaSection {

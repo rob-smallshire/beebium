@@ -59,11 +59,11 @@ struct ConfigurationEditor: View {
     /// The model's startup schema (screen-mode / auto-boot / links), for Keyboard.
     let startupSchema: StartupSchemaSection?
 
-    /// The model's MOS schema (its default MOS ROM), for Processor.
+    /// The model's MOS schema (its default MOS ROM), for Memory.
     let mosSchema: MosSchemaSection?
 
-    /// Resolves a ROM image to its header (describe-rom), for the Memory and
-    /// Processor tabs.
+    /// Resolves a ROM image to its header (describe-rom), for the Memory tab (the
+    /// sideways sockets and the MOS field).
     let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
 
     /// Host serial-port paths, for choices_from "serial-ports" fields.
@@ -241,6 +241,7 @@ struct ConfigurationEditor: View {
                 draft: $draft,
                 originalDraft: originalDraft,
                 schema: memorySchema,
+                mosSchema: mosSchema,
                 romResolver: romResolver,
                 diagnostics: diagnostics))
         case .peripherals:
@@ -267,10 +268,7 @@ struct ConfigurationEditor: View {
             if let extensionsSchema = extensionsSchema {
                 return AnyView(ProcessorSectionView(
                     draft: $draft,
-                    originalDraft: originalDraft,
                     extensionsSchema: extensionsSchema,
-                    mosSchema: mosSchema,
-                    romResolver: romResolver,
                     diagnostics: diagnostics,
                     serialPorts: serialPorts))
             }

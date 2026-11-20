@@ -269,4 +269,26 @@ final class SidewaysSocketEditorTests: XCTestCase {
         // An empty socket always reads "Empty".
         XCTAssertEqual(cache.displayText(for: .empty), "Empty")
     }
+
+    /// The configurator's MOS field shows the title over the file name, the file
+    /// name alone when the server does not recognise the image. `title(forImage:)`
+    /// drives that: a title when resolved, nil when not.
+    @MainActor
+    func testTitleForImageIsNilUntilTheServerRecognisesTheMos() async {
+        let cache = RomTitleCache()
+        cache.resolver = { image in
+            image == "acorn-mos_3_50.rom"
+                ? RomHeaderInfo(recognised: true, title: "Acorn MOS 3.50", version: "",
+                                copyright: "", isLanguage: false, isServiceOnly: false,
+                                containsRomfs: false, kinds: ["os"])
+                : nil
+        }
+        // Before resolution (and for an unrecognised image) there is no title, so
+        // the field shows the file name alone.
+        XCTAssertNil(cache.title(forImage: "acorn-mos_3_50.rom"))
+        await cache.resolve("acorn-mos_3_50.rom")
+        // Once recognised, the title sits above the file name.
+        XCTAssertEqual(cache.title(forImage: "acorn-mos_3_50.rom"), "Acorn MOS 3.50")
+        XCTAssertNil(cache.title(forImage: "mystery.rom"))
+    }
 }

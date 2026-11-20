@@ -13,27 +13,37 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Memory (sideways ROM/RAM) configuration section, editing the draft directly.
+/// Memory configuration section, editing the draft directly.
 ///
-/// Lists the machine's physical sideways sockets, highest boot-priority first,
-/// showing the slot number(s) each answers and what it holds. The rows are a
-/// projection of the sideways schema over the draft's slot assignments
-/// (`SidewaysSocketEditor`); every edit -- kind, image, write-protect, reorder --
-/// writes straight back into `draft.sidewaysBank.slots`, so the draft is the
-/// only source of truth. The ROM-title cache is the one piece of transient UI
-/// state here; it adorns the display and is never written to the draft.
+/// At the top it offers the MOS (operating-system) ROM -- the host's own
+/// firmware -- above the sideways banks, matching the memory map's order and the
+/// running machine's Memory sidebar (OS over sideways). Below it lists the
+/// machine's physical sideways sockets, highest boot-priority first, showing the
+/// slot number(s) each answers and what it holds. The rows are a projection of
+/// the sideways schema over the draft's slot assignments (`SidewaysSocketEditor`);
+/// every edit -- kind, image, write-protect, reorder -- writes straight back into
+/// `draft.sidewaysBank.slots`, so the draft is the only source of truth. The
+/// ROM-title cache is the one piece of transient UI state here; it adorns both
+/// the MOS field and the socket rows and is never written to the draft.
 struct MemorySectionView: View {
     @Binding var draft: MachineDraft
-    /// The preset as loaded, used to mark sockets changed from it.
+    /// The preset as loaded, used to mark the MOS and sockets changed from it.
     let originalDraft: MachineDraft
     let schema: SidewaysSchemaSection?
+    /// The model's MOS schema (its default MOS ROM); nil hides the MOS field.
+    var mosSchema: MosSchemaSection?
     /// Resolves a ROM image to its header (describe-rom), supplied by the host.
     let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
-    /// resolve-preset diagnostics, so a socket row shows the server's own problem
-    /// for its slot (e.g. a Master bank 9-15 image that does not match the MOS).
+    /// resolve-preset diagnostics, so the MOS field and a socket row show the
+    /// server's own problem for their path (e.g. a Master bank 9-15 image that
+    /// does not match the MOS).
     var diagnostics: [PresetManager.PresetDiagnostic] = []
 
     @StateObject private var titles = RomTitleCache()
+
+    /// The Configurator's shared focus owner: Browse commits and releases a
+    /// focused field before it opens the panel.
+    @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
 
     private typealias Content = SidewaysSocketEditor.Content
     private typealias SocketKind = SidewaysSocketEditor.SocketKind
@@ -58,6 +68,17 @@ struct MemorySectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // The OS (MOS) ROM heads the section, above the sideways banks: the
+            // host's own firmware, in the memory map's order (OS over sideways).
+            if mosSchema != nil {
+                mosControl
+                    .padding(.horizontal, 12)
+                    .padding(.top, 12)
+                Divider()
+                    .padding(.horizontal, 12)
+                    .padding(.top, 12)
+            }
+
             header
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
@@ -94,6 +115,106 @@ struct MemorySectionView: View {
                 await titles.resolve(image)
             }
         }
+        .task(id: effectiveMos) {
+            if let image = effectiveMos, !image.isEmpty { await titles.resolve(image) }
+        }
+    }
+
+    // MARK: - MOS ROM
+
+    /// The MOS image the machine will boot with: the draft's own, else the
+    /// model's default from the schema. nil only when there is no MOS schema.
+    private var effectiveMos: String? {
+        if let image = draft.mosImageUri, !image.isEmpty { return image }
+        return mosSchema?.default
+    }
+
+    /// Whether the MOS differs from the preset as loaded.
+    private var mosChanged: Bool {
+        draft.mosImageUri != originalDraft.mosImageUri
+    }
+
+    /// The MOS ROM control, heading the Memory section above the sideways banks:
+    /// the MOS the machine will boot with -- its title over its file name, the
+    /// file name alone when the server does not recognise the image -- with
+    /// Browse for another ROM image and Use Default to put the preset's MOS back.
+    /// A bare ROM-name picker is a follow-up (#297); Browse plus Use Default is
+    /// the mandatory behaviour.
+    private var mosControl: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(mosSchema?.label.isEmpty == false ? mosSchema!.label : "MOS ROM")
+                .font(.headline)
+
+            HStack(spacing: 8) {
+                mosValue
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if mosChanged {
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.accentColor)
+                        .help("Changed from the preset's MOS ROM")
+                }
+
+                Button("Browse…") { browseForMos() }
+
+                Button("Use Default") { draft.mosImageUri = originalDraft.mosImageUri }
+                    .disabled(!mosChanged)
+            }
+            .frame(maxWidth: 360, alignment: .leading)
+
+            Text("The operating-system ROM. Leave as the model's default unless you have a reason to change it.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            DiagnosticLabels(diagnostics: diagnostics.atPath("/mos_image_uri"))
+        }
+    }
+
+    /// The MOS value: its title over its file name, or the file name alone when
+    /// the server does not recognise the image ("Default" when there is none).
+    /// The title is the server's (describe-rom from the OS ROM manifest), never
+    /// guessed here.
+    @ViewBuilder
+    private var mosValue: some View {
+        let image = effectiveMos
+        let fileName = (image?.isEmpty == false)
+            ? URL(fileURLWithPath: image!).lastPathComponent : "Default"
+        let title = image.flatMap { titles.title(forImage: $0) }
+        VStack(alignment: .leading, spacing: 1) {
+            if let title {
+                Text(title)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(fileName)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text(fileName)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+    }
+
+    /// Browse for a MOS ROM image file and record its path in the draft.
+    private func browseForMos() {
+        fieldEditCoordinator?.commitActiveEdit()
+        let panel = NSOpenPanel()
+        panel.title = "Select MOS ROM Image"
+        panel.allowedContentTypes = [UTType(filenameExtension: "rom") ?? .data]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.directoryURL = DialogLocations.shared.startDirectory(for: .chooseRom)
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        DialogLocations.shared.remember(url, for: .chooseRom)
+        draft.mosImageUri = url.path
+        Task { await titles.resolve(url.path) }
     }
 
     // MARK: - Header

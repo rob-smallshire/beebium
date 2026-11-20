@@ -11,28 +11,16 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// The Processor section: the Tube coprocessor (when the model has a tube point),
-/// the emulation speed, and the MOS (operating-system) ROM. Shown for every
-/// model, since speed and the MOS are universal.
+/// The Processor section: the Tube coprocessor (when the model has a tube point)
+/// and the emulation speed. Shown for every model, since speed is universal. The
+/// MOS (operating-system) ROM lives in the Memory section, with the host's memory.
 struct ProcessorSectionView: View {
     @Binding var draft: MachineDraft
-    /// The preset as loaded, so the MOS field can show what the user changed and
-    /// Use Default can revert to it.
-    var originalDraft: MachineDraft = MachineDraft()
     /// The extensions schema, for the tube attachment point's coprocessors.
     let extensionsSchema: ExtensionsSchemaSection
-    /// The MOS schema (the model's default MOS ROM); nil hides the MOS field.
-    var mosSchema: MosSchemaSection?
-    /// Resolves a ROM image to its header (describe-rom), to show the MOS's title.
-    var romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
-
-    /// Titles for the chosen/default MOS image, so the field shows "MOS 3.20"
-    /// rather than a filename. Transient UI adornment, like the Memory section.
-    @StateObject private var mosTitles = RomTitleCache()
 
     /// The Configurator's shared focus owner: the speed picker commits and
     /// releases a focused field before it acts.
@@ -83,85 +71,9 @@ struct ProcessorSectionView: View {
                     Divider()
                 }
                 speedControl
-                if mosSchema != nil {
-                    Divider()
-                    mosControl
-                }
             }
             .padding(12)
         }
-        .onAppear { mosTitles.resolver = romResolver }
-        .task(id: effectiveMos) {
-            if let image = effectiveMos, !image.isEmpty { await mosTitles.resolve(image) }
-        }
-    }
-
-    // MARK: - MOS ROM
-
-    /// The MOS image the machine will boot with: the draft's own, else the
-    /// model's default from the schema. nil only when there is no MOS schema.
-    private var effectiveMos: String? {
-        if let image = draft.mosImageUri, !image.isEmpty { return image }
-        return mosSchema?.default
-    }
-
-    /// Whether the MOS differs from the preset as loaded.
-    private var mosChanged: Bool {
-        draft.mosImageUri != originalDraft.mosImageUri
-    }
-
-    /// The MOS ROM control: the current MOS (as a title when it resolves, else a
-    /// filename), with Browse for another ROM image and Use Default to put the
-    /// preset's MOS back. A bare ROM-name picker is a follow-up (#297); Browse
-    /// plus Use Default is the mandatory behaviour.
-    private var mosControl: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(mosSchema?.label.isEmpty == false ? mosSchema!.label : "MOS ROM")
-                .font(.headline)
-
-            HStack(spacing: 8) {
-                Text(effectiveMos.map { mosTitles.displayText(forImage: $0) } ?? "Default")
-                    .font(.subheadline)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if mosChanged {
-                    Image(systemName: "pencil.circle.fill")
-                        .font(.caption)
-                        .foregroundColor(.accentColor)
-                        .help("Changed from the preset's MOS ROM")
-                }
-
-                Button("Browse…") { browseForMos() }
-
-                Button("Use Default") { draft.mosImageUri = originalDraft.mosImageUri }
-                    .disabled(!mosChanged)
-            }
-            .frame(maxWidth: 360, alignment: .leading)
-
-            Text("The operating-system ROM. Leave as the model's default unless you have a reason to change it.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-            DiagnosticLabels(diagnostics: diagnostics.atPath("/mos_image_uri"))
-        }
-    }
-
-    /// Browse for a MOS ROM image file and record its path in the draft.
-    private func browseForMos() {
-        fieldEditCoordinator?.commitActiveEdit()
-        let panel = NSOpenPanel()
-        panel.title = "Select MOS ROM Image"
-        panel.allowedContentTypes = [UTType(filenameExtension: "rom") ?? .data]
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.directoryURL = DialogLocations.shared.startDirectory(for: .chooseRom)
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        DialogLocations.shared.remember(url, for: .chooseRom)
-        draft.mosImageUri = url.path
-        Task { await mosTitles.resolve(url.path) }
     }
 
     // MARK: - Speed
