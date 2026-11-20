@@ -306,6 +306,12 @@ And when you are done:
 - Stopping, stepping and poking are visible to every client on the server. A
   GUI client shows the machine as stopped and its screen frozen until you run
   it again.
+- `bbc.basic.read_screen_text()` reads the screen in whatever mode it is in:
+  a MODE 7 display from the grid the SAA5050 drew (however many rows a program
+  has given it), a MODE 7 display with no frame yet as blank rows, and a
+  bitmap mode through the server's screen-text reading. A display the server
+  cannot read raises `ScreenTextUnavailableError`, saying which mode it is in;
+  capture it with `bbc.video.capture_frame()` instead.
 - `bbc.debugger.reset()` is a cold power-on reset that leaves the CPU stopped.
   For a Break, hold the key: `bbc.basic.send_break()`.
 - With a Tube coprocessor fitted, `bbc.coprocessor()` yields a second client

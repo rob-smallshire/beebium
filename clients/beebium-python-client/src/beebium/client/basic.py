@@ -23,25 +23,31 @@ import time
 from typing import TYPE_CHECKING
 
 from beebium.client._repr import facade_repr
-from beebium.client.exceptions import TimeoutError
-from beebium.client.screen import _displayed_rows, read_mode7_screen
+from beebium.client.exceptions import ScreenTextUnavailableError, TimeoutError
+from beebium.client.screen import _cells_of, _displayed_rows, cells_to_text, read_mode7_screen
 
 if TYPE_CHECKING:
     from beebium.client import Beebium
+    from beebium.client.video_ula import VideoUlaState
 
 
-# Screen memory addresses for each mode
-# Format: (base_address, bytes_per_line, lines, chars_per_line)
-SCREEN_MODES = {
-    0: (0x3000, 640, 32, 80),  # 640x256 2-colour, 80 chars
-    1: (0x3000, 320, 32, 40),  # 320x256 4-colour, 40 chars
-    2: (0x3000, 160, 32, 20),  # 160x256 16-colour, 20 chars
-    3: (0x4000, 640, 25, 80),  # 640x200 2-colour (text), 80 chars
-    4: (0x5800, 320, 32, 40),  # 320x256 2-colour, 40 chars
-    5: (0x5800, 160, 32, 20),  # 160x256 4-colour, 20 chars
-    6: (0x6000, 320, 25, 40),  # 320x200 2-colour (text), 40 chars
-    7: (0x7C00, 40, 25, 40),  # Teletext mode, 40 chars
+# The bitmap modes a Video ULA control register shows, by its fast clock and
+# characters a line (MODES 3 and 6 differ from 0 and 4 only in the 6845).
+_BITMAP_MODES = {
+    (True, 80): "MODE 0 or 3",
+    (True, 40): "MODE 1",
+    (True, 20): "MODE 2",
+    (False, 40): "MODE 4 or 6",
+    (False, 20): "MODE 5",
 }
+
+
+def _bitmap_mode_name(state: VideoUlaState) -> str:
+    characters = (10, 20, 40, 80)[state.line_width_mode]
+    return _BITMAP_MODES.get(
+        (state.fast_clock, characters),
+        f"a bitmap mode of {characters} characters a line",
+    )
 
 # The BBC BASIC prompt character, expected at the start of a line.
 PROMPT = ">"
@@ -143,45 +149,51 @@ class Basic:
 
         raise TimeoutError(f"Text '{text}' not found within {timeout} seconds")
 
-    def read_screen_text(
-        self,
-        start_row: int = 0,
-        end_row: int | None = None,
-        mode: int = 7,
-    ) -> str:
-        """Read text from the displayed screen.
+    def read_screen_text(self, start_row: int = 0, end_row: int | None = None) -> str:
+        """Read the text on the displayed screen, in whatever mode it is in.
+
+        The server says what is displayed, and the text is read accordingly:
+
+        - a teletext (MODE 7) display from the grid the SAA5050 drew, however
+          many rows it has, so a program that reprograms the 6845 still reads;
+        - a teletext display that has not drawn a frame yet (a machine still
+          booting) as blank rows, so a caller can poll it;
+        - a bitmap display (MODES 0-6) through the server's screen-text
+          reading, :meth:`Video.screen_text`, one line per character row.
 
         Args:
             start_row: First row to read (0-based).
-            end_row: Last row to read (exclusive). None means all rows.
-            mode: Screen mode (default 7 for teletext).
+            end_row: Row to stop before. None reads to the last row; a row
+                past the last is clipped to it.
 
         Returns:
-            The screen text as a string with newlines between rows. In mode
-            7 it is blank until a MODE 7 frame has been displayed; ask
-            ``video.teletext_screen().active`` to know whether the display
-            is MODE 7.
+            The screen text as a string with newlines between rows.
+
+        Raises:
+            ScreenTextUnavailableError: The display is one the server cannot
+                read text from; the message names its mode and says to
+                capture a frame instead.
         """
-        if mode not in SCREEN_MODES:
-            raise ValueError(f"Unsupported mode: {mode}")
+        rows = self._displayed_text_rows()
+        stop = len(rows) if end_row is None else min(end_row, len(rows))
+        return "\n".join(row.rstrip() for row in rows[max(0, start_row) : stop])
 
-        _, _, lines, _ = SCREEN_MODES[mode]
-
-        if end_row is None:
-            end_row = lines
-
-        start_row = max(0, min(start_row, lines - 1))
-        end_row = max(start_row + 1, min(end_row, lines))
-
-        if mode == 7:
-            # Teletext: read what is actually displayed.
-            rows = read_mode7_screen(self._client)
-        else:
-            # Graphics modes: pixel decoding to characters is not implemented.
-            rows = ["[graphics mode - not implemented]"] * lines
-
-        result = [rows[row].rstrip() for row in range(start_row, end_row)]
-        return "\n".join(result)
+    def _displayed_text_rows(self) -> list[str]:
+        teletext = self._client.video.teletext_screen()
+        if teletext.active:
+            return cells_to_text(_cells_of(teletext))
+        control = self._client.video_ula.state
+        if control.teletext_mode:
+            # Teletext with no frame drawn yet: blank, so a boot can be polled.
+            return read_mode7_screen(self._client)
+        reading = self._client.video.screen_text(search="aligned")
+        if reading.supported:
+            return reading.text.split("\n")
+        raise ScreenTextUnavailableError(
+            f"The screen is in {_bitmap_mode_name(control)} (Video ULA control "
+            f"0x{control.control:02X}), which this server cannot read text from; "
+            f"capture it with bbc.video.capture_frame() instead."
+        )
 
     def run_program(
         self,

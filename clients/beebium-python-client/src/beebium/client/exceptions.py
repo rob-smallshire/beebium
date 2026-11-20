@@ -72,6 +72,10 @@ class TimeoutError(BeebiumError):
     pass
 
 
+class ScreenTextUnavailableError(BeebiumError):
+    """The display is in a mode the server cannot read text from."""
+
+
 class ScreenExpectTimeout(TimeoutError):
     """Expected screen text did not appear within the timeout (see Beebium.expect)."""
 
