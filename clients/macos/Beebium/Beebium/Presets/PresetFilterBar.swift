@@ -10,99 +10,111 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
+import AppKit
 import SwiftUI
 
-/// Spike UI: the filter chips and search field above the preset catalogue. One
-/// row of chips per tag group, each chip carrying a live count; a search field
-/// beside them; and a Clear affordance once any chip is on. Toggling a chip or
-/// typing drives the shared `PresetFilterModel`, which the catalogue reads to
-/// decide what to show.
+/// Spike UI: the filter popups and search field above the preset catalogue. A
+/// search field then one single-selection popup per facet, each defaulting to
+/// Any; the row wraps to a second line rather than truncating. A Reset appears
+/// once any popup is off Any. Choosing drives the shared `PresetFilterModel`,
+/// which the catalogue reads to decide what to show.
 struct PresetFilterBar: View {
     @ObservedObject var model: PresetFilterModel
-    /// The groups to show, computed by the owner from the full catalogue so the
+    /// The popups to show, computed by the owner from the full catalogue so the
     /// counts are faceted against the current selection.
-    let groups: [PresetFilterModel.ChipGroup]
-
-    /// The width of the group labels, so every group's chips start at the same x.
-    private let labelWidth: CGFloat = 92
+    let popups: [PresetFilterModel.Popup]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                    .font(.caption)
-                TextField("Filter presets", text: $model.searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 240)
+        FlowLayout(spacing: 8, lineSpacing: 8) {
+            // A real NSSearchField: it shows the insertion caret and the standard
+            // clear button, which a SwiftUI TextField in this container does not.
+            SearchField(text: $model.searchText, placeholder: "Filter presets")
+                .frame(width: 180)
 
-                Spacer()
-
-                if !model.selected.isEmpty {
-                    Button("Clear") { model.clearChips() }
-                        .buttonStyle(.link)
+            ForEach(popups) { popup in
+                FacetPopupView(popup: popup) { choice in
+                    model.select(popup.facet, choice)
                 }
             }
 
-            ForEach(groups) { group in
-                HStack(alignment: .top, spacing: 8) {
-                    Text(group.group.rawValue)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .frame(width: labelWidth, alignment: .leading)
-                        .padding(.top, 3)
-
-                    FlowLayout(spacing: 6, lineSpacing: 6) {
-                        ForEach(group.chips) { chip in
-                            ChipView(chip: chip) { model.toggle(chip.tag) }
-                        }
-                    }
-                }
+            if model.isFiltering {
+                Button("Reset") { model.reset() }
+                    .buttonStyle(.link)
             }
         }
     }
 }
 
-/// A single filter chip: its value, a count, and selected / greyed state.
-private struct ChipView: View {
-    let chip: PresetFilterModel.Chip
-    let toggle: () -> Void
+/// One facet's popup: a menu button labelled "Facet: choice", whose items carry
+/// the faceted count and disable themselves at zero (Any always enabled).
+private struct FacetPopupView: View {
+    let popup: PresetFilterModel.Popup
+    let select: (FacetChoice) -> Void
 
     var body: some View {
-        Button(action: toggle) {
-            HStack(spacing: 4) {
-                Text(chip.tag.value)
-                    .font(.caption)
-                Text("\(chip.count)")
-                    .font(.caption.monospacedDigit())
-                    .opacity(0.65)
+        Menu {
+            ForEach(popup.options) { option in
+                Button {
+                    select(option.choice)
+                } label: {
+                    if option.choice == popup.choice {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
+                    }
+                }
+                .disabled(!option.isEnabled)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule().fill(fill)
-            )
-            .overlay(
-                Capsule().stroke(stroke, lineWidth: 1)
-            )
-            .foregroundColor(foreground)
+        } label: {
+            Text(buttonLabel).font(.callout)
         }
-        .buttonStyle(.plain)
-        .disabled(!chip.isEnabled)
-        .help(chip.isEnabled
-              ? "\(chip.count) preset\(chip.count == 1 ? "" : "s")"
-              : "No presets match with the current filters")
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
-    private var fill: Color {
-        chip.isSelected ? Color.accentColor.opacity(0.22) : Color.secondary.opacity(0.12)
+    /// The popup button's text: the facet name on its own while the choice is Any
+    /// (the facet reads as a label), and "Facet: choice" once a choice is made, so
+    /// the current selection is always visible.
+    private var buttonLabel: String {
+        switch popup.choice {
+        case .any:          return popup.facet.label
+        case .none:         return "\(popup.facet.label): None"
+        case .value(let v): return "\(popup.facet.label): \(v)"
+        }
     }
-    private var stroke: Color {
-        chip.isSelected ? Color.accentColor.opacity(0.6) : Color.clear
+}
+
+/// A standard macOS search field (caret, clear button, magnifier) bridged into
+/// SwiftUI, bound to a string. SwiftUI's own TextField loses its insertion caret
+/// in this bar, so the spike uses the AppKit control the rest of macOS uses here.
+struct SearchField: NSViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.placeholderString = placeholder
+        field.delegate = context.coordinator
+        field.sendsWholeSearchString = false
+        field.sendsSearchStringImmediately = true
+        field.focusRingType = .default
+        return field
     }
-    private var foreground: Color {
-        if !chip.isEnabled { return .secondary.opacity(0.5) }
-        return chip.isSelected ? .accentColor : .primary
+
+    func updateNSView(_ nsView: NSSearchField, context: Context) {
+        if nsView.stringValue != text { nsView.stringValue = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        private let text: Binding<String>
+        init(text: Binding<String>) { self.text = text }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSSearchField else { return }
+            text.wrappedValue = field.stringValue
+        }
     }
 }
 

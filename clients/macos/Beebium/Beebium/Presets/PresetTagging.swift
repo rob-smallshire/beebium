@@ -26,7 +26,7 @@ import Foundation
 /// survive contact with every future preset; that is acceptable for a spike.
 
 /// A group of related tags. Chips within a group OR together; groups AND together.
-enum PresetTagGroup: String, CaseIterable, Comparable {
+enum PresetTagGroup: String, CaseIterable, Comparable, Sendable {
     case family = "Family"
     case board = "Board"
     case coprocessor = "Coprocessor"
@@ -42,7 +42,7 @@ enum PresetTagGroup: String, CaseIterable, Comparable {
 }
 
 /// One tag: a value within a group (e.g. Family / "Model B+").
-struct PresetTag: Hashable, Comparable {
+struct PresetTag: Hashable, Comparable, Sendable {
     let group: PresetTagGroup
     let value: String
 
@@ -162,7 +162,9 @@ enum PresetTagger {
             switch id {
             case "acorn-8271": return "8271"
             case "acorn-1770": return "1770"
-            default:           return id
+            // A socket fitted with no controller ("none") is, to a user picking a
+            // machine, no disc. Anything else unrecognised is treated the same.
+            default:           return "No disc"
             }
         }
         return "1770"

@@ -32,6 +32,11 @@ struct MachinePreset: Identifiable, Hashable {
     let coreExecutablePath: String
     /// Path to the preset file on disk
     let presetFilepath: String
+    /// The server model id this preset runs on (e.g. "model-b-plus-128k"), from
+    /// the `list-presets` row. Optional, since a row may name no model. Used by
+    /// the spike's filter tagging so a preset's family is known from the row even
+    /// when its file cannot be read.
+    var modelId: String? = nil
     let source: Source
     /// The preset's own `machine_description` template, if it declares one (e.g.
     /// "Station {econet-station} (AUN, Model B)"), rendered by the server into

@@ -48,6 +48,16 @@ final class PresetTaggingTests: XCTestCase {
         XCTAssertEqual(tags(json), [t(.family, "Model B"), t(.disc, "8271")])
     }
 
+    func testFdcSocketNoneCountsAsNoDisc() {
+        // A disc socket fitted with no controller is, to someone picking a
+        // machine, no disc -- not a mysterious "none".
+        let json = #"""
+        {"model":"model-b","name":"No controller",
+         "storage":{"fdc_socket":{"id":"none"}}}
+        """#
+        XCTAssertEqual(tags(json), [t(.family, "Model B"), t(.disc, "No disc")])
+    }
+
     func testMaster128() {
         XCTAssertEqual(tags(#"{"model":"master-128","name":"Master 128"}"#),
                        [t(.family, "Master 128"), t(.disc, "No disc")])

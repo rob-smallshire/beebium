@@ -136,8 +136,8 @@ struct WelcomeWindowContent: View {
             let allPresets = presetManager.systemPresets + presetManager.userPresets
             let visible = filter.filtered(allPresets)
 
-            // Spike: filter chips + search above the catalogue.
-            PresetFilterBar(model: filter, groups: filter.chipGroups(for: allPresets))
+            // Spike: filter popups + search above the catalogue.
+            PresetFilterBar(model: filter, popups: filter.popups(for: allPresets))
                 .padding(.horizontal, 24)
                 .padding(.bottom, 4)
 
@@ -166,7 +166,7 @@ struct WelcomeWindowContent: View {
             .frame(minHeight: 100, idealHeight: gridHeight, maxHeight: gridHeight)
             .onPreferenceChange(GridHeightKey.self) { gridHeight = $0 }
             .task(id: allPresets.map(\.presetId).joined(separator: "|")) {
-                filter.index(allPresets)
+                await filter.index(allPresets)
             }
 
             // Error display

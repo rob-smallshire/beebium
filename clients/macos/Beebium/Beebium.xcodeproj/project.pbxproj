@@ -134,6 +134,7 @@
 		599A4994E4D87F976E329F34 /* PresetCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F4576C549F6A61800D9C87 /* PresetCatalogTests.swift */; };
 		5A4F6F3B51DDC576BBD3D142 /* BeebiumTouchBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0787829BB8681E1354B9C585 /* BeebiumTouchBarManager.swift */; };
 		5BFF6217532F7E4126E6A946 /* system.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF33113C39D9E1D2BE649FF6 /* system.grpc.swift */; };
+		5CEC8AA258A4D2F5BC1F6E95 /* PresetTagsIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 052EA015C37312D6C546667C /* PresetTagsIntegrationTests.swift */; };
 		5DC1ADB4DD22F28FC90A758C /* StructuredListItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F38B119FC4AA35BEF5E396 /* StructuredListItemTests.swift */; };
 		5EF39565CAF128FD1974E0BF /* DebugDisplayStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5123F0FA32B3711748D351D7 /* DebugDisplayStyle.swift */; };
 		6115EAB5B469DD1B9242F92E /* GeneralSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6C4FBFCE12BD6DED30E2E24 /* GeneralSettingsPane.swift */; };
@@ -193,6 +194,7 @@
 		987BD71FBAD1D69713DD3995 /* KeyboardClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A63D58ABA4C03E6D3AE1D51 /* KeyboardClient.swift */; };
 		9A8754B2F1CB725F4A296CDF /* SerialClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60AB5DB41408CC531369DC47 /* SerialClient.swift */; };
 		9A896FBF82F923AB47367CE7 /* NetworkSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40E77C5074CCD7F93B8183F /* NetworkSectionView.swift */; };
+		9AC80D5BE5860211922DD198 /* PresetFilterModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA448C16977523D4497CFC8 /* PresetFilterModelTests.swift */; };
 		9AD94E4DED45620BE7083FA2 /* MachineOpenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FE15B21DA8FBD101A3003CF /* MachineOpenTests.swift */; };
 		9B710F684F62B2B4976E205E /* AudioMixerStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D01B8A395DCAD93419F4DD /* AudioMixerStateTests.swift */; };
 		9BD942F6034AE7F95F5D4B88 /* PasteCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941A103B3E9E8B477D32DF75 /* PasteCoordinator.swift */; };
@@ -354,6 +356,7 @@
 		02EB1C9F5D4468D155F3F524 /* CassetteDeckFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CassetteDeckFormattingTests.swift; sourceTree = "<group>"; };
 		0380D979784116B4110F8904 /* ConnectionRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionRegistry.swift; sourceTree = "<group>"; };
 		03C4898953F0003B85113EC0 /* indicator.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = indicator.grpc.swift; sourceTree = "<group>"; };
+		052EA015C37312D6C546667C /* PresetTagsIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetTagsIntegrationTests.swift; sourceTree = "<group>"; };
 		063CC2272D058D46784E181A /* BBCModifierState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCModifierState.swift; sourceTree = "<group>"; };
 		0787829BB8681E1354B9C585 /* BeebiumTouchBarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarManager.swift; sourceTree = "<group>"; };
 		08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClient.swift; sourceTree = "<group>"; };
@@ -607,6 +610,7 @@
 		CB59783F295E0122C4DF3A8D /* AudioRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRendererTests.swift; sourceTree = "<group>"; };
 		CC51B6CDDCA00180CC81969A /* serial.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = serial.grpc.swift; sourceTree = "<group>"; };
 		CC6B04201EE913A2107FB39B /* BuiltInMappingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuiltInMappingsTests.swift; sourceTree = "<group>"; };
+		CCA448C16977523D4497CFC8 /* PresetFilterModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetFilterModelTests.swift; sourceTree = "<group>"; };
 		CDB10CCDB68756C040A009F0 /* EconetStationPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetStationPresentationTests.swift; sourceTree = "<group>"; };
 		CF33113C39D9E1D2BE649FF6 /* system.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = system.grpc.swift; sourceTree = "<group>"; };
 		CF6562062957B62B8C099A42 /* DiscClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscClient.swift; sourceTree = "<group>"; };
@@ -1096,8 +1100,10 @@
 				02BC769B92164417F2195339 /* PopoverFocusHostingTests.swift */,
 				D4F4576C549F6A61800D9C87 /* PresetCatalogTests.swift */,
 				AA381491DEE3F058B098A69B /* PresetDiagnosticLocationTests.swift */,
+				CCA448C16977523D4497CFC8 /* PresetFilterModelTests.swift */,
 				DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */,
 				8467DAEC1A96BF2FF3CBEF2F /* PresetTaggingTests.swift */,
+				052EA015C37312D6C546667C /* PresetTagsIntegrationTests.swift */,
 				8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */,
 				84D7A1533095D918422CCB43 /* PresetThumbnailCacheTests.swift */,
 				0A634C79BE6154BBDAA516A5 /* RecentDiscsTests.swift */,
@@ -1327,8 +1333,10 @@
 				1D4EF3D9B6F79DD6EBC15905 /* PopoverFocusHostingTests.swift in Sources */,
 				599A4994E4D87F976E329F34 /* PresetCatalogTests.swift in Sources */,
 				F1007C97B24AA67ECDE8C619 /* PresetDiagnosticLocationTests.swift in Sources */,
+				9AC80D5BE5860211922DD198 /* PresetFilterModelTests.swift in Sources */,
 				316C036A4CF391595A4DD8CC /* PresetManagerDraftLaunchTests.swift in Sources */,
 				54A26B8F74ED45D3A620A5E5 /* PresetTaggingTests.swift in Sources */,
+				5CEC8AA258A4D2F5BC1F6E95 /* PresetTagsIntegrationTests.swift in Sources */,
 				62024A31F9AD52CA2676CCB2 /* PresetTests.swift in Sources */,
 				12F8F293AAD228BC164AB68D /* PresetThumbnailCacheTests.swift in Sources */,
 				03172AD1E0B845745E898635 /* RecentDiscsTests.swift in Sources */,
