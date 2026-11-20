@@ -525,6 +525,11 @@
         {
           "name": "aun",
           "display_name": "AUN",
+          "short_name": "AUN",
+          "keywords": [
+            "Econet",
+            "Ethernet"
+          ],
           "description": "Connects the Econet port to other machines over the network using AUN (Acorn Universal Networking).",
           "cli_name": "aun",
           "kind": "econet-transport",
@@ -779,6 +784,8 @@
         {
           "name": "host-serial",
           "display_name": "Host Serial",
+          "short_name": "Serial (host port)",
+          "keywords": [],
           "description": "Connects the serial port to a serial device or pseudo-terminal on this computer.",
           "cli_name": "host-serial",
           "kind": "peripheral",
@@ -907,6 +914,8 @@
         {
           "name": "file-printer",
           "display_name": "File Printer",
+          "short_name": "Printer (file)",
+          "keywords": [],
           "description": "Spools everything the BBC sends to its printer port into a file on the host.",
           "cli_name": "file-printer",
           "kind": "peripheral",
@@ -1015,6 +1024,8 @@
         {
           "name": "job-file-printer",
           "display_name": "Job File Printer",
+          "short_name": "Printer (job files)",
+          "keywords": [],
           "description": "Writes what the BBC prints as one file per print job, a job ending after a quiet period.",
           "cli_name": "job-file-printer",
           "kind": "peripheral",
@@ -1148,6 +1159,8 @@
         {
           "name": "joystick",
           "display_name": "Joystick",
+          "short_name": "Joystick",
+          "keywords": [],
           "description": "Two analogue joysticks with a fire button each, plugged into the analogue port.",
           "cli_name": "joystick",
           "kind": "peripheral",
@@ -1164,6 +1177,8 @@
         {
           "name": "rom-cartridge",
           "display_name": "ROM cartridge",
+          "short_name": "ROM cartridge",
+          "keywords": [],
           "description": "A ROM cartridge with two 16K ROM sockets, in one of the Master's cartridge slots.",
           "cli_name": "rom-cartridge",
           "kind": "peripheral",
@@ -1234,6 +1249,8 @@
         {
           "name": "voltmace-delta-14b",
           "display_name": "Voltmace Delta 14B/1 adapter",
+          "short_name": "Voltmace Delta 14B/1",
+          "keywords": [],
           "description": "Voltmace's Delta 14B/1 adapter box with two Delta 14B handsets: a joystick and a 12-key keypad each, in the analogue port and the user port together.",
           "cli_name": "voltmace-delta-14b",
           "kind": "peripheral",
@@ -1251,6 +1268,8 @@
         {
           "name": "tcp-printer",
           "display_name": "Network Printer",
+          "short_name": "Printer (network)",
+          "keywords": [],
           "description": "Sends everything the BBC prints to a raw TCP printer port on the network, such as a JetDirect printer or a printer emulator.",
           "cli_name": "tcp-printer",
           "kind": "peripheral",
@@ -1400,6 +1419,8 @@
         {
           "name": "test-scratch-ram",
           "display_name": "Test Scratch RAM",
+          "short_name": "Test Scratch RAM",
+          "keywords": [],
           "description": "Eight bytes of scratch RAM at &FC50 on the 1 MHz bus, for testing the extension framework.",
           "cli_name": "test-scratch-ram",
           "kind": "peripheral",
@@ -1416,6 +1437,8 @@
         {
           "name": "rpc-serial",
           "display_name": "RPC Serial",
+          "short_name": "Serial (RPC)",
+          "keywords": [],
           "description": "A serial peer that a client program drives, sending and receiving bytes through the RpcSerial service; used by automated tests.",
           "cli_name": "rpc-serial",
           "kind": "peripheral",
@@ -1458,6 +1481,8 @@
         {
           "name": "acorn-scsi",
           "display_name": "Acorn SCSI Host Adapter",
+          "short_name": "SCSI adapter",
+          "keywords": [],
           "description": "The Acorn SCSI host adapter, which connects SCSI hard discs to the 1 MHz bus.",
           "cli_name": "acorn-scsi",
           "kind": "peripheral",
@@ -1476,6 +1501,11 @@
         {
           "name": "acorn-65c102-coprocessor",
           "display_name": "Acorn 65C102 Co-processor",
+          "short_name": "65C102",
+          "keywords": [
+            "6502",
+            "Second Processor"
+          ],
           "description": "An Acorn 65C102 Co-processor: a 4 MHz 65C102 with 64K of its own memory, connected through the Tube.",
           "cli_name": "tube-65c102",
           "kind": "peripheral",
@@ -1528,6 +1558,8 @@
         {
           "name": "rfc2217-client-serial",
           "display_name": "RFC 2217 Serial (client)",
+          "short_name": "Serial (RFC 2217 client)",
+          "keywords": [],
           "description": "Connects the serial port to a serial port server elsewhere on the network, using RFC 2217.",
           "cli_name": "rfc2217-client-serial",
           "kind": "peripheral",
@@ -1768,6 +1800,8 @@
         {
           "name": "ip232-serial",
           "display_name": "IP232 Serial",
+          "short_name": "Serial (IP232)",
+          "keywords": [],
           "description": "Connects the serial port to an IP232 modem emulator, such as tcpser, over the network.",
           "cli_name": "ip232-serial",
           "kind": "peripheral",
@@ -1953,6 +1987,11 @@
         {
           "name": "hybrid-music-5000",
           "display_name": "Hybrid Music 5000",
+          "short_name": "Music 5000",
+          "keywords": [
+            "Hybrid",
+            "synthesiser"
+          ],
           "description": "The Hybrid Music 5000 synthesiser, or its Music 3000 expander, which adds sixteen channels of digital sound on the 1 MHz bus.",
           "cli_name": "hybrid-music-5000",
           "kind": "peripheral",
@@ -2006,6 +2045,11 @@
         {
           "name": "piconet",
           "display_name": "Piconet",
+          "short_name": "Piconet",
+          "keywords": [
+            "Econet",
+            "USB"
+          ],
           "description": "Connects the Econet port to a real Econet network through a Piconet USB interface.",
           "cli_name": "piconet",
           "kind": "econet-transport",
@@ -2046,6 +2090,8 @@
         {
           "name": "host-parallel-printer",
           "display_name": "Host Printer Port",
+          "short_name": "Printer (host port)",
+          "keywords": [],
           "description": "Sends everything the BBC prints to a printer port on the host computer, such as /dev/usb/lp0 or LPT1.",
           "cli_name": "host-parallel-printer",
           "kind": "peripheral",
@@ -2138,6 +2184,10 @@
         {
           "name": "scsi-hard-disc",
           "display_name": "SCSI Hard Disc",
+          "short_name": "SCSI hard disc",
+          "keywords": [
+            "Winchester"
+          ],
           "description": "A SCSI hard disc, kept in a pair of image files (.dat and .dsc).",
           "cli_name": "scsi-hdd",
           "kind": "peripheral",
@@ -2230,6 +2280,8 @@
         {
           "name": "loopback-serial",
           "display_name": "Loopback Serial",
+          "short_name": "Serial (loopback)",
+          "keywords": [],
           "description": "Sends every byte the BBC transmits on its serial port straight back to it, for testing serial software.",
           "cli_name": "loopback-serial",
           "kind": "peripheral",
@@ -2246,6 +2298,8 @@
         {
           "name": "rfc2217-server-serial",
           "display_name": "RFC 2217 Serial (server)",
+          "short_name": "Serial (RFC 2217 server)",
+          "keywords": [],
           "description": "Makes the serial port available to RFC 2217 clients elsewhere on the network.",
           "cli_name": "rfc2217-server-serial",
           "kind": "peripheral",
@@ -2338,6 +2392,8 @@
         {
           "name": "acorn-rtc",
           "display_name": "Acorn Real-Time Clock",
+          "short_name": "Real-time clock",
+          "keywords": [],
           "description": "The Acorn real-time clock module, which plugs into the user port and keeps the date and time.",
           "cli_name": "acorn-rtc",
           "kind": "peripheral",
@@ -2464,6 +2520,11 @@
         {
           "name": "acorn-65c02-coprocessor",
           "display_name": "Acorn 65C02 Co-processor",
+          "short_name": "65C02",
+          "keywords": [
+            "6502",
+            "Second Processor"
+          ],
           "description": "An Acorn 6502 Second Processor: a 3 MHz 65C02 with 64K of its own memory, connected through the Tube.",
           "cli_name": "tube-65c02",
           "kind": "peripheral",
