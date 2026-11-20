@@ -596,6 +596,41 @@ struct Beebium_SlotHeaderChangedEvent: Sendable {
   fileprivate var _romHeader: Beebium_RomHeader? = nil
 }
 
+struct Beebium_GetOsRomRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_GetOsRomResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The image's file as the server resolved it: an absolute path on the
+  /// server.
+  var imageUri: String = String()
+
+  /// The ROM's bare name when the server found it by name on its ROM search
+  /// path (e.g. "acorn-mos_3_20"), without the ".rom" extension; empty when
+  /// it was named by a path.
+  var romName: String = String()
+
+  var sizeBytes: UInt32 = 0
+
+  /// What to call it: the OS ROM manifest's title for a known image (e.g.
+  /// "Acorn MOS 3.20"), else the image file's name without its extension.
+  var title: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "beebium"
@@ -1453,6 +1488,70 @@ extension Beebium_SlotHeaderChangedEvent: SwiftProtobuf.Message, SwiftProtobuf._
   static func ==(lhs: Beebium_SlotHeaderChangedEvent, rhs: Beebium_SlotHeaderChangedEvent) -> Bool {
     if lhs.slot != rhs.slot {return false}
     if lhs._romHeader != rhs._romHeader {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_GetOsRomRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".GetOsRomRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_GetOsRomRequest, rhs: Beebium_GetOsRomRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_GetOsRomResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".GetOsRomResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}image_uri\0\u{3}rom_name\0\u{3}size_bytes\0\u{1}title\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.imageUri) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.romName) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.sizeBytes) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.title) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.imageUri.isEmpty {
+      try visitor.visitSingularStringField(value: self.imageUri, fieldNumber: 1)
+    }
+    if !self.romName.isEmpty {
+      try visitor.visitSingularStringField(value: self.romName, fieldNumber: 2)
+    }
+    if self.sizeBytes != 0 {
+      try visitor.visitSingularUInt32Field(value: self.sizeBytes, fieldNumber: 3)
+    }
+    if !self.title.isEmpty {
+      try visitor.visitSingularStringField(value: self.title, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_GetOsRomResponse, rhs: Beebium_GetOsRomResponse) -> Bool {
+    if lhs.imageUri != rhs.imageUri {return false}
+    if lhs.romName != rhs.romName {return false}
+    if lhs.sizeBytes != rhs.sizeBytes {return false}
+    if lhs.title != rhs.title {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

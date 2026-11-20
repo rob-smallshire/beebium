@@ -94,6 +94,7 @@
 		3A5F2C41B8468DD7E63EC414 /* audio.proto in Resources */ = {isa = PBXBuildFile; fileRef = A16BD17340EC98E2C5EF1127 /* audio.proto */; };
 		3B3122E1626E09ABEAC4315B /* ConfigurationSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B3B8600BFD63BD1D99FFB60 /* ConfigurationSchema.swift */; };
 		3B967ABD0D6D98BCF640B4F2 /* MachinePackage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 703CD429AFEBF865A5EE1F07 /* MachinePackage.swift */; };
+		3B96AB955656EE05ACCF89DE /* OsRomIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DC7722C2F0CC298B822F23F /* OsRomIntegrationTests.swift */; };
 		3BDF16DCA965104AE9A05A70 /* EditableListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E57F03286476B3C039BC2F /* EditableListViewModel.swift */; };
 		3E893BDCD15B92A2A29AD7EB /* VideoSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16524154FADCB403497AFB1F /* VideoSettingsTests.swift */; };
 		406264D4A51A907E3F6F06CF /* PasteCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */; };
@@ -372,6 +373,7 @@
 		1B6DCFA44B730E3663D357C1 /* DiscImageDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageDrop.swift; sourceTree = "<group>"; };
 		1BC15A775463F7A0F66447C8 /* AudioPreRoll.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPreRoll.swift; sourceTree = "<group>"; };
 		1D125639FA049009F5018DA3 /* ExtensionFieldHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionFieldHelp.swift; sourceTree = "<group>"; };
+		1DC7722C2F0CC298B822F23F /* OsRomIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OsRomIntegrationTests.swift; sourceTree = "<group>"; };
 		1DFE84A58CCC1A258C1DA04E /* BBCModifierStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCModifierStateTests.swift; sourceTree = "<group>"; };
 		1E24C908F696C80EFC7B016E /* SystemPowerMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPowerMonitor.swift; sourceTree = "<group>"; };
 		1E743CB023485025EA33E39A /* ExtensionManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionManifestTests.swift; sourceTree = "<group>"; };
@@ -1073,6 +1075,7 @@
 				7D2677DED8933B5E1A7D11D4 /* ModifierKeyStateTests.swift */,
 				A56859CE870DD7B8CD302515 /* MosSchemaSectionTests.swift */,
 				F1D42827CCA97EED66AE7C10 /* OpenedURLTests.swift */,
+				1DC7722C2F0CC298B822F23F /* OsRomIntegrationTests.swift */,
 				D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */,
 				4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */,
 				2D1D75896DF179CEC420018F /* PixelShapeTests.swift */,
@@ -1301,6 +1304,7 @@
 				6686F47B251CF78AF9C5F329 /* ModifierKeyStateTests.swift in Sources */,
 				3939CC1082E3E030342C0A0C /* MosSchemaSectionTests.swift in Sources */,
 				C33A053EAD90F137792332E3 /* OpenedURLTests.swift in Sources */,
+				3B96AB955656EE05ACCF89DE /* OsRomIntegrationTests.swift in Sources */,
 				406264D4A51A907E3F6F06CF /* PasteCoordinatorTests.swift in Sources */,
 				934D31B17454BE2697B2463D /* PeripheralTreeTests.swift in Sources */,
 				A994E213FE38477C0CF26811 /* PixelShapeTests.swift in Sources */,

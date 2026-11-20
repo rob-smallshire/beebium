@@ -2274,10 +2274,21 @@ configure call and is gated server-side on the runtime-configurable flag.
 A `*SRLOAD` into sideways RAM on a running machine updates the socket's title live,
 because the client opts into header-change monitoring on the event stream.
 
+The OS ROM (Core). Above the sideways sockets the client shows the machine's fitted
+MOS (operating-system) ROM, as an "OS" section with one read-only row: the server's
+title ("Acorn MOS 3.20"), and beneath it the bare ROM name when the server found it on
+its search path, else the resolved image's file name. The OS ROM is fixed for the run,
+so it is read once (`GetOsRom`), not subscribed; a server that was never told its OS
+ROM answers FAILED_PRECONDITION, which no real start produces, and the section is then
+simply absent. The server's resolved image path is a path on the server, shown (as a
+tooltip) only when the server shares this filesystem, like every other path here. This
+matters most on the Master 128, whose sideways banks 9-15 are the MOS itself.
+
 Rests on: `sideways.proto SidewaysService.GetSlotStatus` (topology, sockets, aliasing,
 ROM headers, protection groups), `SubscribeEvents` (with header-change monitoring),
-`SetSlotProtection`. The configure and read-data RPCs exist but the reference client
-does not use them.
+`SetSlotProtection`, `GetOsRom` (the fitted OS ROM: resolved image, bare name, size,
+title). The configure and read-data RPCs exist but the reference client does not use
+them.
 
 Conformance:
 
@@ -2285,7 +2296,8 @@ Conformance:
   their aliased slot sets; protection engaged by group id and kind with a re-read
   after (no push event); a protection control reflects server state, not optimistic
   clicks; live slot-content reconfiguration requires the configure RPC and is
-  server-gated.
+  server-gated. Show the fitted OS ROM from `GetOsRom` (Core): its title and the ROM
+  name or image file name, read once, server path local-gated.
 - LATITUDE: a read-only live view; opting into header monitoring; priority-descending
   order; the protection control's presentation.
 - MACOS-ONLY: the ROM-browse panel, Copy Path and reveal, the list and menus.
@@ -2751,7 +2763,7 @@ AND 1` in BBC BASIC reads 1. Attach the Delta 14B/1 adapter -> one controller,
 | cassette.proto | CassetteService: InsertTape, EjectTape, Play, Record, Stop, Rewind, FastForward, Seek, GetDeckStatus, SubscribeDeckStatus, GetTapeSignalMap, SeekToAppendPoint, ListBlankTapes, CreateTape | 5.3, 9.0, 9.0.1 |
 | disc.proto | DiscService: InsertDisc, EjectDisc, CancelEject, GetDriveStatus, SubscribeDiscEvents, ListBlankDiscs, CreateDisc | 9.1-9.7 |
 | indicator.proto | IndicatorService: ListIndicators, Subscribe | 10 |
-| sideways.proto | SidewaysService: GetSlotStatus, SubscribeEvents, SetSlotProtection | 11 |
+| sideways.proto | SidewaysService: GetSlotStatus, SubscribeEvents, SetSlotProtection, GetOsRom | 11 |
 | extension_ui.proto | ExtensionUiService: SubscribeView, Dispatch | 12.1, 12.2 |
 | peripheral_extension.proto | PeripheralExtensionService: ListExtensions | 12.2, 12.3 |
 | serial.proto | SerialService: WatchSerialStatus | 12.4 |

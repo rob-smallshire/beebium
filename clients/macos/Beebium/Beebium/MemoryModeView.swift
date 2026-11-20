@@ -34,6 +34,12 @@ struct MemoryModeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                // The fitted OS (MOS) ROM, when the server reports one. Above
+                // Sideways, since the OS is the machine's core firmware and on
+                // the Master its banks 9-15 are the MOS itself.
+                if let osRom = sidewaysClient.osRom {
+                    osSection(osRom)
+                }
                 if !sidewaysClient.isLoaded {
                     loadingView
                 } else if sidewaysClient.sockets.isEmpty {
@@ -45,6 +51,54 @@ struct MemoryModeView: View {
             }
             .padding(.vertical, 4)
         }
+    }
+
+    // MARK: - OS section
+
+    /// The fitted OS ROM: one read-only row, the title over the ROM name (or the
+    /// image's file name when it was given by a path). Same typography as a
+    /// sideways row. The server-side path is shown only when the server shares
+    /// this filesystem, like every other path in this sidebar.
+    @ViewBuilder
+    private func osSection(_ osRom: SidewaysClient.OsRom) -> some View {
+        sectionHeader("OS")
+        VStack(alignment: .leading, spacing: 1) {
+            Text(osRom.title.isEmpty ? osRom.subtitle : osRom.title)
+                .font(.subheadline)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            // The ROM name, or the image's file name when it came by path, so
+            // the identity beneath the friendly title is always visible.
+            if !osRom.title.isEmpty {
+                Text(osRom.subtitle)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .help(osRomTooltip(osRom))
+        .contentShape(Rectangle())
+        Divider().padding(.leading, 16)
+    }
+
+    private func osRomTooltip(_ osRom: SidewaysClient.OsRom) -> String {
+        var lines: [String] = []
+        if !osRom.title.isEmpty { lines.append(osRom.title) }
+        lines.append(osRom.subtitle)
+        // The image_uri is a path on the server, so it only means anything here
+        // when the server shares this filesystem -- the same rule the slot
+        // Reveal and Copy Path honour.
+        if isServerLocal && !osRom.imageUri.isEmpty {
+            lines.append(osRom.imageUri)
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Sideways section

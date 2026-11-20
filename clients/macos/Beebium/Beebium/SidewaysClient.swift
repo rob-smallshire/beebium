@@ -68,9 +68,34 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         let hidden: Bool
     }
 
+    /// The machine's fitted OS (MOS) ROM, as `GetOsRom` reports it. Fixed for the
+    /// run (set at start, like the keyboard links), so fetched once, not
+    /// subscribed. nil until it arrives, and when the server has no OS ROM to
+    /// report (FAILED_PRECONDITION, which no real start produces).
+    struct OsRom: Sendable, Equatable {
+        /// The image as the server resolved it: an absolute path on the server.
+        let imageUri: String
+        /// The bare name when found on the ROM search path (".rom" dropped,
+        /// e.g. "acorn-mos_3_20"); empty when the image was given by a path.
+        let romName: String
+        let sizeBytes: UInt32
+        /// The OS ROM manifest's title for a known image ("Acorn MOS 3.20"),
+        /// else the image file's name without its extension.
+        let title: String
+
+        /// The identity shown beneath the title: the bare ROM name when the
+        /// server found it on its search path, else the resolved image's file
+        /// name (an image given by an absolute path has no ROM name).
+        var subtitle: String {
+            if !romName.isEmpty { return romName }
+            return URL(fileURLWithPath: imageUri).lastPathComponent
+        }
+    }
+
     @Published private(set) var sockets: [Socket] = []
     @Published private(set) var protectionGroups: [ProtectionGroup] = []
     @Published private(set) var hasAliasing: Bool = false
+    @Published private(set) var osRom: OsRom?
     @Published private(set) var isLoaded: Bool = false
     @Published private(set) var errorMessage: String?
 
@@ -84,6 +109,7 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         client = Beebium_SidewaysServiceNIOClient(channel: channel)
         subscriptionTask = Task { [weak self] in
             await self?.fetchSlotStatus()
+            await self?.fetchOsRom()
             await self?.subscribeEvents()
         }
     }
@@ -95,6 +121,7 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         sockets = []
         protectionGroups = []
         hasAliasing = false
+        osRom = nil
         isLoaded = false
         errorMessage = nil
     }
@@ -137,6 +164,24 @@ final class SidewaysClient: ObservableObject, Disconnectable {
             await MainActor.run {
                 self.errorMessage = "Sideways status failed: \(error.localizedDescription)"
             }
+        }
+    }
+
+    /// Fetch the fitted OS ROM once. It is fixed for the run, so there is no
+    /// event to subscribe to. A server that was never told its OS ROM answers
+    /// FAILED_PRECONDITION (no real start does); that and any other failure
+    /// simply leave `osRom` nil, so the OS section is absent rather than wrong.
+    private func fetchOsRom() async {
+        guard let client = client else { return }
+        do {
+            let response = try await client.getOsRom(.init()).response.get()
+            let osRom = OsRom(imageUri: response.imageUri,
+                              romName: response.romName,
+                              sizeBytes: response.sizeBytes,
+                              title: response.title)
+            await MainActor.run { self.osRom = osRom }
+        } catch {
+            await MainActor.run { self.osRom = nil }
         }
     }
 

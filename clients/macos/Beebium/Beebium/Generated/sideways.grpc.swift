@@ -47,6 +47,11 @@ internal protocol Beebium_SidewaysServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?,
     handler: @escaping (Beebium_SidewaysEvent) -> Void
   ) -> ServerStreamingCall<Beebium_SubscribeEventsRequest, Beebium_SidewaysEvent>
+
+  func getOsRom(
+    _ request: Beebium_GetOsRomRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_GetOsRomRequest, Beebium_GetOsRomResponse>
 }
 
 extension Beebium_SidewaysServiceClientProtocol {
@@ -149,6 +154,25 @@ extension Beebium_SidewaysServiceClientProtocol {
       handler: handler
     )
   }
+
+  /// The OS ROM (the MOS) the machine was started with: where its image came
+  /// from and what it is, so a client can show it beside the sideways slots.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetOsRom.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getOsRom(
+    _ request: Beebium_GetOsRomRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_GetOsRomRequest, Beebium_GetOsRomResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_SidewaysServiceClientMetadata.Methods.getOsRom.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetOsRomInterceptors() ?? []
+    )
+  }
 }
 
 @available(*, deprecated)
@@ -242,6 +266,11 @@ internal protocol Beebium_SidewaysServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_SubscribeEventsRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncServerStreamingCall<Beebium_SubscribeEventsRequest, Beebium_SidewaysEvent>
+
+  func makeGetOsRomCall(
+    _ request: Beebium_GetOsRomRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_GetOsRomRequest, Beebium_GetOsRomResponse>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -313,6 +342,18 @@ extension Beebium_SidewaysServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeSubscribeEventsInterceptors() ?? []
     )
   }
+
+  internal func makeGetOsRomCall(
+    _ request: Beebium_GetOsRomRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_GetOsRomRequest, Beebium_GetOsRomResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_SidewaysServiceClientMetadata.Methods.getOsRom.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetOsRomInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -376,6 +417,18 @@ extension Beebium_SidewaysServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeSubscribeEventsInterceptors() ?? []
     )
   }
+
+  internal func getOsRom(
+    _ request: Beebium_GetOsRomRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_GetOsRomResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_SidewaysServiceClientMetadata.Methods.getOsRom.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetOsRomInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -411,6 +464,9 @@ internal protocol Beebium_SidewaysServiceClientInterceptorFactoryProtocol: Senda
 
   /// - Returns: Interceptors to use when invoking 'subscribeEvents'.
   func makeSubscribeEventsInterceptors() -> [ClientInterceptor<Beebium_SubscribeEventsRequest, Beebium_SidewaysEvent>]
+
+  /// - Returns: Interceptors to use when invoking 'getOsRom'.
+  func makeGetOsRomInterceptors() -> [ClientInterceptor<Beebium_GetOsRomRequest, Beebium_GetOsRomResponse>]
 }
 
 internal enum Beebium_SidewaysServiceClientMetadata {
@@ -423,6 +479,7 @@ internal enum Beebium_SidewaysServiceClientMetadata {
       Beebium_SidewaysServiceClientMetadata.Methods.setSlotProtection,
       Beebium_SidewaysServiceClientMetadata.Methods.readSlotData,
       Beebium_SidewaysServiceClientMetadata.Methods.subscribeEvents,
+      Beebium_SidewaysServiceClientMetadata.Methods.getOsRom,
     ]
   )
 
@@ -456,6 +513,12 @@ internal enum Beebium_SidewaysServiceClientMetadata {
       path: "/beebium.SidewaysService/SubscribeEvents",
       type: GRPCCallType.serverStreaming
     )
+
+    internal static let getOsRom = GRPCMethodDescriptor(
+      name: "GetOsRom",
+      path: "/beebium.SidewaysService/GetOsRom",
+      type: GRPCCallType.unary
+    )
   }
 }
 
@@ -486,6 +549,10 @@ internal protocol Beebium_SidewaysServiceProvider: CallHandlerProvider {
 
   /// Subscribe to slot/bank selection events
   func subscribeEvents(request: Beebium_SubscribeEventsRequest, context: StreamingResponseCallContext<Beebium_SidewaysEvent>) -> EventLoopFuture<GRPCStatus>
+
+  /// The OS ROM (the MOS) the machine was started with: where its image came
+  /// from and what it is, so a client can show it beside the sideways slots.
+  func getOsRom(request: Beebium_GetOsRomRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_GetOsRomResponse>
 }
 
 extension Beebium_SidewaysServiceProvider {
@@ -545,6 +612,15 @@ extension Beebium_SidewaysServiceProvider {
         userFunction: self.subscribeEvents(request:context:)
       )
 
+    case "GetOsRom":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetOsRomRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_GetOsRomResponse>(),
+        interceptors: self.interceptors?.makeGetOsRomInterceptors() ?? [],
+        userFunction: self.getOsRom(request:context:)
+      )
+
     default:
       return nil
     }
@@ -596,6 +672,13 @@ internal protocol Beebium_SidewaysServiceAsyncProvider: CallHandlerProvider, Sen
     responseStream: GRPCAsyncResponseStreamWriter<Beebium_SidewaysEvent>,
     context: GRPCAsyncServerCallContext
   ) async throws
+
+  /// The OS ROM (the MOS) the machine was started with: where its image came
+  /// from and what it is, so a client can show it beside the sideways slots.
+  func getOsRom(
+    request: Beebium_GetOsRomRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_GetOsRomResponse
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -662,6 +745,15 @@ extension Beebium_SidewaysServiceAsyncProvider {
         wrapping: { try await self.subscribeEvents(request: $0, responseStream: $1, context: $2) }
       )
 
+    case "GetOsRom":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetOsRomRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_GetOsRomResponse>(),
+        interceptors: self.interceptors?.makeGetOsRomInterceptors() ?? [],
+        wrapping: { try await self.getOsRom(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -689,6 +781,10 @@ internal protocol Beebium_SidewaysServiceServerInterceptorFactoryProtocol: Senda
   /// - Returns: Interceptors to use when handling 'subscribeEvents'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeSubscribeEventsInterceptors() -> [ServerInterceptor<Beebium_SubscribeEventsRequest, Beebium_SidewaysEvent>]
+
+  /// - Returns: Interceptors to use when handling 'getOsRom'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetOsRomInterceptors() -> [ServerInterceptor<Beebium_GetOsRomRequest, Beebium_GetOsRomResponse>]
 }
 
 internal enum Beebium_SidewaysServiceServerMetadata {
@@ -701,6 +797,7 @@ internal enum Beebium_SidewaysServiceServerMetadata {
       Beebium_SidewaysServiceServerMetadata.Methods.setSlotProtection,
       Beebium_SidewaysServiceServerMetadata.Methods.readSlotData,
       Beebium_SidewaysServiceServerMetadata.Methods.subscribeEvents,
+      Beebium_SidewaysServiceServerMetadata.Methods.getOsRom,
     ]
   )
 
@@ -733,6 +830,12 @@ internal enum Beebium_SidewaysServiceServerMetadata {
       name: "SubscribeEvents",
       path: "/beebium.SidewaysService/SubscribeEvents",
       type: GRPCCallType.serverStreaming
+    )
+
+    internal static let getOsRom = GRPCMethodDescriptor(
+      name: "GetOsRom",
+      path: "/beebium.SidewaysService/GetOsRom",
+      type: GRPCCallType.unary
     )
   }
 }

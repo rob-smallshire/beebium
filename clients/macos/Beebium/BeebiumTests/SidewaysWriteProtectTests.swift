@@ -49,6 +49,25 @@ final class SidewaysProtectionTests: XCTestCase {
             .rejected("Could not change protection for socket-14."))
     }
 
+    // MARK: - OS ROM subtitle (the identity shown beneath the title)
+
+    func testOsRomSubtitleIsTheBareNameWhenFoundOnTheSearchPath() {
+        let osRom = SidewaysClient.OsRom(
+            imageUri: "/opt/beebium/roms/acorn-mos_3_20.rom",
+            romName: "acorn-mos_3_20", sizeBytes: 16384, title: "Acorn MOS 3.20")
+        // A search-path ROM shows its bare name, not the server's absolute path.
+        XCTAssertEqual(osRom.subtitle, "acorn-mos_3_20")
+    }
+
+    func testOsRomSubtitleFallsBackToTheImageFileNameWhenGivenByPath() {
+        // Given by a path, there is no ROM name; show the file's name, never the
+        // whole server path (that is tooltip-only and local-server-gated).
+        let osRom = SidewaysClient.OsRom(
+            imageUri: "/Users/someone/custom/myos.rom",
+            romName: "", sizeBytes: 16384, title: "myos")
+        XCTAssertEqual(osRom.subtitle, "myos.rom")
+    }
+
     // MARK: - Which group covers a socket
 
     func testOneSlotWriteGroupCoversItsSlot() {
