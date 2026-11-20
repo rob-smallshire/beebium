@@ -204,6 +204,7 @@ Files derived from sources licensed under GPL-3.0 only carry that licence instea
 - **James** (acheton1984) - The [Tak benchmark reconstruction](https://github.com/acheton1984/ReTestingTheTak), timed on real BBC Micro and second-processor hardware, which showed Beebium's 6502 Second Processor running fast and now anchors its timing tests; and careful, generous testing of Beebium releases
 - **Dominic Plunkett** (dp111) - The [6502 instruction timing test suite](https://github.com/dp111/6502Timing), which times almost every documented and undocumented 6502 instruction against a 1MHz VIA and now guards Beebium's core, VIA timer and 1MHz bus stretching
 - **Ken Lowe** (KenLowe) - Documenting and reverse engineering the Computech Integra-B board: the rebuilt IBOS 1.20 User Guide and the board schematic that Beebium's Integra-B emulation is built from
+- **Richard Webb** (UKWebb) - Allowing the use of his Master 128 diagnostic ROM, which tests every RAM region and the board's hardware from the MOS socket, to exercise Beebium's Master 128; it found the 1770's missing index pulse, and the LK18/LK19 links are modelled from his notes
 - The BBC Micro community at [Stardot](https://stardot.org.uk/)
 
 ## Third-Party Libraries
