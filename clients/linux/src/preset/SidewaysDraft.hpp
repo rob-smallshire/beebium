@@ -28,6 +28,10 @@ struct SocketContent {
     std::string type = "empty";  // "rom", "ram" or "empty"
     std::string image_uri;       // a name or path; empty for none
     bool write_protected = false;
+    // A Master's bank 9-15 the server derives from the MOS in force
+    // ("source": "mos"), written back marked so it follows the MOS; the
+    // user's own image is never marked.
+    bool from_mos = false;
 
     friend bool operator==(const SocketContent&, const SocketContent&) = default;
 };
@@ -62,6 +66,12 @@ private:
     MachineDraft& draft_;
     std::vector<SchemaSocket> sockets_;
 };
+
+// Take the banks the server derived from the MOS in force (resolve-preset's
+// answer for the draft) into the draft, in place of its marked ones: after
+// a MOS change they show the new set before launch. The user's own entries
+// stay. Whether anything changed.
+bool follow_mos_banks(MachineDraft& draft, const nlohmann::ordered_json& resolved);
 
 }  // namespace beebium::linux_client
 

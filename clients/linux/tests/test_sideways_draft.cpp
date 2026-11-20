@@ -107,3 +107,69 @@ TEST_CASE("The schema gives the sockets and their aliasing", "[preset][sideways]
     CHECK(sockets[1].can("write_protect"));
     CHECK_FALSE(sockets[0].can("write_protect"));
 }
+
+namespace {
+
+// Two of a Master's MOS banks, each its own socket.
+std::vector<SchemaSocket> master_mos_sockets() {
+    std::vector<SchemaSocket> sockets;
+    for (int slot : {14, 15}) {
+        SchemaSocket socket;
+        socket.label = "MOS ROM (bank " + std::to_string(slot) + ")";
+        socket.slots = {slot};
+        socket.capabilities = {"rom"};
+        sockets.push_back(socket);
+    }
+    return sockets;
+}
+
+ordered_json master_banks(const char* bank_14, const char* bank_15, bool mark_15 = true) {
+    ordered_json slots = ordered_json::array();
+    slots.push_back({{"slot", 14}, {"type", "rom"}, {"image_uri", bank_14}, {"source", "mos"}});
+    ordered_json entry{{"slot", 15}, {"type", "rom"}, {"image_uri", bank_15}};
+    if (mark_15) {
+        entry["source"] = "mos";
+    }
+    slots.push_back(entry);
+    return ordered_json{{"model", "master-128"}, {"sideways_bank", {{"slots", slots}}}};
+}
+
+}  // namespace
+
+TEST_CASE("A bank from the MOS is read as such and written back with its marker",
+          "[preset][sideways][mos]") {
+    MachineDraft draft(master_banks("acorn-dfs_2_24.rom", "acorn-terminal_1_20_mos_3_20.rom"));
+    SidewaysDraft sideways(draft, master_mos_sockets());
+    CHECK(sideways.content(0) == SocketContent{"rom", "acorn-terminal_1_20_mos_3_20.rom", false, true});
+    // Written back as it was, marker and all.
+    sideways.set(0, sideways.content(0));
+    CHECK((*draft.get("/sideways_bank/slots"))[1] ==
+          ordered_json::parse(R"({"slot": 15, "type": "rom", "image_uri": "acorn-terminal_1_20_mos_3_20.rom", "source": "mos"})"));
+    CHECK_FALSE(sideways.changed(0));
+    // The user's own image carries none.
+    sideways.set(0, SocketContent{"rom", "/home/me/roms/mine.rom", false});
+    CHECK_FALSE((*draft.get("/sideways_bank/slots"))[1].contains("source"));
+    CHECK(sideways.changed(0));
+}
+
+TEST_CASE("A bank moved to another socket is the user's, not the MOS's", "[preset][sideways][mos]") {
+    MachineDraft draft(master_banks("acorn-dfs_2_24.rom", "acorn-terminal_1_20_mos_3_20.rom"));
+    SidewaysDraft sideways(draft, master_mos_sockets());
+    sideways.swap(0, 1);
+    CHECK(sideways.content(0) == SocketContent{"rom", "acorn-dfs_2_24.rom", false, false});
+    CHECK(sideways.content(1) == SocketContent{"rom", "acorn-terminal_1_20_mos_3_20.rom", false, false});
+}
+
+TEST_CASE("The MOS's banks follow the server's resolution; the user's stay", "[preset][sideways][mos]") {
+    MachineDraft draft(master_banks("acorn-dfs_2_24.rom", "/home/me/roms/mine.rom", false));
+    const ordered_json answer = master_banks("acorn-dfs_2_45.rom", "acorn-terminal_1_20_mos_3_50.rom");
+    CHECK(follow_mos_banks(draft, answer));
+    const auto slots = *draft.get("/sideways_bank/slots");
+    CHECK(slots[0] == ordered_json::parse(R"({"slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_45.rom", "source": "mos"})"));
+    CHECK(slots[1] == ordered_json::parse(R"({"slot": 15, "type": "rom", "image_uri": "/home/me/roms/mine.rom"})"));
+    // Nothing new: nothing changes.
+    CHECK_FALSE(follow_mos_banks(draft, answer));
+    // An answer without the bank leaves it.
+    CHECK_FALSE(follow_mos_banks(draft, ordered_json{{"model", "master-128"}}));
+    CHECK((*draft.get("/sideways_bank/slots"))[0]["image_uri"] == "acorn-dfs_2_45.rom");
+}

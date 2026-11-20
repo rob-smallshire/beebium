@@ -22,6 +22,10 @@ namespace {
 
 const char* SLOTS = "/sideways_bank/slots";
 
+bool from_mos(const ordered_json& entry) {
+    return entry.is_object() && entry.value("source", ordered_json()) == ordered_json("mos");
+}
+
 bool answers(const SchemaSocket& socket, const ordered_json& entry) {
     if (!entry.is_object() || !entry.contains("slot") || !entry["slot"].is_number_integer()) {
         return false;
@@ -51,6 +55,7 @@ SocketContent SidewaysDraft::read(const ordered_json& slots, std::size_t socket)
             const auto uri = entry.value("image_uri", ordered_json());
             content.image_uri = uri.is_string() ? uri.get<std::string>() : std::string();
             content.write_protected = entry.value("write_protected", false);
+            content.from_mos = from_mos(entry);
             break;
         }
     }
@@ -104,6 +109,9 @@ void SidewaysDraft::set(std::size_t socket, const SocketContent& content) {
     if (content.type == "ram") {
         entry["write_protected"] = content.write_protected;
     }
+    if (content.from_mos) {
+        entry["source"] = "mos";
+    }
     // In the entry's place, or after the rest; the socket's other slots go.
     bool placed = false;
     ordered_json out = ordered_json::array();
@@ -124,10 +132,41 @@ void SidewaysDraft::set(std::size_t socket, const SocketContent& content) {
 }
 
 void SidewaysDraft::swap(std::size_t a, std::size_t b) {
-    const SocketContent first = content(a);
-    const SocketContent second = content(b);
+    // Moved, an image is the user's choice: the MOS marks only its own bank.
+    SocketContent first = content(a);
+    SocketContent second = content(b);
+    first.from_mos = false;
+    second.from_mos = false;
     set(a, second);
     set(b, first);
+}
+
+bool follow_mos_banks(MachineDraft& draft, const ordered_json& resolved) {
+    auto slots = draft.get(SLOTS);
+    const ordered_json::json_pointer path(SLOTS);
+    if (!slots || !slots->is_array() || !resolved.contains(path) || !resolved.at(path).is_array()) {
+        return false;
+    }
+    const ordered_json& derived = resolved.at(path);
+    bool changed = false;
+    for (auto& entry : *slots) {
+        if (!from_mos(entry)) {
+            continue;
+        }
+        for (const auto& answer : derived) {
+            if (from_mos(answer) && answer.value("slot", -1) == entry.value("slot", -2)) {
+                if (answer != entry) {
+                    entry = answer;
+                    changed = true;
+                }
+                break;
+            }
+        }
+    }
+    if (changed) {
+        draft.set(SLOTS, *slots);
+    }
+    return changed;
 }
 
 }  // namespace beebium::linux_client
