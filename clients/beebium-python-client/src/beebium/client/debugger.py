@@ -17,7 +17,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import grpc
 
@@ -978,7 +978,9 @@ class Debugger:
         sequence number instead (``ExecutionState.sequence``, as
         :meth:`get_state` and :meth:`stop` return it): a machine already
         stopped with a newer sequence returns at once, from the stream's
-        initial snapshot. That is the form for a REPL, where by the time a
+        initial snapshot, whose message is the state's halt reason (its
+        ``reason`` stays ``STOP_REASON_UNKNOWN``: a snapshot does not say
+        which kind of stop it was). That is the form for a REPL, where by the time a
         person has typed the wait the machine may long since have stopped::
 
             before = bbc.debugger.get_state()
@@ -1020,7 +1022,10 @@ class Debugger:
         if since is None:
             since = initial.state.sequence
         elif not initial.state.is_running and initial.state.sequence > since:
-            return initial
+            # The stream's initial snapshot carries no message, and no
+            # StopReason (it says STOP_REASON_UNKNOWN); give it the state's
+            # halt reason as its message, as a stop event's is.
+            return replace(initial, message=initial.message or initial.state.halt_reason)
         for event in stream:
             if not event.state.is_running and event.state.sequence > since:
                 return event

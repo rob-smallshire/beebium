@@ -514,6 +514,8 @@ class TestWaitForStopSince:
         assert event.state.sequence == stopped.sequence
         assert event.state.sequence > before.sequence
         assert bbc.cpu.pc == 0x0402
+        assert event.message == stopped.halt_reason
+        assert event.message.startswith("breakpoint")
 
     def test_waits_for_a_stop_still_to_come(self, bbc):
         plant_and_run_from(bbc, COUNTING_LOOP)
