@@ -32,6 +32,8 @@
 #include <QProcess>
 #include <QPushButton>
 
+#include <optional>
+
 using namespace beebium::linux_client;
 using namespace beebium::linux_client::testing;
 using nlohmann::ordered_json;
@@ -49,7 +51,8 @@ std::optional<ordered_json> resolved(const QString& executable_filepath, const Q
     if (answer.is_discarded() || !answer.contains("preset") || !answer["preset"].is_object()) {
         return std::nullopt;
     }
-    return answer["preset"];
+    // In place: a json converts to an optional two ways, which GCC 15 refuses.
+    return std::optional<ordered_json>(std::in_place, answer["preset"]);
 }
 
 // The server's own output of a subcommand, as the client runs it.
