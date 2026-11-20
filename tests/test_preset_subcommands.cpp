@@ -297,7 +297,8 @@ TEST_CASE("list-presets: --format jsonl and --json yield the same rows", "[integ
                                     {"filepath", (temp_dir.presets() /
                                                   (LONG_PRESET_ID + ".beebium-preset")).string()},
                                     {"thumbnail", false},
-                                    {"facets", plain_facets("Model B", "None")}};
+                                    {"facets", plain_facets("Model B", "None")},
+                                    {"keywords", nlohmann::ordered_json::array({"BBC", "Micro", "Acorn"})}};
     REQUIRE(jsonl.stdout_output.find(expected.dump() + "\n") != std::string::npos);
 }
 
@@ -335,7 +336,8 @@ TEST_CASE("list-presets jsonl: every field a preset gives, in a fixed order, and
                                     {"release_date", "1984"},
                                     {"filepath", filepath.string()},
                                     {"thumbnail", true},
-                                    {"facets", plain_facets("Model B", "None")}};
+                                    {"facets", plain_facets("Model B", "None")},
+                                    {"keywords", nlohmann::ordered_json::array({"BBC", "Micro", "Acorn"})}};
     CHECK(jsonl_row(result.stdout_output, "full") == expected.dump());
 }
 
@@ -361,7 +363,8 @@ TEST_CASE("list-presets jsonl: a field a preset does not give is omitted, and an
                                {"description", "Suits any model"},
                                {"filepath", any_filepath.string()},
                                {"thumbnail", false},
-                               {"facets", plain_facets("Model B", "None")}};
+                               {"facets", plain_facets("Model B", "None")},
+                               {"keywords", nlohmann::ordered_json::array({"BBC", "Micro", "Acorn"})}};
     CHECK(jsonl_row(own.stdout_output, "any") == any.dump());
 
     // Every model's: the model-b-plus preset is called by its own model's name.
@@ -373,7 +376,10 @@ TEST_CASE("list-presets jsonl: a field a preset does not give is omitted, and an
                                 {"model", "model-b-plus"},
                                 {"filepath", plus_filepath.string()},
                                 {"thumbnail", false},
-                                {"facets", plain_facets("Model B+", "1770")}};
+                                {"facets", plain_facets("Model B+", "1770")},
+                                {"keywords", nlohmann::ordered_json::array({"BBC", "Micro", "Acorn", "B+",
+                                                                            "Plus", "WD1770",
+                                                                            "Western Digital"})}};
     CHECK(jsonl_row(all.stdout_output, "plus") == plus.dump());
     CHECK(jsonl_row(all.stdout_output, "any") == any.dump());
 }
@@ -503,6 +509,47 @@ TEST_CASE("list-presets: a user preset with no name still gets its facets",
     CHECK(row.at("name") == "BBC Model B");
     CHECK(row.at("facets").dump() ==
           facets("Model B", "65C102", "8271", "AUN", {"Floppy", "Cassette"}, {"Music 5000"}).dump());
+}
+
+TEST_CASE("list-presets: a row's keywords are its facet sources' words, in facet order",
+          "[integration][preset][list-presets][keywords]") {
+    TempDirectory user_dir;
+    auto result = run_command(EXECUTABLE + " --format jsonl list-presets --all-models",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+    REQUIRE(result.exit_code == 0);
+    const auto rows = rows_by_id(result.stdout_output);
+
+    // Model, coprocessor, disc controller, network, then storage; the RTC and
+    // the SCSI adapter declare none.
+    REQUIRE(rows.count("model-b-l3fs-aun") == 1);
+    CHECK(rows.at("model-b-l3fs-aun").at("keywords").dump() ==
+          nlohmann::ordered_json::array({"BBC", "Micro", "Acorn", "6502", "Second Processor",
+                                         "WD1770", "Western Digital", "Econet", "Ethernet",
+                                         "Winchester"})
+              .dump());
+
+    // A search for "6502" finds the 65C02 and the 65C102 alike.
+    for (const char* id : {"model-b-disc-65c02-copro", "model-b-plus-128k-65c102-copro",
+                           "master-128-65c102-copro"}) {
+        INFO(id);
+        REQUIRE(rows.count(id) == 1);
+        const auto& keywords = rows.at(id).at("keywords");
+        CHECK(std::find(keywords.begin(), keywords.end(), "6502") != keywords.end());
+    }
+}
+
+TEST_CASE("list-presets: an extension whose manifest declares no keywords adds none",
+          "[integration][preset][list-presets][keywords]") {
+    TempDirectory user_dir;
+    store_preset(user_dir.presets(), "rtc-only",
+                 R"({"model": "model-b", "extensions": [{"name": "acorn-rtc"}]})");
+    auto result = run_command(EXECUTABLE + " --format jsonl list-presets",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+    REQUIRE(result.exit_code == 0);
+    const auto rows = rows_by_id(result.stdout_output);
+    REQUIRE(rows.count("rtc-only") == 1);
+    CHECK(rows.at("rtc-only").at("facets").at("peripherals").dump() == R"(["Real-time clock"])");
+    CHECK(rows.at("rtc-only").at("keywords").dump() == R"(["BBC","Micro","Acorn"])");
 }
 
 TEST_CASE("describe-facets: the facets in display order, with key, label and kind",

@@ -1,6 +1,7 @@
 {
     "name": "hybrid-music-5000",
     "display_name": "Hybrid Music 5000",
+    "keywords": ["Hybrid", "synthesiser"],
     "short_name": "Music 5000",
     "description": "The Hybrid Music 5000 synthesiser, or its Music 3000 expander, which adds sixteen channels of digital sound on the 1 MHz bus.",
     "library": "hybrid-music-5000",

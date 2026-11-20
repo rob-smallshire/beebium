@@ -89,6 +89,10 @@ struct BEEBIUM_EXT_API ExtensionManifest {
     // of the preset facet storage, or empty for an extension that is not
     // storage.
     std::string storage{};
+    // The words a preset search finds this extension by that its names do
+    // not spell ("6502" for a 65C02 coprocessor), a list-presets row's
+    // keywords.
+    std::vector<std::string> keywords{};
 
     // The value a preset facet shows for this extension.
     const std::string& facet_name() const { return short_name.empty() ? display_name : short_name; }

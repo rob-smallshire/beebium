@@ -1,6 +1,7 @@
 {
     "name": "piconet",
     "display_name": "Piconet",
+    "keywords": ["Econet", "USB"],
     "description": "Connects the Econet port to a real Econet network through a Piconet USB interface.",
     "library": "piconet",
     "cli": "piconet",

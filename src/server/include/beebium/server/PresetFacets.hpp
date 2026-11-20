@@ -15,7 +15,9 @@
 // peripherals), derived by the server from the loaded preset, the model's
 // entry in MachineModels and the extensions' manifests, so a client filters
 // without reading preset content. list-presets gives each row's facets and
-// describe-facets the facet list (docs/preset-schema.md, "Facets").
+// keywords (the words a search finds the preset by that its facet values do
+// not spell), and describe-facets the facet list (docs/preset-schema.md,
+// "Facets").
 
 #pragma once
 
@@ -76,18 +78,54 @@ inline void add_once(nlohmann::ordered_json& values, const std::string& value) {
     values.push_back(value);
 }
 
-inline std::string disc_controller_facet(const PresetConfig& preset,
-                                         const beebium::MachineModel& model) {
+// The preset's disc controller: the model's built-in one, else the one in its
+// FDC socket; nullptr for none, or a built-in chip the registry lacks.
+inline const beebium::ControllerTypeEntry* disc_controller(const PresetConfig& preset,
+                                                          const beebium::MachineModel& model) {
     if (!model.builtin_fdc_chip.empty()) {
-        const auto* builtin = beebium::DiscControllerRegistry::find_by_chip(model.builtin_fdc_chip);
-        return std::string(builtin ? builtin->short_name : model.builtin_fdc_chip);
+        return beebium::DiscControllerRegistry::find_by_chip(model.builtin_fdc_chip);
     }
     if (preset.storage && preset.storage->fdc_socket_id) {
-        if (const auto* fitted = beebium::DiscControllerRegistry::find(*preset.storage->fdc_socket_id)) {
-            return std::string(fitted->short_name);
+        return beebium::DiscControllerRegistry::find(*preset.storage->fdc_socket_id);
+    }
+    return nullptr;
+}
+
+inline std::string disc_controller_facet(const PresetConfig& preset,
+                                         const beebium::MachineModel& model) {
+    if (const auto* controller = disc_controller(preset, model)) {
+        return std::string(controller->short_name);
+    }
+    if (!model.builtin_fdc_chip.empty()) return std::string(model.builtin_fdc_chip);
+    return std::string(kNoFacetValue);
+}
+
+// The preset's extensions the resolver knows, by the facet that owns them.
+struct FacetedExtensions {
+    const beebium::ExtensionManifest* coprocessor = nullptr;
+    const beebium::ExtensionManifest* transport = nullptr;
+    std::vector<const beebium::ExtensionManifest*> storage;
+    std::vector<const beebium::ExtensionManifest*> peripherals;
+};
+
+inline FacetedExtensions faceted_extensions(const PresetConfig& preset,
+                                            const beebium::ExtensionResolver& resolver) {
+    FacetedExtensions found;
+    for (const auto& extension : preset.extensions) {
+        const auto* manifest = resolver.find_by_name(extension.name);
+        if (!manifest) continue;
+        if (is_coprocessor(*manifest)) {
+            if (!found.coprocessor) found.coprocessor = manifest;
+        } else if (!manifest->storage.empty()) {
+            found.storage.push_back(manifest);
+        } else if (manifest->extension_kind != "econet-transport") {
+            found.peripherals.push_back(manifest);
         }
     }
-    return std::string(kNoFacetValue);
+    if (preset.econet && preset.econet->transport) {
+        found.transport = resolver.find_by_name(preset.econet->transport->name);
+    }
+    return found;
 }
 
 }  // namespace detail
@@ -153,6 +191,30 @@ inline nlohmann::ordered_json preset_facets(const PresetConfig& preset,
     facets["storage"] = storage;
     facets["peripherals"] = peripherals;
     return facets;
+}
+
+// The keywords of `preset` on `model`: the words a preset search finds it by
+// that its facet values do not spell, as declared beside each facet's source
+// (the model's MachineModels entry, the controller registry, the extensions'
+// manifests). In facet order, each source's in declaration order, each word
+// once.
+inline nlohmann::ordered_json preset_keywords(const PresetConfig& preset,
+                                              const beebium::MachineModel& model,
+                                              const beebium::ExtensionResolver& resolver) {
+    nlohmann::ordered_json keywords = nlohmann::ordered_json::array();
+    auto add_words = [&](const auto& words) {
+        for (const auto& word : words) {
+            if (!word.empty()) detail::add_once(keywords, std::string(word));
+        }
+    };
+    const auto extensions = detail::faceted_extensions(preset, resolver);
+    add_words(model.keywords);
+    if (extensions.coprocessor) add_words(extensions.coprocessor->keywords);
+    if (const auto* controller = detail::disc_controller(preset, model)) add_words(controller->keywords);
+    if (extensions.transport) add_words(extensions.transport->keywords);
+    for (const auto* manifest : extensions.storage) add_words(manifest->keywords);
+    for (const auto* manifest : extensions.peripherals) add_words(manifest->keywords);
+    return keywords;
 }
 
 }  // namespace beebium::server

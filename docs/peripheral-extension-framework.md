@@ -157,6 +157,10 @@ Fields:
   `describe-extension --json` gives it, filled in.
 - `storage` -- optional: the storage medium an instance gives the machine
   ("Hard disc"), listed under the `storage` facet rather than `peripherals`
+- `keywords` -- optional: the words a preset search finds the extension by
+  that its names do not spell (`["6502", "Second Processor"]` for a 65C02
+  coprocessor, `["Winchester"]` for a SCSI hard disc), gathered into each
+  `list-presets` row's `keywords`; none when omitted
 - `description` -- one sentence a user understands, saying what it is or does;
   a configuration UI shows it beside the display name (`describe-preset-schema`
   carries both, and a test holds every shipped description to a sentence)

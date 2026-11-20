@@ -1081,11 +1081,12 @@ my-elite-setup	My Elite Setup	user
 then whichever of `model`, `machine_description`, `description` and `release_date` the
 preset gives (a field it does not give is omitted, never `null`), then
 `filepath`, `thumbnail` (whether `show-preset --thumbnail` has one to write)
-and `facets`, the values a catalogue filters by (see
-[Facets](preset-schema.md#facets) and `describe-facets` below), in that order:
+`facets`, the values a catalogue filters by (see
+[Facets](preset-schema.md#facets) and `describe-facets` below), and `keywords`,
+the other words a search finds the preset by, in that order:
 ```json
-{"id":"model-b","name":"BBC Model B","source":"system","model":"model-b","description":"A standard Model B","release_date":"1981","filepath":"/usr/share/beebium/presets/model-b.beebium-preset","thumbnail":true,"facets":{"model":"Model B","coprocessor":"None","disc_controller":"None","network":"None","storage":["Cassette"],"peripherals":[]}}
-{"id":"my-elite-setup","name":"My Elite Setup","source":"user","model":"model-b","filepath":"/home/me/.config/beebium/presets/my-elite-setup.beebium-preset","thumbnail":false,"facets":{"model":"Model B","coprocessor":"None","disc_controller":"1770","network":"None","storage":["Floppy","Cassette"],"peripherals":[]}}
+{"id":"model-b","name":"BBC Model B","source":"system","model":"model-b","description":"A standard Model B","release_date":"1981","filepath":"/usr/share/beebium/presets/model-b.beebium-preset","thumbnail":true,"facets":{"model":"Model B","coprocessor":"None","disc_controller":"None","network":"None","storage":["Cassette"],"peripherals":[]},"keywords":["BBC","Micro","Acorn"]}
+{"id":"my-elite-setup","name":"My Elite Setup","source":"user","model":"model-b","filepath":"/home/me/.config/beebium/presets/my-elite-setup.beebium-preset","thumbnail":false,"facets":{"model":"Model B","coprocessor":"None","disc_controller":"1770","network":"None","storage":["Floppy","Cassette"],"peripherals":[]},"keywords":["BBC","Micro","Acorn","WD1770","Western Digital"]}
 ```
 
 #### describe-facets

@@ -67,6 +67,7 @@ inline std::vector<Entry> make_entries() {
         ExtensionManifest m;
         m.name = "aun";
         m.display_name = "AUN";
+        m.keywords = {"Econet", "Ethernet"};
         m.description =
             "Connects the Econet port to other machines over the network using AUN "
             "(Acorn Universal Networking).";

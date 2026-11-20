@@ -34,6 +34,9 @@ struct ControllerTypeEntry {
     // The controller's chip as a catalogue filter names it ("1770", "8271"),
     // the preset facet disc_controller.
     std::string_view short_name;
+    // The words a preset search finds the controller by that its names do
+    // not spell; empty entries are unused.
+    std::array<std::string_view, 3> keywords = {};
 };
 
 // Registry of available disc controller types
@@ -92,14 +95,16 @@ private:
             .display_name = "Acorn 1770",
             .fdc_chip = "WD1770",
             .description = "Standard Acorn disc controller upgrade for BBC Model B",
-            .short_name = "1770"
+            .short_name = "1770",
+            .keywords = {"WD1770", "Western Digital"}
         },
         {
             .id = "acorn-8271",
             .display_name = "Acorn 8271",
             .fdc_chip = "8271",
             .description = "Original Intel 8271 disc interface for BBC Model B (DFS 0.90-1.22)",
-            .short_name = "8271"
+            .short_name = "8271",
+            .keywords = {"Intel", "Intel 8271"}
         }
         // Future controllers will be added here
     }};

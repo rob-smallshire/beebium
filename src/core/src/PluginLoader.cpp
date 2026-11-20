@@ -168,6 +168,7 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
     manifest.extension_kind = j.value("extension_kind", "peripheral");
     manifest.short_name = j.value("short_name", "");
     manifest.storage = j.value("storage", "");
+    manifest.keywords = j.value("keywords", std::vector<std::string>{});
     manifest.manifest_dirpath = manifest_filepath.parent_path();
 
     if (manifest.name.empty()) {

@@ -549,7 +549,8 @@ public:
                   << "and source (system or user). A jsonl row also carries what the preset\n"
                   << "gives of model, machine_description, description and release_date, its\n"
                   << "filepath, whether it has a thumbnail (show-preset --thumbnail), and its\n"
-                  << "facets, the values a catalogue filters by (see describe-facets).\n"
+                  << "facets, the values a catalogue filters by (see describe-facets), and\n"
+                  << "keywords, other words a search finds it by.\n"
                   << "A preset with no name is called by its model's display name.\n"
                   << "\n"
                   << "Options:\n"
@@ -598,6 +599,7 @@ public:
             std::filesystem::path filepath;
             bool thumbnail = false;
             nlohmann::ordered_json facets;
+            nlohmann::ordered_json keywords;
         };
         // The extensions' manifests, for the facets.
         ServerConfig<MachineType> resolver_cfg;
@@ -626,7 +628,8 @@ public:
                             system ? "system" : "user", preset.model, preset.machine_description,
                             preset.description, preset.release_date, entry.filepath,
                             PresetPaths::find_thumbnail(*source).has_value(),
-                            preset_facets(preset, model ? *model : *own_model, resolver)});
+                            preset_facets(preset, model ? *model : *own_model, resolver),
+                            preset_keywords(preset, model ? *model : *own_model, resolver)});
         }
 
         OutputFormat format = json_output ? OutputFormat::Jsonl
@@ -684,6 +687,7 @@ public:
                         row["filepath"] = p.filepath.string();
                         row["thumbnail"] = p.thumbnail;
                         row["facets"] = p.facets;
+                        row["keywords"] = p.keywords;
                         std::cout << row.dump() << "\n";
                     }
                 }

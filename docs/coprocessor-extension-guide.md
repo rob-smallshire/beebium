@@ -171,6 +171,10 @@ Coprocessor filter shows it (`"short_name": "65C02"`; a Z80 would be `"Z80"`).
 An extension that attaches to a Tube is the preset's coprocessor facet by
 that name (see [Facets](preset-schema.md#facets)); without one, its
 `display_name` stands in.
+Give it `keywords` too, the words a person searching the presets would use
+that the names do not spell: the 65C02 and 65C102 declare
+`["6502", "Second Processor"]`, and an ARM coprocessor would declare
+`["ARM", "ARM1"]`.
 
 Declare the firmware in `manifest.json` and put it in `roms/` beside it:
 
