@@ -703,6 +703,104 @@ TEST_CASE("Speed writes a multiplier or unlimited, and keeps a preset's own", "[
     CHECK(f.section_names().contains(QStringLiteral("Processor \u2022")));
 }
 
+TEST_CASE("Processor shows the MOS ROM after the speed, by name from the ROM search path",
+          "[configuration][processor][mos]") {
+    auto document = model_b_with_disc();
+    document["mos_image_uri"] = "acorn-mos_1_20.rom";
+    ConfigurationFixture f(document);
+    auto* processor = f.section<ProcessorSection>();
+    REQUIRE(processor->mos_title());
+    CHECK(processor->mos_title()->isVisibleTo(processor));
+    CHECK(processor->mos_title()->text() == QStringLiteral("acorn-mos_1_20.rom"));
+    CHECK(processor->mos_caption()->text() == QStringLiteral("The model's MOS, from the ROM search path"));
+    // Already the model's own: nothing to go back to.
+    CHECK_FALSE(processor->mos_default()->isEnabled());
+    bool headed = false;
+    for (QLabel* label : processor->findChildren<QLabel*>()) {
+        headed = headed || label->text() == QStringLiteral("MOS ROM");
+    }
+    CHECK(headed);
+    CHECK_FALSE(f.section_names().contains(QStringLiteral("Processor •")));
+}
+
+TEST_CASE("A MOS ROM chosen from a file is written as its path; Use Default puts the model's back",
+          "[configuration][processor][mos]") {
+    auto document = model_b_with_disc();
+    document["mos_image_uri"] = "acorn-mos_1_20.rom";
+    ConfigurationFixture f(document);
+    auto* processor = f.section<ProcessorSection>();
+    const int before = f.resolutions;
+    f.answer = QStringLiteral("/home/me/roms/My MOS.rom");
+    processor->mos_browse()->click();
+    CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("/home/me/roms/My MOS.rom"));
+    CHECK(processor->mos_title()->text() == QStringLiteral("My MOS.rom"));
+    CHECK(processor->mos_caption()->text() == QStringLiteral("/home/me/roms/My MOS.rom"));
+    REQUIRE(wait_until([&] { return f.resolutions > before; }));
+    CHECK(f.section_names().contains(QStringLiteral("Processor •")));
+    REQUIRE(processor->mos_default()->isEnabled());
+    processor->mos_default()->click();
+    CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("acorn-mos_1_20.rom"));
+    CHECK_FALSE(processor->mos_default()->isEnabled());
+    CHECK_FALSE(f.section_names().contains(QStringLiteral("Processor •")));
+}
+
+TEST_CASE("A cancelled MOS ROM Browse leaves the draft as it was", "[configuration][processor][mos]") {
+    auto document = model_b_with_disc();
+    document["mos_image_uri"] = "acorn-mos_1_20.rom";
+    ConfigurationFixture f(document);
+    auto* processor = f.section<ProcessorSection>();
+    processor->mos_browse()->click();  // no answer: cancelled
+    CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("acorn-mos_1_20.rom"));
+}
+
+TEST_CASE("A preset's own MOS ROM by name is shown as not the model's", "[configuration][processor][mos]") {
+    auto document = master_128_with_extensions("[]");
+    document["mos_image_uri"] = "acorn-mos_3_50.rom";
+    ConfigurationFixture f(document,
+                           [](ConfigurationFixture& fixture) { fixture.schema_text = master_128_schema_text(); });
+    auto* processor = f.section<ProcessorSection>();
+    CHECK(processor->mos_title()->text() == QStringLiteral("acorn-mos_3_50.rom"));
+    CHECK(processor->mos_caption()->text() == QStringLiteral("From the ROM search path"));
+    REQUIRE(processor->mos_default()->isEnabled());
+    processor->mos_default()->click();
+    CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("acorn-mos_3_20.rom"));
+}
+
+TEST_CASE("The MOS ROM's diagnostics show beneath it, verbatim", "[configuration][processor][mos]") {
+    auto document = model_b_with_disc();
+    document["mos_image_uri"] = "acorn-mos_1_20.rom";
+    ConfigurationFixture f(document);
+    f.diagnostics = ordered_json::parse(R"([{"severity": "error", "path": "/mos_image_uri",
+        "location": "MOS ROM", "message": "MOS ROM 'gone.rom' not found"}])");
+    auto* processor = f.section<ProcessorSection>();
+    f.answer = QStringLiteral("/home/me/roms/gone.rom");
+    processor->mos_browse()->click();
+    REQUIRE(wait_until([&] { return !f.dialog->diagnostics().empty(); }));
+    bool shown = false;
+    for (QLabel* label : processor->findChildren<QLabel*>()) {
+        shown = shown || (label->text() == QStringLiteral("MOS ROM 'gone.rom' not found") &&
+                          label->isVisibleTo(processor));
+    }
+    CHECK(shown);
+}
+
+TEST_CASE("A model whose schema has no MOS ROM shows none", "[configuration][processor][mos]") {
+    ConfigurationFixture f(model_b_with_disc(), [](ConfigurationFixture& fixture) {
+        auto schema = ordered_json::parse(fixture.schema_text);
+        auto& sections = schema["sections"];
+        for (auto it = sections.begin(); it != sections.end(); ++it) {
+            if (it->value("type", std::string()) == "mos_image_uri") {
+                sections.erase(it);
+                break;
+            }
+        }
+        fixture.schema_text = schema.dump();
+    });
+    auto* processor = f.section<ProcessorSection>();
+    CHECK_FALSE(processor->mos_title()->isVisibleTo(processor));
+    CHECK_FALSE(processor->mos_browse()->isVisibleTo(processor));
+}
+
 TEST_CASE("Econet off leaves the rest disabled; on seeds a station and transport",
           "[configuration][network]") {
     ConfigurationFixture f(model_b_with_disc());  // "econet": null

@@ -17,9 +17,12 @@
 #include "preset/ExtensionsDraft.hpp"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 class QComboBox;
+class QLabel;
+class QPushButton;
 class QVBoxLayout;
 
 namespace beebium::linux_client {
@@ -30,7 +33,8 @@ class DiagnosticLine;
 // The configuration editor's Processor section (client specification
 // 5.2), as the macOS client's: the coprocessor on each Tube the model has
 // (the Tube, and a Master 128's internal Tube), as the Peripherals
-// section's points are, then the emulation speed.
+// section's points are, then the emulation speed and the MOS ROM: a name
+// found on the ROM search path, or a file chosen as a sideways image is.
 class ProcessorSection : public ConfigurationSection {
     Q_OBJECT
 
@@ -38,7 +42,7 @@ public:
     explicit ProcessorSection(NewMachineDialog& dialog);
 
     SidebarMode mode() const override { return SidebarMode::processor; }
-    // The speed, and the Tubes' extensions.
+    // The speed, the MOS ROM, and the Tubes' extensions.
     bool changed() const override;
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
@@ -46,9 +50,18 @@ public:
     // The group for the Tube, or for another of the model's Tube points by id.
     AttachmentPointGroup* tube(const std::string& point = "tube") const;
     QComboBox* speed() const { return speed_; }
+    QLabel* mos_title() const { return mos_title_; }
+    QLabel* mos_caption() const { return mos_caption_; }
+    QPushButton* mos_browse() const { return mos_browse_; }
+    QPushButton* mos_default() const { return mos_default_; }
 
 private:
     void show_speed();
+    void show_mos();
+    void browse_mos();
+    void set_mos(const std::string& reference);
+    // The model's MOS, as the schema gives it; empty without one.
+    std::string default_mos() const;
 
     NewMachineDialog& dialog_;
     std::unique_ptr<ExtensionsDraft> extensions_;
@@ -57,6 +70,13 @@ private:
     QWidget* tube_rule_;
     QComboBox* speed_;
     DiagnosticLine* diagnostic_;
+    QWidget* mos_;
+    QLabel* mos_heading_;
+    QLabel* mos_title_;
+    QLabel* mos_caption_;
+    QPushButton* mos_browse_;
+    QPushButton* mos_default_;
+    DiagnosticLine* mos_diagnostic_;
     std::vector<PresetDiagnostic> diagnostics_;
 };
 
