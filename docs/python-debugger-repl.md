@@ -47,11 +47,20 @@ pip install 'beebium[discovery]'
 ```python
 >>> from beebium.client import Beebium
 >>> bbc = Beebium.connect("localhost:48899")       # the default target is localhost:48875
->>> bbc.debugger.get_state()
-ExecutionState(is_running=True, cycle_count=51021725, halt_reason='', sequence=51021727, at_instruction_boundary=True)
->>> bbc.memory.machine_type
-'master-128'
+>>> bbc
+<Beebium localhost:48899 BBC Master 128 'Master 128'>
+>>> bbc.debugger
+<Debugger running cycles=10154477 breakpoints=0 watchpoints=0>
+>>> bbc.cpu
+<CPU 6502 A=1B X=00 Y=0A SP=F1 PC=EB07 P=32 [nv-BdiZc]>
+>>> bbc.memory
+<Memory master-128 regions: main_ram, lynne, hazel, andy, mos_rom, bank_0, bank_1, ..., bank_15>
+>>> bbc.memory.region("hazel")
+<Region 'hazel' &C000-&DFFF>
 ```
+
+Every object the client hands back prints as one line like these, so a bare
+name at the prompt is a useful look at the machine.
 
 `connect()` leaves the machine as it found it. Nothing below changes anything
 until you ask.
@@ -61,8 +70,12 @@ until you ask.
 ```python
 >>> bbc.debugger.stop()
 ExecutionState(is_running=False, cycle_count=55029218, halt_reason='stopped by debugger', sequence=55029221, at_instruction_boundary=True)
+>>> bbc.debugger
+<Debugger stopped cycles=55029218 halt='stopped by debugger' breakpoints=0 watchpoints=0>
 >>> bbc.cpu.registers
 A=1B X=00 Y=0A SP=F1 PC=EAFD P=32 [nv-BdiZc]
+>>> bbc.cpu.registers.status
+P=32 [nv-BdiZc]
 >>> bbc.cpu.pc, bbc.cpu.a, bbc.cpu.registers.status.flag("Z")
 (60157, 27, True)
 ```
@@ -162,16 +175,19 @@ contain, or the breakpoint fires on the echo instead:
 >>> hex(wrchv)
 '0xe822'
 >>> bp = bbc.debugger.add_breakpoint(wrchv, condition="A == 0x68")
+>>> before = bbc.debugger.get_state()
 >>> bbc.debugger.run()
 >>> bbc.basic.type_and_enter("PRINT CHR$(104)")
 ```
 
-By the time you have typed the next line the machine has long since stopped,
-so look at it rather than waiting for it (see the note on `wait_for_stop`
-below):
+By the time you have typed the next line the machine has long since stopped.
+`wait_for_stop(since=...)` counts stops from the sequence number you noted
+before running, so it returns at once with the stop that already happened
+(see the note on `wait_for_stop` below):
 
 ```python
->>> bbc.debugger.get_state()
+>>> ev = bbc.debugger.wait_for_stop(since=before.sequence)
+>>> ev.state
 ExecutionState(is_running=False, cycle_count=13641266, halt_reason='breakpoint at $E822', sequence=13641271, at_instruction_boundary=True)
 >>> hex(bbc.cpu.pc), chr(bbc.cpu.a)
 ('0xe822', 'h')
@@ -212,9 +228,11 @@ write) and, on a machine with shadow RAM, `shadow_access`.
 
 ```python
 >>> wp = bbc.debugger.add_watchpoint(0x0070, 0x0071, "write", condition="value == 42")
+>>> before = bbc.debugger.get_state()
 >>> bbc.debugger.run()
 >>> bbc.basic.type_and_enter("?&70=42")
->>> bbc.debugger.get_state().halt_reason, hex(bbc.cpu.pc)
+>>> ev = bbc.debugger.wait_for_stop(since=before.sequence)
+>>> ev.state.halt_reason, hex(bbc.cpu.pc)
 ('write watchpoint at $0070 = $2A', '0xb34b')
 >>> wp.remove()
 ```
@@ -257,12 +275,13 @@ And when you are done:
 
 - `is_running`, `is_stopped` and `cycle_count` on the debugger are properties,
   not methods.
-- `wait_for_stop()` waits for a stop newer than the state it sees when
-  called. In a script, calling it straight after `run()` works. At a REPL's
-  pace the breakpoint has usually fired before you type the call, and it then
-  waits ten seconds for a second stop that never comes. By hand, read
-  `get_state()` or `is_stopped` instead; in a script, prefer
-  `run_and_wait_for_stop()` or `run_to()`, which subscribe before resuming.
+- `wait_for_stop()` with no arguments waits for a stop newer than the state
+  it sees when called. In a script, calling it straight after `run()` works.
+  At a REPL's pace the breakpoint has usually fired before you type the call,
+  and it would then wait ten seconds for a second stop that never comes. By
+  hand, note `get_state()` before `run()` and pass its sequence number as
+  `since`, as above; or just read `get_state()` or `is_stopped`. In a script,
+  `run_and_wait_for_stop()` and `run_to()` subscribe before resuming.
 - Stopping, stepping and poking are visible to every client on the server. A
   GUI client shows the machine as stopped and its screen frozen until you run
   it again.
