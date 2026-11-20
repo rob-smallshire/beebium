@@ -20,6 +20,7 @@
 
 #include <functional>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace beebium::linux_client {
@@ -61,6 +62,11 @@ struct PresetListing {
     QString release_date;
     QString filepath;
     bool has_thumbnail = false;
+    // The server's index for the catalogue's search (5.1): each facet's key
+    // and its values, one for an exclusive facet, any number for a set
+    // facet; and its keywords. The client classifies nothing itself.
+    std::vector<std::pair<QString, QStringList>> facets;
+    QStringList keywords;
 
     bool built_in() const { return source == QLatin1String("system"); }
 };

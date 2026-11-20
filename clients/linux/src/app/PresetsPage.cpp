@@ -13,11 +13,13 @@
 #include "app/PresetsPage.hpp"
 
 #include "app/CardGrid.hpp"
+#include "servers/PresetLibrary.hpp"
 
 #include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPixmap>
 #include <QPointer>
 #include <QPushButton>
@@ -49,6 +51,12 @@ PresetsPage::PresetsPage(QString thumbnail_cache_dirpath, QWidget* parent)
     : QWidget(parent), thumbnail_cache_dirpath_(std::move(thumbnail_cache_dirpath)) {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    // One search field and nothing else: no per-facet controls (5.1).
+    search_ = new QLineEdit(this);
+    search_->setObjectName(QStringLiteral("presetSearch"));
+    search_->setPlaceholderText(tr("Search presets"));
+    search_->setClearButtonEnabled(true);
+    layout->addWidget(search_);
     grid_ = new CardGrid(this);
     grid_->setObjectName(QStringLiteral("presets"));
     layout->addWidget(grid_, 1);
@@ -80,6 +88,7 @@ PresetsPage::PresetsPage(QString thumbnail_cache_dirpath, QWidget* parent)
     // Activating a card launches it: a click or a double-click, as the
     // desktop is set, or Return.
     connect(grid_, &QListWidget::itemActivated, this, &PresetsPage::launch_chosen);
+    connect(search_, &QLineEdit::textChanged, this, &PresetsPage::apply_search);
 }
 
 void PresetsPage::set_servers(std::optional<ServerLocation> servers) {
@@ -169,11 +178,33 @@ void PresetsPage::show_presets(const std::vector<PresetListing>& presets) {
             fetch_thumbnail(item, preset);
         }
     }
-    if (!presets_.empty()) {
-        grid_->setCurrentRow(0);
+    if (presets_.empty()) {
+        status_->setText(tr("No presets can be launched with the servers found."));
+        return;
     }
-    status_->setText(presets_.empty() ? tr("No presets can be launched with the servers found.")
-                                      : QString());
+    grid_->setCurrentRow(0);
+    apply_search();
+}
+
+void PresetsPage::apply_search() {
+    if (presets_.empty()) {
+        return;
+    }
+    QListWidgetItem* first = nullptr;
+    for (int row = 0; row < grid_->count(); ++row) {
+        QListWidgetItem* item = grid_->item(row);
+        const int index = item->data(INDEX_ROLE).toInt();
+        const bool shown = preset_matches(presets_[static_cast<std::size_t>(index)], search_->text());
+        item->setHidden(!shown);
+        if (shown && !first) {
+            first = item;
+        }
+    }
+    // The chosen card stays chosen while it is shown.
+    if (!grid_->currentItem() || grid_->currentItem()->isHidden()) {
+        grid_->setCurrentItem(first);
+    }
+    status_->setText(first ? QString() : tr("No presets match the search."));
 }
 
 void PresetsPage::fetch_thumbnail(QListWidgetItem* item, const PresetListing& preset) {
@@ -211,7 +242,7 @@ void PresetsPage::fetch_thumbnail(QListWidgetItem* item, const PresetListing& pr
 
 std::optional<PresetListing> PresetsPage::chosen() const {
     const QListWidgetItem* item = grid_->currentItem();
-    if (!item || !item->data(INDEX_ROLE).isValid()) {
+    if (!item || item->isHidden() || !item->data(INDEX_ROLE).isValid()) {
         return std::nullopt;
     }
     const int index = item->data(INDEX_ROLE).toInt();

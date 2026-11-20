@@ -24,6 +24,7 @@
 #include <vector>
 
 class QLabel;
+class QLineEdit;
 class QListWidgetItem;
 class QPushButton;
 
@@ -38,8 +39,8 @@ std::vector<PresetListing> launchable_presets(
     const std::vector<PresetListing>& presets,
     const std::function<bool(const QString& model)>& has_server);
 
-// The home window's presets catalogue (5.1, 13.4): a card per preset, and
-// Launch. The catalogue, descriptions and thumbnails are the server's:
+// The home window's presets catalogue (5.1, 13.4): one search field, a card
+// per preset it matches, and Launch. The catalogue, descriptions and thumbnails are the server's:
 // list-presets, and show-preset --thumbnail for a preset that has one (never
 // for one that has none).
 class PresetsPage : public QWidget {
@@ -57,6 +58,7 @@ public:
     std::optional<PresetListing> chosen() const;
     const std::vector<PresetListing>& presets() const { return presets_; }
     CardGrid* grid() const { return grid_; }
+    QLineEdit* search() const { return search_; }
     QString status_text() const;
     // The server's own words, when reading the presets failed.
     QString detail_text() const;
@@ -77,10 +79,13 @@ private:
     void show_presets(const std::vector<PresetListing>& presets);
     void fetch_thumbnail(QListWidgetItem* item, const PresetListing& preset);
     void launch_chosen();
+    // Show only the cards the search matches.
+    void apply_search();
 
     std::optional<ServerLocation> servers_;
     QString thumbnail_cache_dirpath_;
     CoreCli cli_;
+    QLineEdit* search_;
     CardGrid* grid_;
     QLabel* status_;
     QLabel* detail_;

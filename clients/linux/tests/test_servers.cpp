@@ -98,6 +98,35 @@ TEST_CASE("The preset listing parses, built-in apart from the user's", "[servers
     CHECK(presets[1].model == "model-b-plus");
 }
 
+TEST_CASE("A listed preset's facets and keywords parse, a string facet as one value",
+          "[servers][presets][search]") {
+    const QByteArray jsonl =
+        R"x({"id":"master-128-65c102-copro","name":"Master 128, internal 65C102 Copro (4 MHz)","source":"system","model":"master-128","description":"","filepath":"/p/m.beebium-preset","thumbnail":true,)x"
+        R"("facets":{"model":"Master 128","coprocessor":"65C102","disc_controller":"1770","network":"None","storage":["Floppy","Cassette"],"peripherals":[]},)"
+        R"("keywords":["BBC","6502"]})"
+        "\n"
+        R"({"id":"old","name":"Old","source":"user","model":"model-b","filepath":"/u/old.beebium-preset"})"
+        "\n";
+    const auto presets = parse_preset_listing(jsonl);
+    REQUIRE(presets.size() == 2);
+    REQUIRE(presets[0].facets.size() == 6);
+    const auto facet = [&](const char* key) {
+        for (const auto& [k, values] : presets[0].facets) {
+            if (k == QLatin1String(key)) {
+                return values;
+            }
+        }
+        return QStringList{QStringLiteral("absent")};
+    };
+    CHECK(facet("coprocessor") == QStringList{QStringLiteral("65C102")});
+    CHECK(facet("storage") == QStringList{QStringLiteral("Floppy"), QStringLiteral("Cassette")});
+    CHECK(facet("peripherals").isEmpty());
+    CHECK(presets[0].keywords == QStringList{QStringLiteral("BBC"), QStringLiteral("6502")});
+    // A row without them indexes none.
+    CHECK(presets[1].facets.empty());
+    CHECK(presets[1].keywords.isEmpty());
+}
+
 TEST_CASE("A machine description parses, and a non-machine does not", "[servers][machines]") {
     const auto machine = parse_machine_description(
         R"({"machine_dirpath":"/m/Elite.beebium-machine","name":"Elite","uuid":"u-1","model":"model-b","created":"2026-11-01T10:00:00Z"})");

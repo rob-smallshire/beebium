@@ -28,11 +28,13 @@
 #include "beebium/host_identity/HostFingerprint.hpp"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -50,18 +52,28 @@ using namespace beebium::linux_client::testing;
 namespace {
 
 // A stand-in for this host's servers: a beebium-model-b script that lists
-// one preset, describes any directory as a saved machine, and "starts" by
+// one preset, or the given listing, describes any directory as a saved machine, and "starts" by
 // reporting the fake gRPC server's port. Each run's arguments are logged.
 struct FakeServers {
     QTemporaryDir directory;
     QString log_filepath;
 
-    explicit FakeServers(int grpc_port) {
+    explicit FakeServers(int grpc_port, const QByteArray& listing = {}) {
         log_filepath = directory.filePath(QStringLiteral("calls.log"));
         const QString preset_filepath = directory.filePath(QStringLiteral("model-b.beebium-preset"));
         QFile preset(preset_filepath);
         REQUIRE(preset.open(QIODevice::WriteOnly));
         preset.close();
+        const QString listing_filepath = directory.filePath(QStringLiteral("listing.jsonl"));
+        QFile listing_file(listing_filepath);
+        REQUIRE(listing_file.open(QIODevice::WriteOnly));
+        listing_file.write(listing);
+        listing_file.close();
+        const QByteArray listed = listing.isEmpty()
+            ? "echo '{\"id\":\"model-b\",\"name\":\"Model B\",\"source\":\"system\","
+              "\"model\":\"model-b\",\"description\":\"32K Model B\",\"filepath\":\"" +
+                  preset_filepath.toUtf8() + "\",\"thumbnail\":false}'"
+            : "cat '" + listing_filepath.toUtf8() + "'";
         const QByteArray body =
             "echo \"$*\" >> '" + log_filepath.toUtf8() + "'\n"
             "case \"$1\" in\n"
@@ -69,9 +81,7 @@ struct FakeServers {
             "  show-preset) printf '{\"model\":\"model-b\",\"name\":\"From a File\"}\\n';;\n"
             "  describe-machine) printf '{\"machine_dirpath\":\"%s\",\"name\":\"Elite\","
             "\"uuid\":\"u-1\",\"model\":\"model-b\",\"created\":\"2026-11-01T10:00:00Z\"}\\n' \"$2\";;\n"
-            "  *) echo '{\"id\":\"model-b\",\"name\":\"Model B\",\"source\":\"system\","
-            "\"model\":\"model-b\",\"description\":\"32K Model B\",\"filepath\":\"" +
-            preset_filepath.toUtf8() + "\",\"thumbnail\":false}';;\n"
+            "  *) " + listed + ";;\n"
             "esac\n";
         const QString filepath = directory.filePath(QStringLiteral("beebium-model-b"));
         QFile file(filepath);
@@ -218,6 +228,57 @@ TEST_CASE("The presets page shows the catalogue as cards, and activating one lau
     page.set_launching(true);
     Q_EMIT page.grid()->itemActivated(page.grid()->item(0));
     CHECK_FALSE(asked);
+}
+
+TEST_CASE("The presets page's one search field narrows the cards, and clearing it shows them all",
+          "[home][presets][search]") {
+    const QByteArray listing =
+        R"({"id":"master-128","name":"Master 128","source":"system","model":"model-b","description":"BBC Master 128","filepath":"/p/a","thumbnail":false,"facets":{"model":"Master 128","coprocessor":"None","disc_controller":"1770","network":"None","storage":["Floppy"],"peripherals":[]}})"
+        "\n"
+        R"({"id":"master-copro","name":"Master 128, internal 65C102 Copro","source":"system","model":"model-b","description":"","filepath":"/p/b","thumbnail":false,"facets":{"model":"Master 128","coprocessor":"65C102","disc_controller":"1770","network":"None","storage":["Floppy"],"peripherals":[]}})"
+        "\n"
+        R"({"id":"station-80","name":"Station 80","source":"system","model":"model-b","description":"","filepath":"/p/c","thumbnail":false,"facets":{"model":"Model B","coprocessor":"None","disc_controller":"1770","network":"AUN","storage":["Floppy"],"peripherals":[]}})"
+        "\n";
+    FakeServers servers(1, listing);
+    QTemporaryDir cache;
+    PresetsPage page(cache.path());
+    page.set_servers(ServerLocation{servers.dirpath(), QStringLiteral("settings")});
+    REQUIRE(wait_until([&] { return page.grid()->count() == 3; }));
+    REQUIRE(page.search());
+    CHECK(page.search()->placeholderText() == QStringLiteral("Search presets"));
+    CHECK(page.search()->isClearButtonEnabled());
+    // The search and nothing else above the cards.
+    CHECK(page.findChildren<QComboBox*>().isEmpty());
+    CHECK(page.findChildren<QCheckBox*>().isEmpty());
+    const auto shown = [&] {
+        QStringList ids;
+        for (int row = 0; row < page.grid()->count(); ++row) {
+            if (!page.grid()->item(row)->isHidden()) {
+                ids << page.presets()[static_cast<std::size_t>(row)].id;
+            }
+        }
+        return ids;
+    };
+    CHECK(page.chosen()->id == QStringLiteral("master-128"));
+
+    page.search()->setText(QStringLiteral("Master COPRO"));
+    CHECK(shown() == QStringList{QStringLiteral("master-copro")});
+    // The chosen card is one that is shown, and it launches.
+    REQUIRE(page.chosen());
+    CHECK(page.chosen()->id == QStringLiteral("master-copro"));
+
+    page.search()->setText(QStringLiteral("aun"));
+    CHECK(shown() == QStringList{QStringLiteral("station-80")});
+
+    page.search()->setText(QStringLiteral("electron"));
+    CHECK(shown().isEmpty());
+    CHECK_FALSE(page.chosen());
+    CHECK(page.status_text() == QStringLiteral("No presets match the search."));
+
+    page.search()->clear();
+    CHECK(shown().size() == 3);
+    CHECK(page.status_text().isEmpty());
+    CHECK(page.chosen());
 }
 
 // --- recent machines -----------------------------------------------------------

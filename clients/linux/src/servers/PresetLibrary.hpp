@@ -27,6 +27,12 @@ namespace beebium::linux_client {
 // name as a person reads numbers in it.
 std::vector<PresetListing> library_order(std::vector<PresetListing> presets);
 
+// Whether a preset answers the catalogue's search (5.1): every word of the
+// query, split on whitespace alone, found case-insensitively in its name,
+// its description, a value of its facets or a keyword. An empty query
+// matches every preset.
+bool preset_matches(const PresetListing& preset, const QString& query);
+
 // The preset library's commands, run by the preset's model's server:
 // create-preset from another under a new name (its description and date
 // come with it), export-preset to an archive, delete-preset of a user's.

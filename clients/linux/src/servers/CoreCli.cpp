@@ -120,6 +120,24 @@ std::vector<PresetListing> parse_preset_listing(const QByteArray& jsonl) {
         preset.release_date = row.value(QStringLiteral("release_date")).toString();
         preset.filepath = row.value(QStringLiteral("filepath")).toString();
         preset.has_thumbnail = row.value(QStringLiteral("thumbnail")).toBool();
+        const QJsonObject facets = row.value(QStringLiteral("facets")).toObject();
+        for (auto it = facets.begin(); it != facets.end(); ++it) {
+            QStringList values;
+            if (it.value().isString()) {
+                values << it.value().toString();
+            }
+            for (const QJsonValue value : it.value().toArray()) {
+                if (value.isString()) {
+                    values << value.toString();
+                }
+            }
+            preset.facets.emplace_back(it.key(), values);
+        }
+        for (const QJsonValue keyword : row.value(QStringLiteral("keywords")).toArray()) {
+            if (keyword.isString()) {
+                preset.keywords << keyword.toString();
+            }
+        }
         presets.push_back(preset);
     }
     return presets;

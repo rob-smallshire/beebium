@@ -278,6 +278,13 @@ beebium_linux_add_test(test_memory_os_rom QT
 target_compile_definitions(test_memory_os_rom PRIVATE
     BEEBIUM_TEST_SERVER_FILEPATH="${BEEBIUM_TEST_SERVER_FILEPATH}")
 
+# The presets catalogue's search over that server's listing.
+beebium_linux_add_test(test_preset_search QT
+    SOURCES test_preset_search.cpp
+    LIBRARIES beebium_linux_app)
+target_compile_definitions(test_preset_search PRIVATE
+    BEEBIUM_TEST_SERVER_FILEPATH="${BEEBIUM_TEST_SERVER_FILEPATH}")
+
 # A draft's MOS ROM launched on the beebium-master-128 beside that server.
 beebium_linux_add_test(test_mos_launch QT
     SOURCES test_mos_launch.cpp

@@ -72,4 +72,22 @@ QString duplicate_name(const QString& name, const QStringList& taken) {
     return candidate;
 }
 
+bool preset_matches(const PresetListing& preset, const QString& query) {
+    static const QRegularExpression whitespace(QStringLiteral("\\s+"));
+    const QStringList words = query.split(whitespace, Qt::SkipEmptyParts);
+    if (words.isEmpty()) {
+        return true;
+    }
+    QStringList fields{preset.name, preset.description};
+    for (const auto& facet : preset.facets) {
+        fields << facet.second;
+    }
+    fields << preset.keywords;
+    return std::all_of(words.begin(), words.end(), [&](const QString& word) {
+        return std::any_of(fields.begin(), fields.end(), [&](const QString& field) {
+            return field.contains(word, Qt::CaseInsensitive);
+        });
+    });
+}
+
 }  // namespace beebium::linux_client
