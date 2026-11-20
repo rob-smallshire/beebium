@@ -16,54 +16,56 @@ import Foundation
 /// Each popup is single-selection and defaults to "Any"; selections AND across
 /// popups. The facet keeps `PresetTagger`'s vocabulary and only presents it.
 enum PresetFacet: String, CaseIterable, Identifiable, Sendable {
-    case machine, board, coprocessor, network, disc, addOns
+    // Named and ordered after the sidebar modes, the model first: Model, then the
+    // modes that have something to filter (Storage, Peripherals, Processor,
+    // Network). "Model", not "Machine", so it is not confused with the machine
+    // instances in the Welcome window.
+    case model, storage, peripherals, processor, network
 
     var id: String { rawValue }
 
-    /// The tag group this facet filters on.
+    /// The tag group this facet filters on (one-to-one, same names).
     var group: PresetTagGroup {
         switch self {
-        case .machine:     return .family
-        case .board:       return .board
-        case .coprocessor: return .coprocessor
-        case .network:     return .econet
-        case .disc:        return .disc
-        case .addOns:      return .music
+        case .model:       return .model
+        case .storage:     return .storage
+        case .peripherals: return .peripherals
+        case .processor:   return .processor
+        case .network:     return .network
         }
     }
 
     /// The popup's label.
     var label: String {
         switch self {
-        case .machine:     return "Machine"
-        case .board:       return "Board"
-        case .coprocessor: return "Coprocessor"
+        case .model:       return "Model"
+        case .storage:     return "Storage"
+        case .peripherals: return "Peripherals"
+        case .processor:   return "Processor"
         case .network:     return "Network"
-        case .disc:        return "Disc"
-        case .addOns:      return "Add-ons"
         }
     }
 
-    /// Whether a "None" choice is offered. Every preset has a machine family, so
-    /// Machine has no None; the rest can lack their feature.
-    var offersNone: Bool { self != .machine }
+    /// Whether a "None" choice is offered. Every preset has a model family, so
+    /// Model has no None; the rest can lack their feature.
+    var offersNone: Bool { self != .model }
 
     /// Whether a preset (its values in this facet's group) counts as "None". For
-    /// most facets that is the absence of any tag; for Disc, where every preset
+    /// most facets that is the absence of any tag; for Storage, where every preset
     /// carries a disc tag, "None" is the "No disc" value.
     func isNone(_ values: Set<String>) -> Bool {
         switch self {
-        case .disc: return !values.contains("8271") && !values.contains("1770")
-        default:    return values.isEmpty
+        case .storage: return !values.contains("8271") && !values.contains("1770")
+        default:       return values.isEmpty
         }
     }
 
     /// The concrete (non-None) values to offer, from the values present in the
-    /// group. Disc hides "No disc" here because it is the None choice.
+    /// group. Storage hides "No disc" here because it is the None choice.
     func concreteValues(from values: Set<String>) -> [String] {
         switch self {
-        case .disc: return values.subtracting(["No disc"]).sorted()
-        default:    return values.sorted()
+        case .storage: return values.subtracting(["No disc"]).sorted()
+        default:       return values.sorted()
         }
     }
 }
@@ -125,24 +127,30 @@ final class PresetFilterModel: ObservableObject {
         let id: String
         let filepath: String
         let model: String?
+        let builtinFdcDevice: String?
         let search: String
     }
 
     /// Derive and cache every preset's tags and searchable text. The system
     /// presets are `.beebium-preset` ZIP bundles, so the preset JSON is extracted
     /// from the bundle (off the main actor); this is fine for a local spike, and
-    /// the server will supply the tags later. Family and board come from the
-    /// row's model, so they survive even when the bundle cannot be read.
+    /// the server will supply the tags later. The machine family comes from the
+    /// row's model, so it survives even when the bundle cannot be read. The
+    /// Storage tag needs each model's built-in disc controller, which the model's
+    /// storage schema reports (`builtin.fdc.device`); fetch it once per model.
     /// Re-indexing the same list is cheap and idempotent.
     func index(_ presets: [MachinePreset]) async {
+        let builtinFdc = await builtinFdcDevices(for: presets)
         let entries = presets.map { preset in
             Entry(id: preset.presetId, filepath: preset.presetFilepath, model: preset.modelId,
+                  builtinFdcDevice: builtinFdc[preset.coreExecutablePath],
                   search: "\(preset.name) \(preset.modelDescription ?? "")".lowercased())
         }
         let derived = await Task.detached { () -> [(String, Set<PresetTag>, String)] in
             entries.map { entry in
                 let object = Self.presetObject(atFilepath: entry.filepath)
-                let tags = Set(PresetTagger.tags(model: entry.model, preset: object ?? [:]))
+                let tags = Set(PresetTagger.tags(model: entry.model, preset: object ?? [:],
+                                                 builtinFdcDevice: entry.builtinFdcDevice))
                 return (entry.id, tags, entry.search)
             }
         }.value
@@ -162,6 +170,23 @@ final class PresetFilterModel: ObservableObject {
                 selection[facet] = .any
             }
         }
+    }
+
+    /// Each model's built-in disc controller device (the storage schema's
+    /// `builtin.fdc.device`, e.g. "WD1770" for the Master and B+ family), keyed by
+    /// the model's executable path. One `describe-preset-schema` per distinct
+    /// model; the client fetches the same schema for the configurator.
+    private func builtinFdcDevices(for presets: [MachinePreset]) async -> [String: String] {
+        let coreCLI = CoreCLI()
+        var devices: [String: String] = [:]
+        for path in Set(presets.map(\.coreExecutablePath)) {
+            if let section: StorageSchemaSection = await coreCLI.schemaSection(
+                "storage", executablePath: path),
+               let device = section.builtin?.fdc?.device {
+                devices[path] = device
+            }
+        }
+        return devices
     }
 
     /// The tags derived for a preset id (empty if unknown). For tests.

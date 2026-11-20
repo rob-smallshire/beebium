@@ -31,16 +31,16 @@ final class PresetFilterModelTests: XCTestCase {
     }
 
     /// A small catalogue: two Model B (one 1770, one no disc), a Master with a
-    /// 65C102 and no disc, and a B+ with a 65C02 and AUN on 1770. No boards and no
-    /// add-ons at all.
+    /// 65C102 and no disc, and a B+ with a 65C02 and AUN on 1770. No peripherals
+    /// at all.
     private func seeded() -> (PresetFilterModel, [MachinePreset]) {
         let model = PresetFilterModel()
         model.loadTagsForTesting([
-            "p1": [t(.family, "Model B"), t(.disc, "1770")],
-            "p2": [t(.family, "Model B"), t(.disc, "No disc")],
-            "p3": [t(.family, "Master 128"), t(.coprocessor, "65C102"), t(.disc, "No disc")],
-            "p4": [t(.family, "Model B+"), t(.coprocessor, "65C02"),
-                   t(.econet, "AUN"), t(.disc, "1770")],
+            "p1": [t(.model, "Model B"), t(.storage, "1770")],
+            "p2": [t(.model, "Model B"), t(.storage, "No disc")],
+            "p3": [t(.model, "Master 128"), t(.processor, "65C102"), t(.storage, "No disc")],
+            "p4": [t(.model, "Model B+"), t(.processor, "65C02"),
+                   t(.network, "AUN"), t(.storage, "1770")],
         ])
         return (model, ["p1", "p2", "p3", "p4"].map(preset))
     }
@@ -56,72 +56,71 @@ final class PresetFilterModelTests: XCTestCase {
 
     func testPopupsOfferTheirValuesWithCounts() {
         let (model, presets) = seeded()
-        let machine = popup(model, presets, .machine)
-        XCTAssertEqual(count(machine, .value("Model B")), 2)
-        XCTAssertEqual(count(machine, .value("Model B+")), 1)
-        XCTAssertEqual(count(machine, .value("Master 128")), 1)
-        // Machine has no None (every preset has a family).
-        XCTAssertNil(count(machine, .none))
+        let modelFacet = popup(model, presets, .model)
+        XCTAssertEqual(count(modelFacet, .value("Model B")), 2)
+        XCTAssertEqual(count(modelFacet, .value("Model B+")), 1)
+        XCTAssertEqual(count(modelFacet, .value("Master 128")), 1)
+        // Model has no None (every preset has a family).
+        XCTAssertNil(count(modelFacet, .none))
     }
 
-    func testDiscNoneIsTheNoDiscValue() {
+    func testStorageNoneIsTheNoDiscValue() {
         let (model, presets) = seeded()
-        let disc = popup(model, presets, .disc)
+        let storage = popup(model, presets, .storage)
         // "No disc" is presented as None, not as its own value.
-        XCTAssertEqual(count(disc, .value("1770")), 2)
-        XCTAssertNil(count(disc, .value("No disc")))
-        XCTAssertEqual(count(disc, .none), 2)   // p2, p3
+        XCTAssertEqual(count(storage, .value("1770")), 2)
+        XCTAssertNil(count(storage, .value("No disc")))
+        XCTAssertEqual(count(storage, .none), 2)   // p2, p3
     }
 
-    func testCoprocessorNoneCountsPresetsWithoutOne() {
+    func testProcessorNoneCountsPresetsWithoutOne() {
         let (model, presets) = seeded()
-        let copro = popup(model, presets, .coprocessor)
-        XCTAssertEqual(count(copro, .value("65C02")), 1)
-        XCTAssertEqual(count(copro, .value("65C102")), 1)
-        XCTAssertEqual(count(copro, .none), 2)   // p1, p2
+        let processor = popup(model, presets, .processor)
+        XCTAssertEqual(count(processor, .value("65C02")), 1)
+        XCTAssertEqual(count(processor, .value("65C102")), 1)
+        XCTAssertEqual(count(processor, .none), 2)   // p1, p2
     }
 
     func testFacetWithNothingToChooseIsHidden() {
         let (model, presets) = seeded()
-        // No preset has a board or an add-on, so those popups never appear.
-        XCTAssertNil(popup(model, presets, .board))
-        XCTAssertNil(popup(model, presets, .addOns))
+        // No preset has a peripheral, so that popup never appears.
+        XCTAssertNil(popup(model, presets, .peripherals))
     }
 
     func testSelectionsAndTogether() {
         let (model, presets) = seeded()
-        model.select(.machine, .value("Model B"))
+        model.select(.model, .value("Model B"))
         XCTAssertEqual(Set(model.filtered(presets).map(\.presetId)), ["p1", "p2"])
-        model.select(.disc, .value("1770"))
+        model.select(.storage, .value("1770"))
         XCTAssertEqual(model.filtered(presets).map(\.presetId), ["p1"])
     }
 
     func testNoneChoiceFiltersAbsence() {
         let (model, presets) = seeded()
-        model.select(.coprocessor, .none)
+        model.select(.processor, .none)
         XCTAssertEqual(Set(model.filtered(presets).map(\.presetId)), ["p1", "p2"])
-        model.select(.coprocessor, .any)
-        model.select(.disc, .none)
+        model.select(.processor, .any)
+        model.select(.storage, .none)
         XCTAssertEqual(Set(model.filtered(presets).map(\.presetId)), ["p2", "p3"])
     }
 
     func testCountsAreFacetedAgainstOtherSelections() {
         let (model, presets) = seeded()
-        model.select(.machine, .value("Model B"))
-        // Under Machine = Model B, the Disc popup counts only p1/p2.
-        let disc = popup(model, presets, .disc)
-        XCTAssertEqual(count(disc, .value("1770")), 1)   // p1
-        XCTAssertEqual(count(disc, .none), 1)            // p2
+        model.select(.model, .value("Model B"))
+        // Under Model = Model B, the Storage popup counts only p1/p2.
+        let storage = popup(model, presets, .storage)
+        XCTAssertEqual(count(storage, .value("1770")), 1)   // p1
+        XCTAssertEqual(count(storage, .none), 1)            // p2
         // A choice that can give nothing is disabled (65C102 is Master-only).
-        let copro = popup(model, presets, .coprocessor)
-        let c102 = copro?.options.first { $0.choice == .value("65C102") }
+        let processor = popup(model, presets, .processor)
+        let c102 = processor?.options.first { $0.choice == .value("65C102") }
         XCTAssertEqual(c102?.count, 0)
         XCTAssertEqual(c102?.isEnabled, false)
     }
 
     func testResetClearsEverySelection() {
         let (model, presets) = seeded()
-        model.select(.machine, .value("Master 128"))
+        model.select(.model, .value("Master 128"))
         XCTAssertTrue(model.isFiltering)
         model.reset()
         XCTAssertFalse(model.isFiltering)
