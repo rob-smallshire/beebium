@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from beebium.client._proto import controller_pb2, controller_pb2_grpc
+from beebium.client._repr import facade_repr
 
 
 class ControlKind(Enum):
@@ -78,6 +79,9 @@ class Controllers:
 
     def __init__(self, stub: controller_pb2_grpc.ControllerServiceStub):
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the controllers a person holds (joystick, ...)")
 
     def list(self) -> list[Controller]:
         """The controllers attached to the machine; empty when there are none."""

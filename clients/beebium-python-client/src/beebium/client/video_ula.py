@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
+from beebium.client._repr import facade_repr
 
 
 @dataclass
@@ -81,6 +82,9 @@ class VideoUlaPalette:
     def __init__(self, video_ula: VideoUla):
         self._video_ula = video_ula
 
+    def __repr__(self) -> str:
+        return facade_repr(self, "the Video ULA's palette, by logical colour")
+
     def __getitem__(self, index: int) -> int:
         """Get physical color for logical color index (0-15)."""
         if not 0 <= index < 16:
@@ -115,6 +119,9 @@ class VideoUla:
         """
         self._stub = stub
         self._palette = VideoUlaPalette(self)
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the Video ULA")
 
     @property
     def state(self) -> VideoUlaState:

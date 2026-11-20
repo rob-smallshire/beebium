@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
 from beebium.client._proto import keyboard_pb2, keyboard_pb2_grpc
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import DebuggerError
 from beebium.client.keyboard_map import (
     CTRL_KEY,
@@ -176,6 +177,10 @@ class Keyboard:
         self._stub = stub
         self._client = client
         self._pressed_keys: set[tuple[str, bool]] = set()
+
+    def __repr__(self) -> str:
+        where = f"{self._client.target}: " if self._client is not None else ""
+        return facade_repr(self, f"{where}the keyboard (keys, matrix and type-ahead)")
 
     # High-level text input (cycle-paced via server-side TypeAheadQueue)
 

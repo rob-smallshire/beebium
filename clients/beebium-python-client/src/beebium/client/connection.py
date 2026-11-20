@@ -35,6 +35,7 @@ from beebium.client._proto import (
     tube_pb2_grpc,
     video_pb2_grpc,
 )
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import ConnectionError
 
 
@@ -89,6 +90,9 @@ class Connection:
         self._peripheral_extension_stub: peripheral_extension_pb2_grpc.PeripheralExtensionServiceStub | None = None
 
         self._connect(timeout)
+
+    def __repr__(self) -> str:
+        return facade_repr(self, self._target)
 
     def _connect(self, timeout: float) -> None:
         """Establish the gRPC connection."""

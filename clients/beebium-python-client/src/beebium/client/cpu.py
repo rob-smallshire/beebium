@@ -25,6 +25,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
 from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
+from beebium.client._repr import facade_repr, read_or_unavailable
 
 
 class StatusRegister:
@@ -51,12 +52,20 @@ class StatusRegister:
         "negative": "N",
     }
 
-    def __init__(self, value: int, flag_names: list[str] | None = None):
+    def __init__(
+        self, value: int, flag_names: list[str] | None = None, *, register_name: str = "P"
+    ):
         self._value = value
+        self._register_name = register_name
         # Default to the 6502 layout so StatusRegister(byte) keeps working.
         names = flag_names if flag_names is not None else ["C", "Z", "I", "D", "B", "", "V", "N"]
         self._flag_names = list(names)
         self._bit_of = {name: i for i, name in enumerate(self._flag_names) if name}
+
+    @property
+    def register_name(self) -> str:
+        """The flags register's name, as the descriptor gives it ("P" on a 6502)."""
+        return self._register_name
 
     @property
     def value(self) -> int:
@@ -99,6 +108,11 @@ class StatusRegister:
             else:
                 chars.append(name.lower())
         return "".join(chars)
+
+    def __repr__(self) -> str:
+        """The register's name, raw value and flags, e.g. "P=32 [nv-BdiZc]"."""
+        width = max(1, (len(self._flag_names) + 3) // 4)
+        return f"{self._register_name}={self._value:0{width}X} [{self}]"
 
 
 @dataclass(frozen=True)
@@ -166,7 +180,9 @@ class Registers(Mapping):
         """
         for reg in self._descriptor.registers:
             if reg.role == debugger_pb2.FLAGS:
-                return StatusRegister(self._values[reg.name], list(reg.flag_names))
+                return StatusRegister(
+                    self._values[reg.name], list(reg.flag_names), register_name=reg.name
+                )
         raise AttributeError("this CPU has no flags register")
 
     def __str__(self) -> str:
@@ -180,6 +196,10 @@ class Registers(Mapping):
                 text += f" [{StatusRegister(self._values[reg.name], list(reg.flag_names))}]"
                 break
         return text
+
+    def __repr__(self) -> str:
+        """The register line, as :meth:`__str__` gives it."""
+        return str(self)
 
 
 def _registers_from_state(
@@ -227,6 +247,12 @@ class CPU:
         """
         self._stub = stub
         self._descriptor: debugger_pb2.CpuDescriptor | None = None
+
+    def __repr__(self) -> str:
+        """The CPU family and a snapshot of its registers (one register read)."""
+        return facade_repr(
+            self, read_or_unavailable(lambda: f"{self.descriptor.family} {self.registers}")
+        )
 
     @property
     def descriptor(self) -> debugger_pb2.CpuDescriptor:

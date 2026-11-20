@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from beebium.client._proto import audio_pb2, audio_pb2_grpc
+from beebium.client._repr import facade_repr
 
 
 class SourceEncoding(IntEnum):
@@ -145,6 +146,9 @@ class Audio:
     def __init__(self, stub: audio_pb2_grpc.AudioServiceStub):
         self._stub = stub
         self._format: AudioFormat | None = None
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the audio sample stream")
 
     @property
     def format(self) -> AudioFormat:

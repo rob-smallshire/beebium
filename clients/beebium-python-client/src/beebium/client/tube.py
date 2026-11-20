@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from beebium.client._proto import tube_pb2, tube_pb2_grpc
+from beebium.client._repr import facade_repr
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,9 @@ class Tube:
             stub: The gRPC stub for the TubeService.
         """
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the Tube and its coprocessor")
 
     @property
     def status(self) -> TubeStatus:

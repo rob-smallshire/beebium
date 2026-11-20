@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 import grpc
 
 from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
+from beebium.client._repr import facade_repr, read_or_unavailable
 from beebium.client.exceptions import DebuggerError, InvalidConditionError
 
 DEFAULT_TIMEOUT = 30.0  # seconds
@@ -296,6 +297,22 @@ class Debugger:
             stub: The gRPC stub for the DebuggerControl service.
         """
         self._stub = stub
+
+    def __repr__(self) -> str:
+        """The execution state and how many breakpoints and watchpoints are set.
+
+        Three cheap reads: the execution state and the two lists.
+        """
+        return facade_repr(self, read_or_unavailable(self._describe_state))
+
+    def _describe_state(self) -> str:
+        state = self.get_state()
+        parts = ["running" if state.is_running else "stopped", f"cycles={state.cycle_count}"]
+        if not state.is_running and state.halt_reason:
+            parts.append(f"halt={state.halt_reason!r}")
+        parts.append(f"breakpoints={len(self.list_breakpoints())}")
+        parts.append(f"watchpoints={len(self.list_watchpoints())}")
+        return " ".join(parts)
 
     # Execution control
 

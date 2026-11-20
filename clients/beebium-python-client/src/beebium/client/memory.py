@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import overload
 
 from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
+from beebium.client._repr import facade_repr, read_or_unavailable
 from beebium.client.exceptions import MemoryAccessError
 
 # =============================================================================
@@ -82,6 +83,14 @@ class MemoryAccessorBase:
     def __init__(self, stub: debugger_pb2_grpc.DebuggerControlStub):
         self._stub = stub
 
+    def __repr__(self) -> str:
+        """Which accessor, over what, and whether it peeks or goes through the bus."""
+        return facade_repr(self, self._where())
+
+    def _where(self) -> str:
+        """What the accessor reaches and how, e.g. "address space, peek"."""
+        return ""
+
     def _read_bytes(self, address: int, length: int) -> bytes:
         """Read bytes from memory. Subclasses implement gRPC call."""
         raise NotImplementedError
@@ -98,6 +107,10 @@ class TypedMemoryReader:
         self._accessor = accessor
         self._fmt = fmt
         self._size = struct.calcsize(fmt)
+
+    def __repr__(self) -> str:
+        """The struct format and the accessor it reads through."""
+        return facade_repr(self, f"{self._fmt!r} over {self._accessor._where()}")
 
     @overload
     def __getitem__(self, address: int) -> int: ...
@@ -350,6 +363,9 @@ class PeekMemoryAccessor(MemoryReader):
     without affecting emulator state.
     """
 
+    def _where(self) -> str:
+        return "address space, peek"
+
     def _read_bytes(self, address: int, length: int) -> bytes:
         """Read bytes using PeekMemory RPC (no side effects)."""
         request = debugger_pb2.PeekMemoryRequest(address=address, length=length)
@@ -383,6 +399,9 @@ class BusMemoryAccessor(MemoryReader, MemoryWriter):
     would access memory. Reading or writing I/O addresses may trigger
     hardware side effects.
     """
+
+    def _where(self) -> str:
+        return "address space, bus"
 
     def _read_bytes(self, address: int, length: int) -> bytes:
         """Read bytes using ReadMemory RPC (may have side effects)."""
@@ -447,6 +466,9 @@ class PCContextReader(MemoryReader):
         super().__init__(stub)
         self._pc = pc
 
+    def _where(self) -> str:
+        return f"address space, peek, as from PC={self._pc:04X}"
+
     def _read_bytes(self, address: int, length: int) -> bytes:
         """Read bytes using PeekMemory RPC with simulated PC."""
         request = debugger_pb2.PeekMemoryRequest(address=address, length=length, simulated_pc=self._pc)
@@ -463,6 +485,9 @@ class PCContextAccessor(PCContextReader, MemoryWriter):
 
     For Model B (no shadow RAM), this behaves identically to BusMemoryAccessor.
     """
+
+    def _where(self) -> str:
+        return f"address space, bus, as from PC={self._pc:04X}"
 
     def _read_bytes(self, address: int, length: int) -> bytes:
         """Read bytes using ReadMemory RPC with simulated PC."""
@@ -501,6 +526,9 @@ class AddressSpace:
         self._stub = stub
         self._bus: BusMemoryAccessor | None = None
         self._peek: PeekMemoryAccessor | None = None
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "16-bit flat address space, through .bus or .peek")
 
     @property
     def bus(self) -> BusMemoryAccessor:
@@ -549,6 +577,9 @@ class RegionPeekAccessor(MemoryReader):
         super().__init__(stub)
         self._region_name = region_name
 
+    def _where(self) -> str:
+        return f"region {self._region_name!r}, peek"
+
     def _read_bytes(self, address: int, length: int) -> bytes:
         """Read bytes using PeekRegion RPC (no side effects)."""
         request = debugger_pb2.RegionAccessRequest(region_name=self._region_name, address=address, length=length)
@@ -566,6 +597,9 @@ class RegionBusAccessor(MemoryReader, MemoryWriter):
     def __init__(self, stub: debugger_pb2_grpc.DebuggerControlStub, region_name: str):
         super().__init__(stub)
         self._region_name = region_name
+
+    def _where(self) -> str:
+        return f"region {self._region_name!r}, bus"
 
     def _read_bytes(self, address: int, length: int) -> bytes:
         """Read bytes using ReadRegion RPC (may have side effects)."""
@@ -618,6 +652,14 @@ class Region:
         self._size = size
         self._bus: RegionBusAccessor | None = None
         self._peek: RegionPeekAccessor | None = None
+
+    def __repr__(self) -> str:
+        """The region's name and, when known, the addresses it spans."""
+        detail = repr(self._region_name)
+        if self._base_address is not None and self._size:
+            last_address = self._base_address + self._size - 1
+            detail += f" &{self._base_address:04X}-&{last_address:04X}"
+        return facade_repr(self, detail)
 
     @property
     def name(self) -> str:
@@ -691,6 +733,14 @@ class Memory:
         self._address: AddressSpace | None = None
         self._regions_cache: list[MemoryRegionInfo] | None = None
         self._machine_type_cache: str | None = None
+
+    def __repr__(self) -> str:
+        """The machine type and its region names (one read, then cached)."""
+        return facade_repr(self, read_or_unavailable(self._describe_regions))
+
+    def _describe_regions(self) -> str:
+        names = ", ".join(info.name for info in self.regions)
+        return f"{self.machine_type} regions: {names}"
 
     @property
     def address(self) -> AddressSpace:

@@ -22,6 +22,7 @@ from enum import Enum
 from pathlib import Path
 
 from beebium.client._proto import disc_pb2, disc_pb2_grpc
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import DiscError
 
 
@@ -177,6 +178,9 @@ class EventStreamHandle:
         self._thread = thread
         self._stop_event = stop_event
 
+    def __repr__(self) -> str:
+        return facade_repr(self, "running" if self._thread.is_alive() else "stopped")
+
     def stop(self, timeout: float = 1.0) -> None:
         """Stop the background stream.
 
@@ -268,6 +272,9 @@ class Drive:
         """
         self._disc = disc_service
         self._drive_num = drive_num
+
+    def __repr__(self) -> str:
+        return facade_repr(self, f"drive {self._drive_num}")
 
     @property
     def status(self) -> DriveStatus:
@@ -467,6 +474,9 @@ class Disc:
         self._stub = stub
         self._drive0: Drive | None = None
         self._drive1: Drive | None = None
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the disc drives and their controller")
 
     def drive(self, num: int) -> Drive:
         """Get a Drive interface for drive 0 or 1.

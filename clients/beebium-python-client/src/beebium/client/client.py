@@ -24,6 +24,7 @@ import grpc
 
 import beebium.client as beebium
 from beebium.client._proto.protocol_fingerprint import PROTOCOL_FINGERPRINT
+from beebium.client._repr import facade_repr, read_or_unavailable
 from beebium.client.audio import Audio
 from beebium.client.basic import Basic
 from beebium.client.cassette import Cassette
@@ -134,6 +135,16 @@ class Beebium:
         self._tube_ula: TubeUlaInspection | None = None
         self._audio: Audio | None = None
         self._extensions: Extensions | None = None
+
+    def __repr__(self) -> str:
+        """The target, the machine's model and its name (one read).
+
+        A coprocessor view (:meth:`connect_coprocessor`) says so.
+        """
+        view = ", coprocessor view" if self._debugger_stub_override is not None else ""
+        return facade_repr(
+            self, f"{self.target} {read_or_unavailable(self.system._describe_machine)}{view}"
+        )
 
     @classmethod
     def _from_coprocessor_stub(cls, connection: Connection) -> Beebium:

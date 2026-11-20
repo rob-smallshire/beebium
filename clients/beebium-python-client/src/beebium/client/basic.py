@@ -22,6 +22,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import TimeoutError
 from beebium.client.screen import _displayed_rows, read_mode7_screen
 
@@ -69,6 +70,11 @@ class Basic:
             client: The Beebium client to use.
         """
         self._client = client
+
+    def __repr__(self) -> str:
+        return facade_repr(
+            self, f"{self._client.target}: BBC BASIC helpers (type, run and read programs)"
+        )
 
     def wait_for_prompt(
         self,

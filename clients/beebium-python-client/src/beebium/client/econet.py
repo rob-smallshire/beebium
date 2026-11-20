@@ -29,6 +29,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from beebium.client._proto import econet_pb2, econet_pb2_grpc
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import EconetError
 
 
@@ -297,6 +298,9 @@ class Econet:
             stub: The gRPC stub for the EconetService.
         """
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the Econet interface (MC6854 ADLC)")
 
     @property
     def status(self) -> EconetStatus:

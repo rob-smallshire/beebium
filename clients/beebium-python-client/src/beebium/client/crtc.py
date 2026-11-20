@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
+from beebium.client._repr import facade_repr
 
 
 @dataclass
@@ -164,6 +165,9 @@ class CrtcRegisters:
     def __init__(self, crtc: Crtc):
         self._crtc = crtc
 
+    def __repr__(self) -> str:
+        return facade_repr(self, "the 6845's registers, by number")
+
     def __getitem__(self, index: int) -> int:
         """Get register value by index (0-17)."""
         if not 0 <= index < 18:
@@ -198,6 +202,9 @@ class Crtc:
         """
         self._stub = stub
         self._registers = CrtcRegisters(self)
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the 6845 CRTC")
 
     @property
     def state(self) -> CrtcState:

@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 import grpc
 
 from beebium.client._proto import system_pb2, system_pb2_grpc
+from beebium.client._repr import facade_repr, read_or_unavailable
 from beebium.client.exceptions import BeebiumError
 from beebium.client.host import is_local_host
 
@@ -399,6 +400,14 @@ class System:
         self._stub = stub
         self._instance_uuid = instance_uuid
         self._provenance_cache: Provenance | None = None
+
+    def __repr__(self) -> str:
+        """The machine's model and name (one read)."""
+        return facade_repr(self, read_or_unavailable(self._describe_machine))
+
+    def _describe_machine(self) -> str:
+        identity = self.identity
+        return f"{identity.model_name} {identity.name!r}"
 
     @property
     def identity(self) -> MachineIdentity:

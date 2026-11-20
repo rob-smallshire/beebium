@@ -37,6 +37,7 @@ import stevedore
 import stevedore.driver
 import stevedore.exception
 
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import (
     ExtensionAdapterNotInstalledError,
     ExtensionAmbiguousError,
@@ -92,6 +93,11 @@ class ExtensionAdapter(ABC):
         self._name = name
         self._channel = channel
         self._extension_id = extension_id
+
+    def __repr__(self) -> str:
+        """The extension's name and, when it has one, its instance id."""
+        instance = f" ({self._extension_id})" if self._extension_id else ""
+        return facade_repr(self, f"{self._name!r}{instance}")
 
     @property
     def name(self) -> str:

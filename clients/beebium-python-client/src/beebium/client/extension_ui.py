@@ -46,6 +46,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
 from beebium.client._proto import extension_ui_pb2, extension_ui_pb2_grpc
+from beebium.client._repr import facade_repr
 
 
 class IndicatorState(enum.IntEnum):
@@ -247,6 +248,9 @@ class SubscriptionHandle:
         self._thread = thread
         self._stop_event = stop_event
 
+    def __repr__(self) -> str:
+        return facade_repr(self, "running" if self._thread.is_alive() else "stopped")
+
     def stop(self, timeout: float = 1.0) -> None:
         """Signal the background subscription to stop and join the thread.
 
@@ -284,6 +288,9 @@ class ExtensionUi:
 
     def __init__(self, stub: extension_ui_pb2_grpc.ExtensionUiServiceStub):
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "extension-supplied views and their actions")
 
     def subscribe_view(self, extension_id: str) -> Iterator[View]:
         """Open a server-stream of View updates for one extension.

@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import TypeVar, cast, overload
 
 from beebium.client._proto import econet_transport_pb2, econet_transport_pb2_grpc
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import ExtensionError
 from beebium.client.extension import (
     ECONET_ENTRY_POINT_GROUP,
@@ -89,6 +90,9 @@ class EconetTransport:
     ):
         self._stub = stub
         self._channel = channel
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the active Econet transport and its adapter")
 
     def list(self) -> list[TransportInfo]:
         """List all econet transports the server knows about.

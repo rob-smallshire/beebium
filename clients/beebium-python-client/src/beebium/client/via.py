@@ -19,6 +19,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from beebium.client._proto import debugger_pb2
+from beebium.client._repr import facade_repr
 
 if TYPE_CHECKING:
     from beebium.client._proto import debugger_pb2_grpc
@@ -179,6 +180,9 @@ class Via:
         """
         self._stub = stub
         self._via_id = via_id
+
+    def __repr__(self) -> str:
+        return facade_repr(self, f"the {self._via_id.value.capitalize()} VIA (6522)")
 
     @property
     def state(self) -> ViaState:

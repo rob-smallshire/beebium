@@ -23,6 +23,7 @@ from pathlib import Path
 import grpc
 
 from beebium.client._proto import video_pb2, video_pb2_grpc
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import TimeoutError
 
 # The standard MODE 7 page. A program can drive the SAA5050 into other shapes,
@@ -378,6 +379,9 @@ class FrameStreamHandle:
         self._thread = thread
         self._stop_event = stop_event
 
+    def __repr__(self) -> str:
+        return facade_repr(self, "running" if self._thread.is_alive() else "stopped")
+
     def stop(self, timeout: float = 1.0) -> None:
         """Stop the background stream.
 
@@ -419,6 +423,9 @@ class Video:
         """
         self._stub = stub
         self._config: VideoConfig | None = None
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the video frames and the screen read from them")
 
     @property
     def config(self) -> VideoConfig:

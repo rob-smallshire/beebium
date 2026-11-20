@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beebium.client._proto import debugger_pb2
+from beebium.client._repr import facade_repr
 
 if TYPE_CHECKING:
     from beebium.client._proto import debugger_pb2_grpc
@@ -89,6 +90,9 @@ class AddressableLatch:
             stub: The gRPC stub for the DeviceInspection service.
         """
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the addressable latch on the System VIA")
 
     @property
     def state(self) -> AddressableLatchState:

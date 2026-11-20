@@ -28,6 +28,7 @@ from pathlib import Path
 import grpc
 
 import beebium.client as beebium
+from beebium.client._repr import facade_repr
 from beebium.client.connection import open_channel
 from beebium.client.exceptions import ServerStartupError
 from beebium.client.installation import DEFAULT_VARIANT, ServerInstallation, find_in_build_tree
@@ -106,6 +107,13 @@ class ServerProcess:
         #: values are -signal (e.g. -11 for SIGSEGV); None until the process
         #: has been reaped by stop().
         self.last_exit_code: int | None = None
+
+    def __repr__(self) -> str:
+        """The variant, where it listens once started, and whether it is running."""
+        where = f" {self.target}" if self._port else ""
+        return facade_repr(
+            self, f"{self._variant}{where} {'running' if self.is_running else 'not running'}"
+        )
 
     @property
     def port(self) -> int:

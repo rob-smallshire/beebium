@@ -47,6 +47,8 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
+from beebium.client._repr import facade_repr
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
 
@@ -141,6 +143,12 @@ class MachineDiscovery:
         self._lock = threading.RLock()
         self._generations: dict[str, int] = {}
         self._withdrawn: set[str] = set()
+
+    def __repr__(self) -> str:
+        """Whether it is browsing, and how many servers it knows."""
+        with self._lock:
+            browsing = "browsing" if self._browser is not None else "not browsing"
+            return facade_repr(self, f"{browsing}, {len(self._machines)} found")
 
     def start(self) -> None:
         """Start discovery. Runs in background thread."""

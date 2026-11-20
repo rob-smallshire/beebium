@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
+from beebium.client._repr import facade_repr
 
 # MOS SOUND command channel mapping to SN76489 internal channels
 # MOS channel 0 = Noise (SN76489 index 3)
@@ -140,6 +141,9 @@ class Sound:
             stub: The gRPC stub for the DeviceInspection service.
         """
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the SN76489 sound generator")
 
     def state(self) -> SoundGeneratorState:
         """Get the current sound generator state.

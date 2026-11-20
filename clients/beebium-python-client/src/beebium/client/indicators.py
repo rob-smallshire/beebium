@@ -24,6 +24,7 @@ explicit at the call site.
 from __future__ import annotations
 
 from beebium.client._proto import indicator_pb2, indicator_pb2_grpc
+from beebium.client._repr import facade_repr
 
 
 class Indicators:
@@ -53,6 +54,9 @@ class Indicators:
             stub: The gRPC stub for the IndicatorService.
         """
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the machine's LEDs")
 
     def get_all(self) -> dict[str, int]:
         """Get the current value of every registered indicator.

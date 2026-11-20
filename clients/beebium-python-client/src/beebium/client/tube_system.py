@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from beebium.client._repr import facade_repr
 from beebium.client.debugger import wall_timeout_for
 
 if TYPE_CHECKING:
@@ -56,6 +57,9 @@ class TubeSystem:
         """
         self._host = host
         self._coprocessor = coprocessor
+
+    def __repr__(self) -> str:
+        return facade_repr(self, f"{self._host.target}: the host and its coprocessor, run together")
 
     @classmethod
     def from_host(cls, host: Beebium) -> TubeSystem:

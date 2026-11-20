@@ -32,6 +32,7 @@ from enum import IntEnum
 from typing import cast
 
 from beebium.client._proto import sideways_pb2, sideways_pb2_grpc
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import BeebiumError
 
 
@@ -233,6 +234,9 @@ class Sideways:
 
     def __init__(self, stub: sideways_pb2_grpc.SidewaysServiceStub):
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the sideways ROM and RAM slots")
 
     def get_slot_status(self) -> SlotStatusReport:
         """Read the current sideways topology and per-socket state."""

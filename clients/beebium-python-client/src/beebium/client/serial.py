@@ -29,6 +29,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from beebium.client._proto import serial_pb2, serial_pb2_grpc
+from beebium.client._repr import facade_repr
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,9 @@ class Serial:
             stub: The gRPC stub for the SerialService.
         """
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the serial port (MC6850 ACIA and Serial ULA)")
 
     @property
     def status(self) -> SerialStatus:

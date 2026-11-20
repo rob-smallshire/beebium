@@ -38,6 +38,7 @@ from beebium.client._proto import (
 from beebium.client._proto import (
     peripheral_extension_pb2_grpc as pe_grpc,
 )
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import ExtensionError
 from beebium.client.extension import (
     PERIPHERAL_ENTRY_POINT_GROUP,
@@ -354,6 +355,9 @@ class Extensions:
     ):
         self._stub = stub
         self._channel = channel
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the peripheral extensions: discovery and configuration")
 
     @property
     def loaded(self) -> list[ExtensionInfo]:

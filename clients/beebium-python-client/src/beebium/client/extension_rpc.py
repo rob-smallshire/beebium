@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from beebium.client._proto import extension_rpc_pb2, extension_rpc_pb2_grpc
+from beebium.client._repr import facade_repr
 
 
 class ExtensionChannel:
@@ -43,6 +44,9 @@ class ExtensionChannel:
 
     def __init__(self, stub: extension_rpc_pb2_grpc.ExtensionRpcStub):
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "typed RPCs to an extension, by instance id")
 
     def invoke(self, service: str, method: str, payload: bytes, *, extension_id: str = "") -> bytes:
         """Unary call. Returns the response payload bytes.

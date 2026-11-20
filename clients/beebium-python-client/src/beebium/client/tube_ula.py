@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from beebium.client._proto import debugger_pb2
+from beebium.client._repr import facade_repr
 
 if TYPE_CHECKING:
     from beebium.client._proto import debugger_pb2_grpc
@@ -288,6 +289,9 @@ class TubeUlaInspection:
 
     def __init__(self, stub: debugger_pb2_grpc.DeviceInspectionStub):
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the Tube ULA's flags, latches and FIFOs")
 
     @property
     def state(self) -> TubeUlaState:

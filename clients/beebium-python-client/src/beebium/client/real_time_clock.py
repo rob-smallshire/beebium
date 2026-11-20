@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
+from beebium.client._repr import facade_repr
 
 # The first register of the chip's battery-backed CMOS RAM.
 FIRST_CMOS_REGISTER = 0x0E
@@ -63,6 +64,9 @@ class RealTimeClock:
 
     def __init__(self, stub: debugger_pb2_grpc.DeviceInspectionStub):
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the machine's real-time clock chip")
 
     @property
     def state(self) -> RealTimeClockState:

@@ -30,6 +30,7 @@ from enum import Enum
 from pathlib import Path
 
 from beebium.client._proto import cassette_pb2, cassette_pb2_grpc
+from beebium.client._repr import facade_repr
 from beebium.client.exceptions import CassetteError, CreateTapeError
 
 
@@ -244,6 +245,9 @@ class Cassette:
 
     def __init__(self, stub: cassette_pb2_grpc.CassetteServiceStub):
         self._stub = stub
+
+    def __repr__(self) -> str:
+        return facade_repr(self, "the cassette deck")
 
     def insert(self, path_or_url: str | Path, channel: str | None = None) -> TapeMetadata:
         """Insert a UEF, CSW or WAV tape image the server can reach, judged by
