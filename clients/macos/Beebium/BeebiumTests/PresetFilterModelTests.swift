@@ -14,9 +14,10 @@ import XCTest
 @testable import Beebium
 
 /// The preset filter's popup logic: single-selection facets that AND together,
-/// faceted counts, the None choice (absence, or "No disc" for Disc), and the
-/// rule that a facet with nothing to choose is hidden. Tags are seeded directly,
-/// so no files are read.
+/// faceted counts, the None choice (absence, or "No disc" for the exclusive Disc
+/// controller facet), set facets where choosing a value means "has", and the rule
+/// that a facet with nothing to choose is hidden. Tags are seeded directly, so no
+/// files are read.
 @MainActor
 final class PresetFilterModelTests: XCTestCase {
 
@@ -30,17 +31,21 @@ final class PresetFilterModelTests: XCTestCase {
                       modelName: "", modelDescription: nil, releaseDate: nil, hasThumbnail: false)
     }
 
-    /// A small catalogue: two Model B (one 1770, one no disc), a Master with a
-    /// 65C102 and no disc, and a B+ with a 65C02 and AUN on 1770. No peripherals
-    /// at all.
+    /// A small catalogue exercising both facet kinds:
+    /// - p1: Model B, 1770, Floppy.
+    /// - p2: Model B, no disc, no storage.
+    /// - p3: Master 128, 65C102, 1770, Floppy.
+    /// - p4: Model B+, 65C02, AUN, 1770, Floppy + Hard disc, Music 5000.
     private func seeded() -> (PresetFilterModel, [MachinePreset]) {
         let model = PresetFilterModel()
         model.loadTagsForTesting([
-            "p1": [t(.model, "Model B"), t(.storage, "1770")],
-            "p2": [t(.model, "Model B"), t(.storage, "No disc")],
-            "p3": [t(.model, "Master 128"), t(.processor, "65C102"), t(.storage, "No disc")],
-            "p4": [t(.model, "Model B+"), t(.processor, "65C02"),
-                   t(.network, "AUN"), t(.storage, "1770")],
+            "p1": [t(.model, "Model B"), t(.discController, "1770"), t(.storage, "Floppy")],
+            "p2": [t(.model, "Model B"), t(.discController, "No disc")],
+            "p3": [t(.model, "Master 128"), t(.coprocessor, "65C102"),
+                   t(.discController, "1770"), t(.storage, "Floppy")],
+            "p4": [t(.model, "Model B+"), t(.coprocessor, "65C02"), t(.network, "AUN"),
+                   t(.discController, "1770"), t(.storage, "Floppy"), t(.storage, "Hard disc"),
+                   t(.peripherals, "Music 5000")],
         ])
         return (model, ["p1", "p2", "p3", "p4"].map(preset))
     }
@@ -54,66 +59,86 @@ final class PresetFilterModelTests: XCTestCase {
         popup?.options.first { $0.choice == choice }?.count
     }
 
-    func testPopupsOfferTheirValuesWithCounts() {
+    func testModelPopupOffersItsValuesWithCounts() {
         let (model, presets) = seeded()
         let modelFacet = popup(model, presets, .model)
         XCTAssertEqual(count(modelFacet, .value("Model B")), 2)
         XCTAssertEqual(count(modelFacet, .value("Model B+")), 1)
         XCTAssertEqual(count(modelFacet, .value("Master 128")), 1)
-        // Model has no None (every preset has a family).
+        // Model has no None (every preset has one).
         XCTAssertNil(count(modelFacet, .none))
     }
 
-    func testStorageNoneIsTheNoDiscValue() {
+    func testDiscControllerNoneIsTheNoDiscValue() {
         let (model, presets) = seeded()
-        let storage = popup(model, presets, .storage)
-        // "No disc" is presented as None, not as its own value.
-        XCTAssertEqual(count(storage, .value("1770")), 2)
-        XCTAssertNil(count(storage, .value("No disc")))
-        XCTAssertEqual(count(storage, .none), 2)   // p2, p3
+        let disc = popup(model, presets, .discController)
+        XCTAssertEqual(count(disc, .value("1770")), 3)   // p1, p3, p4
+        XCTAssertNil(count(disc, .value("No disc")))     // shown as None, not a value
+        XCTAssertEqual(count(disc, .none), 1)            // p2
     }
 
-    func testProcessorNoneCountsPresetsWithoutOne() {
+    func testCoprocessorNoneCountsPresetsWithoutOne() {
         let (model, presets) = seeded()
-        let processor = popup(model, presets, .processor)
-        XCTAssertEqual(count(processor, .value("65C02")), 1)
-        XCTAssertEqual(count(processor, .value("65C102")), 1)
-        XCTAssertEqual(count(processor, .none), 2)   // p1, p2
+        let copro = popup(model, presets, .coprocessor)
+        XCTAssertEqual(count(copro, .value("65C02")), 1)
+        XCTAssertEqual(count(copro, .value("65C102")), 1)
+        XCTAssertEqual(count(copro, .none), 2)           // p1, p2
+    }
+
+    func testStorageIsASetFacetWhereValueMeansHas() {
+        let (model, presets) = seeded()
+        let storage = popup(model, presets, .storage)
+        XCTAssertEqual(count(storage, .value("Floppy")), 3)     // p1, p3, p4
+        XCTAssertEqual(count(storage, .value("Hard disc")), 1)  // p4
+        XCTAssertEqual(count(storage, .none), 1)                // p2 has no storage
+        // Choosing Hard disc keeps only the preset that has it.
+        model.select(.storage, .value("Hard disc"))
+        XCTAssertEqual(model.filtered(presets).map(\.presetId), ["p4"])
     }
 
     func testFacetWithNothingToChooseIsHidden() {
-        let (model, presets) = seeded()
-        // No preset has a peripheral, so that popup never appears.
-        XCTAssertNil(popup(model, presets, .peripherals))
+        // A catalogue where every preset has the one same model and no other
+        // facet: only Model has (one) value, so no popup can be built.
+        let model = PresetFilterModel()
+        model.loadTagsForTesting([
+            "a": [t(.model, "Model B")],
+            "b": [t(.model, "Model B")],
+        ])
+        let presets = ["a", "b"].map(preset)
+        // Model has a single value (no None) -> fewer than two choices -> hidden.
+        XCTAssertNil(popup(model, presets, .model))
+        // The other facets have no values at all -> also hidden.
+        XCTAssertNil(popup(model, presets, .storage))
+        XCTAssertNil(popup(model, presets, .network))
     }
 
     func testSelectionsAndTogether() {
         let (model, presets) = seeded()
         model.select(.model, .value("Model B"))
         XCTAssertEqual(Set(model.filtered(presets).map(\.presetId)), ["p1", "p2"])
-        model.select(.storage, .value("1770"))
+        model.select(.discController, .value("1770"))
         XCTAssertEqual(model.filtered(presets).map(\.presetId), ["p1"])
     }
 
     func testNoneChoiceFiltersAbsence() {
         let (model, presets) = seeded()
-        model.select(.processor, .none)
+        model.select(.coprocessor, .none)
         XCTAssertEqual(Set(model.filtered(presets).map(\.presetId)), ["p1", "p2"])
-        model.select(.processor, .any)
+        model.select(.coprocessor, .any)
         model.select(.storage, .none)
-        XCTAssertEqual(Set(model.filtered(presets).map(\.presetId)), ["p2", "p3"])
+        XCTAssertEqual(model.filtered(presets).map(\.presetId), ["p2"])   // only p2 has no storage
     }
 
     func testCountsAreFacetedAgainstOtherSelections() {
         let (model, presets) = seeded()
         model.select(.model, .value("Model B"))
-        // Under Model = Model B, the Storage popup counts only p1/p2.
-        let storage = popup(model, presets, .storage)
-        XCTAssertEqual(count(storage, .value("1770")), 1)   // p1
-        XCTAssertEqual(count(storage, .none), 1)            // p2
+        // Under Model = Model B, the Disc controller popup counts only p1/p2.
+        let disc = popup(model, presets, .discController)
+        XCTAssertEqual(count(disc, .value("1770")), 1)   // p1
+        XCTAssertEqual(count(disc, .none), 1)            // p2
         // A choice that can give nothing is disabled (65C102 is Master-only).
-        let processor = popup(model, presets, .processor)
-        let c102 = processor?.options.first { $0.choice == .value("65C102") }
+        let copro = popup(model, presets, .coprocessor)
+        let c102 = copro?.options.first { $0.choice == .value("65C102") }
         XCTAssertEqual(c102?.count, 0)
         XCTAssertEqual(c102?.isEnabled, false)
     }

@@ -16,56 +16,70 @@ import Foundation
 /// Each popup is single-selection and defaults to "Any"; selections AND across
 /// popups. The facet keeps `PresetTagger`'s vocabulary and only presents it.
 enum PresetFacet: String, CaseIterable, Identifiable, Sendable {
-    // Named and ordered after the sidebar modes, the model first: Model, then the
-    // modes that have something to filter (Storage, Peripherals, Processor,
-    // Network). "Model", not "Machine", so it is not confused with the machine
-    // instances in the Welcome window.
-    case model, storage, peripherals, processor, network
+    // The spec's six facets in order: four exclusive (Model, Coprocessor, Disc
+    // controller, Network), then two set facets (Storage, Peripherals). "Model",
+    // not "Machine", so it is not confused with the machine instances in the
+    // Welcome window.
+    case model, coprocessor, discController, network, storage, peripherals
 
     var id: String { rawValue }
+
+    /// Whether every preset has exactly one value (exclusive) or a preset may
+    /// carry several or none (set). Both are single-selection popups; the kind
+    /// documents intent and maps to the server's `describe-facets` kind later.
+    enum Kind { case exclusive, set }
+
+    var kind: Kind {
+        switch self {
+        case .storage, .peripherals: return .set
+        default:                     return .exclusive
+        }
+    }
 
     /// The tag group this facet filters on (one-to-one, same names).
     var group: PresetTagGroup {
         switch self {
-        case .model:       return .model
-        case .storage:     return .storage
-        case .peripherals: return .peripherals
-        case .processor:   return .processor
-        case .network:     return .network
+        case .model:          return .model
+        case .coprocessor:    return .coprocessor
+        case .discController: return .discController
+        case .network:        return .network
+        case .storage:        return .storage
+        case .peripherals:    return .peripherals
         }
     }
 
     /// The popup's label.
     var label: String {
         switch self {
-        case .model:       return "Model"
-        case .storage:     return "Storage"
-        case .peripherals: return "Peripherals"
-        case .processor:   return "Processor"
-        case .network:     return "Network"
+        case .model:          return "Model"
+        case .coprocessor:    return "Coprocessor"
+        case .discController: return "Disc controller"
+        case .network:        return "Network"
+        case .storage:        return "Storage"
+        case .peripherals:    return "Peripherals"
         }
     }
 
-    /// Whether a "None" choice is offered. Every preset has a model family, so
-    /// Model has no None; the rest can lack their feature.
+    /// Whether a "None" choice is offered. Every preset has a model, so Model has
+    /// no None; the rest can lack their value(s).
     var offersNone: Bool { self != .model }
 
     /// Whether a preset (its values in this facet's group) counts as "None". For
-    /// most facets that is the absence of any tag; for Storage, where every preset
-    /// carries a disc tag, "None" is the "No disc" value.
+    /// most facets that is the absence of any value; for Disc controller, where
+    /// every preset carries one, "None" is the "No disc" value.
     func isNone(_ values: Set<String>) -> Bool {
         switch self {
-        case .storage: return !values.contains("8271") && !values.contains("1770")
-        default:       return values.isEmpty
+        case .discController: return !values.contains("8271") && !values.contains("1770")
+        default:              return values.isEmpty
         }
     }
 
     /// The concrete (non-None) values to offer, from the values present in the
-    /// group. Storage hides "No disc" here because it is the None choice.
+    /// group. Disc controller hides "No disc" here because it is the None choice.
     func concreteValues(from values: Set<String>) -> [String] {
         switch self {
-        case .storage: return values.subtracting(["No disc"]).sorted()
-        default:       return values.sorted()
+        case .discController: return values.subtracting(["No disc"]).sorted()
+        default:              return values.sorted()
         }
     }
 }

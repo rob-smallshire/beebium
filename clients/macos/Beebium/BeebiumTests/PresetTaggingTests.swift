@@ -13,12 +13,12 @@
 import XCTest
 @testable import Beebium
 
-/// The spike's client-side preset tagging, over fixtures that mirror the bundled
-/// presets, so we can read what the derivation decided (and the server can later
-/// be checked against it). Each case asserts the full, sorted tag list. The
-/// built-in disc controller is passed in, standing for the model's storage
-/// schema (`builtin.fdc.device`), so the Master and B+ cases are pinned by the
-/// schema value rather than a model-id switch.
+/// The spike shim's client-side facet derivation, over fixtures that mirror the
+/// bundled presets, so we can read what it decided (and the server can later be
+/// checked against it). Each case asserts the full, sorted tag list. The built-in
+/// disc controller is passed in, standing for the model's storage schema
+/// (`builtin.fdc.device`), so the Master and B+ cases are pinned by the schema
+/// value rather than a model-id switch.
 final class PresetTaggingTests: XCTestCase {
 
     private func tags(_ json: String, builtinFdcDevice: String? = nil) -> [PresetTag] {
@@ -30,19 +30,19 @@ final class PresetTaggingTests: XCTestCase {
         PresetTag(group: group, value: value)
     }
 
-    func testPlainModelBHasNoDisc() {
-        // A Model B has an FDC socket, not a built-in controller, so with nothing
-        // fitted it is no disc.
+    func testPlainModelBHasNoDiscAndNoStorage() {
+        // A Model B with no disc controller fitted: no disc, and no storage media.
         XCTAssertEqual(tags(#"{"model":"model-b","name":"Model B"}"#),
-                       [t(.model, "Model B"), t(.storage, "No disc")])
+                       [t(.model, "Model B"), t(.discController, "No disc")])
     }
 
-    func testModelBWith1770Disc() {
+    func testModelBWith1770DiscHasFloppy() {
         let json = #"""
         {"model":"model-b","name":"Model B (Disc)",
          "storage":{"fdc_socket":{"id":"acorn-1770"}}}
         """#
-        XCTAssertEqual(tags(json), [t(.model, "Model B"), t(.storage, "1770")])
+        XCTAssertEqual(tags(json),
+                       [t(.model, "Model B"), t(.discController, "1770"), t(.storage, "Floppy")])
     }
 
     func testModelB8271Disc() {
@@ -50,46 +50,51 @@ final class PresetTaggingTests: XCTestCase {
         {"model":"model-b","name":"Model B (8271)",
          "storage":{"fdc_socket":{"id":"acorn-8271"}}}
         """#
-        XCTAssertEqual(tags(json), [t(.model, "Model B"), t(.storage, "8271")])
+        XCTAssertEqual(tags(json),
+                       [t(.model, "Model B"), t(.discController, "8271"), t(.storage, "Floppy")])
     }
 
     func testFdcSocketNoneCountsAsNoDisc() {
-        // A disc socket fitted with no controller is, to someone picking a
-        // machine, no disc -- not a mysterious "none".
         let json = #"""
         {"model":"model-b","name":"No controller",
          "storage":{"fdc_socket":{"id":"none"}}}
         """#
-        XCTAssertEqual(tags(json), [t(.model, "Model B"), t(.storage, "No disc")])
+        XCTAssertEqual(tags(json),
+                       [t(.model, "Model B"), t(.discController, "No disc")])
     }
 
     func testMasterTakesItsBuiltinController() {
         // The Master has no socket; its schema carries builtin.fdc = WD1770, so a
-        // Master preset with no storage block is still 1770.
+        // Master preset with no storage block is still 1770, with a floppy.
         XCTAssertEqual(tags(#"{"model":"master-128","name":"Master 128"}"#, builtinFdcDevice: "WD1770"),
-                       [t(.model, "Master 128"), t(.storage, "1770")])
+                       [t(.model, "Master 128"), t(.discController, "1770"), t(.storage, "Floppy")])
     }
 
-    func testBPlusTakesItsBuiltinControllerWhenNoSocketFitted() {
-        // The B+ family also has a built-in WD1770; a floppy-only preset (no
-        // fdc_socket) still reads 1770 from the schema, not a hard-coded default.
+    func testBPlusTakesItsBuiltinControllerAndMusic5000() {
         let json = #"""
         {"model":"model-b-plus-128k","name":"Music 5000",
          "storage":{"floppy_drives":[{"drive":0,"image_uri":"x.ssd"}]},
          "extensions":[{"name":"hybrid-music-5000"}]}
         """#
-        XCTAssertEqual(tags(json, builtinFdcDevice: "WD1770"),
-                       [t(.model, "Model B+"), t(.storage, "1770"), t(.peripherals, "Music 5000")])
+        XCTAssertEqual(tags(json, builtinFdcDevice: "WD1770"), [
+            t(.model, "Model B+"),
+            t(.discController, "1770"),
+            t(.storage, "Floppy"),
+            t(.peripherals, "Music 5000"),
+        ])
     }
 
-    func testModelBPlus128KWith65C102Copro() {
-        // No storage and no built-in controller supplied: no disc.
+    func testBPlusWith65C102Copro() {
         let json = #"""
         {"model":"model-b-plus-128k","name":"B+ 65C102",
          "extensions":[{"name":"acorn-65c102-coprocessor"}]}
         """#
-        XCTAssertEqual(tags(json, builtinFdcDevice: "WD1770"),
-                       [t(.model, "Model B+"), t(.storage, "1770"), t(.processor, "65C102")])
+        XCTAssertEqual(tags(json, builtinFdcDevice: "WD1770"), [
+            t(.model, "Model B+"),
+            t(.coprocessor, "65C102"),
+            t(.discController, "1770"),
+            t(.storage, "Floppy"),
+        ])
     }
 
     func testEconetAunStation() {
@@ -98,14 +103,19 @@ final class PresetTaggingTests: XCTestCase {
          "storage":{"fdc_socket":{"id":"acorn-1770"}},
          "econet":{"station":80,"transport":{"name":"aun","parameters":{"port":"0"}}}}
         """#
-        XCTAssertEqual(tags(json),
-                       [t(.model, "Model B"), t(.storage, "1770"), t(.network, "AUN")])
+        XCTAssertEqual(tags(json), [
+            t(.model, "Model B"),
+            t(.discController, "1770"),
+            t(.network, "AUN"),
+            t(.storage, "Floppy"),
+        ])
     }
 
-    func testFileServerIsTaggedByTransportNotAsFileServer() {
-        // The L3 file server runs over AUN with a 65C02 copro. Its SCSI host, SCSI
-        // disc and RTC are plumbing, not peripherals or a network value of their
-        // own, so the only network tag is the transport.
+    func testFileServerSpansEveryFacet() {
+        // The L3 file server: Model B, 65C02 copro, 1770 over AUN, a floppy and a
+        // SCSI hard disc, with an RTC and SCSI adapter as peripherals. Its SCSI
+        // host is a peripheral; its SCSI disc is Storage/Hard disc; neither is a
+        // network value.
         let json = #"""
         {"model":"model-b","name":"L3 File Server",
          "storage":{"fdc_socket":{"id":"acorn-1770"}},
@@ -115,9 +125,13 @@ final class PresetTaggingTests: XCTestCase {
         """#
         XCTAssertEqual(tags(json), [
             t(.model, "Model B"),
-            t(.storage, "1770"),
-            t(.processor, "65C02"),
+            t(.coprocessor, "65C02"),
+            t(.discController, "1770"),
             t(.network, "AUN"),
+            t(.storage, "Floppy"),
+            t(.storage, "Hard disc"),
+            t(.peripherals, "Real-time clock"),
+            t(.peripherals, "SCSI adapter"),
         ])
     }
 
@@ -127,8 +141,12 @@ final class PresetTaggingTests: XCTestCase {
          "storage":{"fdc_socket":{"id":"acorn-1770"}},
          "econet":{"station":81,"transport":{"name":"piconet"}}}
         """#
-        XCTAssertEqual(tags(json),
-                       [t(.model, "Model B"), t(.storage, "1770"), t(.network, "Piconet")])
+        XCTAssertEqual(tags(json), [
+            t(.model, "Model B"),
+            t(.discController, "1770"),
+            t(.network, "Piconet"),
+            t(.storage, "Floppy"),
+        ])
     }
 
     /// An unknown peripheral extension extends the facet by its raw name.
@@ -137,8 +155,11 @@ final class PresetTaggingTests: XCTestCase {
         {"model":"model-b","name":"Gadget",
          "extensions":[{"name":"some-new-gadget"}]}
         """#
-        XCTAssertEqual(tags(json),
-                       [t(.model, "Model B"), t(.storage, "No disc"), t(.peripherals, "some-new-gadget")])
+        XCTAssertEqual(tags(json), [
+            t(.model, "Model B"),
+            t(.discController, "No disc"),
+            t(.peripherals, "some-new-gadget"),
+        ])
     }
 
     /// The row's model wins over the file's, so a row that names its model still
@@ -147,6 +168,6 @@ final class PresetTaggingTests: XCTestCase {
         let object = try! JSONSerialization.jsonObject(
             with: Data(#"{"model":"model-b","name":"X"}"#.utf8)) as! [String: Any]
         let tags = PresetTagger.tags(model: "master-128", preset: object, builtinFdcDevice: "WD1770")
-        XCTAssertEqual(tags, [t(.model, "Master 128"), t(.storage, "1770")])
+        XCTAssertEqual(tags, [t(.model, "Master 128"), t(.discController, "1770"), t(.storage, "Floppy")])
     }
 }

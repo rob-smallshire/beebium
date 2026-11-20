@@ -75,15 +75,17 @@ final class PresetTagsIntegrationTests: XCTestCase {
             XCTAssertTrue(tags.contains(PresetTag(group: .model, value: "Master 128")),
                           "\(master.presetId) should tag Master 128")
             // The Master's built-in WD1770 comes from its storage schema, so every
-            // Master reads 1770 even with no storage block.
-            XCTAssertTrue(tags.contains(PresetTag(group: .storage, value: "1770")),
-                          "\(master.presetId) should tag storage 1770 from its built-in controller")
+            // Master reads disc controller 1770 even with no storage block.
+            XCTAssertTrue(tags.contains(PresetTag(group: .discController, value: "1770")),
+                          "\(master.presetId) should tag disc controller 1770 from its built-in controller")
         }
 
         // And at least one preset gained a richer tag from the bundle (not just
-        // machine), proving the ZIP read works end to end -- e.g. a storage tag.
+        // model), proving the ZIP read works end to end -- e.g. a disc controller.
         let anyStorageTag = presets.contains { preset in
-            filter.tags(forPresetId: preset.presetId).contains { $0.group == .storage && $0.value != "No disc" }
+            filter.tags(forPresetId: preset.presetId).contains {
+                $0.group == .discController && $0.value != "No disc"
+            }
         }
         XCTAssertTrue(anyStorageTag, "no preset got a disc controller tag; the bundle read is probably failing")
     }

@@ -13,11 +13,13 @@
 import AppKit
 import SwiftUI
 
-/// Spike UI: the filter popups and search field above the preset catalogue. A
-/// search field then one single-selection popup per facet, each defaulting to
-/// Any; the row wraps to a second line rather than truncating. A Reset appears
-/// once any popup is off Any. Choosing drives the shared `PresetFilterModel`,
-/// which the catalogue reads to decide what to show.
+/// Spike UI: the preset catalogue's filter row (client-specification.md 5.1). A
+/// search field then one single-selection popup per facet. Each popup carries a
+/// small uppercase caption above a fixed-width control, so the row never reflows
+/// when a choice changes; it shows "Any" by default and the chosen value
+/// otherwise. A Reset appears once anything is off Any or the search is used. The
+/// row wraps (FlowLayout) rather than truncating. Choosing drives the shared
+/// `PresetFilterModel`, which the catalogue reads to decide what to show.
 struct PresetFilterBar: View {
     @ObservedObject var model: PresetFilterModel
     /// The popups to show, computed by the owner from the full catalogue so the
@@ -25,11 +27,13 @@ struct PresetFilterBar: View {
     let popups: [PresetFilterModel.Popup]
 
     var body: some View {
-        FlowLayout(spacing: 8, lineSpacing: 8) {
-            // A real NSSearchField: it shows the insertion caret and the standard
-            // clear button, which a SwiftUI TextField in this container does not.
-            SearchField(text: $model.searchText, placeholder: "Filter presets")
-                .frame(width: 180)
+        FlowLayout(spacing: 12, lineSpacing: 10) {
+            // The search field, captioned blank so its control lines up with the
+            // popups' controls beneath their captions.
+            captioned(" ") {
+                SearchField(text: $model.searchText, placeholder: "Filter presets")
+                    .frame(width: 180)
+            }
 
             ForEach(popups) { popup in
                 FacetPopupView(popup: popup) { choice in
@@ -38,49 +42,94 @@ struct PresetFilterBar: View {
             }
 
             if model.isFiltering {
-                Button("Reset") { model.reset() }
-                    .buttonStyle(.link)
+                captioned(" ") {
+                    Button("Reset") { model.reset() }
+                        .buttonStyle(.link)
+                }
             }
         }
     }
+
+    /// A control under a small uppercase caption, so every item in the row aligns
+    /// its control on the same baseline.
+    @ViewBuilder
+    private func captioned<Content: View>(_ caption: String,
+                                          @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(caption)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+            content()
+        }
+    }
+
+    var isFiltering: Bool { model.isFiltering }
 }
 
-/// One facet's popup: a menu button labelled "Facet: choice", whose items carry
-/// the faceted count and disable themselves at zero (Any always enabled).
+/// One facet's popup: a caption above a single-selection menu of fixed width. The
+/// button shows "Any" or the chosen value (no "Facet: value" composite); its
+/// width is fixed to the longest value so the control never resizes.
 private struct FacetPopupView: View {
     let popup: PresetFilterModel.Popup
     let select: (FacetChoice) -> Void
 
     var body: some View {
-        Menu {
-            ForEach(popup.options) { option in
-                Button {
-                    select(option.choice)
-                } label: {
-                    if option.choice == popup.choice {
-                        Label(option.label, systemImage: "checkmark")
-                    } else {
-                        Text(option.label)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(popup.facet.label.uppercased())
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+
+            Menu {
+                ForEach(popup.options) { option in
+                    Button {
+                        select(option.choice)
+                    } label: {
+                        if option.choice == popup.choice {
+                            Label(option.label, systemImage: "checkmark")
+                        } else {
+                            Text(option.label)
+                        }
                     }
+                    .disabled(!option.isEnabled)
                 }
-                .disabled(!option.isEnabled)
+            } label: {
+                Text(valueLabel)
+                    .frame(width: valueWidth, alignment: .leading)
             }
-        } label: {
-            Text(buttonLabel).font(.callout)
+            .fixedSize()
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
     }
 
-    /// The popup button's text: the facet name on its own while the choice is Any
-    /// (the facet reads as a label), and "Facet: choice" once a choice is made, so
-    /// the current selection is always visible.
-    private var buttonLabel: String {
+    /// The button's text: "Any" by default, the chosen value otherwise.
+    private var valueLabel: String {
         switch popup.choice {
-        case .any:          return popup.facet.label
-        case .none:         return "\(popup.facet.label): None"
-        case .value(let v): return "\(popup.facet.label): \(v)"
+        case .any:          return "Any"
+        case .none:         return "None"
+        case .value(let v): return v
         }
+    }
+
+    /// Every value the button might show, so its width can be fixed to the widest.
+    private var buttonValues: [String] {
+        popup.options.map { option in
+            switch option.choice {
+            case .any:          return "Any"
+            case .none:         return "None"
+            case .value(let v): return v
+            }
+        }
+    }
+
+    /// The fixed width of the value area, measured from the widest value in the
+    /// menu's own font, so the control does not resize when the choice changes.
+    private var valueWidth: CGFloat {
+        let font = NSFont.menuFont(ofSize: NSFont.systemFontSize)
+        let widest = buttonValues
+            .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
+            .max() ?? 40
+        return widest.rounded(.up)
     }
 }
 
