@@ -25,6 +25,8 @@ struct WelcomeWindowContent: View {
     @State private var launchErrorPresetName: String?
     @State private var isLaunching = false
     @State private var gridHeight: CGFloat = 376
+    /// Spike: filter chips + search over the preset catalogue.
+    @StateObject private var filter = PresetFilterModel()
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
@@ -132,22 +134,40 @@ struct WelcomeWindowContent: View {
             }
         } else {
             let allPresets = presetManager.systemPresets + presetManager.userPresets
+            let visible = filter.filtered(allPresets)
+
+            // Spike: filter chips + search above the catalogue.
+            PresetFilterBar(model: filter, groups: filter.chipGroups(for: allPresets))
+                .padding(.horizontal, 24)
+                .padding(.bottom, 4)
+
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 176, maximum: 176), spacing: 16)], spacing: 16) {
-                    ForEach(allPresets) { preset in
-                        PresetCard(preset: preset, isLaunching: isLaunching,
-                                   thumbnailCache: presetManager.thumbnailCache) {
-                            Task { await launchPreset(preset) }
+                if visible.isEmpty {
+                    Text("No presets match the current filters.")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 176, maximum: 176), spacing: 16)], spacing: 16) {
+                        ForEach(visible) { preset in
+                            PresetCard(preset: preset, isLaunching: isLaunching,
+                                       thumbnailCache: presetManager.thumbnailCache) {
+                                Task { await launchPreset(preset) }
+                            }
                         }
                     }
+                    .padding(.horizontal, 24)
+                    .background(GeometryReader { geo in
+                        Color.clear.preference(key: GridHeightKey.self, value: geo.size.height)
+                    })
                 }
-                .padding(.horizontal, 24)
-                .background(GeometryReader { geo in
-                    Color.clear.preference(key: GridHeightKey.self, value: geo.size.height)
-                })
             }
             .frame(minHeight: 100, idealHeight: gridHeight, maxHeight: gridHeight)
             .onPreferenceChange(GridHeightKey.self) { gridHeight = $0 }
+            .task(id: allPresets.map(\.presetId).joined(separator: "|")) {
+                filter.index(allPresets)
+            }
 
             // Error display
             if let error = launchError {
