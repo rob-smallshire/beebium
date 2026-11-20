@@ -59,8 +59,8 @@ install into a virtualenv (or use `uv`/`pipx`).
 ### Extras
 
 ```bash
-pip install beebium[imaging]     # + Pillow, for saving captured frames as images
-pip install beebium[discovery]   # + zeroconf, for discovering servers over mDNS
+pip install 'beebium[imaging]'     # + Pillow, for saving captured frames as images
+pip install 'beebium[discovery]'   # + zeroconf, for discovering servers over mDNS
 ```
 
 ## Usage

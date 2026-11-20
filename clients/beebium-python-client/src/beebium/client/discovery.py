@@ -15,7 +15,7 @@
 This module provides discovery of Beebium servers advertised via DNS-SD.
 It requires the optional 'zeroconf' dependency to be installed:
 
-    pip install beebium[discovery]
+    pip install 'beebium[discovery]'
 
 Example usage:
     from beebium.client.discovery import browse, MachineDiscovery
@@ -149,7 +149,7 @@ class MachineDiscovery:
             from zeroconf import ServiceBrowser, Zeroconf
         except ImportError as e:
             raise ImportError(
-                "zeroconf is required for mDNS discovery. Install it with: pip install beebium[discovery]"
+                "zeroconf is required for mDNS discovery. Install it with: pip install 'beebium[discovery]'."
             ) from e
 
         self._zeroconf = Zeroconf()

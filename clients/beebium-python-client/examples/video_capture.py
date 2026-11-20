@@ -25,7 +25,7 @@ def demo(bbc: Beebium) -> None:
         frame.save_png("frame.png")
         print("saved frame.png")
     except ImportError:
-        print("install the imaging extra to save PNGs: pip install beebium[imaging]")
+        print("install the imaging extra to save PNGs: pip install 'beebium[imaging]'")
 
 
 if __name__ == "__main__":
