@@ -158,6 +158,23 @@ QString tooltip(const SidewaysSocket& socket) {
 
 MemoryRow::MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, Shares shares,
                      QWidget* parent)
+    : MemoryRow(sideways, socket, std::move(shares), Role::socket, parent) {}
+
+MemoryRow* MemoryRow::for_os_rom(SessionSideways& sideways, const std::string& title,
+                                 const std::string& image_filepath, Shares shares,
+                                 QWidget* parent) {
+    // A socket of no slots, so no slot number and no protection switch.
+    SidewaysSocket os;
+    os.type = SidewaysSlotType::rom;
+    os.populated = true;
+    os.rom.recognised = true;
+    os.rom.title = title;
+    os.image_filepath = image_filepath;
+    return new MemoryRow(sideways, os, std::move(shares), Role::os_rom, parent);
+}
+
+MemoryRow::MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, Shares shares,
+                     Role role, QWidget* parent)
     : QWidget(parent), sideways_(sideways), socket_(socket), shares_(std::move(shares)) {
     for (const SidewaysProtectionGroup* group : sideways_.topology().groups_covering(socket_)) {
         if (group->supports_write_protect && !write_group_) {
@@ -168,12 +185,17 @@ MemoryRow::MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, Sh
         }
     }
     protected_ = write_group_ && write_group_->write_protected;
-    setToolTip(tooltip(socket_));
+    if (role == Role::socket) {
+        setToolTip(tooltip(socket_));
+    } else if (shares_ && shares_()) {
+        setToolTip(QString::fromStdString(socket_.image_filepath));
+    }
 
     auto* layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 4, 0, 4);
     layout->setSpacing(6);
-    priority_ = new QLabel(QString::number(priority(socket_)), this);
+    priority_ = new QLabel(role == Role::socket ? QString::number(priority(socket_)) : QString(),
+                           this);
     make_secondary(priority_, 0.85);
     priority_->setFixedWidth(PRIORITY_WIDTH);
     priority_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -224,7 +246,7 @@ MemoryRow::MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, Sh
     if (actions_->icon().isNull()) {
         actions_->setText(QStringLiteral("…"));
     }
-    actions_->setToolTip(tr("Slot actions"));
+    // No tooltip: one appearing as the menu opens is mistaken for it (11).
     QSizePolicy keep_actions = actions_->sizePolicy();
     keep_actions.setRetainSizeWhenHidden(true);
     actions_->setSizePolicy(keep_actions);
@@ -330,20 +352,14 @@ MemorySidebar::MemorySidebar(SessionSideways& sideways, MemoryRow::Shares shares
         header->setFont(bold);
         return header;
     };
-    // The OS ROM: its title, and beneath it its name on the ROM search path
-    // or its file's name; the whole path is its tooltip, as a socket's is.
+    // The OS ROM, in a row shaped like the sockets' beneath it.
     os_header_ = make_header(tr("OS"));
     layout->addWidget(os_header_);
-    os_row_ = new QWidget(content);
-    auto* os_layout = new QVBoxLayout(os_row_);
-    os_layout->setContentsMargins(PRIORITY_WIDTH + 6, 4, 0, 8);
-    os_layout->setSpacing(0);
-    os_title_ = new QLabel(os_row_);
-    os_layout->addWidget(os_title_);
-    os_name_ = new QLabel(os_row_);
-    make_secondary(os_name_, 0.85);
-    os_layout->addWidget(os_name_);
-    layout->addWidget(os_row_);
+    os_box_ = new QWidget(content);
+    os_layout_ = new QVBoxLayout(os_box_);
+    os_layout_->setContentsMargins(0, 0, 0, 8);
+    os_layout_->setSpacing(0);
+    layout->addWidget(os_box_);
 
     status_ = new QLabel(content);
     status_->setWordWrap(true);
@@ -385,15 +401,17 @@ void MemorySidebar::rebuild() {
         }
         delete item;
     }
+    if (os_row_) {
+        os_row_->hide();
+        os_row_->deleteLater();
+        os_row_ = nullptr;
+    }
     const auto& os = sideways_.os_rom();
     os_header_->setVisible(os.has_value());
-    os_row_->setVisible(os.has_value());
+    os_box_->setVisible(os.has_value());
     if (os) {
-        const QString path = QString::fromStdString(os->image_filepath);
-        os_title_->setText(QString::fromStdString(os->title));
-        os_name_->setText(os->rom_name.empty() ? QFileInfo(path).fileName()
-                                               : QString::fromStdString(os->rom_name));
-        os_row_->setToolTip(path);
+        os_row_ = MemoryRow::for_os_rom(sideways_, os->title, os->image_filepath, shares_, os_box_);
+        os_layout_->addWidget(os_row_);
     }
     const SidewaysTopology& topology = sideways_.topology();
     if (!sideways_.loaded()) {

@@ -18,8 +18,6 @@
 
 #include "RealMaster.hpp"
 
-#include <QLabel>
-
 using namespace beebium::linux_client;
 using namespace beebium::linux_client::testing;
 
@@ -31,15 +29,14 @@ TEST_CASE("A Master 128's Memory mode shows its MOS in the OS section", "[memory
     master.start(QStringLiteral("master-128"));
     SessionSideways sideways;
     sideways.start(master.channel());
-    MemorySidebar memory(sideways);
+    // The server is on this host.
+    MemorySidebar memory(sideways, [] { return true; });
     memory.show();
-    REQUIRE(wait_until([&] { return sideways.loaded() && memory.os_row()->isVisibleTo(&memory); },
+    REQUIRE(wait_until([&] { return sideways.loaded() && memory.os_row() && memory.os_row()->isVisibleTo(&memory); },
                        std::chrono::seconds(10)));
-    QStringList texts;
-    for (QLabel* label : memory.os_row()->findChildren<QLabel*>()) {
-        texts << label->text();
-    }
-    CHECK(texts == QStringList{QStringLiteral("Acorn MOS 3.20"), QStringLiteral("acorn-mos_3_20")});
+    CHECK(memory.os_row()->priority_text().isEmpty());
+    CHECK(memory.os_row()->name_text() == QStringLiteral("Acorn MOS 3.20"));
+    CHECK(memory.os_row()->status_text() == QStringLiteral("ROM"));
     CHECK(memory.os_row()->toolTip().endsWith(QStringLiteral("/acorn-mos_3_20.rom")));
     CHECK(sideways.os_rom()->size_bytes == 16384u);
     CHECK(memory.row_count() > 0);

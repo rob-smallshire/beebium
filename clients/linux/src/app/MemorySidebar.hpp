@@ -20,6 +20,7 @@
 #include <functional>
 
 #include <optional>
+#include <string>
 #include <vector>
 
 class QLabel;
@@ -34,7 +35,8 @@ class SessionSideways;
 // One socket, as the macOS client's Memory mode lists it: its boot
 // priority, its ROM's title and version (else its file's name), a padlock
 // where a write switch covers sideways RAM, its status, and an actions
-// menu. The socket's label, slots, kinds and file are its tooltip.
+// menu. The socket's label, slots, kinds and file are its tooltip. The OS
+// ROM's row is one too, without a slot number.
 class MemoryRow : public QWidget {
     Q_OBJECT
 
@@ -44,12 +46,19 @@ public:
 
     MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, Shares shares,
               QWidget* parent);
+    // The OS ROM's row: its title, ROM, and the sockets' actions on its
+    // image; its path is its tooltip only where the server shares this
+    // host's filesystem.
+    static MemoryRow* for_os_rom(SessionSideways& sideways, const std::string& title,
+                                 const std::string& image_filepath, Shares shares, QWidget* parent);
 
     QString priority_text() const;
     QString name_text() const;
     QString status_text() const;
     // Always there, to keep the columns; hidden where there is no switch.
     QToolButton* padlock() const { return padlock_; }
+    // The actions menu's button, without a tooltip of its own (11).
+    QToolButton* actions() const { return actions_; }
     // Whether the padlock shows the server's write-protect engaged.
     bool shows_protected() const { return protected_; }
     // Whether the row has anything in its menu.
@@ -59,6 +68,10 @@ public:
     QMenu* make_menu();
 
 private:
+    enum class Role { socket, os_rom };
+    MemoryRow(SessionSideways& sideways, const SidewaysSocket& socket, Shares shares, Role role,
+              QWidget* parent);
+
     SessionSideways& sideways_;
     SidewaysSocket socket_;
     Shares shares_;
@@ -85,8 +98,8 @@ public:
 
     int row_count() const { return static_cast<int>(rows_.size()); }
     MemoryRow* row(int index) const { return rows_.at(static_cast<std::size_t>(index)); }
-    // The OS ROM's read-only row, shown once the server has said it.
-    QWidget* os_row() const { return os_row_; }
+    // The OS ROM's row, there once the server has said it, else null.
+    MemoryRow* os_row() const { return os_row_; }
 
 protected:
     void showEvent(QShowEvent* event) override;
@@ -99,9 +112,9 @@ private:
     MemoryRow::Shares shares_;
     QLabel* status_;
     QLabel* os_header_;
-    QWidget* os_row_;
-    QLabel* os_title_;
-    QLabel* os_name_;
+    QWidget* os_box_;
+    QVBoxLayout* os_layout_;
+    MemoryRow* os_row_ = nullptr;
     QLabel* header_;
     QWidget* rows_box_;
     QVBoxLayout* rows_layout_;
