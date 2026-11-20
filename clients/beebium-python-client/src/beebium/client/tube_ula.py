@@ -66,7 +66,7 @@ class TubeLatchState:
 
     def __str__(self) -> str:
         avail = "AVAIL" if self.data_available else "empty"
-        return f"${self.value:02X} ({avail})"
+        return f"0x{self.value:02X} ({avail})"
 
 
 @dataclass
@@ -111,7 +111,10 @@ class TubeHostStatus:
     r4_status: int = 0
 
     def __str__(self) -> str:
-        return f"R1=${self.r1_status:02X} R2=${self.r2_status:02X} R3=${self.r3_status:02X} R4=${self.r4_status:02X}"
+        return (
+            f"R1=0x{self.r1_status:02X} R2=0x{self.r2_status:02X} "
+            f"R3=0x{self.r3_status:02X} R4=0x{self.r4_status:02X}"
+        )
 
 
 @dataclass
@@ -124,7 +127,10 @@ class TubeCoprocessorStatus:
     r4_status: int = 0
 
     def __str__(self) -> str:
-        return f"R1=${self.r1_status:02X} R2=${self.r2_status:02X} R3=${self.r3_status:02X} R4=${self.r4_status:02X}"
+        return (
+            f"R1=0x{self.r1_status:02X} R2=0x{self.r2_status:02X} "
+            f"R3=0x{self.r3_status:02X} R4=0x{self.r4_status:02X}"
+        )
 
 
 @dataclass

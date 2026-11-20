@@ -27,6 +27,7 @@ import pytest
 from beebium.client import Beebium
 from beebium.client._proto import debugger_pb2
 from beebium.client.cpu import Registers, StatusRegister
+from beebium.client.tube_ula import TubeCoprocessorStatus, TubeHostStatus, TubeLatchState
 
 DEFAULT_OBJECT_REPR = re.compile(r" object at 0x[0-9a-fA-F]+>")
 
@@ -75,6 +76,15 @@ class TestSnapshots:
 
     def test_status_register_str_is_unchanged(self):
         assert str(StatusRegister(0x32)) == "nv-BdiZc"
+
+    def test_tube_latch_str_prints_0x_hex(self):
+        assert str(TubeLatchState(value=0xAB, data_available=True)) == "0xAB (AVAIL)"
+        assert str(TubeLatchState(value=0x0F)) == "0x0F (empty)"
+
+    def test_tube_status_strs_print_0x_hex(self):
+        expected = "R1=0xC0 R2=0x40 R3=0x0A R4=0xFF"
+        assert str(TubeHostStatus(0xC0, 0x40, 0x0A, 0xFF)) == expected
+        assert str(TubeCoprocessorStatus(0xC0, 0x40, 0x0A, 0xFF)) == expected
 
 
 FACADE_NAMES = [
