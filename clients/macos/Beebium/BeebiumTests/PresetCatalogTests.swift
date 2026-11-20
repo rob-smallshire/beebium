@@ -88,12 +88,12 @@ final class PresetCatalogBuildTests: XCTestCase {
 
     private func row(id: String, source: String, model: String?,
                      thumbnail: Bool = true, filepath: String? = nil,
-                     facets: PresetFacetValues? = nil) -> PresetListing {
+                     facets: PresetFacetValues? = nil, keywords: [String]? = nil) -> PresetListing {
         PresetListing(
             id: id, name: id.capitalized, source: source, model: model,
             machineDescription: nil, description: "desc of \(id)", releaseDate: "1982",
             filepath: filepath ?? "/presets/\(id).beebium-preset", thumbnail: thumbnail,
-            facets: facets)
+            facets: facets, keywords: keywords)
     }
 
     /// A row's model is paired with `beebium-<model>` under the servers

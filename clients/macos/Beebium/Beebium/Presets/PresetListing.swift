@@ -41,6 +41,10 @@ struct PresetListing: Decodable, Equatable {
     /// controller, Network, Storage, Peripherals values), used to search the
     /// catalogue. Optional so a row from an older server still decodes.
     let facets: PresetFacetValues?
+    /// The family names and synonyms the preset's values are known by but do not
+    /// spell (e.g. "6502" for a 65C02/65C102 coprocessor, "BBC" for every model),
+    /// also searched. Optional so a row from an older server still decodes.
+    let keywords: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -53,5 +57,6 @@ struct PresetListing: Decodable, Equatable {
         case filepath
         case thumbnail
         case facets
+        case keywords
     }
 }

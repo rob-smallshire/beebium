@@ -14,12 +14,13 @@ import Foundation
 
 /// Searches the preset catalogue (client-specification.md 5.1). The Presets page
 /// shows one search field and nothing else: the query matches a preset on its
-/// name, its description and every value of its facets (the server's index --
-/// model, coprocessor, disc controller, network, storage values, peripherals
-/// values), case-insensitively, each space-separated word having to match
-/// somewhere. So "master copro", "b+ music" or "aun 1770" each narrow to the
-/// presets a person means. The client derives nothing from preset content; it
-/// indexes the rows the server already classified.
+/// name, its description, every value of its facets and every keyword (the
+/// server's index -- facet values like the coprocessor "65C102", plus keywords
+/// for the synonyms a value does not spell, e.g. "6502" for a 65C02/65C102
+/// coprocessor), case-insensitively, each space-separated word having to match
+/// somewhere. So "master copro", "b+ music", "aun 1770" or "6502 copro" each
+/// narrow to the presets a person means. The client derives nothing from preset
+/// content; it indexes the rows the server already classified.
 @MainActor
 final class PresetFilterModel: ObservableObject {
     @Published var searchText: String = ""
@@ -49,12 +50,13 @@ final class PresetFilterModel: ObservableObject {
         }
     }
 
-    /// The lower-cased searchable text for a preset: its name, description and
-    /// every facet value.
+    /// The lower-cased searchable text for a preset: its name, description, every
+    /// facet value, and every keyword.
     static func blob(for preset: MachinePreset) -> String {
         var parts = [preset.name]
         if let description = preset.modelDescription { parts.append(description) }
         for values in preset.facets.values { parts.append(contentsOf: values) }
+        parts.append(contentsOf: preset.keywords)
         return parts.joined(separator: " ").lowercased()
     }
 

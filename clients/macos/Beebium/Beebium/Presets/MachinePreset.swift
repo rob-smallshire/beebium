@@ -39,6 +39,9 @@ struct MachinePreset: Identifiable, Hashable {
     /// coprocessor, disc_controller, network, storage, peripherals). Used to
     /// search the catalogue; the client derives none of it.
     var facets: [String: [String]] = [:]
+    /// The server's search keywords for this preset (family names and synonyms its
+    /// values do not spell), also searched.
+    var keywords: [String] = []
     let source: Source
     /// The preset's own `machine_description` template, if it declares one (e.g.
     /// "Station {econet-station} (AUN, Model B)"), rendered by the server into

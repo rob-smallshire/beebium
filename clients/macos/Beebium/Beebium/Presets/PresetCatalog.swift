@@ -54,6 +54,7 @@ enum PresetCatalog {
                 presetFilepath: row.filepath,
                 modelId: row.model,
                 facets: row.facets?.byKey ?? [:],
+                keywords: row.keywords ?? [],
                 source: row.source == "user" ? .userPreset : .systemPreset,
                 machineDescription: row.machineDescription,
                 modelName: modelDisplayName(row),

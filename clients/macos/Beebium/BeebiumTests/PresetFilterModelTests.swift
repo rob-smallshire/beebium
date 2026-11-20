@@ -20,11 +20,12 @@ import XCTest
 final class PresetFilterModelTests: XCTestCase {
 
     private func preset(_ id: String, name: String, description: String? = nil,
-                        facets: [String: [String]] = [:]) -> MachinePreset {
+                        facets: [String: [String]] = [:],
+                        keywords: [String] = []) -> MachinePreset {
         MachinePreset(id: UUID(), presetId: id, name: name, coreExecutablePath: "",
-                      presetFilepath: "", facets: facets, source: .systemPreset,
-                      machineDescription: nil, modelName: "", modelDescription: description,
-                      releaseDate: nil, hasThumbnail: false)
+                      presetFilepath: "", facets: facets, keywords: keywords,
+                      source: .systemPreset, machineDescription: nil, modelName: "",
+                      modelDescription: description, releaseDate: nil, hasThumbnail: false)
     }
 
     /// A small catalogue mirroring real rows (name + description + facets).
@@ -84,6 +85,25 @@ final class PresetFilterModelTests: XCTestCase {
         // matches the B+ preset's name literally.
         XCTAssertEqual(results(model, presets, "b+"), ["bplus-music"])
         XCTAssertEqual(results(model, presets, "b+ music"), ["bplus-music"])
+    }
+
+    func testSearchesKeywordsForSynonymsTheValuesDoNotSpell() {
+        // "6502 copro" must find a 65C102 coprocessor preset: "6502" is not a
+        // substring of "65c102" anywhere in its name or facets, but the server's
+        // keywords carry it.
+        let presets = [
+            preset("copro", name: "Master 128, internal 65C102 Copro (4 MHz)",
+                   description: "Master 128, 65C102 copro",
+                   facets: ["model": ["Master 128"], "coprocessor": ["65C102"]],
+                   keywords: ["BBC", "Master", "6502", "Second Processor"]),
+            preset("plain", name: "Model B", description: "32K Model B",
+                   facets: ["model": ["Model B"], "coprocessor": ["None"]],
+                   keywords: ["BBC", "Micro"]),
+        ]
+        let model = PresetFilterModel()
+        model.index(presets)
+        XCTAssertEqual(results(model, presets, "6502 copro"), ["copro"])
+        XCTAssertEqual(results(model, presets, "6502"), ["copro"])
     }
 
     func testSearchesFacetValuesNotJustNameAndDescription() {

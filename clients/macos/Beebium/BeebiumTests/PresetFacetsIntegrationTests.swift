@@ -50,6 +50,7 @@ final class PresetFacetsIntegrationTests: XCTestCase {
                 id: UUID(), presetId: row.id, name: row.name,
                 coreExecutablePath: serverPath, presetFilepath: row.filepath,
                 modelId: row.model, facets: row.facets?.byKey ?? [:],
+                keywords: row.keywords ?? [],
                 source: row.source == "user" ? .userPreset : .systemPreset,
                 machineDescription: row.machineDescription, modelName: "",
                 modelDescription: row.description, releaseDate: row.releaseDate,
@@ -75,6 +76,21 @@ final class PresetFacetsIntegrationTests: XCTestCase {
         filter.searchText = "65c102 master"
         let coproHits = filter.filtered(presets).filter(\.isSystemProvided).map(\.presetId)
         XCTAssertEqual(coproHits, ["master-128-65c102-copro"])
+
+        // "6502 copro" must find the coprocessor presets via the server's
+        // keywords -- "6502" is in no spelling of a 65C02/65C102 facet value. It
+        // finds the Model B-family coprocessor presets and the Master's, and only
+        // coprocessor presets (every system match has a coprocessor fitted).
+        filter.searchText = "6502 copro"
+        let sixFiveOhTwo = filter.filtered(presets).filter(\.isSystemProvided)
+        let ids = Set(sixFiveOhTwo.map(\.presetId))
+        XCTAssertTrue(ids.contains("master-128-65c102-copro"), "should find the Master copro, found \(ids)")
+        XCTAssertTrue(ids.contains("model-b-disc-65c02-copro"), "should find the Model B 65C02 copro, found \(ids)")
+        XCTAssertTrue(ids.contains("model-b-plus-128k-65c102-copro"), "should find the B+ 65C102 copro, found \(ids)")
+        for preset in sixFiveOhTwo {
+            XCTAssertNotEqual(preset.facets["coprocessor"], ["None"],
+                              "\(preset.presetId) matched '6502 copro' but has no coprocessor")
+        }
     }
 
     // MARK: - Helpers
