@@ -17,6 +17,7 @@
 #include "app/SidebarMode.hpp"
 #include "app/configuration/AttachmentChooser.hpp"
 #include "app/configuration/SectionWidgets.hpp"
+#include "preset/SidewaysDraft.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -333,6 +334,10 @@ void NewMachineDialog::on_resolved(const PresetResolution& resolution) {
                                   : QString());
         rebuild_sections();
     } else {
+        // The banks the server derives from the MOS follow it (5.8).
+        if (resolution.preset && follow_mos_banks(draft_, *resolution.preset)) {
+            Q_EMIT draft_rederived();
+        }
         for (ConfigurationSection* section : sections_) {
             section->set_diagnostics(diagnostics_);
         }

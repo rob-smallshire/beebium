@@ -177,6 +177,9 @@ public:
 
 Q_SIGNALS:
     void rom_described();
+    // The server re-derived part of the draft (a Master's banks from its
+    // MOS) and the draft took it: show it afresh.
+    void draft_rederived();
     void serial_ports_listed();
 
 private:

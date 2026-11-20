@@ -806,6 +806,77 @@ TEST_CASE("A model whose schema has no MOS ROM shows none", "[configuration][pro
     CHECK_FALSE(processor->mos_browse()->isVisibleTo(processor));
 }
 
+namespace {
+
+// A Master 128 as resolve-preset gives it: banks 14 and 15 from its MOS.
+ordered_json master_128_with_mos(const char* mos, const char* dfs, const char* terminal) {
+    auto document = master_128_with_extensions("[]");
+    document["mos_image_uri"] = mos;
+    document["sideways_bank"] = {{"slots", ordered_json::array({
+        {{"slot", 14}, {"type", "rom"}, {"image_uri", dfs}, {"source", "mos"}},
+        {{"slot", 15}, {"type", "rom"}, {"image_uri", terminal}, {"source", "mos"}}})}};
+    return document;
+}
+
+}  // namespace
+
+TEST_CASE("A Master's banks from its MOS say so, and follow a new MOS", "[configuration][memory][mos]") {
+    ConfigurationFixture f(
+        master_128_with_mos("acorn-mos_3_20.rom", "acorn-dfs_2_24.rom", "acorn-terminal_1_20_mos_3_20.rom"),
+        [](ConfigurationFixture& fixture) { fixture.schema_text = master_128_schema_text(); });
+    auto* memory = f.section<MemorySection>();
+    REQUIRE(memory->row_count() > 2);
+    // Bank 15 first, the highest priority.
+    CHECK(memory->row_title(0)->text() == QStringLiteral("acorn-terminal_1_20_mos_3_20.rom"));
+    CHECK(memory->row_caption(0)->text().endsWith(QStringLiteral("From the MOS")));
+    CHECK(memory->row_caption(1)->text().endsWith(QStringLiteral("From the MOS")));
+
+    // The server re-derives the banks for MOS 3.50; the draft takes them.
+    f.resolved = master_128_with_mos("acorn-mos_3_50.rom", "acorn-dfs_2_45.rom", "acorn-terminal_1_20_mos_3_50.rom");
+    auto* processor = f.section<ProcessorSection>();
+    f.answer = QStringLiteral("/home/me/roms/acorn-mos_3_50.rom");
+    const int before = f.resolutions;
+    processor->mos_browse()->click();
+    REQUIRE(wait_until([&] { return f.resolutions > before; }));
+    REQUIRE(wait_until([&] {
+        return memory->row_title(0)->text() == QStringLiteral("acorn-terminal_1_20_mos_3_50.rom");
+    }));
+    CHECK(f.dialog->draft().get("/sideways_bank/slots/0") == ordered_json::parse(
+              R"({"slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_45.rom", "source": "mos"})"));
+    // The MOS as the user chose it, not as the scripted answer has it.
+    CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("/home/me/roms/acorn-mos_3_50.rom"));
+}
+
+TEST_CASE("An image chosen for a MOS bank is the user's, and its diagnostic shows at it",
+          "[configuration][memory][mos]") {
+    ConfigurationFixture f(
+        master_128_with_mos("acorn-mos_3_20.rom", "acorn-dfs_2_24.rom", "acorn-terminal_1_20_mos_3_20.rom"),
+        [](ConfigurationFixture& fixture) { fixture.schema_text = master_128_schema_text(); });
+    f.diagnostics = ordered_json::parse(R"x([{"severity": "error", "path": "/sideways_bank/slots/1",
+        "location": "MOS ROM (bank 15)", "message": "Bank 15 holds the MOS 3.50 set's Terminal ROM."}])x");
+    auto* memory = f.section<MemorySection>();
+    f.answer = QStringLiteral("/home/me/roms/acorn-terminal_1_20_mos_3_50.rom");
+    std::unique_ptr<QMenu> menu(memory->row_menu(0));
+    QAction* browse = nullptr;
+    for (QAction* action : menu->actions()) {
+        if (action->text() == QStringLiteral("Browse for ROM Image...")) {
+            browse = action;
+        }
+    }
+    REQUIRE(browse);
+    browse->trigger();
+    CHECK(f.dialog->draft().get("/sideways_bank/slots/1") == ordered_json::parse(
+              R"({"slot": 15, "type": "rom", "image_uri": "/home/me/roms/acorn-terminal_1_20_mos_3_50.rom"})"));
+    CHECK_FALSE(memory->row_caption(0)->text().contains(QStringLiteral("From the MOS")));
+    REQUIRE(wait_until([&] { return !f.dialog->diagnostics().empty(); }));
+    bool shown = false;
+    for (QLabel* label : memory->findChildren<QLabel*>()) {
+        shown = shown || (label->text() == QStringLiteral("Bank 15 holds the MOS 3.50 set's Terminal ROM.") &&
+                          label->isVisibleTo(memory));
+    }
+    CHECK(shown);
+}
+
 TEST_CASE("Econet off leaves the rest disabled; on seeds a station and transport",
           "[configuration][network]") {
     ConfigurationFixture f(model_b_with_disc());  // "econet": null

@@ -74,6 +74,7 @@ MemorySection::MemorySection(NewMachineDialog& dialog) : dialog_(dialog) {
     layout->addWidget(diagnostic_);
     layout->addStretch(1);
     connect(&dialog_, &NewMachineDialog::rom_described, this, [this] { describe(); });
+    connect(&dialog_, &NewMachineDialog::draft_rederived, this, [this] { describe(); });
 }
 
 void MemorySection::reload() {
@@ -143,6 +144,7 @@ void MemorySection::reload() {
             // A ROM's image stays as the RAM's preload, and back.
             SocketContent content = was;
             content.type = kind;
+            content.from_mos = false;
             if (kind != "ram") {
                 content.write_protected = false;
             }
@@ -154,6 +156,7 @@ void MemorySection::reload() {
         connect(row.padlock, &QToolButton::toggled, this, [this, number](bool engaged) {
             SocketContent content = sideways_->content(static_cast<std::size_t>(number));
             content.write_protected = engaged;
+            content.from_mos = false;
             set(number, content);
         });
         connect(row.actions, &QToolButton::clicked, this, [this, number] {
@@ -204,6 +207,9 @@ void MemorySection::describe() {
                             tr("priority %1").arg(socket.priority())};
         if (rom && rom->recognised) {
             caption << rom->display_kinds();
+        }
+        if (content.from_mos) {
+            caption << tr("From the MOS");
         }
         row.caption->setText(caption.join(QStringLiteral(" · ")));
 
@@ -301,6 +307,7 @@ void MemorySection::browse(int number) {
     if (content.type != "ram") {
         content = SocketContent{"rom", {}, false};
     }
+    content.from_mos = false;  // the user's image
     // A path, not a file:// URI as a disc's is: the server reads a ROM image
     // as a name or a path.
     content.image_uri = QFileInfo(*path).absoluteFilePath().toStdString();
