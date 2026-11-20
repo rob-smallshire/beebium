@@ -104,7 +104,15 @@ ProcessorSection::ProcessorSection(NewMachineDialog& dialog) : dialog_(dialog) {
         Q_EMIT edited();
     });
     connect(mos_browse_, &QPushButton::clicked, this, [this] { browse_mos(); });
-    connect(mos_default_, &QPushButton::clicked, this, [this] { set_mos(default_mos()); });
+    // Use Default returns to the preset's MOS, as resolved (5.8).
+    connect(mos_default_, &QPushButton::clicked, this, [this] {
+        if (!dialog_.draft().changed("/mos_image_uri")) {
+            return;
+        }
+        dialog_.draft().revert("/mos_image_uri");
+        show_mos();
+        Q_EMIT edited();
+    });
 }
 
 AttachmentPointGroup* ProcessorSection::tube(const std::string& point) const {
@@ -204,8 +212,10 @@ void ProcessorSection::show_mos() {
         mos_caption_->setText(reference == model_default ? tr("The model's MOS, from the ROM search path")
                                                          : tr("From the ROM search path"));
     }
-    mos_default_->setEnabled(!model_default.empty() && !reference.empty() && reference != model_default);
-    mos_default_->setToolTip(QString::fromStdString(model_default));
+    mos_default_->setEnabled(dialog_.draft().changed("/mos_image_uri"));
+    const auto& preset_mos = dialog_.draft().baseline().value("mos_image_uri", ordered_json());
+    mos_default_->setToolTip(preset_mos.is_string() ? QString::fromStdString(preset_mos.get<std::string>())
+                                                    : QString());
 }
 
 void ProcessorSection::browse_mos() {

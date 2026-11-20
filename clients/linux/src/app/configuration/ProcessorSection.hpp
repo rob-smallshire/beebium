@@ -34,7 +34,8 @@ class DiagnosticLine;
 // 5.2), as the macOS client's: the coprocessor on each Tube the model has
 // (the Tube, and a Master 128's internal Tube), as the Peripherals
 // section's points are, then the emulation speed and the MOS ROM: a name
-// found on the ROM search path, or a file chosen as a sideways image is.
+// found on the ROM search path, or a file chosen as a sideways image is;
+// Use Default returns to the preset's.
 class ProcessorSection : public ConfigurationSection {
     Q_OBJECT
 

@@ -713,7 +713,7 @@ TEST_CASE("Processor shows the MOS ROM after the speed, by name from the ROM sea
     CHECK(processor->mos_title()->isVisibleTo(processor));
     CHECK(processor->mos_title()->text() == QStringLiteral("acorn-mos_1_20.rom"));
     CHECK(processor->mos_caption()->text() == QStringLiteral("The model's MOS, from the ROM search path"));
-    // Already the model's own: nothing to go back to.
+    // As the preset has it: nothing to go back to.
     CHECK_FALSE(processor->mos_default()->isEnabled());
     bool headed = false;
     for (QLabel* label : processor->findChildren<QLabel*>()) {
@@ -723,7 +723,7 @@ TEST_CASE("Processor shows the MOS ROM after the speed, by name from the ROM sea
     CHECK_FALSE(f.section_names().contains(QStringLiteral("Processor •")));
 }
 
-TEST_CASE("A MOS ROM chosen from a file is written as its path; Use Default puts the model's back",
+TEST_CASE("A MOS ROM chosen from a file is written as its path; Use Default puts the preset's back",
           "[configuration][processor][mos]") {
     auto document = model_b_with_disc();
     document["mos_image_uri"] = "acorn-mos_1_20.rom";
@@ -753,7 +753,7 @@ TEST_CASE("A cancelled MOS ROM Browse leaves the draft as it was", "[configurati
     CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("acorn-mos_1_20.rom"));
 }
 
-TEST_CASE("A preset's own MOS ROM by name is shown as not the model's", "[configuration][processor][mos]") {
+TEST_CASE("A preset's own MOS ROM is its default, though not the model's", "[configuration][processor][mos]") {
     auto document = master_128_with_extensions("[]");
     document["mos_image_uri"] = "acorn-mos_3_50.rom";
     ConfigurationFixture f(document,
@@ -761,9 +761,14 @@ TEST_CASE("A preset's own MOS ROM by name is shown as not the model's", "[config
     auto* processor = f.section<ProcessorSection>();
     CHECK(processor->mos_title()->text() == QStringLiteral("acorn-mos_3_50.rom"));
     CHECK(processor->mos_caption()->text() == QStringLiteral("From the ROM search path"));
+    // The preset's own MOS is its default, not the model's.
+    CHECK_FALSE(processor->mos_default()->isEnabled());
+    f.answer = QStringLiteral("/home/me/roms/My MOS.rom");
+    processor->mos_browse()->click();
     REQUIRE(processor->mos_default()->isEnabled());
     processor->mos_default()->click();
-    CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("acorn-mos_3_20.rom"));
+    CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("acorn-mos_3_50.rom"));
+    CHECK_FALSE(f.dialog->draft().changed("/mos_image_uri"));
 }
 
 TEST_CASE("The MOS ROM's diagnostics show beneath it, verbatim", "[configuration][processor][mos]") {
