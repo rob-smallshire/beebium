@@ -19,8 +19,9 @@ The ROM is private and is never committed. These tests run only when the
 environment variable BEEBIUM_UKWEBB_DIAG_DIRPATH names a directory holding its
 two images: the 16K MOS half (fitted as the MOS) and the bank 9 image. They
 assert only what the emulation defends on its own grounds: the RAM regions
-and hardware lines pass, the summary has no fails or warnings, and the CMOS
-bytes it shows are this server's Welcome Guide seed.
+and hardware lines pass, the summary has no fails or warnings, the CMOS
+bytes it shows are this server's Welcome Guide seed, and with a disc in, the
+drive turns at the 300 rpm the 1770's index pulses give.
 
 The ROM is its own OS and scans the keyboard matrix itself, so a key is held
 down for a while (in emulated time) rather than typed.
@@ -50,6 +51,8 @@ ROM_MAY_BE_AT_FAULT = (
 RAM_SCREEN_SECONDS = 30.0
 SUMMARY_SECONDS = 45.0
 SUBMENU_SECONDS = 10.0
+# The Disc submenu restores to track 0 and then times revolutions.
+DISC_MEASURE_SECONDS = 20.0
 KEY_HOLD_SECONDS = 0.4
 # The menu's text is on the screen a moment before its loop reads keys.
 MENU_SETTLE_SECONDS = 1.0
@@ -194,3 +197,23 @@ def test_cmos_submenu_shows_the_welcome_guide_seed(diag_master: Beebium):
     assert shown == WELCOME_GUIDE_CMOS, (
         f"The CMOS bytes shown are not the Welcome Guide seed:\n{text}\n{ROM_MAY_BE_AT_FAULT}"
     )
+
+
+def test_disc_submenu_measures_the_drive_speed_in_range(diag_master: Beebium, tmp_path):
+    disc_filepath = diag_master.disc.create_disc("Acorn ADFS L 640K", tmp_path / "blank")
+    diag_master.disc.drive(0).insert(disc_filepath)
+    wait_for_menu(diag_master)
+    hold_key(diag_master, "d")
+
+    def measured() -> bool:
+        return "rpm" in line_with(screen(diag_master), "Track 0 / speed")
+
+    if not diag_master.run_until_or_timeout(measured, DISC_MEASURE_SECONDS):
+        pytest.fail(
+            f"The Disc submenu measured no speed within {DISC_MEASURE_SECONDS} emulated "
+            f"seconds:\n{screen(diag_master)}\n{ROM_MAY_BE_AT_FAULT}"
+        )
+    text = screen(diag_master)
+    line = line_with(text, "Track 0 / speed")
+    verdict = line.strip()[len("Track 0 / speed") :].split()
+    assert verdict[:1] == ["OK"], f"{line}\n{text}\n{ROM_MAY_BE_AT_FAULT}"
