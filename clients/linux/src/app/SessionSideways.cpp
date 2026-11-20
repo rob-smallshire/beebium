@@ -39,6 +39,7 @@ void SessionSideways::start(std::shared_ptr<grpc::Channel> channel) {
     channel_ = std::move(channel);
     rpc_ = std::make_unique<RpcWorker>();
     if (watching_) {
+        read_os_rom();
         read_status();
         open_stream();
     }
@@ -52,9 +53,11 @@ void SessionSideways::stop() {
         rpc_.reset();
     }
     channel_.reset();
-    if (loaded_) {
+    os_rom_asked_ = false;
+    if (loaded_ || os_rom_) {
         loaded_ = false;
         topology_ = {};
+        os_rom_.reset();
         Q_EMIT changed();
     }
 }
@@ -66,6 +69,7 @@ void SessionSideways::set_watching(bool watching) {
     watching_ = watching;
     if (watching_) {
         // Read afresh: nothing was kept live while no one watched.
+        read_os_rom();
         read_status();
         open_stream();
     } else {
@@ -93,6 +97,34 @@ void SessionSideways::read_status() {
                 if (guard && generation == guard->connection_generation_) {
                     guard->topology_ = std::move(topology);
                     guard->loaded_ = true;
+                    Q_EMIT guard->changed();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void SessionSideways::read_os_rom() {
+    if (!rpc_ || !channel_ || os_rom_asked_) {
+        return;
+    }
+    os_rom_asked_ = true;
+    const unsigned generation = connection_generation_;
+    QPointer<SessionSideways> guard(this);
+    rpc_->post([channel = channel_, guard, generation](grpc::ClientContext& context) {
+        context.set_deadline(std::chrono::system_clock::now() + CALL_DEADLINE);
+        auto stub = beebium::SidewaysService::NewStub(channel);
+        beebium::GetOsRomResponse response;
+        // A server that cannot say has no OS section; the slots still show.
+        if (!stub->GetOsRom(&context, {}, &response).ok() || !guard) {
+            return;
+        }
+        OsRom os{response.image_uri(), response.rom_name(), response.size_bytes(), response.title()};
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, generation, os = std::move(os)]() mutable {
+                if (guard && generation == guard->connection_generation_) {
+                    guard->os_rom_ = std::move(os);
                     Q_EMIT guard->changed();
                 }
             },

@@ -156,3 +156,50 @@ TEST_CASE("Protection is engaged by group and kind, then shown as the server rea
     CHECK(*refused == QStringLiteral("the switch is stuck"));
     CHECK(sideways.topology().groups[0].write_protected);
 }
+
+TEST_CASE("The OS ROM is read with the sideways state, once a connection", "[sideways][session][os]") {
+    FakeServer server;
+    script_board(server);
+    {
+        std::lock_guard lock(server.sideways.status_mutex);
+        beebium::GetOsRomResponse os;
+        os.set_image_uri("/usr/share/beebium/roms/acorn-mos_3_20.rom");
+        os.set_rom_name("acorn-mos_3_20");
+        os.set_size_bytes(16384);
+        os.set_title("Acorn MOS 3.20");
+        server.sideways.os_rom = os;
+    }
+    MachineSession session;
+    connect_session(session, server);
+    SessionSideways& sideways = session.sideways();
+    CHECK_FALSE(sideways.os_rom());
+    sideways.set_watching(true);
+    REQUIRE(wait_until([&] { return sideways.loaded() && sideways.os_rom().has_value(); }));
+    CHECK(sideways.os_rom()->image_filepath == "/usr/share/beebium/roms/acorn-mos_3_20.rom");
+    CHECK(sideways.os_rom()->rom_name == "acorn-mos_3_20");
+    CHECK(sideways.os_rom()->size_bytes == 16384u);
+    CHECK(sideways.os_rom()->title == "Acorn MOS 3.20");
+    // Fixed for the run: shown again, the slots are read afresh, not the OS.
+    sideways.set_watching(false);
+    const int before = server.sideways.status_requests;
+    sideways.set_watching(true);
+    REQUIRE(wait_until([&] { return server.sideways.status_requests > before; }));
+    CHECK(server.sideways.os_rom_requests == 1);
+    // Gone with the connection.
+    session.disconnect_from_server();
+    REQUIRE(wait_until([&] { return !sideways.os_rom(); }));
+}
+
+TEST_CASE("A server that cannot say its OS ROM still shows its sideways state",
+          "[sideways][session][os]") {
+    FakeServer server;
+    script_board(server);
+    MachineSession session;
+    connect_session(session, server);
+    SessionSideways& sideways = session.sideways();
+    sideways.set_watching(true);
+    REQUIRE(wait_until([&] { return sideways.loaded() && server.sideways.os_rom_requests == 1; }));
+    wait_until([] { return false; }, std::chrono::milliseconds(100));
+    CHECK(sideways.topology().sockets.size() == 2);
+    CHECK_FALSE(sideways.os_rom());
+}

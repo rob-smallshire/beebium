@@ -18,7 +18,9 @@
 #include <QObject>
 #include <QString>
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace grpc {
@@ -31,6 +33,16 @@ class RpcWorker;
 class SidewaysEventStream;
 
 enum class SidewaysProtection { write_protect, hide };
+
+// The OS ROM the machine was started with (GetOsRom): its image as the
+// server resolved it, its bare name when found on the ROM search path,
+// and its title.
+struct OsRom {
+    std::string image_filepath;  // on the server
+    std::string rom_name;        // empty when named by a path
+    std::uint32_t size_bytes = 0;
+    std::string title;
+};
 
 // A machine window's sideways memory (client specification 11): the
 // server's topology, read each time something starts watching it (the
@@ -55,6 +67,10 @@ public:
     // Whether the topology has been read since this connection began.
     bool loaded() const { return loaded_; }
     const SidewaysTopology& topology() const { return topology_; }
+    // The OS ROM, fixed for the run: asked once a connection, as the
+    // sideways state is first read; nothing until answered or when the
+    // server cannot say.
+    const std::optional<OsRom>& os_rom() const { return os_rom_; }
 
     void set_protection(const std::string& group_id, SidewaysProtection kind, bool engaged);
 
@@ -65,6 +81,7 @@ Q_SIGNALS:
 
 private:
     void read_status();
+    void read_os_rom();
     void open_stream();
     void close_stream();
     void on_event(unsigned generation, const beebium::SidewaysEvent& event);
@@ -74,6 +91,8 @@ private:
     std::unique_ptr<RpcWorker> rpc_;
     SidewaysTopology topology_;
     bool loaded_ = false;
+    std::optional<OsRom> os_rom_;
+    bool os_rom_asked_ = false;
     bool watching_ = false;
     unsigned stream_generation_ = 0;
     unsigned connection_generation_ = 0;

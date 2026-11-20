@@ -1441,6 +1441,10 @@ public:
     beebium::SidewaysProtectionKind last_kind = beebium::SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT;
     bool last_engaged = false;
     std::string refusal;  // non-empty: refuse with this error
+    // The OS ROM to report, under status_mutex; none refuses, as a server
+    // never told one does.
+    std::optional<beebium::GetOsRomResponse> os_rom;
+    std::atomic<int> os_rom_requests{0};
 
     void push(const beebium::SidewaysEvent& event) {
         {
@@ -1455,6 +1459,17 @@ public:
         std::lock_guard lock(status_mutex);
         ++status_requests;
         *response = status;
+        return grpc::Status::OK;
+    }
+
+    grpc::Status GetOsRom(grpc::ServerContext*, const beebium::GetOsRomRequest*,
+                          beebium::GetOsRomResponse* response) override {
+        std::lock_guard lock(status_mutex);
+        ++os_rom_requests;
+        if (!os_rom) {
+            return {grpc::StatusCode::FAILED_PRECONDITION, "This server was not told its OS ROM."};
+        }
+        *response = *os_rom;
         return grpc::Status::OK;
     }
 
