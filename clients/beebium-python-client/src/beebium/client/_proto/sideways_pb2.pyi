@@ -726,3 +726,58 @@ class SlotHeaderChangedEvent(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___SlotHeaderChangedEvent: _TypeAlias = SlotHeaderChangedEvent  # noqa: Y015
+
+@_typing.final
+class GetOsRomRequest(_message.Message):
+    """--- OS ROM ---"""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___GetOsRomRequest: _TypeAlias = GetOsRomRequest  # noqa: Y015
+
+@_typing.final
+class GetOsRomResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    IMAGE_URI_FIELD_NUMBER: _builtins.int
+    ROM_NAME_FIELD_NUMBER: _builtins.int
+    SIZE_BYTES_FIELD_NUMBER: _builtins.int
+    TITLE_FIELD_NUMBER: _builtins.int
+    image_uri: _builtins.str
+    """The image's file as the server resolved it: an absolute path on the
+    server.
+    """
+    rom_name: _builtins.str
+    """The ROM's bare name when the server found it by name on its ROM search
+    path (e.g. "acorn-mos_3_20"), without the ".rom" extension; empty when
+    it was named by a path.
+    """
+    size_bytes: _builtins.int
+    title: _builtins.str
+    """What to call it: the OS ROM manifest's title for a known image (e.g.
+    "Acorn MOS 3.20"), else the image file's name without its extension.
+    """
+    def __init__(
+        self,
+        *,
+        image_uri: _builtins.str = ...,
+        rom_name: _builtins.str = ...,
+        size_bytes: _builtins.int = ...,
+        title: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["image_uri", b"image_uri", "rom_name", b"rom_name", "size_bytes", b"size_bytes", "title", b"title"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___GetOsRomResponse: _TypeAlias = GetOsRomResponse  # noqa: Y015

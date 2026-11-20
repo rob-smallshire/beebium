@@ -211,6 +211,7 @@ public:
             // reports the actual topology to clients -- e.g. Model B+
             // with --motherboard-link s13=north shows IC71 at slots 0/1.
             server.set_motherboard_links(config.board.motherboard_links);
+            server.set_os_rom(am.os_rom);
 
             // Where the machine is kept on disk: Save, ResetBattery, and what
             // a graceful shutdown keeps.

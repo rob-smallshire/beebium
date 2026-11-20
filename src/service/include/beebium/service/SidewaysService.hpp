@@ -14,6 +14,7 @@
 #define BEEBIUM_SERVICE_SIDEWAYS_SERVICE_HPP
 
 #include "sideways.grpc.pb.h"
+#include "beebium/OsRom.hpp"
 #include "beebium/SlotProtection.hpp"
 #include "beebium/ThreadName.hpp"
 #include "beebium/SlotTopology.hpp"
@@ -31,6 +32,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -155,6 +157,32 @@ public:
     void set_motherboard_links(const MotherboardLinks& links) {
         std::lock_guard<std::mutex> lock(mutex_);
         motherboard_links_ = links;
+    }
+
+    // The OS ROM the machine was started with, which GetOsRom reports. Set
+    // once by the server bootstrap code, like the motherboard links.
+    void set_os_rom(const OsRom& os_rom) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        os_rom_ = os_rom;
+    }
+
+    grpc::Status GetOsRom(
+        grpc::ServerContext* context,
+        const GetOsRomRequest* request,
+        GetOsRomResponse* response) override
+    {
+        (void)context;
+        (void)request;
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!os_rom_) {
+            return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                                "The server was not told which OS ROM the machine has.");
+        }
+        response->set_image_uri(os_rom_->image_uri);
+        response->set_rom_name(os_rom_->rom_name);
+        response->set_size_bytes(os_rom_->size_bytes);
+        response->set_title(os_rom_->title);
+        return grpc::Status::OK;
     }
 
     grpc::Status GetSlotStatus(
@@ -787,6 +815,7 @@ private:
     MachineType& machine_;
     std::mutex mutex_;
     MotherboardLinks motherboard_links_{};
+    std::optional<OsRom> os_rom_;
 
     // Header scanner state. subscribers_ and slot_states_ are guarded
     // by mutex_; scanner_running_ is an atomic flag for the thread.

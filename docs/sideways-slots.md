@@ -402,6 +402,16 @@ saves the user a round-trip and a confusing error.
 - **`SubscribeEvents`** streams bank-selection and slot-configuration
   events.
 
+- **`GetOsRom`** reports the OS ROM (the MOS) the machine was started
+  with, so a memory view can show an OS section beside the slots:
+  `image_uri`, the image file as resolved (an absolute path on the
+  server); `rom_name`, the bare name when the ROM was found by name on
+  the ROM search path (`acorn-mos_3_20`), empty when it was named by a
+  path; `size_bytes`; and `title`, the OS ROM manifest's name for a known
+  image (`Acorn MOS 3.20`, from `OsRomManifest.hpp`, keyed by SHA-1),
+  else the file's name without its extension. Clients show what it
+  reports rather than working it out from a preset.
+
 Clients are expected to display sockets, not slots, when they need to
 show the user a hardware-faithful view. The `aliased_slots` and
 `socket_label` fields together let a UI render "Socket IC52 (slots 0,

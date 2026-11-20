@@ -25,6 +25,10 @@ service SidewaysService {
 
     // Subscribe to slot/bank selection events
     rpc SubscribeEvents(SubscribeEventsRequest) returns (stream SidewaysEvent);
+
+    // The OS ROM (the MOS) the machine was started with: where its image came
+    // from and what it is, so a client can show it beside the sideways slots.
+    rpc GetOsRom(GetOsRomRequest) returns (GetOsRomResponse);
 }
 
 // --- Slot Types ---
@@ -254,4 +258,22 @@ message SlotConfiguredEvent {
 message SlotHeaderChangedEvent {
     uint32 slot = 1;        // Logical slot whose header just changed
     RomHeader rom_header = 2;  // Current parse result, same shape as SocketStatus.rom_header
+}
+
+// --- OS ROM ---
+
+message GetOsRomRequest {}
+
+message GetOsRomResponse {
+    // The image's file as the server resolved it: an absolute path on the
+    // server.
+    string image_uri = 1;
+    // The ROM's bare name when the server found it by name on its ROM search
+    // path (e.g. "acorn-mos_3_20"), without the ".rom" extension; empty when
+    // it was named by a path.
+    string rom_name = 2;
+    uint32 size_bytes = 3;
+    // What to call it: the OS ROM manifest's title for a known image (e.g.
+    // "Acorn MOS 3.20"), else the image file's name without its extension.
+    string title = 4;
 }

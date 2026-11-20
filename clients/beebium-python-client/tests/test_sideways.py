@@ -30,6 +30,7 @@ from beebium.client.exceptions import (
     ServerStartupError,
 )
 from beebium.client.sideways import (
+    OsRom,
     ProtectionKind,
     RomHeader,
     SlotStatusReport,
@@ -299,3 +300,38 @@ def test_watford_launch_protection_rejects_unknown_group(
     except ServerStartupError:
         return  # expected: server rejects the unknown protection group
     pytest.fail("expected ServerStartupError for --write-protect on an unknown group")
+
+
+def test_os_rom_named_by_path_reports_its_image_and_title(bbc):
+    # The bbc fixture gives the server its MOS by path.
+    os_rom = bbc.sideways.os_rom()
+
+    assert isinstance(os_rom, OsRom)
+    assert os_rom.rom_name == ""
+    assert os_rom.title == "Acorn MOS 1.20"
+    assert os_rom.size_bytes == 16384
+    assert Path(os_rom.image_uri).is_absolute()
+    assert Path(os_rom.image_uri).name == "acorn-mos_1_20.rom"
+
+
+def test_os_rom_found_by_name_reports_its_bare_name(launch_bbc):
+    master = launch_bbc(variant="master-128")
+
+    os_rom = master.sideways.os_rom()
+
+    assert os_rom.rom_name == "acorn-mos_3_20"
+    assert os_rom.title == "Acorn MOS 3.20"
+    assert os_rom.size_bytes == 16384
+
+
+def test_os_rom_repr_is_one_line_with_its_title():
+    os_rom = OsRom(
+        image_uri="/roms/acorn-mos_3_20.rom",
+        rom_name="acorn-mos_3_20",
+        size_bytes=16384,
+        title="Acorn MOS 3.20",
+    )
+    text = repr(os_rom)
+    assert "\n" not in text
+    assert "'Acorn MOS 3.20'" in text
+    assert "rom_name='acorn-mos_3_20'" in text

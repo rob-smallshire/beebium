@@ -27,6 +27,7 @@
 #include "beebium/server/NvramStore.hpp"
 #include "beebium/server/RomPaths.hpp"
 #include "beebium/server/DfsRomManifest.hpp"
+#include "beebium/server/OsRomManifest.hpp"
 #include "beebium/extension/CoprocessorExtension.hpp"
 #include "beebium/extension/ExtensionPersistence.hpp"
 #include "beebium/extension/CpuDebugTarget.hpp"
@@ -94,11 +95,12 @@ beebium::TubeSocket* internal_tube_socket_of(MachineType& machine) {
     }
 }
 
-// Load MOS ROM and sideways ROMs into machine memory.
+// Load MOS ROM and sideways ROMs into machine memory, and return what the
+// MOS is (for SidewaysService.GetOsRom).
 // Applies defaults to config where not specified.
 // Throws on file I/O errors.
 template<typename MachineType>
-void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
+OsRom load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
     // Apply motherboard link state to memory wiring before any ROM is
     // loaded. On Model B+ this drops the IC71 binding from the slot pair
     // S13 has routed away from, so loaded BASIC only appears at the
@@ -124,6 +126,7 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
     // Load MOS ROM into machine
     std::copy(mos_data.begin(), mos_data.end(),
               machine.state().memory.mos_rom.data());
+    OsRom os_rom = describe_os_rom(config.machine.mos_filepath, mos_path, mos_data);
 
     // Process all slot configurations using the unified API. The
     // validation step above (validate_sideways_configs) already rejected
@@ -247,6 +250,7 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
             }
         }
     }
+    return os_rom;
 }
 
 // Install disc controller for machines with sockets.
@@ -1011,6 +1015,9 @@ struct AssembledMachine {
     // enabled until then. Empty for a fixed station or an offline resolve.
     std::optional<beebium::econet::StationRange> pending_auto_station;
 
+    // The OS ROM load_roms fitted, which SidewaysService.GetOsRom reports.
+    OsRom os_rom;
+
     AssembledMachine() = default;
     AssembledMachine(const AssembledMachine&) = delete;
     AssembledMachine& operator=(const AssembledMachine&) = delete;
@@ -1102,7 +1109,7 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
     }
 
     // Load ROMs
-    load_roms(machine, config);
+    am->os_rom = load_roms(machine, config);
 
     // A saved machine's battery-backed units take back what they kept,
     // over the preset's sideways loads (the template) and before power-on.

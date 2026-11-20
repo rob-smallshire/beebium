@@ -164,6 +164,12 @@ public:
         impl_->motherboard_links = links;
     }
 
+    /// The OS ROM the machine was started with, for SidewaysService.GetOsRom.
+    /// Must be called before start(), like set_motherboard_links().
+    void set_os_rom(const OsRom& os_rom) {
+        impl_->os_rom = os_rom;
+    }
+
     /// Access the host DebuggerService (for wiring cross-processor stop).
     DebuggerControlServiceImpl& debugger_service() {
         return *impl_->debugger_control_service;
@@ -243,6 +249,7 @@ private:
         // Motherboard link state captured before start(), applied to
         // sideways_service when it is constructed.
         typename MachineType::Memory::MotherboardLinks motherboard_links{};
+        std::optional<OsRom> os_rom;
         std::unique_ptr<EconetServiceImpl<MachineType>> econet_service;
         std::unique_ptr<SerialServiceImpl<MachineType>> serial_service;
         std::unique_ptr<TubeServiceImpl<MachineType>> tube_service;
@@ -431,6 +438,7 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
     impl_->sideways_service = std::make_unique<SidewaysServiceImpl<MachineType>>(
         impl_->machine);
     impl_->sideways_service->set_motherboard_links(impl_->motherboard_links);
+    if (impl_->os_rom) impl_->sideways_service->set_os_rom(*impl_->os_rom);
 
     impl_->econet_service = std::make_unique<EconetServiceImpl<MachineType>>(
         impl_->machine);

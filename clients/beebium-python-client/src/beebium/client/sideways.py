@@ -185,6 +185,28 @@ class SlotStatusReport:
 
 
 @dataclasses.dataclass(frozen=True)
+class OsRom:
+    """The OS ROM (the MOS) the machine was started with, as the server reports it.
+
+    Attributes:
+        image_uri: The image's file as the server resolved it, an absolute
+            path on the server.
+        rom_name: The ROM's bare name when the server found it by name on its
+            ROM search path (e.g. ``"acorn-mos_3_20"``); empty when it was
+            named by a path.
+        size_bytes: The image's size.
+        title: What to call it: the server's OS ROM manifest title for a known
+            image (e.g. ``"Acorn MOS 3.20"``), else the file's name without
+            its extension.
+    """
+
+    image_uri: str
+    rom_name: str
+    size_bytes: int
+    title: str
+
+
+@dataclasses.dataclass(frozen=True)
 class SlotConfiguredEvent:
     """Emitted after :meth:`Sideways.configure_slot` reconfigures a slot."""
 
@@ -243,6 +265,20 @@ class Sideways:
         request = sideways_pb2.GetSlotStatusRequest()
         response = self._stub.GetSlotStatus(request)
         return _map_status(response)
+
+    def os_rom(self) -> OsRom:
+        """The OS ROM (the MOS) the machine was started with.
+
+        The server says what it is; a client shows it as reported rather than
+        working it out from a preset.
+        """
+        response = self._stub.GetOsRom(sideways_pb2.GetOsRomRequest())
+        return OsRom(
+            image_uri=response.image_uri,
+            rom_name=response.rom_name,
+            size_bytes=response.size_bytes,
+            title=response.title,
+        )
 
     def configure_slot(
         self,

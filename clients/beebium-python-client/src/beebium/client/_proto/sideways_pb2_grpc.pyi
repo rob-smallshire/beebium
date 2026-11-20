@@ -64,6 +64,10 @@ class SidewaysServiceStub:
     """Read slot contents (for debugging/inspection)"""
     SubscribeEvents: _grpc.UnaryStreamMultiCallable[_sideways_pb2.SubscribeEventsRequest, _sideways_pb2.SidewaysEvent]
     """Subscribe to slot/bank selection events"""
+    GetOsRom: _grpc.UnaryUnaryMultiCallable[_sideways_pb2.GetOsRomRequest, _sideways_pb2.GetOsRomResponse]
+    """The OS ROM (the MOS) the machine was started with: where its image came
+    from and what it is, so a client can show it beside the sideways slots.
+    """
 
 @_typing.type_check_only
 class SidewaysServiceAsyncStub(SidewaysServiceStub):
@@ -89,6 +93,10 @@ class SidewaysServiceAsyncStub(SidewaysServiceStub):
     """Read slot contents (for debugging/inspection)"""
     SubscribeEvents: _aio.UnaryStreamMultiCallable[_sideways_pb2.SubscribeEventsRequest, _sideways_pb2.SidewaysEvent]  # type: ignore[assignment]
     """Subscribe to slot/bank selection events"""
+    GetOsRom: _aio.UnaryUnaryMultiCallable[_sideways_pb2.GetOsRomRequest, _sideways_pb2.GetOsRomResponse]  # type: ignore[assignment]
+    """The OS ROM (the MOS) the machine was started with: where its image came
+    from and what it is, so a client can show it beside the sideways slots.
+    """
 
 class SidewaysServiceServicer(metaclass=_abc_1.ABCMeta):
     """Sideways ROM/RAM management service.
@@ -141,5 +149,15 @@ class SidewaysServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_abc.Iterator[_sideways_pb2.SidewaysEvent], _abc.AsyncIterator[_sideways_pb2.SidewaysEvent]]:
         """Subscribe to slot/bank selection events"""
+
+    @_abc_1.abstractmethod
+    def GetOsRom(
+        self,
+        request: _sideways_pb2.GetOsRomRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_sideways_pb2.GetOsRomResponse, _abc.Awaitable[_sideways_pb2.GetOsRomResponse]]:
+        """The OS ROM (the MOS) the machine was started with: where its image came
+        from and what it is, so a client can show it beside the sideways slots.
+        """
 
 def add_SidewaysServiceServicer_to_server(servicer: SidewaysServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

@@ -1723,3 +1723,48 @@ TEST_CASE("GetSlotStatus reports sideways RAM populated once written",
     CHECK(slot0.type() == beebium::SIDEWAYS_SLOT_TYPE_RAM);
     CHECK(slot0.populated());
 }
+
+// =============================================================================
+// GetOsRom
+// =============================================================================
+
+TEST_CASE("GetOsRom reports the OS ROM the server was given", "[grpc][sideways][os-rom]") {
+    beebium::ModelB machine;
+    machine.reset();
+    beebium::service::Server<beebium::ModelB> server(machine, "127.0.0.1", 0);
+    beebium::OsRom os_rom;
+    os_rom.image_uri = "/roms/acorn-mos_1_20.rom";
+    os_rom.rom_name = "acorn-mos_1_20";
+    os_rom.size_bytes = 16384;
+    os_rom.title = "Acorn MOS 1.20";
+    server.set_os_rom(os_rom);
+    server.start({}, {});
+    auto channel = grpc::CreateChannel("127.0.0.1:" + std::to_string(server.port()),
+                                       grpc::InsecureChannelCredentials());
+    auto stub = beebium::SidewaysService::NewStub(channel);
+
+    grpc::ClientContext context;
+    beebium::GetOsRomRequest request;
+    beebium::GetOsRomResponse response;
+    auto status = stub->GetOsRom(&context, request, &response);
+    server.stop();
+
+    REQUIRE(status.ok());
+    CHECK(response.image_uri() == "/roms/acorn-mos_1_20.rom");
+    CHECK(response.rom_name() == "acorn-mos_1_20");
+    CHECK(response.size_bytes() == 16384);
+    CHECK(response.title() == "Acorn MOS 1.20");
+}
+
+TEST_CASE("GetOsRom with no OS ROM given says so", "[grpc][sideways][os-rom]") {
+    ModelBSidewaysFixture fixture;
+
+    grpc::ClientContext context;
+    beebium::GetOsRomRequest request;
+    beebium::GetOsRomResponse response;
+    auto status = fixture.sideways().GetOsRom(&context, request, &response);
+
+    CHECK(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
+    CHECK_THAT(status.error_message(),
+               Catch::Matchers::ContainsSubstring("was not told which OS ROM"));
+}

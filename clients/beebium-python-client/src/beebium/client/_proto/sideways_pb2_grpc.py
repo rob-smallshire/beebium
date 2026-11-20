@@ -76,6 +76,11 @@ class SidewaysServiceStub(object):
                 request_serializer=sideways__pb2.SubscribeEventsRequest.SerializeToString,
                 response_deserializer=sideways__pb2.SidewaysEvent.FromString,
                 _registered_method=True)
+        self.GetOsRom = channel.unary_unary(
+                '/beebium.SidewaysService/GetOsRom',
+                request_serializer=sideways__pb2.GetOsRomRequest.SerializeToString,
+                response_deserializer=sideways__pb2.GetOsRomResponse.FromString,
+                _registered_method=True)
 
 
 class SidewaysServiceServicer(object):
@@ -124,6 +129,14 @@ class SidewaysServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetOsRom(self, request, context):
+        """The OS ROM (the MOS) the machine was started with: where its image came
+        from and what it is, so a client can show it beside the sideways slots.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_SidewaysServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -151,6 +164,11 @@ def add_SidewaysServiceServicer_to_server(servicer, server):
                     servicer.SubscribeEvents,
                     request_deserializer=sideways__pb2.SubscribeEventsRequest.FromString,
                     response_serializer=sideways__pb2.SidewaysEvent.SerializeToString,
+            ),
+            'GetOsRom': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetOsRom,
+                    request_deserializer=sideways__pb2.GetOsRomRequest.FromString,
+                    response_serializer=sideways__pb2.GetOsRomResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -293,6 +311,33 @@ class SidewaysService(object):
             '/beebium.SidewaysService/SubscribeEvents',
             sideways__pb2.SubscribeEventsRequest.SerializeToString,
             sideways__pb2.SidewaysEvent.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetOsRom(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.SidewaysService/GetOsRom',
+            sideways__pb2.GetOsRomRequest.SerializeToString,
+            sideways__pb2.GetOsRomResponse.FromString,
             options,
             channel_credentials,
             insecure,
