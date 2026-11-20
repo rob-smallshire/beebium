@@ -18,6 +18,7 @@
 
 #include "beebium/server/StartOptions.hpp"
 #include "beebium/server/RomPaths.hpp"
+#include "beebium/server/OsRomManifest.hpp"
 #include "beebium/serial/EnumeratePorts.hpp"
 #include "beebium/SidewaysRomHeader.hpp"
 #include "beebium/disc/DiscControllerRegistry.hpp"
@@ -335,7 +336,10 @@ public:
 
 // DescribeRom subcommand - parse a sideways ROM header and print it as JSON.
 // Model-independent (ROM header parsing is generic). Used by frontends to show
-// proper ROM titles/versions instead of filenames.
+// proper ROM titles/versions instead of filenames. An image with no sideways
+// header that the OS ROM manifest knows (a MOS) is recognised as kind "os",
+// titled from the manifest, with every header flag false: an OS ROM has no
+// header, and its vector bytes are not a language entry.
 template<typename MachineType>
 class DescribeRomSubcommand : public Subcommand<MachineType> {
 public:
@@ -350,7 +354,8 @@ public:
                   << "Parses the standard sideways ROM header of <rom> (a ROM library name or a\n"
                   << "path to a ROM image) and prints it as JSON: whether it is a recognised\n"
                   << "sideways ROM, its title, version and copyright, the type-byte flags, and\n"
-                  << "whether it is a language or a service ROM.\n"
+                  << "whether it is a language or a service ROM. An image with no sideways header\n"
+                  << "that is a known OS ROM (a MOS) is recognised, titled by name, with kind \"os\".\n"
                   << "\n"
                   << "  --rom-dir <dir>   Directory to resolve a bare ROM name against\n"
                   << "\n"
@@ -405,6 +410,12 @@ public:
         auto header = beebium::parse_sideways_rom_header(data);
 
         using ojson = nlohmann::ordered_json;
+        if (!header.recognised) {
+            if (const beebium::OsRomEntry* os_rom = beebium::find_os_rom(data)) {
+                std::cout << describe_os_rom_json(*os_rom).dump(2) << "\n";
+                return ExitCode::OK;
+            }
+        }
         ojson out;
         out["recognised"] = header.recognised;
         out["title"] = header.title;
@@ -429,6 +440,29 @@ public:
         out["kinds"] = kinds;
         std::cout << out.dump(2) << "\n";
         return ExitCode::OK;
+    }
+
+private:
+    // A known OS ROM: the same fields as a sideways ROM's, every header
+    // field empty or false, since an OS ROM has no sideways header.
+    static nlohmann::ordered_json describe_os_rom_json(const beebium::OsRomEntry& os_rom) {
+        nlohmann::ordered_json out;
+        out["recognised"] = true;
+        out["title"] = std::string(os_rom.title);
+        out["version"] = "";
+        out["copyright"] = "";
+        out["is_language"] = false;
+        out["is_service_only"] = false;
+        out["has_language_entry"] = false;
+        out["has_service_entry"] = false;
+        out["has_relocation_address"] = false;
+        out["supports_electron_firmkeys"] = false;
+        out["cpu_type"] = 0;
+        out["binary_version"] = 0;
+        out["contains_romfs"] = false;
+        out["romfs_data_offset"] = 0;
+        out["kinds"] = nlohmann::ordered_json::array({"os"});
+        return out;
     }
 };
 

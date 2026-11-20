@@ -411,6 +411,10 @@ saves the user a round-trip and a confusing error.
   image (`Acorn MOS 3.20`, from `OsRomManifest.hpp`, keyed by SHA-1),
   else the file's name without its extension. Clients show what it
   reports rather than working it out from a preset.
+  Before a machine is launched, `describe-rom <rom>` gives the same
+  title from the same manifest: a known OS ROM image is `recognised`,
+  with `kinds` `["os"]` and every sideways-header flag false (see
+  [mos_image_uri](preset-schema.md#mos_image_uri)).
 
 Clients are expected to display sockets, not slots, when they need to
 show the user a hardware-faithful view. The `aliased_slots` and

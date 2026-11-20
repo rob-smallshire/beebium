@@ -233,6 +233,15 @@ diagnostic ROM's MOS half, say), keeps the MOS 3.20 set's banks, as a real
 board does when a foreign MOS half is fitted. The sets are in
 `describe-preset-schema`'s `mos_rom_banks`; see [The MOS's banks](#the-moss-banks-master-128).
 
+`describe-rom <rom>` names a MOS image, so a configurator can show "Acorn MOS
+3.20" beside the file name. An image with no sideways header that the OS ROM
+manifest knows (`OsRomManifest.hpp`, keyed by SHA-1: MOS 1.20, 2.0, 3.20 and
+3.50) comes back with `recognised` true, `title` the manifest's name,
+`version` and `copyright` empty, `kinds` `["os"]`, and every sideways-header
+flag false, since an OS ROM has no header. The header is read first, so a
+sideways ROM is never taken for an OS ROM; an image that is neither is
+`recognised` false, as before.
+
 ## Storage
 
 ```json

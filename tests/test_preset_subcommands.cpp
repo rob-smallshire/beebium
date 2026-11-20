@@ -1538,11 +1538,47 @@ TEST_CASE("describe-rom reports a language ROM", "[integration][describe-rom]") 
     REQUIRE(result.stdout_output.find("\"is_language\": true") != std::string::npos);
 }
 
-TEST_CASE("describe-rom reports a non-sideways ROM as not recognised",
-          "[integration][describe-rom]") {
-    auto result = run_command(EXECUTABLE + " describe-rom acorn-mos_1_20.rom");
+TEST_CASE("describe-rom names each known OS ROM from the manifest",
+          "[integration][describe-rom][os-rom]") {
+    auto [image, title] = GENERATE(table<std::string, std::string>({
+        {"acorn-mos_1_20.rom", "Acorn MOS 1.20"},
+        {"acorn-mos_2_0.rom", "Acorn MOS 2.0"},
+        {"acorn-mos_3_20.rom", "Acorn MOS 3.20"},
+        {"acorn-mos_3_50.rom", "Acorn MOS 3.50"},
+    }));
+    CAPTURE(image);
+    auto result = run_command(EXECUTABLE + " describe-rom " + image);
     REQUIRE(result.exit_code == 0);
-    REQUIRE(result.stdout_output.find("\"recognised\": false") != std::string::npos);
+    auto out = nlohmann::json::parse(result.stdout_output);
+    CHECK(out["recognised"] == true);
+    CHECK(out["title"] == title);
+    CHECK(out["version"] == "");
+    CHECK(out["copyright"] == "");
+    CHECK(out["kinds"] == nlohmann::json::array({"os"}));
+    CHECK(out["is_language"] == false);
+    CHECK(out["is_service_only"] == false);
+    CHECK(out["has_language_entry"] == false);
+    CHECK(out["has_service_entry"] == false);
+    CHECK(out["has_relocation_address"] == false);
+    CHECK(out["contains_romfs"] == false);
+}
+
+TEST_CASE("describe-rom reports an image that is neither a sideways ROM nor a known OS ROM "
+          "as not recognised",
+          "[integration][describe-rom][os-rom]") {
+    auto image_filepath = beebium::test::unique_temp_path("beebium_unknown_rom_", ".rom");
+    {
+        std::ofstream image(image_filepath, std::ios::binary);
+        const std::vector<char> bytes(16384, 0);
+        image.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    }
+    auto result = run_command(EXECUTABLE + " describe-rom " + image_filepath.string());
+    remove_quietly(image_filepath);
+    REQUIRE(result.exit_code == 0);
+    auto out = nlohmann::json::parse(result.stdout_output);
+    CHECK(out["recognised"] == false);
+    CHECK(out["title"] == "");
+    CHECK(out["kinds"] == nlohmann::json::array());
 }
 
 TEST_CASE("describe-rom on a missing file returns NOINPUT", "[integration][describe-rom]") {
