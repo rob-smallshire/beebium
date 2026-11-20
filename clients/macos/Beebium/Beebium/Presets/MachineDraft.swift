@@ -49,6 +49,10 @@ struct MachineDraft: Equatable {
     var autoBoot: Bool?
     /// Emulation speed: a positive number (multiple of real time) or "unlimited".
     var speed: JSONValue?
+    /// The MOS (operating-system) ROM: a ROM name on the search path or a path
+    /// (the preset key `mos_image_uri`, the equivalent of `--mos`). Absent means
+    /// the model's own default MOS.
+    var mosImageUri: String?
     /// Startup keyboard links: screen_mode + auto_boot, or the whole links byte.
     var startup: Startup?
     var storage: Storage?
@@ -65,6 +69,7 @@ struct MachineDraft: Equatable {
          releaseDate: String? = nil,
          autoBoot: Bool? = nil,
          speed: JSONValue? = nil,
+         mosImageUri: String? = nil,
          startup: Startup? = nil,
          storage: Storage? = nil,
          sidewaysBank: SidewaysBank? = nil,
@@ -78,6 +83,7 @@ struct MachineDraft: Equatable {
         self.releaseDate = releaseDate
         self.autoBoot = autoBoot
         self.speed = speed
+        self.mosImageUri = mosImageUri
         self.startup = startup
         self.storage = storage
         self.sidewaysBank = sidewaysBank
@@ -245,7 +251,8 @@ struct MachineDraft: Equatable {
 extension MachineDraft: Codable {
     private static let knownKeys: Set<String> = [
         "model", "name", "machine_description", "description", "release_date",
-        "auto_boot", "speed", "startup", "storage", "sideways_bank", "econet", "extensions",
+        "auto_boot", "speed", "mos_image_uri", "startup", "storage", "sideways_bank",
+        "econet", "extensions",
     ]
 
     init(from decoder: Decoder) throws {
@@ -257,6 +264,7 @@ extension MachineDraft: Codable {
         releaseDate = try c.decodeIfPresent(String.self, forKey: "release_date")
         autoBoot = try c.decodeIfPresent(Bool.self, forKey: "auto_boot")
         speed = try c.decodeIfPresent(JSONValue.self, forKey: "speed")
+        mosImageUri = try c.decodeIfPresent(String.self, forKey: "mos_image_uri")
         startup = try c.decodeIfPresent(Startup.self, forKey: "startup")
         storage = try c.decodeIfPresent(Storage.self, forKey: "storage")
         sidewaysBank = try c.decodeIfPresent(SidewaysBank.self, forKey: "sideways_bank")
@@ -274,6 +282,7 @@ extension MachineDraft: Codable {
         try c.encodeIfPresent(releaseDate, forKey: "release_date")
         try c.encodeIfPresent(autoBoot, forKey: "auto_boot")
         try c.encodeIfPresent(speed, forKey: "speed")
+        try c.encodeIfPresent(mosImageUri, forKey: "mos_image_uri")
         try c.encodeIfPresent(startup, forKey: "startup")
         try c.encodeIfPresent(storage, forKey: "storage")
         try c.encodeIfPresent(sidewaysBank, forKey: "sideways_bank")

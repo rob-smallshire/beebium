@@ -48,6 +48,17 @@ final class RomTitleCache: ObservableObject {
         return URL(fileURLWithPath: image).lastPathComponent
     }
 
+    /// The display text for a ROM image reference: the resolved title (and
+    /// version) when known, otherwise the image's filename. For a bare
+    /// search-path name the filename is the name itself.
+    func displayText(forImage image: String) -> String {
+        if let info = byImage[image], !info.title.isEmpty {
+            if !info.version.isEmpty { return "\(info.title) \(info.version)" }
+            return info.title
+        }
+        return URL(fileURLWithPath: image).lastPathComponent
+    }
+
     /// The resolved ROM kinds for a socket's image (language/service/romfs),
     /// empty when unknown.
     func kinds(for content: SidewaysSocketEditor.Content) -> [String] {

@@ -84,6 +84,7 @@ Section 3 states cross-cutting foundations that every later section assumes.
 | 5.5 | Machine control: run, Break, reset, shutdown | Core |
 | 5.6 | Emulation speed | Core |
 | 5.7 | Names, titles and the description subtitle | Core |
+| 5.8 | The MOS ROM | Core |
 | 6.1 | Frame presentation | Core |
 | 6.2 | Display modes and aspect ratio | Core |
 | 6.3 | Scaling, pixel shape, display styles, background | Advanced display |
@@ -935,6 +936,42 @@ launch again -> "#3" (no reuse). A preset whose description template references 
 placeholder -> the subtitle shows the resolved value and re-renders when it
 changes. Rename a saved machine to a free name -> title and directory change,
 same UUID; to a taken name -> refused, title unchanged.
+
+### 5.8 The MOS ROM
+
+Profile: Core.
+
+Behaviour. The configurator's machine (Processor) section offers the MOS
+(operating-system) ROM as a single field, after the emulation speed. It presents
+the MOS the machine will boot with -- the resolved preset's value, which is the
+model's own default when the preset sets none -- as a title where the ROM
+resolves (e.g. "MOS 3.50") and otherwise the image's name. The user chooses
+another ROM by browsing for a ROM image file, or returns to the preset's MOS with
+Use Default; the chosen value is carried into the draft as the `mos_image_uri`
+preset key (the equivalent of `--mos`), written into the preset and so into the
+launch. Browse plus Use Default is the mandatory behaviour; a picker that lists
+the ROMs on the server's search path by name is a follow-up (issue #297), not
+required for Core. On a model whose MOS occupies sideways banks (the Master 128's
+banks 9-15), the server re-derives those banks from the MOS in force, so changing
+the MOS alone does not strand the previous MOS's bank images; the client shows
+each such bank as the image it holds and re-resolves the draft after a MOS change
+so the rows reflect the new set before launch, never guessing the server's
+defaults itself.
+
+Rests on: `describe-preset-schema`'s `mos_image_uri` section (the model's default
+MOS); the `mos_image_uri` preset key; `describe-rom` for the MOS's title.
+
+Conformance:
+
+- MANDATORY: present the MOS field with the resolved/default value; let the user
+  browse for a ROM image and use the default; carry the choice into the draft,
+  the written preset and the launch.
+- LATITUDE: the field's presentation and where the title is shown; whether a
+  by-name ROM picker (#297) is offered beyond Browse.
+
+Scenario: on the Master, set the MOS to acorn-mos_3_50.rom and launch -> the
+machine boots MOS 3.50 (its *HELP reports OS 3.50), with banks 9-15 re-derived to
+the matching set.
 
 
 ## 6. Display

@@ -186,6 +186,29 @@ final class MachineDraftTests: XCTestCase {
         XCTAssertNil(unlimited.startup?.screenMode)
     }
 
+    func testRoundTripsMosImageUri() throws {
+        // A MOS override round-trips as the top-level `mos_image_uri` key.
+        let withMos = try assertRoundTrips("""
+        { "model": "master-128", "mos_image_uri": "acorn-mos_3_50.rom" }
+        """, "mos_image_uri")
+        XCTAssertEqual(withMos.mosImageUri, "acorn-mos_3_50.rom")
+
+        // Absence means unset; it must encode as absence, not an explicit null.
+        let withoutMos = try assertRoundTrips("""
+        { "model": "model-b" }
+        """, "no mos")
+        XCTAssertNil(withoutMos.mosImageUri)
+        let object = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: withoutMos.encoded()) as? [String: Any])
+        XCTAssertFalse(object.keys.contains("mos_image_uri"),
+                       "an unset MOS must not appear in the encoded preset")
+
+        // A set MOS appears in the re-encoded preset (the launch reads it there).
+        let setObject = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: withMos.encoded()) as? [String: Any])
+        XCTAssertEqual(setObject["mos_image_uri"] as? String, "acorn-mos_3_50.rom")
+    }
+
     // MARK: - Unknown-key preservation
 
     func testPreservesUnknownKeys() throws {

@@ -40,6 +40,8 @@ struct NewMachineDialog: View {
     @State private var econetSchema: EconetSchemaSection?
     /// The model's startup schema, for Keyboard.
     @State private var startupSchema: StartupSchemaSection?
+    /// The model's MOS schema (its default MOS ROM), for Processor.
+    @State private var mosSchema: MosSchemaSection?
     /// Host serial-port paths, for choices_from "serial-ports" fields.
     @State private var serialPorts: [String] = []
     @State private var isLoadingSchema = false
@@ -281,6 +283,7 @@ struct NewMachineDialog: View {
                 extensionsSchema: extensionsSchema,
                 econetSchema: econetSchema,
                 startupSchema: startupSchema,
+                mosSchema: mosSchema,
                 romResolver: romResolver(for: selectedPreset),
                 serialPorts: serialPorts,
                 diagnostics: diagnostics
@@ -425,6 +428,7 @@ struct NewMachineDialog: View {
             let extensions = await manager.fetchExtensionsSchema(for: preset)
             let econet = await manager.fetchEconetSchema(for: preset)
             let startup = await manager.fetchStartupSchema(for: preset)
+            let mos = await manager.fetchMosSchema(for: preset)
             let ports = await manager.serialPortSuggestions()
             // The resolved document is the editing source: defaults filled,
             // paths absolute, default ROMs expanded into explicit slots. The
@@ -439,6 +443,7 @@ struct NewMachineDialog: View {
                 extensionsSchema = extensions
                 econetSchema = econet
                 startupSchema = startup
+                mosSchema = mos
                 serialPorts = ports
                 hardDiscCapability = extensions.flatMap { HardDiscCapability(schema: $0) }
 

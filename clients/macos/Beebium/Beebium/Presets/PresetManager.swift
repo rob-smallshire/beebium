@@ -388,6 +388,12 @@ class PresetManager: ObservableObject {
         await coreCLI.schemaSection("startup", executablePath: preset.coreExecutablePath)
     }
 
+    /// Fetch the `mos_image_uri` schema section (the model's default MOS ROM) for
+    /// a preset's model.
+    func fetchMosSchema(for preset: MachinePreset) async -> MosSchemaSection? {
+        await coreCLI.schemaSection("mos_image_uri", executablePath: preset.coreExecutablePath)
+    }
+
     /// Cached host serial-port paths for the session (for the choices_from
     /// "serial-ports" combo).
     private var cachedSerialPorts: [String]?
