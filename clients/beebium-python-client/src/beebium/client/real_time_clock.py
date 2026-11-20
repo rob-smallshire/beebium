@@ -59,7 +59,7 @@ class RealTimeClock:
 
         state = bbc.real_time_clock.state
         if state.present:
-            print(f"IBOS user register &0F: &{state.cmos_ram[0x0F]:02X}")
+            print(f"IBOS user register 0x0F: 0x{state.cmos_ram[0x0F]:02X}")
     """
 
     def __init__(self, stub: debugger_pb2_grpc.DeviceInspectionStub):

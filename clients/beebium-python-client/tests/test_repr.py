@@ -134,6 +134,14 @@ class TestLiveObjects:
         ):
             assert_one_line_facade(obj)
 
+    def test_region_shows_its_addresses_in_0x_hex(self, bbc_shared: Beebium):
+        memory = bbc_shared.memory
+        info = memory.regions[0]
+        last_address = info.base_address + info.size - 1
+        assert repr(memory.region(info.name)) == (
+            f"<Region {info.name!r} 0x{info.base_address:04X}-0x{last_address:04X}>"
+        )
+
     def test_debugger_shows_its_execution_state(self, bbc_shared: Beebium):
         debugger = bbc_shared.debugger
         debugger.stop()

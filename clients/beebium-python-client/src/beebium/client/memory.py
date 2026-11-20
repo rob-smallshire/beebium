@@ -658,7 +658,7 @@ class Region:
         detail = repr(self._region_name)
         if self._base_address is not None and self._size:
             last_address = self._base_address + self._size - 1
-            detail += f" &{self._base_address:04X}-&{last_address:04X}"
+            detail += f" 0x{self._base_address:04X}-0x{last_address:04X}"
         return facade_repr(self, detail)
 
     @property
