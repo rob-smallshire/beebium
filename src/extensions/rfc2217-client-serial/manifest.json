@@ -1,6 +1,7 @@
 {
     "name": "rfc2217-client-serial",
     "display_name": "RFC 2217 Serial (client)",
+    "short_name": "Serial (RFC 2217 client)",
     "description": "Connects the serial port to a serial port server elsewhere on the network, using RFC 2217.",
     "library": "rfc2217-client-serial",
     "attaches_to": [

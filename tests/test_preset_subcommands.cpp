@@ -259,6 +259,24 @@ TEST_CASE("list-presets: --format tsv yields tab-separated rows", "[integration]
     REQUIRE(result.stdout_output.find("\n" + LONG_PRESET_ID + "\tLong Id Preset\tuser\n") != std::string::npos);
 }
 
+namespace {
+
+// The facets of a preset that fits nothing to its model: a Model B family
+// model has an empty FDC socket; the B+ and Master their built-in 1770.
+nlohmann::ordered_json plain_facets(const std::string& family, const std::string& disc_controller) {
+    nlohmann::ordered_json storage = nlohmann::ordered_json::array();
+    if (disc_controller != "None") storage.push_back("Floppy");
+    storage.push_back("Cassette");
+    return {{"model", family},
+            {"coprocessor", "None"},
+            {"disc_controller", disc_controller},
+            {"network", "None"},
+            {"storage", storage},
+            {"peripherals", nlohmann::ordered_json::array()}};
+}
+
+}  // namespace
+
 TEST_CASE("list-presets: --format jsonl and --json yield the same rows", "[integration][preset][list-presets]") {
     TempDirectory temp_dir;
     write_long_id_user_preset(temp_dir.presets());
@@ -278,7 +296,8 @@ TEST_CASE("list-presets: --format jsonl and --json yield the same rows", "[integ
                                     {"model", "model-b"},
                                     {"filepath", (temp_dir.presets() /
                                                   (LONG_PRESET_ID + ".beebium-preset")).string()},
-                                    {"thumbnail", false}};
+                                    {"thumbnail", false},
+                                    {"facets", plain_facets("Model B", "None")}};
     REQUIRE(jsonl.stdout_output.find(expected.dump() + "\n") != std::string::npos);
 }
 
@@ -315,7 +334,8 @@ TEST_CASE("list-presets jsonl: every field a preset gives, in a fixed order, and
                                     {"description", "Every field"},
                                     {"release_date", "1984"},
                                     {"filepath", filepath.string()},
-                                    {"thumbnail", true}};
+                                    {"thumbnail", true},
+                                    {"facets", plain_facets("Model B", "None")}};
     CHECK(jsonl_row(result.stdout_output, "full") == expected.dump());
 }
 
@@ -340,7 +360,8 @@ TEST_CASE("list-presets jsonl: a field a preset does not give is omitted, and an
                                {"source", "user"},
                                {"description", "Suits any model"},
                                {"filepath", any_filepath.string()},
-                               {"thumbnail", false}};
+                               {"thumbnail", false},
+                               {"facets", plain_facets("Model B", "None")}};
     CHECK(jsonl_row(own.stdout_output, "any") == any.dump());
 
     // Every model's: the model-b-plus preset is called by its own model's name.
@@ -351,7 +372,8 @@ TEST_CASE("list-presets jsonl: a field a preset does not give is omitted, and an
                                 {"source", "user"},
                                 {"model", "model-b-plus"},
                                 {"filepath", plus_filepath.string()},
-                                {"thumbnail", false}};
+                                {"thumbnail", false},
+                                {"facets", plain_facets("Model B+", "1770")}};
     CHECK(jsonl_row(all.stdout_output, "plus") == plus.dump());
     CHECK(jsonl_row(all.stdout_output, "any") == any.dump());
 }
@@ -372,6 +394,150 @@ TEST_CASE("list-presets --all-models lists every model's system presets from one
     CHECK(models.count("model-b") == 1);
     CHECK(models.count("model-b-plus") == 1);
     CHECK(models.count("model-b-integra-b") == 1);
+}
+
+namespace {
+
+nlohmann::ordered_json facets(const std::string& family, const std::string& coprocessor,
+                              const std::string& disc_controller, const std::string& network,
+                              std::vector<std::string> storage, std::vector<std::string> peripherals) {
+    return {{"model", family},
+            {"coprocessor", coprocessor},
+            {"disc_controller", disc_controller},
+            {"network", network},
+            {"storage", storage},
+            {"peripherals", peripherals}};
+}
+
+// Every list-presets --all-models row, by id.
+std::map<std::string, nlohmann::ordered_json> rows_by_id(const std::string& output) {
+    std::map<std::string, nlohmann::ordered_json> rows;
+    std::istringstream lines(output);
+    for (std::string line; std::getline(lines, line);) {
+        auto row = nlohmann::ordered_json::parse(line);
+        rows[row.at("id").get<std::string>()] = row;
+    }
+    return rows;
+}
+
+}  // namespace
+
+TEST_CASE("list-presets: every bundled preset's facets are derived from what it fits",
+          "[integration][preset][list-presets][facets]") {
+    TempDirectory user_dir;
+    auto result = run_command(EXECUTABLE + " --format jsonl list-presets --all-models",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+    REQUIRE(result.exit_code == 0);
+    const auto rows = rows_by_id(result.stdout_output);
+
+    const std::vector<std::string> floppy{"Floppy", "Cassette"};
+    const std::vector<std::pair<std::string, nlohmann::ordered_json>> expected{
+        // The rich case: everything but the cassette comes from the preset.
+        {"model-b-l3fs-aun",
+         facets("Model B", "65C02", "1770", "AUN", {"Floppy", "Hard disc", "Cassette"},
+                {"Real-time clock", "SCSI adapter"})},
+        // An empty FDC socket: no floppy, the cassette alone.
+        {"model-b", facets("Model B", "None", "None", "None", {"Cassette"}, {})},
+        {"model-b-disc", facets("Model B", "None", "1770", "None", floppy, {})},
+        {"model-b-8271-disc", facets("Model B", "None", "8271", "None", floppy, {})},
+        {"model-b-disc-65c02-copro", facets("Model B", "65C02", "1770", "None", floppy, {})},
+        {"model-b-disc-aun-80", facets("Model B", "None", "1770", "AUN", floppy, {})},
+        {"model-b-disc-aun-auto", facets("Model B", "None", "1770", "AUN", floppy, {})},
+        {"model-b-disc-eco-81", facets("Model B", "None", "1770", "Piconet", floppy, {})},
+        // Every board on a Model B is the Model B family.
+        {"model-b-atpl-sidewise-disc", facets("Model B", "None", "1770", "None", floppy, {})},
+        {"model-b-romram-disc", facets("Model B", "None", "1770", "None", floppy, {})},
+        {"model-b-watford-rom-ram-128k", facets("Model B", "None", "1770", "None", floppy, {})},
+        {"model-b-integra-b-disc", facets("Model B", "None", "1770", "None", floppy, {})},
+        {"model-b-integra-b-disc-65c02-copro",
+         facets("Model B", "65C02", "1770", "None", floppy, {})},
+        // The B+ and the Master have their 1770 built in.
+        {"model-b-plus", facets("Model B+", "None", "1770", "None", floppy, {})},
+        {"model-b-plus-128k", facets("Model B+", "None", "1770", "None", floppy, {})},
+        {"model-b-plus-128k-65c02-copro", facets("Model B+", "65C02", "1770", "None", floppy, {})},
+        {"model-b-plus-128k-65c102-copro",
+         facets("Model B+", "65C102", "1770", "None", floppy, {})},
+        {"model-b-plus-128k-music-5000",
+         facets("Model B+", "None", "1770", "None", floppy, {"Music 5000"})},
+        {"master-128", facets("Master 128", "None", "1770", "None", floppy, {})},
+        {"master-128-mos-3-50", facets("Master 128", "None", "1770", "None", floppy, {})},
+        {"master-128-65c102-copro", facets("Master 128", "65C102", "1770", "None", floppy, {})},
+    };
+    for (const auto& [id, want] : expected) {
+        INFO(id);
+        auto it = rows.find(id);
+        REQUIRE(it != rows.end());
+        CHECK(it->second.at("facets").dump() == want.dump());
+    }
+
+    // Every row has every facet, an exclusive one as a string and a set one
+    // as an array of strings.
+    for (const auto& [id, row] : rows) {
+        INFO(id);
+        const auto& row_facets = row.at("facets");
+        CHECK(row_facets.size() == 6);
+        for (const char* key : {"model", "coprocessor", "disc_controller", "network"}) {
+            CHECK(row_facets.at(key).is_string());
+        }
+        for (const char* key : {"storage", "peripherals"}) {
+            REQUIRE(row_facets.at(key).is_array());
+            for (const auto& value : row_facets.at(key)) CHECK(value.is_string());
+        }
+    }
+}
+
+TEST_CASE("list-presets: a user preset with no name still gets its facets",
+          "[integration][preset][list-presets][facets]") {
+    TempDirectory user_dir;
+    store_preset(user_dir.presets(), "unnamed",
+                 R"({"model": "model-b", "storage": {"fdc_socket": {"id": "acorn-8271"}},
+                     "econet": {"station": 12, "transport": {"name": "aun"}},
+                     "extensions": [{"name": "acorn-65c102-coprocessor"},
+                                    {"name": "hybrid-music-5000"}]})");
+    auto result = run_command(EXECUTABLE + " --format jsonl list-presets",
+                              {{"BEEBIUM_USER_DIRPATH", user_dir.path().string()}});
+    REQUIRE(result.exit_code == 0);
+    const auto rows = rows_by_id(result.stdout_output);
+    REQUIRE(rows.count("unnamed") == 1);
+    const auto& row = rows.at("unnamed");
+    CHECK(row.at("name") == "BBC Model B");
+    CHECK(row.at("facets").dump() ==
+          facets("Model B", "65C102", "8271", "AUN", {"Floppy", "Cassette"}, {"Music 5000"}).dump());
+}
+
+TEST_CASE("describe-facets: the facets in display order, with key, label and kind",
+          "[integration][preset][describe-facets][facets]") {
+    const std::vector<nlohmann::ordered_json> expected{
+        {{"key", "model"}, {"label", "Model"}, {"kind", "exclusive"}},
+        {{"key", "coprocessor"}, {"label", "Coprocessor"}, {"kind", "exclusive"}},
+        {{"key", "disc_controller"}, {"label", "Disc controller"}, {"kind", "exclusive"}},
+        {{"key", "network"}, {"label", "Network"}, {"kind", "exclusive"}},
+        {{"key", "storage"}, {"label", "Storage"}, {"kind", "set"}},
+        {{"key", "peripherals"}, {"label", "Peripherals"}, {"kind", "set"}},
+    };
+    std::string want;
+    for (const auto& row : expected) want += row.dump() + "\n";
+
+    auto json = run_command(EXECUTABLE + " describe-facets --json");
+    REQUIRE(json.exit_code == 0);
+    CHECK(json.stdout_output == want);
+
+    auto jsonl = run_command(EXECUTABLE + " --format jsonl describe-facets");
+    REQUIRE(jsonl.exit_code == 0);
+    CHECK(jsonl.stdout_output == want);
+
+    auto tsv = run_command(EXECUTABLE + " --format tsv describe-facets");
+    REQUIRE(tsv.exit_code == 0);
+    CHECK(tsv.stdout_output.rfind("key\tlabel\tkind\nmodel\tModel\texclusive\n", 0) == 0);
+}
+
+TEST_CASE("describe-facets on the Master gives the same facets",
+          "[integration][preset][describe-facets][facets]") {
+    auto model_b = run_command(EXECUTABLE + " describe-facets --json");
+    auto master = run_command(find_executable("beebium-master-128").string() + " describe-facets --json");
+    REQUIRE(model_b.exit_code == 0);
+    REQUIRE(master.exit_code == 0);
+    CHECK(master.stdout_output == model_b.stdout_output);
 }
 
 TEST_CASE("list-presets --help: returns OK", "[integration][preset][list-presets]") {

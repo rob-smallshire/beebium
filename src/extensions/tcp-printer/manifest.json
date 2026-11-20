@@ -1,6 +1,7 @@
 {
     "name": "tcp-printer",
     "display_name": "Network Printer",
+    "short_name": "Printer (network)",
     "description": "Sends everything the BBC prints to a raw TCP printer port on the network, such as a JetDirect printer or a printer emulator.",
     "library": "tcp-printer",
     "attaches_to": [

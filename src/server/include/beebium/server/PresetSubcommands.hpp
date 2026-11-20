@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// The preset subcommands: describe-preset-schema, list-presets,
+// The preset subcommands: describe-preset-schema, list-presets, describe-facets,
 // show-preset, create-preset, resolve-preset,
 // delete-preset, import-preset and export-preset.
 
@@ -19,6 +19,7 @@
 #include "beebium/server/ExtensionSubcommands.hpp"
 #include "beebium/KeyboardMatrix.hpp"
 #include "beebium/MachineModels.hpp"
+#include "beebium/server/PresetFacets.hpp"
 #include "beebium/server/PresetWriter.hpp"
 #include "beebium/server/RomPaths.hpp"
 #include "beebium/server/DfsRomManifest.hpp"
@@ -120,8 +121,16 @@ public:
         ojson storage;
         storage["type"] = "storage";
 
-        // Built-in hardware - all current models have cassette
-        storage["builtin"]["cassette"] = true;
+        // Built-in hardware, from the model's MachineModels entry, which the
+        // preset facets read for any model's preset; checked here against the
+        // hardware policy.
+        constexpr const beebium::MachineModel* model_entry =
+            beebium::machine_models::find(Memory::MACHINE_TYPE);
+        static_assert(model_entry != nullptr, "every model has a MachineModels entry");
+        static_assert(model_entry->builtin_fdc_chip.empty() ==
+                          (HasDiscControllerSocket<Memory> || !HasDiscDrives<Memory>),
+                      "MachineModels' builtin_fdc_chip must match the hardware policy");
+        storage["builtin"]["cassette"] = model_entry->has_cassette;
 
         if constexpr (HasDiscControllerSocket<Memory>) {
             // Model B: socketed FDC, no built-in controller
@@ -147,8 +156,8 @@ public:
         } else if constexpr (HasDiscDrives<Memory>) {
             // Model B+: built-in FDC, no socket
             storage["builtin"]["fdc"] = ojson{
-                {"device", "WD1770"},
-                {"label", "Built-in WD1770"}
+                {"device", model_entry->builtin_fdc_chip},
+                {"label", "Built-in " + std::string(model_entry->builtin_fdc_chip)}
             };
             // No fdc_socket key for machines with built-in FDC
         }
@@ -539,7 +548,8 @@ public:
                   << "(pretty on a terminal, tsv when piped); rows carry the preset id, name\n"
                   << "and source (system or user). A jsonl row also carries what the preset\n"
                   << "gives of model, machine_description, description and release_date, its\n"
-                  << "filepath, and whether it has a thumbnail (show-preset --thumbnail).\n"
+                  << "filepath, whether it has a thumbnail (show-preset --thumbnail), and its\n"
+                  << "facets, the values a catalogue filters by (see describe-facets).\n"
                   << "A preset with no name is called by its model's display name.\n"
                   << "\n"
                   << "Options:\n"
@@ -587,7 +597,15 @@ public:
             std::optional<std::string> release_date;
             std::filesystem::path filepath;
             bool thumbnail = false;
+            nlohmann::ordered_json facets;
         };
+        // The extensions' manifests, for the facets.
+        ServerConfig<MachineType> resolver_cfg;
+        if (auto err = populate_extension_resolver(argv[0], {}, resolver_cfg)) {
+            return *err;
+        }
+        const auto& resolver = resolver_cfg.launch.extension_resolver;
+        const auto* own_model = beebium::machine_models::find(Memory::MACHINE_TYPE);
         std::vector<PresetEntry> system_presets;
         std::vector<PresetEntry> user_presets;
         for (const auto& entry : PresetPaths::enumerate()) {
@@ -601,11 +619,14 @@ public:
                 continue;  // Skip presets for other models
             }
             const bool system = entry.origin == PresetPaths::Origin::System;
+            // A preset naming no model is for this executable's.
+            const auto* model = preset.model ? beebium::machine_models::find(*preset.model) : nullptr;
             (system ? system_presets : user_presets)
                 .push_back({entry.id, preset_display_name<Memory>(preset),
                             system ? "system" : "user", preset.model, preset.machine_description,
                             preset.description, preset.release_date, entry.filepath,
-                            PresetPaths::find_thumbnail(*source).has_value()});
+                            PresetPaths::find_thumbnail(*source).has_value(),
+                            preset_facets(preset, model ? *model : *own_model, resolver)});
         }
 
         OutputFormat format = json_output ? OutputFormat::Jsonl
@@ -662,6 +683,7 @@ public:
                         }
                         row["filepath"] = p.filepath.string();
                         row["thumbnail"] = p.thumbnail;
+                        row["facets"] = p.facets;
                         std::cout << row.dump() << "\n";
                     }
                 }
@@ -672,6 +694,89 @@ public:
                 break;
         }
 
+        return ExitCode::OK;
+    }
+};
+
+// DescribeFacets subcommand - the facets a preset catalogue filters by, in
+// display order, each with its key, label and kind. The values are in the
+// list-presets rows' facets.
+template<typename MachineType>
+class DescribeFacetsSubcommand : public Subcommand<MachineType> {
+public:
+    std::string_view name() const override { return "describe-facets"; }
+    std::string_view description() const override {
+        return "List the facets a preset catalogue filters by";
+    }
+
+    void help(const char* program_name) const override {
+        std::cerr << "Usage: " << program_name
+                  << " [--format pretty|tsv|jsonl] describe-facets [--json]\n"
+                  << "\n"
+                  << "Lists the facets a preset catalogue filters by, in display order: each\n"
+                  << "facet's key, its label and its kind. An exclusive facet gives every preset\n"
+                  << "one value, a set facet any number. Each list-presets row carries its\n"
+                  << "values under \"facets\", by key. The output format follows the global\n"
+                  << "--format option, as list-presets does.\n"
+                  << "\n"
+                  << "Options:\n"
+                  << "  --json        Same as --format jsonl\n";
+    }
+
+    int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
+        if (global.help_requested) {
+            help(argv[0]);
+            return ExitCode::OK;
+        }
+        bool json_output = false;
+        for (int i = global.subcommand_argv_start; i < argc; ++i) {
+            std::string_view arg = argv[i];
+            if (arg == "--help" || arg == "-h") {
+                help(argv[0]);
+                return ExitCode::OK;
+            } else if (arg == "--json") {
+                json_output = true;
+            } else {
+                std::cerr << "Unknown argument: " << arg << "\n";
+                help(argv[0]);
+                return ExitCode::USAGE;
+            }
+        }
+
+        switch (json_output ? OutputFormat::Jsonl : resolve_output_format(global.output_format)) {
+            case OutputFormat::Pretty: {
+                std::size_t key_width = 0;
+                std::size_t label_width = 0;
+                for (const auto& facet : kPresetFacets) {
+                    key_width = std::max(key_width, facet.key.size());
+                    label_width = std::max(label_width, facet.label.size());
+                }
+                for (const auto& facet : kPresetFacets) {
+                    std::cout << facet.key << std::string(key_width + 2 - facet.key.size(), ' ')
+                              << facet.label
+                              << std::string(label_width + 2 - facet.label.size(), ' ')
+                              << facet.kind_name() << "\n";
+                }
+                break;
+            }
+            case OutputFormat::Tsv:
+                std::cout << "key\tlabel\tkind\n";
+                for (const auto& facet : kPresetFacets) {
+                    std::cout << facet.key << "\t" << facet.label << "\t" << facet.kind_name()
+                              << "\n";
+                }
+                break;
+            case OutputFormat::Jsonl:
+                for (const auto& facet : kPresetFacets) {
+                    nlohmann::ordered_json row{{"key", facet.key},
+                                               {"label", facet.label},
+                                               {"kind", facet.kind_name()}};
+                    std::cout << row.dump() << "\n";
+                }
+                break;
+            case OutputFormat::Auto:
+                break;
+        }
         return ExitCode::OK;
     }
 };

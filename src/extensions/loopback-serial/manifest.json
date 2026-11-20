@@ -1,6 +1,7 @@
 {
     "name": "loopback-serial",
     "display_name": "Loopback Serial",
+    "short_name": "Serial (loopback)",
     "description": "Sends every byte the BBC transmits on its serial port straight back to it, for testing serial software.",
     "library": "loopback-serial",
     "attaches_to": ["serial-port"],

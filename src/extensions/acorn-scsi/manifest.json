@@ -1,6 +1,7 @@
 {
     "name": "acorn-scsi",
     "display_name": "Acorn SCSI Host Adapter",
+    "short_name": "SCSI adapter",
     "description": "The Acorn SCSI host adapter, which connects SCSI hard discs to the 1 MHz bus.",
     "library": "acorn-scsi",
     "attaches_to": ["1mhz-bus"],

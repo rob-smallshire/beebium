@@ -166,6 +166,8 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
     manifest.cli_name = j.value("cli", "");
     // extension_kind: defaults to "peripheral" when absent (existing manifests).
     manifest.extension_kind = j.value("extension_kind", "peripheral");
+    manifest.short_name = j.value("short_name", "");
+    manifest.storage = j.value("storage", "");
     manifest.manifest_dirpath = manifest_filepath.parent_path();
 
     if (manifest.name.empty()) {

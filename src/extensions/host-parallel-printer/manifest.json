@@ -1,6 +1,7 @@
 {
     "name": "host-parallel-printer",
     "display_name": "Host Printer Port",
+    "short_name": "Printer (host port)",
     "description": "Sends everything the BBC prints to a printer port on the host computer, such as /dev/usb/lp0 or LPT1.",
     "library": "host-parallel-printer",
     "attaches_to": [

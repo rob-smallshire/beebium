@@ -77,6 +77,7 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<DescribeRomSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeDiscImageSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListPresetsSubcommand<MachineType>>());
+        v.push_back(std::make_unique<DescribeFacetsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ShowPresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<ResolvePresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<CreatePresetSubcommand<MachineType>>());

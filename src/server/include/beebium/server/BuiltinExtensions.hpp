@@ -141,6 +141,7 @@ inline std::vector<Entry> make_entries() {
         ExtensionManifest m;
         m.name = "host-serial";
         m.display_name = "Host Serial";
+        m.short_name = "Serial (host port)";
         m.description =
             "Connects the serial port to a serial device or pseudo-terminal on this computer.";
         m.cli_name = "host-serial";
@@ -192,6 +193,7 @@ inline std::vector<Entry> make_entries() {
         ExtensionManifest m;
         m.name = "file-printer";
         m.display_name = "File Printer";
+        m.short_name = "Printer (file)";
         m.description =
             "Spools everything the BBC sends to its printer port into a file on the host.";
         m.cli_name = "file-printer";
@@ -237,6 +239,7 @@ inline std::vector<Entry> make_entries() {
         ExtensionManifest m;
         m.name = "job-file-printer";
         m.display_name = "Job File Printer";
+        m.short_name = "Printer (job files)";
         m.description =
             "Writes what the BBC prints as one file per print job, a job ending after a "
             "quiet period.";
@@ -341,6 +344,7 @@ inline std::vector<Entry> make_entries() {
         ExtensionManifest m;
         m.name = "voltmace-delta-14b";
         m.display_name = "Voltmace Delta 14B/1 adapter";
+        m.short_name = "Voltmace Delta 14B/1";
         m.description =
             "Voltmace's Delta 14B/1 adapter box with two Delta 14B handsets: a joystick and a "
             "12-key keypad each, in the analogue port and the user port together.";

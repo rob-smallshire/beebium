@@ -1,6 +1,7 @@
 {
     "name": "rpc-serial",
     "display_name": "RPC Serial",
+    "short_name": "Serial (RPC)",
     "description": "A serial peer that a client program drives, sending and receiving bytes through the RpcSerial service; used by automated tests.",
     "library": "rpc-serial",
     "attaches_to": [

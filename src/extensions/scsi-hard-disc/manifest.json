@@ -1,6 +1,8 @@
 {
     "name": "scsi-hard-disc",
     "display_name": "SCSI Hard Disc",
+    "short_name": "SCSI hard disc",
+    "storage": "Hard disc",
     "description": "A SCSI hard disc, kept in a pair of image files (.dat and .dsc).",
     "library": "scsi-hard-disc",
     "attaches_to": [

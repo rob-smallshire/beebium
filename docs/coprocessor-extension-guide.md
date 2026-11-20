@@ -166,6 +166,12 @@ overlay your hardware has, and provide side-effect-free `peek` for the
 debugger. On the 6502 second processor the first access to the Tube window
 unmaps the boot ROM for good; model whatever your hardware does.
 
+Give the manifest a `short_name`, the processor as a preset catalogue's
+Coprocessor filter shows it (`"short_name": "65C02"`; a Z80 would be `"Z80"`).
+An extension that attaches to a Tube is the preset's coprocessor facet by
+that name (see [Facets](preset-schema.md#facets)); without one, its
+`display_name` stands in.
+
 Declare the firmware in `manifest.json` and put it in `roms/` beside it:
 
 ```json

@@ -1080,12 +1080,35 @@ my-elite-setup	My Elite Setup	user
 **`jsonl`** (one object per preset). Each row has `id`, `name` and `source`,
 then whichever of `model`, `machine_description`, `description` and `release_date` the
 preset gives (a field it does not give is omitted, never `null`), then
-`filepath` and `thumbnail` (whether `show-preset --thumbnail` has one to write),
-in that order:
+`filepath`, `thumbnail` (whether `show-preset --thumbnail` has one to write)
+and `facets`, the values a catalogue filters by (see
+[Facets](preset-schema.md#facets) and `describe-facets` below), in that order:
 ```json
-{"id":"model-b","name":"BBC Model B","source":"system","model":"model-b","description":"A standard Model B","release_date":"1981","filepath":"/usr/share/beebium/presets/model-b.beebium-preset","thumbnail":true}
-{"id":"my-elite-setup","name":"My Elite Setup","source":"user","model":"model-b","filepath":"/home/me/.config/beebium/presets/my-elite-setup.beebium-preset","thumbnail":false}
+{"id":"model-b","name":"BBC Model B","source":"system","model":"model-b","description":"A standard Model B","release_date":"1981","filepath":"/usr/share/beebium/presets/model-b.beebium-preset","thumbnail":true,"facets":{"model":"Model B","coprocessor":"None","disc_controller":"None","network":"None","storage":["Cassette"],"peripherals":[]}}
+{"id":"my-elite-setup","name":"My Elite Setup","source":"user","model":"model-b","filepath":"/home/me/.config/beebium/presets/my-elite-setup.beebium-preset","thumbnail":false,"facets":{"model":"Model B","coprocessor":"None","disc_controller":"1770","network":"None","storage":["Floppy","Cassette"],"peripherals":[]}}
 ```
+
+#### describe-facets
+
+List the facets a preset catalogue filters by, in display order.
+
+```bash
+beebium-model-b [--format pretty|tsv|jsonl] describe-facets [--json]
+```
+
+Each facet has a `key` (the key of its value in a `list-presets` row's
+`facets`), a `label` and a `kind`: `exclusive` (every preset has one value) or
+`set` (any number, none included). The output follows the global `--format`
+option, as `list-presets` does; `--json` is an alias of `--format jsonl`:
+```json
+{"key":"model","label":"Model","kind":"exclusive"}
+{"key":"coprocessor","label":"Coprocessor","kind":"exclusive"}
+{"key":"disc_controller","label":"Disc controller","kind":"exclusive"}
+{"key":"network","label":"Network","kind":"exclusive"}
+{"key":"storage","label":"Storage","kind":"set"}
+{"key":"peripherals","label":"Peripherals","kind":"set"}
+```
+How each value is derived is in [Facets](preset-schema.md#facets).
 
 #### show-preset
 

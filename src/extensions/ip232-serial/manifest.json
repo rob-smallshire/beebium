@@ -1,6 +1,7 @@
 {
     "name": "ip232-serial",
     "display_name": "IP232 Serial",
+    "short_name": "Serial (IP232)",
     "description": "Connects the serial port to an IP232 modem emulator, such as tcpser, over the network.",
     "library": "ip232-serial",
     "attaches_to": [

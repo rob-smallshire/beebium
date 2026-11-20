@@ -151,6 +151,12 @@ Each extension has a `manifest.json` file alongside its shared library. The mani
 Fields:
 - `name` -- canonical extension type name (used in presets, gRPC, dependency resolution)
 - `display_name` -- what a user calls it (e.g. "SCSI Hard Disc")
+- `short_name` -- optional: the few words a preset catalogue's filter shows
+  for it ("65C02", "Real-time clock", "SCSI adapter"), its value in the
+  [preset facets](preset-schema.md#facets); `display_name` when omitted.
+  `describe-extension --json` gives it, filled in.
+- `storage` -- optional: the storage medium an instance gives the machine
+  ("Hard disc"), listed under the `storage` facet rather than `peripherals`
 - `description` -- one sentence a user understands, saying what it is or does;
   a configuration UI shows it beside the display name (`describe-preset-schema`
   carries both, and a test holds every shipped description to a sentence)

@@ -1,6 +1,7 @@
 {
     "name": "acorn-rtc",
     "display_name": "Acorn Real-Time Clock",
+    "short_name": "Real-time clock",
     "description": "The Acorn real-time clock module, which plugs into the user port and keeps the date and time.",
     "library": "acorn-rtc",
     "attaches_to": [

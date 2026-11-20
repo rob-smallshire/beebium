@@ -1,6 +1,7 @@
 {
     "name": "acorn-65c102-coprocessor",
     "display_name": "Acorn 65C102 Co-processor",
+    "short_name": "65C102",
     "description": "An Acorn 65C102 Co-processor: a 4 MHz 65C102 with 64K of its own memory, connected through the Tube.",
     "library": "acorn-65c102-coprocessor",
     "attaches_to_one_of": [

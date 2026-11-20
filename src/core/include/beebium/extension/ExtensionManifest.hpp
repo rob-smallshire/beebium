@@ -81,6 +81,17 @@ struct BEEBIUM_EXT_API ExtensionManifest {
     // instance attaches to all of.
     std::vector<std::string> attaches_to_one_of{};
     std::vector<RomImage> roms{};              // firmware images shipped in the plugin's roms/ directory (plugins only)
+    // The few words a catalogue filter shows for this extension ("65C02",
+    // "Real-time clock", "SCSI adapter"), a preset facet's value; empty to
+    // use display_name.
+    std::string short_name{};
+    // The storage medium an instance gives the machine ("Hard disc"), a value
+    // of the preset facet storage, or empty for an extension that is not
+    // storage.
+    std::string storage{};
+
+    // The value a preset facet shows for this extension.
+    const std::string& facet_name() const { return short_name.empty() ? display_name : short_name; }
 
     // The points an instance placed `at` attaches to: attaches_to, and the
     // one of attaches_to_one_of that `at` names (the first when `at` is

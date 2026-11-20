@@ -44,6 +44,7 @@ commands that list, show, create, import, export and delete presets are in
 - [Diagnostics](#diagnostics)
 - [resolve-preset](#resolve-preset)
 - [describe-preset-schema](#describe-preset-schema)
+- [Facets](#facets)
 - [Not in a preset](#not-in-a-preset)
 
 ## An example
@@ -654,7 +655,7 @@ There is one section per preset key, its `type` being the key and its `label` wh
 | `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives`, each with `drive`, `label` (`Floppy drive 0`), its geometry and image types; `cassette`, on every model: `{"has_cassette": true, "label": "Cassette", "image_types": ["uef", "csw", "wav"]}`. Every model has the interface; on one without it, a preset's tape would be ignored with the warning "ignored: this model has no cassette interface" at `/storage/cassette/image_uri` |
 | `sideways_bank` | `sockets` (label, `slots`, `capabilities`, `runtime_configurable`), `has_aliasing`, and `default_roms` (`slot`, `image`, `role`: `language`, `filing` or `board`); on the Master also `mos_rom_banks`: `slots` (9-15), `source` (`"mos"`, the marker), `default_mos`, `sets` (each `mos`, the MOS half's bare name, and its seven `banks`, `slot` and `image`) and a `description`, so a client can label those rows as the MOS's |
 | `econet` | `station`: `min`, `max`, `auto`, `auto_default_range`; `transports`: the transport extensions' names |
-| `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `description`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `catalogue`: every extension that can attach to one of those points, and on a model with Econet every transport, each exactly as `describe-extension <name> --json` gives it (`name`, `display_name`, `description`, `cli_name`, `kind`, `source`, `attaches_to`, `provides`, `parameters`, `roms`). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, each with `image`, `display_name`, `size_bytes` and `extension` (the extension it belongs to, or `null` for any), e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "display_name": "Acorn Level 3 File Server 1.26", "size_bytes": 10002432, "extension": null}], "rom": [{"image": "acorn-tube-6502_1_10.rom", "display_name": "Acorn 6502 Tube ROM 1.10", "size_bytes": 4096, "extension": "acorn-65c02-coprocessor"}, ...]}`. `bundled_image_kinds`: each kind with its `display_name`, what a user calls one, a noun to fit a sentence or, with an "s", a heading: `[{"kind": "hard-disc", "display_name": "hard disc"}, {"kind": "rom", "display_name": "ROM"}]`; every kind a parameter's `bundled` names is among them |
+| `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `description`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `catalogue`: every extension that can attach to one of those points, and on a model with Econet every transport, each exactly as `describe-extension <name> --json` gives it (`name`, `display_name`, `short_name`, `description`, `cli_name`, `kind`, `source`, `attaches_to`, `provides`, `parameters`, `roms`). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, each with `image`, `display_name`, `size_bytes` and `extension` (the extension it belongs to, or `null` for any), e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "display_name": "Acorn Level 3 File Server 1.26", "size_bytes": 10002432, "extension": null}], "rom": [{"image": "acorn-tube-6502_1_10.rom", "display_name": "Acorn 6502 Tube ROM 1.10", "size_bytes": 4096, "extension": "acorn-65c02-coprocessor"}, ...]}`. `bundled_image_kinds`: each kind with its `display_name`, what a user calls one, a noun to fit a sentence or, with an "s", a heading: `[{"kind": "hard-disc", "display_name": "hard disc"}, {"kind": "rom", "display_name": "ROM"}]`; every kind a parameter's `bundled` names is among them |
 
 So one call gives a front-end everything it shows about extensions: what each
 one is called and does, in a sentence a user understands, and what it takes.
@@ -662,6 +663,43 @@ A bundled parameter's `default` is a bare name, so the image it names, and its
 `display_name`, are in `bundled_images` (a coprocessor's `rom` defaults to the
 ROM it ships). The controller and image-format catalogues come from
 `list-fdcs` and `list-disc-formats`.
+
+## Facets
+
+A preset catalogue filters presets by facets, and the server owns them, so a
+client filters without reading preset content. Every `list-presets --json` row
+(with `--all-models` too) carries `facets`, an object keyed by facet key: a
+string for an exclusive facet, an array of strings for a set facet.
+
+```json
+{"model": "Model B", "coprocessor": "65C02", "disc_controller": "1770", "network": "AUN",
+ "storage": ["Floppy", "Hard disc", "Cassette"], "peripherals": ["Real-time clock", "SCSI adapter"]}
+```
+
+`describe-facets` gives the facets in display order, each with its `key`,
+`label` and `kind`, one JSON line each under `--json` or `--format jsonl`
+(and a table or TSV under the other formats). Clients take the values from the
+rows.
+
+| `key` | `label` | `kind` | Value |
+|-------|---------|--------|-------|
+| `model` | Model | exclusive | The model's family: `Model B` (the Model B and every board fitted to it), `Model B+` (64K and 128K), `Master 128` |
+| `coprocessor` | Coprocessor | exclusive | The fitted extension that attaches to a Tube (`tube` or `internal-tube`), by its manifest's `short_name` (`65C02`, `65C102`), else `None` |
+| `disc_controller` | Disc controller | exclusive | The model's built-in controller, else the one in the preset's FDC socket, by its short name (`1770`, `8271`), else `None` |
+| `network` | Network | exclusive | The Econet transport, by its manifest's name (`AUN`, `Piconet`), else `None` |
+| `storage` | Storage | set | `Floppy` when there is a disc controller; the medium each fitted extension whose manifest has a `storage` gives (`Hard disc`, from `scsi-hard-disc`); `Cassette` when the model has a cassette interface (every model today) |
+| `peripherals` | Peripherals | set | Every other fitted extension by its manifest's `short_name` (`Music 5000`, `Serial (IP232)`, `Real-time clock`, `SCSI adapter`), in preset order: not a coprocessor, an Econet transport or a storage medium, which the other facets own |
+
+The facets are derived from the preset as loaded (the loader `resolve-preset`
+uses), the model's entry in the server's model list and the extensions'
+manifests, never from the preset's text. A preset naming no model takes the
+listing executable's. The model's family, its built-in controller and its
+cassette interface are on that entry, so one executable derives every model's
+facets; `describe-preset-schema`'s `storage.builtin` reads the same entry, and
+the build checks it against each model's hardware. A manifest's `short_name`
+is the extension's name in the facets; one without a `short_name` is named by
+its `display_name`. An extension this install does not have is listed among
+the peripherals by its name.
 
 ## Not in a preset
 

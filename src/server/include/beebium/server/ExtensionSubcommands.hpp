@@ -339,6 +339,7 @@ inline nlohmann::ordered_json extension_manifest_json(const beebium::ExtensionMa
     return {
         {"name", m.name},
         {"display_name", m.display_name},
+        {"short_name", m.facet_name()},
         {"description", m.description},
         {"cli_name", std::string(m.effective_cli_name())},
         {"kind", m.extension_kind},
