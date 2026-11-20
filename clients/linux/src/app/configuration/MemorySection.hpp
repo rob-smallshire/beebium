@@ -17,11 +17,13 @@
 #include "preset/SidewaysDraft.hpp"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 class QComboBox;
 class QLabel;
 class QMenu;
+class QPushButton;
 class QToolButton;
 class QVBoxLayout;
 
@@ -30,7 +32,9 @@ namespace beebium::linux_client {
 class DiagnosticLine;
 
 // The configuration editor's Memory section (client specification 5.2,
-// 11), as the macOS client's: the sideways sockets highest priority first,
+// 5.8, 11), as the macOS client's: the MOS ROM first, a name found on the
+// ROM search path or a file chosen as a sideways image is, with Use Default
+// returning to the preset's; then the sideways sockets highest priority first,
 // each with its image's title, its slots and the ROM's roles, a kind, a
 // padlock where the socket's RAM can be write-protected, and a menu.
 class MemorySection : public ConfigurationSection {
@@ -40,7 +44,10 @@ public:
     explicit MemorySection(NewMachineDialog& dialog);
 
     SidebarMode mode() const override { return SidebarMode::memory; }
-    bool changed() const override { return dialog_.draft().changed("/sideways_bank"); }
+    // The MOS ROM and the sideways banks.
+    bool changed() const override {
+        return dialog_.draft().changed("/mos_image_uri") || dialog_.draft().changed("/sideways_bank");
+    }
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
 
@@ -53,6 +60,10 @@ public:
     // The row's menu, as its menu button opens it; the caller owns it.
     QMenu* row_menu(int row);
     QLabel* aliasing_note() const { return aliasing_; }
+    QLabel* mos_title() const { return mos_title_; }
+    QLabel* mos_caption() const { return mos_caption_; }
+    QPushButton* mos_browse() const { return mos_browse_; }
+    QPushButton* mos_default() const { return mos_default_; }
 
 private:
     struct Row {
@@ -69,9 +80,22 @@ private:
     void describe();
     void set(int row, const SocketContent& content);
     void browse(int row);
+    void show_mos();
+    void browse_mos();
+    void set_mos(const std::string& reference);
+    // The model's MOS, as the schema gives it; empty without one.
+    std::string default_mos() const;
 
     NewMachineDialog& dialog_;
     std::unique_ptr<SidewaysDraft> sideways_;
+    QWidget* mos_;
+    QLabel* mos_heading_;
+    QLabel* mos_title_;
+    QLabel* mos_caption_;
+    QPushButton* mos_browse_;
+    QPushButton* mos_default_;
+    DiagnosticLine* mos_diagnostic_;
+    QWidget* mos_rule_;
     QLabel* heading_;
     QLabel* aliasing_;
     QVBoxLayout* rows_layout_;

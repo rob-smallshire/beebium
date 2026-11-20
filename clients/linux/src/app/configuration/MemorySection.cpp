@@ -20,14 +20,19 @@
 #include <QComboBox>
 #include <QDir>
 #include <QFileInfo>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QLabel>
 #include <QMenu>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QToolButton>
 #include <QVBoxLayout>
 
 namespace beebium::linux_client {
+
+using nlohmann::ordered_json;
 
 namespace {
 
@@ -63,6 +68,36 @@ QString image_filepath(const SocketContent& content) {
 MemorySection::MemorySection(NewMachineDialog& dialog) : dialog_(dialog) {
     setObjectName(QStringLiteral("memorySection"));
     auto* layout = new QVBoxLayout(this);
+    // The MOS ROM first, as the memory map has the OS over the sideways
+    // banks and the running machine's Memory mode shows it (5.8, 11).
+    mos_ = new QWidget(this);
+    auto* mos_layout = new QVBoxLayout(mos_);
+    mos_layout->setContentsMargins(0, 0, 0, 8);
+    mos_heading_ = section_heading(QString(), mos_);
+    mos_layout->addWidget(mos_heading_);
+    auto* mos_line = new QHBoxLayout;
+    auto* mos_text = new QVBoxLayout;
+    mos_title_ = new QLabel(mos_);
+    mos_title_->setObjectName(QStringLiteral("mosImage"));
+    mos_caption_ = section_caption(mos_);
+    mos_text->addWidget(mos_title_);
+    mos_text->addWidget(mos_caption_);
+    mos_line->addLayout(mos_text, 1);
+    mos_browse_ = new QPushButton(tr("Browse..."), mos_);
+    mos_browse_->setObjectName(QStringLiteral("mosBrowse"));
+    mos_line->addWidget(mos_browse_);
+    mos_default_ = new QPushButton(tr("Use Default"), mos_);
+    mos_default_->setObjectName(QStringLiteral("mosDefault"));
+    mos_line->addWidget(mos_default_);
+    mos_layout->addLayout(mos_line);
+    mos_diagnostic_ = new DiagnosticLine(mos_);
+    mos_layout->addWidget(mos_diagnostic_);
+    layout->addWidget(mos_);
+    auto* rule = new QFrame(this);
+    rule->setFrameShape(QFrame::HLine);
+    rule->setFrameShadow(QFrame::Sunken);
+    mos_rule_ = rule;
+    layout->addWidget(rule);
     heading_ = section_heading(QString(), this);
     layout->addWidget(heading_);
     aliasing_ = section_caption(this);
@@ -75,6 +110,16 @@ MemorySection::MemorySection(NewMachineDialog& dialog) : dialog_(dialog) {
     layout->addStretch(1);
     connect(&dialog_, &NewMachineDialog::rom_described, this, [this] { describe(); });
     connect(&dialog_, &NewMachineDialog::draft_rederived, this, [this] { describe(); });
+    connect(mos_browse_, &QPushButton::clicked, this, [this] { browse_mos(); });
+    // Use Default returns to the preset's MOS, as resolved (5.8).
+    connect(mos_default_, &QPushButton::clicked, this, [this] {
+        if (!dialog_.draft().changed("/mos_image_uri")) {
+            return;
+        }
+        dialog_.draft().revert("/mos_image_uri");
+        show_mos();
+        Q_EMIT edited();
+    });
 }
 
 void MemorySection::reload() {
@@ -82,6 +127,7 @@ void MemorySection::reload() {
     heading_->setText(schema ? QString::fromStdString(schema->section_label("sideways_bank"))
                              : QString());
     aliasing_->setVisible(schema && schema->has_aliasing());
+    show_mos();
     sideways_ = std::make_unique<SidewaysDraft>(
         dialog_.draft(), schema ? schema->sockets() : std::vector<SchemaSocket>{});
 
@@ -231,6 +277,71 @@ void MemorySection::describe() {
     }
 }
 
+std::string MemorySection::default_mos() const {
+    const auto& schema = dialog_.schema();
+    const ordered_json* section = schema ? schema->section("mos_image_uri") : nullptr;
+    return section ? section->value("default", std::string()) : std::string();
+}
+
+void MemorySection::show_mos() {
+    const auto& schema = dialog_.schema();
+    const bool shown = schema && schema->section("mos_image_uri");
+    mos_->setVisible(shown);
+    mos_rule_->setVisible(shown);
+    if (!shown) {
+        return;
+    }
+    mos_heading_->setText(QString::fromStdString(schema->section_label("mos_image_uri")));
+    const auto value = dialog_.draft().get("/mos_image_uri");
+    const std::string reference = value && value->is_string() ? value->get<std::string>() : std::string();
+    const std::string model_default = default_mos();
+    // The server reads the MOS as a name on the ROM search path or a path.
+    const QString path = QDir::isAbsolutePath(QString::fromStdString(reference))
+                             ? QString::fromStdString(reference)
+                             : QString();
+    if (reference.empty()) {
+        mos_title_->setText(tr("The model's MOS"));
+        mos_caption_->setText(QString::fromStdString(model_default));
+    } else if (!path.isEmpty()) {
+        mos_title_->setText(QFileInfo(path).fileName());
+        mos_caption_->setText(path);
+    } else {
+        mos_title_->setText(QString::fromStdString(reference));
+        mos_caption_->setText(reference == model_default ? tr("The model's MOS, from the ROM search path")
+                                                         : tr("From the ROM search path"));
+    }
+    mos_default_->setEnabled(dialog_.draft().changed("/mos_image_uri"));
+    const auto& preset_mos = dialog_.draft().baseline().value("mos_image_uri", ordered_json());
+    mos_default_->setToolTip(preset_mos.is_string() ? QString::fromStdString(preset_mos.get<std::string>())
+                                                    : QString());
+}
+
+void MemorySection::browse_mos() {
+    FormBrowse request;
+    request.key = "mos-image";
+    request.chooser = FormBrowse::Chooser::open_file;
+    request.label = dialog_.schema() ? dialog_.schema()->section_label("mos_image_uri") : "MOS ROM";
+    const auto value = dialog_.draft().get("/mos_image_uri");
+    if (value && value->is_string() && QDir::isAbsolutePath(QString::fromStdString(value->get<std::string>()))) {
+        request.current = value->get<std::string>();
+    }
+    const auto path = dialog_.choose(request);
+    if (!path || path->isEmpty()) {
+        return;
+    }
+    // A path, as a sideways image's is: the server reads either.
+    set_mos(QFileInfo(*path).absoluteFilePath().toStdString());
+}
+
+void MemorySection::set_mos(const std::string& reference) {
+    if (reference.empty() || dialog_.draft().get("/mos_image_uri") == ordered_json(reference)) {
+        return;
+    }
+    dialog_.draft().set("/mos_image_uri", reference);
+    show_mos();
+    Q_EMIT edited();
+}
+
 QMenu* MemorySection::row_menu(int number) {
     const std::size_t i = static_cast<std::size_t>(number);
     const SchemaSocket& socket = sideways_->sockets()[i];
@@ -351,6 +462,7 @@ void MemorySection::set_diagnostics(const std::vector<PresetDiagnostic>& diagnos
         }
     }
     diagnostic_->show_for(unplaced, "/sideways_bank");
+    mos_diagnostic_->show_for(diagnostics, "/mos_image_uri");
 }
 
 }  // namespace beebium::linux_client
