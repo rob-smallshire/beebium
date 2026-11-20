@@ -322,15 +322,34 @@ MemorySidebar::MemorySidebar(SessionSideways& sideways, MemoryRow::Shares shares
     layout->setContentsMargins(16, 8, 12, 8);
     layout->setSpacing(4);
 
+    const auto make_header = [content](const QString& text) {
+        auto* header = new QLabel(text.toUpper(), content);
+        make_secondary(header, 0.85);
+        QFont bold = header->font();
+        bold.setWeight(QFont::DemiBold);
+        header->setFont(bold);
+        return header;
+    };
+    // The OS ROM: its title, and beneath it its name on the ROM search path
+    // or its file's name; the whole path is its tooltip, as a socket's is.
+    os_header_ = make_header(tr("OS"));
+    layout->addWidget(os_header_);
+    os_row_ = new QWidget(content);
+    auto* os_layout = new QVBoxLayout(os_row_);
+    os_layout->setContentsMargins(PRIORITY_WIDTH + 6, 4, 0, 8);
+    os_layout->setSpacing(0);
+    os_title_ = new QLabel(os_row_);
+    os_layout->addWidget(os_title_);
+    os_name_ = new QLabel(os_row_);
+    make_secondary(os_name_, 0.85);
+    os_layout->addWidget(os_name_);
+    layout->addWidget(os_row_);
+
     status_ = new QLabel(content);
     status_->setWordWrap(true);
     make_secondary(status_, 0.9);
     layout->addWidget(status_);
-    header_ = new QLabel(tr("Sideways").toUpper(), content);
-    make_secondary(header_, 0.85);
-    QFont bold = header_->font();
-    bold.setWeight(QFont::DemiBold);
-    header_->setFont(bold);
+    header_ = make_header(tr("Sideways"));
     layout->addWidget(header_);
     rows_box_ = new QWidget(content);
     rows_layout_ = new QVBoxLayout(rows_box_);
@@ -365,6 +384,16 @@ void MemorySidebar::rebuild() {
             widget->deleteLater();
         }
         delete item;
+    }
+    const auto& os = sideways_.os_rom();
+    os_header_->setVisible(os.has_value());
+    os_row_->setVisible(os.has_value());
+    if (os) {
+        const QString path = QString::fromStdString(os->image_filepath);
+        os_title_->setText(QString::fromStdString(os->title));
+        os_name_->setText(os->rom_name.empty() ? QFileInfo(path).fileName()
+                                               : QString::fromStdString(os->rom_name));
+        os_row_->setToolTip(path);
     }
     const SidewaysTopology& topology = sideways_.topology();
     if (!sideways_.loaded()) {

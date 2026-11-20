@@ -259,6 +259,76 @@ TEST_CASE("The row's menu has Write-Protect and Hide where a switch covers it",
     CHECK_FALSE(memory.row(2)->actionable());
 }
 
+namespace {
+
+beebium::GetOsRomResponse os_rom(const char* image_uri, const char* rom_name, const char* title) {
+    beebium::GetOsRomResponse os;
+    os.set_image_uri(image_uri);
+    os.set_rom_name(rom_name);
+    os.set_size_bytes(16384);
+    os.set_title(title);
+    return os;
+}
+
+}  // namespace
+
+TEST_CASE("The OS section above the sideways list shows the OS ROM's title and name",
+          "[memory][mode][os]") {
+    Fixture fixture;
+    fixture.script([&](beebium::GetSlotStatusResponse& status) {
+        auto* basic = fixture.add_socket(status, {15}, beebium::SIDEWAYS_SLOT_TYPE_ROM, "IC 15");
+        basic->set_populated(true);
+        basic->mutable_rom_header()->set_recognised(true);
+        basic->mutable_rom_header()->set_title("BASIC");
+    });
+    {
+        std::lock_guard lock(fixture.server.sideways.status_mutex);
+        fixture.server.sideways.os_rom =
+            os_rom("/usr/share/beebium/roms/acorn-mos_3_20.rom", "acorn-mos_3_20", "Acorn MOS 3.20");
+    }
+    MemorySidebar memory(fixture.sideways);
+    memory.resize(Sidebar::WIDTH, 500);
+    memory.show();
+    REQUIRE(wait_until([&] { return memory.row_count() == 1 && memory.os_row()->isVisibleTo(&memory); }));
+    const QStringList texts = visible_texts(memory);
+    REQUIRE(texts.size() >= 4);
+    CHECK(texts.mid(0, 4) == QStringList{QStringLiteral("OS"), QStringLiteral("Acorn MOS 3.20"),
+                                         QStringLiteral("acorn-mos_3_20"), QStringLiteral("SIDEWAYS")});
+    CHECK(memory.os_row()->toolTip() == QStringLiteral("/usr/share/beebium/roms/acorn-mos_3_20.rom"));
+    // Read-only: nothing to press.
+    CHECK(memory.os_row()->findChildren<QToolButton*>().isEmpty());
+}
+
+TEST_CASE("An OS ROM given by path shows its file's name beneath the title", "[memory][mode][os]") {
+    Fixture fixture;
+    {
+        std::lock_guard lock(fixture.server.sideways.status_mutex);
+        fixture.server.sideways.os_rom = os_rom("/home/me/roms/my-mos.rom", "", "my-mos");
+    }
+    MemorySidebar memory(fixture.sideways);
+    memory.show();
+    REQUIRE(wait_until([&] { return memory.os_row()->isVisibleTo(&memory); }));
+    const QStringList texts = visible_texts(memory);
+    CHECK(texts.contains(QStringLiteral("my-mos")));
+    CHECK(texts.contains(QStringLiteral("my-mos.rom")));
+    // No sideways memory, but still an OS.
+    CHECK(texts.contains(QStringLiteral("This machine has no sideways memory.")));
+    CHECK(memory.os_row()->toolTip() == QStringLiteral("/home/me/roms/my-mos.rom"));
+}
+
+TEST_CASE("Without an OS ROM from the server there is no OS section", "[memory][mode][os]") {
+    Fixture fixture;
+    fixture.script([&](beebium::GetSlotStatusResponse& status) {
+        fixture.add_socket(status, {15}, beebium::SIDEWAYS_SLOT_TYPE_EMPTY, "IC 15");
+    });
+    MemorySidebar memory(fixture.sideways);
+    memory.show();
+    REQUIRE(wait_until([&] { return memory.row_count() == 1 && fixture.server.sideways.os_rom_requests == 1; }));
+    wait_until([] { return false; }, std::chrono::milliseconds(100));
+    CHECK_FALSE(memory.os_row()->isVisibleTo(&memory));
+    CHECK_FALSE(visible_texts(memory).contains(QStringLiteral("OS")));
+}
+
 TEST_CASE("A row's menu copies its image's path and opens its folder where the file is here",
           "[memory][mode][reveal]") {
     Fixture fixture;

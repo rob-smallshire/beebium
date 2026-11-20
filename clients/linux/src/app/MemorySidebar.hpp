@@ -73,9 +73,9 @@ private:
     QToolButton* actions_;
 };
 
-// The Memory mode (client specification 11, 13.1): the machine's sideways
-// sockets, highest boot priority first, read-only but for the protection
-// switches. It watches the sideways memory while it shows.
+// The Memory mode (client specification 11, 13.1): the machine's OS ROM,
+// then its sideways sockets, highest boot priority first, read-only but
+// for the protection switches. It watches the sideways memory while it shows.
 class MemorySidebar : public QWidget {
     Q_OBJECT
 
@@ -85,6 +85,8 @@ public:
 
     int row_count() const { return static_cast<int>(rows_.size()); }
     MemoryRow* row(int index) const { return rows_.at(static_cast<std::size_t>(index)); }
+    // The OS ROM's read-only row, shown once the server has said it.
+    QWidget* os_row() const { return os_row_; }
 
 protected:
     void showEvent(QShowEvent* event) override;
@@ -96,6 +98,10 @@ private:
     SessionSideways& sideways_;
     MemoryRow::Shares shares_;
     QLabel* status_;
+    QLabel* os_header_;
+    QWidget* os_row_;
+    QLabel* os_title_;
+    QLabel* os_name_;
     QLabel* header_;
     QWidget* rows_box_;
     QVBoxLayout* rows_layout_;
