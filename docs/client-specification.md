@@ -2275,14 +2275,22 @@ A `*SRLOAD` into sideways RAM on a running machine updates the socket's title li
 because the client opts into header-change monitoring on the event stream.
 
 The OS ROM (Core). Above the sideways sockets the client shows the machine's fitted
-MOS (operating-system) ROM, as an "OS" section with one read-only row: the server's
-title ("Acorn MOS 3.20"), and beneath it the bare ROM name when the server found it on
-its search path, else the resolved image's file name. The OS ROM is fixed for the run,
-so it is read once (`GetOsRom`), not subscribed; a server that was never told its OS
-ROM answers FAILED_PRECONDITION, which no real start produces, and the section is then
-simply absent. The server's resolved image path is a path on the server, shown (as a
-tooltip) only when the server shares this filesystem, like every other path here. This
-matters most on the Master 128, whose sideways banks 9-15 are the MOS itself.
+MOS (operating-system) ROM, as an "OS" section with one read-only row laid out
+exactly like a sideways socket row: the server's title ("Acorn MOS 3.20") in the
+title column, the "ROM" status signifier (always ROM, kept for symmetry with the
+sockets below), and the same per-row actions the sockets offer (Copy Path, reveal),
+under the same gating. There is no slot number, and the ROM's bare name or image file
+name is not shown; the sockets manage without it and so does the OS. The OS ROM is
+fixed for the run, so it is read once (`GetOsRom`), not subscribed; a server that was
+never told its OS ROM answers FAILED_PRECONDITION, which no real start produces, and
+the section is then simply absent. The server's resolved image path is a path on the
+server, shown (as a tooltip on the row, never on its action button) only when the
+server shares this filesystem, like every other path here. This matters most on the
+Master 128, whose sideways banks 9-15 are the MOS itself.
+
+Row tooltips and action buttons. A tooltip on a row is welcome; a tooltip on the
+row's action (three-dots) button is not, because it appears as the menu opens and
+confuses the two. No client puts a tooltip on a menu button in this view.
 
 Rests on: `sideways.proto SidewaysService.GetSlotStatus` (topology, sockets, aliasing,
 ROM headers, protection groups), `SubscribeEvents` (with header-change monitoring),
@@ -2296,8 +2304,9 @@ Conformance:
   their aliased slot sets; protection engaged by group id and kind with a re-read
   after (no push event); a protection control reflects server state, not optimistic
   clicks; live slot-content reconfiguration requires the configure RPC and is
-  server-gated. Show the fitted OS ROM from `GetOsRom` (Core): its title and the ROM
-  name or image file name, read once, server path local-gated.
+  server-gated. Show the fitted OS ROM from `GetOsRom` (Core) as a row shaped like
+  a socket row: title, "ROM" signifier, the sockets' row actions; no slot number, no
+  ROM or file name; read once; server path local-gated; no tooltip on action buttons.
 - LATITUDE: a read-only live view; opting into header monitoring; priority-descending
   order; the protection control's presentation.
 - MACOS-ONLY: the ROM-browse panel, Copy Path and reveal, the list and menus.
