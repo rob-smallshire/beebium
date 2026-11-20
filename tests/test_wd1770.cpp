@@ -586,3 +586,142 @@ TEST_CASE("WD1770 nmi_pending combines DRQ and INTRQ", "[disc][wd1770p][nmi]") {
     rig.read_data();
     CHECK_FALSE(rig.fdc.drq());
 }
+
+// =============================================================================
+// Index: Type I status bit 1 is the drive's INDEX line
+// =============================================================================
+
+namespace {
+
+constexpr uint8_t STATUS_BIT_1 = 0x02;
+
+// What status bit 1 does over `ticks` 1 MHz ticks, read without side effects.
+struct Bit1Trace {
+    int rising_edges = 0;
+    int transitions = 0;
+    int ticks_set = 0;
+    int first_level = -1;
+    std::vector<int> rising_edge_ticks;
+};
+
+Bit1Trace trace_status_bit_1(WD1770& fdc, int ticks, bool stop_when_idle = false) {
+    Bit1Trace trace;
+    bool previous = (fdc.peek(0) & STATUS_BIT_1) != 0;
+    trace.first_level = previous ? 1 : 0;
+    for (int i = 0; i < ticks; ++i) {
+        fdc.tick();
+        bool level = (fdc.peek(0) & STATUS_BIT_1) != 0;
+        if (level) ++trace.ticks_set;
+        if (level != previous) {
+            ++trace.transitions;
+            if (level) {
+                ++trace.rising_edges;
+                trace.rising_edge_ticks.push_back(i);
+            }
+        }
+        previous = level;
+        if (stop_when_idle && !fdc.busy()) break;
+    }
+    return trace;
+}
+
+constexpr int REVOLUTION_TICKS = 200'000;  // 300 rpm at 1 MHz
+
+}  // namespace
+
+TEST_CASE("WD1770 Type I status bit 1 pulses once per revolution after a Restore",
+          "[disc][wd1770p][index]") {
+    TestRig rig;
+    rig.write_command(0x00);  // Restore
+    rig.run_until_complete();
+    REQUIRE_FALSE(rig.fdc.busy());
+
+    // A second's worth of ticks, well inside the motor's run-on.
+    auto trace = trace_status_bit_1(rig.fdc, 5 * REVOLUTION_TICKS);
+
+    CHECK(trace.rising_edges >= 4);
+    CHECK(trace.rising_edges <= 5);
+    for (size_t i = 1; i < trace.rising_edge_ticks.size(); ++i) {
+        int period = trace.rising_edge_ticks[i] - trace.rising_edge_ticks[i - 1];
+        CHECK(period >= REVOLUTION_TICKS - 64);
+        CHECK(period <= REVOLUTION_TICKS + 64);
+    }
+    // Asserted for about 4 ms of each 200 ms revolution.
+    CHECK(trace.ticks_set >= 4 * 3'500);
+    CHECK(trace.ticks_set <= 5 * 4'500);
+}
+
+TEST_CASE("WD1770 Type I status bit 1 pulses during a Seek", "[disc][wd1770p][index]") {
+    TestRig rig;
+    rig.write_data(79);
+    rig.write_command(0x13);  // Seek, 30 ms steps: about 2.4 s
+    auto trace = trace_status_bit_1(rig.fdc, 3'000'000, /*stop_when_idle=*/true);
+
+    CHECK_FALSE(rig.fdc.busy());
+    CHECK(rig.drive.current_track() == 79);
+    CHECK(trace.rising_edges >= 10);
+}
+
+TEST_CASE("WD1770 Type I status bit 1 is steady with no disc", "[disc][wd1770p][index]") {
+    WD1770 fdc;
+    DiscDrive drive;
+    fdc.set_spin_up_delay_enabled(false);
+    fdc.attach_drive(0, &drive);
+    fdc.set_drive(0);
+    fdc.write(0, 0x00);  // Restore: starts the motor
+    REQUIRE(drive.motor_on());
+
+    auto trace = trace_status_bit_1(fdc, 2 * REVOLUTION_TICKS);
+
+    // The sensor's light path is open: INDEX is asserted and never moves.
+    CHECK(trace.transitions == 0);
+    CHECK(trace.first_level == (drive.index_level() ? 1 : 0));
+    CHECK(trace.first_level == 1);
+}
+
+TEST_CASE("WD1770 Type I status bit 1 is frozen with the motor off", "[disc][wd1770p][index]") {
+    TestRig rig;
+    rig.write_command(0x00);  // Restore
+    rig.run_until_complete();
+    for (int i = 0; i < 2'500'000 && rig.drive.motor_on(); ++i) rig.fdc.tick();
+    REQUIRE_FALSE(rig.drive.motor_on());
+
+    auto trace = trace_status_bit_1(rig.fdc, 2 * REVOLUTION_TICKS);
+
+    CHECK(trace.transitions == 0);
+    CHECK(trace.first_level == (rig.drive.index_level() ? 1 : 0));
+}
+
+TEST_CASE("WD1770 Type II status bit 1 is DRQ, never the index",
+          "[disc][wd1770p][index]") {
+    TestRig rig;
+    rig.write_sector_reg(42);  // No such sector: searches for 5 revolutions, then RNF
+    rig.write_command(0x80);
+
+    bool index_seen_as_bit_1 = false;
+    for (int i = 0; i < 2'000'000 && rig.fdc.busy(); ++i) {
+        rig.fdc.tick();
+        if ((rig.fdc.peek(0) & STATUS_BIT_1) && !rig.fdc.drq()) index_seen_as_bit_1 = true;
+    }
+    REQUIRE_FALSE(rig.fdc.busy());
+    CHECK((rig.fdc.peek(0) & 0x10) != 0);  // Record not found
+    CHECK_FALSE(index_seen_as_bit_1);
+
+    // Idle after a Type II command the status is still Type II status.
+    auto after = trace_status_bit_1(rig.fdc, 2 * REVOLUTION_TICKS);
+    CHECK(after.ticks_set == 0);
+}
+
+TEST_CASE("WD1770 Force Interrupt with no command returns to Type I status",
+          "[disc][wd1770p][index]") {
+    TestRig rig;
+    rig.write_sector_reg(42);
+    rig.write_command(0x80);
+    rig.run_until_complete(2'000'000);
+    REQUIRE_FALSE(rig.fdc.busy());
+
+    rig.write_command(0xD0);  // Force Interrupt, nothing executing
+
+    auto trace = trace_status_bit_1(rig.fdc, 2 * REVOLUTION_TICKS);
+    CHECK(trace.rising_edges >= 1);
+}

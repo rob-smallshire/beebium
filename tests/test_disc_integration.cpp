@@ -97,8 +97,10 @@ std::vector<uint8_t> read_sector(ModelBPlus& machine, int sector_size = 256) {
     data.reserve(sector_size);
 
     for (int i = 0; i < sector_size; ++i) {
-        // Wait for DRQ
-        int timeout = 10000;
+        // Wait for DRQ. The first byte can be up to a revolution away (200 ms,
+        // 400,000 steps at 2 MHz): the disc turns while the motor runs, so
+        // where the sector lies depends on where it has turned to.
+        int timeout = (i == 0) ? 1'000'000 : 10000;
         while ((machine.read(WD1770_STATUS) & STATUS_DRQ) == 0 && timeout > 0) {
             machine.step();
             --timeout;

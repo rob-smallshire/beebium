@@ -43,7 +43,7 @@ public:
     // Status register bits
     static constexpr uint8_t STATUS_BUSY        = 0x01;
     static constexpr uint8_t STATUS_DRQ         = 0x02;  // Type II/III
-    static constexpr uint8_t STATUS_INDEX       = 0x02;  // Type I
+    static constexpr uint8_t STATUS_INDEX       = 0x02;  // Type I: the drive's INDEX line
     static constexpr uint8_t STATUS_TRACK0      = 0x04;  // Type I
     static constexpr uint8_t STATUS_LOST_DATA   = 0x04;  // Type II/III
     static constexpr uint8_t STATUS_CRC_ERROR   = 0x08;
@@ -91,12 +91,9 @@ public:
 
     uint8_t read(uint16_t offset) {
         switch (offset & 0x03) {
-            case 0: {
+            case 0:
                 intrq_ = false;
-                uint8_t result = status_;
-                if (drq_) result |= STATUS_DRQ;
-                return result;
-            }
+                return status_register();
             case 1: return track_;
             case 2: return sector_;
             case 3:
@@ -110,7 +107,7 @@ public:
     // INTRQ set and reading the data register leaves DRQ set.
     uint8_t peek(uint16_t offset) const {
         switch (offset & 0x03) {
-            case 0: return drq_ ? static_cast<uint8_t>(status_ | STATUS_DRQ) : status_;
+            case 0: return status_register();
             case 1: return track_;
             case 2: return sector_;
             default: return data_;
@@ -132,6 +129,7 @@ public:
 
     void tick() {
         write_back_.tick(drives_);
+        turn_disc_outside_transfers();
 
         // Motor spindown when idle
         if (!(status_ & STATUS_BUSY)) {
@@ -280,6 +278,8 @@ public:
         byte_delay_ = 0;
         byte_counter_ = 0;
         index_count_ = 0;
+        type_i_status_ = true;
+        rotation_ticks_ = 0;
         if (motor_on_) spin_down();
         idle_ticks_ = 0;
         spin_up_delay_ = 0;
@@ -461,6 +461,8 @@ private:
     void execute_command(uint8_t cmd) {
         // Force Interrupt (Type IV) can be issued at any time
         if ((cmd & 0xF0) == CMD_FORCE_INT) {
+            // With no command executing, the status becomes Type I status.
+            if (!(status_ & STATUS_BUSY)) type_i_status_ = true;
             status_ &= ~STATUS_BUSY;
             phase_ = Phase::Idle;
             drq_ = false;
@@ -486,6 +488,7 @@ private:
         selected_step_rate_ = step_rates[cmd & 0x03];
 
         uint8_t cmd_type = cmd & 0xE0;
+        type_i_status_ = (cmd & 0x80) == 0;
         if (cmd_type == 0x00) {
             if ((cmd & 0xF0) == CMD_SEEK) {
                 phase_ = Phase::Seek;
@@ -1185,6 +1188,56 @@ private:
     // Helpers
     // =========================================================================
 
+    // The status register as read. Bit 1 is DRQ in the status of a Type II or
+    // III command, and in Type I status (after a Type I command, a reset, or a
+    // Force Interrupt with nothing executing) the selected drive's INDEX line:
+    // asserted while the index hole is under the sensor, about 4 ms of each
+    // revolution, and steadily asserted by a drive with no disc.
+    uint8_t status_register() const {
+        uint8_t result = static_cast<uint8_t>(status_ & ~STATUS_INDEX);
+        if (type_i_status_) {
+            const DiscDrive* drive = drives_[selected_drive_];
+            if (drive && drive->index_level()) result |= STATUS_INDEX;
+        } else if (drq_) {
+            result |= STATUS_DRQ;
+        }
+        return result;
+    }
+
+    // The disc turns whenever the motor runs. A Type II or III command turns
+    // it itself, a byte at a time, as it reads or writes; at any other time
+    // (idle, a Type I command, the spin-up delay) it turns here, one FM byte
+    // cell every 64 us, so the index hole still passes the sensor.
+    void turn_disc_outside_transfers() {
+        if (!motor_on_ || command_turns_disc()) {
+            rotation_ticks_ = 0;
+            return;
+        }
+        if (++rotation_ticks_ < US_PER_FM_BYTE) return;
+        rotation_ticks_ = 0;
+        DiscDrive* drive = get_current_drive();
+        if (!drive || !drive->motor_on()) return;
+        // Finish a half-read MFM word, else move on a whole word.
+        if (drive->pulse_sub_position() != 0) {
+            drive->advance_head_half();
+        } else {
+            drive->advance_head();
+        }
+    }
+
+    bool command_turns_disc() const {
+        if (!(status_ & STATUS_BUSY) || spin_up_delay_ > 0) return false;
+        switch (phase_) {
+            case Phase::Idle:
+            case Phase::Restore:
+            case Phase::Seek:
+            case Phase::Step:
+                return false;
+            default:
+                return true;
+        }
+    }
+
     void complete_command() {
         status_ &= ~STATUS_BUSY;
         phase_ = Phase::Idle;
@@ -1269,6 +1322,13 @@ private:
 
     // Index pulse counting
     int index_count_ = 0;
+
+    // Whether the status register reads as Type I status (bit 1 the index)
+    // rather than Type II/III status (bit 1 DRQ).
+    bool type_i_status_ = true;
+
+    // Ticks towards the next FM byte cell while the disc turns outside a transfer.
+    int rotation_ticks_ = 0;
 
     // ID field reading state
     std::array<uint8_t, 6> id_field_buf_{};

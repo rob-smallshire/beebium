@@ -214,6 +214,8 @@ The meaning of status bits depends on command type:
 | 6 | WRITE_PROT | WRITE_PROT |
 | 7 | MOTOR_ON | MOTOR_ON |
 
+Type I status applies after a Type I command, a reset, or a Force Interrupt with nothing executing. In it, bit 1 is the selected drive's INDEX line (`DiscDrive::index_level()`): with a disc in and the motor running it is set for about 4 ms of each 200 ms revolution, since the disc turns whenever the motor runs, idle or not. A drive with no disc holds it set, because the sensor's light path is open, and with the motor off it is frozen, so in neither case is there an edge.
+
 #### Key Methods
 
 ```cpp
