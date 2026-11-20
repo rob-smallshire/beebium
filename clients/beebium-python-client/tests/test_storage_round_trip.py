@@ -32,6 +32,7 @@ went unnoticed that way for every ADFS floppy write.
 from __future__ import annotations
 
 import itertools
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -212,8 +213,22 @@ def _launch(row: Row, roms_dirpath: Path, server: Path | None, extra: list[str])
 _sentinel_numbers = itertools.count()
 
 
+def _at_prompt(bbc: Beebium) -> bool:
+    """Whether the guest is back at a bare prompt, waiting for a line."""
+    rows = [row.rstrip() for row in bbc.video.screen_text().text.splitlines() if row.strip()]
+    return bool(rows) and rows[-1] == ">"
+
+
 def _run_and_wait(bbc: Beebium, commands: str, label: str, timeout: float = TIMEOUT) -> None:
-    """Type `commands`, then a PRINT that shows a sentinel only once they are done.
+    """Type `commands` a line at a time, then a PRINT that shows a sentinel once they are done.
+
+    Each line is typed only when the guest is back at its prompt, as a person
+    would type. The type-ahead presses a key every 80 ms whatever the guest is
+    doing, and the MOS's keyboard buffer holds 31 characters and discards a
+    key that arrives when it is full, as the hardware does: typed all at once,
+    a line behind a command that keeps the guest from the buffer for longer
+    than 31 keys (a *SAVE on a 1770 DFS, which waits for each sector to come
+    round on a disc that keeps turning) loses keys.
 
     The typed PRINT line shows the sentinel split in two, so it matches only
     when the PRINT itself runs, after every command before it has returned.
@@ -222,7 +237,19 @@ def _run_and_wait(bbc: Beebium, commands: str, label: str, timeout: float = TIME
     """
     sentinel = f"{label}{next(_sentinel_numbers)}"
     half = len(label) // 2
-    bbc.keyboard.type(f'{commands}PRINT "{sentinel[:half]}";"{sentinel[half:]}"\r')
+    lines = [f"{line}\r" for line in commands.split("\r") if line]
+    for line in lines:
+        bbc.keyboard.type(line)
+        bbc.keyboard.wait_until_typing_complete()
+        deadline = time.monotonic() + timeout
+        while not _at_prompt(bbc):
+            if time.monotonic() > deadline:
+                pytest.fail(
+                    f"The guest did not come back to its prompt within {timeout} s after "
+                    f"{line!r}:\n{bbc.video.screen_text().text}"
+                )
+            time.sleep(0.05)
+    bbc.keyboard.type(f'PRINT "{sentinel[:half]}";"{sentinel[half:]}"\r')
     bbc.expect(sentinel, timeout=timeout)
 
 
