@@ -29,7 +29,13 @@ uv run python
 
 A server started by the macOS or Linux client listens on a port of its own and
 advertises itself over mDNS. `beebium.client.discovery.browse()` lists what it
-finds, with each machine's host and port:
+finds, with each machine's host and port. Discovery needs the `discovery`
+extra, which brings in `zeroconf`; quote the extra, since the brackets are a
+glob to zsh:
+
+```bash
+pip install 'beebium[discovery]'
+```
 
 ```python
 >>> from beebium.client.discovery import browse
