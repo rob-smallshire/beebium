@@ -144,6 +144,37 @@ final class MachineDraftTests: XCTestCase {
         XCTAssertEqual(slots[3].imageUri, "preload.rom")
     }
 
+    func testRoundTripsSidewaysMosMarker() throws {
+        // A Master bank 9-15 carries "source": "mos"; it must survive a round-trip
+        // (and be written back) so the server re-derives it from the MOS in force.
+        let json = """
+        {
+          "model": "master-128",
+          "mos_image_uri": "acorn-mos_3_20.rom",
+          "sideways_bank": {
+            "slots": [
+              { "slot": 15, "type": "rom", "image_uri": "acorn-terminal_1_20_mos_3_20.rom", "source": "mos" },
+              { "slot": 9, "type": "rom", "image_uri": "acorn-dfs_2_24.rom", "source": "mos" },
+              { "slot": 8, "type": "rom", "image_uri": "my-own.rom" }
+            ]
+          }
+        }
+        """
+        let draft = try assertRoundTrips(json, "sideways+mos-marker")
+        let slots = try XCTUnwrap(draft.sidewaysBank?.slots)
+        XCTAssertEqual(slots[0].source, "mos")
+        XCTAssertEqual(slots[1].source, "mos")
+        XCTAssertNil(slots[2].source, "a user-set bank carries no marker")
+
+        // The marker appears in the re-encoded preset the launch reads.
+        let object = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: draft.encoded()) as? [String: Any])
+        let encodedSlots = try XCTUnwrap(
+            (object["sideways_bank"] as? [String: Any])?["slots"] as? [[String: Any]])
+        XCTAssertEqual(encodedSlots.first { $0["slot"] as? Int == 15 }?["source"] as? String, "mos")
+        XCTAssertNil(encodedSlots.first { $0["slot"] as? Int == 8 }?["source"])
+    }
+
     func testRoundTripsMinimalPreset() throws {
         // Only a name; no model. The draft represents what is present.
         let draft = try assertRoundTrips(#"{ "name": "Minimal Preset" }"#, "minimal")

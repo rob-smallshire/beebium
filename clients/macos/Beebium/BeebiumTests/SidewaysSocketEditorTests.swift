@@ -157,6 +157,55 @@ final class SidewaysSocketEditorTests: XCTestCase {
         XCTAssertEqual(new, [Slot(slot: 12, type: "ram", writeProtected: nil)])
     }
 
+    // MARK: - MOS marker (Master 128 banks 9-15, "source": "mos")
+
+    func testMosMarkerIsReadAndWrittenBackUnchanged() {
+        // A marked bank reads as From the MOS and, written back untouched, keeps
+        // its marker so the server re-derives it from the MOS in force.
+        let editor = writeProtectBoard()
+        let original = [Slot(slot: 15, type: "rom",
+                             imageUri: "acorn-terminal_1_20_mos_3_20.rom", source: "mos")]
+        let row = editor.rows(currentSlots: original, originalSlots: original)
+            .first { $0.label == "S15" }!
+        XCTAssertTrue(row.content.isFromMos)
+
+        let written = editor.slots(settingSocket: socket(editor, "S15"),
+                                   to: row.content, in: original)
+        XCTAssertEqual(written, [Slot(slot: 15, type: "rom",
+                                      imageUri: "acorn-terminal_1_20_mos_3_20.rom",
+                                      source: "mos")])
+    }
+
+    func testChoosingAnImageDropsTheMosMarker() {
+        // What the Memory view does when the user picks their own image: source
+        // becomes nil, so the editor writes an unmarked entry the server honours.
+        let editor = writeProtectBoard()
+        let original = [Slot(slot: 15, type: "rom",
+                             imageUri: "acorn-terminal_1_20_mos_3_20.rom", source: "mos")]
+        var content = Content(slot: original[0])
+        content.image = "/tmp/custom.rom"
+        content.source = nil
+        let written = editor.slots(settingSocket: socket(editor, "S15"), to: content, in: original)
+        XCTAssertEqual(written, [Slot(slot: 15, type: "rom", imageUri: "/tmp/custom.rom")])
+        XCTAssertNil(written.first?.source)
+    }
+
+    func testReorderKeepsTheMosMarkerWithItsImage() {
+        // Reordering other rows must not strip a MOS bank's marker: it travels
+        // with the image it belongs to.
+        let editor = writeProtectBoard()  // S15, S14, S12 by priority
+        let original = [
+            Slot(slot: 15, type: "rom", imageUri: "a.rom", source: "mos"),
+            Slot(slot: 14, type: "rom", imageUri: "b.rom"),
+        ]
+        let moved = editor.slots(movingContentsFromOffsets: IndexSet(integer: 0), toOffset: 3,
+                                 currentSlots: original, originalSlots: original)
+        let rows = editor.rows(currentSlots: moved, originalSlots: original)
+        let landed = rows.first { $0.label == "S12" }!
+        XCTAssertEqual(landed.content.image, "a.rom")
+        XCTAssertTrue(landed.content.isFromMos, "the marker travels with its image")
+    }
+
     // MARK: - Reorder
 
     func testMovingContentsMovesImagesBetweenSockets() {

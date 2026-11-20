@@ -52,24 +52,35 @@ struct SidewaysSocketEditor {
         var kind: SocketKind
         var image: String?      // ROM image, or RAM pre-load image; nil for empty/blank RAM
         var writeProtected: Bool
+        /// The draft slot's `source` marker, carried verbatim so a MOS bank
+        /// (Master 128 banks 9-15, source "mos") writes back marked and the
+        /// server re-derives it. Dropped the moment the user picks another image.
+        var source: String?
 
         static let empty = Content(kind: .empty, image: nil, writeProtected: false)
 
-        init(kind: SocketKind, image: String? = nil, writeProtected: Bool = false) {
+        init(kind: SocketKind, image: String? = nil, writeProtected: Bool = false,
+             source: String? = nil) {
             self.kind = kind
             self.image = image
             self.writeProtected = writeProtected
+            self.source = source
         }
 
-        /// Build from a draft slot's type/image/write-protect.
+        /// Build from a draft slot's type/image/write-protect/source.
         init(slot: MachineDraft.SidewaysSlot) {
             switch slot.type {
-            case "rom": self.init(kind: .rom, image: slot.imageUri)
+            case "rom": self.init(kind: .rom, image: slot.imageUri, source: slot.source)
             case "ram": self.init(kind: .ram, image: slot.imageUri,
-                                  writeProtected: slot.writeProtected ?? false)
-            default:    self.init(kind: .empty, image: nil)
+                                  writeProtected: slot.writeProtected ?? false,
+                                  source: slot.source)
+            default:    self.init(kind: .empty, image: nil, source: slot.source)
             }
         }
+
+        /// Whether this content is a bank the server derives from the MOS (the
+        /// Master's 9-15), shown read-only as "From the MOS".
+        var isFromMos: Bool { source == "mos" }
 
         /// Human-readable summary for the row's contents (the kind is shown by
         /// the adjacent control, so this describes the image).
@@ -169,12 +180,15 @@ struct SidewaysSocketEditor {
             result.append(.init(slot: slotNumber, type: "empty"))
         case .rom:
             guard let image = content.image, !image.isEmpty else { break }
-            result.append(.init(slot: slotNumber, type: "rom", imageUri: image))
+            // The source marker rides along so an untouched MOS bank writes back
+            // marked; it is already nil once the user has chosen another image.
+            result.append(.init(slot: slotNumber, type: "rom", imageUri: image,
+                                source: content.source))
         case .ram:
             let writeProtected = (socket.supportsWriteProtect && content.writeProtected) ? true : nil
             result.append(.init(slot: slotNumber, type: "ram",
                                 imageUri: content.image?.isEmpty == true ? nil : content.image,
-                                writeProtected: writeProtected))
+                                writeProtected: writeProtected, source: content.source))
         }
         return result.sorted { $0.slot < $1.slot }
     }
@@ -191,8 +205,13 @@ struct SidewaysSocketEditor {
         struct Payload {
             var sourceKind: SocketKind
             var image: String?
+            /// The `source` marker travels with the image it belongs to, so a
+            /// reorder of other rows does not strip a MOS bank's marker.
+            var marker: String?
         }
-        var payloads = orderedRows.map { Payload(sourceKind: $0.content.kind, image: $0.content.image) }
+        var payloads = orderedRows.map {
+            Payload(sourceKind: $0.content.kind, image: $0.content.image, marker: $0.content.source)
+        }
         payloads.move(fromOffsets: source, toOffset: destination)
 
         var result = currentSlots
@@ -229,7 +248,8 @@ struct SidewaysSocketEditor {
 
             // Write-protect stays with the socket (cleared if it is no longer RAM).
             let keepWriteProtect = (newKind == .ram) ? row.content.writeProtected : false
-            let newContent = Content(kind: newKind, image: payload.image, writeProtected: keepWriteProtect)
+            let newContent = Content(kind: newKind, image: payload.image,
+                                     writeProtected: keepWriteProtect, source: payload.marker)
             result = slots(settingSocket: socket, to: newContent, in: result)
         }
         return result

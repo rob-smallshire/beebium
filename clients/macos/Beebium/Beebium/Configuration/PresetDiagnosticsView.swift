@@ -79,6 +79,13 @@ extension Array where Element == PresetManager.PresetDiagnostic {
     func atPath(_ path: String) -> [Element] { filter { $0.path == path } }
     /// Diagnostics whose path begins with `prefix`.
     func withPrefix(_ prefix: String) -> [Element] { filter { $0.path.hasPrefix(prefix) } }
+    /// Diagnostics on the sideways-slots-array entry at `index`, from a path like
+    /// "/sideways_bank/slots/6" (the array index, not the slot number). Lets a
+    /// socket row show the server's own problem for its slot -- e.g. a Master
+    /// bank 9-15 image that does not match the MOS.
+    func forSidewaysSlot(index: Int) -> [Element] {
+        filter { $0.path == "/sideways_bank/slots/\(index)" }
+    }
     /// Diagnostics on the extensions-array instance at `index`.
     func forExtension(index: Int) -> [Element] {
         filter { PresetDiagnosticLocation.extensionIndex(path: $0.path) == index }

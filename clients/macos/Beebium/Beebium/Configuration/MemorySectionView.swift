@@ -29,6 +29,9 @@ struct MemorySectionView: View {
     let schema: SidewaysSchemaSection?
     /// Resolves a ROM image to its header (describe-rom), supplied by the host.
     let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
+    /// resolve-preset diagnostics, so a socket row shows the server's own problem
+    /// for its slot (e.g. a Master bank 9-15 image that does not match the MOS).
+    var diagnostics: [PresetManager.PresetDiagnostic] = []
 
     @StateObject private var titles = RomTitleCache()
 
@@ -159,8 +162,23 @@ struct MemorySectionView: View {
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .padding(.leading, 82)
+
+            let rowDiagnostics = diagnostics(for: row)
+            if !rowDiagnostics.isEmpty {
+                DiagnosticLabels(diagnostics: rowDiagnostics)
+                    .padding(.leading, 82)
+            }
         }
         .padding(.vertical, 6)
+    }
+
+    /// The server's diagnostics for this socket's slot. resolve-preset keys a
+    /// slot diagnostic by its index in the draft's slots array, so map the
+    /// socket to that index first.
+    private func diagnostics(for row: SidewaysSocketEditor.Row) -> [PresetManager.PresetDiagnostic] {
+        guard let index = currentSlots.firstIndex(where: { row.socket.slots.contains($0.slot) })
+        else { return [] }
+        return diagnostics.forSidewaysSlot(index: index)
     }
 
     private func kindPicker(_ row: SidewaysSocketEditor.Row) -> some View {
@@ -241,11 +259,17 @@ struct MemorySectionView: View {
 
     private func captionText(for row: SidewaysSocketEditor.Row) -> String {
         let slotsLabel = row.slots.count > 1 ? "Slots" : "Slot"
-        let base = "\(slotsLabel) \(row.slotsLabel) · priority \(row.priority)"
+        var segments = ["\(slotsLabel) \(row.slotsLabel) · priority \(row.priority)"]
         let kinds = titles.kinds(for: row.content)
-        if kinds.isEmpty { return base }
-        let labelled = kinds.map { $0 == "romfs" ? "ROMFS" : $0 }
-        return "\(base) · \(labelled.joined(separator: " · "))"
+        if !kinds.isEmpty {
+            segments.append(kinds.map { $0 == "romfs" ? "ROMFS" : $0 }.joined(separator: " · "))
+        }
+        // A MOS bank (Master 128 banks 9-15): the server derives it from the MOS,
+        // so say so. Picking another image here drops the marker.
+        if row.content.isFromMos {
+            segments.append("From the MOS")
+        }
+        return segments.joined(separator: " · ")
     }
 
     // MARK: - Edits (write through to the draft)
@@ -266,6 +290,9 @@ struct MemorySectionView: View {
     private func changeKind(of row: SidewaysSocketEditor.Row, to newKind: SocketKind) {
         var content = row.content
         content.kind = newKind
+        // Changing the kind is an explicit override, so this is no longer a
+        // MOS-derived bank. (The browse path below drops it too.)
+        content.source = nil
         switch newKind {
         case .empty:
             content.image = nil
@@ -310,6 +337,10 @@ struct MemorySectionView: View {
         // socket keeps its kind and treats the image as a preload.
         if content.kind == .empty { content.kind = .rom }
         content.image = url.path
+        // The user has chosen their own image, so this is no longer a MOS-derived
+        // bank: drop the marker (the server will then honour the explicit image,
+        // and flag it if it does not match the MOS).
+        content.source = nil
         setContent(content, for: row)
         Task { await titles.resolve(url.path) }
     }

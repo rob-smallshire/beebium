@@ -241,7 +241,8 @@ struct ConfigurationEditor: View {
                 draft: $draft,
                 originalDraft: originalDraft,
                 schema: memorySchema,
-                romResolver: romResolver))
+                romResolver: romResolver,
+                diagnostics: diagnostics))
         case .peripherals:
             if let extensionsSchema = extensionsSchema {
                 return AnyView(PeripheralsSectionView(

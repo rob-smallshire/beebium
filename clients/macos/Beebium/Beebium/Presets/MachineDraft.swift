@@ -168,14 +168,22 @@ struct MachineDraft: Equatable {
         var imageUri: String?
         /// Power-on write-protect position for a sideways-RAM slot (RAM only).
         var writeProtected: Bool?
+        /// Where the entry comes from: "mos" marks a Master 128 bank (9-15) that
+        /// is part of the MOS chip, so the server re-derives its image from the
+        /// MOS in force (the stored image_uri is then informational). Absent on an
+        /// entry the user set explicitly. Carried verbatim, including on launch,
+        /// so the re-derivation happens; dropped when the user picks another image.
+        var source: String?
         var extra: [String: JSONValue]
 
         init(slot: Int, type: String, imageUri: String? = nil,
-             writeProtected: Bool? = nil, extra: [String: JSONValue] = [:]) {
+             writeProtected: Bool? = nil, source: String? = nil,
+             extra: [String: JSONValue] = [:]) {
             self.slot = slot
             self.type = type
             self.imageUri = imageUri
             self.writeProtected = writeProtected
+            self.source = source
             self.extra = extra
         }
     }
@@ -399,7 +407,7 @@ extension MachineDraft.SidewaysBank: Codable {
 }
 
 extension MachineDraft.SidewaysSlot: Codable {
-    private static let knownKeys: Set<String> = ["slot", "type", "image_uri", "write_protected"]
+    private static let knownKeys: Set<String> = ["slot", "type", "image_uri", "write_protected", "source"]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: JSONCodingKey.self)
@@ -407,6 +415,7 @@ extension MachineDraft.SidewaysSlot: Codable {
         type = try c.decode(String.self, forKey: "type")
         imageUri = try c.decodeIfPresent(String.self, forKey: "image_uri")
         writeProtected = try c.decodeIfPresent(Bool.self, forKey: "write_protected")
+        source = try c.decodeIfPresent(String.self, forKey: "source")
         extra = try c.decodeExtra(excluding: Self.knownKeys)
     }
 
@@ -416,6 +425,7 @@ extension MachineDraft.SidewaysSlot: Codable {
         try c.encode(type, forKey: "type")
         try c.encodeIfPresent(imageUri, forKey: "image_uri")
         try c.encodeIfPresent(writeProtected, forKey: "write_protected")
+        try c.encodeIfPresent(source, forKey: "source")
         try c.encodeExtra(extra)
     }
 }

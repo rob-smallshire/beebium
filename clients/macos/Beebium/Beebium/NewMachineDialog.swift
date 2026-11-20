@@ -125,6 +125,29 @@ struct NewMachineDialog: View {
         .onChange(of: draft) { _ in
             scheduleValidation()
         }
+        .onChange(of: draft.mosImageUri) { _ in
+            reresolveSidewaysForMosChange()
+        }
+    }
+
+    /// After the MOS changes, re-resolve the draft so the model's MOS-derived
+    /// sideways banks (the Master 128's 9-15, marked `"source": "mos"`) show the
+    /// new MOS's set before launch. Only the sideways banks are adopted, so the
+    /// user's MOS choice and every other edit stay; a stale result (the MOS
+    /// changed again meanwhile) is dropped. The marked entries would be
+    /// re-derived at launch regardless, since their marker travels in the preset;
+    /// this is so the rows are right beforehand.
+    private func reresolveSidewaysForMosChange() {
+        guard let preset = selectedPreset else { return }
+        let executablePath = preset.coreExecutablePath
+        let current = draft
+        Task { @MainActor in
+            let (resolved, _) = await presetManager.resolveDraft(current, executablePath: executablePath)
+            guard let resolved,
+                  draft.mosImageUri == current.mosImageUri,
+                  draft.sidewaysBank != resolved.sidewaysBank else { return }
+            draft.sidewaysBank = resolved.sidewaysBank
+        }
     }
 
     /// Whether an error diagnostic blocks launching/saving.
