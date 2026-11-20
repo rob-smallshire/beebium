@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -146,22 +147,41 @@ beebium::SignalMapper::Map wait_for(const beebium::SignalMapper& mapper, Done do
     return map;
 }
 
-// A WAV of silence long enough that walking it takes a good while.
-std::shared_ptr<const std::vector<uint8_t>> long_silent_wav() {
-    TapeBuilder builder;
-    builder.gap(600.0).carrier(2400);
-    WavOptions wav;
-    wav.rate = 22050;
-    return std::make_shared<const std::vector<uint8_t>>(builder.wav(wav));
-}
+// What an EndlessTape tells a test: how many items its walk has taken, and
+// whether the walk has let it go.
+struct EndlessWalk {
+    std::atomic<uint64_t> items{0};
+    std::atomic<bool> released{false};
+};
+
+// A tape with no end: silence at its start, again and again, so a walk of it
+// finishes only when cancelled, however fast the host.
+class EndlessTape : public beebium::TapeSignal {
+public:
+    explicit EndlessTape(EndlessWalk& walk) : walk_(walk) {}
+    ~EndlessTape() override { walk_.released.store(true, std::memory_order_release); }
+
+    beebium::TapeItem next() override {
+        walk_.items.fetch_add(1, std::memory_order_relaxed);
+        return beebium::TapeItem::gap(0);
+    }
+    void seek(beebium::TapeTime) override {}
+    std::optional<beebium::TapeTime> duration() const override { return std::nullopt; }
+    beebium::TapeKind kind() const override { return beebium::TapeKind::Uef; }
+    const beebium::TapeImageMetadata& metadata() const override { return metadata_; }
+
+private:
+    EndlessWalk& walk_;
+    beebium::TapeImageMetadata metadata_;
+};
 
 }  // namespace
 
 TEST_CASE("A superseded signal map job never publishes", "[cassette][signal_map]") {
-    const auto slow = long_silent_wav();
+    EndlessWalk walk;
     const auto quick = std::make_shared<const std::vector<uint8_t>>(two_blocks().uef());
     beebium::SignalMapper mapper;
-    mapper.map([slow] { return open_tape_image(*slow, "slow.wav"); });
+    mapper.map([&walk] { return std::make_unique<EndlessTape>(walk); });
     mapper.map([quick] { return open_tape_image(*quick, "quick.uef"); });
     const auto map = wait_for(mapper, [](const auto& m) { return m.ready; });
     REQUIRE(map.ready);
@@ -172,43 +192,50 @@ TEST_CASE("A superseded signal map job never publishes", "[cassette][signal_map]
     CHECK(mapper.snapshot().generation == 1);
 }
 
-TEST_CASE("Clearing or destroying the mapper stops a long walk within 100 ms", "[cassette][signal_map]") {
-    const auto slow = long_silent_wav();
-    std::atomic<bool> opened{false};
-    auto open = [slow, &opened] {
-        opened = true;
-        return open_tape_image(*slow, "slow.wav");
+// The walk cannot finish on its own, so the only time measured is how long
+// the mapper takes to stop it: until the walk lets its tape go.
+TEST_CASE("Clearing or destroying the mapper stops an endless walk within 100 ms", "[cassette][signal_map]") {
+    EndlessWalk walk;
+    auto open = [&walk] { return std::make_unique<EndlessTape>(walk); };
+    auto wait_until_walking = [&walk] {
+        while (walk.items.load(std::memory_order_relaxed) < 1000) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
     };
-    {
-        // The walk is long: unstopped, it has not finished after 200 ms.
+    auto wait_until_released = [&walk] {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+        while (!walk.released.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+        }
+    };
+
+    SECTION("cleared, then mapped again, the new job runs") {
         beebium::SignalMapper mapper;
         mapper.map(open);
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        wait_until_walking();
         CHECK_FALSE(mapper.ready());
-    }
-    SECTION("cleared, then mapped again, the new job runs at once") {
-        beebium::SignalMapper mapper;
-        mapper.map(open);
-        while (!opened) std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
         const auto start = std::chrono::steady_clock::now();
         mapper.clear();
+        wait_until_released();
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        REQUIRE(walk.released);
+        CHECK(elapsed < std::chrono::milliseconds(100));
+        CHECK_FALSE(mapper.ready());
         const auto quick = std::make_shared<const std::vector<uint8_t>>(two_blocks().uef());
         mapper.map([quick] { return open_tape_image(*quick, "quick.uef"); });
         const auto map = wait_for(mapper, [](const auto& m) { return m.ready; });
-        const auto elapsed = std::chrono::steady_clock::now() - start;
         REQUIRE(map.ready);
         CHECK(map.levels.size() == 12);
-        CHECK(elapsed < std::chrono::milliseconds(100));
     }
     SECTION("destroyed") {
         auto mapper = std::make_unique<beebium::SignalMapper>();
         mapper->map(open);
-        while (!opened) std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        wait_until_walking();
+        CHECK_FALSE(mapper->ready());
         const auto start = std::chrono::steady_clock::now();
         mapper.reset();
         CHECK(std::chrono::steady_clock::now() - start < std::chrono::milliseconds(100));
+        CHECK(walk.released);
     }
 }
 
