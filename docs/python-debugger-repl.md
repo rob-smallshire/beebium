@@ -149,19 +149,46 @@ machine's hardware adds. Ask the machine what it accepts:
 
 The same list comes from the server with `beebium-master-128 describe-conditions`.
 
-Stop in OSWRCH only when it is about to print an `H`:
+Stop in the MOS's write-character routine only when the character is an `h`.
+BASIC 4 does not call OSWRCH at &FFEE for `PRINT`: it jumps through the
+WRCHV vector itself, so the breakpoint goes on the vector's target, which
+catches every route. (The MOS line editor's echo of what you type, and
+BASIC's `>` prompt, do pass &FFEE; a breakpoint there sees those and not the
+`PRINT` output.) The character printed must be one the typed line does not
+contain, or the breakpoint fires on the echo instead:
 
 ```python
->>> bp = bbc.debugger.add_breakpoint(0xFFEE, condition="A == 0x48")
+>>> wrchv = bbc.memory.address.peek.cast("<H")[0x020E]
+>>> hex(wrchv)
+'0xe822'
+>>> bp = bbc.debugger.add_breakpoint(wrchv, condition="A == 0x68")
 >>> bbc.debugger.run()
->>> bbc.basic.type_and_enter('PRINT "Hello"')
->>> ev = bbc.debugger.wait_for_stop(timeout=10)
->>> ev.message, hex(bbc.cpu.pc), chr(bbc.cpu.a)
-('breakpoint at $FFEE', '0xffee', 'H')
+>>> bbc.basic.type_and_enter("PRINT CHR$(104)")
+```
+
+By the time you have typed the next line the machine has long since stopped,
+so look at it rather than waiting for it (see the note on `wait_for_stop`
+below):
+
+```python
+>>> bbc.debugger.get_state()
+ExecutionState(is_running=False, cycle_count=13641266, halt_reason='breakpoint at $E822', sequence=13641271, at_instruction_boundary=True)
+>>> hex(bbc.cpu.pc), chr(bbc.cpu.a)
+('0xe822', 'h')
+>>> sp = bbc.cpu.sp
+>>> hex(bbc.memory.address.peek.cast("<H")[0x0101 + sp])        # the caller's return address
+'0x9222'
+>>> print("\n".join(disassemble(bbc.memory.address.peek[0x921D:0x9223], start=0x921D)))
+$921D: B9 00 06  LDA $0600,Y
+$9220: 20 98 BD  JSR $BD98
 >>> bbc.debugger.list_breakpoints()
-[Breakpoint(id=1, address=65518, end_address=65519, condition='A == 0x48', stop_counterpart=False, hit_count=8, enabled=True)]
+[Breakpoint(id=1, address=59426, end_address=59427, condition='A == 0x68', stop_counterpart=False, hit_count=18, enabled=True)]
 >>> bp.disable(); bp.enable(); bp.remove()
 ```
+
+The return address shows who printed it: BASIC's string output loop, taking
+the character from the string buffer at &0600 and calling its own
+write-character routine at &BD98.
 
 `hit_count` counts every time the condition was evaluated, not only the stops.
 Other useful conditions:
@@ -187,8 +214,7 @@ write) and, on a machine with shadow RAM, `shadow_access`.
 >>> wp = bbc.debugger.add_watchpoint(0x0070, 0x0071, "write", condition="value == 42")
 >>> bbc.debugger.run()
 >>> bbc.basic.type_and_enter("?&70=42")
->>> ev = bbc.debugger.wait_for_stop(timeout=15)
->>> ev.message, hex(bbc.cpu.pc)
+>>> bbc.debugger.get_state().halt_reason, hex(bbc.cpu.pc)
 ('write watchpoint at $0070 = $2A', '0xb34b')
 >>> wp.remove()
 ```
@@ -231,10 +257,12 @@ And when you are done:
 
 - `is_running`, `is_stopped` and `cycle_count` on the debugger are properties,
   not methods.
-- Pairing `run()` with a later `wait_for_stop()` races a breakpoint that fires
-  before the wait subscribes. Prefer `run_and_wait_for_stop()` when nothing has
-  to happen in between; the split form above works because `wait_for_stop`
-  compares sequence numbers against its first snapshot.
+- `wait_for_stop()` waits for a stop newer than the state it sees when
+  called. In a script, calling it straight after `run()` works. At a REPL's
+  pace the breakpoint has usually fired before you type the call, and it then
+  waits ten seconds for a second stop that never comes. By hand, read
+  `get_state()` or `is_stopped` instead; in a script, prefer
+  `run_and_wait_for_stop()` or `run_to()`, which subscribe before resuming.
 - Stopping, stepping and poking are visible to every client on the server. A
   GUI client shows the machine as stopped and its screen frozen until you run
   it again.
