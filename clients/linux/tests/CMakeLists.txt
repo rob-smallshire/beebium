@@ -271,6 +271,13 @@ beebium_linux_add_test(test_cassette_recording QT
 target_compile_definitions(test_cassette_recording PRIVATE
     BEEBIUM_TEST_SERVER_FILEPATH="${BEEBIUM_TEST_SERVER_FILEPATH}")
 
+# The Memory mode's OS section on the beebium-master-128 beside that server.
+beebium_linux_add_test(test_memory_os_rom QT
+    SOURCES test_memory_os_rom.cpp
+    LIBRARIES beebium_linux_app)
+target_compile_definitions(test_memory_os_rom PRIVATE
+    BEEBIUM_TEST_SERVER_FILEPATH="${BEEBIUM_TEST_SERVER_FILEPATH}")
+
 beebium_linux_add_test(test_dialog_locations QT
     SOURCES test_dialog_locations.cpp
     LIBRARIES beebium_linux_app)
