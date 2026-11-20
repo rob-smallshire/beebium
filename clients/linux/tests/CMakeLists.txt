@@ -278,6 +278,13 @@ beebium_linux_add_test(test_memory_os_rom QT
 target_compile_definitions(test_memory_os_rom PRIVATE
     BEEBIUM_TEST_SERVER_FILEPATH="${BEEBIUM_TEST_SERVER_FILEPATH}")
 
+# A draft's MOS ROM launched on the beebium-master-128 beside that server.
+beebium_linux_add_test(test_mos_launch QT
+    SOURCES test_mos_launch.cpp
+    LIBRARIES beebium_linux_app)
+target_compile_definitions(test_mos_launch PRIVATE
+    BEEBIUM_TEST_SERVER_FILEPATH="${BEEBIUM_TEST_SERVER_FILEPATH}")
+
 beebium_linux_add_test(test_dialog_locations QT
     SOURCES test_dialog_locations.cpp
     LIBRARIES beebium_linux_app)
