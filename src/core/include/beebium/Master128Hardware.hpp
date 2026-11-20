@@ -74,6 +74,15 @@ struct DefaultSidewaysRom {
     std::string_view image_filename;
 };
 
+// The Master's MOS ROM is one 128K chip: the MOS half and sideways banks 9 to
+// 15, which travel together. A set is named by its MOS image's bare name;
+// bank 12 is the language ROM, the other six banks are sideways_roms.
+struct MosRomSet {
+    std::string_view mos_rom_name;   // bare name of the MOS half, without ".rom"
+    std::string_view language_rom;   // bank 12
+    std::array<DefaultSidewaysRom, 6> sideways_roms;  // banks 9-11, 13-15
+};
+
 // The BBC Master 128 (docs/discussion/master-128-research.md; the plan is
 // docs/plans/master-128-round-1.md).
 //
@@ -129,19 +138,61 @@ public:
     static constexpr std::string_view REGION_ANDY = "andy";
     static constexpr std::string_view REGION_MOS_ROM = "mos_rom";
 
-    // Default ROMs: the MOS 3.20 ROM's sixteen-kilobyte parts. The MOS half
-    // is the MOS image; the other seven are banks 9 to 15.
-    static constexpr std::string_view DEFAULT_MOS_ROM = "acorn-mos_3_20.rom";
-    static constexpr std::string_view DEFAULT_LANGUAGE_ROM = "bbc-basic_4.rom";
-    static constexpr uint8_t DEFAULT_LANGUAGE_SLOT = 12;
-    static constexpr std::array<DefaultSidewaysRom, 6> DEFAULT_SIDEWAYS_ROMS{{
-        {9, "acorn-dfs_2_24.rom"},
-        {10, "acornsoft-viewsheet_b1_0.rom"},
-        {11, "acorn-edit_1_00.rom"},
-        {13, "acorn-adfs_1_50.rom"},
-        {14, "acornsoft-view_b3_0.rom"},
-        {15, "acorn-terminal_1_20_mos_3_20.rom"},
+    // The MOS ROM sets the server knows, each a 128K chip's sixteen-kilobyte
+    // parts: the MOS half is the MOS image, the other seven banks 9 to 15. A
+    // MOS that matches no set (a path, or a MOS half of another origin) gets
+    // the MOS 3.20 set's banks, which is what a real board has when someone
+    // fits a foreign MOS half.
+    static constexpr std::array<MosRomSet, 2> MOS_ROM_SETS{{
+        {"acorn-mos_3_20", "bbc-basic_4.rom", {{
+            {9, "acorn-dfs_2_24.rom"},
+            {10, "acornsoft-viewsheet_b1_0.rom"},
+            {11, "acorn-edit_1_00.rom"},
+            {13, "acorn-adfs_1_50.rom"},
+            {14, "acornsoft-view_b3_0.rom"},
+            {15, "acorn-terminal_1_20_mos_3_20.rom"},
+        }}},
+        {"acorn-mos_3_50", "bbc-basic_4r32.rom", {{
+            {9, "acorn-dfs_2_45.rom"},
+            {10, "acornsoft-viewsheet_b1_01.rom"},
+            {11, "acorn-edit_1_50r.rom"},
+            {13, "acorn-adfs_2_03.rom"},
+            {14, "acornsoft-view_b3_3.rom"},
+            {15, "acorn-terminal_1_20_mos_3_50.rom"},
+        }}},
     }};
+    static constexpr const MosRomSet& DEFAULT_MOS_ROM_SET = MOS_ROM_SETS[0];
+
+    // The banks the MOS ROM fills: 9 to 15.
+    static constexpr uint8_t FIRST_MOS_ROM_SLOT = 9;
+    static constexpr uint8_t LAST_MOS_ROM_SLOT = 15;
+
+    // The set whose MOS half is `mos_rom_name` (a bare name without ".rom"),
+    // or nullptr for one the server does not know.
+    static constexpr const MosRomSet* find_mos_rom_set(std::string_view mos_rom_name) {
+        for (const auto& set : MOS_ROM_SETS) {
+            if (set.mos_rom_name == mos_rom_name) return &set;
+        }
+        return nullptr;
+    }
+
+    // The set one of whose banks 9 to 15 is `image_filename`, or nullptr.
+    static constexpr const MosRomSet* mos_rom_set_holding(std::string_view image_filename) {
+        for (const auto& set : MOS_ROM_SETS) {
+            if (set.language_rom == image_filename) return &set;
+            for (const auto& rom : set.sideways_roms) {
+                if (rom.image_filename == image_filename) return &set;
+            }
+        }
+        return nullptr;
+    }
+
+    // Default ROMs: the MOS 3.20 set's.
+    static constexpr std::string_view DEFAULT_MOS_ROM = "acorn-mos_3_20.rom";
+    static constexpr std::string_view DEFAULT_LANGUAGE_ROM = DEFAULT_MOS_ROM_SET.language_rom;
+    static constexpr uint8_t DEFAULT_LANGUAGE_SLOT = 12;
+    static constexpr std::array<DefaultSidewaysRom, 6> DEFAULT_SIDEWAYS_ROMS =
+        DEFAULT_MOS_ROM_SET.sideways_roms;
 
     // The modem connector (PL12) is an attachment point of this machine.
     static constexpr bool HAS_MODEM_CONNECTOR = true;
@@ -153,7 +204,6 @@ public:
     static constexpr uint8_t FIRST_SIDEWAYS_RAM_SLOT = 4;
     static constexpr uint8_t LAST_SIDEWAYS_RAM_SLOT = 7;
     static constexpr uint8_t IC27_SLOT = 8;
-    static constexpr uint8_t FIRST_MOS_ROM_SLOT = 9;
 
     // ROMSEL bits
     static constexpr uint8_t ROMSEL_BANK_MASK = 0x0F;

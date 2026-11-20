@@ -70,7 +70,7 @@ The sideways banks (`Master128Hardware::slot_topology`):
 | 2, 3 | the front cartridge slot: the same |
 | 4-7 | sideways RAM; with LK18 East (4, 5) or LK19 East (6, 7) the halves of a 32K ROM in IC41 or IC37, filled with `--sideways` |
 | 8 | the IC27 ROM socket, empty by default |
-| 9-15 | the MOS ROM's sideways parts, ROM only and never empty: DFS 2.24, ViewSheet B1.0, Edit 1.00, BASIC IV, ADFS 1.50, View B3.0, Terminal 1.20 (`DEFAULT_SIDEWAYS_ROMS`, `DEFAULT_LANGUAGE_SLOT` 12) |
+| 9-15 | the MOS ROM's sideways parts, ROM only and never empty: DFS 2.24, ViewSheet B1.0, Edit 1.00, BASIC IV, ADFS 1.50, View B3.0, Terminal 1.20 (the MOS 3.20 set; `MOS_ROM_SETS` holds 3.50's too, and the banks follow the MOS, see [Presets](#presets); `DEFAULT_LANGUAGE_SLOT` 12) |
 
 `docs/sideways-slots.md` has the topology in the terms the other models use.
 
@@ -327,11 +327,22 @@ the banks are filled with `--sideways`.
 | Preset | What it is |
 |---|---|
 | `master-128` | MOS 3.20 and its ROM set, the Welcome Guide's CMOS (the model's default) |
-| `master-128-mos-3-50` | MOS 3.50 and its ROM set: DFS 2.45, ViewSheet B1.01, Edit 1.50r, BASIC IV r32, ADFS 2.03, View B3.3, Terminal 1.20 for 3.50 |
+| `master-128-mos-3-50` | MOS 3.50 and its ROM set: DFS 2.45, ViewSheet B1.01, Edit 1.50r, BASIC IV r32, ADFS 2.03, View B3.3, Terminal 1.20 for 3.50. The preset names only the MOS; its banks follow it |
 | `master-128-65c102-copro` | MOS 3.20 with the 65C102 Co-processor on the internal Tube, a Master Turbo in all but name |
 
+Banks 9 to 15 are the MOS chip's, so they follow the MOS
+(`Master128Hardware::MOS_ROM_SETS`, keyed by the MOS half's bare name). A bank
+no preset or `--sideways` names holds the ROM of the MOS's set, or of the 3.20
+set for a MOS that matches none (a path, or a MOS half of another origin).
+`resolve-preset` marks such a bank `"source": "mos"`, and loading a preset
+re-derives a marked bank from the MOS in force, so changing `mos_image_uri`
+in a configurator changes the banks with it. Naming a bank with another set's
+ROM (MOS 3.50 over the 3.20 Terminal, whose overflow code is 3.20's) is
+refused with a sentence, since that machine never boots. See
+[preset-schema.md](preset-schema.md#the-moss-banks-master-128).
+
 `docs/deployment.md` tabulates the ROM files. `describe-preset-schema` gives the model's
-attachment points, sideways topology and default ROMs.
+attachment points, sideways topology, default ROMs and the MOS ROM sets.
 
 ## The debugger
 

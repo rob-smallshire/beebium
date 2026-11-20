@@ -60,6 +60,10 @@ struct SidewaysConfig {
     SidewaysSlotType type;
     std::string image_filepath;  // Optional: filepath for ROM or pre-loaded RAM
     bool write_protected = false;  // RAM only: engage the write-protect switch
+    // A preset entry marked "source": "mos": a Master bank 9-15 the MOS ROM
+    // fills, written by resolve-preset for information. Loading re-derives it
+    // from the MOS in force and ignores its image.
+    bool from_mos = false;
 };
 
 inline std::string ascii_to_lower(std::string_view s) {

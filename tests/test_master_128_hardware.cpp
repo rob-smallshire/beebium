@@ -125,6 +125,33 @@ TEST_CASE("Master 128 identity", "[master128][hardware]") {
     CHECK(HW::DEFAULT_SIDEWAYS_ROMS.size() == 6);
 }
 
+TEST_CASE("Master 128 MOS ROM sets: banks 9-15 by the MOS they belong to",
+          "[master128][hardware][mos-rom-set]") {
+    const auto* mos_3_20 = HW::find_mos_rom_set("acorn-mos_3_20");
+    REQUIRE(mos_3_20 != nullptr);
+    CHECK(mos_3_20 == &HW::DEFAULT_MOS_ROM_SET);
+    CHECK(mos_3_20->language_rom == HW::DEFAULT_LANGUAGE_ROM);
+    CHECK(mos_3_20->sideways_roms[0].slot == 9);
+    CHECK(mos_3_20->sideways_roms[0].image_filename == "acorn-dfs_2_24.rom");
+    CHECK(mos_3_20->sideways_roms[5].image_filename == "acorn-terminal_1_20_mos_3_20.rom");
+    // The default banks are the MOS 3.20 set's.
+    CHECK(HW::DEFAULT_SIDEWAYS_ROMS[2].image_filename == mos_3_20->sideways_roms[2].image_filename);
+
+    const auto* mos_3_50 = HW::find_mos_rom_set("acorn-mos_3_50");
+    REQUIRE(mos_3_50 != nullptr);
+    CHECK(mos_3_50->language_rom == "bbc-basic_4r32.rom");
+    CHECK(mos_3_50->sideways_roms[0].image_filename == "acorn-dfs_2_45.rom");
+    CHECK(mos_3_50->sideways_roms[5].image_filename == "acorn-terminal_1_20_mos_3_50.rom");
+
+    CHECK(HW::find_mos_rom_set("ukwebb_diag_master_16k") == nullptr);
+    CHECK(HW::find_mos_rom_set("") == nullptr);
+
+    // Which set an image belongs to, for the mixed-set diagnostic.
+    CHECK(HW::mos_rom_set_holding("bbc-basic_4r32.rom") == mos_3_50);
+    CHECK(HW::mos_rom_set_holding("acorn-adfs_1_50.rom") == mos_3_20);
+    CHECK(HW::mos_rom_set_holding("acorn-dfs_2_26.rom") == nullptr);
+}
+
 TEST_CASE("Master 128 sideways topology: cartridge banks, RAM 4-7, IC27, the MOS ROM's banks",
           "[master128][hardware][sideways]") {
     const auto topo = HW::slot_topology();

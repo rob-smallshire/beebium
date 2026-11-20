@@ -74,6 +74,10 @@ struct MachineDescription {
     // ROM without knowing which slot this machine variant uses for it.
     std::string language_rom_filepath;
     std::map<uint8_t, std::string> rom_slots;
+    // The slots of rom_slots that apply_rom_defaults filled from the MOS ROM
+    // set (the Master's banks 9-15 no preset or --sideways named), which
+    // resolve-preset marks "source": "mos".
+    std::set<uint8_t> mos_rom_set_slots;
     // Sideways slot configuration (type, image, and the RAM write-protect
     // switch's power-on position). The switch is also runtime-toggleable via
     // SidewaysService.SetSlotProtection (its slot-N write group); write_protected

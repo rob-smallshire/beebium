@@ -225,6 +225,14 @@ never converts one to the other.
 The MOS ROM, a name or path as for `--mos`. Default: the model's MOS
 (`acorn-mos_1_20.rom` on a Model B). Model B+ variants take their own.
 
+On the Master 128 the MOS chooses banks 9 to 15 too, because the MOS and those
+banks are one 128K chip. A MOS named by a set's bare name (`acorn-mos_3_20.rom`
+or `acorn-mos_3_50.rom`) brings that set's seven ROMs into every bank 9-15 the
+preset does not name. A MOS given by a path, or by a name no set has (a
+diagnostic ROM's MOS half, say), keeps the MOS 3.20 set's banks, as a real
+board does when a foreign MOS half is fitted. The sets are in
+`describe-preset-schema`'s `mos_rom_banks`; see [The MOS's banks](#the-moss-banks-master-128).
+
 ## Storage
 
 ```json
@@ -287,6 +295,29 @@ socket as a default replaces it. Slot priority follows the slot number (the
 highest slot with a language entry wins at reset); a preset does not set it.
 
 The equivalent command-line option is `--sideways slot=N:type=...:image=...[:write-protect]`.
+
+### The MOS's banks (Master 128)
+
+On the Master, banks 9 to 15 are part of the MOS ROM chip, not sockets, so
+a bank the preset does not name follows the MOS (see
+[mos_image_uri](#mos_image_uri)). `resolve-preset` writes such a bank with
+one more key, `"source": "mos"`:
+
+```json
+{ "slot": 9, "type": "rom", "image_uri": "acorn-dfs_2_24.rom", "source": "mos" }
+```
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `source` | `"mos"` | Optional. The bank is the MOS ROM's: when the preset loads it is filled from the MOS in force, and its `image_uri` (what the machine had when the document was written) is not used. Only `"mos"` is defined, and only on banks 9-15 of the Master; anywhere else it is an error |
+
+So a client that writes a resolved document back whole, having changed only
+`mos_image_uri`, gets the new MOS's banks. An entry without the marker is the
+preset's own and is honoured under any MOS, except that naming a bank 9-15
+with a ROM from another MOS's set is an error: that machine does not boot,
+and the message names the bank, its image and the set it belongs to, and
+says to drop the entry or change the MOS. `--sideways` on banks 9-15 is
+unchanged: it names the bank.
 
 ## Econet
 
@@ -541,7 +572,7 @@ every key is present:
 - `startup`: `{ "links": n }`, or `{ "screen_mode": m, "auto_boot": b }` with the defaults filled in
 - `mos_image_uri`: the model's MOS by default
 - `storage.fdc_socket`: `{ "id": ... }` (`"none"` for an empty socket), or `null` on a model with a built-in controller; `storage.floppy_drives`: both drives, `image_uri` a `file://` URI or `null`; `storage.cassette`: `{ "image_uri": ... }`, a `file://` URI or `null`
-- `sideways_bank.slots`: in slot order, including the model's default ROMs as explicit slots; a `ram` slot always has `image_uri` (or `null`) and `write_protected`
+- `sideways_bank.slots`: in slot order, including the model's default ROMs as explicit slots; a `ram` slot always has `image_uri` (or `null`) and `write_protected`; on the Master a bank 9-15 filled from the MOS's set has `"source": "mos"`
 - `econet`: `null`, or `{ "station": ..., "transport": null | {...} }`
 - each extension and the transport: every manifest parameter, typed (integers as numbers, booleans as `true`/`false`, the rest strings, lists as arrays, `""` or `[]` where there is no value), and each extension with its `attaches_to`
 
@@ -612,7 +643,7 @@ There is one section per preset key, its `type` being the key and its `label` wh
 | `startup` | `screen_mode` and `links` with `min`, `max` and `default`, `auto_boot` with `default`, and `links.excludes`. `links` also lays out the byte: `link_made_when` (`clear`), `screen_mode_bits` (least significant first), `auto_boot_bit` with `auto_boot_true_when` (`clear`), and `bits`, one per bit from 7 down, each with `bit`, `link` (`Link 1` to `Link 8`), `label` and a one-sentence `description` |
 | `mos_image_uri` | `default`: the model's MOS |
 | `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives`, each with `drive`, `label` (`Floppy drive 0`), its geometry and image types; `cassette`, on every model: `{"has_cassette": true, "label": "Cassette", "image_types": ["uef", "csw", "wav"]}`. Every model has the interface; on one without it, a preset's tape would be ignored with the warning "ignored: this model has no cassette interface" at `/storage/cassette/image_uri` |
-| `sideways_bank` | `sockets` (label, `slots`, `capabilities`, `runtime_configurable`), `has_aliasing`, and `default_roms` (`slot`, `image`, `role`: `language`, `filing` or `board`) |
+| `sideways_bank` | `sockets` (label, `slots`, `capabilities`, `runtime_configurable`), `has_aliasing`, and `default_roms` (`slot`, `image`, `role`: `language`, `filing` or `board`); on the Master also `mos_rom_banks`: `slots` (9-15), `source` (`"mos"`, the marker), `default_mos`, `sets` (each `mos`, the MOS half's bare name, and its seven `banks`, `slot` and `image`) and a `description`, so a client can label those rows as the MOS's |
 | `econet` | `station`: `min`, `max`, `auto`, `auto_default_range`; `transports`: the transport extensions' names |
 | `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `description`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `catalogue`: every extension that can attach to one of those points, and on a model with Econet every transport, each exactly as `describe-extension <name> --json` gives it (`name`, `display_name`, `description`, `cli_name`, `kind`, `source`, `attaches_to`, `provides`, `parameters`, `roms`). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, each with `image`, `display_name`, `size_bytes` and `extension` (the extension it belongs to, or `null` for any), e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "display_name": "Acorn Level 3 File Server 1.26", "size_bytes": 10002432, "extension": null}], "rom": [{"image": "acorn-tube-6502_1_10.rom", "display_name": "Acorn 6502 Tube ROM 1.10", "size_bytes": 4096, "extension": "acorn-65c02-coprocessor"}, ...]}`. `bundled_image_kinds`: each kind with its `display_name`, what a user calls one, a noun to fit a sentence or, with an "s", a heading: `[{"kind": "hard-disc", "display_name": "hard disc"}, {"kind": "rom", "display_name": "ROM"}]`; every kind a parameter's `bundled` names is among them |
 

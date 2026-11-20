@@ -26,6 +26,7 @@
 #include "beebium/server/DiscPaths.hpp"
 #include "beebium/server/PresetLoader.hpp"
 #include "beebium/server/PresetPaths.hpp"
+#include "beebium/server/ResourcePaths.hpp"
 #include "beebium/server/ServerConfig.hpp"
 #include "beebium/server/SidewaysValidation.hpp"
 
@@ -57,6 +58,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace beebium::server {
@@ -86,7 +88,39 @@ inline nlohmann::ordered_json sideways_slot_json(const SidewaysConfig& slot, boo
             entry["type"] = "empty";
             break;
     }
+    if (slot.from_mos) entry["source"] = "mos";
     return entry;
+}
+
+// The MOS ROM set the MOS `mos_reference` names, on a machine whose sideways
+// banks include its MOS ROM's (the Master): the set whose MOS half has the
+// reference's bare name, or nullptr for a path or a name no set has. An empty
+// reference is the model's default MOS.
+template<typename Memory>
+const auto* named_mos_rom_set(const std::string& mos_reference) {
+    const std::string reference =
+        mos_reference.empty() ? std::string(Memory::DEFAULT_MOS_ROM) : mos_reference;
+    using Set = std::remove_cvref_t<decltype(Memory::DEFAULT_MOS_ROM_SET)>;
+    if (!is_bare_reference(reference)) return static_cast<const Set*>(nullptr);
+    std::string_view name = reference;
+    constexpr std::string_view ROM_EXTENSION = ".rom";
+    if (name.size() > ROM_EXTENSION.size() && name.ends_with(ROM_EXTENSION)) {
+        name.remove_suffix(ROM_EXTENSION.size());
+    }
+    return Memory::find_mos_rom_set(name);
+}
+
+template<typename Memory>
+concept HasMosRomSets = requires { Memory::DEFAULT_MOS_ROM_SET; Memory::FIRST_MOS_ROM_SLOT; };
+
+// Whether `slot` is one of the banks the MOS ROM fills.
+template<typename Memory>
+bool is_mos_rom_bank(uint8_t slot) {
+    if constexpr (HasMosRomSets<Memory>) {
+        return slot >= Memory::FIRST_MOS_ROM_SLOT && slot <= Memory::LAST_MOS_ROM_SLOT;
+    } else {
+        return false;
+    }
 }
 
 // The Econet station as a preset writes it: the number, or "auto" (the
@@ -309,6 +343,14 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
 template<typename MachineType>
 void merge_preset_sideways_configs(ServerConfig<MachineType>& config) {
     for (const auto& preset_slot : config.preset_sideways_configs) {
+        // A bank resolve-preset wrote as the MOS ROM's is left unnamed, to be
+        // filled from the MOS in force (apply_rom_defaults). One marked on a
+        // bank the MOS does not fill stays, for validate_sideways_slots to
+        // refuse.
+        if (preset_slot.from_mos &&
+            is_mos_rom_bank<typename MachineType::Memory>(preset_slot.slot)) {
+            continue;
+        }
         bool cli_claims_slot = std::any_of(
             config.machine.sideways_configs.begin(), config.machine.sideways_configs.end(),
             [&](const SidewaysConfig& c) { return c.slot == preset_slot.slot; });
@@ -779,6 +821,50 @@ std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<Mac
         }
     }
 
+    // A bank marked as the MOS ROM's that the MOS does not fill: the marker
+    // means nothing there. (Marked MOS banks never reach sideways_configs.)
+    for (std::size_t i = 0; i < config.machine.sideways_configs.size(); ++i) {
+        const auto& c = config.machine.sideways_configs[i];
+        if (!c.from_mos) continue;
+        if constexpr (HasMosRomSets<Memory>) {
+            return SidewaysSlotsError{
+                i, "Sideways slot " + std::to_string(c.slot) +
+                       " is marked \"source\": \"mos\", but the MOS ROM fills only banks " +
+                       std::to_string(Memory::FIRST_MOS_ROM_SLOT) + " to " +
+                       std::to_string(Memory::LAST_MOS_ROM_SLOT) + "; remove the marker."};
+        } else {
+            return SidewaysSlotsError{
+                i, "Sideways slot " + std::to_string(c.slot) +
+                       " is marked \"source\": \"mos\", but this machine's MOS ROM fills "
+                       "no sideways bank; remove the marker."};
+        }
+    }
+
+    // On the Master the MOS and banks 9 to 15 are one chip: a bank named with
+    // another MOS's set's ROM makes a machine that does not boot.
+    if constexpr (HasMosRomSets<Memory>) {
+        if (const auto* mos_set = named_mos_rom_set<Memory>(config.machine.mos_filepath)) {
+            for (std::size_t i = 0; i < config.machine.sideways_configs.size(); ++i) {
+                const auto& c = config.machine.sideways_configs[i];
+                if (c.type != SidewaysSlotType::Rom || !is_mos_rom_bank<Memory>(c.slot)) continue;
+                const auto image = std::filesystem::path(c.image_filepath).filename().string();
+                const auto* image_set = Memory::mos_rom_set_holding(image);
+                if (image_set == nullptr || image_set == mos_set) continue;
+                const std::string bank = std::to_string(c.slot);
+                const std::string mos(mos_set->mos_rom_name);
+                const std::string other(image_set->mos_rom_name);
+                return SidewaysSlotsError{
+                    i, "Bank " + bank + " holds " + image + ", which belongs with " + other +
+                           ", but the MOS is " + mos + ": on the Master the MOS and banks " +
+                           std::to_string(Memory::FIRST_MOS_ROM_SLOT) + " to " +
+                           std::to_string(Memory::LAST_MOS_ROM_SLOT) +
+                           " are one chip, and this mix does not boot. Drop the bank " + bank +
+                           " entry to have " + mos + "'s own ROM there, or change the MOS to " +
+                           other + "."};
+            }
+        }
+    }
+
     // Validate write-protect requests carried on --sideways slots: the machine
     // must have a write-protect control and each such slot's socket must have a
     // write-protect switch. (parse_sideways_arg already ensures write-protect is
@@ -881,10 +967,19 @@ void apply_rom_defaults(ServerConfig<MachineType>& config) {
     if (!skip_default_for_slot(Memory::DEFAULT_LANGUAGE_SLOT)
         && config.machine.rom_slots.find(Memory::DEFAULT_LANGUAGE_SLOT)
                == config.machine.rom_slots.end()) {
-        config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] =
-            config.machine.language_rom_filepath.empty()
-                ? std::string(Memory::DEFAULT_LANGUAGE_ROM)
-                : config.machine.language_rom_filepath;
+        if (!config.machine.language_rom_filepath.empty()) {
+            config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] =
+                config.machine.language_rom_filepath;
+        } else if constexpr (HasMosRomSets<Memory>) {
+            // On the Master the language bank is the MOS ROM's.
+            const auto* named = named_mos_rom_set<Memory>(config.machine.mos_filepath);
+            const auto& set = named ? *named : Memory::DEFAULT_MOS_ROM_SET;
+            config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] = std::string(set.language_rom);
+            config.machine.mos_rom_set_slots.insert(Memory::DEFAULT_LANGUAGE_SLOT);
+        } else {
+            config.machine.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] =
+                std::string(Memory::DEFAULT_LANGUAGE_ROM);
+        }
     }
 
     // Load default DFS ROM if machine has one and slot not overridden
@@ -896,13 +991,17 @@ void apply_rom_defaults(ServerConfig<MachineType>& config) {
         }
     }
 
-    // Load the machine's other built-in sideways ROMs (the Master's MOS ROM
-    // banks 9 to 15) into each slot not overridden.
-    if constexpr (requires { Memory::DEFAULT_SIDEWAYS_ROMS; }) {
-        for (const auto& rom : Memory::DEFAULT_SIDEWAYS_ROMS) {
+    // The Master's MOS ROM banks 9 to 15, into each slot not named: the set
+    // the MOS belongs to (they are one chip), or the MOS 3.20 set's for a MOS
+    // that matches none.
+    if constexpr (HasMosRomSets<Memory>) {
+        const auto* named = named_mos_rom_set<Memory>(config.machine.mos_filepath);
+        const auto& set = named ? *named : Memory::DEFAULT_MOS_ROM_SET;
+        for (const auto& rom : set.sideways_roms) {
             if (!skip_default_for_slot(rom.slot)
                 && config.machine.rom_slots.find(rom.slot) == config.machine.rom_slots.end()) {
                 config.machine.rom_slots[rom.slot] = std::string(rom.image_filename);
+                config.machine.mos_rom_set_slots.insert(rom.slot);
             }
         }
     }
@@ -1121,6 +1220,7 @@ std::optional<nlohmann::ordered_json> preset_document(const MachineDescription& 
                             entry.type = SidewaysSlotType::Rom;
                             entry.image_filepath = image;
                         }
+                        entry.from_mos = machine.mos_rom_set_slots.count(slot) != 0;
                         slots.push_back(sideways_slot_json(entry, /*every_key=*/true));
                     }
                 } else {

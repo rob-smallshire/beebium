@@ -298,6 +298,43 @@ public:
             }
             sideways["default_roms"] = default_roms;
 
+            // The banks the MOS ROM fills (the Master's 9 to 15), which follow
+            // the MOS: resolve-preset marks them "source": "mos", and loading
+            // re-derives a marked bank from the MOS in force, so a client can
+            // label those rows as the MOS's rather than as sockets.
+            if constexpr (HasMosRomSets<Memory>) {
+                ojson mos_slots = ojson::array();
+                for (int slot = Memory::FIRST_MOS_ROM_SLOT; slot <= Memory::LAST_MOS_ROM_SLOT;
+                     ++slot) {
+                    mos_slots.push_back(slot);
+                }
+                ojson sets = ojson::array();
+                for (const auto& set : Memory::MOS_ROM_SETS) {
+                    std::vector<std::pair<int, std::string_view>> images{
+                        {Memory::DEFAULT_LANGUAGE_SLOT, set.language_rom}};
+                    for (const auto& rom : set.sideways_roms) {
+                        images.emplace_back(rom.slot, rom.image_filename);
+                    }
+                    std::sort(images.begin(), images.end());
+                    ojson banks = ojson::array();
+                    for (const auto& [slot, image] : images) {
+                        banks.push_back(ojson{{"slot", slot}, {"image", image}});
+                    }
+                    sets.push_back(ojson{{"mos", set.mos_rom_name}, {"banks", banks}});
+                }
+                sideways["mos_rom_banks"] = ojson{
+                    {"slots", mos_slots},
+                    {"source", "mos"},
+                    {"default_mos", Memory::DEFAULT_MOS_ROM_SET.mos_rom_name},
+                    {"sets", sets},
+                    {"description",
+                     "Banks 9 to 15 are part of the MOS ROM chip, not sockets: a bank no "
+                     "preset or --sideways names holds the ROM of the set its MOS belongs "
+                     "to, or of the default set for a MOS that matches none. resolve-preset "
+                     "marks such a bank \"source\": \"mos\", and a marked bank is "
+                     "re-derived from the MOS when the preset loads."}};
+            }
+
             section_for[PresetKey::SidewaysBank] = sideways;
         }
 

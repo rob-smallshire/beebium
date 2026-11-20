@@ -477,7 +477,12 @@ parse_econet_section(const nlohmann::json& econet_json) {
 // Parse the sideways_bank section from JSON.
 //
 // Shape: { "slots": [ { "slot": <0-15>, "type": "rom"|"ram"|"empty",
-//                       "image_uri": "<rom-name-or-path>" }, ... ] }
+//                       "image_uri": "<rom-name-or-path>",
+//                       "source": "mos" (optional) }, ... ] }
+//
+// "source": "mos" marks a Master bank 9-15 that the MOS ROM fills, as
+// resolve-preset writes it: the entry is re-derived from the MOS in force and
+// its image_uri is only what the machine had when it was written.
 //
 // ROM/RAM image references are not rewritten to file:// URIs the way disc
 // images are: a bare name is resolved downstream via the ROM search path (like
@@ -566,6 +571,17 @@ parse_sideways_section(const nlohmann::json& sideways_json) {
         } else {
             errors.push_back({entry + "/type", slot_label + ": invalid type '" + type_raw +
                                                    "' (expected one of: rom, ram, empty)"});
+        }
+
+        // Where the entry came from (optional): only "mos" is defined.
+        if (slot_json.contains("source")) {
+            if (slot_json["source"].is_string() && slot_json["source"] == "mos") {
+                cfg.from_mos = true;
+            } else {
+                errors.push_back({entry + "/source",
+                                  slot_label + ": 'source' can only be \"mos\", for a bank "
+                                               "the MOS ROM fills"});
+            }
         }
 
         if (errors.size() == errors_before) slots.push_back(std::move(cfg));

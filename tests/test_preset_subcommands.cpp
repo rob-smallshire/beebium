@@ -3774,3 +3774,219 @@ TEST_CASE("start: a malformed AUN map item on the command line is refused before
     CHECK(result.stderr_output.find("map item 0") != std::string::npos);
     CHECK(result.stderr_output.find("{net}.{station}@{host}@{port}") != std::string::npos);
 }
+
+// =============================================================================
+// The Master 128's MOS ROM sets: banks 9-15 are the MOS chip, not sockets
+// =============================================================================
+
+namespace {
+
+const std::string MASTER_EXECUTABLE = find_executable("beebium-master-128").string();
+
+const std::vector<std::pair<int, std::string>> MOS_3_20_BANKS = {
+    {9, "acorn-dfs_2_24.rom"},  {10, "acornsoft-viewsheet_b1_0.rom"},
+    {11, "acorn-edit_1_00.rom"}, {12, "bbc-basic_4.rom"},
+    {13, "acorn-adfs_1_50.rom"}, {14, "acornsoft-view_b3_0.rom"},
+    {15, "acorn-terminal_1_20_mos_3_20.rom"},
+};
+const std::vector<std::pair<int, std::string>> MOS_3_50_BANKS = {
+    {9, "acorn-dfs_2_45.rom"},   {10, "acornsoft-viewsheet_b1_01.rom"},
+    {11, "acorn-edit_1_50r.rom"}, {12, "bbc-basic_4r32.rom"},
+    {13, "acorn-adfs_2_03.rom"}, {14, "acornsoft-view_b3_3.rom"},
+    {15, "acorn-terminal_1_20_mos_3_50.rom"},
+};
+
+const nlohmann::json* slot_entry(const nlohmann::json& preset, int slot) {
+    for (const auto& entry : preset.at("sideways_bank").at("slots")) {
+        if (entry.at("slot") == slot) return &entry;
+    }
+    return nullptr;
+}
+
+// Each of banks 9-15 holds the set's image and is marked as the MOS's.
+void check_mos_banks(const nlohmann::json& preset,
+                     const std::vector<std::pair<int, std::string>>& banks) {
+    for (const auto& [slot, image] : banks) {
+        INFO("bank " << slot);
+        const auto* entry = slot_entry(preset, slot);
+        REQUIRE(entry != nullptr);
+        CHECK(entry->at("type") == "rom");
+        CHECK(entry->at("image_uri") == image);
+        CHECK(entry->value("source", "") == "mos");
+    }
+}
+
+std::filesystem::path shipped_preset(const std::string& id) {
+    return std::filesystem::absolute(std::filesystem::path(MASTER_EXECUTABLE)).parent_path() /
+           "presets" / (id + ".beebium-preset");
+}
+
+// A Master preset with banks 9-15 written as resolve-preset wrote them for
+// MOS 3.20, marked, and the given MOS and extra slots.
+std::string marked_master_preset(const std::string& mos, const std::string& extra_slots = "") {
+    std::string slots;
+    for (const auto& [slot, image] : MOS_3_20_BANKS) {
+        slots += R"({"slot": )" + std::to_string(slot) + R"(, "type": "rom", "image_uri": ")" +
+                 image + R"(", "source": "mos"},)";
+    }
+    slots += extra_slots;
+    if (!slots.empty() && slots.back() == ',') slots.pop_back();
+    return R"({"model": "master-128", "name": "Marked", "mos_image_uri": ")" + mos +
+           R"(", "sideways_bank": {"slots": [)" + slots + "]}}";
+}
+
+}  // namespace
+
+TEST_CASE("resolve-preset: the Master's banks 9-15 come from its MOS, marked",
+          "[integration][preset][resolve-preset][mos-rom-set]") {
+    auto out = resolve_json(MASTER_EXECUTABLE, shipped_preset("master-128").string());
+
+    CHECK(out.at("diagnostics").empty());
+    CHECK(out.at("preset").at("mos_image_uri") == "acorn-mos_3_20.rom");
+    check_mos_banks(out.at("preset"), MOS_3_20_BANKS);
+}
+
+TEST_CASE("resolve-preset: marked banks follow MOS 3.50 when the MOS changes",
+          "[integration][preset][resolve-preset][mos-rom-set]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "marked.preset.beebium";
+    std::ofstream(preset_filepath) << marked_master_preset("acorn-mos_3_50.rom");
+
+    auto out = resolve_json(MASTER_EXECUTABLE, preset_filepath.string());
+
+    CHECK(out.at("diagnostics").empty());
+    check_mos_banks(out.at("preset"), MOS_3_50_BANKS);
+}
+
+TEST_CASE("resolve-preset: a bank the preset names itself is kept under either MOS",
+          "[integration][preset][resolve-preset][mos-rom-set]") {
+    for (const std::string mos : {"acorn-mos_3_20.rom", "acorn-mos_3_50.rom"}) {
+        INFO(mos);
+        TempDirectory temp_dir;
+        auto preset_filepath = temp_dir.path() / "named.preset.beebium";
+        std::ofstream(preset_filepath)
+            << R"({"model": "master-128", "name": "Named", "mos_image_uri": ")" << mos
+            << R"(", "sideways_bank": {"slots": [)"
+            << R"({"slot": 9, "type": "rom", "image_uri": "acorn-dfs_2_26.rom"}]}})";
+
+        auto out = resolve_json(MASTER_EXECUTABLE, preset_filepath.string());
+
+        CHECK(out.at("diagnostics").empty());
+        const auto* bank_9 = slot_entry(out.at("preset"), 9);
+        REQUIRE(bank_9 != nullptr);
+        CHECK(bank_9->at("image_uri") == "acorn-dfs_2_26.rom");
+        CHECK_FALSE(bank_9->contains("source"));
+    }
+}
+
+TEST_CASE("resolve-preset: master-128-mos-3-50 gets the MOS 3.50 set from its MOS alone",
+          "[integration][preset][resolve-preset][mos-rom-set]") {
+    const auto preset_filepath = shipped_preset("master-128-mos-3-50");
+    const auto document = nlohmann::json::parse(document_of(preset_filepath));
+    // The preset names only its MOS; the banks follow it.
+    CHECK_FALSE(document.contains("sideways_bank"));
+
+    auto out = resolve_json(MASTER_EXECUTABLE, preset_filepath.string());
+
+    CHECK(out.at("diagnostics").empty());
+    CHECK(out.at("preset").at("mos_image_uri") == "acorn-mos_3_50.rom");
+    check_mos_banks(out.at("preset"), MOS_3_50_BANKS);
+}
+
+TEST_CASE("resolve-preset: a MOS that matches no set keeps the MOS 3.20 banks",
+          "[integration][preset][resolve-preset][mos-rom-set]") {
+    TempDirectory temp_dir;
+    const auto mos_filepath = temp_dir.path() / "foreign-mos.rom";
+    std::ofstream(mos_filepath, std::ios::binary) << std::string(16384, '\xEA');
+    auto preset_filepath = temp_dir.path() / "foreign.preset.beebium";
+    std::ofstream(preset_filepath) << marked_master_preset(mos_filepath.string());
+
+    auto out = resolve_json(MASTER_EXECUTABLE, preset_filepath.string());
+
+    check_mos_banks(out.at("preset"), MOS_3_20_BANKS);
+}
+
+TEST_CASE("resolve-preset: a bank from another MOS's set is an error naming the fix",
+          "[integration][preset][resolve-preset][mos-rom-set]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "mixed.preset.beebium";
+    std::ofstream(preset_filepath)
+        << R"({"model": "master-128", "name": "Mixed", "mos_image_uri": "acorn-mos_3_50.rom",
+              "sideways_bank": {"slots": [{"slot": 15, "type": "rom",
+                                           "image_uri": "acorn-terminal_1_20_mos_3_20.rom"}]}})";
+
+    auto out = resolve_json(MASTER_EXECUTABLE, preset_filepath.string(), 78);
+
+    const nlohmann::json* error = nullptr;
+    for (const auto& d : out.at("diagnostics")) {
+        if (d.at("severity") == "error") error = &d;
+    }
+    REQUIRE(error != nullptr);
+    CHECK(error->at("path") == "/sideways_bank/slots/0");
+    const auto message = error->at("message").get<std::string>();
+    INFO(message);
+    CHECK(message.find("Bank 15") != std::string::npos);
+    CHECK(message.find("acorn-terminal_1_20_mos_3_20.rom") != std::string::npos);
+    CHECK(message.find("acorn-mos_3_20") != std::string::npos);
+    CHECK(message.find("acorn-mos_3_50") != std::string::npos);
+    CHECK(message.find("Drop the bank 15 entry") != std::string::npos);
+}
+
+TEST_CASE("resolve-preset: the MOS marker is refused on a bank that is not the MOS's",
+          "[integration][preset][resolve-preset][mos-rom-set]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "misplaced.preset.beebium";
+    std::ofstream(preset_filepath)
+        << R"({"model": "master-128", "name": "Misplaced",
+              "sideways_bank": {"slots": [{"slot": 4, "type": "ram", "source": "mos"}]}})";
+
+    auto out = resolve_json(MASTER_EXECUTABLE, preset_filepath.string(), 78);
+
+    bool located = false;
+    for (const auto& d : out.at("diagnostics")) {
+        if (d.at("severity") == "error" && d.at("path") == "/sideways_bank/slots/0") located = true;
+    }
+    CHECK(located);
+}
+
+TEST_CASE("resolve-preset: an unknown source is refused", "[integration][preset][resolve-preset][mos-rom-set]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "unknown-source.preset.beebium";
+    std::ofstream(preset_filepath)
+        << R"({"model": "master-128", "name": "Unknown",
+              "sideways_bank": {"slots": [{"slot": 9, "type": "rom",
+                                           "image_uri": "acorn-dfs_2_24.rom", "source": "board"}]}})";
+
+    auto out = resolve_json(MASTER_EXECUTABLE, preset_filepath.string(), 78);
+
+    bool located = false;
+    for (const auto& d : out.at("diagnostics")) {
+        if (d.at("severity") == "error" && d.at("path") == "/sideways_bank/slots/0/source") {
+            located = true;
+        }
+    }
+    CHECK(located);
+}
+
+TEST_CASE("describe-preset-schema: the Master's sideways section describes its MOS ROM sets",
+          "[integration][preset][mos-rom-set]") {
+    auto sideways = schema_section(describe_schema(MASTER_EXECUTABLE), "sideways_bank");
+
+    REQUIRE(sideways.contains("mos_rom_banks"));
+    CHECK(sideways.at("mos_rom_banks").at("slots") ==
+          nlohmann::json::array({9, 10, 11, 12, 13, 14, 15}));
+    CHECK(sideways.at("mos_rom_banks").at("source") == "mos");
+    const auto& sets = sideways.at("mos_rom_banks").at("sets");
+    REQUIRE(sets.size() == 2);
+    CHECK(sets[0].at("mos") == "acorn-mos_3_20");
+    CHECK(sets[1].at("mos") == "acorn-mos_3_50");
+    CHECK(sets[1].at("banks").size() == 7);
+    CHECK(sideways.at("mos_rom_banks").at("description").get<std::string>().find("MOS") !=
+          std::string::npos);
+}
+
+TEST_CASE("describe-preset-schema: a Model B's sideways section has no MOS ROM banks",
+          "[integration][preset][mos-rom-set]") {
+    auto sideways = schema_section(describe_schema(EXECUTABLE), "sideways_bank");
+    CHECK_FALSE(sideways.contains("mos_rom_banks"));
+}
