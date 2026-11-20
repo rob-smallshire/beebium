@@ -625,8 +625,29 @@ invents none of them. A preset whose executable is absent from this build is
 omitted. A preset marked as having no thumbnail is shown with a placeholder and
 never triggers a thumbnail fetch.
 
+Filtering the catalogue (Core). Above the catalogue the client offers a search
+field and one filter control per facet. The facets are the server's: every
+`list-presets --json` row carries a `facets` object, and `describe-facets` publishes
+the facet list in display order with each facet's key, label and kind. The client
+derives nothing from preset content; it binds controls to the rows. A facet is
+one of two kinds. An exclusive facet gives every preset exactly one value (Model,
+Coprocessor, Disc controller, Network) and is shown as a single-selection popup
+whose first and default item is "Any". A set facet lets a preset carry several
+values or none (Storage: Floppy, Hard disc, Cassette; Peripherals: Music 5000,
+Serial, Real-time clock, SCSI adapter, and whatever else is fitted) and is shown as
+the same popup, where choosing a value means "has this value". Selections AND
+across facets. Each popup item shows the count of presets it would leave under the
+other controls' current selections and is disabled at zero, never hidden; "Any" is
+always enabled. The facet label sits above its popup, and each popup has a fixed
+width wide enough for its longest value, so the row does not reflow as choices
+change. A Reset control appears only when something is off Any or the search is
+non-empty. The search matches name and description, case-insensitively, and
+combines with the facets. A facet with fewer than two values across the whole
+catalogue may be omitted from the row.
+
 Rests on (CLI): `list-presets --all-models` (one listing executable returns
-every model's presets as JSON lines), `describe-preset-schema` (model display
+every model's presets as JSON lines, each with its `facets`), `describe-facets`
+(the ordered facet list), `describe-preset-schema` (model display
 name and the editor schema), `show-preset --thumbnail` (a preset's screen PNG).
 Management uses `create-preset`, `delete-preset`, `export-preset`,
 `import-preset`. No gRPC.
@@ -644,7 +665,14 @@ Conformance:
 - MANDATORY: the catalogue comes from `list-presets`, thumbnails from
   `show-preset`, model names from `describe-preset-schema`; a preset whose
   executable is absent is omitted; a no-thumbnail preset is never fetched.
-- LATITUDE: the picker or card presentation, grouping, thumbnail caching.
+- MANDATORY: the catalogue filter binds to the rows' `facets` and the
+  `describe-facets` order, kinds and labels; exclusive and set facets as
+  single-selection popups defaulting to Any, AND across facets, counts under the
+  other selections with zero-count items disabled; label above a fixed-width
+  popup; a Reset control; a search over name and description.
+- LATITUDE: the picker or card presentation, grouping, thumbnail caching;
+  persistence of the filter state; omitting a facet with one value; a
+  checkbox form for set facets if a platform prefers it.
 - MACOS-ONLY: the welcome window and its presets page (the entry-point rule
   behind it is in section 13.4).
 
