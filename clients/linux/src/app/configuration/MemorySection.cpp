@@ -108,7 +108,10 @@ MemorySection::MemorySection(NewMachineDialog& dialog) : dialog_(dialog) {
     diagnostic_ = new DiagnosticLine(this);
     layout->addWidget(diagnostic_);
     layout->addStretch(1);
-    connect(&dialog_, &NewMachineDialog::rom_described, this, [this] { describe(); });
+    connect(&dialog_, &NewMachineDialog::rom_described, this, [this] {
+        describe();
+        show_mos();
+    });
     connect(&dialog_, &NewMachineDialog::draft_rederived, this, [this] { describe(); });
     connect(mos_browse_, &QPushButton::clicked, this, [this] { browse_mos(); });
     // Use Default returns to the preset's MOS, as resolved (5.8).
@@ -293,23 +296,27 @@ void MemorySection::show_mos() {
     }
     mos_heading_->setText(QString::fromStdString(schema->section_label("mos_image_uri")));
     const auto value = dialog_.draft().get("/mos_image_uri");
-    const std::string reference = value && value->is_string() ? value->get<std::string>() : std::string();
-    const std::string model_default = default_mos();
-    // The server reads the MOS as a name on the ROM search path or a path.
+    std::string reference = value && value->is_string() ? value->get<std::string>() : std::string();
+    if (reference.empty()) {
+        reference = default_mos();
+    }
+    // The server reads the MOS as a name on the ROM search path or a path;
+    // its title is the server's, from describe-rom (5.8).
+    const QString name = file_name(reference);
     const QString path = QDir::isAbsolutePath(QString::fromStdString(reference))
                              ? QString::fromStdString(reference)
                              : QString();
-    if (reference.empty()) {
-        mos_title_->setText(tr("The model's MOS"));
-        mos_caption_->setText(QString::fromStdString(model_default));
-    } else if (!path.isEmpty()) {
-        mos_title_->setText(QFileInfo(path).fileName());
-        mos_caption_->setText(path);
+    const RomDescription* rom = dialog_.rom_description(reference);
+    const QString title = rom && rom->recognised ? rom->display_title() : QString();
+    if (title.isEmpty()) {
+        mos_title_->setText(name);
+        mos_caption_->clear();
     } else {
-        mos_title_->setText(QString::fromStdString(reference));
-        mos_caption_->setText(reference == model_default ? tr("The model's MOS, from the ROM search path")
-                                                         : tr("From the ROM search path"));
+        mos_title_->setText(title);
+        mos_caption_->setText(name);
     }
+    mos_caption_->setVisible(!title.isEmpty());
+    mos_title_->setToolTip(path);
     mos_default_->setEnabled(dialog_.draft().changed("/mos_image_uri"));
     const auto& preset_mos = dialog_.draft().baseline().value("mos_image_uri", ordered_json());
     mos_default_->setToolTip(preset_mos.is_string() ? QString::fromStdString(preset_mos.get<std::string>())

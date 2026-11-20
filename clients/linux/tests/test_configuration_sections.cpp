@@ -721,7 +721,8 @@ TEST_CASE("Memory shows the MOS ROM first, above the sideways banks, by name fro
     REQUIRE(memory->mos_title());
     CHECK(memory->mos_title()->isVisibleTo(memory));
     CHECK(memory->mos_title()->text() == QStringLiteral("acorn-mos_1_20.rom"));
-    CHECK(memory->mos_caption()->text() == QStringLiteral("The model's MOS, from the ROM search path"));
+    // Unrecognised: the file name alone.
+    CHECK_FALSE(memory->mos_caption()->isVisibleTo(memory));
     // As the preset has it: nothing to go back to.
     CHECK_FALSE(memory->mos_default()->isEnabled());
     bool headed = false;
@@ -743,7 +744,8 @@ TEST_CASE("A MOS ROM chosen from a file is written as its path; Use Default puts
     memory->mos_browse()->click();
     CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("/home/me/roms/My MOS.rom"));
     CHECK(memory->mos_title()->text() == QStringLiteral("My MOS.rom"));
-    CHECK(memory->mos_caption()->text() == QStringLiteral("/home/me/roms/My MOS.rom"));
+    CHECK_FALSE(memory->mos_caption()->isVisibleTo(memory));
+    CHECK(memory->mos_title()->toolTip() == QStringLiteral("/home/me/roms/My MOS.rom"));
     REQUIRE(wait_until([&] { return f.resolutions > before; }));
     CHECK(f.section_names().contains(QStringLiteral("Memory •")));
     REQUIRE(memory->mos_default()->isEnabled());
@@ -751,6 +753,28 @@ TEST_CASE("A MOS ROM chosen from a file is written as its path; Use Default puts
     CHECK(f.dialog->draft().get("/mos_image_uri") == ordered_json("acorn-mos_1_20.rom"));
     CHECK_FALSE(memory->mos_default()->isEnabled());
     CHECK_FALSE(f.section_names().contains(QStringLiteral("Memory •")));
+}
+
+TEST_CASE("A MOS ROM the server recognises shows its title over its file name",
+          "[configuration][memory][mos]") {
+    auto document = master_128_with_extensions("[]");
+    document["mos_image_uri"] = "acorn-mos_3_20.rom";
+    ConfigurationFixture f(document, [](ConfigurationFixture& fixture) {
+        fixture.schema_text = master_128_schema_text();
+        fixture.roms[QStringLiteral("acorn-mos_3_20.rom")] = described("Acorn MOS 3.20", "", {QStringLiteral("os")});
+        fixture.roms[QStringLiteral("/home/me/roms/mos350.rom")] =
+            described("Acorn MOS 3.50", "", {QStringLiteral("os")});
+    });
+    auto* memory = f.section<MemorySection>();
+    REQUIRE(wait_until([&] { return memory->mos_title()->text() == QStringLiteral("Acorn MOS 3.20"); }));
+    CHECK(memory->mos_caption()->isVisibleTo(memory));
+    CHECK(memory->mos_caption()->text() == QStringLiteral("acorn-mos_3_20.rom"));
+    // A file chosen: its title over its own name, its path the tooltip.
+    f.answer = QStringLiteral("/home/me/roms/mos350.rom");
+    memory->mos_browse()->click();
+    REQUIRE(wait_until([&] { return memory->mos_title()->text() == QStringLiteral("Acorn MOS 3.50"); }));
+    CHECK(memory->mos_caption()->text() == QStringLiteral("mos350.rom"));
+    CHECK(memory->mos_title()->toolTip() == QStringLiteral("/home/me/roms/mos350.rom"));
 }
 
 TEST_CASE("A cancelled MOS ROM Browse leaves the draft as it was", "[configuration][memory][mos]") {
@@ -769,7 +793,6 @@ TEST_CASE("A preset's own MOS ROM is its default, though not the model's", "[con
                            [](ConfigurationFixture& fixture) { fixture.schema_text = master_128_schema_text(); });
     auto* memory = f.section<MemorySection>();
     CHECK(memory->mos_title()->text() == QStringLiteral("acorn-mos_3_50.rom"));
-    CHECK(memory->mos_caption()->text() == QStringLiteral("From the ROM search path"));
     // The preset's own MOS is its default, not the model's.
     CHECK_FALSE(memory->mos_default()->isEnabled());
     f.answer = QStringLiteral("/home/me/roms/My MOS.rom");
