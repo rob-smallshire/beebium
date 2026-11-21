@@ -29,7 +29,7 @@ The emulator aims for cycle-accurate behaviour where it matters (6502, VIA timer
 ### Process Model
 
 ```
-beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, beebium-master-128, ...)
+beebium-server, invoked as beebium-model-b, beebium-master-128, ... (one executable; the model names are links to it, or `beebium-server <model>`)
     |
     +-- gRPC Services (VideoService, AudioService, KeyboardService, etc.)
     |
@@ -41,7 +41,7 @@ beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, beebium-
 
 ### Core Design
 
-- **Headless emulator servers**: Each machine variant is a separate executable (`beebium-model-b`, `beebium-model-b-plus`, `beebium-model-b-plus-128k`, `beebium-model-b-romram`, `beebium-model-b-atpl-sidewise`, `beebium-model-b-watford-rom-ram`, `beebium-model-b-integra-b`, `beebium-master-128`)
+- **Headless emulator server**: One multi-call executable, `beebium-server`, holds every machine variant and runs the one named by the name it was invoked as (`beebium-model-b`, `beebium-model-b-plus`, `beebium-model-b-plus-128k`, `beebium-model-b-romram`, `beebium-model-b-atpl-sidewise`, `beebium-model-b-watford-rom-ram`, `beebium-model-b-integra-b`, `beebium-master-128` are relative symlinks to it on Linux and macOS, tiny launchers on Windows) or by its first argument (`beebium-server master-128 start ...`). See `docs/deployment.md`, "One Executable"
 - **gRPC for control**: All interaction via well-defined protocol buffers
 - **Lock-free video/audio**: `OutputQueue` using moodycamel::ReaderWriterQueue for pixel streaming
 - **Policy-based machines**: `Machine<Hardware>` template with one hardware policy per variant (`ModelBHardware`, `ModelBPlusHardware`, `ModelBIntegraBHardware`, ...; see Hardware Policies below)
@@ -127,10 +127,10 @@ beebium/
 │   │   ├── proto/*.proto
 │   │   ├── include/beebium/service/
 │   │   └── src/
-│   ├── server/                  # Server executables, one main per variant
+│   ├── server/                  # The one server executable: a dispatch main plus one run_<model>() per variant
+│   │   ├── main.cpp
 │   │   ├── main_model_b.cpp
-│   │   ├── main_model_b_plus.cpp
-│   │   └── main_model_b_*.cpp
+│   │   └── main_<model>.cpp
 │   ├── discovery/               # Service advertisement and browse (Bonjour/Avahi/mDNS)
 │   └── extensions/              # Plugins: Econet transports (aun, piconet), SCSI, serial, coprocessors, Music 5000
 ├── clients/
@@ -183,15 +183,8 @@ ctest --output-on-failure
 
 ### Build Targets
 
-- `beebium-model-b`: BBC Model B server
-- `beebium-model-b-plus`: BBC Model B+ server (64K, integral BASIC/DFS)
-- `beebium-model-b-plus-128k`: BBC Model B+ 128K server (adds four 16K sideways RAM banks W/X/Y/Z per AN 030)
-- `beebium-model-b-romram`: Model B with a notional 16-slot ROM/RAM board
-- `beebium-model-b-atpl-sidewise`: Model B with the ATPL Sidewise ROM/RAM board
-- `beebium-model-b-watford-rom-ram`: Model B with the Watford Electronics ROM/RAM board
-- `beebium-model-b-integra-b`: Model B with the Computech Integra-B board (IBOS)
-- `beebium-master-128`: BBC Master 128 (MOS 3.20; preset `master-128-mos-3-50` for MOS 3.50)
-- `beebium-servers`: All server executables
+- `beebium-server`: the one server executable for every machine variant (Model B, B+, B+ 128K, the notional ROM/RAM, ATPL Sidewise, Watford ROM/RAM and Integra-B boards, and the Master 128; MOS 3.20, with preset `master-128-mos-3-50` for MOS 3.50). Its POST_BUILD step creates the eight `beebium-<model>` links beside it, so `build/src/server/beebium-model-b` and friends exist as before
+- `beebium-servers`: `beebium-server` plus every plugin
 
 ## Key Components
 
