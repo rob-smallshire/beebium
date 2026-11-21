@@ -18,6 +18,12 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "Beebium headless BBC Micro emulator server (self-contained)")
 set(CPACK_PACKAGE_CONTACT "Robert Smallshire <robert@smallshire.org.uk>")
 
+# Strip the symbols from every binary the packages carry: the servers and the
+# extensions' shared libraries. The wheels are built from these archives, and
+# PyPI refuses a file over 100 MB. On macOS the bundle is codesigned after
+# CPack, so the signature covers the stripped binaries.
+set(CPACK_STRIP_FILES ON)
+
 # The install layout differs per generator: the .deb lays a /opt/beebium system
 # tree, while the .tar.gz is a relocatable single directory the user extracts
 # anywhere. CPack evaluates this config file once per generator (with

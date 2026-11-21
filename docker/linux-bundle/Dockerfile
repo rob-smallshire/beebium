@@ -133,7 +133,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # /usr/bin via their maintainer scripts / scriptlets); the .tar.gz is a
 # relocatable single directory.
 RUN ctest --test-dir build -R install_smoke --output-on-failure \
-    && cmake --install build --prefix /stage/opt/beebium \
+    && cmake --install build --prefix /stage/opt/beebium --strip \
     && bash scripts/smoke-installed-tree.sh /stage/opt/beebium \
     && ( cd build && cpack -G "DEB;RPM;TGZ" ) \
     && mkdir -p /out \
