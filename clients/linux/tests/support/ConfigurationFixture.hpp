@@ -58,6 +58,10 @@ struct ConfigurationFixture {
     QStringList described;                   // what describe-rom was asked
     std::optional<std::string> pick;         // the attachment chooser's answer
     std::optional<AttachmentChoice> asked;   // what it was last asked
+    // A real server to judge the draft's edits; the preset's own
+    // resolution stays the one given.
+    QString resolving_filepath;
+    CoreCli cli;
     std::unique_ptr<NewMachineDialog> dialog;
 
     // Before: the server's answers are set before the dialog first asks,
@@ -87,8 +91,12 @@ struct ConfigurationFixture {
             const auto found = roms.find(rom);
             done(found == roms.end() ? std::nullopt : std::optional<RomDescription>(found->second));
         };
-        host.resolve_runner = [this](const QString&, const QStringList&, CoreCli::Done done) {
+        host.resolve_runner = [this](const QString&, const QStringList& arguments, CoreCli::Done done) {
             ++resolutions;
+            if (!resolving_filepath.isEmpty() && !arguments.contains(QStringLiteral("test"))) {
+                cli.run(resolving_filepath, arguments, std::move(done));
+                return;
+            }
             const nlohmann::ordered_json answer{{"preset", resolved}, {"diagnostics", diagnostics}};
             done(CliResult{true, 0, QByteArray::fromStdString(answer.dump()), {}});
         };

@@ -296,6 +296,12 @@ beebium_linux_add_test(test_mos_launch QT
 target_compile_definitions(test_mos_launch PRIVATE
     BEEBIUM_TEST_SERVER_FILEPATH="${BEEBIUM_TEST_SERVER_FILEPATH}")
 
+beebium_linux_add_test(test_cartridge_launch QT
+    SOURCES test_cartridge_launch.cpp
+    LIBRARIES beebium_linux_app)
+target_compile_definitions(test_cartridge_launch PRIVATE
+    BEEBIUM_TEST_SERVER_FILEPATH="${BEEBIUM_TEST_SERVER_FILEPATH}")
+
 beebium_linux_add_test(test_dialog_locations QT
     SOURCES test_dialog_locations.cpp
     LIBRARIES beebium_linux_app)
