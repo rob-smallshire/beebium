@@ -70,12 +70,10 @@ void AesExtension::init(beebium::ExtensionContext& context) {
     socket_->install_backend(ula_.get());
     socket_->install_coprocessor(tube_.get());
     // The start-up line, so that a user can see what is running: the clock to two places,
-    // 6.67 MHz (for display only), then AESulator's version and the Beebium it was built against
-    // (CMakeLists.txt passes both in).
+    // 6.67 MHz (for display only), then AESulator's version (CMakeLists.txt passes it in).
     char clock[32];
     std::snprintf(clock, sizeof clock, "%.2f MHz", clock_hz() / 1e6);
-    std::cout << "  " << cpu_name() << " (" << clock << ") coprocessor, AESulator " AES_VERSION
-              ", built with Beebium " AES_BEEBIUM_VERSION "\n";
+    std::cout << "  " << cpu_name() << " (" << clock << ") coprocessor, AESulator " AES_VERSION "\n";
 }
 
 // Stops the AES: unplugs it from the socket, then frees the parts, the debugger's link first

@@ -171,11 +171,10 @@ TEST_CASE("AES: what a held Break does (Beebium's behaviour, recorded)", "[aes]"
     CHECK(screen_has(m.machine, expected_banner_words(m.rom, 4)));
 }
 
-// Both versions on the plugin's start-up line come from the build (CMakeLists.txt): AESulator's from
-// manifest.json, Beebium's from its project() line.
-TEST_CASE("AES: built with its own version and Beebium's", "[aes]") {
-    const std::string aes = AES_VERSION, beebium = AES_BEEBIUM_VERSION;
-    printf("plugin version line: AESulator %s, built with Beebium %s\n", aes.c_str(), beebium.c_str());
+// The version on the plugin's start-up line comes from the build (CMakeLists.txt), from
+// manifest.json.
+TEST_CASE("AES: built with its own version", "[aes]") {
+    const std::string aes = AES_VERSION;
+    printf("plugin version line: AESulator %s\n", aes.c_str());
     CHECK(std::regex_match(aes, std::regex("[0-9]+\\.[0-9]+\\.[0-9]+")));
-    CHECK(std::regex_match(beebium, std::regex("[0-9]+\\.[0-9]+\\.[0-9]+")));
 }

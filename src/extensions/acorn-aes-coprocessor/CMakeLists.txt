@@ -31,13 +31,11 @@ add_library(beebium_ext_aes STATIC ${AES_SOURCES})
 target_include_directories(beebium_ext_aes PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(beebium_ext_aes PUBLIC beebium_core)
 # The plugin's version line: AESulator's version, held in manifest.json alone so that it has one
-# home, and Beebium's, from its top-level project() line. Beebium reads only the manifest keys it
-# knows.
+# home. Beebium reads only the manifest keys it knows.
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/manifest.json AES_MANIFEST)
 string(JSON AES_VERSION GET "${AES_MANIFEST}" version)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/manifest.json)
-target_compile_definitions(beebium_ext_aes PUBLIC
-    AES_VERSION="${AES_VERSION}" AES_BEEBIUM_VERSION="${CMAKE_PROJECT_VERSION}")
+target_compile_definitions(beebium_ext_aes PUBLIC AES_VERSION="${AES_VERSION}")
 set_target_properties(beebium_ext_aes PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # The plugin itself, the library Beebium's server loads: only its entry point is exported.
@@ -64,7 +62,7 @@ if(BEEBIUM_BUILD_SERVICE AND BEEBIUM_BUILD_TESTS)
         ${CMAKE_SOURCE_DIR}/src/core/extension-api/PluginAbiVersion.cpp
     )
     target_compile_definitions(beebium_ext_aes_log_plugin PRIVATE AES_TUBE_LOG
-        AES_VERSION="${AES_VERSION}" AES_BEEBIUM_VERSION="${CMAKE_PROJECT_VERSION}")
+        AES_VERSION="${AES_VERSION}")
     target_include_directories(beebium_ext_aes_log_plugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(beebium_ext_aes_log_plugin PRIVATE beebium_core beebium_extension_api)
     set_target_properties(beebium_ext_aes_log_plugin PROPERTIES
