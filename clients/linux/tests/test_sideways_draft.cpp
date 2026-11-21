@@ -19,6 +19,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+
 using namespace beebium::linux_client;
 using nlohmann::ordered_json;
 
@@ -42,6 +46,27 @@ MachineDraft resolved() {
     return MachineDraft(ordered_json::parse(R"({"model": "model-b", "sideways_bank": {"slots": [
         {"slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_26.rom"},
         {"slot": 15, "type": "rom", "image_uri": "bbc-basic_2.rom"}]}})"));
+}
+
+// The Master 128's schema with cartridges providing banks 0 to 3.
+PresetSchema master_with_cartridges() {
+    std::ifstream file(std::filesystem::path(BEEBIUM_LINUX_FIXTURES_DIRPATH) /
+                       "describe-preset-schema-master-128-cartridges.json");
+    std::stringstream text;
+    text << file.rdbuf();
+    auto schema = PresetSchema::parse(text.str());
+    REQUIRE(schema);
+    return *schema;
+}
+
+const DraftSocket& at_slot(const std::vector<DraftSocket>& sockets, int slot) {
+    for (const auto& s : sockets) {
+        if (std::find(s.socket.slots.begin(), s.socket.slots.end(), slot) != s.socket.slots.end()) {
+            return s;
+        }
+    }
+    FAIL("No socket at slot " << slot);
+    return sockets.front();
 }
 
 }  // namespace
@@ -172,4 +197,37 @@ TEST_CASE("The MOS's banks follow the server's resolution; the user's stay", "[p
     // An answer without the bank leaves it.
     CHECK_FALSE(follow_mos_banks(draft, ordered_json{{"model", "master-128"}}));
     CHECK((*draft.get("/sideways_bank/slots"))[0]["image_uri"] == "acorn-dfs_2_45.rom");
+}
+
+TEST_CASE("A cartridge slot's banks have no socket until a cartridge is fitted there",
+          "[preset][sideways][cartridge]") {
+    const PresetSchema schema = master_with_cartridges();
+    MachineDraft draft(ordered_json::parse(R"({"model": "master-128"})"));
+    const auto sockets = draft_sockets(schema, draft);
+    const DraftSocket& rear = at_slot(sockets, 0);
+    CHECK(rear.unfitted());
+    CHECK(rear.point_name == "Rear Cartridge Slot");
+    CHECK(rear.provider.empty());
+    CHECK(rear.socket.capabilities == std::vector<std::string>{"empty"});
+    const DraftSocket& own = at_slot(sockets, 4);
+    CHECK_FALSE(own.unfitted());
+    CHECK(own.point_name.empty());
+    CHECK(own.socket.can("ram"));
+}
+
+TEST_CASE("A fitted cartridge's banks take the capabilities its manifest gives them",
+          "[preset][sideways][cartridge]") {
+    const PresetSchema schema = master_with_cartridges();
+    MachineDraft draft(ordered_json::parse(R"({"model": "master-128", "extensions": [
+        {"name": "acorn-rom-cartridge", "config": {"at": "cartridge-front"}}]})"));
+    const auto sockets = draft_sockets(schema, draft);
+    for (int slot : {2, 3}) {
+        INFO(slot);
+        const DraftSocket& front = at_slot(sockets, slot);
+        CHECK_FALSE(front.unfitted());
+        CHECK(front.provider == "Acorn ROM Cartridge");
+        CHECK(front.point_name == "Front Cartridge Slot");
+        CHECK(front.socket.capabilities == std::vector<std::string>{"rom", "empty"});
+    }
+    CHECK(at_slot(sockets, 1).unfitted());  // the rear slot is still empty
 }

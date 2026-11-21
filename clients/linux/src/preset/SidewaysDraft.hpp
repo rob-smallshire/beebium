@@ -36,6 +36,20 @@ struct SocketContent {
     friend bool operator==(const SocketContent&, const SocketContent&) = default;
 };
 
+// A sideways socket as the draft's cartridges make it (client
+// specification 5.9): one a cartridge provides has the capabilities the
+// fitted cartridge's manifest gives its banks, and none but "empty"
+// without one.
+struct DraftSocket {
+    SchemaSocket socket;
+    std::string point_name;  // where its cartridge is fitted; empty for the model's own
+    std::string provider;    // the fitted cartridge, by display name; empty for none
+    bool unfitted() const { return !socket.provided_by_point.empty() && provider.empty(); }
+};
+
+// The schema's sockets in its order, as the draft fits them.
+std::vector<DraftSocket> draft_sockets(const PresetSchema& schema, MachineDraft& draft);
+
 // The draft's sideways slots seen by socket (client specification 5.2, 11),
 // as the macOS client's Memory section edits them. A socket is addressed
 // at any of its slots; an edited socket is written explicitly, empty

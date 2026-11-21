@@ -12,6 +12,8 @@
 
 #include "preset/SidewaysDraft.hpp"
 
+#include "preset/ExtensionsDraft.hpp"
+
 #include <algorithm>
 
 namespace beebium::linux_client {
@@ -167,6 +169,35 @@ bool follow_mos_banks(MachineDraft& draft, const ordered_json& resolved) {
         draft.set(SLOTS, *slots);
     }
     return changed;
+}
+
+std::vector<DraftSocket> draft_sockets(const PresetSchema& schema, MachineDraft& draft) {
+    const ExtensionsDraft extensions(draft, schema);
+    const auto points = extensions.model_points();
+    std::vector<DraftSocket> out;
+    for (const SchemaSocket& socket : schema.sockets()) {
+        DraftSocket made{socket, {}, {}};
+        const auto point = std::find_if(points.begin(), points.end(), [&](const SchemaAttachmentPoint& p) {
+            return p.id == socket.provided_by_point;
+        });
+        if (!socket.provided_by_point.empty()) {
+            made.point_name = point == points.end() || point->display_name.empty()
+                                  ? socket.provided_by_point
+                                  : point->display_name;
+        }
+        if (point != points.end()) {
+            for (const ExtensionInstance& instance : extensions.attached(*point)) {
+                const auto extension = schema.extension(instance.name);
+                if (extension && extension->provides_sideways) {
+                    made.provider = extensions.display_name(instance.name);
+                    made.socket.capabilities = extension->provides_sideways->bank_capabilities;
+                    break;
+                }
+            }
+        }
+        out.push_back(std::move(made));
+    }
+    return out;
 }
 
 }  // namespace beebium::linux_client
