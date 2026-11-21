@@ -73,6 +73,7 @@ if(BEEBIUM_BUILD_SERVICE AND BEEBIUM_BUILD_TESTS)
         VISIBILITY_INLINES_HIDDEN YES
     )
     configure_file(manifest.json ${AES_LOG_DIR}/manifest.json COPYONLY)
+    file(COPY roms DESTINATION ${AES_LOG_DIR})
 endif()
 
 # The server-side tests of the AES machine, run by Beebium's test runner.
