@@ -710,8 +710,9 @@ TEST_CASE("Memory shows the MOS ROM first, above the sideways banks, by name fro
     document["mos_image_uri"] = "acorn-mos_1_20.rom";
     ConfigurationFixture f(document);
     auto* memory = f.section<MemorySection>();
-    memory->resize(600, 800);
-    memory->layout()->activate();
+    f.dialog->show();
+    f.dialog->reveal(SidebarMode::memory, std::string());
+    QCoreApplication::processEvents();
     REQUIRE(memory->row_count() > 0);
     CHECK(memory->mos_title()->mapTo(memory, QPoint()).y() < memory->row_title(0)->mapTo(memory, QPoint()).y());
     // Not the processor's: Processor has no MOS ROM.

@@ -26,6 +26,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -69,10 +70,20 @@ QString image_filepath(const SocketContent& content) {
 
 MemorySection::MemorySection(NewMachineDialog& dialog) : dialog_(dialog) {
     setObjectName(QStringLiteral("memorySection"));
-    auto* layout = new QVBoxLayout(this);
+    // Scrolled, so each row is as tall as its wrapped notes need however
+    // many sockets the machine has, rather than squeezed to the dialog.
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    auto* scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    outer->addWidget(scroll);
+    auto* inner = new QWidget(scroll);
+    auto* layout = new QVBoxLayout(inner);
     // The MOS ROM first, as the memory map has the OS over the sideways
     // banks and the running machine's Memory mode shows it (5.8, 11).
-    mos_ = new QWidget(this);
+    mos_ = new QWidget(inner);
     auto* mos_layout = new QVBoxLayout(mos_);
     mos_layout->setContentsMargins(0, 0, 0, 8);
     mos_heading_ = section_heading(QString(), mos_);
@@ -95,21 +106,22 @@ MemorySection::MemorySection(NewMachineDialog& dialog) : dialog_(dialog) {
     mos_diagnostic_ = new DiagnosticLine(mos_);
     mos_layout->addWidget(mos_diagnostic_);
     layout->addWidget(mos_);
-    auto* rule = new QFrame(this);
+    auto* rule = new QFrame(inner);
     rule->setFrameShape(QFrame::HLine);
     rule->setFrameShadow(QFrame::Sunken);
     mos_rule_ = rule;
     layout->addWidget(rule);
-    heading_ = section_heading(QString(), this);
+    heading_ = section_heading(QString(), inner);
     layout->addWidget(heading_);
-    aliasing_ = section_caption(this);
+    aliasing_ = section_caption(inner);
     aliasing_->setText(tr("Each socket on this machine answers several aliased slot numbers."));
     layout->addWidget(aliasing_);
     rows_layout_ = new QVBoxLayout;
     layout->addLayout(rows_layout_);
-    diagnostic_ = new DiagnosticLine(this);
+    diagnostic_ = new DiagnosticLine(inner);
     layout->addWidget(diagnostic_);
     layout->addStretch(1);
+    scroll->setWidget(inner);
     connect(&dialog_, &NewMachineDialog::rom_described, this, [this] {
         describe();
         show_mos();

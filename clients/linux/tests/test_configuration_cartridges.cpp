@@ -204,6 +204,39 @@ TEST_CASE("Fitting and removing a cartridge changes its banks, and an orphaned i
     CHECK(texts.contains(QStringLiteral("Clear")));
 }
 
+TEST_CASE("A note that wraps under a Memory row is shown in full, the row as tall as it needs",
+          "[configuration][memory][cartridge][layout]") {
+    const std::string note =
+        "This is a long note about the image in this socket, long enough that it wraps onto a second "
+        "line, and a third, in a dialog of the default size, so that a row of a fixed height would "
+        "clip its first and last lines.";
+    ConfigurationFixture f(
+        master_128("[]", R"([{"slot": 0, "type": "rom", "image_uri": "/home/me/roms/Hopper.rom"},
+                             {"slot": 4, "type": "rom", "image_uri": "/home/me/roms/Wordwise.rom"}])"),
+        [&](ConfigurationFixture& fixture) {
+            fixture.schema_text = schema_text();
+            for (const char* path : {"/sideways_bank/slots/0", "/sideways_bank/slots/1", "/mos_image_uri"}) {
+                fixture.diagnostics.push_back({{"severity", "warning"}, {"path", path}, {"message", note}});
+            }
+        });
+    f.dialog->show();
+    f.dialog->reveal(SidebarMode::memory, std::string());
+    auto* memory = f.section<MemorySection>();
+    REQUIRE(wait_until([&] { return shows(memory, QString::fromStdString(note)); }));
+    QCoreApplication::processEvents();
+    int notes = 0;
+    for (QLabel* label : memory->findChildren<QLabel*>()) {
+        if (!label->isVisibleTo(memory) || !label->wordWrap() || label->text().isEmpty()) {
+            continue;
+        }
+        INFO(label->text().toStdString());
+        CHECK(label->height() >= label->heightForWidth(label->width()));
+        notes += label->text() == QString::fromStdString(note) ? 1 : 0;
+    }
+    // Under the OS row, a cartridge's bank with no cartridge, and a socket of the model's own.
+    CHECK(notes == 3);
+}
+
 TEST_CASE("A fitted cartridge's view lists the banks it provides, each a way to its row in Memory",
           "[configuration][peripherals][cartridge]") {
     ConfigurationFixture f(master_128(R"([{"name": "acorn-rom-cartridge"}])"),
