@@ -81,6 +81,13 @@ struct SchemaParameterGroup {
     std::string none_description;
 };
 
+// The sideways sockets an extension brings to the point it is fitted to
+// (a cartridge's banks; client specification 5.9).
+struct SchemaSidewaysProvision {
+    int banks = 0;
+    std::vector<std::string> bank_capabilities;
+};
+
 struct SchemaExtension {
     std::string name;
     std::string display_name;
@@ -94,6 +101,7 @@ struct SchemaExtension {
     // (docs/preset-schema.md, Attachment).
     std::vector<std::string> attaches_to_one_of;
     std::vector<std::string> provides;
+    std::optional<SchemaSidewaysProvision> provides_sideways;
     std::vector<SchemaParameter> parameters;
     std::vector<SchemaParameterGroup> groups;
 };
@@ -122,6 +130,10 @@ struct SchemaSocket {
     std::vector<int> slots;
     std::vector<std::string> capabilities;  // "rom", "ram", "empty", "write_protect"
     bool runtime_configurable = false;
+    // The attachment point whose extension brings this socket (a cartridge
+    // slot); empty for one of the model's own. Without that extension the
+    // socket's only capability is "empty".
+    std::string provided_by_point;
 
     bool can(std::string_view capability) const {
         for (const auto& c : capabilities) {

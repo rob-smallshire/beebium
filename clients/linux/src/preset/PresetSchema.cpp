@@ -103,6 +103,13 @@ SchemaExtension extension_of(const ordered_json& e) {
     out.attaches_to = strings(e, "attaches_to");
     out.attaches_to_one_of = strings(e, "attaches_to_one_of");
     out.provides = strings(e, "provides");
+    if (const auto ps = e.find("provides_sideways"); ps != e.end() && ps->is_object()) {
+        SchemaSidewaysProvision provision;
+        const auto banks = ps->find("banks");
+        provision.banks = banks != ps->end() && banks->is_number_integer() ? banks->get<int>() : 0;
+        provision.bank_capabilities = strings(*ps, "bank_capabilities");
+        out.provides_sideways = std::move(provision);
+    }
     if (const auto ps = e.find("parameters"); ps != e.end() && ps->is_array()) {
         for (const auto& p : *ps) {
             out.parameters.push_back(parameter(p));
@@ -186,6 +193,7 @@ std::vector<SchemaSocket> PresetSchema::sockets() const {
         }
         made.capabilities = strings(socket, "capabilities");
         made.runtime_configurable = flag(socket, "runtime_configurable");
+        made.provided_by_point = text(socket, "provided_by_point");
         out.push_back(std::move(made));
     }
     return out;

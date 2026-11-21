@@ -40,6 +40,13 @@ PresetSchema model_b() {
                        "describe-preset-schema-model-b.json");
 }
 
+// The Master 128's, as the server gives it with cartridges providing the
+// sockets at banks 0 to 3 (client specification 5.9).
+PresetSchema master_with_cartridges() {
+    return schema_from(std::filesystem::path(BEEBIUM_LINUX_FIXTURES_DIRPATH) /
+                       "describe-preset-schema-master-128-cartridges.json");
+}
+
 }  // namespace
 
 TEST_CASE("The schema names its model and its sections, in the server's words",
@@ -125,6 +132,34 @@ TEST_CASE("The catalogue gives each extension's parameters, typed", "[preset][sc
     CHECK(rtc->groups[0].label == "Clock start");
     CHECK(rtc->groups[0].parameters == std::vector<std::string>{"time", "offset"});
     CHECK(rtc->groups[0].none_label == "Host time");
+}
+
+TEST_CASE("A socket a cartridge provides names its point, and the cartridge what it provides",
+          "[preset][schema][cartridge]") {
+    const PresetSchema schema = master_with_cartridges();
+    const auto sockets = schema.sockets();
+    const auto at = [&](int slot) {
+        const auto found = std::find_if(sockets.begin(), sockets.end(), [&](const SchemaSocket& s) {
+            return std::find(s.slots.begin(), s.slots.end(), slot) != s.slots.end();
+        });
+        REQUIRE(found != sockets.end());
+        return *found;
+    };
+    CHECK(at(0).provided_by_point == "cartridge-rear");
+    CHECK(at(1).provided_by_point == "cartridge-rear");
+    CHECK(at(3).provided_by_point == "cartridge-front");
+    CHECK(at(0).capabilities == std::vector<std::string>{"empty"});
+    CHECK(at(4).provided_by_point.empty());  // the model's own
+
+    const auto cartridge = schema.extension("acorn-rom-cartridge");
+    REQUIRE(cartridge);
+    REQUIRE(cartridge->provides_sideways);
+    CHECK(cartridge->provides_sideways->banks == 2);
+    CHECK(cartridge->provides_sideways->bank_capabilities == std::vector<std::string>{"rom", "empty"});
+    CHECK(cartridge->provides.empty());  // no attachment points
+    const auto disc = model_b().extension("scsi-hard-disc");
+    REQUIRE(disc);
+    CHECK_FALSE(disc->provides_sideways);
 }
 
 TEST_CASE("The repository's recorded schemas all read", "[preset][schema]") {
