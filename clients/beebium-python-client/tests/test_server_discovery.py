@@ -105,6 +105,51 @@ class TestCommand:
         with pytest.raises(ValueError):
             installation.command("model-c")
 
+    def test_on_windows_the_server_executable_runs_in_place_of_a_launcher(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A beebium-<variant>.exe beside beebium-server.exe is a launcher, whose
+        # PID is not the server's: the server executable is run instead.
+        monkeypatch.setattr(sys, "platform", "win32")
+        root = _make_install_tree(tmp_path / "inst")
+        server = _make_executable(root / "bin", "beebium-server.exe")
+        assert _exe_name("master-128") == "beebium-master-128.exe"
+        installation = ServerInstallation.from_root(root)
+        assert installation.command("master-128") == [str(server), "master-128"]
+        # As does a launcher named explicitly, the form --beebium-server takes.
+        explicit = ServerInstallation.from_executable(root / "bin" / "beebium-model-b.exe")
+        assert explicit.command() == [str(server), "model-b"]
+        # The name stays the variant's own, for a person or a PATH lookup.
+        assert installation.executable_filepath("master-128") == root / "bin" / "beebium-master-128.exe"
+
+    def test_on_windows_a_name_with_no_server_executable_beside_it_runs_as_it_is(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        root = _make_install_tree(tmp_path / "inst")
+        assert ServerInstallation.from_root(root).command("master-128") == [
+            str(root / "bin" / "beebium-master-128.exe")
+        ]
+
+    def test_on_windows_an_explicit_executable_of_another_name_runs_as_it_is(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        binary = _make_executable(tmp_path / "bare", "my-server.exe")
+        _make_executable(tmp_path / "bare", "beebium-server.exe")
+        assert ServerInstallation.from_executable(binary).command() == [str(binary)]
+
+    def test_on_posix_a_name_beside_the_server_executable_runs_as_it_is(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A link is the same process as the server.
+        monkeypatch.setattr(sys, "platform", "linux")
+        root = _make_install_tree(tmp_path / "inst")
+        _make_executable(root / "bin", "beebium-server")
+        assert ServerInstallation.from_root(root).command("master-128") == [
+            str(root / "bin" / "beebium-master-128")
+        ]
+
     def test_a_launch_from_the_server_executable_alone_names_the_variant_first(self, tmp_path: Path) -> None:
         root = _make_install_tree(tmp_path / "wheel", variants=())
         server = _make_executable(root / "bin", _multi_call_exe_name())

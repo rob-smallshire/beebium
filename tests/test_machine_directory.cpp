@@ -84,6 +84,12 @@ std::string cerr_of(F body) {
 // stopped), with `extra_args` after its own and its output discarded, or on
 // POSIX its standard output kept in `stdout_filepath`. Only ever stops the
 // process it started.
+//
+// It runs the server executable itself, with the model as its first argument
+// (beebium-server model-b start ...), on every platform: the tests compare the
+// child's PID with the lock's holder and sweep the moment it is killed, so the
+// process started must be the server. On Windows beebium-model-b.exe is a
+// launcher, a process of its own whose child is the server.
 class ServerChild {
 public:
     explicit ServerChild(const std::vector<std::string>& extra_args = {},
@@ -94,7 +100,7 @@ public:
     {
 #ifdef _WIN32
         std::wstring command = L"\"" + fs::path(BEEBIUM_SERVER_FILEPATH).wstring() +
-                               L"\" start --wait=api --port 0";
+                               L"\" model-b start --wait=api --port 0";
         for (const auto& arg : extra_args) command += L" " + fs::path(arg).wstring();
         STARTUPINFOW startup{};
         startup.cb = sizeof(startup);
@@ -112,8 +118,8 @@ public:
                     : ::open(stdout_filepath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
             ::dup2(stdout_fd, STDOUT_FILENO);
             ::dup2(null_fd, STDERR_FILENO);
-            std::vector<const char*> argv{BEEBIUM_SERVER_FILEPATH, "start", "--wait=api",
-                                          "--port", "0"};
+            std::vector<const char*> argv{BEEBIUM_SERVER_FILEPATH, "model-b", "start",
+                                          "--wait=api", "--port", "0"};
             for (const auto& arg : extra_args) argv.push_back(arg.c_str());
             argv.push_back(nullptr);
             ::execv(BEEBIUM_SERVER_FILEPATH, const_cast<char* const*>(argv.data()));

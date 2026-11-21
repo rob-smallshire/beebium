@@ -92,6 +92,16 @@ def _is_executable(filepath: Path) -> bool:
     return os.access(filepath, os.X_OK)
 
 
+def _is_launcher(filepath: Path, variant: str) -> bool:
+    """Whether a Windows ``filepath`` is the variant's launcher: named for it,
+    with the server executable beside it. (An executable of any other name,
+    one a caller chose explicitly, is run as it is.)"""
+    return (
+        filepath.name.lower() == _exe_name(variant).lower()
+        and (filepath.parent / _multi_call_exe_name()).exists()
+    )
+
+
 def _ensure_executable(filepath: Path) -> None:
     """Repair a missing execute bit (idempotent), so an installer that dropped
     it does not fail the launch. See the wheel's own executable_filepath for
@@ -283,6 +293,14 @@ class ServerInstallation:
         alone (the ``beebium-server`` wheel). Either way the variant sees the
         same arguments.
 
+        On Windows the server executable is run, with the variant as its first
+        argument, whenever it is there beside the variant's name: a
+        ``beebium-<variant>.exe`` there is a launcher, a process of its own
+        whose child is the server, so a program holding its PID would not hold
+        the server's (to wait on it, to stop it, or to compare with a machine
+        directory's lock). On Linux and macOS the names are links, the same
+        process as the server, and run as they are.
+
         Raises:
             ValueError: if ``variant`` is not one of :data:`VARIANTS`.
             ServerNotFoundError: if the installation runs no such variant.
@@ -290,9 +308,9 @@ class ServerInstallation:
         if variant not in VARIANTS:
             raise ValueError(f"unknown variant {variant!r}; expected one of {', '.join(VARIANTS)}")
         named = self._named_executable(variant)
-        if named is not None:
-            return [str(named)]
         multi_call = self.bin_dirpath / _multi_call_exe_name()
+        if named is not None and not (sys.platform == "win32" and _is_launcher(named, variant)):
+            return [str(named)]
         if multi_call.exists():
             _ensure_executable(multi_call)
             return [str(multi_call), variant]

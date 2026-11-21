@@ -2417,7 +2417,7 @@ if(BEEBIUM_BUILD_SERVICE)
         Catch2::Catch2WithMain
     )
     target_compile_definitions(test_machine_directory PRIVATE
-        BEEBIUM_SERVER_FILEPATH="$<TARGET_FILE_DIR:beebium-server>/beebium-model-b${CMAKE_EXECUTABLE_SUFFIX}"
+        BEEBIUM_SERVER_FILEPATH="$<TARGET_FILE:beebium-server>"
     )
     add_dependencies(test_machine_directory beebium-servers)
     catch_discover_tests(test_machine_directory)
