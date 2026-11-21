@@ -321,29 +321,25 @@ add_beebium_server(beebium-server)
 # for. On Linux and macOS each is a relative symlink (beebium-model-b ->
 # beebium-server), so a tree copied with its links (the macOS app's embed
 # phase) keeps them working. Windows has no symlinks a user can rely on, so
-# each name there is a copy of the executable, which dispatches on its own
-# name as a link does.
+# each name there is a small launcher executable (windows/model_launcher.c)
+# that runs the beebium-server.exe beside it with its own command line, so the
+# server dispatches on the launcher's name as it does on a link's.
 if(WIN32)
-    set(server_name_commands "")
-    foreach(model ${BEEBIUM_SERVER_MODELS})
-        list(APPEND server_name_commands
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:beebium-server>"
-                "$<TARGET_FILE_DIR:beebium-server>/beebium-${model}.exe")
-    endforeach()
+    include(${CMAKE_CURRENT_SOURCE_DIR}/windows/model_launchers.cmake)
+    beebium_add_model_launchers(SERVER_TARGET beebium-server MODELS ${BEEBIUM_SERVER_MODELS})
 else()
     set(server_name_commands "")
     foreach(model ${BEEBIUM_SERVER_MODELS})
         list(APPEND server_name_commands
             COMMAND ${CMAKE_COMMAND} -E create_symlink beebium-server beebium-${model})
     endforeach()
+    add_custom_command(TARGET beebium-server POST_BUILD
+        ${server_name_commands}
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:beebium-server>"
+        COMMENT "Naming beebium-server for each model"
+        VERBATIM
+    )
 endif()
-add_custom_command(TARGET beebium-server POST_BUILD
-    ${server_name_commands}
-    WORKING_DIRECTORY "$<TARGET_FILE_DIR:beebium-server>"
-    COMMENT "Naming beebium-server for each model"
-    VERBATIM
-)
 
 # System presets are generated below (after the ROM copy) via add_system_preset,
 # which runs the create-preset subcommand as a POST_BUILD step.
@@ -374,6 +370,9 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_host_parallel_printer_plugin
         beebium_ext_hybrid_music_5000_plugin
     )
+endif()
+if(WIN32)
+    list(APPEND BEEBIUM_SERVERS_DEPS ${BEEBIUM_MODEL_LAUNCHER_TARGETS})
 endif()
 add_custom_target(beebium-servers DEPENDS ${BEEBIUM_SERVERS_DEPS})
 
@@ -693,14 +692,9 @@ install(TARGETS beebium-server
     RUNTIME DESTINATION bin
 )
 # The models' names, as in the build tree (above): relative symlinks on Linux
-# and macOS, made under DESTDIR as CPack's DEB and RPM stages need, and copies
-# of the executable on Windows.
-if(WIN32)
-    foreach(model ${BEEBIUM_SERVER_MODELS})
-        install(PROGRAMS "$<TARGET_FILE_DIR:beebium-server>/beebium-${model}.exe"
-            DESTINATION bin)
-    endforeach()
-else()
+# and macOS, made under DESTDIR as CPack's DEB and RPM stages need. On Windows
+# the launchers install themselves to bin/ (windows/model_launchers.cmake).
+if(NOT WIN32)
     install(CODE "
         foreach(model ${BEEBIUM_SERVER_MODELS})
             set(link_filepath \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/beebium-\${model}\")
