@@ -10,8 +10,8 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef BEEBIUM_EXT_ROM_CARTRIDGE_EXTENSION_HPP
-#define BEEBIUM_EXT_ROM_CARTRIDGE_EXTENSION_HPP
+#ifndef BEEBIUM_EXT_ACORN_ROM_CARTRIDGE_EXTENSION_HPP
+#define BEEBIUM_EXT_ACORN_ROM_CARTRIDGE_EXTENSION_HPP
 
 #include <beebium/devices/SidewaysBankProvider.hpp>
 #include <beebium/extension/PeripheralExtension.hpp>
@@ -45,9 +45,9 @@ class CartridgeSlot;
 // or a cartridge with I/O follows the same shape with a writable provider or
 // bus handlers beside.
 //
-// CLI: --rom-cartridge [low=<rom>][:high=<rom>][:at=cartridge-rear|cartridge-front],
+// CLI: --acorn-rom-cartridge [low=<rom>][:high=<rom>][:at=cartridge-rear|cartridge-front],
 // each ROM a name on the ROM search path or a path.
-class RomCartridgeExtension : public PeripheralExtension, public SidewaysBankProvider {
+class AcornRomCartridgeExtension : public PeripheralExtension, public SidewaysBankProvider {
 public:
     // PeripheralExtension
     std::span<const std::string_view> attaches_to() const override { return {}; }
@@ -80,4 +80,4 @@ private:
 
 }  // namespace beebium
 
-#endif  // BEEBIUM_EXT_ROM_CARTRIDGE_EXTENSION_HPP
+#endif  // BEEBIUM_EXT_ACORN_ROM_CARTRIDGE_EXTENSION_HPP

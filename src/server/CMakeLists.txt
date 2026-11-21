@@ -274,7 +274,7 @@ function(add_beebium_server TARGET_NAME)
     # so a single build invocation produces a complete extension tree.
     #
     # The built-in exceptions (aun, host-serial, file-printer, job-file-printer,
-    # joystick, rom-cartridge and voltmace-delta-14b)
+    # joystick, acorn-rom-cartridge and voltmace-delta-14b)
     # are statically linked.
     # See BuiltinExtensions.hpp for their rationale and what would be required
     # to convert each to a plugin. acorn-65c02-coprocessor is now a plugin.
@@ -287,7 +287,7 @@ function(add_beebium_server TARGET_NAME)
             beebium_ext_file_printer
             beebium_ext_job_file_printer
             beebium_ext_joystick
-            beebium_ext_rom_cartridge
+            beebium_ext_acorn_rom_cartridge
             beebium_ext_voltmace_delta_14b
             nlohmann_json::nlohmann_json
             stb_image_write

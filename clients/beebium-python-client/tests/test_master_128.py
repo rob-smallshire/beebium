@@ -272,7 +272,7 @@ def test_a_rom_cartridge_shows_its_banks_read_only(launch_bbc) -> None:
     # A bare ROM name is found on the ROM search path, as --sideways finds one.
     rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
     bbc = launch_bbc(preset=PRESET, variant=VARIANT,
-                     extra_args=["--rom-cartridge", "low=bbc-basic_2.rom"])
+                     extra_args=["--acorn-rom-cartridge", "low=bbc-basic_2.rom"])
     _booted(bbc)
     status = bbc.sideways.get_slot_status()
     socket = status.find_socket_for_slot(0)
@@ -295,7 +295,7 @@ def test_a_rom_cartridge_shows_its_banks_read_only(launch_bbc) -> None:
 def test_a_cartridge_with_its_odd_socket_only_in_the_front_slot(launch_bbc) -> None:
     rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
     bbc = launch_bbc(preset=PRESET, variant=VARIANT,
-                     extra_args=["--rom-cartridge", f"high={rom}:at=cartridge-front"])
+                     extra_args=["--acorn-rom-cartridge", f"high={rom}:at=cartridge-front"])
     _booted(bbc)
     status = bbc.sideways.get_slot_status()
     assert status.find_socket_for_slot(3).populated
@@ -304,10 +304,24 @@ def test_a_cartridge_with_its_odd_socket_only_in_the_front_slot(launch_bbc) -> N
 
 
 def test_a_cartridge_needs_a_rom_in_a_socket(master_command: list[str]) -> None:
-    result = subprocess.run([*master_command, "start", "--rom-cartridge", "at=cartridge-rear"],
+    result = subprocess.run([*master_command, "start", "--acorn-rom-cartridge", "at=cartridge-rear"],
                             capture_output=True, text=True, timeout=60)
     assert result.returncode != 0
     assert "at least one of its sockets" in result.stderr
+
+
+def test_the_cartridge_s_old_name_is_not_an_extension(master_command: list[str], tmp_path: Path) -> None:
+    """The extension was renamed from rom-cartridge to acorn-rom-cartridge with
+    no alias: a preset naming the old one is refused like any unknown name."""
+    preset_filepath = tmp_path / "old-cartridge.json"
+    preset_filepath.write_text(json.dumps({
+        "model": "master-128",
+        "extensions": [{"name": "rom-cartridge", "config": {"low": "bbc-basic_2.rom"}}],
+    }))
+    result = subprocess.run([*master_command, "resolve-preset", str(preset_filepath)],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode != 0
+    assert "'rom-cartridge' is not a known extension" in result.stderr
 
 
 def test_lk18_east_takes_a_rom_in_banks_4_and_5(launch_bbc) -> None:

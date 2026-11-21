@@ -18,7 +18,7 @@ See [deployment.md](deployment.md#one-executable).
 | `beebium-model-b-atpl-sidewise` | BBC Model B with ATPL Sidewise | The historical ATPL Sidewise board: 16 slots, slot 15 a RAM/ROM socket with write-through and a runtime write-protect switch |
 | `beebium-model-b-watford-rom-ram` | BBC Model B with Watford ROM/RAM board | The historical Watford Electronics board: sideways RAM banks 0-7, a `&FF30` write-select latch, S1/S2 protection switches |
 | `beebium-model-b-integra-b` | BBC Model B with Integra-B | The Computech Integra-B board with IBOS: sideways RAM banks 4-7, ROM/RAM socket pairs 8-15, shadow and private RAM, real-time clock, per-chip write-protect switches (see `docs/integra-b/README.md`) |
-| `beebium-master-128` | BBC Master 128 | The BBC Master 128 with MOS 3.20 (the `master-128-mos-3-50` preset for MOS 3.50): LYNNE, HAZEL, ANDY, sideways RAM banks 4-7, the MC146818 clock and CMOS RAM (`--rtc`), the keypad, the 1770, two Tubes (`at=internal-tube`) and two cartridge slots (`--rom-cartridge`); its start-up options are in CMOS, so `--links`, `--screen-mode` and `--auto-boot` do not apply |
+| `beebium-master-128` | BBC Master 128 | The BBC Master 128 with MOS 3.20 (the `master-128-mos-3-50` preset for MOS 3.50): LYNNE, HAZEL, ANDY, sideways RAM banks 4-7, the MC146818 clock and CMOS RAM (`--rtc`), the keypad, the 1770, two Tubes (`at=internal-tube`) and two cartridge slots (`--acorn-rom-cartridge`); its start-up options are in CMOS, so `--links`, `--screen-mode` and `--auto-boot` do not apply |
 
 ## Usage
 

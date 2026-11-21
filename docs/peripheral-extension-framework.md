@@ -243,7 +243,7 @@ Parameter schema fields:
   - `resource` (`rom`): a **ROM** of the machine's, found as `--mos` and
     `--sideways` images are: a bare name on the ROM search path (the
     preset's container, the ROM directory, the per-user `roms/`), else a
-    path. The extension receives the resolved path. `rom-cartridge`'s `low`
+    path. The extension receives the resolved path. `acorn-rom-cartridge`'s `low`
     and `high` are the first, so a preset can name `bbc-basic_2.rom` and get
     the shipped ROM.
 - `access` -- for a `filepath` or `dirpath`, which way the data goes:
@@ -646,7 +646,7 @@ server must recognise with no plugin directory at all; today those are `aun`,
 joysticks on the analogue port, a controller a client sets through
 `ControllerService`), `voltmace-delta-14b` (Voltmace's two-handset
 adapter, attached to `analogue-port` and `user-port` together; both in
-`docs/analogue-port.md`) and `rom-cartridge` (a Master 128 ROM cartridge,
+`docs/analogue-port.md`) and `acorn-rom-cartridge` (a Master 128 ROM cartridge,
 two 16K ROM sockets placed at `cartridge-rear` or `cartridge-front`; see
 `docs/sideways-slots.md`), whose rationale
 `BuiltinExtensions.hpp` records. A

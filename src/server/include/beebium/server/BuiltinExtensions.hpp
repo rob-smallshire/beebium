@@ -29,7 +29,7 @@
 #include "FilePrinterExtension.hpp"
 #include "JobFilePrinterExtension.hpp"
 #include "JoystickExtension.hpp"
-#include "RomCartridgeExtension.hpp"
+#include "AcornRomCartridgeExtension.hpp"
 #include "VoltmaceDelta14bExtension.hpp"
 #include "HostSerialExtension.hpp"
 #include "beebium/extension/Extension.hpp"
@@ -302,18 +302,18 @@ inline std::vector<Entry> make_entries() {
                               new JoystickExtension()); }});
     }
 
-    // ROM cartridge.
+    // Acorn ROM Cartridge.
     //
     // Built-in for the same reason as the joystick. A ROM in either or both of
     // a cartridge's two 16K sockets, in a Master 128 cartridge slot; see
     // docs/sideways-slots.md.
     {
         ExtensionManifest m;
-        m.name = "rom-cartridge";
-        m.display_name = "ROM cartridge";
+        m.name = "acorn-rom-cartridge";
+        m.display_name = "Acorn ROM Cartridge";
         m.description =
-            "A ROM cartridge with two 16K ROM sockets, in one of the Master's cartridge slots.";
-        m.cli_name = "rom-cartridge";
+            "Acorn's ROM cartridge with two 16K ROM sockets, in one of the Master's cartridge slots.";
+        m.cli_name = "acorn-rom-cartridge";
         m.extension_kind = "peripheral";
         m.attaches_to_one_of = {"cartridge-rear", "cartridge-front"};
         ParameterSchema low{"low", "filepath",
@@ -333,7 +333,7 @@ inline std::vector<Entry> make_entries() {
         m.parameters = {low, high};
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
-                              new RomCartridgeExtension()); }});
+                              new AcornRomCartridgeExtension()); }});
     }
 
     // Voltmace Delta 14B/1 adapter.

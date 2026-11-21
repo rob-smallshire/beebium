@@ -305,7 +305,7 @@ provides the slot's sideways banks:
 `SidewaysService` shows the banks with the cartridge's image names, read only. `ConfigureSlot`
 on one is refused with a sentence saying how to fit a cartridge at launch.
 
-The built-in `rom-cartridge` is the simplest cartridge: `low` and `high` are the ROMs in its
+The built-in `acorn-rom-cartridge` is the simplest cartridge: `low` and `high` are the ROMs in its
 two 16K sockets, on the slot's even and odd banks, as on Acorn's Master ROM Cartridge
 (`docs/master-128/README.md`). Each is a ROM name on the ROM search path or a path (the
 parameter's `resource: "rom"`), and at least one is given. A socket with nothing in it

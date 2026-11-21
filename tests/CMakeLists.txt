@@ -2280,7 +2280,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_file_printer
         beebium_ext_job_file_printer
         beebium_ext_joystick
-        beebium_ext_rom_cartridge
+        beebium_ext_acorn_rom_cartridge
         beebium_ext_voltmace_delta_14b
         nlohmann_json::nlohmann_json
         stb_image_write
@@ -2302,7 +2302,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_file_printer
         beebium_ext_job_file_printer
         beebium_ext_joystick
-        beebium_ext_rom_cartridge
+        beebium_ext_acorn_rom_cartridge
         beebium_ext_voltmace_delta_14b
         nlohmann_json::nlohmann_json
         stb_image_write
@@ -2325,7 +2325,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_file_printer
         beebium_ext_job_file_printer
         beebium_ext_joystick
-        beebium_ext_rom_cartridge
+        beebium_ext_acorn_rom_cartridge
         beebium_ext_voltmace_delta_14b
         nlohmann_json::nlohmann_json
         stb_image_write
@@ -2358,7 +2358,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_file_printer
         beebium_ext_job_file_printer
         beebium_ext_joystick
-        beebium_ext_rom_cartridge
+        beebium_ext_acorn_rom_cartridge
         beebium_ext_voltmace_delta_14b
         nlohmann_json::nlohmann_json
         stb_image_write
@@ -2383,7 +2383,7 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_file_printer
         beebium_ext_job_file_printer
         beebium_ext_joystick
-        beebium_ext_rom_cartridge
+        beebium_ext_acorn_rom_cartridge
         beebium_ext_voltmace_delta_14b
         nlohmann_json::nlohmann_json
         stb_image_write

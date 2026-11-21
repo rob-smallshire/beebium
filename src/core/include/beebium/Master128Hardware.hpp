@@ -434,7 +434,7 @@ public:
         const bool rear = bank < 2;
         return "Bank " + std::to_string(bank) + " is the " +
                std::string(rear ? "rear" : "front") +
-               " cartridge slot's; fit a cartridge there with --rom-cartridge at=" +
+               " cartridge slot's; fit a cartridge there with --acorn-rom-cartridge at=" +
                std::string(rear ? "cartridge-rear" : "cartridge-front") +
                " when the machine starts, not while it runs.";
     }

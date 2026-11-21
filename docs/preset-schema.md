@@ -499,14 +499,14 @@ floppy drives and the cassette. What differs:
 | Sideways slots and types | Per board (see `describe-preset-schema`) | Per model | Banks 4-7 RAM (LK18/LK19 East: ROM), 8 a ROM socket, 9-15 the MOS ROM's; 0-3 a cartridge's only |
 | Attachment points | `1mhz-bus`, `user-port`, `printer-port`, `analogue-port`, `tube`, `serial-port` | The same | The same, and `internal-tube`, `cartridge-rear`, `cartridge-front`, `modem-connector` |
 
-The built-in `rom-cartridge` extension (`low`, `high`: the ROMs in the
+The built-in `acorn-rom-cartridge` extension (`low`, `high`: the ROMs in the
 cartridge's two 16K sockets, on the slot's even and odd banks, at least one of
 them; each a name on the ROM search path or a path; a socket left empty leaves
 its bank empty) is a Master 128 cartridge, placed at `cartridge-rear` or
 `cartridge-front`:
 
 ```json
-"extensions": [ { "name": "rom-cartridge", "config": { "at": "cartridge-front", "low": "bbc-basic_2.rom" } } ]
+"extensions": [ { "name": "acorn-rom-cartridge", "config": { "at": "cartridge-front", "low": "bbc-basic_2.rom" } } ]
 ```
 
 `describe-preset-schema` is the authoritative per-model answer, since it is

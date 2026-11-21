@@ -22,7 +22,7 @@
 // SidewaysService all ask the cartridge for those banks' contents, which it
 // holds itself:
 //
-// - a ROM cartridge (RomCartridgeExtension) answers reads from its images
+// - a ROM cartridge (AcornRomCartridgeExtension) answers reads from its images
 //   and ignores writes;
 // - a RAM cartridge would be the same provider taking writes;
 // - a cartridge that also decodes FRED and JIM on the cartridge bus would add
