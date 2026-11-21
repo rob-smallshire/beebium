@@ -37,7 +37,7 @@ transcript beside it (`Intel_27513.md`): a 64K EPROM as four 16K pages, the
 page chosen by a write cycle whose data bits select it, and a page latch that
 clears to page 0 at power-up.
 
-For Beebium: the built-in `acorn-rom-cartridge` extension's two parameters are
-these two sockets, the lower answering on the slot's even bank and the upper
-on the odd one; a paged 27513 cartridge would be a later provider that turns
+For Beebium: the built-in `acorn-rom-cartridge` extension provides these two
+sockets, the lower answering on the slot's even bank and the upper on the odd
+one, and the ROMs in them are those banks' `sideways_bank` entries; a paged 27513 cartridge would be a later provider that turns
 a write into a page change (research document, section 1.6).

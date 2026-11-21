@@ -268,11 +268,13 @@ REPO_ROMS_DIRPATH = Path(__file__).parents[3] / "roms"
 def test_a_rom_cartridge_shows_its_banks_read_only(launch_bbc) -> None:
     """A cartridge with a ROM in its even-bank socket only, in the rear slot:
     bank 0 answers with it and bank 1 is empty, as on Acorn's cartridge.
-    SidewaysService shows the banks and will not change them."""
-    # A bare ROM name is found on the ROM search path, as --sideways finds one.
+    The ROM is bank 0's ordinary sideways entry. SidewaysService shows the
+    banks and will not change them."""
+    # A bare ROM name is found on the ROM search path, as for any bank.
     rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
     bbc = launch_bbc(preset=PRESET, variant=VARIANT,
-                     extra_args=["--acorn-rom-cartridge", "low=bbc-basic_2.rom"])
+                     extra_args=["--acorn-rom-cartridge",
+                                 "--sideways", "slot=0:type=rom:image=bbc-basic_2.rom"])
     _booted(bbc)
     status = bbc.sideways.get_slot_status()
     socket = status.find_socket_for_slot(0)
@@ -295,7 +297,8 @@ def test_a_rom_cartridge_shows_its_banks_read_only(launch_bbc) -> None:
 def test_a_cartridge_with_its_odd_socket_only_in_the_front_slot(launch_bbc) -> None:
     rom = REPO_ROMS_DIRPATH / "bbc-basic_2.rom"
     bbc = launch_bbc(preset=PRESET, variant=VARIANT,
-                     extra_args=["--acorn-rom-cartridge", f"high={rom}:at=cartridge-front"])
+                     extra_args=["--acorn-rom-cartridge", "at=cartridge-front",
+                                 "--sideways", f"slot=3:type=rom:image={rom}"])
     _booted(bbc)
     status = bbc.sideways.get_slot_status()
     assert status.find_socket_for_slot(3).populated
@@ -303,11 +306,54 @@ def test_a_cartridge_with_its_odd_socket_only_in_the_front_slot(launch_bbc) -> N
     assert not status.find_socket_for_slot(0).populated
 
 
-def test_a_cartridge_needs_a_rom_in_a_socket(master_command: list[str]) -> None:
-    result = subprocess.run([*master_command, "start", "--acorn-rom-cartridge", "at=cartridge-rear"],
+def test_a_cartridge_with_no_roms_has_two_empty_banks(launch_bbc) -> None:
+    bbc = launch_bbc(preset=PRESET, variant=VARIANT,
+                     extra_args=["--acorn-rom-cartridge", "at=cartridge-rear"])
+    _booted(bbc)
+    status = bbc.sideways.get_slot_status()
+    assert not status.find_socket_for_slot(0).populated
+    assert not status.find_socket_for_slot(1).populated
+
+
+def test_a_cartridge_bank_s_rom_needs_a_cartridge(master_command: list[str], tmp_path: Path) -> None:
+    """A preset's entry for a cartridge bank with no cartridge at that slot is
+    refused in the preset's terms, naming the slot to fit one at."""
+    preset_filepath = tmp_path / "orphan.json"
+    preset_filepath.write_text(json.dumps({
+        "model": "master-128",
+        "sideways_bank": {"slots": [{"slot": 2, "type": "rom", "image_uri": "bbc-basic_2.rom"}]},
+    }))
+    result = subprocess.run([*master_command, "resolve-preset", str(preset_filepath)],
                             capture_output=True, text=True, timeout=60)
     assert result.returncode != 0
-    assert "at least one of its sockets" in result.stderr
+    assert "Fit a cartridge at the Front Cartridge Slot under Peripherals" in result.stderr
+    assert "--sideways" not in result.stderr
+
+
+def test_a_preset_s_cartridge_rom_is_its_bank_s_entry(master_command: list[str], tmp_path: Path) -> None:
+    """A fitted cartridge's ROM is an ordinary sideways_bank entry, which
+    resolve-preset writes back as given, with no marker."""
+    entry = {"slot": 0, "type": "rom", "image_uri": "bbc-basic_2.rom"}
+    preset_filepath = tmp_path / "cartridge.json"
+    preset_filepath.write_text(json.dumps({
+        "model": "master-128",
+        "sideways_bank": {"slots": [entry]},
+        "extensions": [{"name": "acorn-rom-cartridge", "config": {"at": "cartridge-rear"}}],
+    }))
+    result = subprocess.run([*master_command, "resolve-preset", str(preset_filepath)],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    resolved = json.loads(result.stdout)
+    assert entry in resolved["sideways_bank"]["slots"]
+    cartridge = resolved["extensions"][0]
+    assert cartridge["name"] == "acorn-rom-cartridge"
+    assert "low" not in cartridge["config"] and "high" not in cartridge["config"]
+
+
+def test_a_cartridge_takes_no_image_parameters(master_command: list[str]) -> None:
+    result = subprocess.run([*master_command, "start", "--acorn-rom-cartridge", "low=bbc-basic_2.rom"],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode != 0
 
 
 def test_the_cartridge_s_old_name_is_not_an_extension(master_command: list[str], tmp_path: Path) -> None:
@@ -316,7 +362,7 @@ def test_the_cartridge_s_old_name_is_not_an_extension(master_command: list[str],
     preset_filepath = tmp_path / "old-cartridge.json"
     preset_filepath.write_text(json.dumps({
         "model": "master-128",
-        "extensions": [{"name": "rom-cartridge", "config": {"low": "bbc-basic_2.rom"}}],
+        "extensions": [{"name": "rom-cartridge"}],
     }))
     result = subprocess.run([*master_command, "resolve-preset", str(preset_filepath)],
                             capture_output=True, text=True, timeout=60)

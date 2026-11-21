@@ -15,13 +15,10 @@
 #include <beebium/extension/CartridgeSlot.hpp>
 #include <beebium/extension/ExtensionContext.hpp>
 
+#include <cstddef>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 namespace beebium {
 
@@ -29,35 +26,27 @@ namespace {
 
 constexpr std::size_t BANK_SIZE = 16384;
 
-// A cartridge ROM image: at most one bank.
-std::vector<uint8_t> read_rom(const std::string& filepath, std::string_view which) {
-    std::ifstream file(filepath, std::ios::binary);
-    if (!file) {
-        throw std::runtime_error("The Acorn ROM Cartridge's " + std::string(which) + " image " +
-                                 filepath + " could not be read.");
-    }
-    std::vector<uint8_t> data{std::istreambuf_iterator<char>(file),
-                              std::istreambuf_iterator<char>()};
-    if (data.empty() || data.size() > BANK_SIZE) {
-        throw std::runtime_error("The Acorn ROM Cartridge's " + std::string(which) + " image " +
-                                 filepath + " is " + std::to_string(data.size()) +
-                                 " bytes; a cartridge ROM is at most 16K.");
-    }
-    return data;
-}
-
 }  // namespace
 
 void AcornRomCartridgeExtension::init(ExtensionContext& ctx) {
-    names_[0] = std::string(config_value("low").value_or(""));
-    names_[1] = std::string(config_value("high").value_or(""));
-    if (names_[0].empty() && names_[1].empty()) {
-        throw std::runtime_error(
-            "An Acorn ROM Cartridge needs a ROM in at least one of its sockets: give low, high or both.");
-    }
-    if (!names_[0].empty()) images_[0] = read_rom(names_[0], "low");
-    if (!names_[1].empty()) images_[1] = read_rom(names_[1], "high");
     slot_ = &ctx.get<CartridgeSlot>();
+    // The ROMs in its sockets are the machine's sideways_bank entries for
+    // the slot's banks, which the server has read; a socket with none is an
+    // empty bank.
+    const auto& bank_images = slot_->bank_images();
+    for (std::size_t i = 0; i < bank_images.size(); ++i) {
+        const auto& bank_image = bank_images[i];
+        if (bank_image.data.size() > BANK_SIZE) {
+            const int bank = slot_->first_bank() + static_cast<int>(i);
+            throw std::runtime_error("The ROM for bank " + std::to_string(bank) + ", " +
+                                     bank_image.filepath + ", is " +
+                                     std::to_string(bank_image.data.size()) +
+                                     " bytes; a socket of the Acorn ROM Cartridge takes at "
+                                     "most 16K.");
+        }
+        images_[i] = bank_image.data;
+        names_[i] = bank_image.data.empty() ? std::string{} : bank_image.filepath;
+    }
     slot_->fit(*this);
 }
 

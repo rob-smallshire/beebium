@@ -4279,6 +4279,22 @@ TEST_CASE("resolve-preset: a cartridge bank's image without a cartridge names th
     CHECK(result.stderr_output.find("--sideways") == std::string::npos);
 }
 
+TEST_CASE("resolve-preset: a fitted cartridge's ROM is its bank's plain entry",
+          "[integration][preset][resolve-preset][cartridge]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "cartridge.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "master-128",
+        "sideways_bank": {"slots": [{"slot": 3, "type": "rom", "image_uri": "bbc-basic_2.rom"}]},
+        "extensions": [{"name": "acorn-rom-cartridge", "config": {"at": "cartridge-front"}}]})";
+    auto result = run_command(MASTER_EXECUTABLE + " resolve-preset \"" + preset_filepath.string() + "\"");
+    INFO(result.stderr_output);
+    REQUIRE(result.exit_code == 0);
+    const auto resolved = nlohmann::json::parse(result.stdout_output);
+    const nlohmann::json entry = {{"slot", 3}, {"type", "rom"}, {"image_uri", "bbc-basic_2.rom"}};
+    const auto& slots = resolved.at("sideways_bank").at("slots");
+    CHECK(std::find(slots.begin(), slots.end(), entry) != slots.end());
+}
+
 TEST_CASE("describe-preset-schema: a Model B's sideways section has no MOS ROM banks",
           "[integration][preset][mos-rom-set]") {
     auto sideways = schema_section(describe_schema(EXECUTABLE), "sideways_bank");

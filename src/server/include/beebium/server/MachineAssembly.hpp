@@ -128,11 +128,42 @@ OsRom load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
               machine.state().memory.mos_rom.data());
     OsRom os_rom = describe_os_rom(config.machine.mos_filepath, mos_path, mos_data);
 
+    // A cartridge slot's banks hold what the cartridge fitted there holds:
+    // their entries' ROMs go to the slot, for the cartridge to take at its
+    // init, not into the sideways memory, which the cartridge answers for.
+    // Validation has refused a ROM for a slot with no cartridge.
+    if constexpr (requires(typename MachineType::Memory& m, uint8_t bank) {
+                      m.cartridge_slot_for_bank(bank);
+                  }) {
+        auto& memory = machine.state().memory;
+        for (auto* slot : {&memory.cartridge_rear, &memory.cartridge_front}) {
+            std::array<beebium::CartridgeSlot::BankImage, 2> images{};
+            for (std::size_t i = 0; i < images.size(); ++i) {
+                const auto bank = static_cast<uint8_t>(slot->first_bank() + i);
+                const auto entry = config.machine.rom_slots.find(bank);
+                if (entry == config.machine.rom_slots.end() ||
+                    entry->second == EMPTY_SLOT_MARKER || entry->second == RAM_SLOT_MARKER) {
+                    continue;
+                }
+                auto [rom_path, rom_data] = RomPaths::load_rom(entry->second, container);
+                std::cout << "Loading ROM into cartridge bank " << static_cast<int>(bank) << ": "
+                          << rom_path << "\n";
+                images[i] = {rom_path.string(), std::move(rom_data)};
+            }
+            slot->set_bank_images(std::move(images));
+        }
+    }
+
     // Process all slot configurations using the unified API. The
     // validation step above (validate_sideways_configs) already rejected
     // unsupported (slot, type) pairs against the topology, so we can
     // pass each request straight through.
     for (const auto& [slot, marker_or_filepath] : config.machine.rom_slots) {
+        if constexpr (requires(typename MachineType::Memory& m, uint8_t bank) {
+                          m.cartridge_slot_for_bank(bank);
+                      }) {
+            if (machine.state().memory.cartridge_slot_for_bank(slot)) continue;
+        }
         if (marker_or_filepath == EMPTY_SLOT_MARKER) {
             std::cout << "Slot " << static_cast<int>(slot) << ": empty\n";
             machine.state().memory.configure_slot_as_empty(slot);

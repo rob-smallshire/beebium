@@ -306,6 +306,21 @@ highest slot with a language entry wins at reset); a preset does not set it.
 
 The equivalent command-line option is `--sideways slot=N:type=...:image=...[:write-protect]`.
 
+### Banks a cartridge provides (Master 128)
+
+On the Master, banks 0 and 1 are the rear cartridge slot's and banks 2 and 3
+the front's. Such a bank has no socket until a cartridge is fitted: the
+schema's socket for it carries `provided_by_point` (`cartridge-rear`,
+`cartridge-front`) and only the `empty` capability, and the cartridge's
+manifest says what it brings (`provides_sideways`: `banks`, and
+`bank_capabilities`, for the Acorn ROM Cartridge `rom` and `empty`). With an
+extension placed at the point, the bank's entry is an ordinary one: a `rom`
+entry is the ROM in that socket of the cartridge, the slot's even bank in its
+first socket and the odd bank in its second; a bank with no entry is an empty
+socket. `resolve-preset` writes these entries as given, with no marker.
+Without a cartridge at the point, an entry other than `empty` for its banks is
+refused, with a sentence naming the bank and the slot to fit a cartridge at.
+
 ### The MOS's banks (Master 128)
 
 On the Master, banks 9 to 15 are part of the MOS ROM chip, not sockets, so
@@ -499,14 +514,15 @@ floppy drives and the cassette. What differs:
 | Sideways slots and types | Per board (see `describe-preset-schema`) | Per model | Banks 4-7 RAM (LK18/LK19 East: ROM), 8 a ROM socket, 9-15 the MOS ROM's; 0-3 a cartridge's only |
 | Attachment points | `1mhz-bus`, `user-port`, `printer-port`, `analogue-port`, `tube`, `serial-port` | The same | The same, and `internal-tube`, `cartridge-rear`, `cartridge-front`, `modem-connector` |
 
-The built-in `acorn-rom-cartridge` extension (`low`, `high`: the ROMs in the
-cartridge's two 16K sockets, on the slot's even and odd banks, at least one of
-them; each a name on the ROM search path or a path; a socket left empty leaves
-its bank empty) is a Master 128 cartridge, placed at `cartridge-rear` or
-`cartridge-front`:
+The built-in `acorn-rom-cartridge` extension is a Master 128 cartridge of two
+16K ROM sockets, placed at `cartridge-rear` or `cartridge-front`. It has no
+image parameters: it provides the slot's two banks (see
+[Banks a cartridge provides](#banks-a-cartridge-provides-master-128)), and the ROMs in its
+sockets are those banks' `sideways_bank` entries:
 
 ```json
-"extensions": [ { "name": "acorn-rom-cartridge", "config": { "at": "cartridge-front", "low": "bbc-basic_2.rom" } } ]
+"sideways_bank": { "slots": [ { "slot": 2, "type": "rom", "image_uri": "bbc-basic_2.rom" } ] },
+"extensions": [ { "name": "acorn-rom-cartridge", "config": { "at": "cartridge-front" } } ]
 ```
 
 `describe-preset-schema` is the authoritative per-model answer, since it is

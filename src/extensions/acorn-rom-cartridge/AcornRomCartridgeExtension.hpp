@@ -33,10 +33,12 @@ class CartridgeSlot;
 //
 // Acorn's Master ROM Cartridge (docs/master-128/README.md) is a pair of
 // 16K ROM sockets behind a 74HCT139: ROMQA 0 selects IC2, the slot's even
-// bank (ROM 0 or 2), and ROMQA 1 selects IC1, its odd bank. `low` is the ROM
-// in the even bank's socket and `high` the one in the odd bank's; at least
-// one is fitted. A socket with nothing in it leaves its bank empty, reading
-// the stale data bus, as on the board.
+// bank (ROM 0 or 2), and ROMQA 1 selects IC1, its odd bank. The ROMs in them
+// are the machine's sideways_bank entries for those banks, chosen in the
+// Memory section like any bank's and given to it by the slot
+// (CartridgeSlot::bank_images()); the extension has no image parameters. A
+// socket with nothing in it leaves its bank empty, reading the stale data
+// bus, as on the board.
 //
 // A cartridge provides its slot's sideways banks (CartridgeSlot.hpp): this
 // one is a SidewaysBankProvider holding its ROM images, fitted to the slot
@@ -45,8 +47,8 @@ class CartridgeSlot;
 // or a cartridge with I/O follows the same shape with a writable provider or
 // bus handlers beside.
 //
-// CLI: --acorn-rom-cartridge [low=<rom>][:high=<rom>][:at=cartridge-rear|cartridge-front],
-// each ROM a name on the ROM search path or a path.
+// CLI: --acorn-rom-cartridge [at=cartridge-rear|cartridge-front], with
+// --sideways slot=<bank>:type=rom:image=<rom> for the ROM on each bank.
 class AcornRomCartridgeExtension : public PeripheralExtension, public SidewaysBankProvider {
 public:
     // PeripheralExtension
@@ -62,8 +64,8 @@ public:
     SlotInfo bank_info(uint8_t bank) const override;
 
 private:
-    // The image in the socket on `bank`: low on bank 0, high on bank 1;
-    // empty for an unfitted socket.
+    // The image in the socket on `bank`: the even bank's on bank 0, the odd
+    // bank's on bank 1; empty for an unfitted socket.
     const std::vector<uint8_t>& image(uint8_t bank) const { return images_[bank & 1]; }
     const std::string& image_name(uint8_t bank) const { return names_[bank & 1]; }
     // A ROM smaller than 16K repeats through the bank, as its address lines

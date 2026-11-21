@@ -116,8 +116,9 @@ between the two. `SidewaysService` reports the banks with the cartridge's
 image names, read only: `ConfigureSlot` on them is refused with a sentence
 saying how to fit a cartridge. A cartridge is changed with the machine
 relaunched, as Acorn told owners to change one with the power off. The
-built-in `acorn-rom-cartridge` (a ROM in either or both of its two 16K sockets, an
-empty socket an empty bank) is the simplest provider; a RAM
+built-in `acorn-rom-cartridge` (two 16K sockets, whose ROMs are the slot's banks'
+`sideways_bank` entries, read by the server and handed to the slot before the
+cartridge starts; an empty socket an empty bank) is the simplest provider; a RAM
 cartridge would be a provider taking writes, and a cartridge decoding FRED and
 JIM on the cartridge bus would add its bus handlers to the same extension.
 

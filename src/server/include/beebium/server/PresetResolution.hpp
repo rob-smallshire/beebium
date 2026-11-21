@@ -791,6 +791,38 @@ struct SidewaysSlotsError {
 template<typename MachineType>
 std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<MachineType>& config);
 
+// The machine's slot topology with the sockets its extensions bring: a
+// socket provided by a point (SocketSpec::provided_by_point) that an
+// instance with provides_sideways is placed at holds what the instance's
+// bank_capabilities say; one whose point has nothing there stays as the
+// topology has it, only empty.
+template<typename MachineType>
+beebium::SlotTopology fitted_slot_topology(const ServerConfig<MachineType>& config,
+                                           beebium::SlotTopology topology) {
+    for (const auto& inst : config.machine.extension_instances) {
+        const auto* manifest = config.launch.extension_resolver.find_by_name(inst.name);
+        if (manifest == nullptr || !manifest->provides_sideways) continue;
+        const auto at = inst.config.find("at");
+        const auto points =
+            manifest->points_for(at == inst.config.end() ? std::string_view{} : at->second);
+        const auto& capabilities = manifest->provides_sideways->bank_capabilities;
+        auto can = [&](std::string_view capability) {
+            return std::find(capabilities.begin(), capabilities.end(), capability) !=
+                   capabilities.end();
+        };
+        for (auto& socket : topology.sockets) {
+            if (socket.provided_by_point.empty() ||
+                std::find(points.begin(), points.end(), socket.provided_by_point) == points.end()) {
+                continue;
+            }
+            socket.supports_rom = can("rom");
+            socket.supports_ram = can("ram");
+            socket.supports_empty = can("empty");
+        }
+    }
+    return topology;
+}
+
 template<typename MachineType>
 std::optional<std::string> validate_config(const ServerConfig<MachineType>& config) {
     if (auto err = validate_startup_links(config)) return err;
@@ -813,7 +845,8 @@ std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<Mac
     // unsupported types, aliased-socket conflicts, duplicate slot specs.
     using Memory = typename MachineType::Memory;
     if constexpr (requires { Memory::slot_topology(config.board.motherboard_links); }) {
-        const auto topology = Memory::slot_topology(config.board.motherboard_links);
+        const auto topology =
+            fitted_slot_topology(config, Memory::slot_topology(config.board.motherboard_links));
         if (auto err = validate_sideways_configs(topology, config.machine.sideways_configs)) {
             return SidewaysSlotsError{
                 sideways_config_problems(topology, config.machine.sideways_configs).front().index,

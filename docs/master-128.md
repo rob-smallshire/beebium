@@ -305,11 +305,15 @@ provides the slot's sideways banks:
 `SidewaysService` shows the banks with the cartridge's image names, read only. `ConfigureSlot`
 on one is refused with a sentence saying how to fit a cartridge at launch.
 
-The built-in `acorn-rom-cartridge` is the simplest cartridge: `low` and `high` are the ROMs in its
-two 16K sockets, on the slot's even and odd banks, as on Acorn's Master ROM Cartridge
-(`docs/master-128/README.md`). Each is a ROM name on the ROM search path or a path (the
-parameter's `resource: "rom"`), and at least one is given. A socket with nothing in it
-leaves its bank empty: the stale bus, and no image in `SidewaysService`. A
+The built-in `acorn-rom-cartridge` is the simplest cartridge: two 16K sockets, on the slot's
+even and odd banks, as on Acorn's Master ROM Cartridge (`docs/master-128/README.md`). It
+provides the slot's banks (its manifest's `provides_sideways`: two, each `rom` or `empty`)
+and has no image parameters: the ROMs in its sockets are those banks' `sideways_bank`
+entries, chosen in the Memory section like any bank's (`--sideways` on the command line).
+The server reads them and gives them to the slot before the cartridge starts. Without a
+cartridge at the slot the schema shows its banks with `provided_by_point` and only `empty`,
+and an image for one is refused with a sentence naming the slot to fit one at. A socket
+with nothing in it leaves its bank empty: the stale bus, and no image in `SidewaysService`. A
 RAM cartridge, a 27513 taking its page from a write, or a cartridge with FRED/JIM I/O follows
 the same shape with a writable provider or bus handlers beside.
 

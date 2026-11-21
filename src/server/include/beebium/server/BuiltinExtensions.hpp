@@ -304,8 +304,9 @@ inline std::vector<Entry> make_entries() {
 
     // Acorn ROM Cartridge.
     //
-    // Built-in for the same reason as the joystick. A ROM in either or both of
-    // a cartridge's two 16K sockets, in a Master 128 cartridge slot; see
+    // Built-in for the same reason as the joystick. Two 16K ROM sockets in a
+    // Master 128 cartridge slot, which provide the slot's banks; the ROMs in
+    // them are the sideways_bank entries for those banks. See
     // docs/sideways-slots.md.
     {
         ExtensionManifest m;
@@ -318,21 +319,6 @@ inline std::vector<Entry> make_entries() {
         m.attaches_to_one_of = {"cartridge-rear", "cartridge-front"};
         // The slot's two banks, each a socket for a ROM or left empty.
         m.provides_sideways = SidewaysProvision{2, {"rom", "empty"}};
-        ParameterSchema low{"low", "filepath",
-                            "The ROM in the socket on the slot's even bank (ROM 0 or 2), a ROM "
-                            "name or a path; with none the bank is empty", -1, false, false,
-                            ""};
-        low.label = "Even-bank socket";
-        low.access = "read";
-        low.resource = "rom";
-        ParameterSchema high{"high", "filepath",
-                             "The ROM in the socket on the slot's odd bank (ROM 1 or 3), a ROM "
-                             "name or a path; with none the bank is empty", -1, false, false,
-                             ""};
-        high.label = "Odd-bank socket";
-        high.access = "read";
-        high.resource = "rom";
-        m.parameters = {low, high};
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new AcornRomCartridgeExtension()); }});

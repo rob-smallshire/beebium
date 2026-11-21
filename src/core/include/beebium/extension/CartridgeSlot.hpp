@@ -28,11 +28,21 @@
 // - a cartridge that also decodes FRED and JIM on the cartridge bus would add
 //   its bus handlers to the same extension.
 
+//
+// The images in a cartridge's sockets are the machine's sideways_bank
+// entries for the slot's banks, chosen in the Memory section like any other
+// bank's: the server reads them and gives them to the slot (bank_images())
+// before the cartridge's init(), so a cartridge holds no image parameters.
+
 #pragma once
 
 #include "beebium/devices/SidewaysBankProvider.hpp"
 
+#include <array>
 #include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace beebium {
 
@@ -50,6 +60,21 @@ public:
 
     // Take the cartridge out: both banks empty.
     virtual void remove() = 0;
+
+    // A ROM image the machine's configuration names for one of the slot's
+    // banks: the file it was read from and its bytes, both empty for a bank
+    // with none.
+    struct BankImage {
+        std::string filepath;
+        std::vector<uint8_t> data;
+    };
+
+    // The images for the slot's even bank ([0]) and odd bank ([1]).
+    const std::array<BankImage, 2>& bank_images() const { return bank_images_; }
+    void set_bank_images(std::array<BankImage, 2> images) { bank_images_ = std::move(images); }
+
+private:
+    std::array<BankImage, 2> bank_images_{};
 };
 
 }  // namespace beebium

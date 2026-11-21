@@ -249,9 +249,10 @@ Parameter schema fields:
   - `resource` (`rom`): a **ROM** of the machine's, found as `--mos` and
     `--sideways` images are: a bare name on the ROM search path (the
     preset's container, the ROM directory, the per-user `roms/`), else a
-    path. The extension receives the resolved path. `acorn-rom-cartridge`'s `low`
-    and `high` are the first, so a preset can name `bbc-basic_2.rom` and get
-    the shipped ROM.
+    path. The extension receives the resolved path, so a preset can name
+    `bbc-basic_2.rom` and get the shipped ROM. (A ROM in a sideways socket an
+    extension brings, such as a cartridge's, is not a parameter: it is that
+    bank's `sideways_bank` entry; see `provides_sideways`.)
 - `access` -- for a `filepath` or `dirpath`, which way the data goes:
   `"read"` (the default) when the extension reads what the path names,
   `"write"` when it creates or replaces it (file-printer's `path`). A
