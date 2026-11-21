@@ -6,13 +6,13 @@
 # tear the symlinks down on the final erase; during an upgrade the incoming
 # package's %post recreates them.
 #
-# One link per installed /opt/beebium/bin/beebium-model-* or beebium-master-* server (still present
-# when %preun runs), and only where /usr/bin holds our symlink, never a file
-# something else put there.
+# One link per installed /opt/beebium/bin/beebium-server, beebium-model-* or
+# beebium-master-* (still present when %preun runs), and only where /usr/bin
+# holds our symlink, never a file something else put there.
 set -e
 
 if [ "$1" = 0 ]; then
-    for server_filepath in /opt/beebium/bin/beebium-model-* /opt/beebium/bin/beebium-master-*; do
+    for server_filepath in /opt/beebium/bin/beebium-server /opt/beebium/bin/beebium-model-* /opt/beebium/bin/beebium-master-*; do
         [ -f "$server_filepath" ] || continue
         link_filepath="/usr/bin/$(basename "$server_filepath")"
         if [ -L "$link_filepath" ] && [ "$(readlink "$link_filepath")" = "$server_filepath" ]; then

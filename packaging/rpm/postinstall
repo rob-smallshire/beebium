@@ -1,20 +1,22 @@
 # RPM %post scriptlet.
 #
-# Create /usr/bin symlinks to the server binaries in the self-contained
-# /opt/beebium tree so they are on PATH. The server canonicalises argv[0]
-# (and reads /proc/self/exe), so a symlink resolves back to /opt/beebium/bin
-# and the exe-relative discovery of extensions/, ROMs, and presets keeps working.
+# Create /usr/bin symlinks into the self-contained /opt/beebium tree so the
+# servers are on PATH: the multi-call /opt/beebium/bin/beebium-server and each
+# per-model name beside it (itself a link to beebium-server). A /usr/bin link
+# keeps the model's name in argv[0], which the server dispatches on, and the
+# server finds its own directory from /proc/self/exe, so the exe-relative
+# discovery of extensions/, ROMs, and presets keeps working.
 #
-# Every server the package ships is linked: the list is the installed
-# /opt/beebium/bin/beebium-model-* and beebium-master-* files, never a fixed list that a new
-# machine variant would silently fall out of.
+# Every name the package ships is linked: the list is the installed
+# /opt/beebium/bin/beebium-server, beebium-model-* and beebium-master-*, never a
+# fixed list that a new machine variant would silently fall out of.
 #
 # RPM passes $1 = the number of installed instances of this package: 1 on a
 # fresh install, 2 during an upgrade. `ln -sf` is idempotent, so this is correct
 # for both.
 set -e
 
-for server_filepath in /opt/beebium/bin/beebium-model-* /opt/beebium/bin/beebium-master-*; do
+for server_filepath in /opt/beebium/bin/beebium-server /opt/beebium/bin/beebium-model-* /opt/beebium/bin/beebium-master-*; do
     [ -f "$server_filepath" ] || continue
     ln -sf "$server_filepath" "/usr/bin/$(basename "$server_filepath")"
 done

@@ -3,17 +3,22 @@
 # check-server-path-links.sh - assert the .deb / .rpm maintainer scripts put
 # every shipped server on PATH, and take every one off again.
 #
-# The packages lay the server tree under /opt/beebium and symlink each
-# /opt/beebium/bin/beebium-model-* and beebium-master-* into /usr/bin (packaging/debian/postinst,
-# packaging/rpm/postinstall); removal deletes those links (prerm, preuninstall).
-# Each /opt/beebium/bin name is itself a relative link to the one executable,
-# beebium-server, so a /usr/bin link runs it through its model's name.
-# Run inside the smoke container, after installing and after removing.
+# The packages lay the server tree under /opt/beebium and symlink the
+# multi-call /opt/beebium/bin/beebium-server and each per-model
+# beebium-model-* and beebium-master-* name beside it into /usr/bin
+# (packaging/debian/postinst, packaging/rpm/postinstall); removal deletes those
+# links (prerm, preuninstall). Each /opt/beebium/bin model name is itself a
+# relative link to beebium-server, so a /usr/bin link runs it through its
+# model's name. Run inside the smoke container, after installing and after
+# removing.
 #
 # Usage: check-server-path-links.sh installed|removed
-#   installed  every /opt/beebium/bin/beebium-model-* or beebium-master-* server (at least one) has
-#              /usr/bin/<name> as a symlink to it, and running the link works
-#   removed    no /usr/bin/beebium-model-* or beebium-master-* entry remains
+#   installed  /opt/beebium/bin/beebium-server and every beebium-model-* or
+#              beebium-master-* name (at least one) has /usr/bin/<name> as a
+#              symlink to it, each per-model name resolves to beebium-server,
+#              and running the link works
+#   removed    no /usr/bin/beebium-server, beebium-model-* or beebium-master-*
+#              entry remains
 
 set -euo pipefail
 
@@ -23,7 +28,7 @@ usr_bin_dirpath="/usr/bin"
 case "${1:-}" in
     installed)
         server_count=0
-        for server_filepath in "${opt_bin_dirpath}"/beebium-model-* "${opt_bin_dirpath}"/beebium-master-*; do
+        for server_filepath in "${opt_bin_dirpath}"/beebium-server "${opt_bin_dirpath}"/beebium-model-* "${opt_bin_dirpath}"/beebium-master-*; do
             [ -f "${server_filepath}" ] || continue
             name="$(basename "${server_filepath}")"
             link_filepath="${usr_bin_dirpath}/${name}"
@@ -34,6 +39,11 @@ case "${1:-}" in
             target="$(readlink "${link_filepath}")"
             if [ "${target}" != "${server_filepath}" ]; then
                 echo "WRONG /usr/bin link: ${link_filepath} -> ${target}, expected ${server_filepath}" >&2
+                exit 1
+            fi
+            if [ "${name}" != beebium-server ] \
+                && [ "$(readlink -f "${link_filepath}")" != "$(readlink -f "${opt_bin_dirpath}/beebium-server")" ]; then
+                echo "NOT the multi-call server: ${link_filepath} resolves to $(readlink -f "${link_filepath}")" >&2
                 exit 1
             fi
             "${name}" --help >/dev/null || {
@@ -47,20 +57,24 @@ case "${1:-}" in
             echo "NO servers in ${opt_bin_dirpath}" >&2
             exit 1
         fi
-        echo "${server_count} servers linked into ${usr_bin_dirpath}"
+        if [ ! -L "${usr_bin_dirpath}/beebium-server" ]; then
+            echo "MISSING /usr/bin link: ${usr_bin_dirpath}/beebium-server" >&2
+            exit 1
+        fi
+        echo "${server_count} server names linked into ${usr_bin_dirpath}"
         ;;
     removed)
         # A glob, not find: the minimal smoke images need not ship findutils.
         # -e misses a dangling link, so test -L as well.
         leftover_count=0
-        for leftover_filepath in "${usr_bin_dirpath}"/beebium-model-* "${usr_bin_dirpath}"/beebium-master-*; do
+        for leftover_filepath in "${usr_bin_dirpath}"/beebium-server "${usr_bin_dirpath}"/beebium-model-* "${usr_bin_dirpath}"/beebium-master-*; do
             if [ -e "${leftover_filepath}" ] || [ -L "${leftover_filepath}" ]; then
                 echo "LEFT BEHIND after removal: ${leftover_filepath}" >&2
                 leftover_count=$((leftover_count + 1))
             fi
         done
         [ "${leftover_count}" -eq 0 ] || exit 1
-        echo "no beebium-model-* or beebium-master-* left in ${usr_bin_dirpath}"
+        echo "no beebium-server, beebium-model-* or beebium-master-* left in ${usr_bin_dirpath}"
         ;;
     *)
         echo "usage: $0 installed|removed" >&2
