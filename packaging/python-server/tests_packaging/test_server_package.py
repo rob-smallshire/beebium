@@ -14,8 +14,9 @@
 wheel in a fresh venv (build_wheel.py + a matching-platform runner). They import
 nothing that executes a server binary -- their job is to prove the wheel is laid
 out and registered correctly: the package resolves from site-packages, the paths
-API points into the bundled tree, the eight binaries are present (and executable
-on POSIX), the console scripts are registered, and py.typed ships.
+API points into the bundled tree, the one multi-call beebium-server binary is
+present (and executable on POSIX) with no per-model copies beside it, the console
+scripts are registered, and py.typed ships.
 """
 
 from __future__ import annotations
@@ -89,15 +90,26 @@ def test_presets_are_present_when_the_bundle_ships_them():
     assert any(presets.glob("*.beebium-preset")), f"preset directory {presets} is present but has no presets"
 
 
+SERVER_NAME = "beebium-server" + (".exe" if sys.platform == "win32" else "")
+
+
 @pytest.mark.parametrize("variant", VARIANTS)
-def test_executable_filepath_present_and_executable(variant):
+def test_executable_filepath_is_the_multi_call_server(variant):
     filepath = beebium.server.executable_filepath(variant)
     assert filepath.is_file()
     assert filepath.parent.name == "bin"
-    expected = f"beebium-{variant}" + (".exe" if sys.platform == "win32" else "")
-    assert filepath.name == expected
+    assert filepath.name == SERVER_NAME
     if sys.platform != "win32":
         assert os.access(filepath, os.X_OK), f"{filepath} is not executable"
+
+
+def test_bundle_bin_holds_no_per_model_names():
+    """The bundle's beebium-<model> links (launchers on Windows) stay out of the
+    wheel: a zip stores what a link points at, so each would be a whole server."""
+    bin_dirpath = beebium.server.bundle_dirpath() / "bin"
+    per_model = sorted(p.name for p in bin_dirpath.iterdir()
+                       if p.name.removesuffix(".exe") in {f"beebium-{v}" for v in VARIANTS})
+    assert per_model == [], f"per-model names in the wheel's bin/: {per_model}"
 
 
 def test_executable_filepath_rejects_unknown_variant():

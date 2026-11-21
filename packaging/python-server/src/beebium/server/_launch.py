@@ -12,14 +12,17 @@
 
 """Console-script entry points for the bundled server binaries.
 
-`pip install beebium-server` puts `beebium-model-b` (and the three other
-variants) on PATH. On POSIX each is a thin ``os.execv`` of the matching binary,
-so signals, exit code and stdout behave exactly as the bare binary. Windows has
+`pip install beebium-server` puts `beebium-model-b` (and the other seven
+variants) on PATH. Each runs the bundled multi-call ``beebium-server`` with the
+variant as its first argument, then the script's own arguments. On POSIX that is
+a thin ``os.execv``, so signals, exit code and stdout behave exactly as the bare
+binary. Windows has
 no exec that preserves console signal semantics -- ``os.execv`` there spawns a
 fresh process and mishandles Ctrl-C and the exit code for the shim -- so on
 Windows the server is run as a child and its exit code is propagated. Either
 way a client that needs precise signal delivery should launch the binary from
-beebium.server.executable_filepath() directly rather than through the shim.
+beebium.server.executable_filepath() directly, with the variant as its first
+argument, rather than through the shim.
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ from beebium.server._paths import executable_filepath
 
 def _exec(variant: str) -> None:
     filepath = executable_filepath(variant)
-    argv = [str(filepath), *sys.argv[1:]]
+    argv = [str(filepath), variant, *sys.argv[1:]]
     if sys.platform == "win32":
         import subprocess
 

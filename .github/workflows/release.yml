@@ -173,8 +173,9 @@ jobs:
           ls -l dist
 
       # Publish-boundary gate: the exact wheel set, with the right platform tags,
-      # each containing all four server binaries -- before the wheels leave this
-      # job. A green build does not prove the wheel was assembled correctly.
+      # each holding the multi-call server and under PyPI's size limit -- before
+      # the wheels leave this job. A green build does not prove the wheel was
+      # assembled correctly.
       - name: Verify the server wheels before upload
         working-directory: packaging/python-server/dist
         run: |
@@ -192,17 +193,33 @@ jobs:
             diff <(echo "${expected}") <(echo "${actual}") || true
             exit 1
           fi
-          # Each wheel carries all eight binaries; the Windows wheel names them
-          # with a .exe suffix, so accept either form per variant.
+          # Each wheel carries the one multi-call beebium-server (.exe on
+          # Windows) that runs all eight models, and none of the bundle's
+          # per-model beebium-<model> names: a zip stores what a symlink points
+          # at, so each would be a whole server again. Each wheel must also fit
+          # PyPI's per-file limit, 100 MiB (104857600 bytes, warehouse's
+          # MAX_FILESIZE), which refuses the upload otherwise. The gate is
+          # 95000000 bytes, a margin of about 9.6 MB, so a wheel that has grown
+          # close to the limit fails here before any file is published.
+          limit_bytes=95000000
           for whl in *.whl; do
+            listing="$(unzip -l "${whl}")"
+            grep -qE "beebium/server/_bundle/bin/beebium-server(\.exe)?\$" <<<"${listing}" \
+              || { echo "::error::${whl} is missing bin/beebium-server"; exit 1; }
             for variant in model-b model-b-plus model-b-plus-128k model-b-romram \
                            model-b-atpl-sidewise model-b-watford-rom-ram model-b-integra-b \
                            master-128; do
-              unzip -l "${whl}" | grep -qE "beebium/server/_bundle/bin/beebium-${variant}(\.exe)?\$" \
-                || { echo "::error::${whl} is missing beebium-${variant}"; exit 1; }
+              if grep -qE "beebium/server/_bundle/bin/beebium-${variant}(\.exe)?\$" <<<"${listing}"; then
+                echo "::error::${whl} carries bin/beebium-${variant}; the wheel holds only beebium-server"; exit 1
+              fi
             done
+            size_bytes="$(wc -c <"${whl}" | tr -d ' ')"
+            echo "${whl}: ${size_bytes} bytes"
+            if [ "${size_bytes}" -gt "${limit_bytes}" ]; then
+              echo "::error::${whl} is ${size_bytes} bytes, over the ${limit_bytes}-byte gate below PyPI's 104857600-byte file limit"; exit 1
+            fi
           done
-          echo "Server wheels verified: correct tags and all eight binaries."
+          echo "Server wheels verified: correct tags, one multi-call binary, under the size limit."
 
       - uses: actions/upload-artifact@v7
         with:

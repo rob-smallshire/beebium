@@ -25,6 +25,13 @@ The server bytes are therefore byte-identical to the ones already on the GitHub
 Release, and the wheel is just a repackaging -- no compile. ``_bundle/`` is
 gitignored and exists only at build time.
 
+One thing is left out: the per-model names in ``bin/``. The bundles carry the
+multi-call ``beebium-server`` plus a ``beebium-<model>`` symlink per model (a
+small launcher ``.exe`` on Windows). A wheel is a zip, which cannot hold a
+symlink, and storing what a link points at would put the whole server in the
+wheel once per model. The wheel's console scripts run ``beebium-server <model>``
+instead (see _launch.py).
+
 Example:
     build_wheel.py beebium-server-0.1.3-linux-arm64.tar.gz manylinux_2_41_aarch64
 """
@@ -38,6 +45,11 @@ import sys
 import tarfile
 import zipfile
 from pathlib import Path
+
+# The model ids, matching _paths._VARIANTS; each has a bin/beebium-<model> name in
+# the bundle that the wheel leaves out.
+MODELS = ("model-b", "model-b-plus", "model-b-plus-128k", "model-b-romram",
+          "model-b-atpl-sidewise", "model-b-watford-rom-ram", "model-b-integra-b", "master-128")
 
 HERE = Path(__file__).resolve().parent
 BUNDLE_DIRPATH = HERE / "src" / "beebium" / "server" / "_bundle"
@@ -76,6 +88,25 @@ def _extract_bundle(archive_filepath: Path, bundle_dirpath: Path) -> None:
         shutil.move(str(tmp_dirpath), str(bundle_dirpath))
 
 
+def _drop_per_model_names(bin_dirpath: Path) -> None:
+    """Remove the bundle's beebium-<model> links (or Windows launchers).
+
+    On POSIX each must be a symlink: a regular file there would be a whole
+    server binary, the size the multi-call executable exists to avoid, so it is
+    an error rather than something to quietly delete.
+    """
+    for model in MODELS:
+        for name in (f"beebium-{model}", f"beebium-{model}.exe"):
+            path = bin_dirpath / name
+            if name.endswith(".exe"):
+                if path.is_file():
+                    path.unlink()
+            elif path.is_symlink():
+                path.unlink()
+            elif path.exists():
+                raise SystemExit(f"bundle looks wrong: {path} is not a symlink to beebium-server")
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 3:
         sys.stderr.write(f"usage: {Path(argv[0]).name} <bundle-archive> <platform-tag>\n")
@@ -87,9 +118,12 @@ def main(argv: list[str]) -> int:
 
     print(f"==> Unpacking {archive_filepath.name} into {BUNDLE_DIRPATH}")
     _extract_bundle(archive_filepath, BUNDLE_DIRPATH)
-    server = BUNDLE_DIRPATH / "bin" / "beebium-model-b"
-    if not (server.exists() or (BUNDLE_DIRPATH / "bin" / "beebium-model-b.exe").exists()):
-        raise SystemExit(f"bundle looks wrong: no bin/beebium-model-b[.exe] under {BUNDLE_DIRPATH}")
+    bin_dirpath = BUNDLE_DIRPATH / "bin"
+    servers = [p for p in (bin_dirpath / "beebium-server", bin_dirpath / "beebium-server.exe")
+               if p.is_file() and not p.is_symlink()]
+    if not servers:
+        raise SystemExit(f"bundle looks wrong: no bin/beebium-server[.exe] under {BUNDLE_DIRPATH}")
+    _drop_per_model_names(bin_dirpath)
 
     print(f"==> Building wheel (tag py3-none-{platform_tag})")
     env = os.environ.copy()

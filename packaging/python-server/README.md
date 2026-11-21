@@ -24,8 +24,9 @@ PyPI -- no system package manager, no compiler, no ROM files to locate by hand:
 pip install beebium-server
 ```
 
-Installing it also puts the eight server binaries on `PATH`
-(`beebium-model-b` and its variants), so the package is useful on its own.
+Installing it also puts the eight servers on `PATH` (`beebium-model-b` and
+its variants), so the package is useful on its own. All eight run one bundled
+executable, `beebium-server`, with the machine model as its first argument.
 
 ### Relationship to `beebium`
 
@@ -99,7 +100,7 @@ useful for launching a server yourself or pointing other tooling at the ROMs:
 import beebium.server
 
 # Where the bundled server binary lives (ensured executable), and its kin.
-executable = beebium.server.executable_filepath()        # the model-b binary
+executable = beebium.server.executable_filepath()        # beebium-server: pass the model first
 print(executable)
 print(beebium.server.variants())                         # the eight variants
 print(beebium.server.rom_dirpath())                      # the bundled ROMs
