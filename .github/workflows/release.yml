@@ -312,7 +312,7 @@ jobs:
 
           echo "== smoke-installed-tree.sh against the wheel bundle =="
           SP="$("${PY}" -c 'import beebium.server, os; print(os.path.dirname(beebium.server.__file__))')"
-          bash scripts/smoke-installed-tree.sh "${SP}/_bundle"
+          bash scripts/smoke-installed-tree.sh --layout wheel "${SP}/_bundle"
 
           echo "== resolver must choose the wheel (no env, no checkout build, outside the repo) =="
           mkdir -p "${RUNNER_TEMP}/outside"

@@ -15,35 +15,68 @@
 #   4. bin/ holds the one executable, beebium-server, and each model's name as a
 #      relative link to it, run both by name and as `beebium-server <model>`.
 #
-# Usage: smoke-installed-tree.sh <prefix>      (prefix = the .../opt/beebium dir)
+# Usage: smoke-installed-tree.sh [--layout tree|wheel] <prefix>
+#
+#   prefix  the installed tree: the .../opt/beebium dir, an extracted bundle, or
+#           the _bundle dir inside an installed beebium-server wheel.
+#   --layout tree   (the default) bin/ holds beebium-server and each model's
+#                   name as a link to it; every model check runs by its name.
+#   --layout wheel  bin/ holds beebium-server alone, since a wheel is a zip and
+#                   carries no links; the check of point 4 instead requires that
+#                   no model's name is there, and every model check runs as
+#                   `beebium-server <model>`.
 
 set -euo pipefail
 
-prefix="${1:?usage: smoke-installed-tree.sh <prefix>}"
+usage="usage: smoke-installed-tree.sh [--layout tree|wheel] <prefix>"
+layout="tree"
+if [ "${1:-}" = "--layout" ]; then
+    layout="${2:?${usage}}"
+    shift 2
+fi
+case "${layout}" in
+    tree|wheel) ;;
+    *) echo "${usage}" >&2; exit 2 ;;
+esac
+prefix="${1:?${usage}}"
 # Canonicalise to an absolute path. The bare-command test below symlinks the
 # server binary into a temp dir; with a relative prefix that symlink would dangle
 # (it resolves relative to the symlink's own location, not the caller's cwd).
 prefix="$(cd "${prefix}" && pwd)"
-server="${prefix}/bin/beebium-model-b"
+multi_call="${prefix}/bin/beebium-server"
 
 fail() { echo "SMOKE FAIL: $*" >&2; exit 1; }
 
+# The executable to inspect for its dynamic dependencies, and the command that
+# runs a model: by its name in a tree, as `beebium-server <model>` in a wheel.
+if [ "${layout}" = "tree" ]; then
+    server="${prefix}/bin/beebium-model-b"
+    run_model() { local model="$1"; shift; "${prefix}/bin/beebium-${model}" "$@"; }
+else
+    server="${multi_call}"
+    run_model() { "${multi_call}" "$@"; }
+fi
+
 [ -x "${server}" ] || fail "server binary missing or not executable: ${server}"
 
-# The one executable, and each model's name a link to it in the same
+# The one executable and, in a tree, each model's name a link to it in the same
 # directory. Relative, so a tree copied with its links (the macOS app's embed
 # phase, cp -R) keeps them; an absolute link would dangle there.
-echo "== beebium-server and the models' names =="
-multi_call="${prefix}/bin/beebium-server"
+echo "== beebium-server and the models' names (${layout} layout) =="
 [ -x "${multi_call}" ] && [ ! -L "${multi_call}" ] \
     || fail "beebium-server missing, not executable, or a link: ${multi_call}"
 models="model-b model-b-plus model-b-plus-128k model-b-romram model-b-atpl-sidewise model-b-watford-rom-ram model-b-integra-b master-128"
 for model in ${models}; do
     link_filepath="${prefix}/bin/beebium-${model}"
-    [ -L "${link_filepath}" ] || fail "${link_filepath} is not a link to beebium-server"
-    target="$(readlink "${link_filepath}")"
-    [ "${target}" = "beebium-server" ] \
-        || fail "${link_filepath} -> ${target}; expected the relative beebium-server"
+    if [ "${layout}" = "tree" ]; then
+        [ -L "${link_filepath}" ] || fail "${link_filepath} is not a link to beebium-server"
+        target="$(readlink "${link_filepath}")"
+        [ "${target}" = "beebium-server" ] \
+            || fail "${link_filepath} -> ${target}; expected the relative beebium-server"
+    else
+        [ ! -e "${link_filepath}" ] && [ ! -L "${link_filepath}" ] \
+            || fail "${link_filepath} is in a wheel's bin/, which holds beebium-server alone"
+    fi
 done
 models_out="$("${multi_call}" --help)" || fail "beebium-server --help exited non-zero"
 for model in ${models}; do
@@ -84,7 +117,7 @@ $(echo "${deps_out}" | grep -Ei "${vendored}")"
 fi
 
 echo "== list-extensions (ABI lib load via RPATH + plugin discovery) =="
-ext_out="$("${server}" list-extensions)" || fail "list-extensions exited non-zero"
+ext_out="$(run_model model-b list-extensions)" || fail "list-extensions exited non-zero"
 echo "${ext_out}"
 # One plugin of each kind plus the network-serial extensions (rpc-serial pulls in
 # gRPC, so its presence also proves those deps resolve from the installed tree).
@@ -98,12 +131,19 @@ done
 # command name as argv[0] (as the .deb's /usr/bin/beebium-model-b symlink does),
 # so extension discovery must resolve the executable from the OS rather than
 # canonicalising argv[0]. Guards the regression where plugins silently vanish
-# under the package's primary entrypoint.
+# under the package's primary entrypoint. A wheel has no model link, so there
+# the link on PATH is beebium-server, run as `beebium-server model-b`.
 echo "== bare-command discovery (PATH symlink, argv0 = command name) =="
 linkdir="$(mktemp -d)"
-ln -s "${server}" "${linkdir}/beebium-model-b"
-bare_out="$(PATH="${linkdir}:${PATH}" beebium-model-b list-extensions)" \
-    || fail "bare-command list-extensions exited non-zero"
+if [ "${layout}" = "tree" ]; then
+    ln -s "${server}" "${linkdir}/beebium-model-b"
+    bare_out="$(PATH="${linkdir}:${PATH}" beebium-model-b list-extensions)" \
+        || fail "bare-command list-extensions exited non-zero"
+else
+    ln -s "${multi_call}" "${linkdir}/beebium-server"
+    bare_out="$(PATH="${linkdir}:${PATH}" beebium-server model-b list-extensions)" \
+        || fail "bare-command list-extensions exited non-zero"
+fi
 for plugin in ${expected_plugins}; do
     echo "${bare_out}" | grep -q "${plugin}" \
         || fail "plugin '${plugin}' not discovered under bare-command invocation -- argv[0]-based discovery has regressed"
@@ -112,7 +152,7 @@ rm -rf "${linkdir}"
 
 echo "== boot (ROM discovery via share fallback + gRPC bring-up) =="
 boot_log="$(mktemp)"
-"${server}" start \
+run_model model-b start \
     --mos acorn-mos_1_20.rom \
     --sideways slot=15:type=rom:image=bbc-basic_2.rom \
     --port 0 >"${boot_log}" 2>&1 &
@@ -132,10 +172,12 @@ fi
 grep "Listening on port" "${boot_log}"
 
 echo "== Master 128 boot (its MOS ROM set and preset from the share fallback) =="
-master="${prefix}/bin/beebium-master-128"
-[ -x "${master}" ] || fail "server binary missing or not executable: ${master}"
+if [ "${layout}" = "tree" ]; then
+    master="${prefix}/bin/beebium-master-128"
+    [ -x "${master}" ] || fail "server binary missing or not executable: ${master}"
+fi
 master_log="$(mktemp)"
-"${master}" start --preset master-128 --port 0 >"${master_log}" 2>&1 &
+run_model master-128 start --preset master-128 --port 0 >"${master_log}" 2>&1 &
 pid=$!
 for _ in $(seq 1 40); do
     grep -q "Listening on port" "${master_log}" && break
@@ -147,7 +189,7 @@ wait "${pid}" 2>/dev/null || true
 if ! grep -q "Listening on port" "${master_log}"; then
     echo "---- server output ----" >&2
     cat "${master_log}" >&2
-    fail "beebium-master-128 did not reach 'Listening on port'"
+    fail "the Master 128 did not reach 'Listening on port'"
 fi
 grep "Listening on port" "${master_log}"
 
@@ -158,7 +200,7 @@ preset_count="$(find "${prefix}/share/beebium/presets" -maxdepth 1 -name '*.beeb
 echo "found ${preset_count} preset(s)"
 
 echo "== blank disc templates discovered (share/beebium/blank-discs) =="
-blank_disc_out="$("${prefix}/bin/beebium-model-b" --format tsv list-blank-discs)" \
+blank_disc_out="$(run_model model-b --format tsv list-blank-discs)" \
     || fail "list-blank-discs failed"
 blank_disc_count="$(printf '%s\n' "${blank_disc_out}" | tail -n +2 | grep -c .)" || true
 [ "${blank_disc_count}" -gt 0 ] \
@@ -166,11 +208,11 @@ blank_disc_count="$(printf '%s\n' "${blank_disc_out}" | tail -n +2 | grep -c .)"
 echo "found ${blank_disc_count} blank disc template(s)"
 
 echo "== blank tape templates discovered (share/beebium/blank-tapes) =="
-blank_tape_out="$("${prefix}/bin/beebium-model-b" --format tsv list-blank-tapes)" \
+blank_tape_out="$(run_model model-b --format tsv list-blank-tapes)" \
     || fail "list-blank-tapes failed"
 blank_tape_count="$(printf '%s\n' "${blank_tape_out}" | tail -n +2 | grep -c .)" || true
 [ "${blank_tape_count}" -gt 0 ] \
     || fail "list-blank-tapes lists no templates -- create-tape needs share/beebium/blank-tapes"
 echo "found ${blank_tape_count} blank tape template(s)"
 
-echo "SMOKE PASS: ${prefix} is runnable on $(uname -m)/$(uname -s)"
+echo "SMOKE PASS: ${prefix} (${layout} layout) is runnable on $(uname -m)/$(uname -s)"
