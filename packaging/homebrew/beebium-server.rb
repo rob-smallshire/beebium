@@ -71,23 +71,20 @@ class BeebiumServer < Formula
     # The plugins must resolve out of the installed tree, not a build dir.
     assert_match (libexec/"bin/extensions").to_s, output
 
-    # Every machine variant is on PATH and resolves its plugins out of the keg
-    # through its own symlink.
+    # Every machine variant is on PATH as a link to the one multi-call server
+    # and resolves its plugins out of the keg through its own symlink.
     servers = bin.glob("beebium-{model,master}-*")
     refute_empty servers
     assert_includes servers.map { |s| s.basename.to_s }, "beebium-model-b"
     assert_includes servers.map { |s| s.basename.to_s }, "beebium-master-128"
     servers.each do |server|
       assert_predicate server, :symlink?
+      assert_equal (libexec/"bin/beebium-server").realpath, server.realpath
       assert_match (libexec/"bin/extensions").to_s,
                    shell_output("#{server} list-extensions")
     end
 
-    # Every model name is a link to the one multi-call server, which also runs
-    # a model named as its first argument.
-    servers.each do |server|
-      assert_equal (libexec/"bin/beebium-server").realpath, server.realpath
-    end
+    # The multi-call server also runs a model named as its first argument.
     assert_match "master-128", shell_output("#{bin}/beebium-server --help")
     assert_match (libexec/"bin/extensions").to_s,
                  shell_output("#{bin}/beebium-server master-128 list-extensions")
