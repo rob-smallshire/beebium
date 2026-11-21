@@ -73,9 +73,10 @@ struct ConfigurationEditor: View {
     /// problems.
     var diagnostics: [PresetManager.PresetDiagnostic] = []
 
-    /// Currently selected section (may not be available for the current model;
-    /// `effectiveSection` resolves that).
-    @State private var selectedSection: ConfigSection = .storage
+    /// Drives the selected section (may not be available for the current model;
+    /// `effectiveSection` resolves that) and carries cross-section cues, so a ROM
+    /// cartridge's Memory and Peripherals views can send the user to each other.
+    @StateObject private var navigator = ConfigNavigator()
 
     /// The one focus owner for every section's text fields: it tracks which field
     /// is being edited and commits and releases it before another control (or the
@@ -151,7 +152,7 @@ struct ConfigurationEditor: View {
     /// The section to show: the selection when it is available, else the first
     /// available one.
     private var effectiveSection: ConfigSection? {
-        if availableSections.contains(selectedSection) { return selectedSection }
+        if availableSections.contains(navigator.section) { return navigator.section }
         return availableSections.first
     }
 
@@ -171,6 +172,7 @@ struct ConfigurationEditor: View {
                 .onTapGesture { fieldEditCoordinator.commitActiveEdit() }
         }
         .environment(\.fieldEditCoordinator, fieldEditCoordinator)
+        .environmentObject(navigator)
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(6)
         .overlay(
@@ -197,7 +199,7 @@ struct ConfigurationEditor: View {
 
     private func sidebarRow(for section: ConfigSection) -> some View {
         Button {
-            selectedSection = section
+            navigator.section = section
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: section.icon)
@@ -241,6 +243,7 @@ struct ConfigurationEditor: View {
                 draft: $draft,
                 originalDraft: originalDraft,
                 schema: memorySchema,
+                extensionsSchema: extensionsSchema,
                 mosSchema: mosSchema,
                 romResolver: romResolver,
                 diagnostics: diagnostics))

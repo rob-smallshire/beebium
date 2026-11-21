@@ -30,6 +30,11 @@ struct MemorySectionView: View {
     /// The preset as loaded, used to mark the MOS and sockets changed from it.
     let originalDraft: MachineDraft
     let schema: SidewaysSchemaSection?
+    /// The model's extensions schema, so a cartridge-provided socket
+    /// (`provided_by_point`) can read whether a cartridge is fitted at its point
+    /// and the bank capabilities that cartridge gives. nil on a model with no
+    /// cartridge slots, where every socket is ordinary. See spec 5.9, #300/#301.
+    var extensionsSchema: ExtensionsSchemaSection? = nil
     /// The model's MOS schema (its default MOS ROM); nil hides the MOS field.
     var mosSchema: MosSchemaSection?
     /// Resolves a ROM image to its header (describe-rom), supplied by the host.
@@ -44,6 +49,10 @@ struct MemorySectionView: View {
     /// The Configurator's shared focus owner: Browse commits and releases a
     /// focused field before it opens the panel.
     @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
+
+    /// Cross-section navigation: a cartridge socket's "No cartridge" row sends the
+    /// user to the slot under Peripherals.
+    @EnvironmentObject private var navigator: ConfigNavigator
 
     private typealias Content = SidewaysSocketEditor.Content
     private typealias SocketKind = SidewaysSocketEditor.SocketKind
@@ -64,6 +73,26 @@ struct MemorySectionView: View {
     /// A key over all loaded images, so title resolution re-runs when they change.
     private var imagesKey: String {
         rows.compactMap { $0.content.image }.sorted().joined(separator: "|")
+    }
+
+    /// The cartridge-socket projection, when the model has an extensions schema.
+    private var cartridgeSockets: CartridgeSockets? {
+        extensionsSchema.map { CartridgeSockets(extensionsSchema: $0) }
+    }
+
+    /// The cartridge state of a socket row: ordinary for a motherboard socket, or
+    /// (for a `provided_by_point` socket) whether a cartridge is fitted at its
+    /// point.
+    private func cartridgeState(for row: SidewaysSocketEditor.Row) -> CartridgeSockets.SocketState {
+        cartridgeSockets?.state(of: row.socket, in: draft) ?? .ordinary
+    }
+
+    /// The capabilities that govern a row's controls: the fitted cartridge's bank
+    /// capabilities when a cartridge provides the socket, else the socket's own.
+    /// (A cartridge-provided socket's own capabilities are just "empty".)
+    private func effectiveCapabilities(for row: SidewaysSocketEditor.Row) -> [String] {
+        if case .cartridgePresent(_, _, _, _, let caps) = cartridgeState(for: row) { return caps }
+        return row.socket.capabilities
     }
 
     var body: some View {
@@ -237,8 +266,23 @@ struct MemorySectionView: View {
 
     // MARK: - Socket Row
 
+    @ViewBuilder
     private func socketRow(_ row: SidewaysSocketEditor.Row) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        // A cartridge slot with no cartridge fitted is not an empty ROM socket:
+        // it reads "No cartridge" and sends the user to fit one under Peripherals.
+        if case .cartridgeAbsent(let point, let pointName) = cartridgeState(for: row) {
+            noCartridgeRow(row, point: point, pointName: pointName)
+        } else {
+            populatedSocketRow(row)
+        }
+    }
+
+    /// An ordinary socket row (a motherboard socket, or a cartridge bank with a
+    /// cartridge fitted): the image, the kind picker and the actions menu, with
+    /// the controls governed by the socket's effective capabilities.
+    private func populatedSocketRow(_ row: SidewaysSocketEditor.Row) -> some View {
+        let caps = effectiveCapabilities(for: row)
+        return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 12))
@@ -266,7 +310,7 @@ struct MemorySectionView: View {
                 }
 
                 Group {
-                    if row.supportsWriteProtect && row.content.kind == .ram {
+                    if caps.contains("write_protect") && row.content.kind == .ram {
                         writeProtectPadlock(row)
                     } else {
                         Color.clear
@@ -274,12 +318,54 @@ struct MemorySectionView: View {
                 }
                 .frame(width: 16)
 
-                kindPicker(row)
+                kindPicker(row, caps: caps)
 
-                actionsMenu(row)
+                actionsMenu(row, caps: caps)
             }
 
             Text(captionText(for: row))
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .padding(.leading, 82)
+
+            let rowDiagnostics = diagnostics(for: row)
+            if !rowDiagnostics.isEmpty {
+                DiagnosticLabels(diagnostics: rowDiagnostics)
+                    .padding(.leading, 82)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    /// A cartridge bank whose slot has no cartridge fitted: "No cartridge", no
+    /// image browse or kind change, and a link to the slot under Peripherals.
+    private func noCartridgeRow(_ row: SidewaysSocketEditor.Row,
+                                point: String, pointName: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                // No drag handle: there is nothing to reorder in an unfitted slot.
+                Color.clear.frame(width: 14)
+
+                Text(row.label)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .frame(width: 52, alignment: .leading)
+
+                Text("No cartridge")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    navigator.goToPeripherals(point: point)
+                } label: {
+                    Label("Fit a cartridge…", systemImage: "arrow.right.circle")
+                }
+                .buttonStyle(.link)
+                .help("Fit a cartridge in the \(pointName) under Peripherals")
+            }
+
+            Text("The \(pointName) takes a cartridge, fitted under Peripherals.")
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .padding(.leading, 82)
@@ -302,17 +388,20 @@ struct MemorySectionView: View {
         return diagnostics.forSidewaysSlot(index: index)
     }
 
-    private func kindPicker(_ row: SidewaysSocketEditor.Row) -> some View {
-        let optionCount = (row.supportsRom ? 1 : 0)
-            + (row.supportsRam ? 1 : 0)
-            + (row.supportsEmpty ? 1 : 0)
+    private func kindPicker(_ row: SidewaysSocketEditor.Row, caps: [String]) -> some View {
+        let supportsRom = caps.contains("rom")
+        let supportsRam = caps.contains("ram")
+        let supportsEmpty = caps.contains("empty")
+        let optionCount = (supportsRom ? 1 : 0)
+            + (supportsRam ? 1 : 0)
+            + (supportsEmpty ? 1 : 0)
         return Picker("", selection: Binding(
             get: { row.content.kind },
             set: { newKind in changeKind(of: row, to: newKind) }
         )) {
-            if row.supportsRom { Text("ROM").tag(SocketKind.rom) }
-            if row.supportsRam { Text("RAM").tag(SocketKind.ram) }
-            if row.supportsEmpty { Text("Empty").tag(SocketKind.empty) }
+            if supportsRom { Text("ROM").tag(SocketKind.rom) }
+            if supportsRam { Text("RAM").tag(SocketKind.ram) }
+            if supportsEmpty { Text("Empty").tag(SocketKind.empty) }
         }
         .pickerStyle(.menu)
         .labelsHidden()
@@ -338,16 +427,20 @@ struct MemorySectionView: View {
               : "Write-protect this sideways RAM")
     }
 
-    private func actionsMenu(_ row: SidewaysSocketEditor.Row) -> some View {
+    private func actionsMenu(_ row: SidewaysSocketEditor.Row, caps: [String]) -> some View {
         Menu {
-            if row.supportsWriteProtect && row.content.kind == .ram {
+            if caps.contains("write_protect") && row.content.kind == .ram {
                 Toggle("Write-Protect", isOn: Binding(
                     get: { row.content.writeProtected },
                     set: { var c = row.content; c.writeProtected = $0; setContent(c, for: row) }
                 ))
                 Divider()
             }
-            Button("Browse for ROM image…") { browseForImage(row) }
+            // Browse loads a ROM in one step, so it is offered only where the
+            // socket can hold a ROM (#300); an "empty"-only socket shows none.
+            if caps.contains("rom") {
+                Button("Browse for ROM image…") { browseForImage(row) }
+            }
             Button("Clear") {
                 var c = row.content
                 c.image = nil
@@ -389,6 +482,10 @@ struct MemorySectionView: View {
         // so say so. Picking another image here drops the marker.
         if row.content.isFromMos {
             segments.append("From the MOS")
+        }
+        // A cartridge-provided bank names the cartridge that brings it.
+        if case .cartridgePresent(_, _, _, let cartridgeDisplayName, _) = cartridgeState(for: row) {
+            segments.append(cartridgeDisplayName)
         }
         return segments.joined(separator: " · ")
     }

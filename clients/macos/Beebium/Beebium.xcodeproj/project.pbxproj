@@ -189,6 +189,7 @@
 		986C994B355DAC32982C71E7 /* ScreenSelectionGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69DA862227C857FDE208AF04 /* ScreenSelectionGeometry.swift */; };
 		9875AA8D51070273D7274C4C /* MosSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5D6C92790B72F4DCF4E928 /* MosSchemaSection.swift */; };
 		987BD71FBAD1D69713DD3995 /* KeyboardClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A63D58ABA4C03E6D3AE1D51 /* KeyboardClient.swift */; };
+		98A340CE76871E697C2F3113 /* ConfigNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD29A37D093E4EB89D8FF521 /* ConfigNavigator.swift */; };
 		9A8754B2F1CB725F4A296CDF /* SerialClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60AB5DB41408CC531369DC47 /* SerialClient.swift */; };
 		9A896FBF82F923AB47367CE7 /* NetworkSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40E77C5074CCD7F93B8183F /* NetworkSectionView.swift */; };
 		9AC80D5BE5860211922DD198 /* PresetFilterModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA448C16977523D4497CFC8 /* PresetFilterModelTests.swift */; };
@@ -590,6 +591,7 @@
 		BBBE634AA648CA594D5DBC2D /* OpenMachinePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenMachinePlan.swift; sourceTree = "<group>"; };
 		BBFC7394EF4EAF43B7BB1EC8 /* LevelMeterStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelMeterStateTests.swift; sourceTree = "<group>"; };
 		BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComboBoxRepresentableTests.swift; sourceTree = "<group>"; };
+		BD29A37D093E4EB89D8FF521 /* ConfigNavigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigNavigator.swift; sourceTree = "<group>"; };
 		BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilterTests.swift; sourceTree = "<group>"; };
 		BED1E4790F731F56410D335E /* ExtensionManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionManifest.swift; sourceTree = "<group>"; };
 		BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMapping.swift; sourceTree = "<group>"; };
@@ -850,6 +852,7 @@
 				C20DF6408FDBE13F68F996E2 /* CartridgeSockets.swift */,
 				2903B68B151EC6C50E61B601 /* CassetteConfigView.swift */,
 				7D999E37E519ADA25BD948D0 /* CommittingField.swift */,
+				BD29A37D093E4EB89D8FF521 /* ConfigNavigator.swift */,
 				FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */,
 				DF361B039A144431294C9141 /* ExtensionInstanceModel.swift */,
 				3DC9C04EC6C010373F7AF591 /* ExtensionParameterForm.swift */,
@@ -1400,6 +1403,7 @@
 				C839B9E69E0D6553AB97CAAC /* CassetteErrorKinds.swift in Sources */,
 				DE83DD7DC63111D2D1AC48CF /* ColorExtensions.swift in Sources */,
 				1592F3698ED208D9ED1D284C /* CommittingField.swift in Sources */,
+				98A340CE76871E697C2F3113 /* ConfigNavigator.swift in Sources */,
 				C6AED867FD53B569CAD5A945 /* ConfigurationEditor.swift in Sources */,
 				3B3122E1626E09ABEAC4315B /* ConfigurationSchema.swift in Sources */,
 				E0AAE22F2367681330BC0EC2 /* ConnectDialog.swift in Sources */,
