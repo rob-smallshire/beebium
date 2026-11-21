@@ -1019,15 +1019,17 @@ Profile: Configuration editing. Binding documents: `preset-schema.md`,
 Behaviour. On a machine with cartridge slots (the Master 128's rear slot is banks 0
 and 1, its front slot banks 2 and 3), a sideways socket at those banks does not
 exist until a cartridge is fitted: the cartridge brings the socket. The server says
-so in the sideways schema: such a socket carries `provided_by`, the attachment point
+so in the sideways schema: such a socket carries `provided_by_point`, a string naming the attachment point
 whose extension provides it (`cartridge-rear`, `cartridge-front`), and its own
-`capabilities` are only `empty`. A cartridge extension's manifest declares what it
-provides (`provides.sideways_banks`, the number of banks, and
-`provides.bank_capabilities`, for the Acorn ROM cartridge `rom` and `empty`).
+`capabilities` are only `empty`. (It is distinct from an attachment point's
+`provided_by`, which lists extensions, and from a manifest's `provides`, which lists
+attachment points.) A cartridge extension's manifest declares what it brings under a
+separate key, `provides_sideways`: `banks`, the number of banks, and
+`bank_capabilities`, for the Acorn ROM cartridge `rom` and `empty`.
 
 The configurator reads the draft, not a guess:
 
-- No extension placed at the socket's `provided_by` point: the Memory row reads
+- No extension placed at the socket's `provided_by_point`: the Memory row reads
   "No cartridge" (never "Empty"), its menu offers no image browse or type change,
   and the row says where a cartridge is fitted, with an affordance that takes the
   user to that attachment point in the Peripherals section.
@@ -1047,7 +1049,7 @@ never quoting a command line.
 
 Conformance:
 
-- MANDATORY: "No cartridge" state from `provided_by` plus the draft's extensions;
+- MANDATORY: "No cartridge" state from `provided_by_point` plus the draft's extensions;
   no image browse or type change in that state; a fitted cartridge's banks editable
   with the manifest's capabilities, written as `sideways_bank` entries; no image
   parameters in the cartridge's extension view; the cross-section affordances in
