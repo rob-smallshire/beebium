@@ -149,6 +149,50 @@ final class CartridgeSocketsTests: XCTestCase {
         XCTAssertTrue(sockets.providedSockets(atPoint: "modem-connector", in: schema).isEmpty)
     }
 
+    // MARK: - Orphan entry (Clear without refitting)
+
+    /// A cartridge-absent bank that still carries a ROM entry (a cartridge removed
+    /// after an image was loaded) is an orphan the row can Clear; a plain unfitted
+    /// bank, an "empty" entry, and a fitted bank are not.
+    func testHasOrphanEntryOnlyForAnAbsentBankWithARomEntry() throws {
+        let sockets = CartridgeSockets(extensionsSchema: try Self.masterCartridgeSchema())
+        let bank0 = Self.rearSocket
+
+        // Plain unfitted bank: no entry, nothing to clear.
+        XCTAssertFalse(sockets.hasOrphanEntry(socket: bank0, in: MachineDraft(model: "master-128")))
+
+        // Cartridge removed with a ROM still loaded into bank 0: an orphan.
+        let orphan = MachineDraft(model: "master-128",
+            sidewaysBank: .init(slots: [.init(slot: 0, type: "rom", imageUri: "basic.rom")]))
+        XCTAssertTrue(sockets.hasOrphanEntry(socket: bank0, in: orphan))
+
+        // An "empty" entry is the socket's one capability, not an orphan.
+        let empty = MachineDraft(model: "master-128",
+            sidewaysBank: .init(slots: [.init(slot: 0, type: "empty")]))
+        XCTAssertFalse(sockets.hasOrphanEntry(socket: bank0, in: empty))
+
+        // With the cartridge fitted the bank is not absent, so not an orphan.
+        let fitted = MachineDraft(model: "master-128",
+            sidewaysBank: .init(slots: [.init(slot: 0, type: "rom", imageUri: "basic.rom")]),
+            extensions: [Ext(name: "acorn-rom-cartridge")])
+        XCTAssertFalse(sockets.hasOrphanEntry(socket: bank0, in: fitted))
+    }
+
+    /// Clearing a socket drops its entry entirely (not an "empty" entry), leaving
+    /// the other banks untouched.
+    func testClearingSocketDropsTheEntry() {
+        let editor = SidewaysSocketEditor(schema: SidewaysSchemaSection(
+            type: "sideways_bank", hasAliasing: false,
+            sockets: [Self.rearSocket], defaultRoms: []))
+        let slots: [MachineDraft.SidewaysSlot] = [
+            .init(slot: 0, type: "rom", imageUri: "basic.rom"),
+            .init(slot: 9, type: "rom", imageUri: "mos.rom"),
+        ]
+        let cleared = editor.slots(clearingSocket: Self.rearSocket, in: slots)
+        XCTAssertEqual(cleared.map(\.slot), [9], "bank 0's entry is dropped, bank 9 kept")
+        XCTAssertFalse(cleared.contains { $0.slot == 0 }, "no leftover empty entry for bank 0")
+    }
+
     // MARK: - Fitted-cartridge signature (drives the sideways re-resolve)
 
     /// The signature is empty with no cartridge, names the cartridge and its

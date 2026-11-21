@@ -193,6 +193,14 @@ struct SidewaysSocketEditor {
         return result.sorted { $0.slot < $1.slot }
     }
 
+    /// The slots array with every entry for `socket` removed entirely (not set to
+    /// an explicit "empty"): used to drop a cartridge bank's orphaned entry so the
+    /// bank returns to a clean unfitted state with nothing left in the preset.
+    func slots(clearingSocket socket: SidewaysSocketSchema,
+               in slots: [MachineDraft.SidewaysSlot]) -> [MachineDraft.SidewaysSlot] {
+        slots.filter { !socket.slots.contains($0.slot) }.sorted { $0.slot < $1.slot }
+    }
+
     /// Reorder the *images* between sockets (highest-priority first), leaving each
     /// socket's identity and hardware-fixed kind in place, and return the new
     /// slots. Mirrors the drag-to-reorder semantics of the live Memory list.

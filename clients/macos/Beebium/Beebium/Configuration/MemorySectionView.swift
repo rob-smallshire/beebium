@@ -417,6 +417,21 @@ struct MemorySectionView: View {
                 }
                 .buttonStyle(.link)
                 .help("Fit a cartridge in the \(pointName) under Peripherals")
+
+                // A bank whose cartridge was removed while a ROM was loaded keeps
+                // that entry as an orphan (the resolver's sentence). Offer a
+                // Clear-only menu so it can be dropped without refitting a
+                // cartridge; a plain unfitted bank has no menu.
+                if cartridgeSockets?.hasOrphanEntry(socket: row.socket, in: draft) == true {
+                    Menu {
+                        Button("Clear") { clearOrphanEntry(row) }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Drop the leftover ROM entry for this bank")
+                }
             }
 
             Text("The \(pointName) takes a cartridge, fitted under Peripherals.")
@@ -554,6 +569,14 @@ struct MemorySectionView: View {
     private func setContent(_ content: Content, for row: SidewaysSocketEditor.Row) {
         guard let editor else { return }
         setSlots(editor.slots(settingSocket: row.socket, to: content, in: currentSlots))
+    }
+
+    /// Drop a cartridge bank's orphaned entry entirely, so the bank returns to a
+    /// clean unfitted state (no entry, no resolver sentence) without refitting a
+    /// cartridge.
+    private func clearOrphanEntry(_ row: SidewaysSocketEditor.Row) {
+        guard let editor else { return }
+        setSlots(editor.slots(clearingSocket: row.socket, in: currentSlots))
     }
 
     /// Change a socket's kind. Selecting ROM on a socket with no image opens a

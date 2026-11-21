@@ -80,6 +80,18 @@ struct CartridgeSockets {
         extensionsSchema.attachmentPoints.first { $0.id == point }?.displayName ?? point
     }
 
+    /// Whether a cartridge socket with no cartridge fitted still carries an image
+    /// entry in the draft -- the orphan the resolver's sentence describes, left
+    /// when a cartridge is removed after a ROM was loaded into its bank. The
+    /// Memory row then offers a Clear so the entry can be dropped without refitting
+    /// a cartridge; a plain unfitted bank (no entry) offers nothing. An "empty"
+    /// entry is not an orphan (the socket's one capability), so it does not count.
+    func hasOrphanEntry(socket: SidewaysSocketSchema, in draft: MachineDraft) -> Bool {
+        guard case .cartridgeAbsent = state(of: socket, in: draft) else { return false }
+        let slots = draft.sidewaysBank?.slots ?? []
+        return slots.contains { socket.slots.contains($0.slot) && $0.type != "empty" }
+    }
+
     /// A stable signature of which cartridges the draft fits and where (name and
     /// occupied point), so the configurator can re-resolve the sideways banks when
     /// a cartridge is fitted, removed or moved between slots -- and not on an
