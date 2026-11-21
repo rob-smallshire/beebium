@@ -377,14 +377,16 @@ Server and client version numbers need not match across the wire.
 ### Keg layout
 
 The formula installs the whole relocatable tree under `libexec` and symlinks
-every server (`libexec/bin/beebium-model-*` and `beebium-master-*`, one per machine variant) into
-`bin`, so only the servers land on the user's `PATH` (not `bin/extensions/`):
+the multi-call `libexec/bin/beebium-server` and every per-model name beside it
+(`beebium-model-*` and `beebium-master-*`) into `bin`, so only the servers land
+on the user's `PATH` (not `bin/extensions/`):
 
 ```
 <keg>/
-├── bin/{beebium-model-b, ...}            # symlinks -> ../libexec/bin/<server>
+├── bin/{beebium-server, beebium-model-b, ...}  # symlinks -> ../libexec/bin/<name>
 └── libexec/
-    ├── bin/{beebium-model-b, ...}        # the real binaries
+    ├── bin/beebium-server                # the one real binary, all eight models
+    ├── bin/{beebium-model-b, ...}        # relative symlinks -> beebium-server
     ├── bin/extensions/<name>/{<plugin>.dylib, manifest.json}
     ├── lib/{libbeebium_extension_api.dylib, libbeebium_extension_ui_proto.dylib}
     └── share/beebium/{roms,presets,discs}/
@@ -525,10 +527,13 @@ enterprise deployment (Intune/SCCM/Group Policy) is needed.
   separate clean runner — extracts it and runs a server (the build-isolation
   smoke). It exposes `workflow_call`, so `release.yml` reuses it and attaches the
   ZIP to the draft.
-- `packaging/scoop/beebium-server.json` — the canonical Scoop manifest (bin shims
-  for every server in the ZIP, which the smoke job checks against the extracted
-  ZIP, `checkver`/`autoupdate`; `url`/`hash` are placeholders
-  pinned at release time, like the Homebrew `sha256`).
+- `packaging/scoop/beebium-server.json` — the canonical Scoop manifest. Its
+  `bin` shims `bin\beebium-server.exe` once plainly and once per model as
+  `[bin\beebium-server.exe, beebium-<model>, <model>]`, so Scoop's own shim
+  passes the model as the first argument rather than going through the
+  launcher; the smoke job checks the aliases against the launchers in the
+  extracted ZIP. It has `checkver`/`autoupdate`; `url`/`hash` are placeholders
+  pinned at release time, like the Homebrew `sha256`.
 - `packaging/scoop/sync-bucket.sh <version> <bucket-checkout>` — downloads the
   published release `.zip` asset, computes its `sha256`, and writes the pinned
   manifest into the bucket's `bucket/`. Run by `sync-channels.yml` on release
@@ -553,24 +558,44 @@ ship-unsigned-first decision is still open.
 
 `cmake --install` produces one relocatable `bin`/`lib`/`share` tree; the package
 formats differ only in *where* they place it (see
-[Package formats](#package-formats)). The **`.deb`** installs it under
-`/opt/beebium` with a `/usr/bin` symlink onto every server it ships (each
-`/opt/beebium/bin/beebium-model-*` and `beebium-master-*`) so they are on `PATH`:
+[Package formats](#package-formats)). Its `bin/` holds **one multi-call
+executable**, `beebium-server`, that carries every machine model, and a relative
+symlink `beebium-<model> -> beebium-server` per model (#298). The server
+dispatches on the name it was invoked by, so `beebium-master-128 ...` runs the
+Master 128; any other name, `beebium-server` included, takes the model as its
+first argument (`beebium-server master-128 ...`). Statically linked, eight
+separate executables carried eight copies of gRPC, protobuf and abseil; one
+executable carries one.
+
+The **`.deb`** installs the tree under `/opt/beebium` with a `/usr/bin` symlink
+onto `beebium-server` and onto every per-model name it ships (each
+`/opt/beebium/bin/beebium-model-*` and `beebium-master-*`), so they are on
+`PATH`:
 
 ```
 /opt/beebium/
 ├── bin/
-│   ├── beebium-model-b, beebium-model-b-plus, beebium-model-b-plus-128k, beebium-model-b-romram
+│   ├── beebium-server                     # the one real binary
+│   ├── beebium-model-b, ..., beebium-master-128   # relative symlinks -> beebium-server
 │   └── extensions/<name>/{<plugin>.so, manifest.json}
 ├── lib/{libbeebium_extension_api.so, libbeebium_extension_ui_proto.so}
 └── share/beebium/{roms,presets}/
-/usr/bin/beebium-model-b -> /opt/beebium/bin/beebium-model-b   (+ the other three)
+/usr/bin/beebium-server -> /opt/beebium/bin/beebium-server
+/usr/bin/beebium-model-b -> /opt/beebium/bin/beebium-model-b   (+ the other seven)
 ```
+
+Windows has no symlink an ordinary user can rely on, so its `bin\` holds a small
+launcher `beebium-<model>.exe` per model instead (`src/server/windows/`, about
+13 KB each). A launcher runs the `beebium-server.exe` beside it with its own
+command line unchanged, so the server sees the launcher's name in `argv[0]` and
+the arguments byte for byte; the server shares the console, runs in a job object
+that ends it when the launcher ends, and its exit code is the launcher's.
 
 The **`.tar.gz`** ships the same `bin`/`lib`/`share` tree inside a single
 relocatable directory (`beebium-server-<version>-linux-<arch>/`) that the user
-extracts anywhere and adds the directory's `bin/` to `PATH`. The macOS keg and
-the Windows `.zip` use the same shape. In every case the binaries resolve their
+extracts anywhere and adds the directory's `bin/` to `PATH`; `tar` keeps the
+symlinks. The macOS keg and the Windows `.zip` use the same shape. In every case
+the binaries resolve their
 extension ABI libraries, plugins, ROMs and presets relative to their own on-disk
 location (read from the OS, not `argv[0]`), so the symlinks work and the tree
 relocates intact. See [Deployment](deployment.md) for the discovery details.
@@ -589,9 +614,10 @@ and [Windows](#windows) sections.)
   `libstdc++6 (>= 14)`. Those versions follow the symbols the binaries use, so
   they can sit below the build image's own (glibc 2.41); the supported floor is
   still trixie. The maintainer scripts create and remove the `/usr/bin` symlinks,
-  one per installed `/opt/beebium/bin/beebium-model-*` or `beebium-master-*`; the smoke-deb job asserts
-  every server is linked after install and none is left after removal
-  (`scripts/check-server-path-links.sh`).
+  one per installed `/opt/beebium/bin/beebium-server`, `beebium-model-*` or
+  `beebium-master-*`; the smoke-deb job asserts every name is linked after
+  install, that each per-model name resolves to `beebium-server`, and that none
+  is left after removal (`scripts/check-server-path-links.sh`).
 - **`.rpm`** (`beebium-server-<version>-1.<arch>.rpm`, arch `x86_64` /
   `aarch64`) - the RPM sibling of the `.deb`, for the **Fedora / RHEL family**
   (and openSUSE): `sudo dnf install ./<file>.rpm`. It lays the same `/opt/beebium`
@@ -788,13 +814,23 @@ deployment floors the bundle build sets — see below); and Windows uses
 `.exe`, the plugin DLLs sit beside the exes, and there is no `lib/` —
 `build_wheel.py` preserves that exe-relative layout).
 
+The one thing a wheel leaves out of the bundle is the per-model names in `bin/`.
+A wheel is a zip, which cannot hold a symlink, and storing what a link points at
+would put the whole server in the wheel once per model, which is what took the
+0.21.0 Linux wheels over PyPI's 100 MiB file limit. So `bin/` holds
+`beebium-server` alone (`build_wheel.py` drops the links, and the Windows
+launchers, and refuses a per-model name that is a regular file on POSIX);
+`beebium.server.executable_filepath(variant)` returns it for every variant, and
+the console scripts run `beebium-server <variant> ...`.
+
 In `release.yml`:
 
 - **`server-wheels`** (needs `linux`, `windows` and `macos-bundle`) downloads the
   `bundle-*` artifacts, builds all five wheels, and — a publish-boundary gate
-  before upload — asserts the exact wheel set with the right platform tags and
-  that each wheel contains all four server binaries (the Windows wheel's carry
-  the `.exe` suffix).
+  before upload — asserts the exact wheel set with the right platform tags,
+  that each wheel contains `bin/beebium-server` (`.exe` on Windows) and no
+  per-model name, and that each is at most 95,000,000 bytes, a margin below
+  PyPI's 100 MiB (104,857,600-byte) file limit.
 - **`verify-server-wheels`** (a matrix on `ubuntu-latest` / `ubuntu-24.04-arm` /
   `macos-15` / the self-hosted Intel macOS runner) and **`verify-server-wheels-windows`**
   (`windows-2022`) install the matching server wheel plus the **client wheel
@@ -812,6 +848,9 @@ In `release.yml`:
   in the `pypi`/`testpypi` environment) publishes the verified wheels. Unlike the
   client publish it genuinely needs the server builds, so it runs only after all
   five verification legs pass, and asserts each wheel's version matches the tag.
+  `uv publish` checks the index's simple page first (`UV_PUBLISH_CHECK_URL`)
+  and skips any file already there, so a re-run after a partial publish uploads
+  only the rest.
 
 **macOS deployment floor.** The bundle's floor is 11.0 on arm64 (the first
 Apple-Silicon macOS) and 12.0 on x86_64 (a defensible modern Intel floor). It is
