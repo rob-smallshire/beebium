@@ -29,6 +29,9 @@ import SwiftUI
 struct AttachmentPointGroup: View {
     @Binding var draft: MachineDraft
     let schema: ExtensionsSchemaSection
+    /// The sideways schema, so a cartridge instance can name and link to the
+    /// banks it provides in the Memory section. nil where there are none.
+    var sidewaysSchema: SidewaysSchemaSection? = nil
     let point: AttachmentPoint
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
@@ -48,6 +51,10 @@ struct AttachmentPointGroup: View {
     /// a focused parameter field before they act. The instance parameter forms and
     /// nested points reach it from the environment.
     @Environment(\.fieldEditCoordinator) private var fieldEditCoordinator
+
+    /// Cross-section navigation: a cartridge's "banks in Memory" affordance sends
+    /// the user to the Memory section and highlights the bank row.
+    @EnvironmentObject private var navigator: ConfigNavigator
 
     /// Whether the Add / Change chooser popover is open.
     @State private var showingAdd = false
@@ -249,14 +256,49 @@ struct AttachmentPointGroup: View {
                 serialPortSuggestions: serialPorts,
                 setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })
                 .padding(.leading, 8)
+            // A ROM cartridge carries no image parameters: its ROM images are
+            // loaded in the Memory section. Its view names the banks it provides
+            // and links to each one's row there, so there is one loader.
+            providedBanksSection(instance)
             // Points this instance provides (e.g. the SCSI bus) nest beneath it
             // as further child nodes.
             ForEach(model.pointsProvided(by: instance)) { provided in
                 AttachmentPointGroup(
-                    draft: $draft, schema: schema, point: provided,
-                    diagnostics: diagnostics, serialPorts: serialPorts,
+                    draft: $draft, schema: schema, sidewaysSchema: sidewaysSchema,
+                    point: provided, diagnostics: diagnostics, serialPorts: serialPorts,
                     providerInstance: instance,
                     showsOrphans: model.isLastProvider(instance, ofPoint: provided.id, in: draft))
+            }
+        }
+    }
+
+    /// For a cartridge instance (one whose manifest provides sideways sockets),
+    /// the banks it provides, each a link that reveals and highlights that bank's
+    /// row in the Memory section. Nothing for an extension that provides none.
+    @ViewBuilder
+    private func providedBanksSection(_ instance: ExtensionInstanceModel.Instance) -> some View {
+        if schema.providesSideways(forExtension: instance.name) != nil,
+           let sidewaysSchema = sidewaysSchema {
+            let sockets = CartridgeSockets(extensionsSchema: schema)
+                .providedSockets(atPoint: point.id, in: sidewaysSchema)
+            if !sockets.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ROM images are loaded in the Memory section:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    ForEach(sockets) { socket in
+                        Button {
+                            fieldEditCoordinator?.commitActiveEdit()
+                            navigator.goToMemory(socketLabel: socket.label)
+                        } label: {
+                            Label("\(socket.label) in the Memory section",
+                                  systemImage: "arrow.right.circle")
+                        }
+                        .buttonStyle(.link)
+                        .help("Load this bank's ROM in the Memory section")
+                    }
+                }
+                .padding(.leading, 8)
             }
         }
     }

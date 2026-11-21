@@ -24,8 +24,15 @@ import SwiftUI
 struct PeripheralsSectionView: View {
     @Binding var draft: MachineDraft
     let schema: ExtensionsSchemaSection
+    /// The sideways schema, so a cartridge's group can name and link to the banks
+    /// it provides in the Memory section. nil on a model with no cartridge slots.
+    var sidewaysSchema: SidewaysSchemaSection? = nil
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
+
+    /// Reveals (and the Memory view highlights) a point when another section's
+    /// affordance sends the user here.
+    @EnvironmentObject private var navigator: ConfigNavigator
 
     private var model: ExtensionInstanceModel { ExtensionInstanceModel(schema: schema) }
 
@@ -38,15 +45,28 @@ struct PeripheralsSectionView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(shownPoints) { point in
-                    AttachmentPointGroup(
-                        draft: $draft, schema: schema, point: point,
-                        diagnostics: diagnostics, serialPorts: serialPorts)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(shownPoints) { point in
+                        AttachmentPointGroup(
+                            draft: $draft, schema: schema, sidewaysSchema: sidewaysSchema,
+                            point: point, diagnostics: diagnostics, serialPorts: serialPorts)
+                            .id(point.id)
+                    }
                 }
+                .padding(12)
             }
-            .padding(12)
+            .onAppear { revealIfNeeded(proxy) }
+            .onChange(of: navigator.revealPointId) { _ in revealIfNeeded(proxy) }
         }
+    }
+
+    /// Scroll a point into view when the navigator asks (a Memory "No cartridge"
+    /// row sending the user to the slot), then clear the one-shot cue.
+    private func revealIfNeeded(_ proxy: ScrollViewProxy) {
+        guard let point = navigator.revealPointId else { return }
+        withAnimation { proxy.scrollTo(point, anchor: .top) }
+        navigator.revealPointId = nil
     }
 }

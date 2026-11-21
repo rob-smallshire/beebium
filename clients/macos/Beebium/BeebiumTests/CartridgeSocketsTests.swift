@@ -124,6 +124,31 @@ final class CartridgeSocketsTests: XCTestCase {
                        .cartridgeAbsent(point: "cartridge-rear", pointName: "Rear Cartridge Slot"))
     }
 
+    /// The banks a cartridge provides at a point are the sockets whose
+    /// `provided_by_point` names it, lowest bank first -- what the cartridge's
+    /// Peripherals view links to in Memory.
+    func testProvidedSocketsAtPoint() throws {
+        let sockets = CartridgeSockets(extensionsSchema: try Self.masterCartridgeSchema())
+        let schema = SidewaysSchemaSection(
+            type: "sideways_bank", hasAliasing: false,
+            sockets: [
+                SidewaysSocketSchema(label: "IC101", slots: [3], capabilities: ["rom"],
+                                     runtimeConfigurable: false),
+                SidewaysSocketSchema(label: "ROM 1", slots: [1], capabilities: ["empty"],
+                                     runtimeConfigurable: true, providedByPoint: "cartridge-rear"),
+                SidewaysSocketSchema(label: "ROM 0", slots: [0], capabilities: ["empty"],
+                                     runtimeConfigurable: true, providedByPoint: "cartridge-rear"),
+                SidewaysSocketSchema(label: "ROM 2", slots: [2], capabilities: ["empty"],
+                                     runtimeConfigurable: true, providedByPoint: "cartridge-front"),
+            ],
+            defaultRoms: [])
+        XCTAssertEqual(sockets.providedSockets(atPoint: "cartridge-rear", in: schema).map(\.label),
+                       ["ROM 0", "ROM 1"])  // lowest bank first
+        XCTAssertEqual(sockets.providedSockets(atPoint: "cartridge-front", in: schema).map(\.label),
+                       ["ROM 2"])
+        XCTAssertTrue(sockets.providedSockets(atPoint: "modem-connector", in: schema).isEmpty)
+    }
+
     // MARK: - Reorder anchoring (an unfitted cartridge bank takes no drop)
 
     /// With no unfitted cartridge banks, every reorder is allowed.

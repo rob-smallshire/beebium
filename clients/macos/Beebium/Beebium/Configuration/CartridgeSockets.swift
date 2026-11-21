@@ -79,4 +79,15 @@ struct CartridgeSockets {
     func pointDisplayName(_ point: String) -> String {
         extensionsSchema.attachmentPoints.first { $0.id == point }?.displayName ?? point
     }
+
+    /// The sideways sockets a cartridge at `point` provides -- the sockets whose
+    /// `provided_by_point` names it -- lowest bank first. These are the banks the
+    /// cartridge's Peripherals view links to in the Memory section, and the ones
+    /// the Memory section treats as cartridge-provided.
+    func providedSockets(atPoint point: String,
+                         in sidewaysSchema: SidewaysSchemaSection) -> [SidewaysSocketSchema] {
+        sidewaysSchema.sockets
+            .filter { $0.providedByPoint == point }
+            .sorted { ($0.slots.min() ?? 0) < ($1.slots.min() ?? 0) }
+    }
 }

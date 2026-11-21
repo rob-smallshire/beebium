@@ -252,6 +252,7 @@ struct ConfigurationEditor: View {
                 return AnyView(PeripheralsSectionView(
                     draft: $draft,
                     schema: extensionsSchema,
+                    sidewaysSchema: memorySchema,
                     diagnostics: diagnostics,
                     serialPorts: serialPorts,
                     excludedPointIds: Set(ProcessorSectionView.tubePointIds(in: extensionsSchema))))

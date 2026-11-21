@@ -54,6 +54,10 @@ struct MemorySectionView: View {
     /// user to the slot under Peripherals.
     @EnvironmentObject private var navigator: ConfigNavigator
 
+    /// The socket row to momentarily highlight, set when a cartridge's Peripherals
+    /// view sends the user to a bank here. Cleared after a short interval.
+    @State private var highlightedLabel: String?
+
     private typealias Content = SidewaysSocketEditor.Content
     private typealias SocketKind = SidewaysSocketEditor.SocketKind
 
@@ -145,9 +149,13 @@ struct MemorySectionView: View {
                 // Rows are draggable to reorder: dragging moves a socket's
                 // contents (image + kind), not its identity, so the sockets stay
                 // in priority order while the ROMs move between them.
+                ScrollViewReader { proxy in
                 List {
                     ForEach(rows) { row in
                         socketRow(row)
+                            .id(row.label)
+                            .listRowBackground(highlightedLabel == row.label
+                                ? Color.accentColor.opacity(0.15) : Color.clear)
                     }
                     .onMove { source, destination in
                         guard let editor else { return }
@@ -166,6 +174,9 @@ struct MemorySectionView: View {
                     }
                 }
                 .listStyle(.plain)
+                .onAppear { revealIfNeeded(proxy) }
+                .onChange(of: navigator.revealSocketLabel) { _ in revealIfNeeded(proxy) }
+                }
             }
         }
         .onAppear { titles.resolver = romResolver }
@@ -292,6 +303,19 @@ struct MemorySectionView: View {
             }
         }
         .padding(.bottom, 8)
+    }
+
+    /// Scroll a bank row into view and briefly highlight it when a cartridge's
+    /// Peripherals view sends the user here, then clear the one-shot cue.
+    private func revealIfNeeded(_ proxy: ScrollViewProxy) {
+        guard let label = navigator.revealSocketLabel else { return }
+        navigator.revealSocketLabel = nil
+        withAnimation { proxy.scrollTo(label, anchor: .center) }
+        highlightedLabel = label
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            if highlightedLabel == label { withAnimation { highlightedLabel = nil } }
+        }
     }
 
     // MARK: - Socket Row
