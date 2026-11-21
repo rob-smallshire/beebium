@@ -64,6 +64,9 @@ struct SidewaysConfig {
     // fills, written by resolve-preset for information. Loading re-derives it
     // from the MOS in force and ignores its image.
     bool from_mos = false;
+    // A --sideways argument, not a preset's entry: a validation message
+    // quotes it as typed.
+    bool from_cli = false;
 };
 
 inline std::string ascii_to_lower(std::string_view s) {
@@ -177,6 +180,7 @@ inline std::string strip_quotes(const std::string& s) {
 // without '=' (other than the write-protect flag) is reported with guidance.
 inline SidewaysConfig parse_sideways_arg(const std::string& arg) {
     SidewaysConfig config{};
+    config.from_cli = true;
 
     bool have_slot = false;
     bool have_type = false;

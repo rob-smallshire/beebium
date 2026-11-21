@@ -63,6 +63,14 @@ struct ParameterGroup {
 // For dynamically loaded extensions, this is read from manifest.json.
 // For built-in extensions, this is constructed programmatically.
 // The manifest is the single source of truth for extension metadata.
+// The sideways sockets an extension provides (ExtensionManifest::
+// provides_sideways): the number of banks, and what a bank can hold, of
+// "rom", "ram" and "empty", as a sideways socket's capabilities say.
+struct SidewaysProvision {
+    int banks = 0;
+    std::vector<std::string> bank_capabilities{};
+};
+
 struct BEEBIUM_EXT_API ExtensionManifest {
     std::string name{};           // e.g. "scsi-hard-disc" (canonical type name)
     std::string display_name{};   // short noun-phrase used as the default per-instance label
@@ -93,6 +101,12 @@ struct BEEBIUM_EXT_API ExtensionManifest {
     // not spell ("6502" for a 65C02 coprocessor), a list-presets row's
     // keywords.
     std::vector<std::string> keywords{};
+    // The sideways sockets an instance brings to the point it is placed at,
+    // or nullopt: a cartridge that provides its slot's banks. The machine's
+    // topology names the point that provides each such socket
+    // (SocketSpec::provided_by_point); this says how many banks and what each
+    // can hold.
+    std::optional<SidewaysProvision> provides_sideways{};
 
     // The value a preset facet shows for this extension.
     const std::string& facet_name() const { return short_name.empty() ? display_name : short_name; }

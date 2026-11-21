@@ -4235,6 +4235,50 @@ TEST_CASE("describe-preset-schema: the Master's sideways section describes its M
           std::string::npos);
 }
 
+TEST_CASE("describe-preset-schema: the Master's cartridge banks name the point that provides them",
+          "[integration][preset][describe-preset-schema][cartridge]") {
+    const auto schema = describe_schema(MASTER_EXECUTABLE);
+    const auto sideways = schema_section(schema, "sideways_bank");
+    for (const auto& socket : sideways.at("sockets")) {
+        const int slot = socket.at("slots")[0].get<int>();
+        INFO("bank " << slot);
+        if (slot < 4) {
+            CHECK(socket.at("provided_by_point") == (slot < 2 ? "cartridge-rear" : "cartridge-front"));
+            CHECK(socket.at("capabilities") == nlohmann::json::array({"empty"}));
+        } else {
+            CHECK_FALSE(socket.contains("provided_by_point"));
+        }
+    }
+    // The cartridge says what it brings, in the catalogue as in describe-extension.
+    const auto extensions = schema_section(schema, "extensions");
+    nlohmann::json cartridge;
+    for (const auto& ext : extensions.at("catalogue")) {
+        if (ext.at("name") == "acorn-rom-cartridge") cartridge = ext;
+        else CHECK_FALSE(ext.contains("provides_sideways"));
+    }
+    REQUIRE(cartridge.is_object());
+    const nlohmann::json provision = {{"banks", 2}, {"bank_capabilities", {"rom", "empty"}}};
+    CHECK(cartridge.at("provides_sideways") == provision);
+    auto result = run_command(MASTER_EXECUTABLE + " describe-extension acorn-rom-cartridge --json");
+    REQUIRE(result.exit_code == 0);
+    CHECK(nlohmann::json::parse(result.stdout_output).at("provides_sideways") == provision);
+}
+
+TEST_CASE("resolve-preset: a cartridge bank's image without a cartridge names the slot to fit",
+          "[integration][preset][resolve-preset][cartridge]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "orphan.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "master-128",
+        "sideways_bank": {"slots": [{"slot": 0, "type": "rom", "image_uri": "bbc-basic_2.rom"}]}})";
+    auto result = run_command(MASTER_EXECUTABLE + " resolve-preset \"" + preset_filepath.string() + "\"");
+    CHECK(result.exit_code != 0);
+    INFO(result.stderr_output);
+    CHECK(result.stderr_output.find("Bank 0 cannot be a ROM") != std::string::npos);
+    CHECK(result.stderr_output.find("Fit a cartridge at the Rear Cartridge Slot under Peripherals") !=
+          std::string::npos);
+    CHECK(result.stderr_output.find("--sideways") == std::string::npos);
+}
+
 TEST_CASE("describe-preset-schema: a Model B's sideways section has no MOS ROM banks",
           "[integration][preset][mos-rom-set]") {
     auto sideways = schema_section(describe_schema(EXECUTABLE), "sideways_bank");

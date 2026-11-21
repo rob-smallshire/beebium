@@ -104,7 +104,10 @@ capability:
 The Master 128's cartridge slots are not runtime-configurable sockets. They
 are extension attachment points, `cartridge-rear` (banks 0 and 1) and
 `cartridge-front` (banks 2 and 3), and a cartridge is an extension instance
-placed at one of them (`at`). The cartridge provides the slot's two banks: it
+placed at one of them (`at`). Without a cartridge those banks have no socket:
+the topology gives them `provided_by_point`, the slot's point, and only the
+`empty` capability, and the cartridge's manifest says what it brings
+(`provides_sideways`: its banks and what each can hold). The cartridge provides the slot's two banks: it
 fits itself to the slot as a `SidewaysBankProvider`
 (`devices/SidewaysBankProvider.hpp`, `extension/CartridgeSlot.hpp`), and from
 then on the sideways memory, the debugger and `SidewaysService` ask it for
@@ -290,19 +293,38 @@ physical socket they target and rejects any of:
 - the same slot specified twice;
 - RAM in only some slots of a RAM chip that spans several slots
   (`SlotTopology::ram_chips`, e.g. `--sideways slot=9:type=ram` alone on the
-  Integra-B, whose 32K RAM in socket pair 8/9 decodes both slots).
+  Integra-B, whose 32K RAM in socket pair 8/9 decodes both slots);
+- an image for a bank whose socket an extension brings
+  (`SocketSpec::provided_by_point`, the Master's cartridge banks 0-3) with no
+  extension at that point.
 
-Errors are reported in a single multi-line message naming the affected
-socket(s) and full alias set, so multiple problems can be fixed in one
-edit. Example:
+The same rules check a preset's `sideways_bank` entries and `--sideways`
+arguments together, and the messages speak in the preset's terms: the bank,
+the socket's label and the type asked for, never a command line, since a
+configurator shows them to its user. One about a `--sideways` argument adds
+the argument as typed. A lone problem is its sentence:
 
 ```
-Error: Invalid --sideways configuration:
-  * Socket IC52 (aliased to slots 0, 4, 8, 12) has conflicting type
+Error: /sideways_bank/slots/0: Bank 0 cannot be a ROM: it is the Rear Cartridge
+Slot's, and has no socket until a cartridge is fitted there. Fit a cartridge at
+the Rear Cartridge Slot under Peripherals.
+```
+
+Several are listed in one message naming the affected socket(s) and full
+alias set, so they can all be fixed in one edit:
+
+```
+Error: The sideways banks cannot be configured as asked:
+  * Socket IC52 (aliased to banks 0, 4, 8, 12) has conflicting type
     requests:
-      - --sideways slot=0:type=rom:image=bbc-basic_2.rom
-      - --sideways slot=12:type=ram
+      - --sideways slot=0:type=ROM:image=bbc-basic_2.rom
+      - --sideways slot=12:type=RAM
     A single physical socket cannot hold more than one type.
+  * Socket IC101 (aliased to banks 3, 7, 11, 15) has conflicting ROM image
+    requests:
+      - --sideways slot=3:type=ROM:image=a.rom
+      - --sideways slot=7:type=ROM:image=b.rom
+    A single physical socket can only hold one ROM image.
 ```
 
 The default-language and default-DFS ROMs are skipped automatically

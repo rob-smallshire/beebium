@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <beebium/Master128Hardware.hpp>
 #include <beebium/ModelBHardware.hpp>
 #include <beebium/ModelBPlusHardware.hpp>
 #include <beebium/ModelBRomRamBoardHardware.hpp>
@@ -199,7 +200,7 @@ TEST_CASE("Validation against Model B+ with S13 South rejects --sideways 0:rom",
     };
     auto err = validate_sideways_configs(topo, configs);
     REQUIRE(err.has_value());
-    REQUIRE_THAT(*err, ContainsSubstring("slot 0 does not exist"));
+    REQUIRE_THAT(*err, ContainsSubstring("Bank 0 does not exist"));
 }
 
 TEST_CASE("Validation against Model B+ with S13 North accepts --sideways 0:rom",
@@ -333,8 +334,8 @@ TEST_CASE("Validation rejects nonexistent slot on Model B+",
     };
     auto err = validate_sideways_configs(topo, configs);
     REQUIRE(err.has_value());
-    REQUIRE_THAT(*err, ContainsSubstring("slot 12 does not exist"));
-    REQUIRE_THAT(*err, ContainsSubstring("Valid slots are"));
+    REQUIRE_THAT(*err, ContainsSubstring("Bank 12 does not exist"));
+    REQUIRE_THAT(*err, ContainsSubstring("Its banks are"));
 }
 
 // ============================================================================
@@ -355,7 +356,7 @@ TEST_CASE("Validation rejects ROM+RAM in aliased Model B slots",
     auto err = validate_sideways_configs(topo, configs);
     REQUIRE(err.has_value());
     REQUIRE_THAT(*err, ContainsSubstring("IC52"));
-    REQUIRE_THAT(*err, ContainsSubstring("aliased to slots 0, 4, 8, 12"));
+    REQUIRE_THAT(*err, ContainsSubstring("aliased to banks 0, 4, 8, 12"));
     REQUIRE_THAT(*err, ContainsSubstring("conflicting type requests"));
 }
 
@@ -419,7 +420,7 @@ TEST_CASE("Validation flags pure duplicate slot specifications",
     };
     auto err = validate_sideways_configs(topo, configs);
     REQUIRE(err.has_value());
-    REQUIRE_THAT(*err, ContainsSubstring("slot 7 specified 2 times"));
+    REQUIRE_THAT(*err, ContainsSubstring("Bank 7 is given 2 times"));
 }
 
 // ============================================================================
@@ -441,7 +442,7 @@ TEST_CASE("Validation reports multiple distinct problems in one message",
     };
     auto err = validate_sideways_configs(topo, configs);
     REQUIRE(err.has_value());
-    REQUIRE_THAT(*err, ContainsSubstring("slot 12 does not exist"));
+    REQUIRE_THAT(*err, ContainsSubstring("Bank 12 does not exist"));
     REQUIRE_THAT(*err, ContainsSubstring("IC68"));
 }
 
@@ -497,16 +498,18 @@ TEST_CASE("Validation rejects RAM in only one slot of a RAM chip",
     std::vector<SidewaysConfig> configs{ram_cfg(9), rom_cfg(8, "a.rom")};
     auto err = validate_sideways_configs(paired_ram_topology(), configs);
     REQUIRE(err.has_value());
-    CHECK_THAT(*err, ContainsSubstring("Slots 8, 9 share one RAM chip"));
-    CHECK_THAT(*err, ContainsSubstring("--sideways slot=8:type=RAM"));
+    CHECK_THAT(*err, ContainsSubstring("Banks 8, 9 share one RAM chip"));
+    CHECK_THAT(*err, ContainsSubstring("Make bank 8 RAM as well"));
+    CHECK_THAT(*err, !ContainsSubstring("--sideways"));
 }
 
 TEST_CASE("Validation rejects RAM in one slot of a RAM chip when the other is unspecified",
           "[sideways][validation][ram_chip]") {
-    std::vector<SidewaysConfig> configs{ram_cfg(8)};
+    std::vector<SidewaysConfig> configs{beebium::server::parse_sideways_arg("slot=8:type=ram")};
     auto err = validate_sideways_configs(paired_ram_topology(), configs);
     REQUIRE(err.has_value());
-    CHECK_THAT(*err, ContainsSubstring("slot=9:type=RAM"));
+    CHECK_THAT(*err, ContainsSubstring("requested by --sideways slot=8:type=RAM"));
+    CHECK_THAT(*err, ContainsSubstring("Also specify: --sideways slot=9:type=RAM"));
 }
 
 TEST_CASE("Validation names what a RAM-only socket supports",
@@ -516,4 +519,40 @@ TEST_CASE("Validation names what a RAM-only socket supports",
     REQUIRE(err.has_value());
     CHECK_THAT(*err, ContainsSubstring("supports only RAM"));
     CHECK_THAT(*err, !ContainsSubstring("ROM-only"));
+}
+
+TEST_CASE("Validation speaks of a preset's bank in the preset's terms",
+          "[sideways][validation]") {
+    std::vector<SidewaysConfig> configs{rom_cfg(4, "basic.rom")};
+    auto err = validate_sideways_configs(fixed_ram_topology(), configs);
+    REQUIRE(err.has_value());
+    CHECK_THAT(*err, ContainsSubstring("Bank 4 cannot be a ROM: its socket, RAM 4, supports only RAM"));
+    CHECK_THAT(*err, !ContainsSubstring("--sideways"));
+}
+
+TEST_CASE("Validation quotes a --sideways argument it refuses",
+          "[sideways][validation]") {
+    std::vector<SidewaysConfig> configs{
+        beebium::server::parse_sideways_arg("slot=4:type=rom:image=basic.rom")};
+    auto err = validate_sideways_configs(fixed_ram_topology(), configs);
+    REQUIRE(err.has_value());
+    CHECK_THAT(*err, ContainsSubstring(
+        "Bank 4 cannot be a ROM (requested by --sideways slot=4:type=ROM:image=basic.rom)"));
+}
+
+TEST_CASE("Validation sends a cartridge bank's ROM to the slot that takes a cartridge",
+          "[sideways][validation][cartridge]") {
+    const auto topo = beebium::Master128Hardware::slot_topology();
+    std::vector<SidewaysConfig> configs{rom_cfg(2, "basic.rom")};
+    auto err = validate_sideways_configs(topo, configs);
+    REQUIRE(err.has_value());
+    CHECK_THAT(*err, ContainsSubstring("Bank 2 cannot be a ROM: it is the Front Cartridge Slot's"));
+    CHECK_THAT(*err, ContainsSubstring("Fit a cartridge at the Front Cartridge Slot under Peripherals."));
+    CHECK_THAT(*err, !ContainsSubstring("--"));
+
+    configs = {beebium::server::parse_sideways_arg("slot=0:type=rom:image=basic.rom")};
+    err = validate_sideways_configs(topo, configs);
+    REQUIRE(err.has_value());
+    CHECK_THAT(*err, ContainsSubstring("(requested by --sideways slot=0:type=ROM:image=basic.rom)"));
+    CHECK_THAT(*err, ContainsSubstring("Place a cartridge extension with at=cartridge-rear."));
 }

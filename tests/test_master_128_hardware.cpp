@@ -168,14 +168,16 @@ TEST_CASE("Master 128 sideways topology: cartridge banks, RAM 4-7, IC27, the MOS
             CHECK_FALSE(s.supports_ram);
             CHECK_FALSE(s.supports_empty);
         } else if (slot < 4) {
-            // A cartridge slot's: a cartridge fills it, not --sideways.
+            // A cartridge slot's: the cartridge fitted there brings the socket.
             CHECK_FALSE(s.supports_rom);
             CHECK_FALSE(s.supports_ram);
             CHECK(s.supports_empty);
+            CHECK(s.provided_by_point == (slot < 2 ? "cartridge-rear" : "cartridge-front"));
         } else {
             CHECK(s.supports_rom);
             CHECK(s.supports_empty);
         }
+        if (slot >= 4) CHECK(s.provided_by_point.empty());
     }
     auto hw = std::make_unique<HW>();
     for (uint8_t slot = 4; slot <= 7; ++slot) CHECK(hw->sideways.bank_type(slot) == SlotType::Ram);
@@ -646,5 +648,6 @@ TEST_CASE("Master 128 a cartridge provides its slot's two banks, chosen by ROMQA
     // SidewaysService may not change a cartridge bank at run time.
     REQUIRE(hw->slot_change_refusal(1));
     CHECK(hw->slot_change_refusal(1)->find("rear cartridge slot") != std::string::npos);
+    CHECK(hw->slot_change_refusal(1)->find("--") == std::string::npos);
     CHECK_FALSE(hw->slot_change_refusal(4));
 }

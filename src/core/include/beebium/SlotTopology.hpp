@@ -48,6 +48,11 @@ struct SocketSpec {
     // "can a per-slot write-protect be set here". False on boards whose
     // write-protect is board-wide (e.g. the Watford S2 link), not per-slot.
     bool supports_write_protect = false;
+    // The attachment point whose extension provides this socket
+    // ("cartridge-rear"), or empty for a socket on the board. Without an
+    // extension there the socket only reads empty; with one its capabilities
+    // are the extension's (ExtensionManifest::provides_sideways).
+    std::string provided_by_point;
 };
 
 // SlotTopology describes the sideways memory layout of a machine variant.

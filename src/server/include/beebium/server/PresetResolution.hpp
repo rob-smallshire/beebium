@@ -877,8 +877,8 @@ std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<Mac
                           m.set_slot_write_protected(uint8_t{0}, bool{});
                       }) {
             return SidewaysSlotsError{std::nullopt,
-                                      "write-protect is not supported on this machine variant "
-                                      "(no sideways write-protect control)"};
+                                      "This machine has no sideways write-protect control, so "
+                                      "no bank can be write-protected."};
         } else if constexpr (requires {
                                  Memory::slot_topology(config.board.motherboard_links);
                              }) {
@@ -890,8 +890,9 @@ std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<Mac
                     topo.find_socket_for_slot(static_cast<int>(c.slot));
                 if (spec == nullptr) {
                     return SidewaysSlotsError{
-                        i, "--sideways write-protect: slot " + std::to_string(c.slot)
-                               + " does not exist on this machine variant"};
+                        i, "Bank " + std::to_string(c.slot)
+                               + " does not exist on this machine, so it cannot be "
+                                 "write-protected."};
                 }
                 // Per-slot launch write-protect targets a per-slot switch (a
                 // one-slot write-protect group, applied below via
@@ -900,9 +901,9 @@ std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<Mac
                 // not this flag - their sockets set supports_write_protect false.
                 if (!spec->supports_write_protect) {
                     return SidewaysSlotsError{
-                        i, "--sideways write-protect: slot " + std::to_string(c.slot)
-                               + " has no per-slot write-protect switch on this "
-                                 "machine variant"};
+                        i, "Bank " + std::to_string(c.slot)
+                               + " has no write-protect switch of its own on this "
+                                 "machine."};
                 }
             }
         }

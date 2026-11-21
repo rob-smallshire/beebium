@@ -316,6 +316,8 @@ inline std::vector<Entry> make_entries() {
         m.cli_name = "acorn-rom-cartridge";
         m.extension_kind = "peripheral";
         m.attaches_to_one_of = {"cartridge-rear", "cartridge-front"};
+        // The slot's two banks, each a socket for a ROM or left empty.
+        m.provides_sideways = SidewaysProvision{2, {"rom", "empty"}};
         ParameterSchema low{"low", "filepath",
                             "The ROM in the socket on the slot's even bank (ROM 0 or 2), a ROM "
                             "name or a path; with none the bank is empty", -1, false, false,

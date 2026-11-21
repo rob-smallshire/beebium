@@ -336,7 +336,7 @@ inline nlohmann::ordered_json extension_manifest_json(const beebium::ExtensionMa
         }
         groups.push_back(std::move(group));
     }
-    return {
+    nlohmann::ordered_json result = {
         {"name", m.name},
         {"display_name", m.display_name},
         {"short_name", m.facet_name()},
@@ -355,6 +355,15 @@ inline nlohmann::ordered_json extension_manifest_json(const beebium::ExtensionMa
         {"groups", groups},
         {"roms", roms},
     };
+    // The sideways sockets an instance brings, for an extension that brings
+    // any: the configurator makes the banks of the point it is placed at
+    // editable with these capabilities.
+    if (m.provides_sideways) {
+        result["provides_sideways"] = {{"banks", m.provides_sideways->banks},
+                                       {"bank_capabilities",
+                                        m.provides_sideways->bank_capabilities}};
+    }
+    return result;
 }
 
 template<typename MachineType>

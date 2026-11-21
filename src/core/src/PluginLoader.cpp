@@ -189,6 +189,16 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
         }
     }
 
+    // Parse provides_sideways (the sideways sockets an instance brings).
+    if (j.contains("provides_sideways") && j["provides_sideways"].is_object()) {
+        const auto& p = j["provides_sideways"];
+        SidewaysProvision provision;
+        provision.banks = p.value("banks", 0);
+        provision.bank_capabilities =
+            p.value("bank_capabilities", std::vector<std::string>{});
+        manifest.provides_sideways = std::move(provision);
+    }
+
     // Parse attaches_to_one_of (points of which an instance attaches to one).
     if (j.contains("attaches_to_one_of") && j["attaches_to_one_of"].is_array()) {
         for (const auto& a : j["attaches_to_one_of"]) {

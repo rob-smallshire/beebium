@@ -10,7 +10,8 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Validate a list of parsed --sideways arguments against a machine variant's
+// Validate a machine's sideways configurations, a preset's sideways_bank
+// entries and --sideways arguments together, against a machine variant's
 // SlotTopology. Detects the user blunders enumerated in GitHub issue #31:
 //
 //   * referencing a sideways slot that does not exist on the chosen machine
@@ -25,7 +26,14 @@
 //     socket on the real hardware;
 //
 //   * specifying the same slot twice (which is a degenerate case of aliased
-//     conflict).
+//     conflict);
+//
+//   * a bank whose socket a cartridge brings (SocketSpec::provided_by_point)
+//     with no cartridge at that point.
+//
+// Messages speak in the preset's terms (the bank, the socket's label, the
+// type asked for), never quoting a command line to a configurator's user;
+// one about a --sideways argument adds the argument as typed.
 //
 // All detected problems are reported in one error message rather than
 // failing on the first one, so the user can fix every problem before
@@ -36,6 +44,7 @@
 
 #include "CliArgParsers.hpp"
 #include <beebium/SlotTopology.hpp>
+#include <beebium/extension/AttachmentPointCatalogue.hpp>
 
 #include <algorithm>
 #include <map>
@@ -58,6 +67,16 @@ inline std::string_view sideways_type_name(SidewaysSlotType t) {
     return "?";
 }
 
+// What a bank of that type is, for a sentence: "a ROM", "RAM", "empty".
+inline std::string_view sideways_type_phrase(SidewaysSlotType t) {
+    switch (t) {
+        case SidewaysSlotType::Empty: return "empty";
+        case SidewaysSlotType::Rom:   return "a ROM";
+        case SidewaysSlotType::Ram:   return "RAM";
+    }
+    return "?";
+}
+
 inline std::string format_slot_list(const std::vector<int>& slots) {
     std::ostringstream out;
     for (size_t i = 0; i < slots.size(); ++i) {
@@ -67,11 +86,12 @@ inline std::string format_slot_list(const std::vector<int>& slots) {
     return out.str();
 }
 
-inline std::string format_socket_alias_clause(const SocketSpec& spec) {
+// "Socket IC52 (aliased to banks 0, 4, 8, 12)", or "Socket IC41".
+inline std::string format_socket_clause(const SocketSpec& spec) {
     std::ostringstream out;
     out << "Socket " << spec.label;
     if (spec.slots.size() > 1) {
-        out << " (aliased to slots " << format_slot_list(spec.slots) << ")";
+        out << " (aliased to banks " << format_slot_list(spec.slots) << ")";
     }
     return out.str();
 }
@@ -90,9 +110,8 @@ inline std::string format_supported_types(const SocketSpec& spec) {
     return out.str();
 }
 
-// Describe one --sideways request in the same shorthand the user typed,
-// so the error message points back at their CLI input.
-inline std::string format_request(const SidewaysConfig& cfg) {
+// A --sideways request as the user typed it.
+inline std::string format_cli_request(const SidewaysConfig& cfg) {
     std::ostringstream out;
     out << "--sideways slot=" << static_cast<int>(cfg.slot)
         << ":type=" << sideways_type_name(cfg.type);
@@ -105,9 +124,33 @@ inline std::string format_request(const SidewaysConfig& cfg) {
     return out.str();
 }
 
+// One request in the terms it was made in: a --sideways argument as typed,
+// or a preset's sideways_bank entry as the bank and what it holds.
+inline std::string format_request(const SidewaysConfig& cfg) {
+    if (cfg.from_cli) return format_cli_request(cfg);
+    std::ostringstream out;
+    out << "bank " << static_cast<int>(cfg.slot) << " as " << sideways_type_name(cfg.type);
+    if (!cfg.image_filepath.empty()) out << " " << cfg.image_filepath;
+    if (cfg.write_protected) out << ", write-protected";
+    return out.str();
+}
+
+// " (requested by --sideways ...)" for a --sideways argument, so the
+// message points back at the command line; nothing for a preset's entry,
+// whose sentence already names the bank.
+inline std::string cli_request_suffix(const SidewaysConfig& cfg) {
+    if (!cfg.from_cli) return {};
+    return " (requested by " + format_cli_request(cfg) + ")";
+}
+
+// The point's name as the configurator shows it: "the Rear Cartridge Slot".
+inline std::string point_phrase(std::string_view point_id) {
+    return "the " + std::string(beebium::attachment_point_display_name(point_id));
+}
+
 }  // namespace detail
 
-// One problem with a list of --sideways configurations: the index of the
+// One problem with a list of sideways configurations: the index of the
 // configuration it is reported against (for a conflict, the later one) and
 // the message.
 struct SidewaysProblem {
@@ -115,8 +158,11 @@ struct SidewaysProblem {
     std::string message;
 };
 
-// Every problem with a parsed list of --sideways configurations against a
-// machine variant's slot topology, in the order found.
+// Every problem with a list of sideways configurations, a preset's
+// sideways_bank entries and --sideways arguments together, against a
+// machine variant's slot topology, in the order found. A message speaks in
+// the preset's terms (the bank, the socket's label, the type asked for); one
+// about a --sideways argument also quotes the argument.
 inline std::vector<SidewaysProblem> sideways_config_problems(
     const SlotTopology& topo,
     const std::vector<SidewaysConfig>& configs)
@@ -132,9 +178,10 @@ inline std::vector<SidewaysProblem> sideways_config_problems(
         const SocketSpec* socket = topo.find_socket_for_slot(cfg.slot);
         if (socket == nullptr) {
             std::ostringstream msg;
-            msg << "Sideways slot " << static_cast<int>(cfg.slot)
-                << " does not exist on this machine variant. "
-                << "Valid slots are: "
+            msg << "Bank " << static_cast<int>(cfg.slot)
+                << " does not exist on this machine"
+                << detail::cli_request_suffix(cfg) << ". "
+                << "Its banks are "
                 << detail::format_slot_list(topo.all_slots()) << '.';
             problems.push_back({i, msg.str()});
             continue;
@@ -147,15 +194,31 @@ inline std::vector<SidewaysProblem> sideways_config_problems(
             case SidewaysSlotType::Ram:   ok = socket->supports_ram; break;
             case SidewaysSlotType::Empty: ok = socket->supports_empty; break;
         }
+        if (!ok && !socket->provided_by_point.empty()) {
+            // A socket an extension brings, with no extension there.
+            const auto& point = socket->provided_by_point;
+            std::ostringstream msg;
+            msg << "Bank " << static_cast<int>(cfg.slot) << " cannot be "
+                << detail::sideways_type_phrase(cfg.type)
+                << detail::cli_request_suffix(cfg) << ": it is "
+                << detail::point_phrase(point) << "'s, and has no socket until a "
+                << "cartridge is fitted there. ";
+            if (cfg.from_cli) {
+                msg << "Place a cartridge extension with at=" << point << ".";
+            } else {
+                msg << "Fit a cartridge at " << detail::point_phrase(point)
+                    << " under Peripherals.";
+            }
+            problems.push_back({i, msg.str()});
+            continue;
+        }
         if (!ok) {
             std::ostringstream msg;
-            msg << detail::format_socket_alias_clause(*socket)
-                << " cannot be configured as "
-                << detail::sideways_type_name(cfg.type)
-                << " (requested by " << detail::format_request(cfg)
-                << "). This socket supports only "
-                << detail::format_supported_types(*socket)
-                << " on this machine variant.";
+            msg << "Bank " << static_cast<int>(cfg.slot) << " cannot be "
+                << detail::sideways_type_phrase(cfg.type)
+                << detail::cli_request_suffix(cfg) << ": its socket, " << socket->label
+                << ", supports only " << detail::format_supported_types(*socket)
+                << " on this machine.";
             problems.push_back({i, msg.str()});
             continue;
         }
@@ -163,7 +226,7 @@ inline std::vector<SidewaysProblem> sideways_config_problems(
         by_socket[socket->socket_index].push_back(i);
     }
 
-    // For each socket targeted by more than one --sideways arg, all of those
+    // For each socket targeted by more than one request, all of those
     // requests must agree -- they map to the same physical chip.
     for (const auto& [socket_idx, indices] : by_socket) {
         if (indices.size() < 2) continue;
@@ -182,7 +245,7 @@ inline std::vector<SidewaysProblem> sideways_config_problems(
         }
         if (type_conflict) {
             std::ostringstream msg;
-            msg << detail::format_socket_alias_clause(*socket)
+            msg << detail::format_socket_clause(*socket)
                 << " has conflicting type requests:";
             for (size_t idx : indices) {
                 msg << "\n  - " << detail::format_request(configs[idx]);
@@ -193,7 +256,7 @@ inline std::vector<SidewaysProblem> sideways_config_problems(
         }
 
         // For ROM, all specified image paths must agree. (At most one path may
-        // legitimately be specified per socket; if multiple arguments target
+        // legitimately be specified per socket; if several requests target
         // the same socket they must all name the same image, since there is
         // only one physical chip.)
         if (first_type == SidewaysSlotType::Rom) {
@@ -211,7 +274,7 @@ inline std::vector<SidewaysProblem> sideways_config_problems(
             }
             if (image_conflict) {
                 std::ostringstream msg;
-                msg << detail::format_socket_alias_clause(*socket)
+                msg << detail::format_socket_clause(*socket)
                     << " has conflicting ROM image requests:";
                 for (size_t idx : indices) {
                     msg << "\n  - " << detail::format_request(configs[idx]);
@@ -239,7 +302,7 @@ inline std::vector<SidewaysProblem> sideways_config_problems(
             }
             if (image_conflict) {
                 std::ostringstream msg;
-                msg << detail::format_socket_alias_clause(*socket)
+                msg << detail::format_socket_clause(*socket)
                     << " has conflicting RAM preload image requests:";
                 for (size_t idx : indices) {
                     msg << "\n  - " << detail::format_request(configs[idx]);
@@ -266,8 +329,8 @@ inline std::vector<SidewaysProblem> sideways_config_problems(
         for (const auto& [slot, count] : slot_counts) {
             if (count > 1) {
                 std::ostringstream msg;
-                msg << "Sideways slot " << static_cast<int>(slot)
-                    << " specified " << count << " times.";
+                msg << "Bank " << static_cast<int>(slot)
+                    << " is given " << count << " times.";
                 problems.push_back({last_index_of(slot), msg.str()});
             }
         }
@@ -292,31 +355,38 @@ inline std::vector<SidewaysProblem> sideways_config_problems(
             if (!requested) missing.push_back(slot);
         }
         if (missing.empty()) continue;
+        const bool from_cli = configs[ram_requests.front()].from_cli;
         std::ostringstream msg;
-        msg << "Slots " << detail::format_slot_list(chip_slots)
+        msg << "Banks " << detail::format_slot_list(chip_slots)
             << " share one RAM chip, so RAM must be fitted to all of them or none"
             << " (requested by";
         for (size_t i : ram_requests) msg << ' ' << detail::format_request(configs[i]);
-        msg << "). Also specify:";
-        for (int slot : missing) msg << " --sideways slot=" << slot << ":type=RAM";
+        if (from_cli) {
+            msg << "). Also specify:";
+            for (int slot : missing) msg << " --sideways slot=" << slot << ":type=RAM";
+        } else {
+            msg << "). Make " << (missing.size() > 1 ? "banks " : "bank ")
+                << detail::format_slot_list(missing) << " RAM as well.";
+        }
         problems.push_back({ram_requests.front(), msg.str()});
     }
 
     return problems;
 }
 
-// Validate a parsed list of --sideways configurations against a machine
-// variant's slot topology. Returns nullopt on success, or a multi-line error
-// message describing every detected problem on failure.
+// Validate a list of sideways configurations against a machine variant's
+// slot topology. Returns nullopt on success, else the problem's sentence, or
+// a list of every problem when there are several.
 inline std::optional<std::string> validate_sideways_configs(
     const SlotTopology& topo,
     const std::vector<SidewaysConfig>& configs)
 {
     const auto problems = sideways_config_problems(topo, configs);
     if (problems.empty()) return std::nullopt;
+    if (problems.size() == 1) return problems.front().message;
 
     std::ostringstream combined;
-    combined << "Invalid --sideways configuration:";
+    combined << "The sideways banks cannot be configured as asked:";
     for (const auto& p : problems) {
         combined << "\n  * " << p.message;
     }

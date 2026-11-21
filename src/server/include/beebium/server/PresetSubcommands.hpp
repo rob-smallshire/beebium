@@ -261,12 +261,17 @@ public:
                 if (sock.supports_empty) capabilities.push_back("empty");
                 if (sock.supports_write_protect) capabilities.push_back("write_protect");
 
-                sockets.push_back(ojson{
+                ojson socket{
                     {"label", sock.label},
                     {"slots", sock.slots},
                     {"capabilities", capabilities},
                     {"runtime_configurable", sock.runtime_configurable}
-                });
+                };
+                // A socket an extension brings: the point it is placed at.
+                if (!sock.provided_by_point.empty()) {
+                    socket["provided_by_point"] = sock.provided_by_point;
+                }
+                sockets.push_back(std::move(socket));
             }
             sideways["sockets"] = sockets;
 

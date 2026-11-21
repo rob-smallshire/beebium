@@ -186,6 +186,12 @@ Fields:
   `at`.
 - `provides` -- new extension points this extension creates for others to attach
   to (e.g. the SCSI adapter's `["scsi"]`); omit if none.
+- `provides_sideways` -- the sideways sockets an instance brings to the point it
+  is placed at: `banks`, how many, and `bank_capabilities`, what each can hold
+  (of `rom`, `ram`, `empty`). The Acorn ROM Cartridge's is
+  `{"banks": 2, "bank_capabilities": ["rom", "empty"]}`. The machine's sideways
+  topology marks the banks such a point provides with `provided_by_point`
+  (`docs/sideways-slots.md`); omit if none.
 - `parameters` -- schema for CLI/preset/gRPC configuration (see below)
 - `groups` -- parameters that are alternatives to one another (see below); omit
   if none

@@ -434,9 +434,10 @@ public:
         const bool rear = bank < 2;
         return "Bank " + std::to_string(bank) + " is the " +
                std::string(rear ? "rear" : "front") +
-               " cartridge slot's; fit a cartridge there with --acorn-rom-cartridge at=" +
-               std::string(rear ? "cartridge-rear" : "cartridge-front") +
-               " when the machine starts, not while it runs.";
+               " cartridge slot's, which a cartridge fills; fit one at the " +
+               std::string(rear ? "Rear" : "Front") +
+               " Cartridge Slot under Peripherals before the machine starts, not while it "
+               "runs.";
     }
 
     // FRED and JIM (&FC00-&FDFF): the external 1 MHz bus while ACCCON IFJ is
@@ -970,6 +971,7 @@ public:
                 spec.supports_rom = false;
                 spec.supports_ram = false;
                 spec.supports_empty = true;
+                spec.provided_by_point = slot < 2 ? "cartridge-rear" : "cartridge-front";
             } else if (slot <= LAST_SIDEWAYS_RAM_SLOT && links.rom_socket(slot)) {
                 spec.label = std::string(slot < 6 ? "IC41" : "IC37") + " (bank " +
                              std::to_string(slot) + ")";
