@@ -34,13 +34,14 @@ from beebium.client import Beebium
 from beebium.client._proto import debugger_pb2
 from beebium.client.screen import read_mode7_cells
 
-SERVER = os.environ.get("BEEBIUM_SERVER", "")
-ROM = os.environ.get("AES_ROM", "")
+SERVER = os.environ.get("AES_SERVER_FILEPATH", "")
+PLUGIN_FOLDER = Path(__file__).resolve().parents[4] / "src" / "extensions" / "acorn-aes-coprocessor"
+ROM = os.environ.get("BEEBIUM_AES_ROM_FILEPATH", "")
 BANNER_TOOL = os.environ.get("AES_BANNER_TOOL", "")
 PROJECT = os.environ.get("AES_PROJECT", "")
 ROMS = Path(os.environ.get("BEEBIUM_ROM_DIR", ""))
 DFS = ROMS / "acorn-dfs_2_26.rom"
-FACTS_FOLDER = Path(__file__).parent / "rom-facts"
+FACTS_FOLDER = PLUGIN_FOLDER / "tests" / "rom-facts"
 # DOC, Beebium docs/cli.md: full speed. Emulated time is what the tests count (INF, no test
 # here reads wall time).
 os.environ.setdefault("BEEBIUM_NO_PACING", "1")
@@ -93,7 +94,7 @@ FACTS = load_facts()
 def rom_problem():
     """Why tests tied to a ROM cannot run on this one; empty if they can. As RomCheck.hpp."""
     if not rom_is_readable():
-        return "no ROM: AES_ROM is not set, or names no file"
+        return "no ROM: BEEBIUM_AES_ROM_FILEPATH is not set, or names no file"
     return "" if FACTS else f"no facts file for this ROM, SHA-1 {sha1(ROM)}"
 
 
