@@ -85,6 +85,7 @@ Section 3 states cross-cutting foundations that every later section assumes.
 | 5.6 | Emulation speed | Core |
 | 5.7 | Names, titles and the description subtitle | Core |
 | 5.8 | The MOS ROM | Core |
+| 5.9 | Sockets a cartridge provides | Configuration editing |
 | 6.1 | Frame presentation | Core |
 | 6.2 | Display modes and aspect ratio | Core |
 | 6.3 | Scaling, pixel shape, display styles, background | Advanced display |
@@ -1009,6 +1010,58 @@ Scenario: on the Master, set the MOS to acorn-mos_3_50.rom and launch -> the
 machine boots MOS 3.50 (its *HELP reports OS 3.50), with banks 9-15 re-derived to
 the matching set.
 
+
+### 5.9 Sockets a cartridge provides
+
+Profile: Configuration editing. Binding documents: `preset-schema.md`,
+`sideways-slots.md`, `master-128.md`. Issues #300, #301.
+
+Behaviour. On a machine with cartridge slots (the Master 128's rear slot is banks 0
+and 1, its front slot banks 2 and 3), a sideways socket at those banks does not
+exist until a cartridge is fitted: the cartridge brings the socket. The server says
+so in the sideways schema: such a socket carries `provided_by`, the attachment point
+whose extension provides it (`cartridge-rear`, `cartridge-front`), and its own
+`capabilities` are only `empty`. A cartridge extension's manifest declares what it
+provides (`provides.sideways_banks`, the number of banks, and
+`provides.bank_capabilities`, for the Acorn ROM cartridge `rom` and `empty`).
+
+The configurator reads the draft, not a guess:
+
+- No extension placed at the socket's `provided_by` point: the Memory row reads
+  "No cartridge" (never "Empty"), its menu offers no image browse or type change,
+  and the row says where a cartridge is fitted, with an affordance that takes the
+  user to that attachment point in the Peripherals section.
+- An extension placed there: the row is an ordinary socket with the extension's
+  `bank_capabilities`, and the user loads an image exactly as for any other socket;
+  the choice is written to the preset as a `sideways_bank` entry for that bank. The
+  row names the cartridge that provides it.
+
+The cartridge extension's own configuration carries no image parameters. Its view
+under Peripherals states which banks it provides and offers, per bank, an
+affordance that takes the user to that row in the Memory section, so that sideways
+ROM images are loaded in one place. The server owns the rule: `resolve-preset`
+refuses a `sideways_bank` entry for a provided bank whose point has no cartridge,
+with a sentence naming the bank, the slot and where to fit one, and every
+sideways validation error speaks in the preset's terms (bank, socket label, type),
+never quoting a command line.
+
+Conformance:
+
+- MANDATORY: "No cartridge" state from `provided_by` plus the draft's extensions;
+  no image browse or type change in that state; a fitted cartridge's banks editable
+  with the manifest's capabilities, written as `sideways_bank` entries; no image
+  parameters in the cartridge's extension view; the cross-section affordances in
+  both directions.
+- LATITUDE: the affordance's form (a link, a button, a disclosure); whether the
+  Memory row also shows the cartridge's name; highlighting the target row on
+  arrival.
+
+Scenario: a Master 128 draft with nothing at cartridge-rear -> banks 0 and 1 read
+"No cartridge" with no browse; fit the Acorn ROM cartridge there under Peripherals
+-> the two rows become ROM-capable; load an image into bank 0 -> the preset gains
+`{"slot": 0, "type": "rom", "image_uri": ...}` and the launched machine shows it in
+the Memory sidebar; remove the cartridge -> `resolve-preset` reports the orphaned
+entry with its sentence and the configurator shows it under the row.
 
 ## 6. Display
 
