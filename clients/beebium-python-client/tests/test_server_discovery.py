@@ -73,12 +73,6 @@ class TestCommand:
     """command(variant) runs a variant by its own name where the installation
     has one, else as the server executable's first argument (the wheel)."""
 
-    def test_a_named_variant_runs_by_its_name(self, tmp_path: Path) -> None:
-        root = _make_install_tree(tmp_path / "inst")
-        _make_executable(root / "bin", _multi_call_exe_name())
-        installation = ServerInstallation.from_root(root)
-        assert installation.command("master-128") == [str(root / "bin" / _exe_name("master-128"))]
-
     def test_the_server_executable_alone_runs_every_variant_by_argument(self, tmp_path: Path) -> None:
         root = _make_install_tree(tmp_path / "wheel", variants=())
         server = _make_executable(root / "bin", _multi_call_exe_name())
@@ -142,7 +136,9 @@ class TestCommand:
     def test_on_posix_a_name_beside_the_server_executable_runs_as_it_is(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # A link is the same process as the server.
+        # A link is the same process as the server, so a variant with its name
+        # runs by it. (Pinned to POSIX: on Windows the server executable runs
+        # in place of a launcher, tested above.)
         monkeypatch.setattr(sys, "platform", "linux")
         root = _make_install_tree(tmp_path / "inst")
         _make_executable(root / "bin", "beebium-server")
