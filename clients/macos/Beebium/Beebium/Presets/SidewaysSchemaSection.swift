@@ -42,8 +42,19 @@ struct SidewaysSocketSchema: Codable, Identifiable {
     let slots: [Int]            // logical slot numbers wired to this socket
     let capabilities: [String]  // any of "rom", "ram", "empty", "write_protect"
     let runtimeConfigurable: Bool
+    /// The attachment point whose cartridge provides this socket (e.g.
+    /// "cartridge-rear"), when the socket does not exist until a cartridge is
+    /// fitted there; nil for an ordinary motherboard socket. Named apart from an
+    /// attachment point's own `provided_by` list: this is a single point id.
+    /// When set, the socket's own `capabilities` are only "empty" (there is no
+    /// ROM socket without the cartridge); the fitted cartridge's manifest
+    /// contributes the editable capabilities. See spec 5.9, issues #300/#301.
+    var providedByPoint: String? = nil
 
     var id: String { label }
+
+    /// Whether a cartridge, fitted at `providedByPoint`, provides this socket.
+    var isCartridgeProvided: Bool { providedByPoint != nil }
 
     /// Effective boot priority: the highest slot number the socket answers.
     /// A higher number wins the language-ROM selection at reset.
@@ -64,6 +75,7 @@ struct SidewaysSocketSchema: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case label, slots, capabilities
         case runtimeConfigurable = "runtime_configurable"
+        case providedByPoint = "provided_by_point"
     }
 }
 

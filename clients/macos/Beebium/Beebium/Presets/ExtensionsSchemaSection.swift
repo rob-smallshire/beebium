@@ -69,6 +69,12 @@ struct ExtensionsSchemaSection: Codable {
         entry(forExtension: name)?.attachesToOneOf ?? []
     }
 
+    /// The sideways sockets an extension provides when fitted (a ROM cartridge),
+    /// or nil when it provides none (the common case).
+    func providesSideways(forExtension name: String) -> ProvidesSideways? {
+        entry(forExtension: name)?.providesSideways
+    }
+
     /// The parameter manifest for an extension, built from the catalogue (ordered
     /// by declared position). Empty when the catalogue has no entry.
     func manifest(forExtension name: String) -> ExtensionManifest {
@@ -100,6 +106,12 @@ struct ExtensionCatalogueEntry: Codable, Identifiable {
     /// has no alternatives. See docs/peripheral-extension-framework.md.
     var attachesToOneOf: [String] = []
     var provides: [String] = []
+    /// The sideways sockets this extension provides when fitted (a ROM
+    /// cartridge): the number of banks and the capabilities each editable bank
+    /// then has. nil for an extension that provides no sideways sockets. Named
+    /// `provides_sideways` apart from `provides`, which lists attachment points.
+    /// See spec 5.9, issue #301.
+    var providesSideways: ProvidesSideways? = nil
     var parameters: [ExtensionParameter] = []
     /// The ROMs this extension ships, offered as the bundled choices for a
     /// filepath ROM parameter (e.g. a coprocessor's client ROM).
@@ -115,6 +127,7 @@ struct ExtensionCatalogueEntry: Codable, Identifiable {
         case attachesTo = "attaches_to"
         case attachesToOneOf = "attaches_to_one_of"
         case provides
+        case providesSideways = "provides_sideways"
     }
 
     // Decoded explicitly (not synthesised) so an entry missing any field but the
@@ -130,9 +143,28 @@ struct ExtensionCatalogueEntry: Codable, Identifiable {
         attachesTo = try c.decodeIfPresent([String].self, forKey: .attachesTo) ?? []
         attachesToOneOf = try c.decodeIfPresent([String].self, forKey: .attachesToOneOf) ?? []
         provides = try c.decodeIfPresent([String].self, forKey: .provides) ?? []
+        providesSideways = try c.decodeIfPresent(ProvidesSideways.self, forKey: .providesSideways)
         parameters = try c.decodeIfPresent([ExtensionParameter].self, forKey: .parameters) ?? []
         roms = try c.decodeIfPresent([CatalogueRom].self, forKey: .roms) ?? []
         groups = try c.decodeIfPresent([ExtensionGroup].self, forKey: .groups) ?? []
+    }
+}
+
+/// The sideways sockets a ROM cartridge provides when fitted, from the
+/// extension manifest's `provides_sideways`. The Acorn one-chip cartridge
+/// provides two banks, each capable of "rom" or "empty". See spec 5.9.
+struct ProvidesSideways: Codable, Equatable {
+    /// The number of sideways banks the cartridge provides (2 for the Acorn
+    /// one-chip cartridge).
+    let banks: Int
+    /// The capabilities each provided bank has once the cartridge is fitted
+    /// (e.g. ["rom", "empty"]); the socket's own capabilities without the
+    /// cartridge are only "empty".
+    let bankCapabilities: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case banks
+        case bankCapabilities = "bank_capabilities"
     }
 }
 
