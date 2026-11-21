@@ -297,9 +297,13 @@ jobs:
           while IFS= read -r f; do
             file "$f" | grep -q "Mach-O" && sign "$f"
           done < <(find "${srv}/lib" "${srv}/bin/extensions" -type f)
-          # 2. server executables
+          # 2. server executables. The per-model names (beebium-model-b, ...) are
+          # symlinks to the single multi-call beebium-server binary, which dispatches
+          # on argv[0]; skip them (! -L) so the real target is signed exactly once.
+          # Signing through a symlink would re-sign the same target under --force,
+          # and a future codesign could refuse a symlink argument outright.
           for exe in "${srv}"/bin/beebium-*; do
-            [ -f "${exe}" ] && sign "${exe}"
+            [ -f "${exe}" ] && [ ! -L "${exe}" ] && sign "${exe}"
           done
           # 3. the app last (seals everything nested)
           sign "${app}"
