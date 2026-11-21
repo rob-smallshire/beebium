@@ -243,6 +243,20 @@ jobs:
             "$(ls packaging/python-server/dist/beebium_server-*-macosx_11_0_arm64.whl)" \
             "$(ls clients/beebium-python-client/dist/beebium-*.whl)"
 
+  # The Homebrew formula's brew audit --strict on every push, not only in the
+  # release's macos-formula job: the 0.22.0 release failed there on a lint the
+  # formula had carried since its last change. It needs no build (the audit
+  # installs nothing), so it starts at once and takes a minute or two.
+  homebrew-formula-audit:
+    name: Audit the Homebrew formula (macOS arm64)
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: brew audit --strict
+        run: packaging/homebrew/test-formula.sh --audit-only
+
   server-macos-x86_64:
     name: Build and Test Server (macOS x86_64)
     # Self-hosted Intel macOS runner: the hosted Intel image took two to four

@@ -15,8 +15,20 @@
 # installed from any tap. Set BEEBIUM_FORMULA_TEST_REPLACE=1 to have it
 # uninstall the existing keg(s) first instead.
 #
-# Usage: packaging/homebrew/test-formula.sh
+# With --audit-only it stops after `brew audit --strict`: no install, no test,
+# no keg checks, so it takes a minute rather than a from-source build, and runs
+# whatever is installed. CI runs it on every push so that an audit failure
+# shows on master, not first at a tag's release run.
+#
+# Usage: packaging/homebrew/test-formula.sh [--audit-only]
 set -euo pipefail
+
+audit_only=0
+case "${1:-}" in
+  "") ;;
+  --audit-only) audit_only=1 ;;
+  *) echo "usage: $0 [--audit-only]" >&2; exit 2 ;;
+esac
 
 here_dirpath="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_dirpath="$(cd "${here_dirpath}/../.." && pwd)"
@@ -26,8 +38,10 @@ version="$(grep -E '^current_version' "${repo_dirpath}/.bumpversion.toml" \
   | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
 echo "Validating beebium-server formula for version ${version}"
 
-# Refuse to replace an existing install unless explicitly asked.
-if existing="$(brew list --formula --versions beebium-server 2>/dev/null)" \
+# Refuse to replace an existing install unless explicitly asked. An audit
+# installs nothing, so it leaves any install alone.
+if [ "${audit_only}" = "0" ] \
+   && existing="$(brew list --formula --versions beebium-server 2>/dev/null)" \
    && [ -n "${existing}" ]; then
   if [ "${BEEBIUM_FORMULA_TEST_REPLACE:-}" != "1" ]; then
     echo "beebium-server is already installed (${existing}):" >&2
@@ -103,8 +117,9 @@ if [ "${CI:-}" = "true" ]; then
   # files are replaced. beebium-server's own install below stays WITHOUT
   # --overwrite: a link conflict of its own files is what the bin-symlink
   # checks exist to catch. CI only: a developer's Homebrew is never modified.
+  # An audit installs nothing, so it needs none of this.
   openssl_linkpath="$(brew --prefix)/bin/openssl"
-  if [ -L "${openssl_linkpath}" ] \
+  if [ "${audit_only}" = "0" ] && [ -L "${openssl_linkpath}" ] \
      && [[ "$(readlink "${openssl_linkpath}")" == *openssl@1.1* ]]; then
     echo "::group::link openssl@3 over the orphaned openssl@1.1 symlink"
     echo "${openssl_linkpath} -> $(readlink "${openssl_linkpath}")"
@@ -152,6 +167,14 @@ if [ "${CI:-}" = "true" ]; then
     echo "${openssl_linkpath} -> $(readlink "${openssl_linkpath}")"
     echo "::endgroup::"
   fi
+fi
+
+if [ "${audit_only}" = "1" ]; then
+  echo "::group::brew audit --strict"
+  brew audit --strict beebium/formula-test/beebium-server
+  echo "::endgroup::"
+  echo "Formula audit PASSED."
+  exit 0
 fi
 
 echo "::group::brew install --build-from-source"
