@@ -317,6 +317,7 @@
 		F2431DC394AC700B6F65A7AE /* PresetFacets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 477A95A9A6A6784529D907BC /* PresetFacets.swift */; };
 		F27E0697D14CBC60E7BB945E /* TextInputField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A03414ECE92D9AA04944FBB /* TextInputField.swift */; };
 		F285735344904A7D3775E42B /* DiscImageDropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */; };
+		F2DCD647BC540BC0D31A71DC /* CartridgeIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74A3BB3E4E7946451115E597 /* CartridgeIntegrationTests.swift */; };
 		F369818B03931A54C795F6D6 /* RecentConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B19F4DD5A21B41C2CF9630 /* RecentConnections.swift */; };
 		F3F550B221EC02EBB29D6CD9 /* DialogLocations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54DAC8B43B8AEC5BAA1D486D /* DialogLocations.swift */; };
 		F44ED1692215ABF5CE928E87 /* indicator.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831E41582E1F4F7358C624E8 /* indicator.pb.swift */; };
@@ -480,6 +481,7 @@
 		6D736DE1C5A930D6A43C94E0 /* SvgPathParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPathParser.swift; sourceTree = "<group>"; };
 		703CD429AFEBF865A5EE1F07 /* MachinePackage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinePackage.swift; sourceTree = "<group>"; };
 		7319BB6A760A9042161B98EB /* MachineManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineManager.swift; sourceTree = "<group>"; };
+		74A3BB3E4E7946451115E597 /* CartridgeIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartridgeIntegrationTests.swift; sourceTree = "<group>"; };
 		74AEA0430FDD370E37C07678 /* VideoSettingsLoadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsLoadTests.swift; sourceTree = "<group>"; };
 		750FA727EAFD38FAE34EA7C7 /* DriveStatusLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveStatusLine.swift; sourceTree = "<group>"; };
 		757B84FAA1D1A37B1ABEB0A0 /* PeripheralsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralsClient.swift; sourceTree = "<group>"; };
@@ -1043,6 +1045,7 @@
 				BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */,
 				C858E5C4019E78FFD1AD693F /* BlankDiscNamingTests.swift */,
 				CC6B04201EE913A2107FB39B /* BuiltInMappingsTests.swift */,
+				74A3BB3E4E7946451115E597 /* CartridgeIntegrationTests.swift */,
 				FEC1747F40BF88D45E6EB1D1 /* CartridgeSocketsTests.swift */,
 				824454E653FC6B753B26BD00 /* CassetteClientTests.swift */,
 				D133AA0458DD643B20FD55AE /* CassetteConfigTests.swift */,
@@ -1276,6 +1279,7 @@
 				9E04292AEA136B391E1E68CE /* BiquadFilterTests.swift in Sources */,
 				2DFA99C752F8021C8A4C91AE /* BlankDiscNamingTests.swift in Sources */,
 				22ECF44772C0159ABFED1800 /* BuiltInMappingsTests.swift in Sources */,
+				F2DCD647BC540BC0D31A71DC /* CartridgeIntegrationTests.swift in Sources */,
 				FE34B7DEDA61CA2344E3693C /* CartridgeSocketsTests.swift in Sources */,
 				B6C17F5C841FADB054186D30 /* CassetteClientTests.swift in Sources */,
 				2CFC414B888BBBC6C1A6F438 /* CassetteConfigTests.swift in Sources */,

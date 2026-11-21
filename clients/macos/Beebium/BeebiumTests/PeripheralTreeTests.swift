@@ -454,7 +454,7 @@ final class PeripheralTreeTests: XCTestCase {
                                storageDevice(id: "fr-0",
                                              name: "Cartridge slot",
                                              kind: .removable,
-                                             mediaType: "rom-cartridge",
+                                             mediaType: "acorn-rom-cartridge",
                                              backingPath: "")
                            ])
         let tree = PeripheralTree.build(from: [oddball])
