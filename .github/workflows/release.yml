@@ -297,44 +297,9 @@ jobs:
       - name: Install both wheels into a fresh venv and verify
         run: |
           set -euo pipefail
-          server_whl="$(ls server-wheels/beebium_server-*-${{ matrix.tag }}.whl)"
-          client_whl="$(ls clients/beebium-python-client/dist/beebium-*.whl)"
-          echo "server wheel: ${server_whl}"
-          echo "client wheel: ${client_whl}"
-          # Under RUNNER_TEMP, which the runner empties per job; /tmp persists on
-          # the self-hosted runner.
-          uv venv "${RUNNER_TEMP}/verify-venv"
-          PY="${RUNNER_TEMP}/verify-venv/bin/python"
-          uv pip install --python "${PY}" "${server_whl}" "${client_whl}" pytest pytest-timeout
-
-          echo "== import + paths =="
-          "${PY}" -c "import beebium.server as s; print(s.__version__, s.executable_filepath())"
-
-          echo "== smoke-installed-tree.sh against the wheel bundle =="
-          SP="$("${PY}" -c 'import beebium.server, os; print(os.path.dirname(beebium.server.__file__))')"
-          bash scripts/smoke-installed-tree.sh --layout wheel "${SP}/_bundle"
-
-          echo "== resolver must choose the wheel (no env, no checkout build, outside the repo) =="
-          mkdir -p "${RUNNER_TEMP}/outside"
-          ( cd "${RUNNER_TEMP}/outside" && env -u BEEBIUM_SERVER "${PY}" -c "
-          from beebium.client import ServerInstallation
-          i = ServerInstallation.default()
-          print('resolved origin:', i.origin)
-          assert i.origin == 'beebium-server wheel', i.origin
-          " )
-
-          echo "== full smoke: client launches the wheel server with no arguments =="
-          env -u BEEBIUM_SERVER "${PY}" -m pytest "${GITHUB_WORKSPACE}/packaging/smoke/test_smoke.py" -q
-
-          echo "== README snippets: the beebium-server README examples run against this wheel =="
-          env -u BEEBIUM_SERVER "${PY}" -m pytest "${GITHUB_WORKSPACE}/packaging/python-server/readme/snippets" -q
-
-          echo "== README snippets: the client README examples run against this wheel (all four variants) =="
-          # The full beebium-server wheel ships every variant, so this covers the
-          # choose_server snippet (model-b-plus), which the everyday integration
-          # legs skip because their artifact ships only beebium-model-b. Wheel
-          # origin passes the snippet guard with BEEBIUM_SERVER unset.
-          env -u BEEBIUM_SERVER "${PY}" -m pytest "${GITHUB_WORKSPACE}/clients/beebium-python-client/readme/snippets" -q
+          bash scripts/verify-server-wheel.sh \
+            "$(ls server-wheels/beebium_server-*-${{ matrix.tag }}.whl)" \
+            "$(ls clients/beebium-python-client/dist/beebium-*.whl)"
 
   # The Windows analogue of the verify matrix. smoke-installed-tree.sh does not
   # run here, so the console-script shim (which runs the exe), a check that each
