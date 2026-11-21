@@ -32,6 +32,7 @@ from beebium.client.installation import (
     VARIANTS,
     ServerInstallation,
     _exe_name,
+    _multi_call_exe_name,
     find_in_build_tree,
 )
 from beebium.client.server import ServerProcess
@@ -66,6 +67,51 @@ def _inject_fake_wheel(monkeypatch: pytest.MonkeyPatch, bundle_root: Path, *, ve
     module.preset_dirpath = lambda: bundle_root / "share" / "beebium" / "presets"
     module.variants = lambda: VARIANTS
     monkeypatch.setitem(sys.modules, "beebium.server", module)
+
+
+class TestCommand:
+    """command(variant) runs a variant by its own name where the installation
+    has one, else as the server executable's first argument (the wheel)."""
+
+    def test_a_named_variant_runs_by_its_name(self, tmp_path: Path) -> None:
+        root = _make_install_tree(tmp_path / "inst")
+        _make_executable(root / "bin", _multi_call_exe_name())
+        installation = ServerInstallation.from_root(root)
+        assert installation.command("master-128") == [str(root / "bin" / _exe_name("master-128"))]
+
+    def test_the_server_executable_alone_runs_every_variant_by_argument(self, tmp_path: Path) -> None:
+        root = _make_install_tree(tmp_path / "wheel", variants=())
+        server = _make_executable(root / "bin", _multi_call_exe_name())
+        installation = ServerInstallation.from_root(root)
+        assert installation.variants() == VARIANTS
+        assert installation.command() == [str(server), "model-b"]
+        assert installation.command("master-128") == [str(server), "master-128"]
+
+    def test_executable_filepath_of_the_server_executable_alone_names_command(self, tmp_path: Path) -> None:
+        root = _make_install_tree(tmp_path / "wheel", variants=())
+        _make_executable(root / "bin", _multi_call_exe_name())
+        with pytest.raises(ServerNotFoundError) as excinfo:
+            ServerInstallation.from_root(root).executable_filepath("master-128")
+        assert "command('master-128')" in str(excinfo.value)
+
+    def test_an_explicit_executable_is_the_default_variant(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bare", _exe_name("model-b"))
+        assert ServerInstallation.from_executable(binary).command() == [str(binary)]
+
+    def test_a_variant_absent_is_an_error(self, tmp_path: Path) -> None:
+        installation = ServerInstallation.from_root(_make_install_tree(tmp_path / "inst", variants=("model-b",)))
+        with pytest.raises(ServerNotFoundError):
+            installation.command("master-128")
+        with pytest.raises(ValueError):
+            installation.command("model-c")
+
+    def test_a_launch_from_the_server_executable_alone_names_the_variant_first(self, tmp_path: Path) -> None:
+        root = _make_install_tree(tmp_path / "wheel", variants=())
+        server = _make_executable(root / "bin", _multi_call_exe_name())
+        process = ServerProcess(server=root, variant="master-128", port=1)
+        command = process._build_command()
+        assert command[:2] == [str(server), "master-128"]
+        assert process.server_filepath == server
 
 
 class TestFindInBuildTree:

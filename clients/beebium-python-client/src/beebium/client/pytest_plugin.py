@@ -174,12 +174,12 @@ def resolve_preset(
     preset_id = str(preset)
     try:
         installation = ServerInstallation.default() if server is None else ServerInstallation.coerce(server)
-        executable_filepath = installation.executable_filepath(variant)
+        command = installation.command(variant)
     except ServerNotFoundError as e:
         raise FileNotFoundError(f"no preset {preset_id!r}: no server was found to ask ({e})") from e
     try:
         listed = subprocess.run(
-            [str(executable_filepath), "--format", "jsonl", "list-presets", "--all-models"],
+            [*command, "--format", "jsonl", "list-presets", "--all-models"],
             capture_output=True,
             text=True,
             timeout=30,
@@ -187,14 +187,14 @@ def resolve_preset(
         ).stdout
     except (OSError, subprocess.SubprocessError) as e:
         raise FileNotFoundError(
-            f"no preset {preset_id!r}: {executable_filepath.name} could not list its presets ({e})"
+            f"no preset {preset_id!r}: {Path(command[0]).name} could not list its presets ({e})"
         ) from e
     for line in listed.splitlines():
         row = json.loads(line)
         if row.get("id") == preset_id:
             return Path(row["filepath"])
     raise FileNotFoundError(
-        f"no preset {preset_id!r} among the system and user presets {executable_filepath.name} lists"
+        f"no preset {preset_id!r} among the system and user presets {Path(command[0]).name} lists"
     )
 
 

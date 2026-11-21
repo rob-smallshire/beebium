@@ -61,11 +61,11 @@ def run(installation: ServerInstallation):
 
     def _run(*args: str | Path, variant: str = "model-b") -> subprocess.CompletedProcess[str]:
         try:
-            executable_filepath = installation.executable_filepath(variant)
+            command = installation.command(variant)
         except ServerNotFoundError as e:
             pytest.skip(str(e))
         return subprocess.run(
-            [str(executable_filepath), *map(str, args)],
+            [*command, *map(str, args)],
             capture_output=True,
             text=True,
             timeout=60,

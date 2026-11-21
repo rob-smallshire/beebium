@@ -286,7 +286,7 @@ def test_running_instance_sees_a_subcommand_write_via_the_poll(
         # subcommand -- exactly what a GUI or a hand run would do.
         completed = subprocess.run(
             [
-                str(server_installation.executable_filepath(DEFAULT_VARIANT)),
+                *server_installation.command(DEFAULT_VARIANT),
                 "add-aun-peer",
                 "0.254",
                 "127.0.0.1",
@@ -333,7 +333,7 @@ def test_discovery_off_instance_still_sees_a_subcommand_map_write(
 
         completed = subprocess.run(
             [
-                str(server_installation.executable_filepath(DEFAULT_VARIANT)),
+                *server_installation.command(DEFAULT_VARIANT),
                 "add-aun-peer",
                 "0.254",
                 "127.0.0.1",
@@ -391,7 +391,7 @@ def test_poll_driven_reload_repushes_the_sidebar_view(
             # A separate process edits the shared file -- no RPC on this server.
             completed = subprocess.run(
                 [
-                    str(server_installation.executable_filepath(DEFAULT_VARIANT)),
+                    *server_installation.command(DEFAULT_VARIANT),
                     "add-aun-peer",
                     "0.111",
                     "127.0.0.1",

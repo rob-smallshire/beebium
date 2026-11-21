@@ -12,8 +12,8 @@
 
 """Choosing which Beebium server to run.
 
-A server is never just one binary: an *installation* is the four machine
-binaries plus the extensions, ABI libraries, ROMs and presets laid out beside
+A server is never just one binary: an *installation* is the server executable
+and its machine models' names plus the extensions, ABI libraries, ROMs and presets laid out beside
 them -- what a ``.deb``, a Homebrew keg, a Scoop app, a checkout build and the
 ``beebium-server`` wheel each provide. :class:`ServerInstallation` names one, so
 choosing a server is a first-class, explicit choice, not only a search order.
@@ -71,6 +71,18 @@ def _exe_name(variant: str) -> str:
     return name
 
 
+#: The one server executable every machine model runs in. Beside it each model
+#: has a name of its own, beebium-<variant> (a link, or a Windows launcher),
+#: except in a layout that cannot carry links, the ``beebium-server`` wheel,
+#: where a model is run as ``beebium-server <variant> ...``.
+MULTI_CALL_NAME = "beebium-server"
+
+
+def _multi_call_exe_name() -> str:
+    """The server executable's filename (beebium-server[.exe])."""
+    return MULTI_CALL_NAME + (".exe" if sys.platform == "win32" else "")
+
+
 def _is_executable(filepath: Path) -> bool:
     """Whether filepath is an executable server binary (cross-platform)."""
     if not filepath.exists():
@@ -78,6 +90,14 @@ def _is_executable(filepath: Path) -> bool:
     if sys.platform == "win32":
         return filepath.suffix.lower() in (".exe", ".cmd", ".bat", ".com")
     return os.access(filepath, os.X_OK)
+
+
+def _ensure_executable(filepath: Path) -> None:
+    """Repair a missing execute bit (idempotent), so an installer that dropped
+    it does not fail the launch. See the wheel's own executable_filepath for
+    the same guarantee."""
+    if sys.platform != "win32" and not os.access(filepath, os.X_OK):
+        filepath.chmod(filepath.stat().st_mode | 0o111)
 
 
 def find_in_build_tree(exe_name: str, search_dirpaths: list[Path] | None = None) -> Path | None:
@@ -166,7 +186,9 @@ class ServerInstallation:
         dirpath = Path(root)
         if (dirpath / "bin").is_dir():
             return cls(origin=origin, bin_dirpath=dirpath / "bin", root_dirpath=dirpath)
-        if any(_is_executable(dirpath / _exe_name(v)) for v in VARIANTS):
+        if _is_executable(dirpath / _multi_call_exe_name()) or any(
+            _is_executable(dirpath / _exe_name(v)) for v in VARIANTS
+        ):
             # A bin/ directory was passed directly; its parent is the prefix.
             return cls(origin=origin, bin_dirpath=dirpath, root_dirpath=dirpath.parent)
         raise ServerNotFoundError(f"no bin/ directory or server binaries under install root: {dirpath}")
@@ -241,37 +263,80 @@ class ServerInstallation:
     # -- accessors ----------------------------------------------------------
 
     def variants(self) -> tuple[str, ...]:
-        """Which of the four machine variants are present in this installation."""
+        """Which machine variants this installation runs: by name, or every one
+        when it holds the server executable."""
+        multi_call = _is_executable(self.bin_dirpath / _multi_call_exe_name())
         present = []
         for variant in VARIANTS:
             if variant == DEFAULT_VARIANT and self.explicit_executable is not None:
                 present.append(variant)
-            elif _is_executable(self.bin_dirpath / _exe_name(variant)):
+            elif multi_call or _is_executable(self.bin_dirpath / _exe_name(variant)):
                 present.append(variant)
         return tuple(present)
 
-    def executable_filepath(self, variant: str = DEFAULT_VARIANT) -> Path:
-        """Path to a machine variant's binary, ensured executable.
+    def command(self, variant: str = DEFAULT_VARIANT) -> list[str]:
+        """The command that runs a machine variant, for its arguments to follow.
+
+        ``[<bin>/beebium-<variant>]`` where the installation has the variant's
+        name (a build tree, an installed tree, PATH), else
+        ``[<bin>/beebium-server, <variant>]`` where it has the server executable
+        alone (the ``beebium-server`` wheel). Either way the variant sees the
+        same arguments.
 
         Raises:
             ValueError: if ``variant`` is not one of :data:`VARIANTS`.
-            ServerNotFoundError: if the binary is absent from this installation
-                (the message names the installation via :meth:`describe`).
+            ServerNotFoundError: if the installation runs no such variant.
         """
         if variant not in VARIANTS:
             raise ValueError(f"unknown variant {variant!r}; expected one of {', '.join(VARIANTS)}")
+        named = self._named_executable(variant)
+        if named is not None:
+            return [str(named)]
+        multi_call = self.bin_dirpath / _multi_call_exe_name()
+        if multi_call.exists():
+            _ensure_executable(multi_call)
+            return [str(multi_call), variant]
+        raise ServerNotFoundError(
+            f"variant {variant!r} not found in {self.describe()}: {self.bin_dirpath / _exe_name(variant)}"
+        )
+
+    def _named_executable(self, variant: str) -> Path | None:
+        """The variant's own name in this installation, ensured executable, or
+        None when it has none."""
         if self.explicit_executable is not None and variant == DEFAULT_VARIANT:
             candidate = self.explicit_executable
         else:
             candidate = self.bin_dirpath / _exe_name(variant)
         if not candidate.exists():
-            raise ServerNotFoundError(f"variant {variant!r} not found in {self.describe()}: {candidate}")
-        # Belt and braces: repair a missing execute bit (idempotent) so an
-        # installer that dropped it does not fail the launch. See the wheel's
-        # own executable_filepath for the same guarantee.
-        if sys.platform != "win32" and not os.access(candidate, os.X_OK):
-            candidate.chmod(candidate.stat().st_mode | 0o111)
+            return None
+        _ensure_executable(candidate)
         return candidate
+
+    def executable_filepath(self, variant: str = DEFAULT_VARIANT) -> Path:
+        """Path to a machine variant's own name in this installation, ensured
+        executable. To run a variant, use :meth:`command`, which also runs one
+        in an installation with the server executable alone (the wheel).
+
+        Raises:
+            ValueError: if ``variant`` is not one of :data:`VARIANTS`.
+            ServerNotFoundError: if the installation has no name for the
+                variant (the message names the installation via
+                :meth:`describe`, and :meth:`command` where that runs it).
+        """
+        if variant not in VARIANTS:
+            raise ValueError(f"unknown variant {variant!r}; expected one of {', '.join(VARIANTS)}")
+        named = self._named_executable(variant)
+        if named is not None:
+            return named
+        if (self.bin_dirpath / _multi_call_exe_name()).exists():
+            raise ServerNotFoundError(
+                f"{self.describe()} has the server executable {MULTI_CALL_NAME} but no "
+                f"{_exe_name(variant)}; run the variant with command({variant!r}), "
+                f"which names it as the first argument."
+            )
+        raise ServerNotFoundError(
+            f"variant {variant!r} not found in {self.describe()}: {self.bin_dirpath / _exe_name(variant)}"
+        )
 
     @property
     def rom_dirpath(self) -> Path | None:

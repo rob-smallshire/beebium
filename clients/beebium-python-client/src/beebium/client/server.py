@@ -89,7 +89,8 @@ class ServerProcess:
         self._installation = (
             ServerInstallation.default() if server is None else ServerInstallation.coerce(server)
         )
-        self._server_filepath = self._installation.executable_filepath(variant)
+        self._server_command = self._installation.command(variant)
+        self._server_filepath = Path(self._server_command[0])
         self._port = port if port != 0 else self._find_free_port()
         self._extra_args = extra_args or []
         self._preset = str(preset) if preset is not None else None
@@ -122,7 +123,9 @@ class ServerProcess:
 
     @property
     def server_filepath(self) -> Path:
-        """Path to the resolved server executable."""
+        """Path to the resolved server executable: the variant's own name, or
+        ``beebium-server`` in an installation with that alone, run with the
+        variant as its first argument."""
         return self._server_filepath
 
     @property
@@ -159,7 +162,7 @@ class ServerProcess:
     def _build_command(self) -> list[str]:
         """The server command line. A None mos_filepath omits --mos, so the
         server resolves its own default MOS from its ROM directory."""
-        cmd = [str(self._server_filepath)]
+        cmd = list(self._server_command)
         if self._mos_filepath is not None:
             cmd.extend(["--mos", str(self._mos_filepath)])
         cmd.extend(["--port", str(self._port)])

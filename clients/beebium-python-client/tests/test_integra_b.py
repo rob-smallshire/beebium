@@ -570,13 +570,13 @@ def test_a_saved_machine_keeps_its_configuration_until_its_battery_is_reset(
     try:
         installation = (ServerInstallation.default() if beebium_server_filepath is None
                         else ServerInstallation.coerce(beebium_server_filepath))
-        executable_filepath = installation.executable_filepath(VARIANT)
+        integra_command = installation.command(VARIANT)
     except ServerNotFoundError as e:
         pytest.skip(str(e))
     machine = tmp_path / "Integra.beebium-machine"
 
     def server_command(*args: str) -> None:
-        result = subprocess.run([str(executable_filepath), *args, str(machine)],
+        result = subprocess.run([*integra_command, *args, str(machine)],
                                 capture_output=True, text=True, timeout=60)
         assert result.returncode == 0, result.stderr
 
@@ -609,11 +609,11 @@ def test_a_battery_reset_while_running_takes_effect_at_the_next_start(
     try:
         installation = (ServerInstallation.default() if beebium_server_filepath is None
                         else ServerInstallation.coerce(beebium_server_filepath))
-        executable_filepath = installation.executable_filepath(VARIANT)
+        integra_command = installation.command(VARIANT)
     except ServerNotFoundError as e:
         pytest.skip(str(e))
     machine = tmp_path / "Integra.beebium-machine"
-    created = subprocess.run([str(executable_filepath), "create-machine", *DISC_ARGS,
+    created = subprocess.run([*integra_command, "create-machine", *DISC_ARGS,
                               "--output", str(machine)],
                              capture_output=True, text=True, timeout=60)
     assert created.returncode == 0, created.stderr

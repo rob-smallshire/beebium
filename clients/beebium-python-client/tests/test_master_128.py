@@ -60,13 +60,20 @@ def _type(bbc: Beebium, line: str, then_containing: str) -> None:
 
 
 @pytest.fixture
-def executable_filepath(beebium_server_filepath: Path | None) -> Path:
+def installation(beebium_server_filepath: Path | None) -> ServerInstallation:
     try:
         installation = (ServerInstallation.default() if beebium_server_filepath is None
                         else ServerInstallation.coerce(beebium_server_filepath))
-        return installation.executable_filepath(VARIANT)
+        installation.command(VARIANT)
+        return installation
     except ServerNotFoundError as e:
         pytest.skip(str(e))
+
+
+@pytest.fixture
+def master_command(installation: ServerInstallation) -> list[str]:
+    """The command that runs the Master, for its arguments to follow."""
+    return installation.command(VARIANT)
 
 
 def test_boots_mos_3_20_to_basic_in_mode_7_on_adfs(launch_bbc) -> None:
@@ -79,40 +86,41 @@ def test_boots_mos_3_20_to_basic_in_mode_7_on_adfs(launch_bbc) -> None:
     assert re.search(r"MODE=\s*7", _screen(bbc)), _screen(bbc)
 
 
-def test_configure_survives_save_and_relaunch(executable_filepath: Path,
+def test_configure_survives_save_and_relaunch(installation: ServerInstallation,
+                                              master_command: list[str],
                                               tmp_path: Path) -> None:
     machine = tmp_path / "Master.beebium-machine"
     created = subprocess.run(
-        [str(executable_filepath), "create-machine", "--preset", PRESET, "--output",
+        [*master_command, "create-machine", "--preset", PRESET, "--output",
          str(machine)],
         capture_output=True, text=True, timeout=60)
     assert created.returncode == 0, created.stderr
 
-    with Beebium.launch(server=executable_filepath,
+    with Beebium.launch(server=installation, variant=VARIANT,
                         extra_args=["--machine", str(machine)]) as bbc:
         _booted(bbc)
         _type(bbc, "*CONFIGURE MODE 0", ">")
     assert (machine / "nvram" / "master-128-cmos.bin").is_file()
 
-    with Beebium.launch(server=executable_filepath,
+    with Beebium.launch(server=installation, variant=VARIANT,
                         extra_args=["--machine", str(machine)]) as bbc:
         _booted(bbc)
         _type(bbc, PRINT_MODE, "MODE=")
         assert re.search(r"MODE=\s*0", _screen(bbc)), _screen(bbc)
 
 
-def test_keyboard_links_do_not_apply(executable_filepath: Path) -> None:
+def test_keyboard_links_do_not_apply(master_command: list[str]) -> None:
     """The Master's keyboard has no start-up links: its boot options are in
     CMOS, so the server refuses the options that set links."""
-    result = subprocess.run([str(executable_filepath), "start", "--auto-boot"],
+    result = subprocess.run([*master_command, "start", "--auto-boot"],
                             capture_output=True, text=True, timeout=60)
     assert result.returncode != 0
     assert "no start-up links" in result.stderr
 
 
 def test_preset_schema_has_no_startup_links_and_names_the_mos_roms(
-        executable_filepath: Path) -> None:
-    result = subprocess.run([str(executable_filepath), "describe-preset-schema"],
+        master_command: list[str]) -> None:
+    result = subprocess.run([*master_command, "describe-preset-schema"],
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stderr
     schema = json.loads(result.stdout)
@@ -231,20 +239,20 @@ def test_mos_finds_an_external_coprocessor_with_intube_configured(launch_bbc) ->
     assert bbc.tube.status.enabled
 
 
-def test_two_coprocessors_are_refused(executable_filepath: Path) -> None:
+def test_two_coprocessors_are_refused(master_command: list[str]) -> None:
     result = subprocess.run(
-        [str(executable_filepath), "start", "--tube-65c102", "--tube-65c02", "at=internal-tube"],
+        [*master_command, "start", "--tube-65c102", "--tube-65c02", "at=internal-tube"],
         capture_output=True, text=True, timeout=60)
     assert result.returncode != 0
     assert "serves one coprocessor at a time" in result.stderr
 
 
-def test_a_model_b_has_no_internal_tube(executable_filepath: Path) -> None:
-    model_b = executable_filepath.with_name(
-        executable_filepath.name.replace("master-128", "model-b"))
-    if not model_b.exists():
+def test_a_model_b_has_no_internal_tube(installation: ServerInstallation) -> None:
+    try:
+        model_b = installation.command("model-b")
+    except ServerNotFoundError:
         pytest.skip("beebium-model-b not built")
-    result = subprocess.run([str(model_b), "start", "--tube-65c102", "at=internal-tube"],
+    result = subprocess.run([*model_b, "start", "--tube-65c102", "at=internal-tube"],
                             capture_output=True, text=True, timeout=60)
     assert result.returncode != 0
     assert "internal-tube" in result.stderr
@@ -295,8 +303,8 @@ def test_a_cartridge_with_its_odd_socket_only_in_the_front_slot(launch_bbc) -> N
     assert not status.find_socket_for_slot(0).populated
 
 
-def test_a_cartridge_needs_a_rom_in_a_socket(executable_filepath: Path) -> None:
-    result = subprocess.run([str(executable_filepath), "start", "--rom-cartridge", "at=cartridge-rear"],
+def test_a_cartridge_needs_a_rom_in_a_socket(master_command: list[str]) -> None:
+    result = subprocess.run([*master_command, "start", "--rom-cartridge", "at=cartridge-rear"],
                             capture_output=True, text=True, timeout=60)
     assert result.returncode != 0
     assert "at least one of its sockets" in result.stderr
@@ -326,8 +334,8 @@ def test_the_mos_3_50_preset_boots_to_basic_on_adfs(launch_bbc) -> None:
     assert "Acorn ADFS" in screen, screen
 
 
-def test_the_master_lists_its_presets(executable_filepath: Path) -> None:
-    result = subprocess.run([str(executable_filepath), "--format", "tsv", "list-presets"],
+def test_the_master_lists_its_presets(master_command: list[str]) -> None:
+    result = subprocess.run([*master_command, "--format", "tsv", "list-presets"],
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stderr
     ids = {line.split("\t")[0] for line in result.stdout.splitlines()[1:]}

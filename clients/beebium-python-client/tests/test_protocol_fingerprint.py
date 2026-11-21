@@ -62,11 +62,13 @@ def test_mismatched_client_is_rejected_at_connect(
 
 
 def test_server_reports_its_executable_path(bbc: Beebium) -> None:
-    """The server names its own binary, so a mismatch can be diagnosed."""
+    """The server names its own binary, so a mismatch can be diagnosed: the
+    model's name it was run by, or the server executable where it was run as
+    ``beebium-server model-b`` (the wheel, which carries no names)."""
     executable = bbc.system.executable_path
     assert executable, "server did not report an executable path"
     assert Path(executable).is_file()
-    assert Path(executable).name.startswith("beebium-model-b")
+    assert Path(executable).name.startswith(("beebium-model-b", "beebium-server"))
 
 
 def test_mismatch_message_names_the_server_binary(
@@ -96,6 +98,7 @@ def test_mismatch_message_names_the_server_binary(
         pytest.skip(str(e))
 
     message = str(excinfo.value)
-    assert "beebium-model-b" in message
+    # The model's name, or the server executable run as `beebium-server model-b`.
+    assert "beebium-model-b" in message or "beebium-server" in message
     # The path, not just the executable name.
     assert os.sep in message
