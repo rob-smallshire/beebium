@@ -106,6 +106,7 @@ beebium/
 ├── triplets/                      # static vcpkg triplets (linux/osx/windows-static-md)
 ├── docker/linux-bundle/           # static-bundle build (the Linux .deb/.tar.gz)
 ├── scripts/smoke-installed-tree.sh
+├── scripts/verify-server-wheel.sh # install a server wheel + the client, run the user path
 ├── packaging/
 │   ├── debian/{postinst,prerm}    # .deb maintainer scripts
 │   ├── smoke/test_smoke.py        # client-drives-installed-server interaction smoke
@@ -115,7 +116,7 @@ beebium/
 │   │   └── sync-bucket.sh          # pin a released .zip into the Scoop bucket
 │   └── homebrew/
 │       ├── beebium-server.rb      # CANONICAL formula (source of truth, reviewed/CI'd)
-│       ├── test-formula.sh         # build/install/test/audit against the working tree
+│       ├── test-formula.sh         # build/install/test/audit against the working tree (--audit-only: just the audit)
 │       └── sync-tap.sh             # pin a release into the tap (below)
 └── .github/workflows/
     ├── linux-packages.yml         # build + smoke the Linux packages
@@ -409,6 +410,9 @@ example, `model-b-integra-b-disc` via `beebium-model-b-integra-b list-presets`).
   GitHub-style source tarball, pins a throwaway formula at it, then
   `brew install --build-from-source` + `brew test` + `brew audit --strict` +
   an extension-discovery check. Run locally or in CI; both run identical steps.
+  With `--audit-only` it stops after `brew audit --strict`, installing nothing;
+  `ci.yml`'s `homebrew-formula-audit` job runs that on every push, so an audit
+  failure shows on master rather than first at a tag.
 - `packaging/homebrew/sync-tap.sh <version> <tap-checkout>` — fetches the
   released source tarball, computes its `sha256`, and writes the pinned formula
   into the tap's `Formula/`. It is run by `sync-channels.yml` at release time,
@@ -762,6 +766,10 @@ published assets.
    *extracted* bundle at a given prefix on any OS: `ldd` self-containment (no
    `libgrpc`/`libprotobuf`/…), plugin discovery, ROM discovery + boot, and a
    bare-command (PATH-symlink) check. Prefix-agnostic (canonicalised to absolute).
+   `--layout tree` (the default) expects each model's name in `bin/` as a link to
+   `beebium-server` and runs each model by its name; `--layout wheel`, for a
+   wheel's `_bundle`, expects `beebium-server` alone and runs
+   `beebium-server <model>`.
 3. **Build-isolation smoke** (CI, a *clean* runner separate from the build,
    against the *just-built* artifact) — proves the artifact installs and runs
    without the build environment. Linux `smoke-deb` (install the `.deb` in a
@@ -837,8 +845,13 @@ In `release.yml`:
   built from the same checkout** into a fresh venv, then prove the whole user
   path: `import beebium.server`, that `ServerInstallation.default()` resolves to
   the wheel with no environment set, and `packaging/smoke/test_smoke.py`
-  launching the wheel's server with no arguments. Linux and macOS also run
-  `smoke-installed-tree.sh` against the installed `_bundle`; Windows has no bash
+  launching the wheel's server with no arguments. Linux and macOS do it all
+  through `scripts/verify-server-wheel.sh <server-wheel> <client-wheel>`, which
+  also runs `smoke-installed-tree.sh --layout wheel` against the installed
+  `_bundle` and both READMEs' snippets. `ci.yml`'s `server-wheel-macos-arm64`
+  runs the same script on every push, on a wheel built from
+  `server-macos-arm64`'s CPack tarball, so the wheel is exercised before a tag
+  as well. Windows has no bash
   equivalent, so the `beebium-model-b` console-script shim (which runs the exe
   and loads every plugin DLL) plus the full boot in `test_smoke.py` stand in for
   it. The macOS legs are where ad-hoc signing is proven on real runners:
