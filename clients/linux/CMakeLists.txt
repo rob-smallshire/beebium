@@ -16,7 +16,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(beebium-linux-client
-    VERSION 0.21.0
+    VERSION 0.22.0
     LANGUAGES C CXX
 )
 
