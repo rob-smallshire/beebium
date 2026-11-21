@@ -99,6 +99,7 @@ TEST_CASE("A cartridge slot's banks read No cartridge, with nothing to load and 
         REQUIRE(row >= 0);
         CHECK(memory->row_title(row)->text() == QStringLiteral("No cartridge"));
         CHECK_FALSE(memory->row_kind(row)->isVisibleTo(memory));
+        CHECK_FALSE(memory->row_actions(row)->isVisibleTo(memory));
         const QStringList menu = menu_texts(memory, row);
         CHECK_FALSE(menu.contains(QStringLiteral("Browse for ROM Image...")));
         REQUIRE(memory->row_cartridge(row));
@@ -130,6 +131,7 @@ TEST_CASE("A fitted cartridge's banks are ordinary sockets that name it and load
     CHECK(memory->row_kind(rear)->isVisibleTo(memory));
     CHECK(kinds(memory->row_kind(rear)) == QStringList{QStringLiteral("ROM"), QStringLiteral("Empty")});
     CHECK_FALSE(memory->row_cartridge(rear)->isVisibleTo(memory));
+    CHECK(memory->row_actions(rear)->isVisibleTo(memory));
     CHECK(menu_texts(memory, rear).contains(QStringLiteral("Browse for ROM Image...")));
     // The front slot holds none.
     CHECK(memory->row_title(memory->row_at_slot(2))->text() == QStringLiteral("No cartridge"));
@@ -196,6 +198,7 @@ TEST_CASE("Fitting and removing a cartridge changes its banks, and an orphaned i
     REQUIRE(wait_until([&] { return memory->row_title(row())->text() == QStringLiteral("No cartridge"); }));
     CHECK(shows(memory, QString::fromStdString(sentence)));
     // Nothing to load, but the orphan can be cleared.
+    CHECK(memory->row_actions(row())->isVisibleTo(memory));
     const QStringList texts = menu_texts(memory, row());
     CHECK_FALSE(texts.contains(QStringLiteral("Browse for ROM Image...")));
     CHECK(texts.contains(QStringLiteral("Clear")));

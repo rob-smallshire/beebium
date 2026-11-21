@@ -62,6 +62,8 @@ public:
     QLabel* row_caption(int row) const { return at(row).caption; }
     QComboBox* row_kind(int row) const { return at(row).kind; }
     QToolButton* row_padlock(int row) const { return at(row).padlock; }
+    // The row's menu button.
+    QToolButton* row_actions(int row) const { return at(row).actions; }
     // The way to the slot of a cartridge that provides the socket.
     QPushButton* row_cartridge(int row) const { return at(row).cartridge; }
     // The row of the socket that answers at a slot; -1 for none.

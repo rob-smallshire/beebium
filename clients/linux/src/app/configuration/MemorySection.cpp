@@ -321,6 +321,9 @@ void MemorySection::describe() {
         row.padlock->setVisible(content.type == "ram" && socket.can("write_protect") && !unfitted);
         row.kind->setVisible(!unfitted);
         row.cartridge->setVisible(unfitted);
+        // No menu where there is no socket, but for an image the draft
+        // names there all the same, to clear.
+        row.actions->setVisible(!unfitted || content.type != "empty");
     }
 }
 
