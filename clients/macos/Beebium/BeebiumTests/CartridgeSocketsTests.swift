@@ -124,6 +124,40 @@ final class CartridgeSocketsTests: XCTestCase {
                        .cartridgeAbsent(point: "cartridge-rear", pointName: "Rear Cartridge Slot"))
     }
 
+    // MARK: - Reorder anchoring (an unfitted cartridge bank takes no drop)
+
+    /// With no unfitted cartridge banks, every reorder is allowed.
+    func testReorderAllowedWithNoAnchors() {
+        XCTAssertTrue(MemorySectionView.reorderAllowed(
+            source: IndexSet(integer: 0), destination: 3, anchorRowIndices: []))
+    }
+
+    /// A reorder entirely above the anchor block is allowed.
+    func testReorderAboveAnchorsAllowed() {
+        // Anchors at the bottom (rows 4, 5); reorder among 0...3.
+        XCTAssertTrue(MemorySectionView.reorderAllowed(
+            source: IndexSet(integer: 1), destination: 3, anchorRowIndices: [4, 5]))
+    }
+
+    /// A reorder that crosses an anchor is rejected (it would discard the ROM).
+    func testReorderCrossingAnchorRejected() {
+        XCTAssertFalse(MemorySectionView.reorderAllowed(
+            source: IndexSet(integer: 0), destination: 5, anchorRowIndices: [4]))
+    }
+
+    /// An anchor row cannot be the drag source.
+    func testAnchorCannotBeDragged() {
+        XCTAssertFalse(MemorySectionView.reorderAllowed(
+            source: IndexSet(integer: 4), destination: 1, anchorRowIndices: [4]))
+    }
+
+    /// A reorder between two fitted cartridge rows below the anchors is allowed.
+    func testReorderBelowAnchorsAllowed() {
+        // Anchors 2, 3 (front, unfitted); rows 4, 5 (rear, fitted) reorderable.
+        XCTAssertTrue(MemorySectionView.reorderAllowed(
+            source: IndexSet(integer: 5), destination: 4, anchorRowIndices: [2, 3]))
+    }
+
     // MARK: - Fixtures
 
     private static let rearSocket = SidewaysSocketSchema(

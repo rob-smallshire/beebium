@@ -95,6 +95,29 @@ struct MemorySectionView: View {
         return row.socket.capabilities
     }
 
+    /// The indices (into `rows`) of the unfitted cartridge banks: the rows that
+    /// are fixed anchors in the reorder list.
+    private var cartridgeAbsentRowIndices: Set<Int> {
+        var result = Set<Int>()
+        for (index, row) in rows.enumerated() {
+            if case .cartridgeAbsent = cartridgeState(for: row) { result.insert(index) }
+        }
+        return result
+    }
+
+    /// Whether a drag-to-reorder move is allowed: a move may not include or cross
+    /// an anchor row (an unfitted cartridge bank), since that would displace the
+    /// anchor or discard a dragged ROM into it. A move entirely above, or entirely
+    /// below, the anchors is fine. Pure, so the rule is pinned in tests.
+    static func reorderAllowed(source: IndexSet, destination: Int,
+                               anchorRowIndices: Set<Int>) -> Bool {
+        if anchorRowIndices.isEmpty { return true }
+        var touched = source
+        touched.insert(destination)
+        guard let lo = touched.min(), let hi = touched.max() else { return true }
+        return !anchorRowIndices.contains { ($0 >= lo && $0 <= hi) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // The OS (MOS) ROM heads the section, above the sideways banks: the
@@ -128,6 +151,13 @@ struct MemorySectionView: View {
                     }
                     .onMove { source, destination in
                         guard let editor else { return }
+                        // An unfitted cartridge bank ("No cartridge") is a fixed
+                        // anchor: it is not a drag source and takes no drop, and a
+                        // move may not cross it (that would discard a ROM). Reject
+                        // any move touching one.
+                        guard Self.reorderAllowed(source: source, destination: destination,
+                                                  anchorRowIndices: cartridgeAbsentRowIndices)
+                        else { return }
                         let newSlots = editor.slots(
                             movingContentsFromOffsets: source, toOffset: destination,
                             currentSlots: currentSlots,
