@@ -80,6 +80,20 @@ struct CartridgeSockets {
         extensionsSchema.attachmentPoints.first { $0.id == point }?.displayName ?? point
     }
 
+    /// A stable signature of which cartridges the draft fits and where (name and
+    /// occupied point), so the configurator can re-resolve the sideways banks when
+    /// a cartridge is fitted, removed or moved between slots -- and not on an
+    /// unrelated extension edit. Empty when no cartridge is fitted.
+    func fittedSignature(in draft: MachineDraft) -> String {
+        let model = instanceModel
+        let parts = (draft.extensions ?? []).enumerated().compactMap { index, ext -> String? in
+            guard extensionsSchema.providesSideways(forExtension: ext.name) != nil else { return nil }
+            let point = model.attachment(ofInstanceAt: index, name: ext.name, in: draft)
+            return "\(ext.name)@\(point)"
+        }
+        return parts.sorted().joined(separator: ",")
+    }
+
     /// The sideways sockets a cartridge at `point` provides -- the sockets whose
     /// `provided_by_point` names it -- lowest bank first. These are the banks the
     /// cartridge's Peripherals view links to in the Memory section, and the ones

@@ -149,6 +149,33 @@ final class CartridgeSocketsTests: XCTestCase {
         XCTAssertTrue(sockets.providedSockets(atPoint: "modem-connector", in: schema).isEmpty)
     }
 
+    // MARK: - Fitted-cartridge signature (drives the sideways re-resolve)
+
+    /// The signature is empty with no cartridge, names the cartridge and its
+    /// occupied point when fitted, and changes when the cartridge moves slots --
+    /// but not for an unrelated extension edit.
+    func testFittedSignatureTracksCartridgesNotOtherExtensions() throws {
+        let sockets = CartridgeSockets(extensionsSchema: try Self.masterCartridgeSchema())
+
+        XCTAssertEqual(sockets.fittedSignature(in: MachineDraft(model: "master-128")), "")
+
+        let rear = MachineDraft(model: "master-128", extensions: [Ext(name: "acorn-rom-cartridge")])
+        XCTAssertEqual(sockets.fittedSignature(in: rear), "acorn-rom-cartridge@cartridge-rear")
+
+        let front = MachineDraft(model: "master-128", extensions: [
+            Ext(name: "acorn-rom-cartridge", config: ["at": .string("cartridge-front")]),
+        ])
+        XCTAssertEqual(sockets.fittedSignature(in: front), "acorn-rom-cartridge@cartridge-front")
+        XCTAssertNotEqual(sockets.fittedSignature(in: rear), sockets.fittedSignature(in: front))
+
+        // Adding a non-cartridge extension does not change the signature.
+        let rearPlusRtc = MachineDraft(model: "master-128", extensions: [
+            Ext(name: "acorn-rom-cartridge"), Ext(name: "acorn-rtc"),
+        ])
+        XCTAssertEqual(sockets.fittedSignature(in: rearPlusRtc),
+                       sockets.fittedSignature(in: rear))
+    }
+
     // MARK: - Reorder anchoring (an unfitted cartridge bank takes no drop)
 
     /// With no unfitted cartridge banks, every reorder is allowed.

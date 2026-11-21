@@ -126,18 +126,31 @@ struct NewMachineDialog: View {
             scheduleValidation()
         }
         .onChange(of: draft.mosImageUri) { _ in
-            reresolveSidewaysForMosChange()
+            reresolveSideways()
+        }
+        .onChange(of: fittedCartridgeSignature) { _ in
+            reresolveSideways()
         }
     }
 
-    /// After the MOS changes, re-resolve the draft so the model's MOS-derived
-    /// sideways banks (the Master 128's 9-15, marked `"source": "mos"`) show the
-    /// new MOS's set before launch. Only the sideways banks are adopted, so the
-    /// user's MOS choice and every other edit stay; a stale result (the MOS
-    /// changed again meanwhile) is dropped. The marked entries would be
-    /// re-derived at launch regardless, since their marker travels in the preset;
-    /// this is so the rows are right beforehand.
-    private func reresolveSidewaysForMosChange() {
+    /// A signature of which cartridges the draft fits and where, so fitting,
+    /// removing or moving a cartridge re-resolves the sideways banks (its banks
+    /// become editable, or its orphaned entries are flagged) while an unrelated
+    /// extension edit does not. Empty on a model with no cartridge slots.
+    private var fittedCartridgeSignature: String {
+        guard let extensionsSchema = extensionsSchema else { return "" }
+        return CartridgeSockets(extensionsSchema: extensionsSchema).fittedSignature(in: draft)
+    }
+
+    /// Re-resolve the draft so the server's derived sideways banks show before
+    /// launch, after a change that re-derives them: the MOS (the Master 128's
+    /// MOS-derived banks 9-15, marked `"source": "mos"`) or the fitted cartridges
+    /// (a cartridge's banks become editable; removing one leaves an orphaned entry
+    /// the resolver flags). The server owns the topology, so only the sideways
+    /// banks are adopted and only when nothing has changed since the snapshot --
+    /// the MOS, the extensions and the sideways banks must all still match, so a
+    /// later edit or a just-loaded ROM is never clobbered by a stale result.
+    private func reresolveSideways() {
         guard let preset = selectedPreset else { return }
         let executablePath = preset.coreExecutablePath
         let current = draft
@@ -145,7 +158,9 @@ struct NewMachineDialog: View {
             let (resolved, _) = await presetManager.resolveDraft(current, executablePath: executablePath)
             guard let resolved,
                   draft.mosImageUri == current.mosImageUri,
-                  draft.sidewaysBank != resolved.sidewaysBank else { return }
+                  draft.extensions == current.extensions,
+                  draft.sidewaysBank == current.sidewaysBank,
+                  current.sidewaysBank != resolved.sidewaysBank else { return }
             draft.sidewaysBank = resolved.sidewaysBank
         }
     }
