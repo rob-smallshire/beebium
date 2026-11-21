@@ -1,8 +1,57 @@
 # Beebium Deployment and Resource Discovery
 
-This document describes how Beebium server executables are deployed, how they locate ROMs, presets, extensions, bundled discs and blank disc and tape templates at runtime, and where they keep per-user state.
+This document describes how the Beebium server executable is deployed, how they locate ROMs, presets, extensions, bundled discs and blank disc and tape templates at runtime, and where they keep per-user state.
 
 > For embedding the servers and their native dependencies inside the macOS `.app` bundle (and the path to a distributable, notarized build), see [macOS App Packaging](macos-app-packaging.md).
+
+## One Executable
+
+Every machine model runs in one executable, `beebium-server`: a multi-call
+binary holding all eight machines. Each model also has a name of its own beside
+it, `beebium-<model>`, by which it is run as before:
+
+| Model | Name | First argument to `beebium-server` |
+|-------|------|------------------------------------|
+| BBC Model B | `beebium-model-b` | `model-b` |
+| BBC Model B+ 64K | `beebium-model-b-plus` | `model-b-plus` |
+| BBC Model B+ 128K | `beebium-model-b-plus-128k` | `model-b-plus-128k` |
+| Model B with ROM/RAM board | `beebium-model-b-romram` | `model-b-romram` |
+| Model B with ATPL Sidewise | `beebium-model-b-atpl-sidewise` | `model-b-atpl-sidewise` |
+| Model B with Watford ROM/RAM | `beebium-model-b-watford-rom-ram` | `model-b-watford-rom-ram` |
+| Model B with Integra-B | `beebium-model-b-integra-b` | `model-b-integra-b` |
+| BBC Master 128 | `beebium-master-128` | `master-128` |
+
+The executable decides which model to run from the name it was invoked by, the
+last component of `argv[0]` (less `.exe`, in any case, on Windows):
+
+- Invoked as `beebium-<model>` it runs that model with its command line
+  unchanged, so `beebium-master-128 start --preset master-128` behaves exactly as
+  it did when each model was an executable of its own.
+- Invoked by any other name, `beebium-server` among them, its first argument
+  names the model: `beebium-server master-128 start --preset master-128`. The
+  model then sees the command line it would see invoked by its own name:
+  `argv[0]` with its last component renamed `beebium-master-128`, and the
+  arguments after the model.
+- `beebium-server --help` lists the models, and `beebium-server --version`
+  prints the version; both exit 0. No model, or one there is not, is a usage
+  error (exit code 64) that lists the models.
+
+On Linux and macOS each name is a relative symbolic link in the same directory
+(`beebium-model-b -> beebium-server`), in the build tree and in an installed
+one, so a tree copied with its links, as the macOS app's embed phase copies
+`bin/`, keeps them working. On Windows each name is an executable of its own
+that runs `beebium-server.exe` with its command line unchanged. A Python wheel
+cannot carry links, so it ships `beebium-server` alone and runs a model by the
+first argument.
+
+Whatever name it was invoked by, the executable finds its extensions, ROMs and
+presets beside its own on-disk location, from the operating system
+(`/proc/self/exe`, `_NSGetExecutablePath`, `GetModuleFileName`), so a link
+anywhere, `/usr/bin` among them, finds the tree it points into.
+`SystemInfo.executable_path` reports the name it was invoked by instead, so a
+client can say which model's binary it talks to: `argv[0]` made absolute when
+it holds a directory, else the first match for it on `PATH`, else the
+executable's own path, which is also what `beebium-server <model>` reports.
 
 ## ROM Files
 
@@ -86,7 +135,7 @@ Plugin extensions, including the Acorn 65C02 second processor
 transport, are built into the server.) `--extension-dir <path>` adds further
 search directories, and `list-extensions` shows what resolves.
 A server run from a build tree in which the plugins have not been built
-(the `beebium-servers` target builds them all), or from an installed tree
+(the `beebium-servers` target builds `beebium-server` and every plugin), or from an installed tree
 missing `extensions/acorn-65c02-coprocessor/`, has no Tube coprocessor:
 `--tube-65c02` is not recognised and the machine boots without a second
 processor. The release artifacts, packages and the macOS app bundle all
@@ -100,7 +149,8 @@ beside the executables:
 ```
 build/
 ├── src/server/
-│   ├── beebium-model-b, beebium-model-b-plus, ...
+│   ├── beebium-server
+│   ├── beebium-model-b -> beebium-server, beebium-model-b-plus -> beebium-server, ...
 │   ├── extensions/<name>/{<plugin library>, manifest.json}
 │   ├── presets/   (*.beebium-preset)
 │   ├── blank-discs/   (copied from discs/blank/)
@@ -121,7 +171,8 @@ When installed via `cmake --install`, the tree is relocatable and self-describin
 ```
 <prefix>/
 ├── bin/
-│   ├── beebium-model-b, beebium-model-b-plus, ...
+│   ├── beebium-server
+│   ├── beebium-model-b -> beebium-server, beebium-model-b-plus -> beebium-server, ...
 │   └── extensions/<name>/{<plugin>.so, manifest.json, roms/}
 ├── lib/
 │   ├── libbeebium_extension_api.so
@@ -133,9 +184,9 @@ When installed via `cmake --install`, the tree is relocatable and self-describin
     └── blank-tapes/   (C30.uef, ...)
 ```
 
-The server binaries carry an `$ORIGIN`-relative `RPATH` (`@loader_path` on macOS),
-so they resolve the extension ABI libraries in `lib/` from the installed tree.
-Each binary finds its `extensions/`, ROMs, and presets relative to its own
+The server executable carries an `$ORIGIN`-relative `RPATH` (`@loader_path` on macOS),
+so it resolves the extension ABI libraries in `lib/` from the installed tree.
+It finds its `extensions/`, ROMs, and presets relative to its own
 on-disk location (resolved from the OS, not `argv[0]`, so a `/usr/bin` symlink
 into the tree works too), so the whole tree relocates intact.
 
@@ -200,7 +251,7 @@ cmake --install . --prefix ~/.local
 ### Install Rules
 
 The CMake install rules handle:
-- Executables to `bin/`
+- `beebium-server` to `bin/`, and each model's name beside it: a relative symbolic link on Linux and macOS
 - Plugin extensions (library, `manifest.json`, firmware) to `bin/extensions/<name>/`
 - The extension ABI libraries to `lib/`
 - ROM files (`.rom`) to `share/beebium/roms/`

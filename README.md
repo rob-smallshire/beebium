@@ -122,7 +122,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-The four server executables land in `build/src/server/` (`beebium-model-b`, `-model-b-plus`, `-model-b-plus-128k`, `-model-b-romram`); the `beebium-servers` target builds them all. Run the test suite with:
+The server executable, `beebium-server`, lands in `build/src/server/` with each machine model's name beside it (`beebium-model-b`, `beebium-master-128`, ...); the `beebium-servers` target builds it and every plugin. Run the test suite with:
 
 ```bash
 ctest --test-dir build --output-on-failure

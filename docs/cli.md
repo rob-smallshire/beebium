@@ -1,10 +1,16 @@
 # Beebium Command Line Interface
 
-The Beebium emulator runs as a headless gRPC server. This document covers all command-line options for the server executables.
+The Beebium emulator runs as a headless gRPC server. This document covers all command-line options for the server.
 
 ## Executables
 
-| Executable | Machine | Description |
+One executable, `beebium-server`, runs every machine model. Each model has a
+name of its own beside it, by which it is run; `beebium-server <model> ...`
+runs it too, with the model id the name carries after `beebium-`
+(`beebium-server master-128 start`). `beebium-server --help` lists the models.
+See [deployment.md](deployment.md#one-executable).
+
+| Name | Machine | Description |
 |------------|---------|-------------|
 | `beebium-model-b` | BBC Model B | Original 32K BBC Micro with MOS 1.20 |
 | `beebium-model-b-plus` | BBC Model B+ 64K | Enhanced 64K model with MOS 2.0 |

@@ -50,9 +50,12 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Server executables are in `build/src/server/`:
+The server executable, `beebium-server`, is in `build/src/server/`, with each
+machine model's name beside it as a link to it (on Windows, an executable of its
+own); run a model by its name, or as `beebium-server <model>`
+([deployment.md](deployment.md#one-executable)):
 
-| Executable | Machine |
+| Name | Machine |
 |------------|---------|
 | `beebium-model-b` | BBC Model B |
 | `beebium-model-b-plus` | BBC Model B+ |
@@ -67,7 +70,8 @@ A Tube coprocessor is a plugin in `build/src/server/extensions/`, attached to
 any of them at launch: `--tube-65c02` (the 3 MHz 6502 Second Processor) or
 `--tube-65c102` (the 4 MHz 65C102 Co-processor).
 
-To build all server executables at once, use the convenience target:
+To build the server executable and every plugin at once, use the convenience
+target:
 
 ```bash
 cmake --build build --target beebium-servers --parallel

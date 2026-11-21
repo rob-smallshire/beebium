@@ -6,6 +6,8 @@
 # The packages lay the server tree under /opt/beebium and symlink each
 # /opt/beebium/bin/beebium-model-* and beebium-master-* into /usr/bin (packaging/debian/postinst,
 # packaging/rpm/postinstall); removal deletes those links (prerm, preuninstall).
+# Each /opt/beebium/bin name is itself a relative link to the one executable,
+# beebium-server, so a /usr/bin link runs it through its model's name.
 # Run inside the smoke container, after installing and after removing.
 #
 # Usage: check-server-path-links.sh installed|removed

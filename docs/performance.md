@@ -74,7 +74,7 @@ cmake -S . -B build-prof -G Ninja \
     -DCMAKE_C_FLAGS=-fno-omit-frame-pointer \
     -DCMAKE_CXX_FLAGS=-fno-omit-frame-pointer \
     -DBEEBIUM_BUILD_TESTS=OFF
-cmake --build build-prof --parallel 2 --target beebium-model-b \
+cmake --build build-prof --parallel 2 --target beebium-server \
     beebium_ext_acorn_65c02_plugin
 ```
 

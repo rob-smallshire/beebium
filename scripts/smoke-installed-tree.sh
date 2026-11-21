@@ -11,7 +11,9 @@
 #      gRPC/protobuf/abseil/etc. (only the base system libraries);
 #   2. the extension ABI shared libraries resolve via RPATH and the plugin tree
 #      is discovered (`list-extensions`);
-#   3. ROMs resolve through the share fallback and the gRPC server boots.
+#   3. ROMs resolve through the share fallback and the gRPC server boots;
+#   4. bin/ holds the one executable, beebium-server, and each model's name as a
+#      relative link to it, run both by name and as `beebium-server <model>`.
 #
 # Usage: smoke-installed-tree.sh <prefix>      (prefix = the .../opt/beebium dir)
 
@@ -27,6 +29,29 @@ server="${prefix}/bin/beebium-model-b"
 fail() { echo "SMOKE FAIL: $*" >&2; exit 1; }
 
 [ -x "${server}" ] || fail "server binary missing or not executable: ${server}"
+
+# The one executable, and each model's name a link to it in the same
+# directory. Relative, so a tree copied with its links (the macOS app's embed
+# phase, cp -R) keeps them; an absolute link would dangle there.
+echo "== beebium-server and the models' names =="
+multi_call="${prefix}/bin/beebium-server"
+[ -x "${multi_call}" ] && [ ! -L "${multi_call}" ] \
+    || fail "beebium-server missing, not executable, or a link: ${multi_call}"
+models="model-b model-b-plus model-b-plus-128k model-b-romram model-b-atpl-sidewise model-b-watford-rom-ram model-b-integra-b master-128"
+for model in ${models}; do
+    link_filepath="${prefix}/bin/beebium-${model}"
+    [ -L "${link_filepath}" ] || fail "${link_filepath} is not a link to beebium-server"
+    target="$(readlink "${link_filepath}")"
+    [ "${target}" = "beebium-server" ] \
+        || fail "${link_filepath} -> ${target}; expected the relative beebium-server"
+done
+models_out="$("${multi_call}" --help)" || fail "beebium-server --help exited non-zero"
+for model in ${models}; do
+    echo "${models_out}" | grep -q "^  ${model} " || fail "beebium-server --help does not list ${model}"
+done
+"${multi_call}" master-128 describe-preset-schema >/dev/null \
+    || fail "beebium-server master-128 describe-preset-schema exited non-zero"
+echo "beebium-server and ${models// /, } present"
 
 # Every plugin's library must sit beside its manifest. list-extensions (below)
 # reads only the manifests, so it cannot catch a library installed elsewhere.
