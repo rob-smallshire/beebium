@@ -256,17 +256,17 @@ TEST_CASE("A cartridge goes in either Master 128 slot, each holding one", "[pres
     ExtensionsDraft extensions(draft, master_128_schema());
     const auto rear = point(extensions, "cartridge-rear");
     const auto front = point(extensions, "cartridge-front");
-    CHECK(names(extensions.addable(rear)) == std::vector<std::string>{"rom-cartridge"});
-    CHECK(names(extensions.addable(front)) == std::vector<std::string>{"rom-cartridge"});
-    extensions.add("rom-cartridge", front);
-    extensions.add("rom-cartridge", rear);
+    CHECK(names(extensions.addable(rear)) == std::vector<std::string>{"acorn-rom-cartridge"});
+    CHECK(names(extensions.addable(front)) == std::vector<std::string>{"acorn-rom-cartridge"});
+    extensions.add("acorn-rom-cartridge", front);
+    extensions.add("acorn-rom-cartridge", rear);
     CHECK(*draft.get("/extensions") == ordered_json::parse(R"([
-        {"name": "rom-cartridge", "config": {"at": "cartridge-front"}},
-        {"name": "rom-cartridge", "config": {"id": "rom-cartridge-1"}}])"));
+        {"name": "acorn-rom-cartridge", "config": {"at": "cartridge-front"}},
+        {"name": "acorn-rom-cartridge", "config": {"id": "acorn-rom-cartridge-1"}}])"));
     // Occupancy is the point's own: one in each, and each full.
     CHECK(extensions.attached(rear).size() == 1);
     CHECK(extensions.attached(front).size() == 1);
-    CHECK(extensions.attached(front).at(0).id == "rom-cartridge");
+    CHECK(extensions.attached(front).at(0).id == "acorn-rom-cartridge");
     CHECK(extensions.addable(rear).empty());
     CHECK(extensions.addable(front).empty());
     // A point nothing fits is not offered.

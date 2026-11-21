@@ -90,7 +90,8 @@
           "capabilities": [
             "empty"
           ],
-          "runtime_configurable": false
+          "runtime_configurable": false,
+          "provided_by_point": "cartridge-rear"
         },
         {
           "label": "Rear cartridge (bank 1)",
@@ -100,7 +101,8 @@
           "capabilities": [
             "empty"
           ],
-          "runtime_configurable": false
+          "runtime_configurable": false,
+          "provided_by_point": "cartridge-rear"
         },
         {
           "label": "Front cartridge (bank 2)",
@@ -110,7 +112,8 @@
           "capabilities": [
             "empty"
           ],
-          "runtime_configurable": false
+          "runtime_configurable": false,
+          "provided_by_point": "cartridge-front"
         },
         {
           "label": "Front cartridge (bank 3)",
@@ -120,7 +123,8 @@
           "capabilities": [
             "empty"
           ],
-          "runtime_configurable": false
+          "runtime_configurable": false,
+          "provided_by_point": "cartridge-front"
         },
         {
           "label": "Sideways RAM (bank 4)",
@@ -468,7 +472,7 @@
           "max_occupancy": 1,
           "provided_by": null,
           "extensions": [
-            "rom-cartridge"
+            "acorn-rom-cartridge"
           ]
         },
         {
@@ -479,7 +483,7 @@
           "max_occupancy": 1,
           "provided_by": null,
           "extensions": [
-            "rom-cartridge"
+            "acorn-rom-cartridge"
           ]
         },
         {
@@ -1175,12 +1179,12 @@
           "roms": []
         },
         {
-          "name": "rom-cartridge",
-          "display_name": "ROM cartridge",
-          "short_name": "ROM cartridge",
+          "name": "acorn-rom-cartridge",
+          "display_name": "Acorn ROM Cartridge",
+          "short_name": "Acorn ROM Cartridge",
           "keywords": [],
-          "description": "A ROM cartridge with two 16K ROM sockets, in one of the Master's cartridge slots.",
-          "cli_name": "rom-cartridge",
+          "description": "Acorn's ROM cartridge with two 16K ROM sockets, in one of the Master's cartridge slots.",
+          "cli_name": "acorn-rom-cartridge",
           "kind": "peripheral",
           "source": "built-in",
           "attaches_to": [
@@ -1191,60 +1195,16 @@
             "cartridge-front"
           ],
           "provides": [],
-          "parameters": [
-            {
-              "key": "low",
-              "label": "Even-bank socket",
-              "description": "The ROM in the socket on the slot's even bank (ROM 0 or 2), a ROM name or a path; with none the bank is empty",
-              "type": "filepath",
-              "required": false,
-              "is_list": false,
-              "position": null,
-              "default": "",
-              "default_from": "",
-              "effective_default": "",
-              "min": null,
-              "max": null,
-              "choices": [],
-              "choices_from": "",
-              "excludes": [],
-              "bundled": "",
-              "media": "",
-              "resource": "rom",
-              "access": "read",
-              "unique": false,
-              "provider_of": "",
-              "item_format": "",
-              "fields": []
-            },
-            {
-              "key": "high",
-              "label": "Odd-bank socket",
-              "description": "The ROM in the socket on the slot's odd bank (ROM 1 or 3), a ROM name or a path; with none the bank is empty",
-              "type": "filepath",
-              "required": false,
-              "is_list": false,
-              "position": null,
-              "default": "",
-              "default_from": "",
-              "effective_default": "",
-              "min": null,
-              "max": null,
-              "choices": [],
-              "choices_from": "",
-              "excludes": [],
-              "bundled": "",
-              "media": "",
-              "resource": "rom",
-              "access": "read",
-              "unique": false,
-              "provider_of": "",
-              "item_format": "",
-              "fields": []
-            }
-          ],
+          "parameters": [],
           "groups": [],
-          "roms": []
+          "roms": [],
+          "provides_sideways": {
+            "banks": 2,
+            "bank_capabilities": [
+              "rom",
+              "empty"
+            ]
+          }
         },
         {
           "name": "voltmace-delta-14b",

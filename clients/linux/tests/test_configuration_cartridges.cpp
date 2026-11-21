@@ -40,11 +40,10 @@ using nlohmann::ordered_json;
 
 namespace {
 
-// The Master 128's schema with cartridges providing banks 0 to 3, edited
-// from the recorded one to the server's contract.
+// The Master 128's schema, cartridges providing its banks 0 to 3.
 std::string schema_text() {
     std::ifstream file(std::filesystem::path(BEEBIUM_LINUX_FIXTURES_DIRPATH) /
-                       "describe-preset-schema-master-128-cartridges.json");
+                       "describe-preset-schema-master-128.json");
     std::stringstream text;
     text << file.rdbuf();
     return text.str();

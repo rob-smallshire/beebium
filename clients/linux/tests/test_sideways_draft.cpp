@@ -51,7 +51,7 @@ MachineDraft resolved() {
 // The Master 128's schema with cartridges providing banks 0 to 3.
 PresetSchema master_with_cartridges() {
     std::ifstream file(std::filesystem::path(BEEBIUM_LINUX_FIXTURES_DIRPATH) /
-                       "describe-preset-schema-master-128-cartridges.json");
+                       "describe-preset-schema-master-128.json");
     std::stringstream text;
     text << file.rdbuf();
     auto schema = PresetSchema::parse(text.str());

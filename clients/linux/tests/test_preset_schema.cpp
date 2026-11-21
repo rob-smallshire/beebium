@@ -44,7 +44,7 @@ PresetSchema model_b() {
 // sockets at banks 0 to 3 (client specification 5.9).
 PresetSchema master_with_cartridges() {
     return schema_from(std::filesystem::path(BEEBIUM_LINUX_FIXTURES_DIRPATH) /
-                       "describe-preset-schema-master-128-cartridges.json");
+                       "describe-preset-schema-master-128.json");
 }
 
 }  // namespace
