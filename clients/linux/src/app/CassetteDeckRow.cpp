@@ -250,18 +250,22 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     header->addWidget(title);
     header->addWidget(motor_);
     header->addStretch(1);
-    // The ways in for an empty deck, on the header rather than among the
-    // keys, so the key row keeps its edges for the two keys that lose the
-    // user's place.
-    browse_ = new QToolButton(this);
+    layout->addLayout(header);
+
+    // The ways in for an empty deck, in the row the keys take with a tape
+    // in, at its left edge: the column of the floppy drives' Browse.
+    empty_row_ = new QWidget(this);
+    auto* empty = new QHBoxLayout(empty_row_);
+    empty->setContentsMargins(0, 0, 0, 0);
+    browse_ = new QToolButton(empty_row_);
     browse_->setObjectName(QStringLiteral("browseTape"));
     browse_->setText(tr("Browse..."));
     browse_->setIcon(themed("folder", QStyle::SP_DirIcon, this));
     browse_->setPopupMode(QToolButton::MenuButtonPopup);
     menu_ = new QMenu(browse_);
     browse_->setMenu(menu_);
-    header->addWidget(browse_);
-    layout->addLayout(header);
+    empty->addWidget(browse_);
+    empty->addStretch(1);
 
     name_ = new ElidedLabel(this);
     name_->setTextInteractionFlags(Qt::NoTextInteraction);
@@ -395,6 +399,7 @@ CassetteDeckRow::CassetteDeckRow(SessionCassette& cassette, ClientSettings* sett
     add_key(CassetteKey::eject, QStringLiteral("ejectTape"), tr("Eject tape"),
             themed("media-eject", QStyle::SP_ArrowUp, this));
     layout->addWidget(key_row_);
+    layout->addWidget(empty_row_);
     for (QToolButton* button : findChildren<QToolButton*>()) {
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
         button->setAutoRaise(true);
@@ -606,6 +611,7 @@ void CassetteDeckRow::present() {
     metadata_->setVisible(inserted && !metadata_->whole().isEmpty());
     position_line_->setVisible(inserted);
     key_row_->setVisible(inserted);
+    empty_row_->setVisible(!inserted);
     const double duration = deck.tape.duration_seconds;
     // An unknown length has the counter alone, with no proportional timeline.
     duration_->setVisible(duration > 0.0);

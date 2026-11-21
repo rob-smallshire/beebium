@@ -1219,6 +1219,23 @@ TEST_CASE("The cassette deck sits above the floppy drives", "[cassette][sidebar]
     CHECK(s.sidebar->status_text().isEmpty());
 }
 
+TEST_CASE("An empty deck's Browse sits in the drives' Browse column, at their size",
+          "[cassette][sidebar]") {
+    Storage s(true, true);
+    CassetteDeckRow* deck = s.sidebar->cassette_deck();
+    REQUIRE(wait_until([&] { return deck->isVisible() && !s.sidebar->rows().empty(); }));
+    DriveRow* drive = s.sidebar->rows().front();
+    REQUIRE(wait_until([&] { return drive->isVisible(); }));
+    QCoreApplication::processEvents();
+    QToolButton* tape = deck->browse_button();
+    QToolButton* disc = drive->browse_button();
+    REQUIRE(tape->isVisibleTo(s.sidebar.get()));
+    const QRect tape_rect(tape->mapTo(s.sidebar.get(), QPoint(0, 0)), tape->size());
+    const QRect disc_rect(disc->mapTo(s.sidebar.get(), QPoint(0, 0)), disc->size());
+    CHECK(tape_rect.left() == disc_rect.left());
+    CHECK(tape_rect.size() == disc_rect.size());
+}
+
 TEST_CASE("A model without a cassette interface has no deck, not a disabled one",
           "[cassette][sidebar]") {
     Storage s(true, false);

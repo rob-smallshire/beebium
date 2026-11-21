@@ -182,6 +182,7 @@ private:
     QToolButton* copy_;
     QPushButton* eject_offer_;
     QToolButton* dismiss_;
+    QWidget* empty_row_ = nullptr;  // Browse, while the deck is empty
     QWidget* key_row_;
     QToolButton* browse_;
     QMenu* menu_;
