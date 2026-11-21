@@ -201,3 +201,29 @@ TEST_CASE("Fitting and removing a cartridge changes its banks, and an orphaned i
     CHECK_FALSE(texts.contains(QStringLiteral("Browse for ROM Image...")));
     CHECK(texts.contains(QStringLiteral("Clear")));
 }
+
+TEST_CASE("A fitted cartridge's view lists the banks it provides, each a way to its row in Memory",
+          "[configuration][peripherals][cartridge]") {
+    ConfigurationFixture f(master_128(R"([{"name": "acorn-rom-cartridge"}])"),
+                           [](ConfigurationFixture& fixture) { fixture.schema_text = schema_text(); });
+    auto* peripherals = f.section<PeripheralsSection>();
+    AttachmentPointGroup* rear = peripherals->group("cartridge-rear");
+    REQUIRE(rear);
+    REQUIRE(rear->card("acorn-rom-cartridge"));
+    // Its images are loaded in Memory: no fields for them here.
+    CHECK(rear->forms().empty());
+    CHECK(shows(rear, QStringLiteral("Provides sideways banks 0 and 1.")));
+    const auto links = rear->bank_links("acorn-rom-cartridge");
+    REQUIRE(links.size() == 2);
+    CHECK(links[0]->text() == QStringLiteral("Rear cartridge (bank 0) in Memory"));
+    CHECK(links[1]->text() == QStringLiteral("Rear cartridge (bank 1) in Memory"));
+    // The front slot holds none: nothing listed.
+    REQUIRE(peripherals->group("cartridge-front"));
+    CHECK_FALSE(peripherals->group("cartridge-front")->card("acorn-rom-cartridge"));
+
+    links[1]->click();
+    auto* memory = f.section<MemorySection>();
+    CHECK(current_section(f) == memory);
+    CHECK(memory->revealed_row() == memory->row_at_slot(1));
+    CHECK(memory->revealed_row() >= 0);
+}

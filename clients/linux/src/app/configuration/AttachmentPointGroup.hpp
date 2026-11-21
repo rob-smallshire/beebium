@@ -34,6 +34,8 @@ class ParameterForm;
 // 5.2), as the macOS client's: the point's name, occupancy, an Add while
 // there is room, its description, and an instance card for each extension
 // attached, its parameters inline and the points it provides beneath it.
+// A cartridge, whose images are loaded in Memory, lists the banks it
+// provides there instead (5.9).
 class AttachmentPointGroup : public QWidget {
     Q_OBJECT
 
@@ -58,6 +60,8 @@ public:
     QWidget* card(const std::string& id) const;
     QPushButton* change_button(const std::string& id) const;
     QToolButton* remove_button(const std::string& id) const;
+    // A cartridge's links to the Memory rows of the banks it provides.
+    std::vector<QPushButton*> bank_links(const std::string& id) const;
     AttachmentPointGroup* nested(const std::string& id, const std::string& point) const;
 
 Q_SIGNALS:
@@ -78,6 +82,7 @@ private:
         QToolButton* remove = nullptr;
         ParameterForm* form = nullptr;
         class DiagnosticLine* diagnostic = nullptr;  // the instance's own
+        std::vector<QPushButton*> bank_links;
         std::vector<AttachmentPointGroup*> nested;
     };
     const ExtensionInstance* provider() const { return provider_ ? &*provider_ : nullptr; }

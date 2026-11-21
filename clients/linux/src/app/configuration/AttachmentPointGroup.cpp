@@ -146,6 +146,40 @@ AttachmentPointGroup::AttachmentPointGroup(NewMachineDialog& dialog, ExtensionsD
             description->setText(text(extension->description));
             rows->addWidget(description);
         }
+        if (extension && extension->provides_sideways && schema) {
+            // The sockets it brings at this point, for their images in Memory.
+            std::vector<SchemaSocket> banks;
+            for (const auto& socket : schema->sockets()) {
+                if (!point_.id.empty() && socket.provided_by_point == point_.id) {
+                    banks.push_back(socket);
+                }
+            }
+            if (!banks.empty()) {
+                QStringList numbers;
+                for (const auto& socket : banks) {
+                    for (int slot : socket.slots) {
+                        numbers << QString::number(slot);
+                    }
+                }
+                const QString last = numbers.takeLast();
+                QLabel* provides = section_caption(frame);
+                provides->setText(numbers.isEmpty()
+                                      ? tr("Provides sideways bank %1.").arg(last)
+                                      : tr("Provides sideways banks %1 and %2.")
+                                            .arg(numbers.join(QStringLiteral(", ")), last));
+                rows->addWidget(provides);
+                for (const auto& socket : banks) {
+                    QPushButton* link =
+                        section_link(tr("%1 in Memory").arg(text(socket.label)), frame);
+                    const int slot = socket.slots.empty() ? -1 : socket.slots.front();
+                    connect(link, &QPushButton::clicked, this, [this, slot] {
+                        dialog_.reveal(SidebarMode::memory, std::to_string(slot));
+                    });
+                    rows->addWidget(link, 0, Qt::AlignLeft);
+                    card.bank_links.push_back(link);
+                }
+            }
+        }
         if (extension && !extension->parameters.empty()) {
             card.form = new ParameterForm(
                 ParameterFormModel(*extension, "/extensions/" + std::to_string(instance.index) + "/config",
@@ -270,6 +304,15 @@ QToolButton* AttachmentPointGroup::remove_button(const std::string& id) const {
         }
     }
     return nullptr;
+}
+
+std::vector<QPushButton*> AttachmentPointGroup::bank_links(const std::string& id) const {
+    for (const Card& card : cards_) {
+        if (card.instance.id == id) {
+            return card.bank_links;
+        }
+    }
+    return {};
 }
 
 AttachmentPointGroup* AttachmentPointGroup::nested(const std::string& id, const std::string& point) const {
