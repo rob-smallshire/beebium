@@ -109,6 +109,9 @@ public:
     virtual void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) {
         (void)diagnostics;
     }
+    // Bring what the target names into view, marked for the user to find:
+    // a Memory bank by its slot number, a Peripherals point by its id.
+    virtual void reveal(const std::string& target) { (void)target; }
 
 Q_SIGNALS:
     void edited();
@@ -146,6 +149,8 @@ public:
 
     // The draft changed through the dialog: ask the server again.
     void draft_edited();
+    // Show a section, at what it names there (ConfigurationSection::reveal).
+    void reveal(SidebarMode mode, const std::string& target);
 
     // A sideways image's description (a ROM library name or path),
     // asked of the server once per image: null until it has answered or
@@ -177,6 +182,9 @@ public:
 
 Q_SIGNALS:
     void rom_described();
+    // A section edited the draft: another that shows what it edited
+    // (a cartridge's banks) reads it again.
+    void draft_changed();
     // The server re-derived part of the draft (a Master's banks from its
     // MOS) and the draft took it: show it afresh.
     void draft_rederived();

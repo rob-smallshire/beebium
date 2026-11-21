@@ -13,6 +13,9 @@
 #include "app/configuration/SectionWidgets.hpp"
 
 #include <QPalette>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QTimer>
 
 #include <algorithm>
 #include <QUrl>
@@ -34,6 +37,41 @@ QLabel* section_caption(QWidget* parent) {
     palette.setColor(QPalette::WindowText, palette.color(QPalette::PlaceholderText));
     label->setPalette(palette);
     return label;
+}
+
+void mark_revealed(QWidget* widget) {
+    if (!widget) {
+        return;
+    }
+    for (QWidget* above = widget->parentWidget(); above; above = above->parentWidget()) {
+        if (auto* scroll = qobject_cast<QScrollArea*>(above)) {
+            scroll->ensureWidgetVisible(widget);
+            break;
+        }
+    }
+    const QPalette was = widget->palette();
+    const bool filled = widget->autoFillBackground();
+    QPalette tinted = was;
+    QColor tint = was.color(QPalette::Highlight);
+    tint.setAlpha(60);
+    tinted.setColor(QPalette::Window, tint);
+    widget->setPalette(tinted);
+    widget->setAutoFillBackground(true);
+    QTimer::singleShot(1500, widget, [widget, was, filled] {
+        widget->setPalette(was);
+        widget->setAutoFillBackground(filled);
+    });
+}
+
+QPushButton* section_link(const QString& text, QWidget* parent) {
+    auto* link = new QPushButton(text, parent);
+    link->setFlat(true);
+    link->setCursor(Qt::PointingHandCursor);
+    QPalette palette = link->palette();
+    palette.setColor(QPalette::ButtonText, palette.color(QPalette::Link));
+    link->setPalette(palette);
+    link->setStyleSheet(QStringLiteral("QPushButton { text-align: left; padding: 0; }"));
+    return link;
 }
 
 DiagnosticLine::DiagnosticLine(QWidget* parent) : QLabel(parent) {

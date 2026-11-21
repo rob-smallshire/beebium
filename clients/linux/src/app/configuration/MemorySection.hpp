@@ -36,7 +36,10 @@ class DiagnosticLine;
 // ROM search path or a file chosen as a sideways image is, with Use Default
 // returning to the preset's; then the sideways sockets highest priority first,
 // each with its image's title, its slots and the ROM's roles, a kind, a
-// padlock where the socket's RAM can be write-protected, and a menu.
+// padlock where the socket's RAM can be write-protected, and a menu. A
+// socket a cartridge provides reads "No cartridge", with nothing to load
+// and the way to its slot under Peripherals, until one is fitted there; then
+// it is an ordinary socket naming its cartridge (5.9).
 class MemorySection : public ConfigurationSection {
     Q_OBJECT
 
@@ -50,6 +53,8 @@ public:
     }
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
+    // A bank's row, by its slot number.
+    void reveal(const std::string& target) override;
 
     int row_count() const { return static_cast<int>(rows_.size()); }
     QLabel* row_label(int row) const { return at(row).label; }
@@ -57,6 +62,12 @@ public:
     QLabel* row_caption(int row) const { return at(row).caption; }
     QComboBox* row_kind(int row) const { return at(row).kind; }
     QToolButton* row_padlock(int row) const { return at(row).padlock; }
+    // The way to the slot of a cartridge that provides the socket.
+    QPushButton* row_cartridge(int row) const { return at(row).cartridge; }
+    // The row of the socket that answers at a slot; -1 for none.
+    int row_at_slot(int slot) const;
+    // The row last revealed from another section; -1 for none.
+    int revealed_row() const { return revealed_; }
     // The row's menu, as its menu button opens it; the caller owns it.
     QMenu* row_menu(int row);
     QLabel* aliasing_note() const { return aliasing_; }
@@ -74,10 +85,14 @@ private:
         QComboBox* kind = nullptr;
         QToolButton* padlock = nullptr;
         QToolButton* actions = nullptr;
+        QPushButton* cartridge = nullptr;
         DiagnosticLine* diagnostic = nullptr;
+        DraftSocket fit;  // the socket as the draft's cartridges make it
     };
     const Row& at(int row) const { return rows_.at(static_cast<std::size_t>(row)); }
     void describe();
+    // The draft's cartridges, by slot point: a change rebuilds the rows.
+    std::vector<std::string> fits() const;
     void set(int row, const SocketContent& content);
     void browse(int row);
     void show_mos();
@@ -100,6 +115,8 @@ private:
     QLabel* aliasing_;
     QVBoxLayout* rows_layout_;
     std::vector<Row> rows_;
+    std::vector<std::string> fits_;
+    int revealed_ = -1;
     DiagnosticLine* diagnostic_;
     std::vector<PresetDiagnostic> diagnostics_;
 };

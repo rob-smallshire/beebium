@@ -350,8 +350,19 @@ void NewMachineDialog::on_resolved(const PresetResolution& resolution) {
 void NewMachineDialog::draft_edited() {
     settled_ = false;
     create_->setEnabled(false);
+    Q_EMIT draft_changed();
     update_markers();
     resolver_->resolve(draft_);
+}
+
+void NewMachineDialog::reveal(SidebarMode mode, const std::string& target) {
+    for (std::size_t i = 0; i < sections_.size(); ++i) {
+        if (sections_[i]->mode() == mode) {
+            sections_list_->setCurrentRow(static_cast<int>(i));
+            sections_[i]->reveal(target);
+            return;
+        }
+    }
 }
 
 void NewMachineDialog::present_diagnostics() {

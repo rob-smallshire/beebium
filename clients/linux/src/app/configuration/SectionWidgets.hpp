@@ -21,6 +21,8 @@
 #include <QLabel>
 #include <QString>
 
+class QPushButton;
+
 #include <string>
 #include <vector>
 
@@ -31,6 +33,12 @@ namespace beebium::linux_client {
 
 QLabel* section_heading(const QString& text, QWidget* parent);
 QLabel* section_caption(QWidget* parent);
+
+// A row or group another section sent the user to: scrolled into view and
+// tinted with the highlight colour for a moment.
+void mark_revealed(QWidget* widget);
+// A flat, link-like button that takes the user to another section.
+QPushButton* section_link(const QString& text, QWidget* parent);
 
 // Beneath a control: the diagnostics at a JSON pointer or within it, in
 // the server's words, coloured by severity; hidden when there are none.

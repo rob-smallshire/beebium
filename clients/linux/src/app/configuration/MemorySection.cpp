@@ -30,6 +30,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 namespace beebium::linux_client {
 
 using nlohmann::ordered_json;
@@ -113,6 +115,13 @@ MemorySection::MemorySection(NewMachineDialog& dialog) : dialog_(dialog) {
         show_mos();
     });
     connect(&dialog_, &NewMachineDialog::draft_rederived, this, [this] { describe(); });
+    // A cartridge fitted or removed under Peripherals brings or takes its
+    // banks' sockets (5.9).
+    connect(&dialog_, &NewMachineDialog::draft_changed, this, [this] {
+        if (fits() != fits_) {
+            reload();
+        }
+    });
     connect(mos_browse_, &QPushButton::clicked, this, [this] { browse_mos(); });
     // Use Default returns to the preset's MOS, as resolved (5.8).
     connect(mos_default_, &QPushButton::clicked, this, [this] {
@@ -131,8 +140,15 @@ void MemorySection::reload() {
                              : QString());
     aliasing_->setVisible(schema && schema->has_aliasing());
     show_mos();
-    sideways_ = std::make_unique<SidewaysDraft>(
-        dialog_.draft(), schema ? schema->sockets() : std::vector<SchemaSocket>{});
+    const std::vector<DraftSocket> fitted =
+        schema ? draft_sockets(*schema, dialog_.draft()) : std::vector<DraftSocket>{};
+    std::vector<SchemaSocket> sockets;
+    for (const DraftSocket& socket : fitted) {
+        sockets.push_back(socket.socket);
+    }
+    sideways_ = std::make_unique<SidewaysDraft>(dialog_.draft(), sockets);
+    fits_ = fits();
+    revealed_ = -1;
 
     for (Row& row : rows_) {
         row.widget->deleteLater();
@@ -142,6 +158,11 @@ void MemorySection::reload() {
         const SchemaSocket& socket = sideways_->sockets()[i];
         const int number = static_cast<int>(i);
         Row row;
+        for (const DraftSocket& f : fitted) {
+            if (f.socket.slots == socket.slots) {
+                row.fit = f;
+            }
+        }
         row.widget = new QWidget(this);
         auto* outer = new QVBoxLayout(row.widget);
         outer->setContentsMargins(0, 4, 0, 4);
@@ -154,6 +175,9 @@ void MemorySection::reload() {
         row.caption = section_caption(row.widget);
         text->addWidget(row.title);
         text->addWidget(row.caption);
+        row.cartridge = section_link(tr("Fit a Cartridge in Peripherals"), row.widget);
+        row.cartridge->setObjectName(QStringLiteral("socketCartridge%1").arg(number));
+        text->addWidget(row.cartridge, 0, Qt::AlignLeft);
         line->addLayout(text, 1);
         row.kind = new QComboBox(row.widget);
         row.kind->setObjectName(QStringLiteral("socketKind%1").arg(number));
@@ -208,6 +232,9 @@ void MemorySection::reload() {
             content.from_mos = false;
             set(number, content);
         });
+        connect(row.cartridge, &QPushButton::clicked, this, [this, point = socket.provided_by_point] {
+            dialog_.reveal(SidebarMode::peripherals, point);
+        });
         connect(row.actions, &QToolButton::clicked, this, [this, number] {
             QMenu* menu = row_menu(number);
             menu->setAttribute(Qt::WA_DeleteOnClose);
@@ -226,9 +253,13 @@ void MemorySection::describe() {
         const SchemaSocket& socket = sideways_->sockets()[i];
         const SocketContent content = sideways_->content(i);
         const RomDescription* rom = dialog_.rom_description(content.image_uri);
+        // No socket until a cartridge brings one (5.9).
+        const bool unfitted = row.fit.unfitted();
 
         QString title;
-        if (content.type == "empty") {
+        if (unfitted) {
+            title = tr("No cartridge");
+        } else if (content.type == "empty") {
             title = tr("Empty");
         } else if (content.type == "ram") {
             title = content.image_uri.empty()
@@ -245,7 +276,7 @@ void MemorySection::describe() {
         row.label->setText(QString::fromStdString(socket.label) +
                            (sideways_->changed(i) ? QStringLiteral(" \u2022") : QString()));
         row.title->setText(title);
-        row.title->setEnabled(content.type != "empty");
+        row.title->setEnabled(content.type != "empty" && !unfitted);
 
         QStringList slots;
         for (int slot : socket.slots) {
@@ -254,7 +285,18 @@ void MemorySection::describe() {
         QStringList caption{(socket.slots.size() > 1 ? tr("Slots %1") : tr("Slot %1"))
                                 .arg(slots.join(QStringLiteral(", "))),
                             tr("priority %1").arg(socket.priority())};
-        if (rom && rom->recognised) {
+        if (unfitted) {
+            caption << tr("a cartridge in the %1 provides this socket")
+                           .arg(QString::fromStdString(row.fit.point_name));
+            if (!content.image_uri.empty()) {
+                caption << tr("image %1").arg(file_name(content.image_uri));
+            }
+        } else if (!row.fit.provider.empty()) {
+            caption << tr("%1 in the %2")
+                           .arg(QString::fromStdString(row.fit.provider),
+                                QString::fromStdString(row.fit.point_name));
+        }
+        if (rom && rom->recognised && !unfitted) {
             caption << rom->display_kinds();
         }
         if (content.from_mos) {
@@ -276,7 +318,45 @@ void MemorySection::describe() {
                 row.padlock->setText(tr("Write-Protect"));
             }
         }
-        row.padlock->setVisible(content.type == "ram" && socket.can("write_protect"));
+        row.padlock->setVisible(content.type == "ram" && socket.can("write_protect") && !unfitted);
+        row.kind->setVisible(!unfitted);
+        row.cartridge->setVisible(unfitted);
+    }
+}
+
+std::vector<std::string> MemorySection::fits() const {
+    std::vector<std::string> out;
+    if (const auto& schema = dialog_.schema()) {
+        for (const DraftSocket& socket : draft_sockets(*schema, dialog_.draft())) {
+            std::string fit = socket.provider;
+            for (const auto& capability : socket.socket.capabilities) {
+                fit += " " + capability;
+            }
+            out.push_back(fit);
+        }
+    }
+    return out;
+}
+
+int MemorySection::row_at_slot(int slot) const {
+    if (!sideways_) {
+        return -1;
+    }
+    const auto& sockets = sideways_->sockets();
+    for (std::size_t i = 0; i < sockets.size(); ++i) {
+        if (std::find(sockets[i].slots.begin(), sockets[i].slots.end(), slot) != sockets[i].slots.end()) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+void MemorySection::reveal(const std::string& target) {
+    bool ok = false;
+    const int row = QString::fromStdString(target).toInt(&ok);
+    revealed_ = ok ? row_at_slot(row) : -1;
+    if (revealed_ >= 0) {
+        mark_revealed(rows_[static_cast<std::size_t>(revealed_)].widget);
     }
 }
 
@@ -354,6 +434,20 @@ QMenu* MemorySection::row_menu(int number) {
     const SchemaSocket& socket = sideways_->sockets()[i];
     const SocketContent content = sideways_->content(i);
     auto* menu = new QMenu;
+    if (rows_[i].fit.unfitted()) {
+        // Nothing to load until a cartridge is fitted; an image the draft
+        // names for the bank all the same can be cleared.
+        QAction* clear = menu->addAction(tr("Clear"));
+        clear->setEnabled(content.type != "empty");
+        connect(clear, &QAction::triggered, this, [this, number] { set(number, SocketContent{}); });
+        if (sideways_->changed(i)) {
+            QAction* revert = menu->addAction(tr("Revert to Default"));
+            connect(revert, &QAction::triggered, this, [this, number] {
+                set(number, sideways_->resolved(static_cast<std::size_t>(number)));
+            });
+        }
+        return menu;
+    }
     QAction* choose = menu->addAction(tr("Browse for ROM Image..."));
     choose->setEnabled(socket.can("rom") || content.type == "ram");
     connect(choose, &QAction::triggered, this, [this, number] { browse(number); });
@@ -384,14 +478,15 @@ QMenu* MemorySection::row_menu(int number) {
     }
     menu->addSeparator();
     QAction* up = menu->addAction(tr("Move Up"));
-    up->setEnabled(i > 0);
+    // Not into a socket no cartridge provides.
+    up->setEnabled(i > 0 && !rows_[i - 1].fit.unfitted());
     connect(up, &QAction::triggered, this, [this, i] {
         sideways_->swap(i, i - 1);
         reload();
         Q_EMIT edited();
     });
     QAction* down = menu->addAction(tr("Move Down"));
-    down->setEnabled(i + 1 < rows_.size());
+    down->setEnabled(i + 1 < rows_.size() && !rows_[i + 1].fit.unfitted());
     connect(down, &QAction::triggered, this, [this, i] {
         sideways_->swap(i, i + 1);
         reload();

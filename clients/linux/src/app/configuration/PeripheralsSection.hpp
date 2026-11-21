@@ -43,6 +43,10 @@ public:
     bool changed() const override;
     void reload() override;
     void set_diagnostics(const std::vector<PresetDiagnostic>& diagnostics) override;
+    // A point's group, by the point's id.
+    void reveal(const std::string& target) override;
+    // The point last revealed from another section; empty for none.
+    const std::string& revealed() const { return revealed_; }
 
     AttachmentPointGroup* group(const std::string& point) const;
     // What no point places; null when everything is placed.
@@ -57,6 +61,7 @@ private:
     AttachmentPointGroup* unattached_ = nullptr;
     DiagnosticLine* diagnostic_ = nullptr;
     std::vector<PresetDiagnostic> diagnostics_;
+    std::string revealed_;
 };
 
 }  // namespace beebium::linux_client

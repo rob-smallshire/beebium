@@ -125,6 +125,12 @@ bool PeripheralsSection::changed() const {
         "/extensions", [&](const nlohmann::ordered_json& entry) { return !names_one_of(entry, tube); });
 }
 
+void PeripheralsSection::reveal(const std::string& target) {
+    AttachmentPointGroup* found = group(target);
+    revealed_ = found ? target : std::string();
+    mark_revealed(found);
+}
+
 AttachmentPointGroup* PeripheralsSection::group(const std::string& point) const {
     for (auto* g : groups_) {
         if (g->point().id == point) {
