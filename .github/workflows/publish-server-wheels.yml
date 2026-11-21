@@ -11,9 +11,10 @@
 # short-lived upload token. No API token is stored anywhere.
 #
 # Uploads are permanent. The tag==version assertion (from the wheel filename)
-# guards against publishing a mismatched build. Only Linux wheels exist today;
-# the Windows and macOS wheels join once their bundles are built (the caller logs
-# them as skipped in the meantime).
+# guards against publishing a mismatched build. `uv publish` checks the index's
+# simple page first and skips any file already there, so re-running this after a
+# partial publish (one wheel refused, say, for the per-file size limit) uploads
+# only what is missing instead of failing on the files that went up.
 #
 # workflow_dispatch publishes whatever `server-wheels` artifact exists in the
 # triggering run, so it is useful for re-driving the publish step of a release
@@ -81,4 +82,5 @@ jobs:
       - name: Publish with trusted publishing
         env:
           UV_PUBLISH_URL: ${{ inputs.repository == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+          UV_PUBLISH_CHECK_URL: ${{ inputs.repository == 'testpypi' && 'https://test.pypi.org/simple/beebium-server/' || 'https://pypi.org/simple/beebium-server/' }}
         run: uv publish --trusted-publishing always dist/*.whl
