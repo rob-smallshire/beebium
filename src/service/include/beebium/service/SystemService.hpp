@@ -433,7 +433,7 @@ grpc::Status SystemServiceImpl<MachineType>::GetSystemInfo(
     response->set_protocol_fingerprint(std::string(PROTOCOL_FINGERPRINT));
     response->set_host_fingerprint(beebium::host_identity::host_fingerprint());
 
-    if (auto exe_path = beebium::platform::executable_path()) {
+    if (auto exe_path = beebium::platform::invoked_executable_path()) {
         response->set_executable_path(exe_path->string());
     }
 

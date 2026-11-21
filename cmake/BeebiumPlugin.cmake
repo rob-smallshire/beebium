@@ -55,11 +55,9 @@ function(beebium_finalize_plugin)
     # are being built this configure; skip gracefully otherwise so that
     # tests-only / plugin-only configures still succeed.
     if(BEEBIUM_BUILD_SERVER)
-        # $<TARGET_FILE_DIR:beebium-model-b> is evaluated at build-system
+        # $<TARGET_FILE_DIR:beebium-server> is evaluated at build-system
         # generation time; no dependency on subdirectory processing order.
-        # All three server variants (model-b, model-b-plus, model-b-romram)
-        # share the same output directory, so any of them is a valid anchor.
-        set(_deploy_dir "$<TARGET_FILE_DIR:beebium-model-b>/extensions/${ARG_NAME}")
+        set(_deploy_dir "$<TARGET_FILE_DIR:beebium-server>/extensions/${ARG_NAME}")
         # The copy below runs only when the plugin relinks, so make an edit to
         # the manifest alone relink it; otherwise the deployed manifest goes
         # stale. (Honoured by the Makefile and Ninja generators.)

@@ -1958,10 +1958,10 @@ if(BEEBIUM_BUILD_SERVICE)
     # looks at. Uses a generator expression so multi-config generators
     # (MSBuild, Xcode) resolve the right $(Configuration) subdirectory.
     target_compile_definitions(test_plugin_loader PRIVATE
-        BEEBIUM_PLUGIN_DIR="$<TARGET_FILE_DIR:beebium-model-b>/extensions/test-scratch-ram"
+        BEEBIUM_PLUGIN_DIR="$<TARGET_FILE_DIR:beebium-server>/extensions/test-scratch-ram"
         # The parent extensions/ dir holds every deployed plugin (for the
         # manifest/code attaches_to drift guard).
-        BEEBIUM_EXTENSIONS_DIR="$<TARGET_FILE_DIR:beebium-model-b>/extensions"
+        BEEBIUM_EXTENSIONS_DIR="$<TARGET_FILE_DIR:beebium-server>/extensions"
     )
     # Stub plugins for the extension ABI check (#176): one claiming another ABI
     # version, one carrying none; and one exporting the configuration check. Built beside the test, never deployed, so no
@@ -2012,7 +2012,7 @@ if(BEEBIUM_BUILD_SERVICE)
         Catch2::Catch2WithMain
     )
     target_compile_definitions(test_scsi_plugin_shutdown PRIVATE
-        BEEBIUM_PLUGIN_EXTENSIONS_DIR="$<TARGET_FILE_DIR:beebium-model-b>/extensions"
+        BEEBIUM_PLUGIN_EXTENSIONS_DIR="$<TARGET_FILE_DIR:beebium-server>/extensions"
     )
     add_dependencies(test_scsi_plugin_shutdown
         beebium_ext_acorn_scsi_plugin
@@ -2338,6 +2338,15 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_grpc_controller)
 
+    # The one server executable's dispatch, with entry points of its own
+    add_executable(test_multi_call test_multi_call.cpp)
+    target_link_libraries(test_multi_call PRIVATE
+        beebium_server_headers
+        beebium_core
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_multi_call)
+
     add_executable(test_server_main test_server_main.cpp)
     target_link_libraries(test_server_main PRIVATE
         beebium_server_headers
@@ -2408,7 +2417,7 @@ if(BEEBIUM_BUILD_SERVICE)
         Catch2::Catch2WithMain
     )
     target_compile_definitions(test_machine_directory PRIVATE
-        BEEBIUM_SERVER_FILEPATH="$<TARGET_FILE:beebium-model-b>"
+        BEEBIUM_SERVER_FILEPATH="$<TARGET_FILE_DIR:beebium-server>/beebium-model-b${CMAKE_EXECUTABLE_SUFFIX}"
     )
     add_dependencies(test_machine_directory beebium-servers)
     catch_discover_tests(test_machine_directory)

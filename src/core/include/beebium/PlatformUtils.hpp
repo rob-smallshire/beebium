@@ -150,6 +150,29 @@ inline std::optional<std::filesystem::path> executable_path() {
 #endif
 }
 
+namespace detail {
+inline std::optional<std::filesystem::path>& invoked_executable_path_storage() {
+    static std::optional<std::filesystem::path> path;
+    return path;
+}
+}  // namespace detail
+
+// The path the executable was invoked through, as a person or client named it:
+// for the one server executable invoked as beebium-master-128 (a link to it,
+// or a Windows launcher), that name's path, where executable_path() gives the
+// executable's own. Set once, by the executable's main before any thread
+// starts; executable_path() when it was not set. What SystemInfo reports, so a
+// client can say which model's binary it talks to; discovery of what lies
+// beside the executable uses executable_directory(), never this.
+inline void set_invoked_executable_path(std::filesystem::path path) {
+    detail::invoked_executable_path_storage() = std::move(path);
+}
+
+inline std::optional<std::filesystem::path> invoked_executable_path() {
+    if (const auto& path = detail::invoked_executable_path_storage()) return path;
+    return executable_path();
+}
+
 // Cross-platform path to the directory containing the running executable.
 // See executable_path() for why this does not consult argv[0].
 inline std::optional<std::filesystem::path> executable_directory() {

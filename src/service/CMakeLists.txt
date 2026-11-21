@@ -60,9 +60,11 @@ foreach(PROTO_FILE ${PROTO_FILES})
 endforeach()
 
 # Service implementation sources
-# Note: Server.hpp and DebuggerService.hpp are now header-only templates
+# Note: Server.hpp is a header-only template; DebuggerService.cpp holds the
+# debugger service, which every model shares.
 set(SERVICE_SOURCES
     src/VideoService.cpp
+    src/DebuggerService.cpp
     src/KeyboardService.cpp
     src/ConnectionTracker.cpp
     src/ShutdownCoordinator.cpp

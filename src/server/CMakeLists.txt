@@ -1,4 +1,6 @@
-# beebium server executables - one per machine type
+# The beebium server executable: one multi-call binary, beebium-server, running
+# every machine model, with a name per model (beebium-<model>) beside it -- a
+# relative symlink on Linux and macOS (docs/deployment.md, "One executable").
 
 # Common include directory for server templates
 set(SERVER_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -74,11 +76,12 @@ set(PRESET_USER_DIRPATH "${CMAKE_CURRENT_BINARY_DIR}/user-state")
 set(PRESET_SOURCES_DIR "${CMAKE_CURRENT_BINARY_DIR}/preset-sources")
 
 # Generate a system preset at build time, using the same create-preset code
-# path that users create their own presets with, as <id>.beebium-preset: the
+# path that users create their own presets with, on the server's MODEL (an id
+# of MachineModels, run as beebium-server <model>), as <id>.beebium-preset: the
 # preset is created unpacked, booted to capture its thumbnail into it, and
 # exported as the archive. Extra create-preset arguments (e.g. --fdc,
 # --sideways) are forwarded via ARGN.
-function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
+function(add_system_preset MODEL PRESET_ID PRESET_NAME RELEASE_DATE)
     # DESCRIPTION is a one-value keyword forwarded as create-preset's
     # --description (the concise one-liner the picker card shows); the rest of
     # ARGN goes to create-preset unchanged.
@@ -98,11 +101,11 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
     set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.beebium-preset")
     set(source_dirpath "${PRESET_SOURCES_DIR}/${PRESET_ID}")
     bundled_disc_extract_commands(extract_commands "${source_dirpath}" ${disc_tarballs})
-    add_custom_command(TARGET ${EXECUTABLE} POST_BUILD
+    add_custom_command(TARGET beebium-server POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}" "${PRESET_SOURCES_DIR}"
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${source_dirpath}"
         COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
-            $<TARGET_FILE:${EXECUTABLE}> create-preset
+            $<TARGET_FILE:beebium-server> ${MODEL} create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
             ${description_args}
@@ -114,14 +117,14 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
         # image (deterministic thumbnail).
         COMMAND ${CMAKE_COMMAND} -E env
             "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
-            $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
+            $<TARGET_FILE:beebium-server> ${MODEL} capture-screenshot
             --preset "${source_dirpath}"
             --output "${source_dirpath}/thumbnail.png"
             --rom-dir "${BEEBIUM_ROM_DIR}"
             --crop auto
         COMMAND ${CMAKE_COMMAND} -E rm -f "${preset_filepath}"
         COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
-            $<TARGET_FILE:${EXECUTABLE}> export-preset "${source_dirpath}"
+            $<TARGET_FILE:beebium-server> ${MODEL} export-preset "${source_dirpath}"
             --output "${preset_filepath}"
         COMMENT "Generating preset ${PRESET_ID}"
         VERBATIM
@@ -132,11 +135,11 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
     # tree. On single-config generators PRESETS_OUTPUT_DIR already IS
     # $<TARGET_FILE_DIR:...>, so no copy is needed.
     if(CMAKE_CONFIGURATION_TYPES)
-        add_custom_command(TARGET ${EXECUTABLE} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets"
+        add_custom_command(TARGET beebium-server POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:beebium-server>/presets"
             COMMAND ${CMAKE_COMMAND} -E copy
                 "${preset_filepath}"
-                "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets/"
+                "$<TARGET_FILE_DIR:beebium-server>/presets/"
             VERBATIM
         )
     endif()
@@ -152,7 +155,7 @@ endfunction()
 # plugin -- so the extension resolves. THUMBNAIL_DELAY is forwarded to
 # capture-screenshot as --duration (the parasite's "Acorn TUBE ..." banner
 # settles after the 2.0s default); the rest of ARGN goes to create-preset.
-function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEASE_DATE)
+function(add_plugin_preset MODEL PLUGIN_TARGET PRESET_ID PRESET_NAME RELEASE_DATE)
     # EXTRA_DEPENDS: further coprocessor/peripheral plugin targets, beyond the
     # primary PLUGIN_TARGET, that create-preset/capture need. Bundled discs the
     # arguments name are found by bundled_disc_tarballs_named. CAPTURE_ARGS go
@@ -176,10 +179,10 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
     set(copy_commands "")
     if(CMAKE_CONFIGURATION_TYPES)
         set(copy_commands
-            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:beebium-server>/presets"
             COMMAND ${CMAKE_COMMAND} -E copy
                 "${preset_filepath}"
-                "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets/")
+                "$<TARGET_FILE_DIR:beebium-server>/presets/")
     endif()
     # One command makes the archive from nothing, so its OUTPUT is everything
     # preset_<id> needs: the unpacked directory and the thumbnail captured into
@@ -189,7 +192,7 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}" "${PRESET_SOURCES_DIR}"
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${source_dirpath}"
         COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
-            $<TARGET_FILE:${EXECUTABLE}> create-preset
+            $<TARGET_FILE:beebium-server> ${MODEL} create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
             ${description_args}
@@ -200,7 +203,7 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
         # capture's own machine directory (see add_system_preset).
         COMMAND ${CMAKE_COMMAND} -E env
             "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
-            $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
+            $<TARGET_FILE:beebium-server> ${MODEL} capture-screenshot
             --preset "${source_dirpath}"
             --output "${source_dirpath}/thumbnail.png"
             --rom-dir "${BEEBIUM_ROM_DIR}"
@@ -209,17 +212,17 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
             ${PRESET_CAPTURE_ARGS}
         COMMAND ${CMAKE_COMMAND} -E rm -f "${preset_filepath}"
         COMMAND ${CMAKE_COMMAND} -E env "BEEBIUM_USER_DIRPATH=${PRESET_USER_DIRPATH}"
-            $<TARGET_FILE:${EXECUTABLE}> export-preset "${source_dirpath}"
+            $<TARGET_FILE:beebium-server> ${MODEL} export-preset "${source_dirpath}"
             --output "${preset_filepath}"
         ${copy_commands}
-        DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET} ${PRESET_EXTRA_DEPENDS} ${disc_tarballs}
+        DEPENDS beebium-server ${PLUGIN_TARGET} ${PRESET_EXTRA_DEPENDS} ${disc_tarballs}
             ${CMAKE_SOURCE_DIR}/cmake/DecompressBundledDisc.cmake
         COMMENT "Generating plugin preset ${PRESET_ID}"
         VERBATIM
     )
     add_custom_target(preset_${PRESET_ID} ALL DEPENDS "${preset_filepath}")
     # Unlike add_system_preset (whose POST_BUILD runs when beebium-servers builds
-    # the executable), this preset is its own target, so wire it into the
+    # beebium-server), this preset is its own target, so wire it into the
     # beebium-servers aggregate that CI and the release build actually build --
     # otherwise `cmake --build --target beebium-servers` never generates it.
     if(TARGET beebium-servers)
@@ -227,11 +230,31 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
     endif()
 endfunction()
 
-# Function to create a beebium server executable for a specific machine type
-function(add_beebium_server TARGET_NAME SOURCE_FILE)
-    add_executable(${TARGET_NAME} ${SOURCE_FILE})
+# The machine models, by the ids of MachineModels.hpp: each has an entry point
+# in main_<model>.cpp (dashes as underscores), and a name beside the
+# executable, beebium-<model>.
+set(BEEBIUM_SERVER_MODELS
+    model-b
+    model-b-plus
+    model-b-plus-128k
+    model-b-romram
+    model-b-atpl-sidewise
+    model-b-watford-rom-ram
+    model-b-integra-b
+    master-128
+)
 
-    # The server main is the single most memory-hungry TU in the tree (full
+# The one executable: the dispatch main and a translation unit per model, so
+# the eight Machine<Hardware> instantiations still compile separately.
+function(add_beebium_server TARGET_NAME)
+    set(sources main.cpp)
+    foreach(model ${BEEBIUM_SERVER_MODELS})
+        string(REPLACE "-" "_" model_identifier "${model}")
+        list(APPEND sources main_${model_identifier}.cpp)
+    endforeach()
+    add_executable(${TARGET_NAME} ${sources})
+
+    # A model's main is the single most memory-hungry TU in the tree (full
     # Machine<Hardware> template + static gRPC/protobuf headers). Pin its
     # compilation to the depth-1 beebium_heavy_compile pool (defined in the
     # top-level CMakeLists) so a parallel Ninja build never compiles two of
@@ -290,33 +313,48 @@ function(add_beebium_server TARGET_NAME SOURCE_FILE)
     endif()
 endfunction()
 
-# Model-specific executables
-add_beebium_server(beebium-model-b main_model_b.cpp)
-add_beebium_server(beebium-model-b-plus main_model_b_plus.cpp)
-add_beebium_server(beebium-model-b-plus-128k main_model_b_plus_128k.cpp)
-add_beebium_server(beebium-model-b-romram main_model_b_romram.cpp)
-add_beebium_server(beebium-model-b-atpl-sidewise main_model_b_atpl_sidewise.cpp)
-add_beebium_server(beebium-model-b-watford-rom-ram main_model_b_watford_rom_ram.cpp)
-add_beebium_server(beebium-model-b-integra-b main_model_b_integra_b.cpp)
-add_beebium_server(beebium-master-128 main_master_128.cpp)
+add_beebium_server(beebium-server)
+
+# The models' names beside the executable, in the build tree as in an
+# installed one: the clients, the tests and the documentation run a model by
+# its name, and beebium-model-b is the name both GUI clients probe a directory
+# for. On Linux and macOS each is a relative symlink (beebium-model-b ->
+# beebium-server), so a tree copied with its links (the macOS app's embed
+# phase) keeps them working. Windows has no symlinks a user can rely on, so
+# each name there is a copy of the executable, which dispatches on its own
+# name as a link does.
+if(WIN32)
+    set(server_name_commands "")
+    foreach(model ${BEEBIUM_SERVER_MODELS})
+        list(APPEND server_name_commands
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:beebium-server>"
+                "$<TARGET_FILE_DIR:beebium-server>/beebium-${model}.exe")
+    endforeach()
+else()
+    set(server_name_commands "")
+    foreach(model ${BEEBIUM_SERVER_MODELS})
+        list(APPEND server_name_commands
+            COMMAND ${CMAKE_COMMAND} -E create_symlink beebium-server beebium-${model})
+    endforeach()
+endif()
+add_custom_command(TARGET beebium-server POST_BUILD
+    ${server_name_commands}
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:beebium-server>"
+    COMMENT "Naming beebium-server for each model"
+    VERBATIM
+)
 
 # System presets are generated below (after the ROM copy) via add_system_preset,
 # which runs the create-preset subcommand as a POST_BUILD step.
 
-# Convenience target to build all server executables and their bundled
+# Convenience target to build the server executable and its bundled
 # extension plugins. Plugins are loaded at runtime from
 # <exe-dir>/extensions/<name>/ via beebium_finalize_plugin() post-build
 # deployment, not linked, so we list them here to ensure a complete
 # build in one invocation.
 set(BEEBIUM_SERVERS_DEPS
-    beebium-model-b
-    beebium-model-b-plus
-    beebium-model-b-plus-128k
-    beebium-model-b-romram
-    beebium-model-b-atpl-sidewise
-    beebium-model-b-watford-rom-ram
-    beebium-model-b-integra-b
-    beebium-master-128
+    beebium-server
 )
 if(BEEBIUM_BUILD_SERVICE)
     list(APPEND BEEBIUM_SERVERS_DEPS
@@ -347,8 +385,8 @@ file(MAKE_DIRECTORY ${ROM_OUTPUT_DIR})
 # BEEBIUM_SERVERS_DIRPATH launch finds any ROM a preset or --sideways names.
 # (Tube coprocessor ROMs are not here: they ship inside each coprocessor
 # plugin's roms/ directory and load via the extension.) Staged by one target
-# every server depends on, like the blank templates below, so building any
-# one server alone (beebium-master-128, say) stages the ROMs it boots.
+# the server depends on, like the blank templates below, so building
+# beebium-server alone stages the ROMs it boots.
 file(GLOB BUNDLED_ROM_FILEPATHS CONFIGURE_DEPENDS "${BEEBIUM_ROM_DIR}/*.rom")
 add_custom_target(beebium-bundled-roms
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -402,39 +440,35 @@ add_custom_target(beebium-blank-templates
     COMMENT "Staging the blank disc and tape templates"
     VERBATIM
 )
-foreach(server_target ${BEEBIUM_SERVERS_DEPS})
-    if(server_target MATCHES "^beebium-(model|master)-")
-        get_target_property(server_output_dirpath ${server_target} RUNTIME_OUTPUT_DIRECTORY)
-        if(server_output_dirpath)
-            message(FATAL_ERROR
-                "${server_target} sets RUNTIME_OUTPUT_DIRECTORY (${server_output_dirpath}); "
-                "beebium-blank-templates stages into ${CMAKE_CURRENT_BINARY_DIR} and must follow it.")
-        endif()
-        add_dependencies(${server_target} beebium-blank-templates beebium-bundled-roms)
-    endif()
-endforeach()
+get_target_property(server_output_dirpath beebium-server RUNTIME_OUTPUT_DIRECTORY)
+if(server_output_dirpath)
+    message(FATAL_ERROR
+        "beebium-server sets RUNTIME_OUTPUT_DIRECTORY (${server_output_dirpath}); "
+        "beebium-blank-templates stages into ${CMAKE_CURRENT_BINARY_DIR} and must follow it.")
+endif()
+add_dependencies(beebium-server beebium-blank-templates beebium-bundled-roms)
 
 # Generate the shipped system presets (and their thumbnails). Model B serves
 # two presets: a bare cassette machine and a disc-equipped variant. A filing
 # system is provisioned explicitly via --sideways; no machine auto-loads DFS
 # except the Model B+, whose disc controller and DFS are integral hardware.
-add_system_preset(beebium-model-b "model-b" "Model B" "1981-12"
+add_system_preset(model-b "model-b" "Model B" "1981-12"
     DESCRIPTION "32K Model B, no disc")
-add_system_preset(beebium-model-b "model-b-disc" "Model B (Disc)" "1982"
+add_system_preset(model-b "model-b-disc" "Model B (Disc)" "1982"
     DESCRIPTION "32K Model B, 1770 DFS"
     --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom)
 # The Model B's original disc interface: the Intel 8271 with Acorn DFS 1.20
 # (combined with NFS 3.60), for software written for the 8271 era.
-add_system_preset(beebium-model-b "model-b-8271-disc" "Model B (8271 Disc)" "1982"
+add_system_preset(model-b "model-b-8271-disc" "Model B (8271 Disc)" "1982"
     DESCRIPTION "32K Model B, 8271 DFS 1.20"
     --fdc acorn-8271 --sideways slot=14:type=rom:image=acorn-dnfs_1_20.rom)
-add_system_preset(beebium-model-b-romram "model-b-romram-disc"
+add_system_preset(model-b-romram "model-b-romram-disc"
     "Model B with ROM/RAM Board (Disc)" "1984"
     DESCRIPTION "Model B, ROM/RAM board, 1770 DFS"
     --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom)
 # BASIC auto-loads into slot 14 (this machine's default language slot), so the
 # DFS goes in slot 13 and slot 15 is the board's sideways RAM.
-add_system_preset(beebium-model-b-atpl-sidewise "model-b-atpl-sidewise-disc"
+add_system_preset(model-b-atpl-sidewise "model-b-atpl-sidewise-disc"
     "Model B with ATPL Sidewise (Disc)" "1984"
     DESCRIPTION "Model B, ATPL Sidewise board, 1770 DFS, 16K sideways RAM in slot 15"
     --fdc acorn-1770 --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom --sideways slot=15:type=ram)
@@ -443,7 +477,7 @@ add_system_preset(beebium-model-b-atpl-sidewise "model-b-atpl-sidewise-disc"
 # default language slot, the board socket the manual recommends); DFS goes in
 # board ROM slot 13. Other sizes are a matter of fitting fewer RAM banks via
 # --sideways slot=N:type=ram.
-add_system_preset(beebium-model-b-watford-rom-ram "model-b-watford-rom-ram-128k"
+add_system_preset(model-b-watford-rom-ram "model-b-watford-rom-ram-128k"
     "Model B with Watford ROM/RAM (128K)" "1985"
     DESCRIPTION "Model B, Watford ROM/RAM board, 1770 DFS, 128K sideways RAM (banks 0-7)"
     --fdc acorn-1770 --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
@@ -454,18 +488,18 @@ add_system_preset(beebium-model-b-watford-rom-ram "model-b-watford-rom-ram-128k"
 # Integra-B: IBOS auto-loads into slot 15 and BASIC into motherboard slot 3
 # (this machine's defaults); DFS goes in motherboard slot 1, as in the IBOS
 # guide's own *ROMS example. Board RAM banks 4-7 are always fitted.
-add_system_preset(beebium-model-b-integra-b "model-b-integra-b-disc"
+add_system_preset(model-b-integra-b "model-b-integra-b-disc"
     "Model B with Integra-B (Disc)" "1988"
     DESCRIPTION "Model B, Integra-B board (IBOS 1.26), 1770 DFS, shadow RAM, RTC"
     --fdc acorn-1770 --sideways slot=1:type=rom:image=acorn-dfs_2_26.rom)
-add_system_preset(beebium-model-b-plus "model-b-plus" "Model B+ 64K" "1985-06"
+add_system_preset(model-b-plus "model-b-plus" "Model B+ 64K" "1985-06"
     DESCRIPTION "64K Model B+, integral DFS")
-add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
+add_system_preset(model-b-plus-128k "model-b-plus-128k"
     "Model B+ 128K" "1985-06"
     DESCRIPTION "128K Model B+, sideways RAM")
-add_system_preset(beebium-master-128 "master-128" "Master 128" "1986-01"
+add_system_preset(master-128 "master-128" "Master 128" "1986-01"
     DESCRIPTION "BBC Master 128, MOS 3.20, Welcome Guide configuration")
-add_system_preset(beebium-master-128 "master-128-mos-3-50" "Master 128 (MOS 3.50)" "1989"
+add_system_preset(master-128 "master-128-mos-3-50" "Master 128 (MOS 3.50)" "1989"
     DESCRIPTION "BBC Master 128 with the MOS 3.50 ROM set"
     # Banks 9-15 follow the MOS: its ROM set fills them.
     --mos acorn-mos_3_50.rom)
@@ -478,7 +512,7 @@ add_system_preset(beebium-master-128 "master-128-mos-3-50" "Master 128 (MOS 3.50
 # fitted (*DISC / SHIFT+BREAK still work). Slot 15 is left to its aliased BASIC
 # socket (IC101) so the machine still boots to BASIC. DNFS 3.02 is deliberately
 # NOT used here -- it is 8271-only and silently fatal with the 1770 controller.
-add_system_preset(beebium-model-b "model-b-disc-aun-80"
+add_system_preset(model-b "model-b-disc-aun-80"
     "Station 80 (AUN, Model B)" "1985"
     DESCRIPTION "Econet over AUN (UDP), ANFS + DFS"
     # The name follows the station number in force (#153), so a renumbered
@@ -498,7 +532,7 @@ add_system_preset(beebium-model-b "model-b-disc-aun-80"
 # default range, so several clients can be started together with no renumbering
 # (the trigger for #68/#148/#155). The name is a template (#153), so each
 # machine is titled with the number it chose.
-add_system_preset(beebium-model-b "model-b-disc-aun-auto"
+add_system_preset(model-b "model-b-disc-aun-auto"
     "AUN client, auto station (Model B)" "1985"
     DESCRIPTION "Econet over AUN (UDP), automatic station number, ANFS + DFS"
     --machine-description "Station {econet-station} (AUN, Model B)"
@@ -517,7 +551,7 @@ add_system_preset(beebium-model-b "model-b-disc-aun-auto"
 # before create-preset resolves --tube-*). The plugin targets exist only when the
 # servers are built (src/extensions is configured before src/server).
 if(TARGET beebium_ext_acorn_65c02_plugin)
-    add_plugin_preset(beebium-model-b beebium_ext_acorn_65c02_plugin
+    add_plugin_preset(model-b beebium_ext_acorn_65c02_plugin
         "model-b-disc-65c02-copro"
         "Model B (Disc), 65C02 Copro (3 MHz)" "1984"
         DESCRIPTION "Model B disc, 65C02 copro (3 MHz)"
@@ -526,7 +560,7 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
         --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom --tube-65c02)
 endif()
 if(TARGET beebium_ext_acorn_65c102_plugin)
-    add_plugin_preset(beebium-model-b-plus-128k beebium_ext_acorn_65c102_plugin
+    add_plugin_preset(model-b-plus-128k beebium_ext_acorn_65c102_plugin
         "model-b-plus-128k-65c102-copro"
         "Model B+ 128K, 65C102 Copro (4 MHz)" "1986"
         DESCRIPTION "128K B+, 65C102 copro (4 MHz)"
@@ -538,7 +572,7 @@ endif()
 # launched with a coprocessor is seeded *CONFIGURE TUBE (#203), so it boots
 # with the Tube in; the disc set-up is model-b-integra-b-disc's.
 if(TARGET beebium_ext_acorn_65c02_plugin)
-    add_plugin_preset(beebium-model-b-plus-128k beebium_ext_acorn_65c02_plugin
+    add_plugin_preset(model-b-plus-128k beebium_ext_acorn_65c02_plugin
         "model-b-plus-128k-65c02-copro"
         "Model B+ 128K, 65C02 Copro (3 MHz)" "1985-06"
         DESCRIPTION "128K B+, 65C02 copro (3 MHz)"
@@ -546,14 +580,14 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
         --machine-description "Model B+ 128K, {coprocessor-cpu} Copro ({coprocessor-clock})"
         --tube-65c02)
     # The Master Turbo in all but name: the 65C102 on the internal Tube.
-    add_plugin_preset(beebium-master-128 beebium_ext_acorn_65c102_plugin
+    add_plugin_preset(master-128 beebium_ext_acorn_65c102_plugin
         "master-128-65c102-copro"
         "Master 128, internal 65C102 Copro (4 MHz)" "1986"
         DESCRIPTION "Master 128, MOS 3.20, 65C102 copro (4 MHz) on the internal Tube"
         THUMBNAIL_DELAY 6
         --machine-description "Master 128, internal {coprocessor-cpu} Copro ({coprocessor-clock})"
         --tube-65c102 at=internal-tube)
-    add_plugin_preset(beebium-model-b-integra-b beebium_ext_acorn_65c02_plugin
+    add_plugin_preset(model-b-integra-b beebium_ext_acorn_65c02_plugin
         "model-b-integra-b-disc-65c02-copro"
         "Model B with Integra-B (Disc), 65C02 Copro (3 MHz)" "1988"
         DESCRIPTION "Integra-B (IBOS 1.26), 1770 DFS, 65C02 copro (3 MHz)"
@@ -571,7 +605,7 @@ endif()
 # banks stay free for AMPLE. The discs are bundled (copy-on-write per machine,
 # like the L3FS disc); see packaging/discs/music5000-parts/PROVENANCE.md.
 if(TARGET beebium_ext_hybrid_music_5000_plugin)
-    add_plugin_preset(beebium-model-b-plus-128k beebium_ext_hybrid_music_5000_plugin
+    add_plugin_preset(model-b-plus-128k beebium_ext_hybrid_music_5000_plugin
         "model-b-plus-128k-music-5000"
         "B+ 128K, Music 5000" "1986"
         DESCRIPTION "128K Model B+, Hybrid Music 5000, AMPLE Studio 5000 and Amplinex discs"
@@ -592,7 +626,7 @@ endif()
 # device). Slot layout matches the AUN preset: ANFS(14) outranks DFS(13) so
 # ANFS is the default filing system, BASIC stays in slot 15.
 if(TARGET beebium_ext_piconet_plugin)
-    add_plugin_preset(beebium-model-b beebium_ext_piconet_plugin
+    add_plugin_preset(model-b beebium_ext_piconet_plugin
         "model-b-disc-eco-81"
         "Station 81 (Piconet, Model B)" "1985"
         DESCRIPTION "Econet via Piconet USB, ANFS + DFS"
@@ -620,7 +654,7 @@ if(TARGET beebium_ext_acorn_65c02_plugin
    AND TARGET beebium_ext_acorn_scsi_plugin
    AND TARGET beebium_ext_scsi_hard_disc_plugin
    AND TARGET beebium_ext_acorn_rtc_plugin)
-    add_plugin_preset(beebium-model-b beebium_ext_acorn_65c02_plugin
+    add_plugin_preset(model-b beebium_ext_acorn_65c02_plugin
         "model-b-l3fs-aun"
         "Station 254 (L3 File Server, Model B)" "1985"
         DESCRIPTION "Level 3 File Server: ADFS + ANFS, SCSI disc, 65C02 copro"
@@ -655,17 +689,27 @@ if(TARGET beebium_ext_acorn_65c02_plugin
 endif()
 
 # Install rules
-install(TARGETS
-        beebium-model-b
-        beebium-model-b-plus
-        beebium-model-b-plus-128k
-        beebium-model-b-romram
-        beebium-model-b-atpl-sidewise
-        beebium-model-b-watford-rom-ram
-        beebium-model-b-integra-b
-        beebium-master-128
+install(TARGETS beebium-server
     RUNTIME DESTINATION bin
 )
+# The models' names, as in the build tree (above): relative symlinks on Linux
+# and macOS, made under DESTDIR as CPack's DEB and RPM stages need, and copies
+# of the executable on Windows.
+if(WIN32)
+    foreach(model ${BEEBIUM_SERVER_MODELS})
+        install(PROGRAMS "$<TARGET_FILE_DIR:beebium-server>/beebium-${model}.exe"
+            DESTINATION bin)
+    endforeach()
+else()
+    install(CODE "
+        foreach(model ${BEEBIUM_SERVER_MODELS})
+            set(link_filepath \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/beebium-\${model}\")
+            message(STATUS \"Installing: \${link_filepath} -> beebium-server\")
+            file(REMOVE \"\${link_filepath}\")
+            file(CREATE_LINK beebium-server \"\${link_filepath}\" SYMBOLIC)
+        endforeach()
+    ")
+endif()
 install(DIRECTORY ${BEEBIUM_ROM_DIR}/
     DESTINATION share/beebium/roms
     FILES_MATCHING PATTERN "*.rom"

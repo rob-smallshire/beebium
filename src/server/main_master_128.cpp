@@ -10,9 +10,18 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
+// The master-128 model's entry point in the one server executable
+// (main.cpp): a translation unit of its own, so the eight machines compile in
+// parallel.
+
 #include "beebium/server/ServerMain.hpp"
+#include "beebium/server/ServerModels.hpp"
 #include "beebium/Machines.hpp"
 
-int main(int argc, char* argv[]) {
-    return beebium::server::server_main<beebium::Master128>(argc, argv);
+namespace beebium::server {
+
+int run_master_128(int argc, char* argv[]) {
+    return server_main<beebium::Master128>(argc, argv);
 }
+
+}  // namespace beebium::server

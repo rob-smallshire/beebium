@@ -46,6 +46,33 @@ if(NOT EXISTS "${server}")
     message(FATAL_ERROR "installed server binary missing: ${server}")
 endif()
 
+# --- the one executable, and each model's name a relative link to it --------
+# A link that names its target relatively survives the tree being copied with
+# its links (the macOS app's embed phase); an absolute one would dangle.
+if(NOT EXISTS "${prefix}/bin/beebium-server${EXE_SUFFIX}" OR IS_SYMLINK "${prefix}/bin/beebium-server${EXE_SUFFIX}")
+    message(FATAL_ERROR "installed beebium-server missing, or not the executable itself")
+endif()
+foreach(model model-b model-b-plus model-b-plus-128k model-b-romram model-b-atpl-sidewise
+              model-b-watford-rom-ram model-b-integra-b master-128)
+    set(link_filepath "${prefix}/bin/beebium-${model}")
+    if(NOT IS_SYMLINK "${link_filepath}")
+        message(FATAL_ERROR "installed ${link_filepath} is not a link to beebium-server")
+    endif()
+    file(READ_SYMLINK "${link_filepath}" link_target)
+    if(NOT link_target STREQUAL "beebium-server")
+        message(FATAL_ERROR "installed ${link_filepath} -> ${link_target}; expected the relative beebium-server")
+    endif()
+endforeach()
+execute_process(
+    COMMAND "${prefix}/bin/beebium-server" --help
+    RESULT_VARIABLE rc
+    OUTPUT_VARIABLE out
+    ERROR_VARIABLE err
+)
+if(NOT rc EQUAL 0 OR NOT out MATCHES "master-128")
+    message(FATAL_ERROR "beebium-server --help failed (${rc}) or listed no models:\n${out}\n${err}")
+endif()
+
 # --- 2. list-extensions: ABI lib load (RPATH) + plugin discovery ------------
 execute_process(
     COMMAND "${server}" list-extensions
