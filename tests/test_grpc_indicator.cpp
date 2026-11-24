@@ -17,6 +17,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_template_test_macros.hpp>
+
+#include <algorithm>
 #include "test_extension_ids.hpp"
 #include <catch2/matchers/catch_matchers.hpp>
 
@@ -1098,7 +1100,7 @@ TEST_CASE("IndicatorService Model B+ with SCSI signals activity on transaction",
 // The cassette motor LED (#208)
 // =============================================================================
 
-TEMPLATE_TEST_CASE("Every model lists the cassette motor LED between the lock LEDs and the drives",
+TEMPLATE_TEST_CASE("Every model but the Master lists the cassette motor LED between the lock LEDs and the drives",
                    "[indicator][cassette]", beebium::ModelB, beebium::ModelBPlus, beebium::ModelBPlus128K,
                    beebium::ModelBRomRamBoard, beebium::ModelBAtplSidewise, beebium::ModelBWatfordRomRam,
                    beebium::ModelBIntegraB) {
@@ -1113,6 +1115,19 @@ TEMPLATE_TEST_CASE("Every model lists the cassette motor LED between the lock LE
     CHECK(metadata.at("label") == "CASSETTE MOTOR");
     CHECK(metadata.at("color") == "625nm");
     CHECK(metadata.at("shape") == "domed");
+}
+
+// The Master 128's keyboard has no cassette motor LED (#311): its lock LEDs are
+// followed directly by the drives'. The relay itself is still driven.
+TEST_CASE("The Master 128 lists no cassette motor LED", "[indicator][cassette][master128]") {
+    beebium::Master128 machine;
+    auto& indicators = machine.state().memory.indicators;
+    const auto names = indicators.names();
+    CHECK(std::find(names.begin(), names.end(), "cassette-motor-led") == names.end());
+    REQUIRE(names.size() >= 4);
+    CHECK(std::vector<std::string>(names.begin(), names.begin() + 4) ==
+          std::vector<std::string>{"caps-lock-led", "shift-lock-led", "floppy-0-activity-led",
+                                   "floppy-1-activity-led"});
 }
 
 TEST_CASE("ListIndicators lists the cassette motor LED between SHIFT LOCK and FDD 0",

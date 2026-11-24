@@ -265,7 +265,7 @@ public:
 
 **Header:** `src/core/include/beebium/cassette/CassetteMotorLed.hpp`
 
-The keyboard's cassette motor LED is lit with the motor relay, which the Serial ULA's control latch drives: the value is 255 while latch bit 7 (&FE10) is set and 0 while it is clear, whether or not a tape is in the deck. A `CassetteMotorLed` registers `cassette-motor-led` when it is constructed, and its `attach()` connects it to the ULA's motor line. Every hardware policy declares it as a member after the System VIA peripheral (which registers the lock LEDs) and before the disc drives, and calls `attach()` in its constructor, since the serial socket is declared later. Clients list indicators in registration order, so the status bar shows it between SHIFT LOCK and FDD 0, as the storage sidebar puts the cassette above the floppies.
+The keyboard's cassette motor LED is lit with the motor relay, which the Serial ULA's control latch drives: the value is 255 while latch bit 7 (&FE10) is set and 0 while it is clear, whether or not a tape is in the deck. A `CassetteMotorLed` registers `cassette-motor-led` when it is constructed, and its `attach()` connects it to the ULA's motor line. Every hardware policy but the Master 128's declares it as a member after the System VIA peripheral (which registers the lock LEDs) and before the disc drives, and calls `attach()` in its constructor, since the serial socket is declared later. The Master's keyboard has no cassette motor LED, so its policy declares none (#311). Clients list indicators in registration order, so the status bar shows it between SHIFT LOCK and FDD 0, as the storage sidebar puts the cassette above the floppies.
 
 ```cpp
 class CassetteMotorLed {
@@ -407,7 +407,7 @@ message IndicatorUpdate {
 
 ### Every model
 
-Every hardware policy registers these five, in this order, which is the order ListIndicators gives and clients show:
+Every hardware policy registers these five, in this order, which is the order ListIndicators gives and clients show. The Master 128's registers four: it has no `cassette-motor-led` (#311).
 
 | Name | Filter | Label | Color | Shape |
 |------|--------|-------|-------|-------|

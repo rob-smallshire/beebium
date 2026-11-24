@@ -53,7 +53,6 @@
 #include "disc/DiscDrive.hpp"
 #include "econet/EconetSocket.hpp"
 #include "cassette/CassetteDeck.hpp"
-#include "cassette/CassetteMotorLed.hpp"
 #include "serial/SerialSocket.hpp"
 #include "tube/TubeSocket.hpp"
 #include "indicators/Indicators.hpp"
@@ -293,8 +292,8 @@ public:
     UserPort user_port_{user_via_peripheral};
     PrinterPort printer_port_{user_via_peripheral};
 
-    // Registered after the lock LEDs and before the drives' (CassetteMotorLed.hpp).
-    CassetteMotorLed cassette_motor_led{indicators};
+    // No CassetteMotorLed: the Master's keyboard has no cassette motor LED
+    // (#311). The Serial ULA still drives the motor relay.
 
     // The 1770 on the motherboard, with the Master's latch layout, and its
     // two drives. DS2, the latch's third select, has no drive.
@@ -532,7 +531,6 @@ public:
         econet_socket.set_last_bus_value_ptr(&stale_bus_);
         serial_socket.set_last_bus_value_ptr(memory_map_.last_bus_value_ptr());
         serial_socket.ula().set_deck(&cassette_deck);
-        cassette_motor_led.attach(serial_socket.ula());
         tube_socket.set_last_bus_value_ptr(&stale_bus_);
         internal_tube_socket.set_last_bus_value_ptr(&stale_bus_);
         disc_controller.attach_drive(0, &disc_drive_0);
