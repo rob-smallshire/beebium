@@ -98,10 +98,19 @@ final class WelcomeWindowRegistry {
         }
         if welcomeWindow !== window {
             welcomeWindow = window
+            // queue: nil delivers the block synchronously on the thread that
+            // posts the notification. A window's willClose is always posted on
+            // the main thread, so the block runs on the main actor in fact --
+            // assumeIsolated states what is already true -- and, crucially, runs
+            // before `close()` returns rather than on a later runloop turn.
+            // The earlier deferral (a Task) mattered: until it ran, the slot
+            // still pointed at the closing window, so a focusExisting() in
+            // between -- e.g. a losing duplicate bringing "the" Welcome forward
+            // -- could revive a window that was on its way out.
             closeObserver = NotificationCenter.default.addObserver(
-                forName: NSWindow.willCloseNotification, object: window, queue: .main
+                forName: NSWindow.willCloseNotification, object: window, queue: nil
             ) { [weak self, weak window] _ in
-                Task { @MainActor in
+                MainActor.assumeIsolated {
                     guard let self, let window else { return }
                     self.clear(window)
                 }

@@ -56,8 +56,19 @@ class ConnectionRegistry: ObservableObject {
 
     /// Activate (bring to front) the window for a connection
     /// Returns true if a window was activated, false if no connection exists
+    ///
+    /// A closed window must never be activated: it would come back empty, with
+    /// no live video view (the second symptom of #309 -- a blank window on the
+    /// attempt after a lost one). A registered window that is neither visible
+    /// nor miniaturized has been closed; drop the stale entry and report no
+    /// connection, so the caller opens a fresh window instead of reviving a dead
+    /// one.
     func activateWindow(for address: String) -> Bool {
         guard let window = connections[address] else {
+            return false
+        }
+        guard window.isVisible || window.isMiniaturized else {
+            unregister(address: address)
             return false
         }
 
