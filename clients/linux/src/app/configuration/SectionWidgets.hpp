@@ -19,6 +19,7 @@
 #include <optional>
 
 #include <QLabel>
+#include <QScrollArea>
 #include <QString>
 
 class QPushButton;
@@ -37,6 +38,17 @@ QLabel* section_caption(QWidget* parent);
 // A row or group another section sent the user to: scrolled into view and
 // tinted with the highlight colour for a moment.
 void mark_revealed(QWidget* widget);
+// A section's content, scrolled down only: at least as wide as the content
+// needs, so its minimum width reaches the dialog and nothing is cut off at
+// the sides however narrow the dialog is made.
+class VerticalScrollArea : public QScrollArea {
+public:
+    explicit VerticalScrollArea(QWidget* parent);
+    void set_content(QWidget* content);
+    QSize minimumSizeHint() const override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
+};
+
 // A flat, link-like button that takes the user to another section.
 QPushButton* section_link(const QString& text, QWidget* parent);
 

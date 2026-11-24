@@ -26,7 +26,6 @@
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
-#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -74,10 +73,7 @@ MemorySection::MemorySection(NewMachineDialog& dialog) : dialog_(dialog) {
     // many sockets the machine has, rather than squeezed to the dialog.
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
-    auto* scroll = new QScrollArea(this);
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* scroll = new VerticalScrollArea(this);
     outer->addWidget(scroll);
     auto* inner = new QWidget(scroll);
     auto* layout = new QVBoxLayout(inner);
@@ -121,7 +117,7 @@ MemorySection::MemorySection(NewMachineDialog& dialog) : dialog_(dialog) {
     diagnostic_ = new DiagnosticLine(inner);
     layout->addWidget(diagnostic_);
     layout->addStretch(1);
-    scroll->setWidget(inner);
+    scroll->set_content(inner);
     connect(&dialog_, &NewMachineDialog::rom_described, this, [this] {
         describe();
         show_mos();

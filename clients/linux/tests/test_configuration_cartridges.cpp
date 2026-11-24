@@ -26,6 +26,7 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QStackedWidget>
 #include <QToolButton>
 
@@ -241,6 +242,10 @@ TEST_CASE("A note that wraps under a Memory row is shown in full, the row as tal
     for (int width : {f.dialog->minimumSizeHint().width(), 600}) {
         f.dialog->resize(width, 640);
         QCoreApplication::processEvents();
+        // Scrolled down only: the rows fit across what shows of them.
+        auto* scroll = memory->findChild<QScrollArea*>();
+        REQUIRE(scroll);
+        CHECK(scroll->widget()->width() <= scroll->viewport()->width());
         for (int row = 0; row < memory->row_count(); ++row) {
             QLabel* label = memory->row_label(row);
             INFO(width << " " << label->text().toStdString());

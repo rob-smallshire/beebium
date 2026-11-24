@@ -12,9 +12,11 @@
 
 #include "app/configuration/SectionWidgets.hpp"
 
+#include <QEvent>
 #include <QPalette>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QTimer>
 
 #include <algorithm>
@@ -61,6 +63,34 @@ void mark_revealed(QWidget* widget) {
         widget->setPalette(was);
         widget->setAutoFillBackground(filled);
     });
+}
+
+VerticalScrollArea::VerticalScrollArea(QWidget* parent) : QScrollArea(parent) {
+    setWidgetResizable(true);
+    setFrameShape(QFrame::NoFrame);
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+}
+
+void VerticalScrollArea::set_content(QWidget* content) {
+    setWidget(content);
+    content->installEventFilter(this);
+}
+
+QSize VerticalScrollArea::minimumSizeHint() const {
+    QSize hint = QScrollArea::minimumSizeHint();
+    if (widget()) {
+        hint.setWidth(widget()->minimumSizeHint().width() + 2 * frameWidth() +
+                      verticalScrollBar()->sizeHint().width());
+    }
+    return hint;
+}
+
+// The content's layout changed, and with it perhaps the width it needs.
+bool VerticalScrollArea::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == widget() && event->type() == QEvent::LayoutRequest) {
+        updateGeometry();
+    }
+    return QScrollArea::eventFilter(watched, event);
 }
 
 QPushButton* section_link(const QString& text, QWidget* parent) {
