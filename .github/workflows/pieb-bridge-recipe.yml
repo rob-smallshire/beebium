@@ -119,8 +119,8 @@ jobs:
           run-id: ${{ steps.server.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf build/beebium-server.tar.gz -C build
 
       - name: Set up Python
         uses: actions/setup-python@v6

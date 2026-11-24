@@ -176,28 +176,24 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Upload server binaries, presets, blank discs and blank tapes
+      # One tarball, not the files: upload-artifact follows symlinks, so the
+      # eight beebium-<model> links would each upload a whole server, and it
+      # drops executable bits. See scripts/pack-server-artifact.sh; consumers
+      # extract it with tar -xzf into build/.
+      - name: Pack server binaries, presets, blank discs and blank tapes
         # Preserve the built binaries even if a step failed, so a re-run of a
         # dependent job can reuse them instead of forcing a full rebuild.
+        if: always()
+        run: bash scripts/pack-server-artifact.sh build "${{ runner.temp }}/server-artifact/beebium-server.tar.gz"
+
+      - name: Upload server binaries, presets, blank discs and blank tapes
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: beebium-server-macos-arm64
-          path: |
-            build/src/server/beebium-model-b
-            build/src/server/beebium-model-b-plus
-            build/src/server/beebium-model-b-plus-128k
-            build/src/server/beebium-model-b-romram
-            build/src/server/beebium-model-b-atpl-sidewise
-            build/src/server/beebium-model-b-watford-rom-ram
-            build/src/server/beebium-model-b-integra-b
-            build/src/server/beebium-master-128
-            build/src/server/presets/
-            build/src/server/blank-discs/
-            build/src/server/blank-tapes/
-            build/src/server/extensions/
-            build/lib/libbeebium_extension_api.dylib
-            build/lib/libbeebium_extension_ui_proto.dylib
+          path: ${{ runner.temp }}/server-artifact/beebium-server.tar.gz
+          # Already gzipped.
+          compression-level: 0
           retention-days: 7
 
   # The server wheel on master, not only at a tag. The release's
@@ -393,28 +389,24 @@ jobs:
             echo "::warning::A test failed on its first attempt and passed on rerun (flaky). See the ctest output above and root-cause it; do not rely on the retry."
           fi
 
-      - name: Upload server binaries, presets, blank discs and blank tapes
+      # One tarball, not the files: upload-artifact follows symlinks, so the
+      # eight beebium-<model> links would each upload a whole server, and it
+      # drops executable bits. See scripts/pack-server-artifact.sh; consumers
+      # extract it with tar -xzf into build/.
+      - name: Pack server binaries, presets, blank discs and blank tapes
         # Preserve the built binaries even if a step failed, so a re-run of a
         # dependent job can reuse them instead of forcing a full rebuild.
+        if: always()
+        run: bash scripts/pack-server-artifact.sh build "${{ runner.temp }}/server-artifact/beebium-server.tar.gz"
+
+      - name: Upload server binaries, presets, blank discs and blank tapes
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: beebium-server-macos-x86_64
-          path: |
-            build/src/server/beebium-model-b
-            build/src/server/beebium-model-b-plus
-            build/src/server/beebium-model-b-plus-128k
-            build/src/server/beebium-model-b-romram
-            build/src/server/beebium-model-b-atpl-sidewise
-            build/src/server/beebium-model-b-watford-rom-ram
-            build/src/server/beebium-model-b-integra-b
-            build/src/server/beebium-master-128
-            build/src/server/presets/
-            build/src/server/blank-discs/
-            build/src/server/blank-tapes/
-            build/src/server/extensions/
-            build/lib/libbeebium_extension_api.dylib
-            build/lib/libbeebium_extension_ui_proto.dylib
+          path: ${{ runner.temp }}/server-artifact/beebium-server.tar.gz
+          # Already gzipped.
+          compression-level: 0
           retention-days: 7
 
   server-linux:
@@ -558,28 +550,24 @@ jobs:
           path: cpp.count
           retention-days: 1
 
-      - name: Upload server binaries, presets, blank discs and blank tapes
+      # One tarball, not the files: upload-artifact follows symlinks, so the
+      # eight beebium-<model> links would each upload a whole server, and it
+      # drops executable bits. See scripts/pack-server-artifact.sh; consumers
+      # extract it with tar -xzf into build/.
+      - name: Pack server binaries, presets, blank discs and blank tapes
         # Preserve the built binaries even if a step failed, so a re-run of a
         # dependent job can reuse them instead of forcing a full rebuild.
+        if: always()
+        run: bash scripts/pack-server-artifact.sh build "${{ runner.temp }}/server-artifact/beebium-server.tar.gz"
+
+      - name: Upload server binaries, presets, blank discs and blank tapes
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: beebium-server-linux
-          path: |
-            build/src/server/beebium-model-b
-            build/src/server/beebium-model-b-plus
-            build/src/server/beebium-model-b-plus-128k
-            build/src/server/beebium-model-b-romram
-            build/src/server/beebium-model-b-atpl-sidewise
-            build/src/server/beebium-model-b-watford-rom-ram
-            build/src/server/beebium-model-b-integra-b
-            build/src/server/beebium-master-128
-            build/src/server/presets/
-            build/src/server/blank-discs/
-            build/src/server/blank-tapes/
-            build/src/server/extensions/
-            build/lib/libbeebium_extension_api.so
-            build/lib/libbeebium_extension_ui_proto.so
+          path: ${{ runner.temp }}/server-artifact/beebium-server.tar.gz
+          # Already gzipped.
+          compression-level: 0
           retention-days: 7
 
   server-linux-arm64:
@@ -671,28 +659,24 @@ jobs:
             echo "::warning::A test failed on its first attempt and passed on rerun (flaky). See the ctest output above and root-cause it; do not rely on the retry."
           fi
 
-      - name: Upload server binaries, presets, blank discs and blank tapes
+      # One tarball, not the files: upload-artifact follows symlinks, so the
+      # eight beebium-<model> links would each upload a whole server, and it
+      # drops executable bits. See scripts/pack-server-artifact.sh; consumers
+      # extract it with tar -xzf into build/.
+      - name: Pack server binaries, presets, blank discs and blank tapes
         # Preserve the built binaries even if a step failed, so a re-run of a
         # dependent job can reuse them instead of forcing a full rebuild.
+        if: always()
+        run: bash scripts/pack-server-artifact.sh build "${{ runner.temp }}/server-artifact/beebium-server.tar.gz"
+
+      - name: Upload server binaries, presets, blank discs and blank tapes
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: beebium-server-linux-arm64
-          path: |
-            build/src/server/beebium-model-b
-            build/src/server/beebium-model-b-plus
-            build/src/server/beebium-model-b-plus-128k
-            build/src/server/beebium-model-b-romram
-            build/src/server/beebium-model-b-atpl-sidewise
-            build/src/server/beebium-model-b-watford-rom-ram
-            build/src/server/beebium-model-b-integra-b
-            build/src/server/beebium-master-128
-            build/src/server/presets/
-            build/src/server/blank-discs/
-            build/src/server/blank-tapes/
-            build/src/server/extensions/
-            build/lib/libbeebium_extension_api.so
-            build/lib/libbeebium_extension_ui_proto.so
+          path: ${{ runner.temp }}/server-artifact/beebium-server.tar.gz
+          # Already gzipped.
+          compression-level: 0
           retention-days: 7
 
   server-windows:
@@ -881,8 +865,8 @@ jobs:
           name: beebium-server-macos-arm64
           path: server-build
 
-      - name: Make servers executable
-        run: chmod +x server-build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf server-build/beebium-server.tar.gz -C server-build
       - name: Install XcodeGen
         run: brew install xcodegen
 
@@ -959,8 +943,8 @@ jobs:
           name: beebium-server-macos-x86_64
           path: server-build
 
-      - name: Make servers executable
-        run: chmod +x server-build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf server-build/beebium-server.tar.gz -C server-build
       - name: Install XcodeGen
         run: command -v xcodegen >/dev/null || brew install xcodegen
 
@@ -1091,8 +1075,8 @@ jobs:
           name: beebium-server-linux
           path: build
 
-      - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf build/beebium-server.tar.gz -C build
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -1131,8 +1115,8 @@ jobs:
           name: beebium-server-macos-arm64
           path: build
 
-      - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf build/beebium-server.tar.gz -C build
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -1185,8 +1169,8 @@ jobs:
           name: beebium-server-macos-x86_64
           path: build
 
-      - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf build/beebium-server.tar.gz -C build
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -1332,8 +1316,8 @@ jobs:
           name: beebium-server-linux
           path: build
 
-      - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf build/beebium-server.tar.gz -C build
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -1415,8 +1399,8 @@ jobs:
           name: beebium-server-linux
           path: build
 
-      - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf build/beebium-server.tar.gz -C build
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -1516,8 +1500,8 @@ jobs:
           name: beebium-server-macos-arm64
           path: build
 
-      - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf build/beebium-server.tar.gz -C build
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -1578,8 +1562,8 @@ jobs:
           name: beebium-server-macos-x86_64
           path: build
 
-      - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b*
+      - name: Extract the server
+        run: tar -xzf build/beebium-server.tar.gz -C build
       # No actions/setup-python here: its macOS builds install under the
       # hosted image's /Users/runner tool cache, which a self-hosted Mac does
       # not have. uv provides the interpreter instead, pinned by UV_PYTHON to

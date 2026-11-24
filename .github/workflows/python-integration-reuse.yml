@@ -71,9 +71,17 @@ jobs:
           run-id: ${{ inputs.server_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Make servers executable
+      # The Unix artifacts are one tarball (see scripts/pack-server-artifact.sh).
+      # A run from before they were has the loose files instead, and is not
+      # reusable here; its artifacts expire within 7 days anyway.
+      - name: Extract the server
         if: inputs.platform != 'windows'
-        run: chmod +x build/src/server/beebium-model-b*
+        run: |
+          [ -f build/beebium-server.tar.gz ] || {
+            echo "::error::run ${{ inputs.server_run_id }}'s artifact has no beebium-server.tar.gz; it predates the packed server artifact, so pick a newer run"
+            exit 1
+          }
+          tar -xzf build/beebium-server.tar.gz -C build
 
       # Not on the self-hosted Intel macOS runner: setup-python's macOS builds
       # install under the hosted image's /Users/runner tool cache. There uv
