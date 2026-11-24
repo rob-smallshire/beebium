@@ -180,7 +180,6 @@ void MemorySection::reload() {
         outer->setContentsMargins(0, 4, 0, 4);
         auto* line = new QHBoxLayout;
         row.label = new QLabel(QString::fromStdString(socket.label), row.widget);
-        row.label->setMinimumWidth(row.label->fontMetrics().horizontalAdvance(QStringLiteral("IC100 ")));
         line->addWidget(row.label);
         auto* text = new QVBoxLayout;
         row.title = new QLabel(row.widget);
@@ -287,6 +286,10 @@ void MemorySection::describe() {
         }
         row.label->setText(QString::fromStdString(socket.label) +
                            (sideways_->changed(i) ? QStringLiteral(" \u2022") : QString()));
+        // The socket's name whole, never squeezed for the notes beside it;
+        // a short one as wide as "IC100", so the columns start together.
+        row.label->setMinimumWidth(std::max(row.label->fontMetrics().horizontalAdvance(QStringLiteral("IC100 ")),
+                                            row.label->sizeHint().width()));
         row.title->setText(title);
         row.title->setEnabled(content.type != "empty" && !unfitted);
 

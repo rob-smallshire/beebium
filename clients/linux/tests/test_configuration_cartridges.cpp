@@ -235,6 +235,18 @@ TEST_CASE("A note that wraps under a Memory row is shown in full, the row as tal
     }
     // Under the OS row, a cartridge's bank with no cartridge, and a socket of the model's own.
     CHECK(notes == 3);
+
+    // The socket's name is never cut short to make room for the notes
+    // beside it, the narrowest dialog included.
+    for (int width : {f.dialog->minimumSizeHint().width(), 600}) {
+        f.dialog->resize(width, 640);
+        QCoreApplication::processEvents();
+        for (int row = 0; row < memory->row_count(); ++row) {
+            QLabel* label = memory->row_label(row);
+            INFO(width << " " << label->text().toStdString());
+            CHECK(label->width() >= label->sizeHint().width());
+        }
+    }
 }
 
 TEST_CASE("A fitted cartridge's view lists the banks it provides, each a way to its row in Memory",
