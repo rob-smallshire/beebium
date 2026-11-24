@@ -36,22 +36,70 @@ enum WelcomeWindow {
     }
 }
 
+/// A main-group window's fixed role, decided once when the window is created: a
+/// machine window (a connection target was pending) or the Welcome window.
+enum MainWindowKind: Equatable {
+    case welcome
+    case machine(target: ConnectionTarget, needsRun: Bool,
+                 provenanceUUID: String?, showSidebar: Bool?)
+
+    /// Whether this is a machine window, for the branches that only care which
+    /// of the two it is.
+    var isMachine: Bool {
+        if case .machine = self { return true }
+        return false
+    }
+}
+
+/// Latches a main window's kind exactly once, the moment the window is created,
+/// by consuming any pending connection target from `ConnectWindowState`.
+///
+/// Held as a `@StateObject`, whose initialiser SwiftUI evaluates once per window
+/// and never on a re-init, so the pending target is consumed by the one new
+/// window it was set for -- never twice, and never by an existing window that
+/// merely re-rendered. Deciding the kind here, before the first render, is what
+/// lets a machine window's first render already be `ContentView`; see
+/// `MainWindowRouter`.
+@MainActor
+final class MainWindowRole: ObservableObject {
+    let kind: MainWindowKind
+
+    init() {
+        let (target, needsRun, provenanceUUID, showSidebar) =
+            ConnectWindowState.shared.consumePendingTarget()
+        if let target {
+            kind = .machine(target: target, needsRun: needsRun,
+                            provenanceUUID: provenanceUUID, showSidebar: showSidebar)
+        } else {
+            kind = .welcome
+        }
+    }
+}
+
 /// Routes the main WindowGroup to either welcome or emulator content based on whether
 /// a connection target was pending when the window was created. This eliminates the need
 /// for a separate Welcome Window scene and avoids the ghost Window menu entry caused by
 /// SwiftUI's unconditional window creation on launch.
+///
+/// The welcome-vs-machine decision is made when the window's view is *created*
+/// (a `@StateObject` that consumes the pending target in its initialiser), not
+/// in `.onAppear`. Setting it in `.onAppear` meant every new window first
+/// rendered `WelcomeWindowContent`, whose `WindowAccessor` then raced
+/// `WelcomeWindowRegistry`: a window bound for a machine could lose that race to
+/// the real Welcome, be ordered out and closed before its target was ever read.
+/// That was the lost first preset click and the failed first Connect (#310 and
+/// #309). A machine window now never renders the Welcome content at all, so it
+/// never registers as a Welcome and never loses that race.
 struct MainWindowRouter: View {
     @ObservedObject var keyboardMappingManager: KeyboardMappingManager
-    @State private var connectionTarget: ConnectionTarget?
-    @State private var needsRun: Bool = false
-    @State private var provenanceUUID: String?
-    @State private var showSidebar: Bool?
+    @StateObject private var role = MainWindowRole()
     @State private var currentWindow: NSWindow?
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
-            if let target = connectionTarget {
+            switch role.kind {
+            case .machine(let target, let needsRun, let provenanceUUID, let showSidebar):
                 ContentView(
                     initialTarget: target,
                     initialNeedsRun: needsRun,
@@ -59,7 +107,7 @@ struct MainWindowRouter: View {
                     initialShowSidebar: showSidebar,
                     keyboardMappingManager: keyboardMappingManager
                 )
-            } else {
+            case .welcome:
                 WelcomeWindowContent(onDismiss: { currentWindow?.close() })
                     .background(WindowAccessor(window: $currentWindow, configure: { window in
                         window.titlebarAppearsTransparent = true
@@ -105,12 +153,10 @@ struct MainWindowRouter: View {
                 }
             }
 
-            let (target, run, prov, sidebar) = ConnectWindowState.shared.consumePendingTarget()
-            connectionTarget = target
-            needsRun = run
-            provenanceUUID = prov
-            showSidebar = sidebar
-            if target != nil {
+            // A machine window taking its place is the cue for the Welcome
+            // window to close itself (the target was already consumed at
+            // creation, above).
+            if role.kind.isMachine {
                 NotificationCenter.default.post(name: .didOpenEmulatorWindow, object: nil)
             }
         }
