@@ -83,4 +83,42 @@ if(BEEBIUM_BUILD_TESTS)
         BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
         AES_ROM_FACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/rom-facts")
     catch_discover_tests(test_aes_machine)
+
+    # The plugin's own tests, on its own runner (tests/test_main.cpp), registered as one test so
+    # that plain ctest runs them; tests tied to the Executive ROM skip when
+    # BEEBIUM_AES_ROM_FILEPATH is unset.
+    file(GLOB AES_UNIT_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.cpp)
+    add_executable(test_aes_plugin ${AES_UNIT_TEST_SOURCES})
+    target_link_libraries(test_aes_plugin PRIVATE beebium_ext_aes beebium_extension_api)
+    target_compile_definitions(test_aes_plugin PRIVATE
+        AES_ROM_FACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/rom-facts")
+    add_test(NAME aes_plugin_tests COMMAND test_aes_plugin)
+    set_tests_properties(aes_plugin_tests PROPERTIES
+        ENVIRONMENT "AES_PLUGIN_DIR=${CMAKE_CURRENT_SOURCE_DIR}")
+
+    # Prints the banner expected for a ROM and a RAM size, for the Python server tests.
+    add_executable(aes-banner tests/aes-banner.cpp)
+    target_link_libraries(aes-banner PRIVATE beebium_core)
+    target_compile_definitions(aes-banner PRIVATE
+        AES_ROM_FACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/rom-facts")
+
+    # Windows has no RPATH: these executables load beebium_extension_api.dll from their own
+    # directory, and the build copies that DLL into tests/<config> beside Beebium's own test
+    # executables (src/core/extension-api/CMakeLists.txt). Build them there too, so ctest's
+    # discovery can run them.
+    if(WIN32)
+        set_target_properties(test_aes_machine test_aes_plugin aes-banner PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
+    endif()
+
+    # As tests/CMakeLists.txt does for Beebium's own test executables: the tests poke registers
+    # and bytes with integer literals, which MSVC /W4 reports as narrowing (C4244, C4267) and
+    # Catch2's macros as bool/int mixes (C4805). test_aes_plugin also truncates constants into
+    # bytes on purpose (C4310).
+    if(MSVC)
+        foreach(aes_test_target test_aes_machine test_aes_plugin aes-banner)
+            target_compile_options(${aes_test_target} PRIVATE /wd4244 /wd4267 /wd4805)
+        endforeach()
+        target_compile_options(test_aes_plugin PRIVATE /wd4310)
+    endif()
 endif()

@@ -45,9 +45,9 @@ inline std::string sha1_text(const std::vector<uint8_t>& image) {
     return text;
 }
 
-// Empty if AES_ROM is not set or cannot be read: rom_problem then says so.
+// Empty if BEEBIUM_AES_ROM_FILEPATH is not set or cannot be read: rom_problem then says so.
 inline std::vector<uint8_t> rom_from_env() {
-    const char* path = getenv("AES_ROM");
+    const char* path = getenv("BEEBIUM_AES_ROM_FILEPATH");
     if (!path) return {};
     std::ifstream file(path, std::ios::binary);
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
@@ -72,7 +72,7 @@ inline RomFacts rom_facts_for(const std::vector<uint8_t>& image) {
 
 // Why tests tied to a ROM cannot run on this one; empty if they can.
 inline std::string rom_problem(const std::vector<uint8_t>& image) {
-    if (image.empty()) return "no ROM: AES_ROM is not set, or names no file";
+    if (image.empty()) return "no ROM: BEEBIUM_AES_ROM_FILEPATH is not set, or names no file";
     if (rom_facts_for(image).empty()) return "no facts file for this ROM, SHA-1 " + sha1_text(image);
     return "";
 }
