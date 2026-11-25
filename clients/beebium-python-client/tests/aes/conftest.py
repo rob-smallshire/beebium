@@ -16,7 +16,10 @@
 
 """What every test here shares: the paths the AES tests read, from Beebium's own test options, and
 a plain skip when the server or the host's ROMs are missing. Beebium's own conftest.py gives every
-test a private user folder."""
+test a private user folder.
+
+The paths go to aes_host, never into os.environ: these tests run in the same pytest process as the
+rest of the suite, and a variable set here would reach every server launched after them."""
 import os
 from pathlib import Path
 
@@ -27,27 +30,29 @@ from beebium.client.installation import ServerInstallation
 _PLUGIN_DIRPATH = Path(__file__).resolve().parents[4] / "src" / "extensions" / "acorn-aes-coprocessor"
 
 
-def pytest_configure(config):
-    """Runs before aes_host is imported, which reads these at import. --beebium-server and
-    --beebium-rom-dir, as Beebium's tests take them, outrank the environment."""
+def _server_filepath(config):
+    """--beebium-server, as Beebium's tests take it, or the server they would launch."""
     server = config.getoption("--beebium-server")
     if server:
         # absolute(), not resolve(): a model link names the model the multi-call server runs.
-        os.environ["BEEBIUM_SERVER"] = str(Path(server).absolute())
-    rom_dirpath = config.getoption("--beebium-rom-dir")
-    if rom_dirpath:
-        os.environ["BEEBIUM_ROM_DIR"] = str(Path(rom_dirpath).absolute())
-    os.environ.setdefault("BEEBIUM_ROM_DIR", str(_PLUGIN_DIRPATH.parents[2] / "roms"))
-    os.environ.setdefault("AES_PLUGIN_DIR", str(_PLUGIN_DIRPATH))
+        return Path(server).absolute()
     try:
-        server_filepath = ServerInstallation.default().executable_filepath("model-b")
+        return ServerInstallation.default().executable_filepath("model-b")
     except Exception:
-        return
-    os.environ["AES_SERVER_FILEPATH"] = str(server_filepath)
-    # The server is <build>/src/server/beebium-model-b; the plugin's tools are built beside it.
-    tools_dirpath = server_filepath.parent.parent / "extensions" / "acorn-aes-coprocessor"
-    os.environ.setdefault("AES_BANNER_TOOL", str(tools_dirpath / "aes-banner"))
-    os.environ.setdefault("AES_TUBE_LOG_DIR", str(tools_dirpath / "tube-log"))
+        return None
+
+
+def _rom_dirpath(config):
+    """--beebium-rom-dir, then BEEBIUM_ROM_DIR, then the checkout's roms/."""
+    rom_dirpath = config.getoption("--beebium-rom-dir") or os.environ.get("BEEBIUM_ROM_DIR")
+    return Path(rom_dirpath).absolute() if rom_dirpath else _PLUGIN_DIRPATH.parents[2] / "roms"
+
+
+def pytest_configure(config):
+    """Runs before the tests import from aes_host, so they see these paths."""
+    import aes_host
+
+    aes_host.configure(_server_filepath(config), _rom_dirpath(config))
 
 
 @pytest.fixture(autouse=True)

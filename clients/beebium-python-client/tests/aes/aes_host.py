@@ -34,19 +34,22 @@ from beebium.client import Beebium
 from beebium.client._proto import debugger_pb2
 from beebium.client.screen import read_mode7_cells
 
-SERVER = os.environ.get("AES_SERVER_FILEPATH", "")
+# Set by configure(), from conftest.py, before any test imports them.
+SERVER = ""
 # The Executive ROM the plugin ships, unless BEEBIUM_AES_ROM_FILEPATH names another image.
 PLUGIN_FOLDER = Path(__file__).resolve().parents[4] / "src" / "extensions" / "acorn-aes-coprocessor"
 BUNDLED_ROM = PLUGIN_FOLDER / "roms" / "acorn-aes-executive_1_00.rom"
 ROM = os.environ.get("BEEBIUM_AES_ROM_FILEPATH") or str(BUNDLED_ROM)
-BANNER_TOOL = os.environ.get("AES_BANNER_TOOL", "")
+BANNER_TOOL = ""
+TUBE_LOG_DIRPATH = ""
 PROJECT = os.environ.get("AES_PROJECT", "")
-ROMS = Path(os.environ.get("BEEBIUM_ROM_DIR", ""))
+ROMS = Path()
 DFS = ROMS / "acorn-dfs_2_26.rom"
 FACTS_FOLDER = PLUGIN_FOLDER / "tests" / "rom-facts"
 # DOC, Beebium docs/cli.md: full speed. Emulated time is what the tests count (INF, no test
-# here reads wall time).
-os.environ.setdefault("BEEBIUM_NO_PACING", "1")
+# here reads wall time). Given to each server these tests launch, not set in os.environ, where
+# every server the rest of the pytest run launches would inherit it.
+SERVER_ENV = {"BEEBIUM_NO_PACING": "1"}
 
 # First 8 hex digits of each frozen disc's SHA-1, from notes/real-aes/real-aes-run-sheet.md. Under AES_PROJECT.
 FROZEN = {
@@ -61,6 +64,26 @@ FROZEN = {
     "arm_lisp_3a": ("own-work/tak/test-discs/arm_lisp_3a.ssd", "135223ac"),
     "arm_lisp_3b": ("own-work/tak/test-discs/arm_lisp_3b.ssd", "d7ed7c93"),
 }
+
+
+def configure(server_filepath, rom_dirpath):
+    """The server under test, which may be None for none, and the host's ROM folder."""
+    global SERVER, BANNER_TOOL, TUBE_LOG_DIRPATH, ROMS, DFS
+    ROMS = Path(rom_dirpath)
+    DFS = ROMS / "acorn-dfs_2_26.rom"
+    if server_filepath is None:
+        return
+    SERVER = str(server_filepath)
+    # The server is <build>/src/server/beebium-model-b; the plugin's tools are built beside it.
+    tools_dirpath = Path(server_filepath).parent.parent / "extensions" / "acorn-aes-coprocessor"
+    BANNER_TOOL = str(tools_dirpath / "aes-banner")
+    TUBE_LOG_DIRPATH = str(tools_dirpath / "tube-log")
+
+
+def launch(extra_args, extra_env=None, **options):
+    """A server for these tests: the one under test, unpaced, given time to start."""
+    return Beebium.launch(server=SERVER, extra_args=extra_args, startup_timeout=20.0,
+                          extra_env={**SERVER_ENV, **(extra_env or {})}, **options)
 
 
 def missing(why):
@@ -330,7 +353,7 @@ class Aes:
             self.args += ["--acorn-scsi", "--scsi-hdd", f"scsi-id=0:image={hard_disc}"]
         self.tube_log = tube_log
         if tube_log and log_build:
-            self.args += ["--extension-dir", os.environ["AES_TUBE_LOG_DIR"]]
+            self.args += ["--extension-dir", TUBE_LOG_DIRPATH]
         if disc:
             self.args += ["--floppy", f"0:{disc}"]
         if disc1:
@@ -340,16 +363,13 @@ class Aes:
         self.chunk = 0.02  # Emulated seconds between trace reads. The ring holds 1024 entries.
 
     def __enter__(self):
-        if self.tube_log:
-            os.environ["AES_TUBE_LOG"] = str(self.tube_log)
-        self.launch = Beebium.launch(server=SERVER, extra_args=self.args, startup_timeout=20.0,
-                                     start_stopped=self.start_stopped)
+        extra_env = {"AES_TUBE_LOG": str(self.tube_log)} if self.tube_log else {}
+        self.launch = launch(self.args, extra_env, start_stopped=self.start_stopped)
         self.bbc = self.launch.__enter__()
         self.wire = Wire(self.bbc)
         return self
 
     def __exit__(self, *args):
-        os.environ.pop("AES_TUBE_LOG", None)
         return self.launch.__exit__(*args)
 
     def run(self, done, seconds, chunk=None):

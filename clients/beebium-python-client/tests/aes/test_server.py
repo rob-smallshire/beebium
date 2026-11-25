@@ -24,16 +24,14 @@ is not evidence of what an AES does.
 import json
 import os
 import subprocess
-from pathlib import Path
 
 import pytest
 
-from aes_host import DFS, ROM, SERVER, Aes, expected_banner, fact, need_rom
+from aes_host import DFS, PLUGIN_FOLDER, ROM, SERVER, Aes, expected_banner, fact, launch, need_rom
 
-from beebium.client import Beebium
 from beebium.client.screen import read_mode7_screen, screen_contains
 
-MANIFEST = Path(os.environ.get("AES_PLUGIN_DIR", ".")) / "manifest.json"
+MANIFEST = PLUGIN_FOLDER / "manifest.json"
 # DOC, profile host.model: BBC B with the 1770. The host's Tube code is in the filing system
 # ROM, so one must be fitted (DOC, Beebium's docs/tube-subsystem.md). DFS 2.26 for now: the profile's
 # ADFS 1.30, and ADFS with DFS, are tried outside these tests, on the owner's own discs.
@@ -51,7 +49,7 @@ def server(*arguments):
 
 
 def banner_shows(extra_args, text):
-    with Beebium.launch(server=SERVER, extra_args=extra_args, startup_timeout=20.0) as bbc:
+    with launch(extra_args) as bbc:
         seen = bbc.run_until_or_timeout(lambda: screen_contains(bbc, text), emulated_seconds=BOOT_SECONDS)
         if not seen:
             print("\n".join(read_mode7_screen(bbc)))
@@ -60,7 +58,7 @@ def banner_shows(extra_args, text):
 
 def test_host_has_a_filing_system():
     """Without this the banner test would fail on any plugin, and say nothing about ours."""
-    with Beebium.launch(server=SERVER, extra_args=HOST, startup_timeout=20.0) as bbc:
+    with launch(HOST) as bbc:
         assert bbc.run_until_or_timeout(lambda: screen_contains(bbc, "Acorn 1770 DFS"), emulated_seconds=BOOT_SECONDS)
 
 
