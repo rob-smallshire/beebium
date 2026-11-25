@@ -22,16 +22,24 @@
 
 using beebium::format_clock_mhz;
 
-TEST_CASE("Clock text is whole megahertz, or the shortest decimal", "[clock-text]") {
+TEST_CASE("Clock text is whole megahertz, or at most two decimal places", "[clock-text]") {
     CHECK(format_clock_mhz(3'000'000) == "3 MHz");
     CHECK(format_clock_mhz(4'000'000) == "4 MHz");
     CHECK(format_clock_mhz(16'000'000) == "16 MHz");
     CHECK(format_clock_mhz(3'500'000) == "3.5 MHz");
     CHECK(format_clock_mhz(1'790'000) == "1.79 MHz");
-    CHECK(format_clock_mhz(4'194'304) == "4.194304 MHz");
     CHECK(format_clock_mhz(500'000) == "0.5 MHz");
-    CHECK(format_clock_mhz(1) == "0.000001 MHz");
     CHECK(format_clock_mhz(0) == "0 MHz");
+}
+
+TEST_CASE("Clock text cuts a longer fraction to two decimal places", "[clock-text]") {
+    // The ARM Evaluation System's 6 2/3 MHz ARM1, nominally 6666666 Hz.
+    CHECK(format_clock_mhz(6'666'666) == "6.66 MHz");
+    CHECK(format_clock_mhz(4'194'304) == "4.19 MHz");
+    CHECK(format_clock_mhz(1'999'999) == "1.99 MHz");
+    CHECK(format_clock_mhz(3'001'000) == "3 MHz");
+    CHECK(format_clock_mhz(3'050'000) == "3.05 MHz");
+    CHECK(format_clock_mhz(1) == "0 MHz");
 }
 
 TEST_CASE("A board's nominal clock comes from its timing", "[coprocessor][clock]") {
