@@ -358,12 +358,17 @@ TEST_CASE("An OS ROM given by path shows only its title", "[memory][mode][os]") 
     }
     MemorySidebar memory(fixture.sideways, [] { return true; });
     memory.show();
-    REQUIRE(wait_until([&] { return memory.os_row() && memory.os_row()->isVisibleTo(&memory); }));
+    // The OS ROM and the slot status are answered separately, so wait for both.
+    const QString no_sideways = QStringLiteral("This machine has no sideways memory.");
+    REQUIRE(wait_until([&] {
+        return memory.os_row() && memory.os_row()->isVisibleTo(&memory) &&
+               visible_texts(memory).contains(no_sideways);
+    }));
     const QStringList texts = visible_texts(memory);
     CHECK(memory.os_row()->name_text() == QStringLiteral("my-mos"));
     CHECK_FALSE(texts.contains(QStringLiteral("my-mos.rom")));
     // No sideways memory, but still an OS.
-    CHECK(texts.contains(QStringLiteral("This machine has no sideways memory.")));
+    CHECK(texts.contains(no_sideways));
     CHECK(memory.os_row()->toolTip() == QStringLiteral("/home/me/roms/my-mos.rom"));
 }
 
