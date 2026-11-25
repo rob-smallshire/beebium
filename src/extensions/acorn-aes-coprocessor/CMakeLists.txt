@@ -68,7 +68,10 @@ if(BEEBIUM_BUILD_SERVICE AND BEEBIUM_BUILD_TESTS)
     set_target_properties(beebium_ext_aes_log_plugin PROPERTIES
         PREFIX ""
         OUTPUT_NAME "acorn-aes-coprocessor"
-        LIBRARY_OUTPUT_DIRECTORY ${AES_LOG_DIR}
+        # Beside its manifest on every platform: a Windows DLL is a RUNTIME output, and the
+        # generator expression keeps a multi-config generator from adding a Release/ folder.
+        LIBRARY_OUTPUT_DIRECTORY "$<1:${AES_LOG_DIR}>"
+        RUNTIME_OUTPUT_DIRECTORY "$<1:${AES_LOG_DIR}>"
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN YES
     )
