@@ -330,7 +330,7 @@ Complete transcripts of BBC Micro documentation:
 - Cassette interface (UEF and CSW tapes, and WAV recordings through a model of the LM324 input stages) through the Serial ULA's data separator and high-tone detector, with the deck, CassetteService and the motor LED; recording on UEF tapes through the Serial ULA's tone synthesiser, written back to the tape's file; blank tape templates (C15 to C90) with `list-blank-tapes`/`create-tape`; live audio input streamed by a client (StreamAudio) through a primed ring
 - Hybrid Music 5000 / 3000 synthesiser on the 1 MHz bus (plugin `hybrid-music-5000`), with the board's analogue output filter; JIM paging is owned by the bus port so several 1 MHz bus devices coexist
 - Keyboard matrix with type-ahead
-- Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger
+- Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz), 65C102 Co-processor (4 MHz) and the Acorn ARM Evaluation System (`acorn-aes-coprocessor`: a 6.67 MHz ARM1 with 2 or 4 MB, the Executive 1.00 ROM bundled, contributed from James Sargent's AESulator, #313), single-threaded host-time-driven contract, family-agnostic debugger
 - gRPC service layer (19 services)
 - macOS frontend with Metal rendering
 - Linux / Raspberry Pi frontend (Qt 6 Widgets, QRhi on Vulkan) built against `docs/client-specification.md`: all eight sidebar modes, the New Machine configurator, the preset library, screen text selection and Copy As, Meta / Ctrl+Alt application shortcuts; per-distribution `.deb` packages (Debian 13, Ubuntu 26.04)

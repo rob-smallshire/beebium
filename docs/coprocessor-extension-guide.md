@@ -29,6 +29,13 @@ The two shipped coprocessors, `src/extensions/acorn-65c02-coprocessor`
 with a different clock ratio and firmware, and is the pattern for any
 variant that shares a CPU family.
 
+The third shipped coprocessor, `src/extensions/acorn-aes-coprocessor` (the
+Acorn ARM Evaluation System, an ARM1 at 6.67 MHz), is the worked example of a
+CPU outside the 6502 family: its own core, memory map and board timing behind
+the same `Coprocessor` and `CpuDebugTarget` interfaces, with a manifest whose
+`ram` and `abort` parameters show settings beyond the firmware path. It was
+written outside the tree against this contract and merged unchanged (#313).
+
 ## 1. Decide what differs
 
 Answer these before writing code; each maps onto one part of the contract.

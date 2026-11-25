@@ -129,16 +129,17 @@ executable's `start --help` lists its defaults.
 ### Extensions Directory
 
 Plugin extensions, including the Acorn 65C02 second processor
-(`acorn-65c02-coprocessor`) and the Piconet Econet transport, are loaded from
+(`acorn-65c02-coprocessor`), the Acorn ARM Evaluation System
+(`acorn-aes-coprocessor`) and the Piconet Econet transport, are loaded from
 `<exe-dir>/extensions/`, one directory per plugin holding its library, its
 `manifest.json` and any firmware in `roms/`. (Some extensions, such as the AUN
 transport, are built into the server.) `--extension-dir <path>` adds further
 search directories, and `list-extensions` shows what resolves.
 A server run from a build tree in which the plugins have not been built
 (the `beebium-servers` target builds `beebium-server` and every plugin), or from an installed tree
-missing `extensions/acorn-65c02-coprocessor/`, has no Tube coprocessor:
-`--tube-65c02` is not recognised and the machine boots without a second
-processor. The release artifacts, packages and the macOS app bundle all
+missing `extensions/acorn-65c02-coprocessor/`, has no 6502 second processor:
+`--tube-65c02` is not recognised and the machine boots without one; the
+same holds for each coprocessor plugin and its flag. The release artifacts, packages and the macOS app bundle all
 ship the `extensions/` tree.
 
 ### Build Directory (Development)

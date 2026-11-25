@@ -900,6 +900,8 @@ beebium-model-b list-extensions --attaches-to serial-port
 Available extensions:
   --tube-65c02 (acorn-65c02-coprocessor) [built-in]
       An Acorn 6502 Second Processor: a 3 MHz 65C02 with 64K of its own memory, connected through the Tube.
+  --tube-aes (acorn-aes-coprocessor) [/install/path/extensions]
+      An Acorn ARM Evaluation System: a 6.67 MHz ARM1 processor with up to 4 MB of its own memory, connected through the Tube.
   --acorn-rtc [/install/path/extensions]
       The Acorn real-time clock module, which plugs into the user port and keeps the date and time.
   ...
@@ -909,6 +911,7 @@ Available extensions:
 ```
 cli_name	name	kind	source	attaches_to	description
 tube-65c02	acorn-65c02-coprocessor	peripheral	built-in	tube	An Acorn 6502 Second Processor: a 3 MHz 65C02 with 64K of its own memory, connected through the Tube.
+tube-aes	acorn-aes-coprocessor	peripheral	/install/path/extensions	tube	An Acorn ARM Evaluation System: a 6.67 MHz ARM1 processor with up to 4 MB of its own memory, connected through the Tube.
 acorn-rtc	acorn-rtc	peripheral	/install/path/extensions	user-port	The Acorn real-time clock module, which plugs into the user port and keeps the date and time.
 ```
 

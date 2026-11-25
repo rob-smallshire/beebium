@@ -28,19 +28,27 @@ known to the core, the server or the clients: the 6502 second processors are
 plugins like any other, and their debugger is served from a description the
 coprocessor supplies.
 
-Two coprocessors ship: `tube-65c02`, the Acorn 6502 Second Processor (65C02
-at 3 MHz, 64 KB, Tube client v1.10), and `tube-65c102`, the 65C102
+Three coprocessors ship: `tube-65c02`, the Acorn 6502 Second Processor (65C02
+at 3 MHz, 64 KB, Tube client v1.10); `tube-65c102`, the 65C102
 Co-processor from the Master Turbo (65C02-family at 4 MHz, 64 KB, client
-v1.20). They are one class constructed with different board timing (see Board
-timing, below) and firmware.
+v1.20); and `tube-aes`, the Acorn ARM Evaluation System (an ARM1 at
+6.67 MHz with 2 or 4 MB of its own memory, running the Executive 1.00 ROM of
+14 August 1986). The first two are one class constructed with different board
+timing (see Board timing, below) and firmware. The third is a separate plugin,
+`src/extensions/acorn-aes-coprocessor/`, contributed by James Sargent from
+his AESulator project (#313); its own README describes the ARM1 core, the
+board and its tests.
 
 ```
 beebium-model-b start --tube-65c02  ...      # 6502 Second Processor, 3 MHz
 beebium-model-b start --tube-65c102 ...      # 65C102 Co-processor, 4 MHz
+beebium-model-b start --tube-aes    ...      # ARM Evaluation System, 4 MB
+beebium-model-b start --tube-aes ram=2 abort=strict ...   # 2 MB, aborts on unmapped access
 beebium-model-b start --tube-65c02 rom=/path/to/client.rom   # alternative client ROM
 ```
 
-The Tube socket accepts one coprocessor; giving both flags is refused.
+The Tube socket accepts one coprocessor; giving more than one of these flags
+is refused.
 
 A coprocessor is not special to `start`: it is an extension, and every
 subcommand that runs the machine builds it through the one shared
