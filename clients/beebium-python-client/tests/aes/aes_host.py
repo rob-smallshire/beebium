@@ -56,9 +56,13 @@ def configure(server_filepath, rom_dirpath):
     if server_filepath is None:
         return
     SERVER = str(server_filepath)
-    # The server is <build>/src/server/beebium-model-b; the plugin's tools are built beside it.
-    tools_dirpath = Path(server_filepath).parent.parent / "extensions" / "acorn-aes-coprocessor"
-    TUBE_LOG_DIRPATH = str(tools_dirpath / "tube-log")
+    # The server is <build>/src/server/beebium-model-b (in a Release/ folder below that on
+    # Windows), and the Tube-log test plugin is at <build>/src/extensions/acorn-aes-coprocessor/
+    # tube-log/, in the build tree and in the CI server tarball (scripts/pack-server-artifact.sh).
+    for dirpath in Path(server_filepath).absolute().parents:
+        if dirpath.name == "server" and dirpath.parent.name == "src":
+            TUBE_LOG_DIRPATH = str(dirpath.parent / "extensions" / "acorn-aes-coprocessor" / "tube-log")
+            break
 
 
 def launch(extra_args, extra_env=None, **options):
@@ -315,6 +319,10 @@ class Aes:
             self.args += ["--acorn-scsi", "--scsi-hdd", f"scsi-id=0:image={hard_disc}"]
         self.tube_log = tube_log
         if tube_log and log_build:
+            # Fails, never skips: the plugin is built with the tests and packed with the server.
+            manifest = Path(TUBE_LOG_DIRPATH) / "acorn-aes-coprocessor" / "manifest.json"
+            if not manifest.is_file():
+                pytest.fail(f"no Tube-log test plugin at {TUBE_LOG_DIRPATH!r}, beside the server under test")
             self.args += ["--extension-dir", TUBE_LOG_DIRPATH]
         if disc:
             self.args += ["--floppy", f"0:{disc}"]
