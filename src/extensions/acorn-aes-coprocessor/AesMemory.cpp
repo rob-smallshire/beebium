@@ -36,6 +36,7 @@
 #include "AesMemory.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <random>
@@ -79,13 +80,22 @@ AesMemory::AesMemory(const AesOptions& options, AesTiming& timing, TubePort& tub
 // Reads the ROM image from the file the rom setting names; none is built in.
 bool AesMemory::load_rom() { return load_rom(opt_.rom); }
 
-// Reads a ROM image from `path`. False if the file is missing or not exactly 16 KB, so that the
-// caller can say why the machine did not start; the old image is then kept.
+// Reads a ROM image from `path`. False if it is missing, is not a regular file (a folder, say),
+// cannot be read, or is not exactly 16 KB, so that the caller can say why the machine did not
+// start; the old image is then kept. It never throws: the C++ library may report a failed read by
+// throwing (libstdc++ does, reading a folder), and the caller's message is what the user should see.
 bool AesMemory::load_rom(const std::string& path) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file) return false;
-    std::vector<uint8_t> image{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-    if (image.size() != kRomBytes) return false;
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(path, error)) return false;
+    const uintmax_t size = std::filesystem::file_size(path, error);
+    if (error || size != kRomBytes) return false;
+    std::vector<uint8_t> image(kRomBytes);
+    try {
+        std::ifstream file(path, std::ios::binary);
+        if (!file.read(reinterpret_cast<char*>(image.data()), std::streamsize(kRomBytes))) return false;
+    } catch (const std::ios_base::failure&) {
+        return false;
+    }
     rom_ = image;
     return true;
 }

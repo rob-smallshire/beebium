@@ -135,6 +135,23 @@ TEST(mem_rom_load, "rom: a file is read at run time; a missing or wrong-sized fi
     CHECK_EQ(mem.load_rom(dir + "no-such-file"), false);
 }
 
+TEST(mem_rom_load_folder, "rom: a folder is refused, not thrown on, so the plugin can say why (USER, 1 Nov 2026)") {
+    const std::string folder = std::filesystem::temp_directory_path().string() + "/aes-rom-folder";
+    std::filesystem::create_directories(folder);
+    AesOptions o;
+    AesTiming timing(o);
+    FakeTube tube;
+    AesMemory mem(o, timing, tube);
+    mem.set_rom(test_rom());
+    bool refused = false;
+    try {
+        refused = !mem.load_rom(folder);
+    } catch (const std::exception&) {
+    }
+    CHECK_EQ(refused, true);
+    CHECK_EQ(mem.read_word(ROM + 0x20, false), 0x23222120);  // the old image is kept
+}
+
 TEST(mem_ram_sizes, "ram: fitted banks answer, each 1 MB, chosen by A20, A21 (DOC, HW 5.1.2; USER)") {
     for (int mb : {2, 4}) {
         Board b(with_ram(mb));
