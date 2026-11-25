@@ -23,6 +23,7 @@ import sys
 import threading
 import time
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 
 import grpc
@@ -57,6 +58,7 @@ class ServerProcess:
         extra_args: list[str] | None = None,
         preset: str | Path | None = None,
         exit_with_parent: bool = False,
+        extra_env: Mapping[str, str] | None = None,
     ):
         """Create a server process manager.
 
@@ -81,6 +83,9 @@ class ServerProcess:
                 on the server's stdin for as long as this process manages it,
                 so the server exits when this Python process ends, however it
                 ends (SIGKILL included). ``release()`` lets it go.
+            extra_env: Environment variables for the server, on top of this
+                process's own (e.g., {"BEEBIUM_NO_PACING": "1"}). This
+                process's environment is not changed.
         """
         self._exit_with_parent = exit_with_parent
         self._mos_filepath = Path(mos_filepath) if mos_filepath is not None else None
@@ -93,6 +98,7 @@ class ServerProcess:
         self._server_filepath = Path(self._server_command[0])
         self._port = port if port != 0 else self._find_free_port()
         self._extra_args = extra_args or []
+        self._extra_env = dict(extra_env or {})
         self._preset = str(preset) if preset is not None else None
         self._process: subprocess.Popen[bytes] | None = None
         self._provenance_instance_uuid = str(uuid.uuid4())
@@ -222,6 +228,7 @@ class ServerProcess:
             stdin=subprocess.PIPE if self._exit_with_parent else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env={**os.environ, **self._extra_env} if self._extra_env else None,
         )
         _MANAGED.add(self)
         self._start_readers()
