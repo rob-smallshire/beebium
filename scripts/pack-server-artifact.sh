@@ -13,6 +13,12 @@
 #   src/server/beebium-<model>        each model's name, a link to it
 #   src/server/{presets,blank-discs,blank-tapes,extensions}/
 #   lib/libbeebium_extension_api.{so,dylib}, lib/libbeebium_extension_ui_proto.{so,dylib}
+#   src/extensions/acorn-aes-coprocessor/tube-log/, when the build has it
+#
+# The last is the AES coprocessor's Tube-log test plugin, a test build of the
+# plugin that logs each Tube access. It is not a server component: it is here
+# for the Python integration jobs' tests/aes/test_tube_log.py, which loads it
+# with --extension-dir from this path, and nothing else consumes it.
 #
 # A consumer extracts it into a directory of its own, conventionally build/,
 # so the server's build-time RPATH into ../../lib resolves:
@@ -69,8 +75,16 @@ for name in libbeebium_extension_api libbeebium_extension_ui_proto; do
     library_relpaths+=("${found}")
 done
 
+test_relpaths=()
+tube_log_relpath="src/extensions/acorn-aes-coprocessor/tube-log"
+if [ -d "${tube_log_relpath}" ]; then
+    test_relpaths+=("${tube_log_relpath}")
+fi
+
 # COPYFILE_DISABLE keeps macOS tar from adding ._ AppleDouble entries.
 COPYFILE_DISABLE=1 tar -czf "${archive_filepath}" \
-    "${server_relpath}" "${model_relpaths[@]}" "${tree_relpaths[@]}" "${library_relpaths[@]}"
+    "${server_relpath}" "${model_relpaths[@]}" "${tree_relpaths[@]}" "${library_relpaths[@]}" \
+    ${test_relpaths[@]+"${test_relpaths[@]}"}
 echo "Packed ${server_relpath}, ${#model_relpaths[@]} model links, ${tree_relpaths[*]} and ${library_relpaths[*]}"
+[ "${#test_relpaths[@]}" -eq 0 ] || echo "and the test plugin ${test_relpaths[*]}"
 echo "into ${archive_filepath} ($(wc -c <"${archive_filepath}" | tr -d ' ') bytes)"
