@@ -712,11 +712,12 @@ public:
     std::string document_name() const override { return saved ? document : std::string(); }
     bool template_media_written() const override { return written; }
     SaveOutcome save(const std::string& destination, bool replace_existing,
-                     const std::string& uuid, const std::string& description_template) override {
+                     const std::string& requested_uuid,
+                     const std::string& description_template) override {
         asked_destination = destination;
         asked_replace = replace_existing;
         if (outcome.error == SaveOutcome::Error::None) saved = true;
-        asked_uuid = uuid;
+        asked_uuid = requested_uuid;
         asked_description_template = description_template;
         return outcome;
     }
@@ -730,9 +731,9 @@ public:
         return moved(rename_outcome);
     }
     // A move keeps the machine's uuid, which the store reports.
-    SaveOutcome moved(SaveOutcome outcome) const {
-        if (outcome.error == SaveOutcome::Error::None) outcome.machine_uuid = uuid;
-        return outcome;
+    SaveOutcome moved(SaveOutcome result) const {
+        if (result.error == SaveOutcome::Error::None) result.machine_uuid = uuid;
+        return result;
     }
     std::vector<std::string> reset_battery() override { return {"integra-b-rtc", "clock/saf3019p"}; }
     void described(const std::string& description_template) override {
