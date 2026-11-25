@@ -100,20 +100,12 @@ if(BEEBIUM_BUILD_TESTS)
     set_tests_properties(aes_plugin_tests PROPERTIES
         ENVIRONMENT "AES_PLUGIN_DIR=${CMAKE_CURRENT_SOURCE_DIR}")
 
-    # Prints the banner expected for a ROM and a RAM size: RomCheck.hpp's rule as a command. The
-    # Python client's AES tests work the banner out themselves, as the build tree is not where
-    # they always run.
-    add_executable(aes-banner tests/aes-banner.cpp)
-    target_link_libraries(aes-banner PRIVATE beebium_core)
-    target_compile_definitions(aes-banner PRIVATE
-        AES_ROM_FACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/rom-facts")
-
     # Windows has no RPATH: these executables load beebium_extension_api.dll from their own
     # directory, and the build copies that DLL into tests/<config> beside Beebium's own test
     # executables (src/core/extension-api/CMakeLists.txt). Build them there too, so ctest's
     # discovery can run them.
     if(WIN32)
-        set_target_properties(test_aes_machine test_aes_plugin aes-banner PROPERTIES
+        set_target_properties(test_aes_machine test_aes_plugin PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
     endif()
 
@@ -122,7 +114,7 @@ if(BEEBIUM_BUILD_TESTS)
     # Catch2's macros as bool/int mixes (C4805). test_aes_plugin also truncates constants into
     # bytes on purpose (C4310).
     if(MSVC)
-        foreach(aes_test_target test_aes_machine test_aes_plugin aes-banner)
+        foreach(aes_test_target test_aes_machine test_aes_plugin)
             target_compile_options(${aes_test_target} PRIVATE /wd4244 /wd4267 /wd4805)
         endforeach()
         target_compile_options(test_aes_plugin PRIVATE /wd4310)

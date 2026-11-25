@@ -17,8 +17,8 @@
 """The AES in a real Beebium server, started the way a user starts it.
 
 Always names the built server (notes/beebium-baseline.md): nothing is discovered. Tied to the
-ROM through aes-banner, the one shared check.
-Run with run-server-tests.sh. Says what Beebium's server does with the plugin; a result here
+ROM through aes_host.expected_banner, RomCheck.hpp's check. Says what Beebium's server does with
+the plugin; a result here
 is not evidence of what an AES does.
 """
 import json
