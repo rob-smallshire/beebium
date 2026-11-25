@@ -17,7 +17,7 @@ from __future__ import annotations
 import contextlib
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import grpc
@@ -206,6 +206,7 @@ class Beebium:
         preset: str | Path | None = None,
         start_stopped: bool = False,
         exit_with_client: bool = True,
+        extra_env: Mapping[str, str] | None = None,
     ) -> Beebium:
         """Start a beebium-server process, connect to it and return the client.
 
@@ -258,6 +259,9 @@ class Beebium:
                 so it exits when this process does, however it ends (the
                 default). False launches it without, so only ``close()`` or
                 the interpreter's normal exit stops it.
+            extra_env: Environment variables for the server, on top of this
+                process's own (e.g., {"BEEBIUM_NO_PACING": "1"}). This
+                process's environment is not changed.
 
         Returns:
             A connected Beebium client, which owns the server.
@@ -275,6 +279,7 @@ class Beebium:
             extra_args=["--wait=api", *(extra_args or [])],
             preset=preset,
             exit_with_parent=exit_with_client,
+            extra_env=extra_env,
         )
 
         client: Beebium | None = None

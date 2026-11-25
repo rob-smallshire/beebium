@@ -1,0 +1,70 @@
+{
+    "name": "acorn-aes-coprocessor",
+    "version": "2.0.0",
+    "display_name": "Acorn ARM Evaluation System",
+    "description": "An Acorn ARM Evaluation System: a 6.67 MHz ARM1 processor with up to 4 MB of its own memory, connected through the Tube.",
+    "library": "acorn-aes-coprocessor",
+    "attaches_to": [
+        "tube"
+    ],
+    "cli": "tube-aes",
+    "roms": [
+        {
+            "key": "executive",
+            "filename": "acorn-aes-executive_1_00.rom",
+            "size": 16384,
+            "display_name": "Acorn ARM Evaluation System Executive 1.00, 14 August 1986 (the image also known as 1.01)"
+        }
+    ],
+    "parameters": [
+        {
+            "key": "rom",
+            "label": "Executive ROM",
+            "type": "filepath",
+            "bundled": "rom",
+            "description": "The AES Executive ROM: a 16 KB image, as a path, or the name of a ROM this coprocessor ships",
+            "default": "acorn-aes-executive_1_00.rom",
+            "required": false
+        },
+        {
+            "key": "ram",
+            "label": "Memory",
+            "type": "string",
+            "default": "4",
+            "choices": [
+                {
+                    "value": "2",
+                    "label": "2 MB",
+                    "description": "The AES with its memory card removed."
+                },
+                {
+                    "value": "4",
+                    "label": "4 MB",
+                    "description": "The standard AES."
+                }
+            ],
+            "required": false,
+            "description": "How much memory the AES has."
+        },
+        {
+            "key": "abort",
+            "label": "Memory aborts",
+            "type": "string",
+            "default": "off",
+            "choices": [
+                {
+                    "value": "off",
+                    "label": "Off (as hardware)",
+                    "description": "No aborts are raised."
+                },
+                {
+                    "value": "strict",
+                    "label": "Strict",
+                    "description": "An abort is raised for any access outside the emulated memory."
+                }
+            ],
+            "required": false,
+            "description": "An emulator aid: whether the ARM is told when it accesses memory that isn't emulated."
+        }
+    ]
+}
