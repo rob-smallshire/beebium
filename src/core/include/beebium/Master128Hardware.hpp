@@ -620,7 +620,9 @@ public:
     // LYNNE too (the Planet Nubium corner).
     bool lynne_selected(bool vdu) const {
         if (!vdu) return x();
-        if (Y_SUPPRESSES_E && (acccon_ & ACCCON_Y)) return x();
+        if constexpr (Y_SUPPRESSES_E) {
+            if (acccon_ & ACCCON_Y) return x();
+        }
         return x() || (acccon_ & ACCCON_E) != 0;
     }
 
