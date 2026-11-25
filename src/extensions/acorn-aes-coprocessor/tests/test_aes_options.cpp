@@ -44,7 +44,10 @@ struct ManifestRow {
 static std::map<std::string, ManifestRow> manifest_rows() {
     const char* folder = getenv("AES_PLUGIN_DIR");
     std::ifstream file(std::string(folder ? folder : "..") + "/manifest.json");
-    const std::string text{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    const std::string whole{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    // The settings only: the bundled ROMs before them carry keys of their own.
+    const size_t parameters_at = whole.find("\"parameters\"");
+    const std::string text = parameters_at == std::string::npos ? whole : whole.substr(parameters_at);
     std::map<std::string, ManifestRow> rows;
     const std::regex key("\"key\": \"([a-z0-9_.]+)\"");
     const std::regex fallback("\"default\": \"([^\"]*)\"");

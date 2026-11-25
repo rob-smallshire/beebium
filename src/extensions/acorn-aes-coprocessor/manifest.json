@@ -8,13 +8,23 @@
         "tube"
     ],
     "cli": "tube-aes",
+    "roms": [
+        {
+            "key": "executive",
+            "filename": "acorn-aes-executive_1_00.rom",
+            "size": 16384,
+            "display_name": "Acorn ARM Evaluation System Executive 1.00, 14 August 1986 (the image also known as 1.01)"
+        }
+    ],
     "parameters": [
         {
             "key": "rom",
             "label": "Executive ROM",
             "type": "filepath",
-            "required": true,
-            "description": "The AES Executive ROM: a 16 KB image, as a path. Beebium does not supply one."
+            "bundled": "rom",
+            "description": "The AES Executive ROM: a 16 KB image, as a path, or the name of a ROM this coprocessor ships",
+            "default": "acorn-aes-executive_1_00.rom",
+            "required": false
         },
         {
             "key": "ram",

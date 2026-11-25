@@ -79,9 +79,11 @@ endif()
 if(BEEBIUM_BUILD_TESTS)
     add_executable(test_aes_machine tests/machine_test.cpp)
     target_link_libraries(test_aes_machine PRIVATE beebium_ext_aes Catch2::Catch2WithMain)
+    set(AES_BUNDLED_ROM_FILEPATH ${CMAKE_CURRENT_SOURCE_DIR}/roms/acorn-aes-executive_1_00.rom)
     target_compile_definitions(test_aes_machine PRIVATE
         BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
-        AES_ROM_FACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/rom-facts")
+        AES_ROM_FACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/rom-facts"
+        AES_BUNDLED_ROM_FILEPATH="${AES_BUNDLED_ROM_FILEPATH}")
     catch_discover_tests(test_aes_machine)
 
     # The plugin's own tests, on its own runner (tests/test_main.cpp), registered as one test so
@@ -91,7 +93,8 @@ if(BEEBIUM_BUILD_TESTS)
     add_executable(test_aes_plugin ${AES_UNIT_TEST_SOURCES})
     target_link_libraries(test_aes_plugin PRIVATE beebium_ext_aes beebium_extension_api)
     target_compile_definitions(test_aes_plugin PRIVATE
-        AES_ROM_FACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/rom-facts")
+        AES_ROM_FACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/rom-facts"
+        AES_BUNDLED_ROM_FILEPATH="${AES_BUNDLED_ROM_FILEPATH}")
     add_test(NAME aes_plugin_tests COMMAND test_aes_plugin)
     set_tests_properties(aes_plugin_tests PROPERTIES
         ENVIRONMENT "AES_PLUGIN_DIR=${CMAKE_CURRENT_SOURCE_DIR}")

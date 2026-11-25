@@ -106,11 +106,12 @@ def test_strict_reaches_the_plugin(setting, shown, not_shown):
     assert shown in out and not_shown not in out, out
 
 
-def test_rom_is_required():
-    """USER, Plugin option 4: none bundled, so no ROM named means no machine."""
-    done = server(*HOST, "--tube-aes")
-    assert done.returncode != 0
-    assert "'rom'" in done.stdout + done.stderr
+def test_bundled_rom_is_the_default():
+    """The Executive ROM ships with the plugin, so --tube-aes alone boots it."""
+    if os.environ.get("BEEBIUM_AES_ROM_FILEPATH"):
+        pytest.skip("BEEBIUM_AES_ROM_FILEPATH names another image than the bundled one")
+    need_rom()
+    assert banner_shows(HOST + ["--tube-aes"], expected_banner(4))
 
 
 def test_short_rom_refused(tmp_path):

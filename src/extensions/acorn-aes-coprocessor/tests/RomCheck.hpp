@@ -45,9 +45,13 @@ inline std::string sha1_text(const std::vector<uint8_t>& image) {
     return text;
 }
 
-// Empty if BEEBIUM_AES_ROM_FILEPATH is not set or cannot be read: rom_problem then says so.
+// The ROM BEEBIUM_AES_ROM_FILEPATH names, else the one the plugin ships (AES_BUNDLED_ROM_FILEPATH,
+// set by the build). Empty if neither can be read: rom_problem then says so.
 inline std::vector<uint8_t> rom_from_env() {
     const char* path = getenv("BEEBIUM_AES_ROM_FILEPATH");
+#ifdef AES_BUNDLED_ROM_FILEPATH
+    if (!path) path = AES_BUNDLED_ROM_FILEPATH;
+#endif
     if (!path) return {};
     std::ifstream file(path, std::ios::binary);
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());

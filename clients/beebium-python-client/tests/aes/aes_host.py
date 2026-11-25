@@ -35,8 +35,10 @@ from beebium.client._proto import debugger_pb2
 from beebium.client.screen import read_mode7_cells
 
 SERVER = os.environ.get("AES_SERVER_FILEPATH", "")
+# The Executive ROM the plugin ships, unless BEEBIUM_AES_ROM_FILEPATH names another image.
 PLUGIN_FOLDER = Path(__file__).resolve().parents[4] / "src" / "extensions" / "acorn-aes-coprocessor"
-ROM = os.environ.get("BEEBIUM_AES_ROM_FILEPATH", "")
+BUNDLED_ROM = PLUGIN_FOLDER / "roms" / "acorn-aes-executive_1_00.rom"
+ROM = os.environ.get("BEEBIUM_AES_ROM_FILEPATH") or str(BUNDLED_ROM)
 BANNER_TOOL = os.environ.get("AES_BANNER_TOOL", "")
 PROJECT = os.environ.get("AES_PROJECT", "")
 ROMS = Path(os.environ.get("BEEBIUM_ROM_DIR", ""))
