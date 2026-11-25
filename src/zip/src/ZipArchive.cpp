@@ -226,7 +226,7 @@ void write_zip(const std::filesystem::path& filepath, std::vector<ZipMember> mem
     for (const auto& member : members) {
         if (!mz_zip_writer_add_mem_ex(&zip, member.name.c_str(), member.data.data(),
                                       member.data.size(), nullptr, 0,
-                                      MZ_DEFAULT_COMPRESSION, 0, 0)) {
+                                      MZ_DEFAULT_LEVEL, 0, 0)) {
             const auto error = miniz_error(zip);
             mz_zip_writer_end(&zip);
             fail("cannot add " + member.name + " (" + error + ")");
