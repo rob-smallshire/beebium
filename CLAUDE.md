@@ -16,6 +16,8 @@ Write tests before implementation. The test suite is comprehensive, spanning thr
 2. Implement the minimum code to pass the test
 3. Refactor while keeping tests green
 
+Python test module names must be unique across the whole repository, not just within their folder: the test folders have no `__init__.py`, and pytest imports each test file by its bare module name, so two files called `test_debugger.py` in different folders stop collection of the whole suite with "import file mismatch". Give the files of a subsystem a prefix, as `tests/aes/test_aes_*.py` do. Do not import a `conftest.py` as a module; shared helpers go in a uniquely named module (CI checks this).
+
 ### Architecture Over Features
 
 Prioritise clean separation of concerns, well-defined interfaces, and maintainable code over feature accumulation. The codebase uses policy-based design with templates for machine variants, allowing compile-time configuration without runtime overhead.
