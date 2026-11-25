@@ -25,7 +25,6 @@ import hashlib
 import os
 import re
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -40,7 +39,6 @@ SERVER = ""
 PLUGIN_FOLDER = Path(__file__).resolve().parents[4] / "src" / "extensions" / "acorn-aes-coprocessor"
 BUNDLED_ROM = PLUGIN_FOLDER / "roms" / "acorn-aes-executive_1_00.rom"
 ROM = os.environ.get("BEEBIUM_AES_ROM_FILEPATH") or str(BUNDLED_ROM)
-BANNER_TOOL = ""
 TUBE_LOG_DIRPATH = ""
 PROJECT = os.environ.get("AES_PROJECT", "")
 ROMS = Path()
@@ -68,7 +66,7 @@ FROZEN = {
 
 def configure(server_filepath, rom_dirpath):
     """The server under test, which may be None for none, and the host's ROM folder."""
-    global SERVER, BANNER_TOOL, TUBE_LOG_DIRPATH, ROMS, DFS
+    global SERVER, TUBE_LOG_DIRPATH, ROMS, DFS
     ROMS = Path(rom_dirpath)
     DFS = ROMS / "acorn-dfs_2_26.rom"
     if server_filepath is None:
@@ -76,7 +74,6 @@ def configure(server_filepath, rom_dirpath):
     SERVER = str(server_filepath)
     # The server is <build>/src/server/beebium-model-b; the plugin's tools are built beside it.
     tools_dirpath = Path(server_filepath).parent.parent / "extensions" / "acorn-aes-coprocessor"
-    BANNER_TOOL = str(tools_dirpath / "aes-banner")
     TUBE_LOG_DIRPATH = str(tools_dirpath / "tube-log")
 
 
@@ -169,11 +166,13 @@ def frozen_unchanged(name):
 
 
 def expected_banner(ram_mb=4):
-    """The one shared check, RomCheck.hpp, through aes-banner."""
+    """The banner's words for this ROM and RAM size, as RomCheck.hpp's expected_banner_words
+    makes them: the ROM's bytes from the facts file's banner_at up to the NUL, then the size in
+    KB (SRC, ROM bytes at banner_at; the size is the setting ram)."""
     need_rom()
-    done = subprocess.run([BANNER_TOOL, ROM, str(ram_mb)], capture_output=True, text=True)
-    assert done.returncode == 0, done.stdout
-    return done.stdout.strip()
+    image = Path(ROM).read_bytes()
+    at = int(FACTS["banner_at"], 0)
+    return image[at:image.index(0, at)].decode("latin-1") + f"{ram_mb * 1024}K"
 
 
 class Wire:

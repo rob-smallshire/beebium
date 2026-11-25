@@ -100,7 +100,9 @@ if(BEEBIUM_BUILD_TESTS)
     set_tests_properties(aes_plugin_tests PROPERTIES
         ENVIRONMENT "AES_PLUGIN_DIR=${CMAKE_CURRENT_SOURCE_DIR}")
 
-    # Prints the banner expected for a ROM and a RAM size, for the Python server tests.
+    # Prints the banner expected for a ROM and a RAM size: RomCheck.hpp's rule as a command. The
+    # Python client's AES tests work the banner out themselves, as the build tree is not where
+    # they always run.
     add_executable(aes-banner tests/aes-banner.cpp)
     target_link_libraries(aes-banner PRIVATE beebium_core)
     target_compile_definitions(aes-banner PRIVATE
