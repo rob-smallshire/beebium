@@ -15,7 +15,7 @@
 // version 2.0.0, 20 November 2026.
 
 // The banner through the Tube chip, on the real ROM, tied to it by SHA-1 (USER, 1 Nov 2026).
-// The host here is two lines of polling; the full machine's banner is in test_server.py.
+// The host here is two lines of polling; the full machine's banner is in test_aes_server.py.
 
 #include "../beebium/AesTube.hpp"
 #include "ArmTest.hpp"

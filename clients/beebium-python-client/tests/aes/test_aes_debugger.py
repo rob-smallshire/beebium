@@ -12,7 +12,7 @@
 
 
 # AESulator: the Acorn ARM Evaluation System, a Beebium plugin.
-# test_debugger.py, tests the debugger's registers, memory, steps, resets and stops through Beebium's client
+# test_aes_debugger.py, tests the debugger's registers, memory, steps, resets and stops through Beebium's client
 # version 2.0.0, 20 November 2026.
 
 """The AES's registers as Beebium's coprocessor debugger shows them (step 4.2; design,

@@ -11,7 +11,7 @@
 # If not, see <https://www.gnu.org/licenses/>.
 
 # AESulator: the Acorn ARM Evaluation System, a Beebium plugin.
-# test_tube_log.py, tests the counting wrapper in the server
+# test_aes_tube_log.py, tests the counting wrapper in the server
 # version 2.0.0, 20 November 2026.
 
 """The counting wrapper in a real server. Its banner check restores what an earlier banner test had

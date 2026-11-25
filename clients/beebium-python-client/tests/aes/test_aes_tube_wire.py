@@ -11,7 +11,7 @@
 # If not, see <https://www.gnu.org/licenses/>.
 
 # AESulator: the Acorn ARM Evaluation System, a Beebium plugin.
-# test_tube_wire.py, tests the Tube conversation on the wire
+# test_aes_tube_wire.py, tests the Tube conversation on the wire
 # version 2.0.0, 20 November 2026.
 
 """What the Tube carries, through the real Executive and a real BBC host.

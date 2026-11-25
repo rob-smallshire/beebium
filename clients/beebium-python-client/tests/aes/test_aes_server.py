@@ -11,7 +11,7 @@
 # If not, see <https://www.gnu.org/licenses/>.
 
 # AESulator: the Acorn ARM Evaluation System, a Beebium plugin.
-# test_server.py, tests the plugin in the built server
+# test_aes_server.py, tests the plugin in the built server
 # version 2.0.0, 20 November 2026.
 
 """The AES in a real Beebium server, started the way a user starts it.

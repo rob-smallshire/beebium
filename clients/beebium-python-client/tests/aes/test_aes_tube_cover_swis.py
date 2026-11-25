@@ -11,11 +11,11 @@
 # If not, see <https://www.gnu.org/licenses/>.
 
 # AESulator: the Acorn ARM Evaluation System, a Beebium plugin.
-# test_tube_cover_swis.py, tests the screen, keyboard and other SWIs
+# test_aes_tube_cover_swis.py, tests the screen, keyboard and other SWIs
 # version 2.0.0, 20 November 2026.
 
 """The screen and keyboard SWIs, and the SWIs with no Tube traffic of their own, through the
-running Executive. Written as test_tube_cover_io.py says, which gives the rules for them."""
+running Executive. Written as test_aes_tube_cover_io.py says, which gives the rules for them."""
 import pytest
 
 from aes_host import Aes, fact, registers, start_call

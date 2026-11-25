@@ -11,7 +11,7 @@
 # If not, see <https://www.gnu.org/licenses/>.
 
 # AESulator: the Acorn ARM Evaluation System, a Beebium plugin.
-# test_tube_cover_io.py, tests the OSWORD and file Tube calls
+# test_aes_tube_cover_io.py, tests the OSWORD and file Tube calls
 # version 2.0.0, 20 November 2026.
 
 """The rest of the SWI index and Tube tables that typed words can reach.

@@ -11,10 +11,10 @@
 # If not, see <https://www.gnu.org/licenses/>.
 
 # AESulator: the Acorn ARM Evaluation System, a Beebium plugin.
-# test_tube_cover_break.py, tests the cache and soft Break
+# test_aes_tube_cover_break.py, tests the cache and soft Break
 # version 2.0.0, 20 November 2026.
 
-"""Soft Break, through the running Executive. Written as test_tube_cover_io.py says, which
+"""Soft Break, through the running Executive. Written as test_aes_tube_cover_io.py says, which
 gives the rules for it."""
 from aes_host import Aes, conversation, expected_banner, fact, start_call
 from cover_support import words

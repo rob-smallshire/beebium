@@ -17,7 +17,7 @@
 #
 # The last is the AES coprocessor's Tube-log test plugin, a test build of the
 # plugin that logs each Tube access. It is not a server component: it is here
-# for the Python integration jobs' tests/aes/test_tube_log.py, which loads it
+# for the Python integration jobs' tests/aes/test_aes_tube_log.py, which loads it
 # with --extension-dir from this path, and nothing else consumes it.
 #
 # A consumer extracts it into a directory of its own, conventionally build/,

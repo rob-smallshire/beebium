@@ -14,9 +14,9 @@
 # cover_support.py, what the Tube call tests share
 # version 2.0.0, 20 November 2026.
 
-"""What test_tube_cover_io.py, test_tube_cover_swis.py and test_tube_cover_break.py share: the
+"""What test_aes_tube_cover_io.py, test_aes_tube_cover_swis.py and test_aes_tube_cover_break.py share: the
 addresses, flags and code lines their programs use, and the helpers. How these tests are
-written, and where their expected values come from: test_tube_cover_io.py."""
+written, and where their expected values come from: test_aes_tube_cover_io.py."""
 from pathlib import Path
 
 import dfs_image
