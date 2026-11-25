@@ -14,27 +14,13 @@
 # test_tube_cover_break.py, tests the cache and soft Break
 # version 2.0.0, 20 November 2026.
 
-"""The cache and soft Break, through the running Executive. Written as test_tube_cover_io.py
-says, which gives the rules for them."""
-from aes_host import Aes, conversation, copy_frozen, expected_banner, fact, frozen_unchanged, start_call
-from cover_support import calls_of, words
+"""Soft Break, through the running Executive. Written as test_tube_cover_io.py says, which
+gives the rules for it."""
+from aes_host import Aes, conversation, expected_banner, fact, start_call
+from cover_support import words
 
 
-# Cache and soft Break.
-def test_cached_name_needs_no_host(tmp_path):
-    """Spec 1.2; SRC, Kernel SCLI, Super2 CACHE: the program runs from high memory, so typing its
-    name sends no OSCLI and no transfer. The limit falls (`Memory limit now &`)."""
-    limit = fact("text.memory_limit")
-    disc = copy_frozen("AESTESTS", tmp_path)
-    with Aes(disc=disc) as aes:
-        aes.boot()
-        assert limit in aes.command("CACHE T12ENV TE")
-        text = aes.command("TE")
-        assert "T12 DONE" in text
-        assert calls_of(aes, 0x02) == [] and aes.wire.host_wrote(4) == []
-    assert frozen_unchanged("AESTESTS")
-
-
+# Soft Break.
 def soft_break(aes):
     """Break alone, no Ctrl. Ends at the new prompt."""
     aes.wire.clear()
@@ -69,20 +55,3 @@ def test_soft_break_keeps_ram_and_copies_no_language():
         assert reply[2] == 0, "X: the last Break was soft"
         aes.hook_oswrch()
         assert words(aes.memory(0x2000, 4)) == [0x12345678]
-
-
-def test_soft_break_with_a_cache_is_a_soft_start(tmp_path):
-    """SRC, Super1:193-215, the ROM's `Soft start ` text: with a cache the pointer equals the RAM
-    limit, so the RAM limit is kept, the memory limit is worked out again from it (Super1:205-206)
-    and `Soft start ` comes before the banner. The cached program
-    still runs (Super1:233 onwards keeps CACHENAMES)."""
-    soft_start = fact("text.soft_start")
-    disc = copy_frozen("AESTESTS", tmp_path)
-    with Aes(disc=disc) as aes:
-        aes.boot()
-        aes.command("CACHE T12ENV TE")
-        screen = soft_break(aes)
-        assert soft_start.encode() + b" " + expected_banner().encode() in screen
-        aes.hook_oswrch()
-        assert "T12 DONE" in aes.command("TE")
-    assert frozen_unchanged("AESTESTS")

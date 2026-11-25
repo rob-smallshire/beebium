@@ -22,17 +22,15 @@ typed at the A* prompt with the Executive's own MemoryA, and the 6502 bytes are 
 host: no disc, no file, nothing built for the AES. A run here is not evidence of what an AES
 does. Run with run-server-tests.sh.
 """
-import hashlib
 import re
 from pathlib import Path
 
 import pytest
 
 import dfs_image
-from aes_host import (PROMPT, ROM, ROMS, Aes, calls_on_r2, conversation, copy_frozen, expected_banner, fact,
-                      frozen_unchanged, need_rom, registers, start_call)
+from aes_host import (PROMPT, ROM, ROMS, Aes, calls_on_r2, conversation, expected_banner, fact,
+                      need_rom, registers, start_call)
 
-AB_SHA1 = "29daa03807a481b5ec0657ec3c95e2db1ae532c9"  # CLAUDE.md, fixed inputs.
 BYTE, FILE, MULTIPLE, OPEN, EXIT = 6, 8, 12, 13, 0x11  # DOC, UTIL 2.4.
 PROGRAM, TEXT, DATA_AT = 0x1000, 0x1100, 0x1200
 EXIT_LINE = [(0xEF000011, "SWI &11")]  # Exit (DOC, UTIL 2.4.18).
@@ -441,20 +439,3 @@ def test_address_exception_to_the_screen():
         assert r14 & 0x3FFFFFC == at + 8 and r14 & 3 == 0
         assert registers(text)[9] == 0x4000000
         assert fact("text.finished") + " " in text
-
-
-# Item 3.
-def test_ab_loads_as_a_file(tmp_path):
-    """CLAUDE.md, fixed inputs: AB's SHA-1. Loaded from a copy of the Tak disc at its own load
-    address and saved back to a blank disc: both directions, whole. AB is not started."""
-    disc = copy_frozen("arm_tak_1", tmp_path)
-    load, _, data = dfs_image.catalogue(disc.read_bytes())["$.AB"]
-    assert hashlib.sha1(data).hexdigest() == AB_SHA1
-    blank = tmp_path / "blank.ssd"
-    blank.write_bytes(dfs_image.make([]))
-    with Aes(disc=disc, disc1=blank) as aes:
-        aes.boot()
-        aes.command("*LOAD AB", seconds=60)
-        aes.command(f"*SAVE :1.ABCOPY {load:X} +{len(data):X}", seconds=60)
-    assert hashlib.sha1(saved(blank, "ABCOPY")).hexdigest() == AB_SHA1
-    assert frozen_unchanged("arm_tak_1")

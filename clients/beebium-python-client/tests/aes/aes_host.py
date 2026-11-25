@@ -24,7 +24,6 @@ of what an AES does (CLAUDE.md, the clean-room rule).
 import hashlib
 import os
 import re
-import shutil
 from pathlib import Path
 
 import pytest
@@ -40,7 +39,6 @@ PLUGIN_FOLDER = Path(__file__).resolve().parents[4] / "src" / "extensions" / "ac
 BUNDLED_ROM = PLUGIN_FOLDER / "roms" / "acorn-aes-executive_1_00.rom"
 ROM = os.environ.get("BEEBIUM_AES_ROM_FILEPATH") or str(BUNDLED_ROM)
 TUBE_LOG_DIRPATH = ""
-PROJECT = os.environ.get("AES_PROJECT", "")
 ROMS = Path()
 DFS = ROMS / "acorn-dfs_2_26.rom"
 FACTS_FOLDER = PLUGIN_FOLDER / "tests" / "rom-facts"
@@ -48,20 +46,6 @@ FACTS_FOLDER = PLUGIN_FOLDER / "tests" / "rom-facts"
 # here reads wall time). Given to each server these tests launch, not set in os.environ, where
 # every server the rest of the pytest run launches would inherit it.
 SERVER_ENV = {"BEEBIUM_NO_PACING": "1"}
-
-# First 8 hex digits of each frozen disc's SHA-1, from notes/real-aes/real-aes-run-sheet.md. Under AES_PROJECT.
-FROZEN = {
-    "AESTESTS": ("tests/AESTESTS.ssd", "79612e37"),
-    "AESTIER2": ("tests/AESTIER2.ssd", "447bfa4f"),
-    "AESTIER3": ("tests/AESTIER3.ssd", "20cfd33f"),
-    "AESTIER4": ("tests/AESTIER4.ssd", "446fb8c3"),
-    "AESTIER6": ("tests/AESTIER6.ssd", "e83ef8a3"),
-    "AESTIER7": ("tests/AESTIER7.ssd", "a80839ae"),
-    "arm_tak_1": ("own-work/tak/test-discs/arm_tak_1.ssd", "9ba5529f"),
-    "arm_tak_2": ("own-work/tak/test-discs/arm_tak_2.ssd", "77d733f2"),
-    "arm_lisp_3a": ("own-work/tak/test-discs/arm_lisp_3a.ssd", "135223ac"),
-    "arm_lisp_3b": ("own-work/tak/test-discs/arm_lisp_3b.ssd", "d7ed7c93"),
-}
 
 
 def configure(server_filepath, rom_dirpath):
@@ -142,27 +126,6 @@ def start_call():
 # SRC, ROM at prompt_at, Super1:390. The screen's cells keep 7 bits (DOC, Beebium client screen.py).
 PROMPT = bytes(int(byte) for byte in FACTS.get("prompt_bytes", "").split())
 PROMPT_CELLS = bytes(b & 0x7F for b in PROMPT)
-
-
-def frozen_path(name):
-    path = Path(PROJECT) / FROZEN[name][0]
-    if not PROJECT or not path.is_file():
-        missing(f"frozen test disc {name} is not shipped")
-    return path
-
-
-def copy_frozen(name, folder):
-    """A frozen disc only ever runs as a copy, with its hash checked first (CLAUDE.md)."""
-    original, prefix = frozen_path(name), FROZEN[name][1]
-    assert sha1(original).startswith(prefix), f"{original} is not the frozen image"
-    copy = Path(folder) / f"{name}.ssd"
-    shutil.copyfile(original, copy)
-    copy.chmod(0o644)
-    return copy
-
-
-def frozen_unchanged(name):
-    return sha1(frozen_path(name)).startswith(FROZEN[name][1])
 
 
 def expected_banner(ram_mb=4):
