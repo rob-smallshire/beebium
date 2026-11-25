@@ -16,7 +16,7 @@
 
 // The AES inside a real Beebium Model B, in one process, for what only that can show: the
 // skew contract across a whole boot, and what Beebium does on a held Break. Built by
-// acorn-aes-coprocessor/CMakeLists.txt in the Beebium tree, not by run-tests.sh. Tied to the working ROM.
+// acorn-aes-coprocessor/CMakeLists.txt in the Beebium tree. Tied to the working ROM.
 
 #include "../beebium/AesTube.hpp"
 #include "RomCheck.hpp"

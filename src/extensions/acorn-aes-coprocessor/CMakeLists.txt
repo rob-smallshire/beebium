@@ -15,7 +15,6 @@
 # version 2.0.0, 20 November 2026.
 
 # The AES plugin, built inside a Beebium working copy, as Beebium's guide asks (section 7).
-# A copy of acorn-aes-coprocessor/ lands in src/extensions/acorn-aes-coprocessor: see tools/plugin-build.sh.
 
 # The plugin's code, built once as a static library that the plugin and the tests both link.
 set(AES_SOURCES
