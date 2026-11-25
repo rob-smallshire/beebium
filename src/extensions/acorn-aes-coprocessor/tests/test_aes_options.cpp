@@ -238,7 +238,7 @@ TEST(version_held_in_one_place, "manifest.json's version is three numbers, and e
         if (!std::regex_search(source, line, std::regex("\n// version ([^,]+), "))) continue;
         lines++;
         if (line[1] != held) {
-            printf("  %s: version %s, manifest.json %s\n", entry.path().filename().c_str(), std::string(line[1]).c_str(), held.c_str());
+            printf("  %s: version %s, manifest.json %s\n", entry.path().filename().string().c_str(), std::string(line[1]).c_str(), held.c_str());
             wrong++;
         }
     }
