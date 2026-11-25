@@ -1,0 +1,60 @@
+{
+    "name": "acorn-aes-coprocessor",
+    "version": "2.0.0",
+    "display_name": "Acorn ARM Evaluation System",
+    "description": "An Acorn ARM Evaluation System: a 6.67 MHz ARM1 processor with up to 4 MB of its own memory, connected through the Tube.",
+    "library": "acorn-aes-coprocessor",
+    "attaches_to": [
+        "tube"
+    ],
+    "cli": "tube-aes",
+    "parameters": [
+        {
+            "key": "rom",
+            "label": "Executive ROM",
+            "type": "filepath",
+            "required": true,
+            "description": "The AES Executive ROM: a 16 KB image, as a path. Beebium does not supply one."
+        },
+        {
+            "key": "ram",
+            "label": "Memory",
+            "type": "string",
+            "default": "4",
+            "choices": [
+                {
+                    "value": "2",
+                    "label": "2 MB",
+                    "description": "The AES with its memory card removed."
+                },
+                {
+                    "value": "4",
+                    "label": "4 MB",
+                    "description": "The standard AES."
+                }
+            ],
+            "required": false,
+            "description": "How much memory the AES has."
+        },
+        {
+            "key": "abort",
+            "label": "Memory aborts",
+            "type": "string",
+            "default": "off",
+            "choices": [
+                {
+                    "value": "off",
+                    "label": "Off (as hardware)",
+                    "description": "No aborts are raised."
+                },
+                {
+                    "value": "strict",
+                    "label": "Strict",
+                    "description": "An abort is raised for any access outside the emulated memory."
+                }
+            ],
+            "required": false,
+            "description": "An emulator aid: whether the ARM is told when it accesses memory that isn't emulated."
+        }
+    ]
+}

@@ -1,0 +1,63 @@
+# Facts about one ROM, for the tests. The file's name is the ROM's SHA-1. A ROM with no file here
+# has its tied tests skipped. One key=value on each line; everything after the first = is the
+# value, spaces included. Any other ROM needs its own file (notes/acceptance-suite.md).
+# This one: Executive 1.00, 6 June 1986, an image from mdfs.net.
+# Places and texts read from its bytes (SRC); the source-line labels are the standard ROM's,
+# so INF for this one until a run agrees.
+
+# Owner, 18 Nov 2026: a facts file ships when its ROM boots and every server test passes or is
+# skipped for a stated reason, such as a feature the ROM lacks (DECISIONS.md).
+ships=yes
+
+# SRC, ROM bytes. The Executive's banner, and the prompt's bytes (Super1:390).
+banner_at=0x17CA
+prompt_at=0x1A80
+prompt_bytes=132 157 135 65 42 156
+
+# SRC, ROM bytes: Memory's first load, the first such word after the text (Super1 MEMP1).
+memory_load_word=0xE499A000
+text.memory_anchor=ASCII Data
+
+# INF, the standard ROM's value, not read from this one: the default SWI handler lies below this.
+workspace_limit=0xE00
+
+# INF, seen on the emulator (step 5.8, 18 Nov 2026), not read from the ROM: the first R2 call after
+# the boot is OSBYTE &87 (X &90, Y 0), not the standard ROM's OSBYTE 253; the tests wait for it.
+start_call=6 144 0 135
+
+# go_unmapped_report: none. Seen on the emulator (step 5.8, 18 Nov 2026), not read from the ROM:
+# GO 400000 under abort strict gives the branch-through-0 report, as with abort off, so GO cannot
+# tell the two apart on this ROM; the test that needs it skips.
+
+# text.: must appear whole in the ROM, and test_aes_rom_facts.cpp checks that they do.
+text.banner=Acorn ARM Second Processor 
+text.dump=Register dump (stored at &E40) is:
+text.undefined=Undefined instruction at 
+text.data_abort=Abort on data fetch at 
+text.prefetch_abort=Abort on prefetch at 
+text.address_exception=Address exception at 
+text.break_point=Stopped at break point at 
+text.irq_while=IRQ, while at
+text.supervisor_version=Supervisor 1.00
+text.supervisor_name=  Supervisor
+text.finished=Finished after
+text.escape=Escape
+# text.memory_limit: not in this ROM (it has no Cache or Soft start); tests that need it skip.
+# text.soft_start: not in this ROM (it has no Cache or Soft start); tests that need it skip.
+# SRC, Kernel RESET1: what address 0 leads to after the boot (the branch at Kernel ADR R0,(RESET1-8)).
+text.branch_zero=Entering Supervisor because of branch through 0
+
+# said.: whole lines the ROM puts together from parts, so not found whole in it. Each has its
+# own label just above it, and test_aes_rom_facts.cpp checks each quoted part (an earlier review's gap: unlabelled said. lines).
+# SRC, ROM parts, Middle:618, 624, 645: "Mode " + "USR" (from MODETB) + " flags set: ", then the flags.
+said.mode_usr=Mode USR flags set: 
+# SRC, ROM parts, Middle:618, 624, 645: "Mode " + "SVC" (from MODETB) + " flags set: ", then the flags.
+said.mode_svc=Mode SVC flags set: 
+# SRC, ROM parts, Super1:1137, 1145: "Store initialised to &" + R0 in eight hex digits, &EE000000 by default (MOVNE R0,#&EE000000).
+said.store=Store initialised to &EE000000
+# SRC, ROM parts, Super1:733-734: "Buffering disabled, memory limit set to &" + R2, the RAM top, in eight hex digits: &00400000 with 4 MB fitted (INF, the plugin's default ram 4).
+said.nobuff=Buffering disabled, memory limit set to &00400000
+# SRC, ROM parts, Super1:713-714: "Buffering enabled, memory limit set to &" + R2 - 4096 - 16*1024: &00400000 - &5000 = &003FB000 with 4 MB fitted (INF, the plugin's default ram 4).
+said.buff=Buffering enabled, memory limit set to &003FB000
+# SRC, ROM parts, Super1:1071-1106: "File " + name + " copied from " + source + " to " + destination + " as " + new name + ", " + count + " bytes". D100, C100, DISC and 100 are the test's own.
+said.transfer=File D100 copied from DISC to DISC as C100, 100 bytes
