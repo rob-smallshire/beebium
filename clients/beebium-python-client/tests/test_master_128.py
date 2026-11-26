@@ -399,4 +399,4 @@ def test_the_master_lists_its_presets(master_command: list[str]) -> None:
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stderr
     ids = {line.split("\t")[0] for line in result.stdout.splitlines()[1:]}
-    assert {"master-128", "master-128-mos-3-50", "master-128-65c102-copro"} <= ids
+    assert {"master-128", "master-128-mos-3-50", "master-128-65c102-copro", "master-128-aes-copro"} <= ids

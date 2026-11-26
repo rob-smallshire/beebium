@@ -50,6 +50,10 @@ beebium-model-b start --tube-65c02 rom=/path/to/client.rom   # alternative clien
 The Tube socket accepts one coprocessor; giving more than one of these flags
 is refused.
 
+Two system presets fit the AES: `model-b-disc-aes-copro` on a Model B with
+the 1770 DFS, and `master-128-aes-copro` on a Master 128's external Tube,
+where the AES's own box was cabled (not the internal one).
+
 A coprocessor is not special to `start`: it is an extension, and every
 subcommand that runs the machine builds it through the one shared
 `assemble_machine` and drives it through the one shared `step_emulation` (see

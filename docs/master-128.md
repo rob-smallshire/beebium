@@ -333,6 +333,7 @@ the banks are filled with `--sideways`.
 | `master-128` | MOS 3.20 and its ROM set, the Welcome Guide's CMOS (the model's default) |
 | `master-128-mos-3-50` | MOS 3.50 and its ROM set: DFS 2.45, ViewSheet B1.01, Edit 1.50r, BASIC IV r32, ADFS 2.03, View B3.3, Terminal 1.20 for 3.50. The preset names only the MOS; its banks follow it |
 | `master-128-65c102-copro` | MOS 3.20 with the 65C102 Co-processor on the internal Tube, a Master Turbo in all but name |
+| `master-128-aes-copro` | MOS 3.20 with the Acorn ARM Evaluation System (an ARM1 with 4 MB) on the external Tube, where its own box was cabled |
 
 Banks 9 to 15 are the MOS chip's, so they follow the MOS
 (`Master128Hardware::MOS_ROM_SETS`, keyed by the MOS half's bare name). A bank

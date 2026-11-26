@@ -595,6 +595,25 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
         --machine-description "Model B with Integra-B (Disc), {coprocessor-cpu} Copro ({coprocessor-clock})"
         --fdc acorn-1770 --sideways slot=1:type=rom:image=acorn-dfs_2_26.rom --tube-65c02)
 endif()
+# The Acorn ARM Evaluation System: an ARM1 with 4 MB of its own memory, in
+# a box of its own on the Tube cable, so on the Master's external Tube, not
+# its internal one. The Executive ROM ships with the plugin.
+if(TARGET beebium_ext_aes_plugin)
+    add_plugin_preset(model-b beebium_ext_aes_plugin
+        "model-b-disc-aes-copro"
+        "Model B (Disc), ARM1 Copro (6.66 MHz)" "1986"
+        DESCRIPTION "Model B disc, ARM Evaluation System: ARM1 copro (6.66 MHz, 4 MB)"
+        THUMBNAIL_DELAY 6
+        --machine-description "Model B (Disc), {coprocessor-cpu} Copro ({coprocessor-clock})"
+        --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom --tube-aes)
+    add_plugin_preset(master-128 beebium_ext_aes_plugin
+        "master-128-aes-copro"
+        "Master 128, ARM1 Copro (6.66 MHz)" "1986"
+        DESCRIPTION "Master 128, MOS 3.20, ARM Evaluation System: ARM1 copro (6.66 MHz, 4 MB) on the external Tube"
+        THUMBNAIL_DELAY 6
+        --machine-description "Master 128, {coprocessor-cpu} Copro ({coprocessor-clock})"
+        --tube-aes)
+endif()
 
 # The Hybrid Music 5000 preset: a B+ 128K with the synthesiser on the 1 MHz
 # bus (JIM pages &30-&3F), ready for AMPLE. The AMPLE Nucleus ROM is in slot 4

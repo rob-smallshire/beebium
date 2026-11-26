@@ -447,6 +447,7 @@ TEST_CASE("list-presets: every bundled preset's facets are derived from what it 
         {"model-b-disc", facets("Model B", "None", "1770", "None", floppy, {})},
         {"model-b-8271-disc", facets("Model B", "None", "8271", "None", floppy, {})},
         {"model-b-disc-65c02-copro", facets("Model B", "65C02", "1770", "None", floppy, {})},
+        {"model-b-disc-aes-copro", facets("Model B", "AES", "1770", "None", floppy, {})},
         {"model-b-disc-aun-80", facets("Model B", "None", "1770", "AUN", floppy, {})},
         {"model-b-disc-aun-auto", facets("Model B", "None", "1770", "AUN", floppy, {})},
         {"model-b-disc-eco-81", facets("Model B", "None", "1770", "Piconet", floppy, {})},
@@ -468,6 +469,7 @@ TEST_CASE("list-presets: every bundled preset's facets are derived from what it 
         {"master-128", facets("Master 128", "None", "1770", "None", floppy, {})},
         {"master-128-mos-3-50", facets("Master 128", "None", "1770", "None", floppy, {})},
         {"master-128-65c102-copro", facets("Master 128", "65C102", "1770", "None", floppy, {})},
+        {"master-128-aes-copro", facets("Master 128", "AES", "1770", "None", floppy, {})},
     };
     for (const auto& [id, want] : expected) {
         INFO(id);
@@ -535,6 +537,15 @@ TEST_CASE("list-presets: a row's keywords are its facet sources' words, in facet
         REQUIRE(rows.count(id) == 1);
         const auto& keywords = rows.at(id).at("keywords");
         CHECK(std::find(keywords.begin(), keywords.end(), "6502") != keywords.end());
+    }
+
+    // A search for "ARM1" or "Evaluation System" finds the AES presets.
+    for (const char* id : {"model-b-disc-aes-copro", "master-128-aes-copro"}) {
+        INFO(id);
+        REQUIRE(rows.count(id) == 1);
+        const auto& keywords = rows.at(id).at("keywords");
+        CHECK(std::find(keywords.begin(), keywords.end(), "ARM1") != keywords.end());
+        CHECK(std::find(keywords.begin(), keywords.end(), "Evaluation System") != keywords.end());
     }
 }
 
@@ -1561,6 +1572,10 @@ TEST_CASE("capture-screenshot runs the Tube coprocessor from a preset",
         // coprocessor is seeded *CONFIGURE TUBE (#203).
         {"beebium-model-b-integra-b", "model-b-integra-b-disc-65c02-copro",
          "model-b-integra-b-disc",   "acorn-65c02-coprocessor"},
+        {"beebium-model-b",          "model-b-disc-aes-copro",
+         "model-b-disc",             "acorn-aes-coprocessor"},
+        {"beebium-master-128",       "master-128-aes-copro",
+         "master-128",               "acorn-aes-coprocessor"},
     };
 
     auto read_file = [](const std::filesystem::path& p) {
