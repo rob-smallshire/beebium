@@ -24,6 +24,7 @@
 
 #include "beebium/Machines.hpp"
 #include "beebium/service/Server.hpp"
+#include "beebium/disc/DiscControllerRegistry.hpp"
 #include "beebium/disc/DiscLoader.hpp"
 #include "beebium/FrameAllocator.hpp"
 #include "beebium/FrameBuffer.hpp"
@@ -134,7 +135,12 @@ std::vector<uint8_t> load_rom(const std::string& filepath) {
 // Test fixture for Model B
 class IndicatorTestFixtureModelB {
 public:
-    IndicatorTestFixtureModelB() {
+    // A Model B's drive LEDs come with its disc controller (#292), fitted
+    // here, before the indicators are sealed, when `fit_acorn_1770`.
+    explicit IndicatorTestFixtureModelB(bool fit_acorn_1770 = false) {
+        if (fit_acorn_1770) {
+            machine_.state().memory.install_acorn_1770();
+        }
         // Load ROMs
 #ifdef BEEBIUM_ROM_DIR
         auto mos = load_rom(std::string(BEEBIUM_ROM_DIR) + "/acorn-mos_1_20.rom");
@@ -1105,6 +1111,10 @@ TEMPLATE_TEST_CASE("Every model but the Master lists the cassette motor LED betw
                    beebium::ModelBRomRamBoard, beebium::ModelBAtplSidewise, beebium::ModelBWatfordRomRam,
                    beebium::ModelBIntegraB) {
     TestType machine;
+    // A socketed model's drives come with its controller (#292).
+    if constexpr (beebium::HasDiscControllerSocket<typename TestType::Memory>) {
+        machine.state().memory.install_acorn_1770();
+    }
     auto& indicators = machine.state().memory.indicators;
     const auto names = indicators.names();
     REQUIRE(names.size() >= 5);
@@ -1115,6 +1125,52 @@ TEMPLATE_TEST_CASE("Every model but the Master lists the cassette motor LED betw
     CHECK(metadata.at("label") == "CASSETTE MOTOR");
     CHECK(metadata.at("color") == "625nm");
     CHECK(metadata.at("shape") == "domed");
+}
+
+// =============================================================================
+// Drive LEDs come with a disc controller (#292)
+// =============================================================================
+
+TEMPLATE_TEST_CASE("A socketed model with an empty FDC socket lists no drive LEDs",
+                   "[indicator][disc][fdc]", beebium::ModelB, beebium::ModelBRomRamBoard,
+                   beebium::ModelBAtplSidewise, beebium::ModelBWatfordRomRam, beebium::ModelBIntegraB) {
+    TestType machine;
+    CHECK(machine.state().memory.indicators.names() ==
+          std::vector<std::string>{"caps-lock-led", "shift-lock-led", "cassette-motor-led"});
+}
+
+TEST_CASE("A Model B with the Acorn 1770 fitted lists its two drive LEDs after the cassette LED",
+          "[indicator][disc][fdc]") {
+    beebium::ModelB machine;
+    machine.state().memory.install_acorn_1770();
+    CHECK(machine.state().memory.indicators.names() ==
+          std::vector<std::string>{"caps-lock-led", "shift-lock-led", "cassette-motor-led",
+                                   "floppy-0-activity-led", "floppy-1-activity-led"});
+}
+
+TEST_CASE("A Model B with the Acorn 8271 fitted lists its two drive LEDs", "[indicator][disc][fdc]") {
+    beebium::ModelB machine;
+    machine.state().memory.install_disc_controller(beebium::DiscControllerRegistry::create("acorn-8271"),
+                                                   "acorn-8271");
+    CHECK(machine.state().memory.indicators.names() ==
+          std::vector<std::string>{"caps-lock-led", "shift-lock-led", "cassette-motor-led",
+                                   "floppy-0-activity-led", "floppy-1-activity-led"});
+}
+
+TEMPLATE_TEST_CASE("A model with a built-in 1770 lists its two drive LEDs without any --fdc",
+                   "[indicator][disc][fdc]", beebium::ModelBPlus, beebium::ModelBPlus128K) {
+    TestType machine;
+    CHECK(machine.state().memory.indicators.names() ==
+          std::vector<std::string>{"caps-lock-led", "shift-lock-led", "cassette-motor-led",
+                                   "floppy-0-activity-led", "floppy-1-activity-led"});
+}
+
+TEST_CASE("The Master 128 lists its built-in 1770's two drive LEDs and no cassette LED",
+          "[indicator][disc][fdc][master128]") {
+    beebium::Master128 machine;
+    CHECK(machine.state().memory.indicators.names() ==
+          std::vector<std::string>{"caps-lock-led", "shift-lock-led", "floppy-0-activity-led",
+                                   "floppy-1-activity-led"});
 }
 
 // The Master 128's keyboard has no cassette motor LED (#311): its lock LEDs are
@@ -1132,7 +1188,7 @@ TEST_CASE("The Master 128 lists no cassette motor LED", "[indicator][cassette][m
 
 TEST_CASE("ListIndicators lists the cassette motor LED between SHIFT LOCK and FDD 0",
           "[grpc][indicator][cassette]") {
-    IndicatorTestFixtureModelB fixture;
+    IndicatorTestFixtureModelB fixture{true};
     grpc::ClientContext context;
     beebium::ListIndicatorsRequest request;
     beebium::ListIndicatorsResponse response;

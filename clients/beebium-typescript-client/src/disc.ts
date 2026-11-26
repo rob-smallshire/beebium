@@ -540,6 +540,11 @@ export class Disc {
     /**
      * Install a disc controller into the socket.
      *
+     * The controller is fixed for the life of a running machine: a running
+     * server refuses every change, which throws a DiscError with its reason.
+     * Choose the controller when the machine is created (--fdc, or a preset's
+     * storage.fdc_socket).
+     *
      * @param controllerId - CLI identifier (e.g. "acorn-1770").
      * @returns The controller type name that was installed.
      */

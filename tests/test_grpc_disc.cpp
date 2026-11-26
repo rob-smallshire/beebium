@@ -1,4 +1,4 @@
-// Copyright © 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright © 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -20,6 +20,7 @@
 #include "test_temp_paths.hpp"
 
 #include "beebium/Machines.hpp"
+#include "beebium/disc/DiscControllerRegistry.hpp"
 #include "beebium/disc/DiscUrl.hpp"
 #include "beebium/service/Server.hpp"
 
@@ -101,7 +102,10 @@ private:
 // Test fixture for Model B (which does NOT have disc drives)
 class DiscTestFixtureModelB {
 public:
-    DiscTestFixtureModelB() {
+    // The machine as assembled before start, its indicators open, unless
+    // `running`: then they are sealed, as on a started server. `controller_id`,
+    // when not empty, is fitted first, as --fdc fits it.
+    explicit DiscTestFixtureModelB(bool running = false, const std::string& controller_id = "") {
         // Load ROMs
 #ifdef BEEBIUM_ROM_DIR
         auto mos = load_rom(std::string(BEEBIUM_ROM_DIR) + "/acorn-mos_1_20.rom");
@@ -109,7 +113,14 @@ public:
         std::copy(mos.begin(), mos.end(), machine_.state().memory.mos_rom.data());
         machine_.state().memory.load_basic(basic.data(), basic.size());
 #endif
+        if (!controller_id.empty()) {
+            machine_.state().memory.install_disc_controller(
+                beebium::DiscControllerRegistry::create(controller_id), controller_id);
+        }
         machine_.reset();
+        if (running) {
+            machine_.state().memory.indicators.start();
+        }
 
         // Start server on a dynamically allocated port
         server_ = std::make_unique<beebium::service::Server<beebium::ModelB>>(
@@ -316,8 +327,49 @@ TEST_CASE("DiscService InsertDisc fails on Model B", "[grpc][disc]") {
 
     REQUIRE(status.ok());
     CHECK_FALSE(response.success());
-    CHECK(response.error().find("no disc controller") != std::string::npos);
+    CHECK(response.error() ==
+          "This machine has no disc controller, so it has no drive to insert a disc into.");
     CHECK(response.kind() == beebium::DISC_ERROR_KIND_NO_CONTROLLER);
+}
+
+TEST_CASE("DiscService EjectDisc on a Model B with no disc controller is refused (#292)", "[grpc][disc]") {
+    DiscTestFixtureModelB fixture{true};
+
+    grpc::ClientContext context;
+    beebium::EjectDiscRequest request;
+    request.set_drive(0);
+    beebium::EjectDiscResponse response;
+
+    REQUIRE(fixture.stub().EjectDisc(&context, request, &response).ok());
+    CHECK_FALSE(response.accepted());
+    CHECK(response.error() == "This machine has no disc controller, so it has no drives.");
+    CHECK(response.kind() == beebium::DISC_ERROR_KIND_NO_CONTROLLER);
+}
+
+TEST_CASE("DiscService GetDriveStatus on a running Model B with no disc controller lists no drives (#292)",
+          "[grpc][disc]") {
+    DiscTestFixtureModelB fixture{true};
+
+    grpc::ClientContext context;
+    beebium::GetDriveStatusRequest request;
+    beebium::GetDriveStatusResponse response;
+    REQUIRE(fixture.stub().GetDriveStatus(&context, request, &response).ok());
+    CHECK_FALSE(response.has_disc_controller());
+    CHECK(response.is_socketed());
+    CHECK(response.drives_size() == 0);
+}
+
+TEST_CASE("DiscService GetDriveStatus on a running Model B with the 1770 fitted lists two drives (#292)",
+          "[grpc][disc]") {
+    DiscTestFixtureModelB fixture{true, "acorn-1770"};
+
+    grpc::ClientContext context;
+    beebium::GetDriveStatusRequest request;
+    beebium::GetDriveStatusResponse response;
+    REQUIRE(fixture.stub().GetDriveStatus(&context, request, &response).ok());
+    CHECK(response.has_disc_controller());
+    CHECK(response.installed_controller_id() == "acorn-1770");
+    CHECK(response.drives_size() == 2);
 }
 
 TEST_CASE("DiscService InsertDisc classifies an empty image as EMPTY", "[grpc][disc]") {
@@ -705,7 +757,7 @@ TEST_CASE("DiscService installs the Acorn 8271 in a Model B", "[grpc][disc][i827
 // InstallDiscController tests
 // ============================================================================
 
-TEST_CASE("DiscService InstallDiscController works on Model B (socketed)", "[grpc][disc]") {
+TEST_CASE("DiscService InstallDiscController works on Model B (socketed) before start", "[grpc][disc]") {
     DiscTestFixtureModelB fixture;
 
     // Initially no controller
@@ -749,7 +801,7 @@ TEST_CASE("DiscService InstallDiscController works on Model B (socketed)", "[grp
     }
 }
 
-TEST_CASE("DiscService InstallDiscController with 'none' removes controller", "[grpc][disc]") {
+TEST_CASE("DiscService InstallDiscController with 'none' removes controller before start", "[grpc][disc]") {
     DiscTestFixtureModelB fixture;
 
     // Install controller first
@@ -787,6 +839,86 @@ TEST_CASE("DiscService InstallDiscController with 'none' removes controller", "[
         CHECK(response.is_socketed());
         CHECK(response.installed_controller_id().empty());
     }
+}
+
+namespace {
+
+beebium::InstallDiscControllerResponse install_controller(beebium::DiscService::Stub& stub,
+                                                          const std::string& controller_id) {
+    grpc::ClientContext context;
+    beebium::InstallDiscControllerRequest request;
+    request.set_controller_id(controller_id);
+    beebium::InstallDiscControllerResponse response;
+    REQUIRE(stub.InstallDiscController(&context, request, &response).ok());
+    return response;
+}
+
+beebium::GetDriveStatusResponse drive_status(beebium::DiscService::Stub& stub) {
+    grpc::ClientContext context;
+    beebium::GetDriveStatusRequest request;
+    beebium::GetDriveStatusResponse response;
+    REQUIRE(stub.GetDriveStatus(&context, request, &response).ok());
+    return response;
+}
+
+constexpr const char* RUNNING_REFUSAL =
+    "This machine is running, so its disc controller cannot be changed; "
+    "choose the controller when the machine is created.";
+
+}  // namespace
+
+TEST_CASE("DiscService InstallDiscController cannot fit a controller in a running machine (#292)",
+          "[grpc][disc]") {
+    DiscTestFixtureModelB fixture{true};
+
+    const auto response = install_controller(fixture.stub(), "acorn-1770");
+    CHECK_FALSE(response.success());
+    CHECK(response.error() == RUNNING_REFUSAL);
+
+    const auto status = drive_status(fixture.stub());
+    CHECK_FALSE(status.has_disc_controller());
+    CHECK(status.drives_size() == 0);
+    CHECK(fixture.machine().state().memory.indicators.names() ==
+          std::vector<std::string>{"caps-lock-led", "shift-lock-led", "cassette-motor-led"});
+}
+
+TEST_CASE("DiscService InstallDiscController cannot exchange or remove a running machine's controller (#292)",
+          "[grpc][disc]") {
+    DiscTestFixtureModelB fixture{true, "acorn-1770"};
+
+    for (const std::string controller_id : {"acorn-8271", "acorn-1770", "none", ""}) {
+        CAPTURE(controller_id);
+        const auto response = install_controller(fixture.stub(), controller_id);
+        CHECK_FALSE(response.success());
+        CHECK(response.error() == RUNNING_REFUSAL);
+    }
+
+    const auto status = drive_status(fixture.stub());
+    CHECK(status.has_disc_controller());
+    CHECK(status.installed_controller_id() == "acorn-1770");
+    CHECK(status.drives_size() == 2);
+}
+
+TEST_CASE("DiscService InstallDiscController before start brings drives a disc goes into (#292)",
+          "[grpc][disc]") {
+    auto disc_path = get_test_disc_path();
+    if (!std::filesystem::exists(disc_path)) {
+        SKIP("Test disc image not available");
+    }
+    DiscTestFixtureModelB fixture;
+    REQUIRE(install_controller(fixture.stub(), "acorn-1770").success());
+
+    grpc::ClientContext context;
+    beebium::InsertDiscRequest request;
+    request.set_drive(1);
+    request.set_url(disc_path.string());
+    beebium::InsertDiscResponse response;
+    REQUIRE(fixture.stub().InsertDisc(&context, request, &response).ok());
+    CHECK(response.success());
+
+    const auto status = drive_status(fixture.stub());
+    REQUIRE(status.drives_size() == 2);
+    CHECK(status.drives(1).state() != beebium::DISC_DRIVE_STATE_EMPTY);
 }
 
 TEST_CASE("DiscService InstallDiscController fails with unknown controller", "[grpc][disc]") {

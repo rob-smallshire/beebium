@@ -238,7 +238,7 @@ TEST_CASE("Skew: exact accesses and bounded interval across the CE2023 load",
 
     auto disc_result = load_disc_from_url_or_filepath(disc_filepath.string());
     REQUIRE(disc_result.success());
-    machine.memory().disc_drive_0.insert(std::move(disc_result.disc));
+    machine.memory().disc_drive(0)->insert(std::move(disc_result.disc));
 
     machine.state().memory.tube_socket.enable();
     machine.memory().set_auto_boot(true);

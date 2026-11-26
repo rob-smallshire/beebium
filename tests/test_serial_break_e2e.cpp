@@ -136,7 +136,7 @@ struct BootedBeeb {
 
         auto disc = load_disc_from_url_or_filepath(ssd.string());
         REQUIRE(disc.success());
-        machine.memory().disc_drive_0.insert(std::move(disc.disc));
+        machine.memory().disc_drive(0)->insert(std::move(disc.disc));
 
         machine.memory().serial_socket.set_device(&device);
         machine.memory().enable_video_output();

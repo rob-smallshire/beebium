@@ -90,7 +90,7 @@ SuiteResult run_timing_suite(const std::string& disc_filename,
     auto disc_filepath = assets_dirpath / "discs" / disc_filename;
     auto disc_result = load_disc_from_url_or_filepath(disc_filepath.string());
     REQUIRE(disc_result.success());
-    machine.memory().disc_drive_0.insert(std::move(disc_result.disc));
+    machine.memory().disc_drive(0)->insert(std::move(disc_result.disc));
 
     machine.memory().set_auto_boot(true);
     machine.reset();

@@ -1,4 +1,4 @@
-// Copyright © 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright © 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -218,11 +218,10 @@ public:
     // Disc subsystem
     // Registered after the lock LEDs and before the drives' (CassetteMotorLed.hpp).
     CassetteMotorLed cassette_motor_led{indicators};
-    DiscDrive disc_drive_0{indicators, "floppy-0-activity-led", "FDD 0", "568nm"};
-    DiscDrive disc_drive_1{indicators, "floppy-1-activity-led", "FDD 1", "568nm"};
 
-    // Disc controller socket at 0xFE80-0xFE9F
-    DiscControllerSocket disc_socket;
+    // Disc controller socket at 0xFE80-0xFE9F. A controller fitted in it
+    // brings the two drives, which the socket owns (#292).
+    DiscControllerSocket disc_socket{indicators};
 
     // Registry ID of installed controller
     std::string installed_controller_id_;
@@ -593,8 +592,6 @@ public:
     void install_disc_controller(std::unique_ptr<DiscControllerInterface> controller,
                                  std::string_view controller_id = "") {
         disc_socket.install(std::move(controller));
-        disc_socket.attach_drive(0, &disc_drive_0);
-        disc_socket.attach_drive(1, &disc_drive_1);
         installed_controller_id_ = controller_id;
     }
 
@@ -609,6 +606,13 @@ public:
 
     bool has_disc_controller() const {
         return disc_socket.has_controller();
+    }
+
+    // The drive the fitted controller brings (#292), or nullptr with the
+    // socket empty: a machine without a disc controller has no drives.
+    // @param drive_num Drive number (0 or 1)
+    DiscDrive* disc_drive(int drive_num) const {
+        return disc_socket.attached_drive(drive_num);
     }
 
     std::string_view installed_controller_id() const {

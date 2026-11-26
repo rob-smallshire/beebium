@@ -76,7 +76,7 @@ struct DfsMachine {
                                                   "acorn-8271");
         auto result = load_disc_from_url_or_filepath(disc_filepath.string());
         REQUIRE(result.success());
-        machine.memory().disc_drive_0.insert(std::move(result.disc));
+        machine.memory().disc_drive(0)->insert(std::move(result.disc));
 
         machine.memory().enable_video_output();
         machine.reset();

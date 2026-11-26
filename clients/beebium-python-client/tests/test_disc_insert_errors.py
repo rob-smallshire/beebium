@@ -152,3 +152,77 @@ def test_empty_disc_reports_empty(
 
     assert "Empty disc image" in str(excinfo.value)
     assert excinfo.value.kind == DiscErrorKind.EMPTY
+
+
+# A disc controller brings two drives (#292): a Model B with an empty FDC
+# socket has none, so no drive LEDs, no drives to report and none to insert a
+# disc into. Its controller is fixed while it runs.
+
+
+@pytest.fixture
+def bbc_discless(
+    mos_filepath: Path,
+    basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
+) -> Iterator[Beebium]:
+    """A Model B with no disc controller (no --fdc)."""
+    try:
+        with Beebium.launch(
+            mos_filepath=mos_filepath,
+            basic_filepath=basic_filepath,
+            server=beebium_server_filepath,
+            startup_timeout=20.0,
+        ) as bbc:
+            yield bbc
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+
+
+def test_discless_model_b_lists_no_drive_leds(bbc_discless: Beebium) -> None:
+    names = [info.name for info in bbc_discless.indicators.list()]
+    assert names == ["caps-lock-led", "shift-lock-led", "cassette-motor-led"]
+
+
+def test_model_b_with_1770_lists_its_two_drive_leds(bbc_disc: Beebium) -> None:
+    names = [info.name for info in bbc_disc.indicators.list()]
+    assert names[:5] == [
+        "caps-lock-led",
+        "shift-lock-led",
+        "cassette-motor-led",
+        "floppy-0-activity-led",
+        "floppy-1-activity-led",
+    ]
+
+
+def test_discless_model_b_reports_no_controller_and_no_drives(
+    bbc_discless: Beebium,
+) -> None:
+    status = bbc_discless.disc.status
+    assert not status.has_disc_controller
+    assert status.is_socketed
+    assert status.drives == ()
+
+
+def test_discless_model_b_refuses_a_disc(
+    bbc_discless: Beebium, genuine_ssd_filepath: Path
+) -> None:
+    with pytest.raises(DiscError) as excinfo:
+        bbc_discless.disc.drive(0).insert(genuine_ssd_filepath)
+
+    assert (
+        "This machine has no disc controller, so it has no drive to insert a disc into."
+        in str(excinfo.value)
+    )
+    assert excinfo.value.kind == DiscErrorKind.NO_CONTROLLER
+
+
+def test_running_machine_refuses_to_change_its_disc_controller(
+    bbc_discless: Beebium,
+) -> None:
+    with pytest.raises(DiscError) as excinfo:
+        bbc_discless.disc.install_controller("acorn-1770")
+
+    assert "cannot be changed; choose the controller when the machine is created" in str(
+        excinfo.value
+    )
+    assert not bbc_discless.disc.status.has_disc_controller

@@ -301,6 +301,16 @@ public:
     DiscDrive disc_drive_0{indicators, "floppy-0-activity-led", "FDD 0", "568nm"};
     DiscDrive disc_drive_1{indicators, "floppy-1-activity-led", "FDD 1", "568nm"};
 
+    // The drive the built-in controller brings (#292): it has two, always.
+    // @param drive_num Drive number (0 or 1)
+    // @return The drive, or nullptr with drive_num not 0 or 1
+    DiscDrive* disc_drive(int drive_num) {
+        return drive_num == 0 ? &disc_drive_0 : drive_num == 1 ? &disc_drive_1 : nullptr;
+    }
+    const DiscDrive* disc_drive(int drive_num) const {
+        return drive_num == 0 ? &disc_drive_0 : drive_num == 1 ? &disc_drive_1 : nullptr;
+    }
+
     EconetSocket econet_socket;
     SerialSocket serial_socket;
 

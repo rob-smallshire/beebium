@@ -77,18 +77,16 @@ public:
     explicit DiscServiceImpl(MachineType& machine)
         : machine_(machine)
     {
-        if constexpr (HasDiscDrives<typename MachineType::Memory>) {
-            attach_observer(machine_.state().memory.disc_drive_0, 0);
-            attach_observer(machine_.state().memory.disc_drive_1, 1);
-        }
+        attach_observers();
     }
 
     ~DiscServiceImpl() override {
         // The drives outlive this service, so stop them calling into a
         // half-destroyed object.
         if constexpr (HasDiscDrives<typename MachineType::Memory>) {
-            machine_.state().memory.disc_drive_0.set_observer(nullptr);
-            machine_.state().memory.disc_drive_1.set_observer(nullptr);
+            for (uint32_t n : {0u, 1u}) {
+                if (auto* drive = drive_at(n)) drive->set_observer(nullptr);
+            }
         }
         broker_.close();
     }
@@ -107,14 +105,14 @@ public:
 
         if constexpr (!HasDiscDrives<typename MachineType::Memory>) {
             response->set_success(false);
-            response->set_error("Machine has no disc controller");
+            response->set_error(NO_CONTROLLER_SENTENCE);
             response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
             return grpc::Status::OK;
         } else {
             // Check if controller is present (Model B+ always, Model B via socket)
             if (!disc_controller_present(machine_.state().memory)) {
                 response->set_success(false);
-                response->set_error("Machine has no disc controller");
+                response->set_error(NO_CONTROLLER_SENTENCE);
                 response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
                 return grpc::Status::OK;
             }
@@ -127,9 +125,7 @@ public:
                 return grpc::Status::OK;
             }
 
-            DiscDrive& drive = (drive_num == 0)
-                ? machine_.state().memory.disc_drive_0
-                : machine_.state().memory.disc_drive_1;
+            DiscDrive& drive = *drive_at(drive_num);
 
             // Loading into an occupied drive is refused rather than made to
             // work. Doing it for the caller would mean ejecting the disc
@@ -186,10 +182,17 @@ public:
 
         if constexpr (!HasDiscDrives<typename MachineType::Memory>) {
             response->set_accepted(false);
-            response->set_error("Machine has no disc controller");
+            response->set_error(NO_DRIVES_SENTENCE);
             response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
             return grpc::Status::OK;
         } else {
+            if (!disc_controller_present(machine_.state().memory)) {
+                response->set_accepted(false);
+                response->set_error(NO_DRIVES_SENTENCE);
+                response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
+                return grpc::Status::OK;
+            }
+
             uint32_t drive_num = request->drive();
             if (drive_num > 1) {
                 response->set_accepted(false);
@@ -198,9 +201,7 @@ public:
                 return grpc::Status::OK;
             }
 
-            DiscDrive& drive = (drive_num == 0)
-                ? machine_.state().memory.disc_drive_0
-                : machine_.state().memory.disc_drive_1;
+            DiscDrive& drive = *drive_at(drive_num);
 
             if (drive.state() == DriveState::Empty) {
                 response->set_accepted(false);
@@ -250,10 +251,17 @@ public:
 
         if constexpr (!HasDiscDrives<typename MachineType::Memory>) {
             response->set_cancelled(false);
-            response->set_error("Machine has no disc controller");
+            response->set_error(NO_DRIVES_SENTENCE);
             response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
             return grpc::Status::OK;
         } else {
+            if (!disc_controller_present(machine_.state().memory)) {
+                response->set_cancelled(false);
+                response->set_error(NO_DRIVES_SENTENCE);
+                response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
+                return grpc::Status::OK;
+            }
+
             uint32_t drive_num = request->drive();
             if (drive_num > 1) {
                 response->set_cancelled(false);
@@ -262,9 +270,7 @@ public:
                 return grpc::Status::OK;
             }
 
-            DiscDrive& drive = (drive_num == 0)
-                ? machine_.state().memory.disc_drive_0
-                : machine_.state().memory.disc_drive_1;
+            DiscDrive& drive = *drive_at(drive_num);
 
             // Only touches the drive's state word, but it shares a thread
             // with everything else that does, so it is serialised the same
@@ -328,15 +334,13 @@ public:
                         response->set_installed_controller_id("");  // Built-in, not from registry
                     }
 
-                    // Report drive status (only drives connected to controller)
-                    fill_drive_status(response->add_drives(), 0,
-                        machine_.state().memory.disc_drive_0);
-                    fill_drive_status(response->add_drives(), 1,
-                        machine_.state().memory.disc_drive_1);
+                    // The two drives the controller brings
+                    fill_drive_status(response->add_drives(), 0, *drive_at(0));
+                    fill_drive_status(response->add_drives(), 1, *drive_at(1));
                 } else {
                     response->set_controller_type("");
                     response->set_installed_controller_id("");
-                    // Don't report drives if no controller to use them
+                    // No controller, so no drives (#292)
                 }
             });
 
@@ -388,7 +392,7 @@ public:
 
         if constexpr (!HasDiscDrives<typename MachineType::Memory>) {
             response->set_success(false);
-            response->set_error("Machine has no disc controller");
+            response->set_error(NO_DRIVES_SENTENCE);
             return grpc::Status::OK;
         } else {
             // The controller reads this flag from the emulation thread; park
@@ -457,6 +461,17 @@ public:
             response->set_error("Machine has built-in disc controller (not socketed)");
             return grpc::Status::OK;
         } else {
+            // The controller is chosen when the machine is created and fixed
+            // for the life of the running machine (#292): it brings the
+            // drives and their LEDs, and the indicators are sealed at start.
+            if (machine_.state().memory.indicators.registration_closed()) {
+                response->set_success(false);
+                response->set_error(
+                    "This machine is running, so its disc controller cannot be changed; "
+                    "choose the controller when the machine is created.");
+                return grpc::Status::OK;
+            }
+
             const std::string& controller_id = request->controller_id();
 
             // Empty string or "none" removes the controller. The emulation
@@ -493,6 +508,7 @@ public:
             machine_.with_emulation_paused([&] {
                 machine_.state().memory.install_disc_controller(std::move(controller), controller_id);
             });
+            attach_observers();
 
             response->set_success(true);
             response->set_controller_type(controller_name);
@@ -665,6 +681,26 @@ private:
 
     // Bridge one drive's changes onto the wire. The drive knows nothing of
     // protobuf or of which drive number it is; both are supplied here.
+    static constexpr const char* NO_CONTROLLER_SENTENCE =
+        "This machine has no disc controller, so it has no drive to insert a disc into.";
+    static constexpr const char* NO_DRIVES_SENTENCE =
+        "This machine has no disc controller, so it has no drives.";
+
+    // The drive the machine's controller brings, or nullptr with none fitted.
+    DiscDrive* drive_at(uint32_t drive_num) {
+        return machine_.state().memory.disc_drive(static_cast<int>(drive_num));
+    }
+
+    // Tell the service of every change to each drive there is. Drives come
+    // into being with a controller, so this runs again after an install.
+    void attach_observers() {
+        if constexpr (HasDiscDrives<typename MachineType::Memory>) {
+            for (uint32_t n : {0u, 1u}) {
+                if (auto* drive = drive_at(n)) attach_observer(*drive, n);
+            }
+        }
+    }
+
     void attach_observer(DiscDrive& drive, uint32_t drive_num) {
         drive.set_observer([this, drive_num](const DiscDriveEvent& change) {
             DiscEvent event;

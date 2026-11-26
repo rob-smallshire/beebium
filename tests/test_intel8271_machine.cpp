@@ -106,7 +106,7 @@ TEST_CASE("A Model B reads a sector through the 8271 with an NMI per byte",
     ModelB machine;
     machine.memory().install_disc_controller(std::make_unique<Intel8271DiscController>(),
                                               "acorn-8271");
-    machine.memory().disc_drive_0.insert(make_disc());
+    machine.memory().disc_drive(0)->insert(make_disc());
 
     std::array<uint8_t, 16384> mos{};
     std::fill(mos.begin(), mos.end(), 0xEA);

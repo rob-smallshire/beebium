@@ -1486,11 +1486,22 @@ private:
 
     template<typename Warning>
     static void check_floppies_exist(const ServerConfig<MachineType>& config, Warning warning) {
+        using Memory = typename MachineType::Memory;
         const auto container = config.launch.reference_container();
+        // The drives come with a disc controller (#292): with the socket
+        // empty there are none to put a disc in.
+        bool no_drives = !HasDiscDrives<Memory>;
+        if constexpr (HasDiscControllerSocket<Memory>) {
+            no_drives = config.machine.fdc_type.empty() || config.machine.fdc_type == "none";
+        }
         for (std::size_t drive = 0; drive < config.machine.floppy_filepaths.size(); ++drive) {
             const auto& uri = config.machine.floppy_filepaths[drive];
             if (uri.empty()) continue;
             const auto path = "/storage/floppy_drives/" + std::to_string(drive) + "/image_uri";
+            if (no_drives) {
+                warning(path, "ignored: this machine has no disc controller, so it has no drives");
+                continue;
+            }
             std::filesystem::path filepath;
             if (uri.find("://") != std::string::npos) {
                 auto url = beebium::DiscUrl::parse(uri);

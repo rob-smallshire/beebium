@@ -603,8 +603,9 @@ private:
         using Memory = typename MachineType::Memory;
         if constexpr (beebium::HasDiscDrives<Memory>) {
             auto& memory = am_.machine.state().memory;
-            for (auto* drive : {&memory.disc_drive_0, &memory.disc_drive_1}) {
-                if (!drive->disc()) continue;
+            for (int n : {0, 1}) {
+                auto* drive = memory.disc_drive(n);
+                if (!drive || !drive->disc()) continue;
                 const auto relative = machine_store_detail::relative_within(
                     drive->disc()->source_filepath(), home);
                 if (!relative) continue;

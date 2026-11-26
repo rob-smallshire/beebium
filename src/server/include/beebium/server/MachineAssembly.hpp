@@ -592,9 +592,10 @@ std::optional<int> load_tape_image(MachineType& machine, const ServerConfig<Mach
 // exit.
 template<typename MachineType>
 void flush_disc_drives(MachineType& machine) {
-    if constexpr (requires { machine.state().memory.disc_drive_0; }) {
-        machine.state().memory.disc_drive_0.flush_if_dirty();
-        machine.state().memory.disc_drive_1.flush_if_dirty();
+    if constexpr (HasDiscDrives<typename MachineType::Memory>) {
+        for (int n : {0, 1}) {
+            if (auto* drive = machine.state().memory.disc_drive(n)) drive->flush_if_dirty();
+        }
     }
 }
 
@@ -617,9 +618,10 @@ void flush_cassette_deck(MachineType& machine) {
 // handler stops progressing the moment nobody is listening.
 template<typename MachineType>
 void tick_disc_drives(MachineType& machine) {
-    if constexpr (requires { machine.state().memory.disc_drive_0; }) {
-        machine.state().memory.disc_drive_0.tick_eject();
-        machine.state().memory.disc_drive_1.tick_eject();
+    if constexpr (HasDiscDrives<typename MachineType::Memory>) {
+        for (int n : {0, 1}) {
+            if (auto* drive = machine.state().memory.disc_drive(n)) drive->tick_eject();
+        }
     }
 }
 
@@ -628,18 +630,18 @@ void tick_disc_drives(MachineType& machine) {
 template<typename MachineType>
 std::optional<int> load_disc_images(MachineType& machine, const ServerConfig<MachineType>& config,
                                     const DiscPaths::CopyDestination& destination) {
-    if constexpr (requires { machine.state().memory.disc_drive_0; }) {
-        if (!config.machine.floppy_filepaths[0].empty()) {
-            if (auto exit_code = load_single_disc(
-                    machine.state().memory.disc_drive_0, 0, config.machine.floppy_filepaths[0],
-                    config.launch.reference_container(), destination)) {
-                return exit_code;
+    if constexpr (HasDiscDrives<typename MachineType::Memory>) {
+        for (int n : {0, 1}) {
+            const auto& filepath = config.machine.floppy_filepaths[static_cast<size_t>(n)];
+            if (filepath.empty()) continue;
+            auto* drive = machine.state().memory.disc_drive(n);
+            if (!drive) {
+                // A machine without a disc controller has no drives (#292).
+                std::cerr << "Warning: drive " << n << "'s disc " << filepath
+                          << " is ignored: this machine has no disc controller, so it has no drives\n";
+                continue;
             }
-        }
-
-        if (!config.machine.floppy_filepaths[1].empty()) {
-            if (auto exit_code = load_single_disc(
-                    machine.state().memory.disc_drive_1, 1, config.machine.floppy_filepaths[1],
+            if (auto exit_code = load_single_disc(*drive, n, filepath,
                     config.launch.reference_container(), destination)) {
                 return exit_code;
             }

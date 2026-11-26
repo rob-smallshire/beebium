@@ -189,7 +189,7 @@ std::string run_basic(const std::filesystem::path& ssd_filepath,
     machine.memory().install_acorn_1770();
     auto disc = load_disc_from_url_or_filepath(ssd_filepath.string());
     REQUIRE(disc.success());
-    machine.memory().disc_drive_0.insert(std::move(disc.disc));
+    machine.memory().disc_drive(0)->insert(std::move(disc.disc));
 
     HeapFrameAllocator allocator;
     FrameBuffer frame_buffer{&allocator, 640, 512};
@@ -402,7 +402,7 @@ TEST_CASE("A strobe written to the user port is read back on the next instructio
     machine.memory().install_acorn_1770();
     auto disc = load_disc_from_url_or_filepath(ssd_filepath.string());
     REQUIRE(disc.success());
-    machine.memory().disc_drive_0.insert(std::move(disc.disc));
+    machine.memory().disc_drive(0)->insert(std::move(disc.disc));
 
     Plugged plugged(machine.memory());
     plugged.adapter.set_button("handset2.key7", true);

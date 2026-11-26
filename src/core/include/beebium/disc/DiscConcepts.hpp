@@ -22,12 +22,12 @@
 
 namespace beebium {
 
-// Concept to detect if a hardware type has disc drives
-// Both Model B and Model B+ have disc drives
+// Concept to detect if a hardware type can have disc drives: a controller,
+// socketed or built in, brings two (#292). hw.disc_drive(n) is the one way
+// to reach them, and is nullptr while a socket is empty.
 template<typename T>
 concept HasDiscDrives = requires(T& hw) {
-    { hw.disc_drive_0 } -> std::same_as<DiscDrive&>;
-    { hw.disc_drive_1 } -> std::same_as<DiscDrive&>;
+    { hw.disc_drive(0) } -> std::convertible_to<DiscDrive*>;
 };
 
 // Concept to detect if hardware has a pluggable disc controller socket (Model B)

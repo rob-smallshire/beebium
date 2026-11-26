@@ -256,6 +256,12 @@ public:
         }
     }
 
+    /// Whether the registration window has closed: true from the first
+    /// start() on, after which no indicator can be added.
+    bool registration_closed() const {
+        return ever_started_.load(std::memory_order_acquire);
+    }
+
     /// Check if the consumer thread is running.
     bool is_running() const {
         return running_.load(std::memory_order_relaxed);

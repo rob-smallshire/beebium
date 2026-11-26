@@ -1,4 +1,4 @@
-// Copyright © 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright © 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -198,17 +198,14 @@ public:
     // Printer port handle (must be declared after user_via_peripheral for init order)
     PrinterPort printer_port_{user_via_peripheral};
 
-    // Disc subsystem - drives owned by hardware, persist across controller changes
-    // On real Model B, these drives were external to the optional controller socket
     // Registered after the lock LEDs and before the drives' (CassetteMotorLed.hpp).
     CassetteMotorLed cassette_motor_led{indicators};
-    DiscDrive disc_drive_0{indicators, "floppy-0-activity-led", "FDD 0", "568nm"};
-    DiscDrive disc_drive_1{indicators, "floppy-1-activity-led", "FDD 1", "568nm"};
 
-    // Disc controller socket at 0xFE80-0xFE9F
+    // Disc controller socket at 0xFE80-0xFE9F. A controller fitted in it
+    // brings the two drives, which the socket owns (#292).
     // On real hardware, this was a physical socket that could be empty or contain
     // various disc controller boards (8271, WD1770 upgrades, Opus, Watford, etc.)
-    DiscControllerSocket disc_socket;
+    DiscControllerSocket disc_socket{indicators};
 
     // Registry ID of installed controller (empty if no controller or unknown)
     std::string installed_controller_id_;
@@ -562,14 +559,13 @@ public:
     // =========================================================================
 
     // Install a disc controller into the socket
-    // After installation, drives are automatically attached
+    // The first installation brings the socket's two drives and their LEDs,
+    // so it must come before the indicators are sealed.
     // @param controller Controller to install (takes ownership)
     // @param controller_id Registry ID of the controller (for querying later)
     void install_disc_controller(std::unique_ptr<DiscControllerInterface> controller,
                                  std::string_view controller_id = "") {
         disc_socket.install(std::move(controller));
-        disc_socket.attach_drive(0, &disc_drive_0);
-        disc_socket.attach_drive(1, &disc_drive_1);
         installed_controller_id_ = controller_id;
     }
 
@@ -589,6 +585,13 @@ public:
     // Check if a disc controller is installed
     bool has_disc_controller() const {
         return disc_socket.has_controller();
+    }
+
+    // The drive the fitted controller brings (#292), or nullptr with the
+    // socket empty: a machine without a disc controller has no drives.
+    // @param drive_num Drive number (0 or 1)
+    DiscDrive* disc_drive(int drive_num) const {
+        return disc_socket.attached_drive(drive_num);
     }
 
     // Get registry ID of installed controller

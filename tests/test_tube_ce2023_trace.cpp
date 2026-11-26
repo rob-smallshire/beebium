@@ -105,7 +105,7 @@ struct TestFixture {
         auto disc_filepath = assets_dirpath / "discs" / DISC_FILENAME;
         auto disc_result = load_disc_from_url_or_filepath(disc_filepath.string());
         REQUIRE(disc_result.success());
-        machine.memory().disc_drive_0.insert(std::move(disc_result.disc));
+        machine.memory().disc_drive(0)->insert(std::move(disc_result.disc));
 
         machine.state().memory.tube_socket.install_backend(&tube);
         machine.memory().enable_video_output();

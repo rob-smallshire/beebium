@@ -233,7 +233,7 @@ private:
 
 **Header:** `src/core/include/beebium/disc/DiscDrive.hpp`
 
-Registers its activity LED indicator on construction.
+Registers its activity LED indicator on construction. A drive comes with a disc controller (#292): a model with a built-in controller (the B+, B+ 128K and Master 128) declares its two drives as members, so they register at construction; on a socketed model the `DiscControllerSocket` owns the two drives and creates them when a controller is first installed, so an empty socket has no drives and no drive LEDs. `hw.disc_drive(n)` reaches a drive on every model, and is `nullptr` while a socket is empty.
 
 ```cpp
 class DiscDrive {
@@ -265,7 +265,7 @@ public:
 
 **Header:** `src/core/include/beebium/cassette/CassetteMotorLed.hpp`
 
-The keyboard's cassette motor LED is lit with the motor relay, which the Serial ULA's control latch drives: the value is 255 while latch bit 7 (&FE10) is set and 0 while it is clear, whether or not a tape is in the deck. A `CassetteMotorLed` registers `cassette-motor-led` when it is constructed, and its `attach()` connects it to the ULA's motor line. Every hardware policy but the Master 128's declares it as a member after the System VIA peripheral (which registers the lock LEDs) and before the disc drives, and calls `attach()` in its constructor, since the serial socket is declared later. The Master's keyboard has no cassette motor LED, so its policy declares none (#311). Clients list indicators in registration order, so the status bar shows it between SHIFT LOCK and FDD 0, as the storage sidebar puts the cassette above the floppies.
+The keyboard's cassette motor LED is lit with the motor relay, which the Serial ULA's control latch drives: the value is 255 while latch bit 7 (&FE10) is set and 0 while it is clear, whether or not a tape is in the deck. A `CassetteMotorLed` registers `cassette-motor-led` when it is constructed, and its `attach()` connects it to the ULA's motor line. Every hardware policy but the Master 128's declares it as a member after the System VIA peripheral (which registers the lock LEDs) and before the disc drives or the disc controller socket, and calls `attach()` in its constructor, since the serial socket is declared later. The drives of a socketed model register when its controller is installed, which machine assembly does before any extension registers, so they still follow the cassette LED. The Master's keyboard has no cassette motor LED, so its policy declares none (#311). Clients list indicators in registration order, so the status bar shows it between SHIFT LOCK and FDD 0, as the storage sidebar puts the cassette above the floppies; with no disc controller there is no FDD 0 and it is the last.
 
 ```cpp
 class CassetteMotorLed {
@@ -295,6 +295,11 @@ struct ModelBHardware {
 
     AddressableLatch addressable_latch;
     SystemViaPeripheral system_via_peripheral{addressable_latch, indicators};
+    CassetteMotorLed cassette_motor_led{indicators};
+
+    // Empty until --fdc installs a controller, which brings the two drives
+    // and registers their LEDs.
+    DiscControllerSocket disc_socket{indicators};
 
     ModelBHardware() {
         // ... other initialization ...
@@ -407,7 +412,7 @@ message IndicatorUpdate {
 
 ### Every model
 
-Every hardware policy registers these five, in this order, which is the order ListIndicators gives and clients show. The Master 128's registers four: it has no `cassette-motor-led` (#311).
+Every hardware policy registers these five, in this order, which is the order ListIndicators gives and clients show. The Master 128's registers four: it has no `cassette-motor-led` (#311). The two drive LEDs come with a disc controller (#292): a socketed model (Model B and its board variants) with an empty FDC socket, `--fdc none` or no `--fdc`, registers only the first three.
 
 | Name | Filter | Label | Color | Shape |
 |------|--------|-------|-------|-------|

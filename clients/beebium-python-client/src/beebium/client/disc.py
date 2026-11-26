@@ -627,6 +627,11 @@ class Disc:
     def install_controller(self, controller_id: str) -> str:
         """Install a disc controller (socketed machines only).
 
+        The controller is fixed for the life of a running machine: a running
+        server refuses every change, which raises DiscError with its reason.
+        Choose the controller when the machine is created (--fdc, or a
+        preset's storage.fdc_socket).
+
         Args:
             controller_id: CLI identifier (e.g., "acorn-1770", "none").
 

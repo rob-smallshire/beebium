@@ -108,51 +108,61 @@ TEST_CASE("DiscControllerSocket controller installation", "[disc][socket]") {
     }
 }
 
-TEST_CASE("DiscControllerSocket drive attachment", "[disc][socket]") {
+TEST_CASE("DiscControllerSocket drives come with a controller (#292)", "[disc][socket]") {
     DiscControllerSocket socket;
-    DiscDrive drive0;
-    DiscDrive drive1;
 
-    SECTION("attach drives to empty socket does nothing") {
-        socket.attach_drive(0, &drive0);
-        socket.attach_drive(1, &drive1);
-        // No crash, drives not queryable without controller
+    SECTION("an empty socket has no drives") {
         CHECK(socket.attached_drive(0) == nullptr);
         CHECK(socket.attached_drive(1) == nullptr);
     }
 
-    SECTION("attach drives after controller installation") {
+    SECTION("a fitted controller brings two drives") {
         socket.install(std::make_unique<Acorn1770DiscController>());
-        socket.attach_drive(0, &drive0);
-        socket.attach_drive(1, &drive1);
-
-        CHECK(socket.attached_drive(0) == &drive0);
-        CHECK(socket.attached_drive(1) == &drive1);
+        REQUIRE(socket.attached_drive(0) != nullptr);
+        REQUIRE(socket.attached_drive(1) != nullptr);
+        CHECK(socket.attached_drive(0) != socket.attached_drive(1));
+        CHECK(socket.attached_drive(2) == nullptr);
+        CHECK(socket.attached_drive(-1) == nullptr);
+        CHECK(socket.controller()->attached_drive(0) == socket.attached_drive(0));
+        CHECK(socket.controller()->attached_drive(1) == socket.attached_drive(1));
     }
 
-    SECTION("drives detached when controller removed") {
+    SECTION("the drives are unreachable once the controller is removed") {
         socket.install(std::make_unique<Acorn1770DiscController>());
-        socket.attach_drive(0, &drive0);
-        socket.attach_drive(1, &drive1);
-
         socket.remove();
-
         CHECK(socket.attached_drive(0) == nullptr);
         CHECK(socket.attached_drive(1) == nullptr);
     }
 
-    SECTION("drives detached when new controller installed") {
+    SECTION("a replacement controller is connected to the same drives") {
         socket.install(std::make_unique<Acorn1770DiscController>());
-        socket.attach_drive(0, &drive0);
+        auto* drive_0 = socket.attached_drive(0);
+        auto* drive_1 = socket.attached_drive(1);
 
-        CHECK(socket.attached_drive(0) == &drive0);
+        socket.install(std::make_unique<Intel8271DiscController>());
 
-        // Install new controller - old drives should be detached
-        socket.install(std::make_unique<Acorn1770DiscController>());
-
-        // New controller has no drives attached yet
-        CHECK(socket.attached_drive(0) == nullptr);
+        CHECK(socket.attached_drive(0) == drive_0);
+        CHECK(socket.attached_drive(1) == drive_1);
+        CHECK(socket.controller()->attached_drive(0) == drive_0);
     }
+}
+
+TEST_CASE("DiscControllerSocket registers the drives' LEDs only when a controller is fitted (#292)",
+          "[disc][socket][indicators]") {
+    Indicators indicators;
+    DiscControllerSocket socket{indicators};
+    CHECK(indicators.names().empty());
+
+    socket.install(std::make_unique<Acorn1770DiscController>());
+    CHECK(indicators.names() == std::vector<std::string>{"floppy-0-activity-led", "floppy-1-activity-led"});
+    const auto metadata = indicators.metadata("floppy-1-activity-led");
+    CHECK(metadata.at("label") == "FDD 1");
+    CHECK(metadata.at("color") == "568nm");
+    CHECK(metadata.at("shape") == "rectangular");
+
+    // Exchanging the controller keeps the drives, so registers nothing more.
+    socket.install(std::make_unique<Intel8271DiscController>());
+    CHECK(indicators.names().size() == 2);
 }
 
 TEST_CASE("DiscControllerSocket delegates to controller", "[disc][socket]") {
@@ -293,12 +303,8 @@ TEST_CASE("Intel8271DiscController decodes the 8271 at &FE80-&FE87, mirrored", "
 }
 
 TEST_CASE("Intel8271DiscController raises NMI for a completion", "[disc][socket][i8271]") {
-    DiscDrive drive_0;
-    DiscDrive drive_1;
     DiscControllerSocket socket;
     socket.install(std::make_unique<Intel8271DiscController>());
-    socket.attach_drive(0, &drive_0);
-    socket.attach_drive(1, &drive_1);
     socket.reset(ResetCause::PowerOn);
 
     // Seek drive 0 to track 0: with no disc the drive is not ready, so the
@@ -321,12 +327,10 @@ TEST_CASE("Intel8271DiscController identifies its chip", "[disc][socket][i8271]"
 TEST_CASE("Intel8271DiscController lights only the selected drive's LED", "[disc][socket][i8271][indicators]") {
     // LOAD HEAD turns both drives, but a drive's LED follows its select line.
     Indicators indicators;
-    DiscDrive drive_0(indicators, "floppy-0-activity-led", "Drive 0");
-    DiscDrive drive_1(indicators, "floppy-1-activity-led", "Drive 1");
-    DiscControllerSocket socket;
+    DiscControllerSocket socket{indicators};
     socket.install(std::make_unique<Intel8271DiscController>());
-    socket.attach_drive(0, &drive_0);
-    socket.attach_drive(1, &drive_1);
+    DiscDrive& drive_0 = *socket.attached_drive(0);
+    DiscDrive& drive_1 = *socket.attached_drive(1);
     socket.reset(ResetCause::PowerOn);
 
     // WRITE SPECIAL REGISTER &23 = &48: select drive 0, load head

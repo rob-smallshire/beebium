@@ -2147,6 +2147,28 @@ TEST_CASE("resolve-preset: a missing tape is a warning at its image_uri",
     CHECK(warned);
 }
 
+TEST_CASE("resolve-preset: a floppy on a Model B with no disc controller is ignored with a warning (#292)",
+          "[integration][preset][resolve-preset][disc]") {
+    TempDirectory temp_dir;
+    for (const std::string fdc_socket : {R"("fdc_socket": {"id": "none"},)", ""}) {
+        INFO(fdc_socket);
+        const auto preset_filepath = temp_dir.path() / "discless.preset.beebium";
+        std::ofstream(preset_filepath) << R"({"model": "model-b", "storage": {)" << fdc_socket
+                                       << R"("floppy_drives": [{"drive": 1, "image_uri": "file:///nonexistent/beebium.ssd"}]}})";
+
+        auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+        int found = 0;
+        for (const auto& d : out.at("diagnostics")) {
+            if (d.at("path") != "/storage/floppy_drives/1/image_uri") continue;
+            ++found;
+            CHECK(d.at("severity") == "warning");
+            CHECK(d.at("message") == "ignored: this machine has no disc controller, so it has no drives");
+        }
+        CHECK(found == 1);
+    }
+}
+
 TEST_CASE("resolve-preset: a preset without a tape resolves the deck to null",
           "[integration][preset][resolve-preset][cassette]") {
     TempDirectory temp_dir;

@@ -472,9 +472,11 @@ beebium-model-b --fdc acorn-1770 --floppy 0:game.ssd
 beebium-model-b --fdc none
 ```
 
+A disc controller brings two drives (#292), so a Model B with an empty socket has none: no FDD 0 or FDD 1 activity LEDs, `GetDriveStatus` reports `has_disc_controller` false and an empty `drives` list, and `InsertDisc` is refused with the sentence "This machine has no disc controller, so it has no drive to insert a disc into." (`DISC_ERROR_KIND_NO_CONTROLLER`). A `--floppy` image, or a preset's `storage.floppy_drives` image, on such a machine is ignored with a warning. The socket (`DiscControllerSocket`) owns the two drives and creates them, registering their LEDs, when a controller is first installed; `attached_drive(n)` is `nullptr` while the socket is empty. The B+, B+ 128K and Master 128, whose 1770 is built in, have their two drives from construction.
+
 ### gRPC Configuration
 
-The DiscService provides runtime controller management:
+The DiscService lists the controllers and can install one. The controller is fixed for the life of a running machine (#292): it brings the drives and their LEDs, and the indicators are sealed when the machine starts, so once it is running `InstallDiscController` refuses every change, installing into an empty socket, exchanging one controller for another or removing it with `"none"`, with `success` false and the error "This machine is running, so its disc controller cannot be changed; choose the controller when the machine is created." Choose the controller with `--fdc` or a preset's `storage.fdc_socket`. Before start (machine assembly, unit tests) any change is allowed.
 
 ```protobuf
 service DiscService {
@@ -500,10 +502,12 @@ if status.is_socketed:
     for ctrl in available.controllers:
         print(f"{ctrl.id}: {ctrl.display_name} ({ctrl.fdc_chip})")
 
-    # Install a controller
+    # Install a controller: refused on a running machine (see above)
     result = disc_service.InstallDiscController(controller_id="acorn-1770")
     if result.success:
         print(f"Installed: {result.controller_type}")
+    else:
+        print(result.error)
 ```
 
 ### NMI Handling
