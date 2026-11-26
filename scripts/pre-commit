@@ -1,13 +1,37 @@
 #!/bin/bash
 #
-# Pre-commit hook to verify Beebium copyright notices are present in source files
-# and automatically update the copyright year to the current year.
+# Pre-commit hook to verify copyright and licence notices are present in source
+# files, and to keep the maintainer's copyright year current.
 #
-# Checks staged .swift, .h, .c, .hpp, .cpp, .py files for the required license
-# notice and for the maintainer's copyright line. Additional contributor
-# copyright lines are welcome; the check only ensures the maintainer (Robert
-# Smallshire) remains in the set of names. If the maintainer's notice has an
-# outdated year, it is updated and the file re-staged.
+# Checks staged .swift, .h, .c, .hpp, .cpp, .py files. A file passes when:
+#   - it carries one of the accepted licence notices (KNOWN_NOTICES below): the
+#     Beebium notice, or the notice of a plugin contributed with its own name;
+#   - and at least one of its copyright lines names a known contributor
+#     (KNOWN_CONTRIBUTORS below). Any of them will do; none is required.
+# A copyright line may read "Copyright YYYY Name", "Copyright © YYYY Name",
+# "Copyright (C) YYYY Name" or "Copyright (c) YYYY Name", with a single year or
+# a range "YYYY-YYYY", and an email or not.
+#
+# The year is updated only on the maintainer's (Robert Smallshire's) own line,
+# and only when it is a single year. Another contributor's line is their claim:
+# the hook never rewrites it.
+
+# The people who hold copyright in Beebium's files. A new contributor is added
+# here, by name, as a deliberate and reviewable change.
+KNOWN_CONTRIBUTORS=(
+    "Robert Smallshire"
+    "Mark J. Fisher"
+    "James Sargent"
+    "Tom Seddon"
+)
+
+# The licence notices a file may carry, either or both.
+KNOWN_NOTICES=(
+    "This file is part of Beebium"
+    "This file is part of AESulator, a plugin for Beebium"
+)
+
+MAINTAINER="Robert Smallshire"
 
 # Get current year
 current_year=$(date +%Y)
@@ -15,14 +39,45 @@ current_year=$(date +%Y)
 # Get list of staged files (excluding deleted files)
 staged_files=$(git diff --cached --name-only --diff-filter=d)
 
-# Track files missing the license notice
+# The text of a name, escaped for an extended regular expression.
+regex_escape() {
+    printf '%s' "$1" | sed 's/[][\.*^$()+?{}|]/\\&/g'
+}
+
+# The start of a copyright line, up to and including the year or range and the
+# space before the holder's name.
+copyright_prefix='Copyright( ©| \([Cc]\))? [0-9]{4}(-[0-9]{4})?,? (by )?'
+
+has_known_notice() {
+    local notice
+    for notice in "${KNOWN_NOTICES[@]}"; do
+        if grep -qF "$notice" "$1" 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+has_known_contributor() {
+    local name
+    for name in "${KNOWN_CONTRIBUTORS[@]}"; do
+        if grep -qE "${copyright_prefix}$(regex_escape "$name")" "$1" 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Track files missing an accepted licence notice
 missing_copyright=()
 
-# Track files that have the license notice but not the maintainer's name
-missing_maintainer=()
+# Track files that have a notice but no known contributor as holder
+missing_contributor=()
 
 # Track files with updated year
 updated_year=()
+
+maintainer_pattern=$(regex_escape "$MAINTAINER")
 
 for file in $staged_files; do
     # Check file extension
@@ -43,29 +98,24 @@ for file in $staged_files; do
                 continue
             fi
 
-            # Check for the Beebium license notice (the GPL boilerplate body).
-            if ! grep -q "This file is part of Beebium" "$file" 2>/dev/null; then
+            if ! has_known_notice "$file"; then
                 missing_copyright+=("$file")
-            # Require the maintainer (Robert Smallshire) among the copyright
-            # holders. Additional contributor copyright lines are welcome; this
-            # only ensures the maintainer's name is always in the set.
-            elif ! grep -qE "Copyright .*Robert Smallshire" "$file" 2>/dev/null; then
-                missing_maintainer+=("$file")
+            elif ! has_known_contributor "$file"; then
+                missing_contributor+=("$file")
             else
-                # File has copyright notice - check if year needs updating
-                # Match various copyright patterns:
-                # - "Copyright © YYYY" (C++ with symbol)
-                # - "Copyright (C) YYYY" (C++ with text)
-                # - "Copyright YYYY" (Python style)
-                if grep -qE "Copyright (©|\(C\) )?[0-9]{4} Robert Smallshire" "$file" 2>/dev/null; then
-                    # Extract the year from the copyright line
-                    file_year=$(grep -oE "Copyright (©|\(C\) )?[0-9]{4}" "$file" | grep -oE "[0-9]{4}" | head -1)
+                # The maintainer's own line, with a single year, in any of
+                # the forms "Copyright © YYYY", "Copyright (C) YYYY" and
+                # "Copyright YYYY". Only that line's year is read and updated.
+                maintainer_line=$(grep -E "Copyright( ©| \(C\))? [0-9]{4} ${maintainer_pattern}" "$file" 2>/dev/null | head -1)
+                if [ -n "$maintainer_line" ]; then
+                    file_year=$(printf '%s' "$maintainer_line" | grep -oE "Copyright( ©| \(C\))? [0-9]{4}" | grep -oE "[0-9]{4}")
 
                     if [ -n "$file_year" ] && [ "$file_year" != "$current_year" ]; then
-                        # Update the year in the file (handle all formats)
-                        sed -i '' "s/Copyright © $file_year Robert Smallshire/Copyright © $current_year Robert Smallshire/g" "$file"
-                        sed -i '' "s/Copyright (C) $file_year Robert Smallshire/Copyright © $current_year Robert Smallshire/g" "$file"
-                        sed -i '' "s/Copyright $file_year Robert Smallshire/Copyright $current_year Robert Smallshire/g" "$file"
+                        # Each substitution names the maintainer, so no other
+                        # holder's line can match it.
+                        sed -i '' "s/Copyright © $file_year $MAINTAINER/Copyright © $current_year $MAINTAINER/g" "$file"
+                        sed -i '' "s/Copyright (C) $file_year $MAINTAINER/Copyright © $current_year $MAINTAINER/g" "$file"
+                        sed -i '' "s/Copyright $file_year $MAINTAINER/Copyright $current_year $MAINTAINER/g" "$file"
 
                         # Re-stage the file with updated year
                         git add "$file"
@@ -86,32 +136,42 @@ if [ ${#updated_year[@]} -ne 0 ]; then
     echo ""
 fi
 
-# Report and fail if any files have the license notice but not the maintainer
-if [ ${#missing_maintainer[@]} -ne 0 ]; then
-    echo "ERROR: The following files have the Beebium license notice but are"
-    echo "missing the maintainer copyright line (Robert Smallshire):"
+# Report and fail if any files have a notice but no known contributor
+if [ ${#missing_contributor[@]} -ne 0 ]; then
+    echo "ERROR: The following files have a licence notice but no copyright line"
+    echo "naming a known contributor:"
     echo ""
-    for file in "${missing_maintainer[@]}"; do
+    for file in "${missing_contributor[@]}"; do
         echo "  $file"
     done
     echo ""
-    echo "Keep a copyright line for Robert Smallshire alongside any contributor"
-    echo "lines, for example:"
+    echo "The known contributors are:"
+    for name in "${KNOWN_CONTRIBUTORS[@]}"; do
+        echo "  $name"
+    done
+    echo ""
+    echo "Name one of them in a copyright line, for example:"
     echo "  // Copyright $current_year Robert Smallshire <robert@smallshire.org.uk>"
-    echo "  // Copyright $current_year Ada Lovelace <ada@example.com>"
+    echo "If the holder is a new contributor, add their name to KNOWN_CONTRIBUTORS"
+    echo "at the top of scripts/pre-commit, then run scripts/install-hooks."
     echo ""
     exit 1
 fi
 
-# Report and fail if any files are missing copyright
+# Report and fail if any files are missing a notice
 if [ ${#missing_copyright[@]} -ne 0 ]; then
-    echo "ERROR: The following files are missing the Beebium copyright notice:"
+    echo "ERROR: The following files are missing a licence notice:"
     echo ""
     for file in "${missing_copyright[@]}"; do
         echo "  $file"
     done
     echo ""
-    echo "Please add the following notice at the top of each file:"
+    echo "Accepted notices (either or both):"
+    for notice in "${KNOWN_NOTICES[@]}"; do
+        echo "  $notice"
+    done
+    echo ""
+    echo "Please add the Beebium notice at the top of each file:"
     echo ""
     echo "For C/C++/Swift:"
     echo "  // Copyright © $current_year Robert Smallshire <robert@smallshire.org.uk>"
