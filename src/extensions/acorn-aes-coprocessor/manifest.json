@@ -2,6 +2,8 @@
     "name": "acorn-aes-coprocessor",
     "version": "2.0.0",
     "display_name": "Acorn ARM Evaluation System",
+    "keywords": ["ARM", "ARM1", "Evaluation System"],
+    "short_name": "AES",
     "description": "An Acorn ARM Evaluation System: a 6.67 MHz ARM1 processor with up to 4 MB of its own memory, connected through the Tube.",
     "library": "acorn-aes-coprocessor",
     "attaches_to": [

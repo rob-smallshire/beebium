@@ -347,6 +347,15 @@ TEST_CASE("describe-extension --json describes the extension and each parameter"
     CHECK(parameter(ext, "image").at("min").is_null());
 }
 
+TEST_CASE("describe-extension --json gives the AES the short name and keywords the catalogue uses",
+          "[integration][extension][describe-extension][json][aes]") {
+    // The preset catalogue's coprocessor facet shows the short name; its
+    // search finds a preset by the keywords of what is fitted.
+    auto ext = describe_extension_json("tube-aes");
+    CHECK(ext.at("short_name") == "AES");
+    CHECK(ext.at("keywords") == nlohmann::json::array({"ARM", "ARM1", "Evaluation System"}));
+}
+
 TEST_CASE("describe-extension --json lists a parameter's choices",
           "[integration][extension][describe-extension][json]") {
     const auto aun = describe_extension_json("aun");
