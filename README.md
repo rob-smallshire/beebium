@@ -181,6 +181,8 @@ Component and subsystem documentation lives in [`docs/`](docs/). Some entry poin
 
 ## Development
 
+To contribute, read [CONTRIBUTING.md](CONTRIBUTING.md): start with a fork that follows master, work on branches, open a draft pull request early, and the rules the repository holds a change to.
+
 After cloning, install the git hooks:
 
 ```bash
