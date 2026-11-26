@@ -1,4 +1,4 @@
-// Copyright © 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright © 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -12,6 +12,14 @@
 
 import SwiftUI
 import AppKit
+import os
+
+/// Diagnostic logging for the menu-rebuild churn behind #290 (the Edit and
+/// Window menus flickering at the ~2 Hz server heartbeat on macOS 26/27). Logged
+/// at `.debug`, which is off unless explicitly streamed, so it is silent in the
+/// shipping build and stays in; watch it with
+/// `log stream --process Beebium --predicate 'category == "menus"'`.
+let menuDiagnosticsLog = Logger(subsystem: "com.beebium.Beebium", category: "menus")
 
 /// Shared actions for File menu commands. Captured from any view that has
 /// @Environment(\.openWindow) and used by FileCommands via @ObservedObject.
@@ -160,12 +168,28 @@ extension Notification.Name {
 
 // Renaming acts on the machine in the focused window, so it is a focused value
 // rather than a shared action: it means nothing without a focused machine.
+/// The rename action for the focused machine window, carried as a value with a
+/// stable identity (the machine's `SystemClient`) rather than a bare closure, so
+/// two values built in successive ContentView body passes compare `==` and do
+/// not rebuild the open menus (#290). Invoked with `renameMachine?()` via
+/// `callAsFunction`, exactly as the bare closure was.
+struct RenameMachineAction: Equatable {
+    let machineIdentity: ObjectIdentifier
+    let perform: () -> Void
+
+    func callAsFunction() { perform() }
+
+    static func == (lhs: RenameMachineAction, rhs: RenameMachineAction) -> Bool {
+        lhs.machineIdentity == rhs.machineIdentity
+    }
+}
+
 struct RenameMachineActionKey: FocusedValueKey {
-    typealias Value = () -> Void
+    typealias Value = RenameMachineAction
 }
 
 extension FocusedValues {
-    var renameMachine: (() -> Void)? {
+    var renameMachine: RenameMachineAction? {
         get { self[RenameMachineActionKey.self] }
         set { self[RenameMachineActionKey.self] = newValue }
     }
@@ -177,11 +201,26 @@ extension FocusedValues {
 // path-writing variants -- the first save of a transient machine and Save As --
 // since they hand the server a host path chosen on this machine, which only
 // means anything when the server shares this filesystem (#263).
-struct MachineSaveActions {
+struct MachineSaveActions: Equatable {
     let isSaved: Bool
     let isServerLocal: Bool
     let save: () -> Void
     let saveAs: () -> Void
+    /// Identity of the machine (its `SystemClient`) these actions act on. The
+    /// focused value is rebuilt on every ContentView body pass, each with fresh
+    /// save/saveAs closures; carrying a stable identity and comparing on it (not
+    /// the closures, which cannot be equated and always do the same thing for a
+    /// given machine) makes successive values `==`, so SwiftUI does not rebuild
+    /// the open Edit/File menus on every 500 ms heartbeat (#290). A genuine
+    /// state change -- isSaved or isServerLocal -- still changes the value, so
+    /// the Save / Save As items update when they should.
+    let machineIdentity: ObjectIdentifier
+
+    static func == (lhs: MachineSaveActions, rhs: MachineSaveActions) -> Bool {
+        lhs.isSaved == rhs.isSaved
+            && lhs.isServerLocal == rhs.isServerLocal
+            && lhs.machineIdentity == rhs.machineIdentity
+    }
 }
 
 struct MachineSaveActionsKey: FocusedValueKey {

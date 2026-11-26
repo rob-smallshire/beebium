@@ -1,4 +1,4 @@
-// Copyright © 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright © 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -519,7 +519,9 @@ final class SystemClient: ObservableObject, Disconnectable {
     }
 
     /// Handle a server status event from the WatchServerStatus stream
-    private func handleStatusEvent(_ event: Beebium_ServerStatusEvent) {
+    func handleStatusEvent(_ event: Beebium_ServerStatusEvent) {
+        menuDiagnosticsLog.debug(
+            "status event: status=\(event.status.rawValue, privacy: .public) templateMediaWritten=\(event.templateMediaWritten, privacy: .public)")
         // Any event -- heartbeat or otherwise -- proves the server is reachable.
         // Reset the liveness watchdog, and recover from a transient unreachable
         // state (e.g. heartbeats resuming after a network blip or unfreeze).
@@ -529,15 +531,23 @@ final class SystemClient: ObservableObject, Disconnectable {
             NSLog("[SystemClient] Heartbeats resumed -- server reachable again")
         }
 
-        // Stamped on every event, heartbeats included, so the unsaved-changes
+        // Carried on every event, heartbeats included, so the unsaved-changes
         // dot and the close prompt stay current without a dedicated event.
-        templateMediaWritten = event.templateMediaWritten
+        // Assign only on a real change: a heartbeat arrives every 500 ms with
+        // the same value, and an unconditional @Published write fires
+        // objectWillChange each time, re-evaluating every window's body and (on
+        // macOS 26/27) rebuilding the open menus -- the #290 flicker.
+        if templateMediaWritten != event.templateMediaWritten {
+            templateMediaWritten = event.templateMediaWritten
+        }
 
         switch event.status {
         case .serverStatusReady:
-            isServerShuttingDown = false
+            // READY can repeat; publish only when it actually clears the flag,
+            // for the same reason as above.
+            if isServerShuttingDown { isServerShuttingDown = false }
         case .serverStatusShuttingDown:
-            isServerShuttingDown = true
+            if !isServerShuttingDown { isServerShuttingDown = true }
         case .serverStatusIdentityChanged:
             if event.hasIdentity {
                 updateIdentity(event.identity)

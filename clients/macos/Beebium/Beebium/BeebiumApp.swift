@@ -1,4 +1,4 @@
-// Copyright © 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright © 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -91,6 +91,8 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
         ) { notification in
             guard let menu = notification.object as? NSMenu,
                   menu == NSApp.windowsMenu else { return }
+            menuDiagnosticsLog.debug(
+                "didAddItem Window menu: items=\(menu.items.count, privacy: .public)")
             for item in menu.items where Self.hiddenWindowMenuTitles.contains(item.title) {
                 item.isHidden = true
             }
@@ -109,6 +111,12 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { notification in
             guard let menu = notification.object as? NSMenu else { return }
+            // The Edit menu is the one carrying Paste; log its churn so the 2 Hz
+            // rebuild (#290) can be seen and correlated with the heartbeat.
+            if menu.items.contains(where: { $0.action == #selector(NSText.paste(_:)) }) {
+                menuDiagnosticsLog.debug(
+                    "didAddItem Edit menu: items=\(menu.items.count, privacy: .public)")
+            }
             Self.placeFullSpeedPasteBelowPaste(in: menu)
             Self.placeCopyVariantsBelowCopy(in: menu)
         }
@@ -158,6 +166,8 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
         isReorderingPasteItems = true
         defer { isReorderingPasteItems = false }
 
+        menuDiagnosticsLog.debug(
+            "placeFullSpeedPasteBelowPaste: moving 'Paste at Full Speed' \(fullSpeedIndex, privacy: .public)->\(pasteIndex + 1, privacy: .public)")
         let item = menu.items[fullSpeedIndex]
         menu.removeItem(at: fullSpeedIndex)
         menu.insertItem(item, at: pasteIndex + 1)
@@ -185,6 +195,8 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
         isReorderingCopyItems = true
         defer { isReorderingCopyItems = false }
 
+        menuDiagnosticsLog.debug(
+            "placeCopyVariantsBelowCopy: regrouping \(variants.count, privacy: .public) copy variants below Copy")
         for item in variants {
             if let index = menu.items.firstIndex(of: item) {
                 menu.removeItem(at: index)

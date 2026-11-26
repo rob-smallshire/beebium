@@ -1,4 +1,4 @@
-// Copyright © 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright © 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -454,7 +454,11 @@ struct ContentView: View {
     }
 
     private var styledContent: some View {
-        Group {
+        // #290 diagnostic: a body pass here is where the command-dependent
+        // focused values are re-attached, which on macOS 26/27 rebuilds the open
+        // menus. Correlate its rate with the heartbeat in the "menus" log.
+        let _ = menuDiagnosticsLog.debug("ContentView.styledContent body pass")
+        return Group {
             if isImmersive {
                 immersiveLayout
             } else {
@@ -472,12 +476,14 @@ struct ContentView: View {
         // Beneath the name: the machine's rendered description, or empty when it
         // has none, so an ordinary window carries the name alone.
         .navigationSubtitle(windowSubtitle)
-        .focusedValue(\.renameMachine, { renameTransientMachine() })
+        .focusedValue(\.renameMachine, RenameMachineAction(
+            machineIdentity: ObjectIdentifier(systemClient)) { renameTransientMachine() })
         .focusedValue(\.machineSaveActions, MachineSaveActions(
             isSaved: systemClient.machineSaved,
             isServerLocal: systemClient.isServerLocal,
             save: { Task { await MachineSaving.save(systemClient: systemClient) } },
-            saveAs: { Task { await MachineSaving.saveAs(systemClient: systemClient) } }))
+            saveAs: { Task { await MachineSaving.saveAs(systemClient: systemClient) } },
+            machineIdentity: ObjectIdentifier(systemClient)))
         .onChange(of: systemClient.machineSaved) { _ in
             // Becoming saved (a first Save or Save As) is when the window gains
             // its document, and so its popover.
