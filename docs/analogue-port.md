@@ -47,7 +47,7 @@ analogue ground, the two fire buttons (System VIA PB4 and PB5) and the light
 pen strobe. The chip has no reset pin and no power-on reset.
 
 The Model B family decodes the chip at &FEC0-&FEDF on the 1 MHz bus. (The
-Master 128 has it at &FE18-&FE1F; Beebium has no Master yet.)
+Master 128 has it at &FE18-&FE1F, where Beebium's Master 128 places it too.)
 
 ## Registers
 
