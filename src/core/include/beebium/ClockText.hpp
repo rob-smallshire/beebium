@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// A clock frequency as people write it: "3 MHz", "3.5 MHz", "6.66 MHz".
+// A clock frequency as people write it: "3 MHz", "3.5 MHz", "6.67 MHz".
 
 #ifndef BEEBIUM_CLOCK_TEXT_HPP
 #define BEEBIUM_CLOCK_TEXT_HPP
@@ -20,12 +20,15 @@
 
 namespace beebium {
 
-// `hz` in megahertz, cut (not rounded) to two decimal places with any
+// `hz` in megahertz, rounded half up to two decimal places with any
 // trailing zeros dropped: "3 MHz", "3.5 MHz", "1.79 MHz", and the AES's
-// 6666666 Hz as "6.66 MHz".
+// 6666666 Hz as "6.67 MHz". Text only: the clock itself stays exact.
 inline std::string format_clock_mhz(uint64_t hz) {
-    const uint64_t whole = hz / 1'000'000;
-    const uint64_t hundredths = hz % 1'000'000 / 10'000;
+    // Round to whole hundredths of a megahertz first, so that a carry
+    // reaches the whole megahertz (2995000 Hz is "3 MHz").
+    const uint64_t in_hundredths = (hz + 5'000) / 10'000;
+    const uint64_t whole = in_hundredths / 100;
+    const uint64_t hundredths = in_hundredths % 100;
     std::string text = std::to_string(whole);
     if (hundredths != 0) {
         std::string digits = std::to_string(hundredths);

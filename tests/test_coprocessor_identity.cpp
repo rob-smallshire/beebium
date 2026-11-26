@@ -32,14 +32,27 @@ TEST_CASE("Clock text is whole megahertz, or at most two decimal places", "[cloc
     CHECK(format_clock_mhz(0) == "0 MHz");
 }
 
-TEST_CASE("Clock text cuts a longer fraction to two decimal places", "[clock-text]") {
+TEST_CASE("Clock text rounds a longer fraction to two decimal places", "[clock-text]") {
     // The ARM Evaluation System's 6 2/3 MHz ARM1, nominally 6666666 Hz.
-    CHECK(format_clock_mhz(6'666'666) == "6.66 MHz");
+    CHECK(format_clock_mhz(6'666'666) == "6.67 MHz");
     CHECK(format_clock_mhz(4'194'304) == "4.19 MHz");
-    CHECK(format_clock_mhz(1'999'999) == "1.99 MHz");
+    CHECK(format_clock_mhz(1'789'773) == "1.79 MHz");
     CHECK(format_clock_mhz(3'001'000) == "3 MHz");
     CHECK(format_clock_mhz(3'050'000) == "3.05 MHz");
     CHECK(format_clock_mhz(1) == "0 MHz");
+}
+
+TEST_CASE("Clock text rounds half up at the second decimal place", "[clock-text]") {
+    CHECK(format_clock_mhz(3'005'000) == "3.01 MHz");
+    CHECK(format_clock_mhz(3'004'999) == "3 MHz");
+    CHECK(format_clock_mhz(3'125'000) == "3.13 MHz");
+}
+
+TEST_CASE("Clock text carries rounding into the whole megahertz", "[clock-text]") {
+    CHECK(format_clock_mhz(2'995'000) == "3 MHz");
+    CHECK(format_clock_mhz(1'999'999) == "2 MHz");
+    CHECK(format_clock_mhz(9'996'000) == "10 MHz");
+    CHECK(format_clock_mhz(2'095'000) == "2.1 MHz");
 }
 
 TEST_CASE("A board's nominal clock comes from its timing", "[coprocessor][clock]") {

@@ -601,15 +601,15 @@ endif()
 if(TARGET beebium_ext_aes_plugin)
     add_plugin_preset(model-b beebium_ext_aes_plugin
         "model-b-disc-aes-copro"
-        "Model B (Disc), ARM1 Copro (6.66 MHz)" "1986"
-        DESCRIPTION "Model B disc, ARM Evaluation System: ARM1 copro (6.66 MHz, 4 MB)"
+        "Model B (Disc), ARM1 Copro (6.67 MHz)" "1986"
+        DESCRIPTION "Model B disc, ARM Evaluation System: ARM1 copro (6.67 MHz, 4 MB)"
         THUMBNAIL_DELAY 6
         --machine-description "Model B (Disc), {coprocessor-cpu} Copro ({coprocessor-clock})"
         --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom --tube-aes)
     add_plugin_preset(master-128 beebium_ext_aes_plugin
         "master-128-aes-copro"
-        "Master 128, ARM1 Copro (6.66 MHz)" "1986"
-        DESCRIPTION "Master 128, MOS 3.20, ARM Evaluation System: ARM1 copro (6.66 MHz, 4 MB) on the external Tube"
+        "Master 128, ARM1 Copro (6.67 MHz)" "1986"
+        DESCRIPTION "Master 128, MOS 3.20, ARM Evaluation System: ARM1 copro (6.67 MHz, 4 MB) on the external Tube"
         THUMBNAIL_DELAY 6
         --machine-description "Master 128, {coprocessor-cpu} Copro ({coprocessor-clock})"
         --tube-aes)

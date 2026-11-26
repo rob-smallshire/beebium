@@ -66,7 +66,7 @@
                 }
             ],
             "required": false,
-            "description": "An emulator aid: whether the ARM is told when it accesses memory that isn't emulated."
+            "description": "An emulator aid: whether the ARM1 is told when it accesses memory that isn't emulated."
         }
     ]
 }
