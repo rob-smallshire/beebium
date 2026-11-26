@@ -128,7 +128,7 @@ machine chooses for itself.
 | `machine-ordinal` | Machine | This machine's instance number among those its launcher started, as "#" and the number ("#3"), supplied by the launcher with `--machine-ordinal <n>`. Not applicable, so empty, when none was given. | Never; set at launch. |
 | `fdc-controller` | Storage | The fitted floppy disc controller's chip, as the device names itself ("WD1770"). Not applicable, so empty, when the controller socket is empty. | A controller fitted or removed at runtime. |
 | `coprocessor-cpu` | Coprocessor | The Tube coprocessor's CPU, as its plugin reports it (`CoprocessorExtension::cpu_name()`: "65C02", "65C102"). Not applicable, so empty, with no coprocessor. | Never; set at launch. |
-| `coprocessor-clock` | Coprocessor | The coprocessor's clock, from the frequency its plugin reports (`clock_hz()`), as whole megahertz ("3 MHz") or a decimal cut to at most two places ("3.5 MHz", "6.66 MHz"). Not applicable, so empty, with no coprocessor. | Never; set at launch. |
+| `coprocessor-clock` | Coprocessor | The coprocessor's clock, from the frequency its plugin reports (`clock_hz()`), as whole megahertz ("3 MHz") or a decimal rounded to at most two places ("3.5 MHz", "6.67 MHz" for the AES's 20 MHz / 3). Not applicable, so empty, with no coprocessor. | Never; set at launch. |
 
 `machine-ordinal` was first left out, as the launcher's state rather than
 the machine's, with the app writing "#2" into the template as literal text.
