@@ -1,28 +1,32 @@
 # Contributing to Beebium
 
 Beebium welcomes contributions: fixes, new peripherals and coprocessors as
-plugins, client work, documentation and tests. This page explains how to
+plugins, new clients, documentation and tests. This page explains how to
 work with the repository so that your change integrates smoothly. The
 building and testing instructions themselves are in the
 [README](README.md#building-from-source) and are not repeated here.
 
+
+## Talking first
+
+For anything larger than a fix, open an issue before the branch, so that the
+shape of the change can be agreed while it is still cheap to change: which
+interface it touches, what it is called, what the presets and documentation
+will say. Design notes live in `docs/` and `docs/discussion/`. Questions
+about how something is meant to work are welcome on the issue tracker too.
+Asking first can avoid duplicate or conflicting work. Don't be afraid to ask;
+we welcome contributions - AI assisted or not - and have a bias towards
+accepting them.
+
+
 ## Start with a fork, not with a finished tree
 
-Begin in a fork of this repository from the first day, and keep it close to
+Begin in a fork of this repository early on, and try to keep it close to
 upstream while you work, rather than developing elsewhere and bringing the
 result over at the end. Integration problems are cheap to fix one at a time
 as they arise and expensive to fix all at once: a tree developed apart for
 months meets every change of interface, every new test rule and every
 platform difference on the day it is merged.
-
-The merge of the Acorn ARM Evaluation System coprocessor (#313) is the
-example. The plugin itself was sound, but moving its tests into the tree took
-four rounds of continuous integration, each fixing something a shared tree
-would have shown early: a test module whose name clashed with one of ours, an
-environment variable set at import time that reached every other test, a
-helper tool missing from the release tarballs, and a Linux standard library
-that throws where macOS returns an error. None of this reflected on the
-plugin. All of it was avoidable by working in a fork that followed master.
 
 ## Set up the fork
 
@@ -37,7 +41,7 @@ git fetch upstream
 ./scripts/install-hooks
 ```
 
-Treat your fork's `master` as a mirror of upstream's: never commit to it.
+Treat your fork's `master` as a mirror of upstream's: avoid commit to it directly.
 Bring it up to date with a fast-forward only, so that it can never diverge:
 
 ```bash
@@ -66,7 +70,7 @@ Name the branch for the change (`tube-z80`, `fix-1770-index-pulse`,
 targeted tests for the area you are changing after each step, and the full
 suite before you ask for review.
 
-Keep the branch current with upstream while you work. Once a week, or
+Keep the branch current with upstream while you work. When you're about to commence a session, or
 whenever upstream `master` moves under something you depend on, rebase:
 
 ```bash
@@ -76,7 +80,7 @@ git push --force-with-lease origin tube-z80
 ```
 
 Rebasing keeps your commits as a clean sequence on top of the latest master,
-and surfaces conflicts while they are small and you remember the code. Use
+and surfaces conflicts while they are small and while you remember the code. Use
 `--force-with-lease`, never bare `--force`, so that a push cannot overwrite
 commits you have not seen. Do not rebase or force-push a branch that someone
 else is also committing to without agreeing it first.
@@ -119,7 +123,12 @@ These are the rules that continuous integration or review will hold a change
 to. [CLAUDE.md](CLAUDE.md) has more detail on the architecture and the
 working principles.
 
-**Tests first.** Write the failing test before the code that makes it pass.
+**Refactor in preparation.** Rather than cramming features in where the don't
+really fit, refactor in preparation for new features. Make the change easy,
+then make the easy change.
+
+**Tests first.** We test to follow a test-led or test-driven approach. Write
+a failing test before the code that makes it pass.
 C++ tests are Catch2 under `tests/` or beside a plugin; Python integration
 tests are under `clients/beebium-python-client/tests` and run against a
 built server; the TypeScript client has its own suite.
@@ -144,7 +153,9 @@ TypeScript. File extensions are `.h` and `.c` for C, `.hpp` and `.cpp` for
 C++.
 
 **Errors are sentences.** Text a user may see says what happened and what to
-do, as a sentence, not a code or a fragment.
+do, as a sentence, not a code or a fragment. If errors are actionable by the
+user tell them what to do. If errors are not actionable by the user, admit as
+much.
 
 **The server is the single source of truth.** Clients display and control
 what the server reports; they do not keep their own model of the machine.
@@ -198,11 +209,3 @@ A plugin's tests run under ctest beside the tree's own, and its Python
 tests live in the Python client's suite, with a prefix, so that one command
 runs everything. Do not keep a separate test harness or build script for a
 plugin; CI will not run it.
-
-## Talking first
-
-For anything larger than a fix, open an issue before the branch, so that the
-shape of the change can be agreed while it is still cheap to change: which
-interface it touches, what it is called, what the presets and documentation
-will say. Design notes live in `docs/` and `docs/discussion/`. Questions
-about how something is meant to work are welcome on the issue tracker too.
